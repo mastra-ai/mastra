@@ -1,18 +1,15 @@
-import { createRoute, HTTPException, SERVER_ROUTES, type ServerRoute } from '@mastra/server/server-adapter';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { handleError } from '@mastra/server/handlers/error';
+import { createRoute, HTTPException, SERVER_ROUTES } from '@mastra/server/server-adapter';
+import type { ServerRoute } from '@mastra/server/server-adapter';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { z } from 'zod';
 import { z as z3 } from 'zod/v3';
 
 import { createRouteTestSuite } from './route-test-suite';
 import { expectValidSchema } from './route-test-utils';
-import {
-  type AdapterTestContext,
-  type AdapterTestSuiteConfig,
-  buildRouteRequest,
-  createDefaultTestContext,
-  type HttpRequest,
-  parseDatesInResponse,
-} from './test-helpers';
+import { buildRouteRequest, createDefaultTestContext, parseDatesInResponse } from './test-helpers';
+import type { AdapterTestContext, AdapterTestSuiteConfig, HttpRequest } from './test-helpers';
 
 /**
  * Creates a standardized integration test suite for server adapters (Express/Hono)
@@ -77,6 +74,63 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
         expect(response.data).toEqual({ userId: 'query-user-123' });
       });
     }
+
+    it('ignores special object keys in query params while preserving legitimate params', async () => {
+      await setup.adapter.registerRoute(app, {
+        method: 'GET',
+        path: '/test/query-special-keys',
+        responseType: 'json',
+        handler: async (params: any) => ({
+          filter: typeof params.filter === 'string' ? JSON.parse(params.filter) : null,
+          tag: params.tag ?? null,
+          keys: Object.keys(params).filter(
+            k =>
+              ![
+                'mastra',
+                'requestContext',
+                'tools',
+                'taskStore',
+                'abortSignal',
+                'registeredTools',
+                'routePrefix',
+                'request',
+              ].includes(k),
+          ),
+        }),
+      });
+
+      const response = await executeHttpRequest(app, {
+        method: 'GET',
+        path: '/api/test/query-special-keys',
+        query: Object.fromEntries([
+          // Keys that must never be written onto parsed objects
+          ['__proto__[polluted]', 'yes'],
+          ['constructor[prototype]', 'yes'],
+          ['prototype[x]', 'yes'],
+          ['filter[__proto__]', 'yes'],
+          // Legitimate params alongside them
+          ['filter[status]', 'active'],
+          ['tag', ['a', 'b']],
+          ['page', '2'],
+        ]),
+      });
+
+      expect(response.status).toBe(200);
+      const data = response.data as any;
+      // Bracket-notation groups still reconstruct as before
+      expect(data.filter).toEqual({ status: 'active' });
+      // Repeated keys still arrive (as an array where the framework preserves
+      // them; some frameworks collapse them to the last value — both are the
+      // pre-existing behavior and must not change)
+      const tags = Array.isArray(data.tag) ? data.tag : [data.tag];
+      expect(tags).toContain('b');
+      // Special keys are dropped, not parsed
+      expect(data.keys).not.toContain('__proto__');
+      expect(data.keys).not.toContain('constructor');
+      expect(data.keys).not.toContain('prototype');
+      // The process-wide Object.prototype must be untouched
+      expect(({} as any).polluted).toBeUndefined();
+    });
 
     describe.each([
       {
@@ -975,6 +1029,48 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
         expect(response.status).toBe(404);
         expect(response.data).toEqual({ error: 'Legacy fallback' });
         expect(custom.getHandlerCalls()).toBe(1);
+      });
+    });
+
+    describe('Run claim conflict responses (#27638)', () => {
+      // No model is needed: this regression is at the handler-to-HTTP serialization boundary.
+      it.each([
+        'AGENT_RESUME_ALREADY_CLAIMED',
+        'WORKFLOW_RESUME_ALREADY_CLAIMED',
+        'AGENT_RESUME_RUN_NOT_SUSPENDED',
+        'WORKFLOW_RUN_NOT_SUSPENDED',
+        'WORKFLOW_TIME_TRAVEL_ALREADY_CLAIMED',
+        'WORKFLOW_TIME_TRAVEL_RUN_RUNNING',
+      ] as const)('lets clients identify %s without matching message text', async code => {
+        const error = new MastraError(
+          { id: code, domain: ErrorDomain.MASTRA_WORKFLOW, category: ErrorCategory.USER },
+          'Run conflict',
+        );
+        const route: ServerRoute = {
+          method: 'POST',
+          path: '/test/run-claim-conflict',
+          responseType: 'json',
+          handler: async () => handleError(error, 'Unable to resume'),
+        };
+        const mutableServerRoutes = SERVER_ROUTES as ServerRoute[];
+        const originalLength = mutableServerRoutes.length;
+        mutableServerRoutes.push(route);
+        let conflictApp: any;
+        try {
+          ({ app: conflictApp } = await setupAdapter(context));
+        } finally {
+          mutableServerRoutes.splice(originalLength);
+        }
+
+        const response = await executeHttpRequest(conflictApp, {
+          method: 'POST',
+          path: '/api/test/run-claim-conflict',
+          body: {},
+        });
+
+        expect(response.status).toBe(409);
+        expect(response.headers['content-type']).toContain('application/json');
+        expect(response.data).toEqual({ error: 'Run conflict', code });
       });
     });
 

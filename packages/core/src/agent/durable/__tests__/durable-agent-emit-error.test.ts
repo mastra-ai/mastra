@@ -5,10 +5,10 @@ import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
 import { createEventedAgent } from '../create-evented-agent';
 
-describe('DurableAgent background error emission', () => {
+describe('DurableAgent settleExecution error emission', () => {
   it('logs instead of rejecting when the pubsub refuses the publish', async () => {
-    // Fire-and-forget call sites use this helper, so a publish failure during
-    // shutdown must not become an unhandledRejection.
+    // Fire-and-forget call sites settle executions without awaiting, so a
+    // publish failure during shutdown must not become an unhandledRejection.
     const pubsub = new EventEmitterPubSub();
     vi.spyOn(pubsub, 'publish').mockRejectedValue(new Error('cannot publish on closed client'));
     const warn = vi.fn();
@@ -24,7 +24,7 @@ describe('DurableAgent background error emission', () => {
     const unhandled = vi.fn();
     process.on('unhandledRejection', unhandled);
     try {
-      (durableAgent as any).emitErrorInBackground('run-1', new Error('step failed'));
+      void (durableAgent as any).settleExecution('run-1', undefined, { error: new Error('step failed') });
       await new Promise(r => setTimeout(r, 10));
     } finally {
       process.off('unhandledRejection', unhandled);
@@ -38,7 +38,7 @@ describe('DurableAgent background error emission', () => {
 describe('EventedAgent.executeWorkflow terminal error emission', () => {
   it('logs instead of rejecting when the run rejects and the pubsub refuses the publish', async () => {
     // executeWorkflow() fires the run without awaiting it and routes a rejected
-    // run through emitErrorInBackground() in its `.catch`. A publish failure
+    // run through settleExecution() in its `.catch`. A publish failure
     // during shutdown must not become an unhandledRejection (#24071).
     const pubsub = new EventEmitterPubSub();
     vi.spyOn(pubsub, 'publish').mockRejectedValue(new Error('cannot publish on closed client'));
@@ -52,7 +52,7 @@ describe('EventedAgent.executeWorkflow terminal error emission', () => {
     const eventedAgent = createEventedAgent({ agent: baseAgent, pubsub });
     vi.spyOn(eventedAgent as any, 'logger', 'get').mockReturnValue({ warn });
     // Drive the fire-and-forget run so start() rejects, exercising the `.catch`
-    // handler that this fix routes through emitErrorInBackground().
+    // handler that this fix routes through settleExecution().
     vi.spyOn(eventedAgent as any, 'getWorkflow').mockReturnValue({
       createRun: async () => ({
         start: () => Promise.reject(new Error('run failed')),

@@ -20,7 +20,6 @@ export const omProviderErrorGuidanceScenario = {
       skippedAt: null,
       version: 1,
       omPackId: 'custom',
-      quietModePreferenceSelected: true,
     };
     settings.models = {
       ...settings.models,

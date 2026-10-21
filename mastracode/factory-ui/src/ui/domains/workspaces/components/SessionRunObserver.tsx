@@ -17,9 +17,9 @@ export function resetSessionRunObserverForTests(): void {
  * The run registry is the one poll that sees a session the dispatcher created before this tab listed it:
  * a run on an unlisted session refetches the list once; a watched run ending rings the done sound and refetches too.
  */
-export function SessionRunObserver({ projectRepositoryId }: { projectRepositoryId: string | undefined }) {
+export function SessionRunObserver({ factoryId }: { factoryId: string | undefined }) {
   const queryClient = useQueryClient();
-  const { data } = useWorkspacesQuery(projectRepositoryId);
+  const { data } = useWorkspacesQuery(factoryId);
   const activeRunResourceIds = useActiveRunResourceIds(AGENT_CONTROLLER_ID);
   const [refetchedUnlistedRuns] = useState(() => new Set<string>());
 
@@ -40,9 +40,9 @@ export function SessionRunObserver({ projectRepositoryId }: { projectRepositoryI
     }
     if (runEnded) playDoneSound();
     if (runEnded || unlistedRunStarted) {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(projectRepositoryId) });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.sessions(factoryId) });
     }
-  }, [activeRunResourceIds, data, refetchedUnlistedRuns, queryClient, projectRepositoryId]);
+  }, [activeRunResourceIds, data, refetchedUnlistedRuns, queryClient, factoryId]);
 
   return null;
 }

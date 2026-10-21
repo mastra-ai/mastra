@@ -91,6 +91,7 @@ interface ExplainPlanNode {
   'Relation Name'?: string;
   Alias?: string;
   'Index Name'?: string;
+  'Index Cond'?: string;
   'Actual Rows'?: number;
   'Actual Loops'?: number;
   Plans?: ExplainPlanNode[];
@@ -2128,6 +2129,48 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
             filters: { timestamp: { start: dayAt(0, 0), end: dayAt(1, 0) } },
           }),
         ).resolves.toEqual({ value: selectedRows });
+      } finally {
+        await harness.close();
+      }
+    });
+  });
+
+  describe('trace-query equality filter plans', () => {
+    it('serves a root eq filter from the column index', async () => {
+      const harness = await createHarness({ schemaPrefix: 'obs_vnext_eq_plan' });
+      const table = qualifiedTable(harness.schema, TABLE_SPAN_EVENTS);
+      const startedAt = dayAt(0, 10);
+
+      try {
+        // 20k agent roots and 20 workflow roots in one time window, so only the spanType index is selective.
+        await harness.client.none(
+          `INSERT INTO ${table} ("traceId", "spanId", "name", "spanType", "isEvent", "startedAt", "endedAt")
+           SELECT 'eq-plan-' || value, 'eq-plan-' || value, 'root-span',
+                  CASE WHEN value <= 20 THEN $1 ELSE $2 END, false,
+                  $3::timestamptz + value * interval '1 millisecond', $3::timestamptz + interval '1 minute'
+           FROM generate_series(1, 20000) AS value`,
+          [SpanType.WORKFLOW_RUN, SpanType.AGENT_RUN, startedAt],
+        );
+        await harness.client.none(`ANALYZE ${table}`);
+
+        const plan = planTraceQuery(
+          parseTraceQueryRequest({
+            timeRange: { from: dayAt(0, 0).toISOString(), to: dayAt(1, 0).toISOString() },
+            where: { op: 'eq', left: { path: 'spanType' }, right: { literal: SpanType.WORKFLOW_RUN } },
+            page: { limit: 50 },
+          }),
+        );
+        const compiled = compilePostgresTraceQuery(harness.schema, plan);
+        const explained = await harness.client.one<{ 'QUERY PLAN': Array<{ Plan: ExplainPlanNode }> }>(
+          `EXPLAIN (ANALYZE, BUFFERS, FORMAT JSON) ${compiled.text}`,
+          compiled.values,
+        );
+        const nodes = collectPlanNodes(explained['QUERY PLAN'][0]!.Plan);
+        expect(nodes.some(node => node['Index Cond']?.includes('"spanType" = '))).toBe(true);
+        expect(nodes.find(node => node['Subplan Name'] === 'CTE root_scope')?.['Actual Rows']).toBe(20);
+        await expect(harness.domain.queryTraces(plan)).resolves.toMatchObject({
+          traces: expect.arrayContaining([expect.objectContaining({ traceId: 'eq-plan-1' })]),
+        });
       } finally {
         await harness.close();
       }

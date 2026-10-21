@@ -1,3 +1,4 @@
+import { OBSERVATIONAL_MEMORY_LIFECYCLE_COLUMNS } from '@internal/core/memory';
 import { spanRecordSchema } from './domains/observability';
 import { buildStorageSchema } from './types';
 import type { StorageColumn, StorageTableConfig } from './types';
@@ -558,6 +559,7 @@ export const OBSERVATIONAL_MEMORY_SCHEMA: Record<string, StorageColumn> = {
   originType: { type: 'text', nullable: false }, // 'initialization', 'observation', or 'reflection'
   config: { type: 'text', nullable: false }, // JSON object
   generationCount: { type: 'integer', nullable: false },
+  supersededBy: OBSERVATIONAL_MEMORY_LIFECYCLE_COLUMNS.supersededBy,
   lastObservedAt: { type: 'timestamp', nullable: true },
   lastReflectionAt: { type: 'timestamp', nullable: true },
   pendingMessageTokens: { type: 'integer', nullable: false }, // Token count
@@ -1093,4 +1095,47 @@ export const TABLE_CONFIGS: Partial<Record<TABLE_NAMES, StorageTableConfig>> = {
  */
 export const OBSERVATIONAL_MEMORY_TABLE_SCHEMA = {
   [TABLE_OBSERVATIONAL_MEMORY]: OBSERVATIONAL_MEMORY_SCHEMA,
+};
+
+export const TABLE_WORKFLOW_RUN_OWNERS = 'mastra_workflow_run_owners';
+export const TABLE_MEMORY_RUN_FENCES = 'mastra_memory_run_fences';
+
+/**
+ * Run ownership records for workflows stores that support run fencing.
+ * `leaseExpiresAt` and `updatedAt` are epoch milliseconds on the database
+ * clock; `leaseExpiresAt` is null once released. `updatedAt` is refreshed by
+ * every claim, renewal and release and anchors `workflows.runOwnership`
+ * retention. A run's first generation is the store clock in epoch
+ * milliseconds, so a run claimed again after its record was pruned still gets
+ * a higher generation.
+ */
+export const WORKFLOW_RUN_OWNERS_SCHEMA: Record<string, StorageColumn> = {
+  runId: { type: 'text', nullable: false, primaryKey: true },
+  generation: { type: 'bigint', nullable: false },
+  ownerId: { type: 'text', nullable: false },
+  leaseExpiresAt: { type: 'bigint', nullable: true },
+  updatedAt: { type: 'bigint', nullable: false },
+};
+
+/**
+ * The claim each run's memory writes must carry, for memory stores that support run fencing.
+ * `retiredAt` is epoch milliseconds on the database clock, set once the
+ * execution holding the fence settles and cleared when the fence is raised
+ * again. It anchors `memory.runFences` retention; NULL rows are never pruned.
+ */
+export const MEMORY_RUN_FENCES_SCHEMA: Record<string, StorageColumn> = {
+  runId: { type: 'text', nullable: false, primaryKey: true },
+  generation: { type: 'bigint', nullable: false },
+  ownerId: { type: 'text', nullable: false },
+  retiredAt: { type: 'bigint', nullable: true },
+};
+
+/**
+ * Schemas for the run fencing tables.
+ * Exported separately because only adapters that support run fencing create them,
+ * so they are not part of TABLE_NAMES.
+ */
+export const RUN_FENCING_TABLE_SCHEMAS = {
+  [TABLE_WORKFLOW_RUN_OWNERS]: WORKFLOW_RUN_OWNERS_SCHEMA,
+  [TABLE_MEMORY_RUN_FENCES]: MEMORY_RUN_FENCES_SCHEMA,
 };

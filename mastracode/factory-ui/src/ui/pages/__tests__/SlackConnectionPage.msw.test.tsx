@@ -25,21 +25,21 @@ function mockAccounts(accounts: ConnectedChannelAccount[], canConnect = true) {
   server.use(http.get(`${TEST_BASE_URL}/web/channel-accounts`, () => HttpResponse.json({ accounts, canConnect })));
 }
 
-function mockFactories(slackWorkItemsEnabled = false) {
+function mockFactories() {
   server.use(
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({
         projects: [
-          { id: 'fp-1', name: 'Primary Factory', slackWorkItemsEnabled },
-          { id: 'fp-2', name: 'Secondary Factory', slackWorkItemsEnabled: false },
+          { id: 'fp-1', name: 'Primary Factory' },
+          { id: 'fp-2', name: 'Secondary Factory' },
         ],
       }),
     ),
   );
 }
 
-function renderPage(slackWorkItemsEnabled = false) {
-  mockFactories(slackWorkItemsEnabled);
+function renderPage() {
+  mockFactories();
   return renderWithProviders(
     <MemoryRouter initialEntries={['/factories/fp-1/settings/connections/slack']}>
       <SidebarProvider storageKey="slack-connection-page-test" mobileBreakpoint={0}>
@@ -118,17 +118,6 @@ describe('SlackConnectionPage', () => {
       within(sessionBehaviorSection).getByRole('combobox', { name: 'Default factory for Test User' }),
     ).toHaveTextContent('Primary Factory');
 
-    // Routing a Slack account is personal; creating work items flips a flag on
-    // the factory, so it sits in its own block rather than under this one.
-    expect(
-      within(sessionBehaviorSection).queryByRole('switch', { name: 'Create work items for new Slack threads' }),
-    ).not.toBeInTheDocument();
-    const workItemsSection = screen.getByRole('heading', { level: 2, name: 'Work items' }).closest('section');
-    if (!workItemsSection) throw new Error('Work items section not found');
-    expect(
-      within(workItemsSection).getByRole('switch', { name: 'Create work items for new Slack threads' }),
-    ).toBeInTheDocument();
-
     const dangerZoneSection = screen.getByRole('heading', { level: 2, name: 'Danger zone' }).closest('section');
     if (!dangerZoneSection) throw new Error('Danger zone section not found');
     expect(dangerZoneSection).toHaveTextContent(
@@ -139,7 +128,6 @@ describe('SlackConnectionPage', () => {
     expect(screen.getAllByRole('heading', { level: 2 }).map(heading => heading.textContent)).toEqual([
       'Connection',
       'Session behavior',
-      'Work items',
       'Danger zone',
     ]);
   });
@@ -176,24 +164,22 @@ describe('SlackConnectionPage', () => {
     expect(slackRow).toHaveTextContent(/Slack.*Not connected.*Connect Slack/);
   });
 
-  it('given a linked account, when work-item creation is enabled, then it updates the active Factory', async () => {
+  it('given a linked account, when rendered, then it offers no Slack work-item setting and never updates the Factory', async () => {
     mockAccounts([slackLink]);
-    let patchBody: unknown;
+    let projectPatches = 0;
     server.use(
-      http.patch(`${TEST_BASE_URL}/web/factory/projects/fp-1`, async ({ request }) => {
-        patchBody = await request.json();
-        return HttpResponse.json({ project: { id: 'fp-1', name: 'Primary Factory', slackWorkItemsEnabled: true } });
+      http.patch(`${TEST_BASE_URL}/web/factory/projects/:id`, () => {
+        projectPatches += 1;
+        return HttpResponse.json({ project: { id: 'fp-1', name: 'Primary Factory' } });
       }),
     );
     const { client } = renderPage();
-    const user = userEvent.setup();
-    const workItemSwitch = await screen.findByRole('switch', { name: 'Create work items for new Slack threads' });
-    expect(workItemSwitch).not.toBeChecked();
 
-    await user.click(workItemSwitch);
-
-    await waitFor(() => expect(patchBody).toEqual({ slackWorkItemsEnabled: true }));
+    expect(await screen.findByRole('button', { name: 'Disconnect Test User' })).toBeInTheDocument();
+    expect(screen.getByText('Example Workspace')).toBeInTheDocument();
+    expect(screen.queryByRole('switch', { name: /create work items/i })).toBeNull();
     await waitForMutationsIdle(client);
+    expect(projectPatches).toBe(0);
   });
 
   it('given a linked account, when disconnected, then it sends the sender key and returns to the connect state', async () => {

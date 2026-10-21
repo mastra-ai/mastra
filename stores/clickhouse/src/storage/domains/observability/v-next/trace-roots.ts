@@ -20,6 +20,8 @@ import { buildTraceFilterConditions, buildTraceOrderByClause } from './filters';
 import { CH_SETTINGS, rowToLightSpanRecord, rowToSpanRecord } from './helpers';
 import type { ClickHouseDeltaCursorStrategy } from './polling';
 import { appendWhere, assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
+import { needsPreviewPayloads } from './previews';
+import { compileClickHouseTraceRootPayloads, toTraceRootRowKey, traceRootRowKey } from './trace-query';
 
 // ---------------------------------------------------------------------------
 // getRootSpan
@@ -63,9 +65,9 @@ type TraceRootProjection = {
 };
 
 /**
- * Columns a trace list renders. `input` is selected only so the row mapper can
- * derive a short `inputPreview` at read time (see `rowToLightSpanRecord`); the
- * raw blob itself never leaves the store.
+ * Columns a trace list renders. The previews are the stored ones; rows written
+ * before they were stored get theirs from the payload columns, fetched for just
+ * those rows (see `withPreviewPayloads`).
  */
 const LIGHT_TRACE_ROOT_FIELDS = [
   'traceId',
@@ -80,10 +82,13 @@ const LIGHT_TRACE_ROOT_FIELDS = [
   'entityId',
   'entityName',
   'threadId',
+  'organizationId',
   'resourceId',
   'error',
   'metadataRaw',
-  'input',
+  'inputPreview',
+  'outputPreview',
+  'errorPreview',
 ];
 
 const FULL_PROJECTION: TraceRootProjection = {
@@ -95,7 +100,8 @@ const FULL_PROJECTION: TraceRootProjection = {
 const LIGHT_PROJECTION: TraceRootProjection = {
   // `LIMIT 1 BY dedupeKey` runs after projection, so the inner select must keep dedupeKey.
   innerSelect: ['dedupeKey', ...LIGHT_TRACE_ROOT_FIELDS].join(', '),
-  outerSelect: LIGHT_TRACE_ROOT_FIELDS.join(', '),
+  // dedupeKey identifies the row for the legacy preview payload lookup (withPreviewPayloads).
+  outerSelect: ['dedupeKey', ...LIGHT_TRACE_ROOT_FIELDS].join(', '),
   // startedAt/traceId are re-selected by the delta join itself.
   deltaSelect: LIGHT_TRACE_ROOT_FIELDS.filter(field => field !== 'startedAt' && field !== 'traceId')
     .map(field => `r.${field}`)
@@ -118,7 +124,7 @@ async function listTraceRows<TSpan>(
   args: ListTracesArgs,
   strategy: ClickHouseDeltaCursorStrategy | null,
   projection: TraceRootProjection,
-  mapRows: (rows: Record<string, any>[]) => TSpan[],
+  mapRows: (rows: Record<string, any>[]) => TSpan[] | Promise<TSpan[]>,
 ): Promise<{
   pagination?: { total: number; page: number; perPage: number; hasMore: boolean };
   delta?: { limit: number; hasMore: boolean };
@@ -167,7 +173,7 @@ async function listTraceRows<TSpan>(
     const visibleRows = rows.slice(0, limit);
 
     return {
-      spans: mapRows(visibleRows),
+      spans: await mapRows(visibleRows),
       delta: { limit, hasMore: rows.length > limit },
       deltaCursor: visibleRows.length > 0 ? buildTraceCursor(visibleRows[visibleRows.length - 1]!) : streamHeadCursor,
     };
@@ -248,7 +254,7 @@ async function listTraceRows<TSpan>(
       perPage,
       hasMore: (page + 1) * perPage < total,
     },
-    spans: mapRows(rows),
+    spans: await mapRows(rows),
     ...(deltaCursorEnabled ? { deltaCursor: currentDeltaCursor } : {}),
   };
 }
@@ -263,16 +269,32 @@ export async function listTraces(
 }
 
 /**
+ * Adds `input` / `output` / `error` to the rows written before previews were stored, read from
+ * the same root row version (same `endedAt`) the list kept. A page can hold several tenants' rows,
+ * so each row is looked up by its own identity, tenant included, not by one shared scope.
+ */
+async function withPreviewPayloads(client: ClickHouseClient, rows: Record<string, any>[]) {
+  const missing = rows.filter(needsPreviewPayloads);
+  if (missing.length === 0) return rows;
+  const compiled = compileClickHouseTraceRootPayloads(missing.map(toTraceRootRowKey), undefined, 'previewPayloads');
+  const result = await client.query({ ...compiled, format: 'JSONEachRow', clickhouse_settings: CH_SETTINGS });
+  const payloads = new Map(((await result.json()) as Record<string, any>[]).map(row => [traceRootRowKey(row), row]));
+  return rows.map(row => (needsPreviewPayloads(row) ? { ...row, ...payloads.get(traceRootRowKey(row)) } : row));
+}
+
+/**
  * List traces projecting only the columns a trace list renders.
- * Skips the attributes/output blobs and reduces `input` to a short preview in
- * the mapper, so the response payload stays flat as traces grow.
+ * Skips the attributes/input/output blobs and reads the stored previews instead,
+ * so the response payload stays flat as traces grow.
  */
 export async function listTracesLight(
   client: ClickHouseClient,
   args: ListTracesArgs,
   strategy: ClickHouseDeltaCursorStrategy | null,
 ): Promise<ListTracesLightResponse> {
-  return listTraceRows(client, args, strategy, LIGHT_PROJECTION, rows => rows.map(rowToLightSpanRecord));
+  return listTraceRows(client, args, strategy, LIGHT_PROJECTION, async rows =>
+    (await withPreviewPayloads(client, rows)).map(rowToLightSpanRecord),
+  );
 }
 
 type TraceDeltaRow = Record<string, any> & {

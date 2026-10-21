@@ -1,5 +1,6 @@
 import type { GetAgentResponse, GetMemoryStatusResponse } from '@mastra/client-js';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
@@ -8,7 +9,7 @@ import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useAgent, useAgentVersions } from '@mastra/react/hooks/agents';
 import { useMemory } from '@mastra/react/hooks/memory';
-import { Bot, ChevronRight, ExternalLink, Pencil, SlidersHorizontal, WorkflowIcon, Wrench } from 'lucide-react';
+import { Bot, ExternalLink, Pencil, SlidersHorizontal, WorkflowIcon, Wrench } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
@@ -365,12 +366,7 @@ export function AgentCapabilitiesFooter({ agentId }: { agentId: string }) {
               <ProcessorsCapability agentId={agentId} view="chip" />
             </div>
             <CapabilitiesSummary agentId={agentId} />
-            <ChevronRight
-              className={cn(
-                'size-3.5 shrink-0 text-muted-foreground transition-transform duration-normal ease-out-custom',
-                isExpanded ? 'rotate-90' : undefined,
-              )}
-            />
+            <DisclosureChevron direction="right" className="size-3.5 text-muted-foreground" />
           </button>
         </CollapsibleTrigger>
 

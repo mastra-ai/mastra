@@ -586,6 +586,105 @@ describe('DatasetsManager', () => {
     expect(comparison.baselineId).toBe(exp2.experimentId);
   });
 
+  describe('compareExperiments', () => {
+    const runInline = (items: Array<{ id: string; prompt: string }>, scoreFor: (prompt: string) => number) => {
+      const scorer: MastraScorer<any, any, any, any> = {
+        id: 'accuracy',
+        name: 'Accuracy',
+        description: 'Mock scorer',
+        run: vi.fn().mockImplementation(async ({ input }: { input: { prompt: string } }) => ({
+          score: scoreFor(input.prompt),
+          reason: 'mock',
+        })),
+      } as unknown as MastraScorer<any, any, any, any>;
+
+      return runExperiment(mastra, {
+        data: items.map(item => ({ id: item.id, input: { prompt: item.prompt } })),
+        task: async ({ input }) => `out-${(input as { prompt: string }).prompt}-${scoreFor('x')}`,
+        scorers: [scorer],
+      });
+    };
+
+    describe('when given three experiments', () => {
+      it('returns a result entry for every experiment on each item', async () => {
+        const items = [
+          { id: 'item-1', prompt: 'a' },
+          { id: 'item-2', prompt: 'b' },
+        ];
+        const exp1 = await runInline(items, () => 0.1);
+        const exp2 = await runInline(items, () => 0.5);
+        const exp3 = await runInline(items, () => 0.9);
+
+        const comparison = await mgr.compareExperiments({
+          experimentIds: [exp1.experimentId, exp2.experimentId, exp3.experimentId],
+        });
+
+        expect(comparison.baselineId).toBe(exp1.experimentId);
+        expect(comparison.items).toHaveLength(2);
+        for (const item of comparison.items) {
+          expect(Object.keys(item.results).sort()).toEqual(
+            [exp1.experimentId, exp2.experimentId, exp3.experimentId].sort(),
+          );
+          expect(item.results[exp1.experimentId]?.scores).toEqual({ accuracy: 0.1 });
+          expect(item.results[exp2.experimentId]?.scores).toEqual({ accuracy: 0.5 });
+          expect(item.results[exp3.experimentId]?.scores).toEqual({ accuracy: 0.9 });
+          expect(item.results[exp3.experimentId]?.output).toBe(`out-${(item.input as { prompt: string }).prompt}-0.9`);
+        }
+      });
+
+      it('keeps items that only one contender ran', async () => {
+        const exp1 = await runInline([{ id: 'shared', prompt: 'a' }], () => 0.1);
+        const exp2 = await runInline([{ id: 'shared', prompt: 'a' }], () => 0.5);
+        const exp3 = await runInline(
+          [
+            { id: 'shared', prompt: 'a' },
+            { id: 'only-in-3', prompt: 'c' },
+          ],
+          () => 0.9,
+        );
+
+        const comparison = await mgr.compareExperiments({
+          experimentIds: [exp1.experimentId, exp2.experimentId, exp3.experimentId],
+        });
+
+        const onlyIn3 = comparison.items.find(item => item.itemId === 'only-in-3');
+        expect(comparison.items.map(item => item.itemId).sort()).toEqual(['only-in-3', 'shared']);
+        expect(onlyIn3?.input).toEqual({ prompt: 'c' });
+        expect(onlyIn3?.results[exp1.experimentId]).toBeNull();
+        expect(onlyIn3?.results[exp2.experimentId]).toBeNull();
+        expect(onlyIn3?.results[exp3.experimentId]?.scores).toEqual({ accuracy: 0.9 });
+      });
+    });
+
+    describe('when baselineId is not among experimentIds', () => {
+      it('throws COMPARE_INVALID_INPUT', async () => {
+        await expect(mgr.compareExperiments({ experimentIds: ['a', 'b'], baselineId: 'c' })).rejects.toMatchObject({
+          id: 'COMPARE_INVALID_INPUT',
+        });
+      });
+    });
+
+    describe('when experimentIds contains duplicates', () => {
+      it('deduplicates before comparing', async () => {
+        const items = [{ id: 'item-1', prompt: 'a' }];
+        const exp1 = await runInline(items, () => 0.1);
+        const exp2 = await runInline(items, () => 0.5);
+
+        const comparison = await mgr.compareExperiments({
+          experimentIds: [exp1.experimentId, exp2.experimentId, exp2.experimentId, exp1.experimentId],
+        });
+
+        expect(Object.keys(comparison.items[0]!.results)).toHaveLength(2);
+      });
+
+      it('throws COMPARE_INVALID_INPUT when fewer than 2 distinct ids remain', async () => {
+        await expect(mgr.compareExperiments({ experimentIds: ['a', 'a'] })).rejects.toMatchObject({
+          id: 'COMPARE_INVALID_INPUT',
+        });
+      });
+    });
+  });
+
   // 15. mastra.datasets singleton
   it('mastra.datasets returns the same instance on repeated access', () => {
     const realMastra = new Mastra({ logger: false });

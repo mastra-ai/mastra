@@ -25,7 +25,6 @@ export const setupCompletionPersistenceScenario = {
       version: 1,
       modePackId: null,
       omPackId: 'custom',
-      quietModePreferenceSelected: true,
     };
     settings.models = {
       ...settings.models,

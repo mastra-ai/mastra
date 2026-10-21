@@ -13,6 +13,8 @@ import type {
   KNOWLEDGE_TABLE_NAME,
   StorageColumn,
   TABLE_NAMES,
+  TABLE_MEMORY_RUN_FENCES,
+  TABLE_WORKFLOW_RUN_OWNERS,
   CreateIndexOptions,
   IndexInfo,
   StorageIndexStats,
@@ -31,6 +33,9 @@ import type { SchemaSnapshot } from './schema-snapshot';
 
 // Re-export DbClient for external use
 export type { DbClient } from '../client';
+
+/** Tables retention can prune: the core tables plus the run fencing tables, which aren't in TABLE_NAMES. */
+export type PrunableTable = TABLE_NAMES | typeof TABLE_WORKFLOW_RUN_OWNERS | typeof TABLE_MEMORY_RUN_FENCES;
 
 const POSTGRES_MAX_BIND_PARAMETERS = 65_535;
 
@@ -633,8 +638,6 @@ export class PgDB extends MastraBase {
   }
 
   async hasColumn(table: string, column: string): Promise<boolean> {
-    const schema = this.schemaName || 'public';
-
     const snapshot = this.schemaSnapshot;
     if (snapshot) {
       const columns = snapshot.columns.get(table);
@@ -642,12 +645,9 @@ export class PgDB extends MastraBase {
       return columns.has(column) || columns.has(column.toLowerCase());
     }
 
-    const result = await this.client.oneOrNone(
-      `SELECT 1 FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 AND (column_name = $3 OR column_name = $4)`,
-      [schema, table, column, column.toLowerCase()],
-    );
-
-    return !!result;
+    // Outside init, reuse getColumnType's per-instance cache so hot paths
+    // (e.g. listWorkflowRuns with resourceId) don't probe the catalog per call.
+    return (await this.getColumnType(table, column)) !== null;
   }
 
   /**
@@ -674,8 +674,9 @@ export class PgDB extends MastraBase {
     if (cached !== undefined) return cached;
 
     const schema = this.schemaName || 'public';
+    // Prefer the exact-case column when both "resourceId" and "resourceid" exist.
     const result = await this.client.oneOrNone<{ data_type: string }>(
-      `SELECT data_type FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 AND (column_name = $3 OR column_name = $4)`,
+      `SELECT data_type FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2 AND (column_name = $3 OR column_name = $4) ORDER BY (column_name = $3) DESC LIMIT 1`,
       [schema, table, column, column.toLowerCase()],
     );
 
@@ -1026,9 +1027,13 @@ export class PgDB extends MastraBase {
     await flush();
   }
 
-  async insert({ tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> }): Promise<void> {
+  /** `client` lets a caller run the insert inside its own transaction. */
+  async insert(
+    { tableName, record }: { tableName: TABLE_NAMES; record: Record<string, any> },
+    client: Pick<DbClient, 'none'> | Pick<TxClient, 'none'> = this.client,
+  ): Promise<void> {
     try {
-      await this.executeInsert(this.client, { tableName, record });
+      await this.executeInsert(client, { tableName, record });
     } catch (error) {
       throw new MastraError(
         {
@@ -2224,7 +2229,7 @@ export class PgDB extends MastraBase {
     cutoff,
     limit,
   }: {
-    tableName: TABLE_NAMES;
+    tableName: PrunableTable;
     column: string;
     cutoff: Date | string | number;
     limit: number;
@@ -2233,6 +2238,8 @@ export class PgDB extends MastraBase {
     const fullTableName = getTableName({ indexName: tableName, schemaName: getSchemaName(this.schemaName) });
     const parsedColumn = `"${parseSqlIdentifier(column, 'column name')}"`;
 
+    // The outer anchor check keeps a row whose anchor moved past the cutoff
+    // after the subquery selected it (e.g. a run ownership renewal).
     const sql = `
       DELETE FROM ${fullTableName}
       WHERE ctid IN (
@@ -2240,6 +2247,7 @@ export class PgDB extends MastraBase {
         WHERE ${parsedColumn} < $1
         LIMIT $2
       )
+      AND ${parsedColumn} < $1
     `;
 
     const result = await this.client.query(sql, [cutoff, limit]);
@@ -2310,7 +2318,7 @@ export class PgDB extends MastraBase {
     column,
   }: {
     indexName: string;
-    tableName: TABLE_NAMES;
+    tableName: PrunableTable;
     column: string;
   }): Promise<void> {
     const name = buildConstraintName({ baseName: indexName });

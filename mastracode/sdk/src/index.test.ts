@@ -152,7 +152,7 @@ vi.mock('./onboarding/settings.js', () => ({
       omReflectionThreshold: null,
       subagentModels: {},
     },
-    preferences: { yolo: null, theme: 'auto', thinkingLevel: 'off', quietMode: false },
+    preferences: { yolo: null, theme: 'auto', thinkingLevel: 'off', previewLines: 2 },
     storage: { backend: 'libsql', libsql: {}, pg: {} },
     customModelPacks: [],
     customProviders: [],

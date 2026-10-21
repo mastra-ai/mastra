@@ -28,7 +28,7 @@ env:
 jobs:
   publish-experiment-worker-registry:
     name: Publish experiment worker registry
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 30
     permissions:
       contents: read
@@ -64,7 +64,7 @@ jobs:
           printf '%s\n' "$digest" > "${{ runner.temp }}/experiment-worker-registry/handoff-digest.txt"
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
       - name: Upload registry artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: experiment-worker-registry
           path: ${{ runner.temp }}/experiment-worker-registry
@@ -74,7 +74,7 @@ jobs:
     name: Experiment worker PR tier
     needs: publish-experiment-worker-registry
     if: github.event_name == 'workflow_dispatch' && inputs.tier == 'pr' && (inputs.scenario == '' || inputs.scenario == null)
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 10
     permissions:
       contents: read
@@ -86,7 +86,7 @@ jobs:
       - uses: ./.github/actions/setup-pnpm-node
       - run: pnpm install --frozen-lockfile
         working-directory: ./e2e-tests/experiment-worker
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: experiment-worker-registry
           path: ${{ runner.temp }}/experiment-worker-registry
@@ -112,7 +112,7 @@ jobs:
           MASTRA_EXPERIMENT_E2E_REQUIRE_PUBLISHED_REGISTRY: '1'
           MASTRA_EXPERIMENT_E2E_REPORT_DIR: ${{ runner.temp }}/experiment-worker-reports
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: experiment-worker-pr-reports
           path: ${{ runner.temp }}/experiment-worker-reports
@@ -123,7 +123,7 @@ jobs:
     name: Experiment worker full tier
     needs: publish-experiment-worker-registry
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && ((inputs.tier == 'full' && (inputs.scenario == '' || inputs.scenario == null)) || (inputs.scenario != '' && inputs.scenario != 'workspace-browser' && inputs.scenario != 'remote-sandbox' && inputs.scenario != 'object-store' && inputs.scenario != 'real-model' && inputs.scenario != 'hosted-proxy')))
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 30
     permissions:
       contents: read
@@ -135,7 +135,7 @@ jobs:
       - uses: ./.github/actions/setup-pnpm-node
       - run: pnpm install --frozen-lockfile
         working-directory: ./e2e-tests/experiment-worker
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: experiment-worker-registry
           path: ${{ runner.temp }}/experiment-worker-registry
@@ -166,7 +166,7 @@ jobs:
           MASTRA_EXPERIMENT_E2E_REQUIRE_PUBLISHED_REGISTRY: '1'
           MASTRA_EXPERIMENT_E2E_REPORT_DIR: ${{ runner.temp }}/experiment-worker-reports
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: experiment-worker-full-reports
           path: ${{ runner.temp }}/experiment-worker-reports
@@ -177,7 +177,7 @@ jobs:
     name: Experiment worker browser tier
     needs: publish-experiment-worker-registry
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && ((inputs.tier == 'full' && (inputs.scenario == '' || inputs.scenario == null)) || inputs.scenario == 'workspace-browser'))
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 15
     permissions:
       contents: read
@@ -189,7 +189,7 @@ jobs:
       - uses: ./.github/actions/setup-pnpm-node
       - run: pnpm install --frozen-lockfile
         working-directory: ./e2e-tests/experiment-worker
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: experiment-worker-registry
           path: ${{ runner.temp }}/experiment-worker-registry
@@ -215,7 +215,7 @@ jobs:
           MASTRA_EXPERIMENT_E2E_REQUIRE_PUBLISHED_REGISTRY: '1'
           MASTRA_EXPERIMENT_E2E_REPORT_DIR: ${{ runner.temp }}/experiment-worker-reports
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: experiment-worker-browser-reports
           path: ${{ runner.temp }}/experiment-worker-reports
@@ -226,7 +226,7 @@ jobs:
     name: Experiment worker gated (remote sandbox)
     needs: publish-experiment-worker-registry
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && ((inputs.tier == 'gated' && (inputs.scenario == '' || inputs.scenario == null)) || inputs.scenario == 'remote-sandbox'))
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 15
     continue-on-error: true
     environment: experiment-worker-e2e-gated
@@ -243,7 +243,7 @@ jobs:
           MASTRA_E2E_REMOTE_SANDBOX_URL: ${{ secrets.EXPERIMENT_WORKER_REMOTE_SANDBOX_URL }}
           MASTRA_E2E_REMOTE_SANDBOX_API_KEY: ${{ secrets.EXPERIMENT_WORKER_REMOTE_SANDBOX_API_KEY }}
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           {
             name: experiment-worker-gated-remote-sandbox-reports,
@@ -256,7 +256,7 @@ jobs:
     name: Experiment worker gated (object store)
     needs: publish-experiment-worker-registry
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && ((inputs.tier == 'gated' && (inputs.scenario == '' || inputs.scenario == null)) || inputs.scenario == 'object-store'))
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 15
     continue-on-error: true
     environment: experiment-worker-e2e-gated
@@ -274,7 +274,7 @@ jobs:
           MASTRA_E2E_OBJECT_STORE_ACCESS_KEY: ${{ secrets.EXPERIMENT_WORKER_OBJECT_STORE_ACCESS_KEY }}
           MASTRA_E2E_OBJECT_STORE_SECRET_KEY: ${{ secrets.EXPERIMENT_WORKER_OBJECT_STORE_SECRET_KEY }}
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           {
             name: experiment-worker-gated-object-store-reports,
@@ -287,7 +287,7 @@ jobs:
     name: Experiment worker gated (real model)
     needs: publish-experiment-worker-registry
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && ((inputs.tier == 'gated' && (inputs.scenario == '' || inputs.scenario == null)) || inputs.scenario == 'real-model'))
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 15
     continue-on-error: true
     environment: experiment-worker-e2e-gated
@@ -304,7 +304,7 @@ jobs:
           MASTRA_E2E_MODEL_PROVIDER: ${{ vars.EXPERIMENT_WORKER_MODEL_PROVIDER }}
           MASTRA_E2E_MODEL_API_KEY: ${{ secrets.EXPERIMENT_WORKER_MODEL_API_KEY }}
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           {
             name: experiment-worker-gated-real-model-reports,
@@ -317,7 +317,7 @@ jobs:
     name: Experiment worker gated (hosted proxy)
     needs: publish-experiment-worker-registry
     if: github.event_name == 'schedule' || (github.event_name == 'workflow_dispatch' && ((inputs.tier == 'gated' && (inputs.scenario == '' || inputs.scenario == null)) || inputs.scenario == 'hosted-proxy'))
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 15
     continue-on-error: true
     environment: experiment-worker-e2e-gated
@@ -334,7 +334,7 @@ jobs:
           MASTRA_E2E_HOSTED_PROXY_URL: ${{ secrets.EXPERIMENT_WORKER_HOSTED_PROXY_URL }}
           MASTRA_E2E_HOSTED_PROXY_TOKEN: ${{ secrets.EXPERIMENT_WORKER_HOSTED_PROXY_TOKEN }}
       - if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           {
             name: experiment-worker-gated-hosted-proxy-reports,

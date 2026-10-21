@@ -21,7 +21,9 @@ type FactorySessionControllerContext = AgentControllerRequestContext<FactorySess
 
 /** Minimal source-control session lookup used to heal recovered session state. */
 export interface FactorySessionSourceLookup {
-  getBySessionId(sessionId: string): Promise<{ orgId: string; projectRepositoryId: string; baseBranch: string } | null>;
+  getBySessionId(
+    sessionId: string,
+  ): Promise<{ orgId: string; projectRepositoryId: string | null; baseBranch: string } | null>;
 }
 
 export function getFactorySessionCoordinates(
@@ -30,12 +32,12 @@ export function getFactorySessionCoordinates(
   if (!requestContext || typeof requestContext.get !== 'function') return null;
   const context = requestContext.get('controller') as FactorySessionControllerContext | undefined;
   const factoryProjectId = context?.getState().factoryProjectId;
-  if (!context?.threadId || !context.resourceId || !factoryProjectId) return null;
+  if (!context?.threadId || !context.resourceId || !context.sessionId || !factoryProjectId) return null;
   return {
     factoryProjectId,
     threadId: context.threadId,
     resourceId: context.resourceId,
-    sessionId: context.resourceId,
+    sessionId: context.sessionId,
   };
 }
 
@@ -83,14 +85,14 @@ export async function findSessionRunBinding(
 ): Promise<FactoryRunBindingRecord | null> {
   if (!requestContext || typeof requestContext.get !== 'function') return null;
   const context = requestContext.get('controller') as FactorySessionControllerContext | undefined;
-  if (!context?.threadId || !context.resourceId) return null;
+  if (!context?.threadId || !context.resourceId || !context.sessionId) return null;
   const orgId = getFactoryAuthOrgId(getFactoryAuthUserFromContext(requestContext));
   if (!orgId) return null;
   return storage.findActiveRunBindingByThread({
     orgId,
     threadId: context.threadId,
     resourceId: context.resourceId,
-    sessionId: context.resourceId,
+    sessionId: context.sessionId,
   });
 }
 
@@ -128,7 +130,7 @@ export async function resolveFactorySessionAddress(options: {
   const requestContext = options.requestContext;
   if (!requestContext || typeof requestContext.get !== 'function') return null;
   const context = requestContext.get('controller') as FactorySessionControllerContext | undefined;
-  if (!context?.threadId || !context.resourceId) return null;
+  if (!context?.threadId || !context.resourceId || !context.sessionId) return null;
   const user = getFactoryAuthUserFromContext(requestContext);
   const orgId = getFactoryAuthOrgId(user);
   if (!orgId) return null;
@@ -137,7 +139,7 @@ export async function resolveFactorySessionAddress(options: {
     orgId,
     threadId: context.threadId,
     resourceId: context.resourceId,
-    sessionId: context.resourceId,
+    sessionId: context.sessionId,
   });
   if (!binding) return null;
 
@@ -149,7 +151,7 @@ export async function resolveFactorySessionAddress(options: {
       factoryProjectId: binding.factoryProjectId,
       threadId: context.threadId,
       resourceId: context.resourceId,
-      sessionId: context.resourceId,
+      sessionId: context.sessionId,
     },
     binding,
   };
@@ -178,7 +180,7 @@ async function healRecoveredSessionState(options: {
     const item = await options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
     const foundSession = (await options.sessions?.getBySessionId(binding.sessionId)) ?? null;
     const sourceSession = foundSession?.orgId === binding.orgId ? foundSession : null;
-    if (sourceSession) {
+    if (sourceSession?.projectRepositoryId) {
       updates.projectRepositoryId = sourceSession.projectRepositoryId;
     }
     const untrusted = updates.untrustedCheckout === true || item?.externalSource?.type === 'pull-request';

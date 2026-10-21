@@ -188,6 +188,17 @@ const stream = await agent.stream('Research solana for me', {
 
 Visit [`Agent.stream()`](/reference/streaming/agents/stream) for the full API.
 
+To change the default for every `untilIdle: true` call, including calls Mastra makes internally, set `untilIdleMaxIdleMs` on the Mastra `backgroundTasks` config. Use a value longer than your slowest background task so its completion still triggers a continuation turn. A per-call `maxIdleMs` still takes precedence:
+
+```typescript
+export const mastra = new Mastra({
+  backgroundTasks: {
+    enabled: true,
+    untilIdleMaxIdleMs: 30 * 60_000,
+  },
+})
+```
+
 ### Aggregate properties
 
 `stream()` with `untilIdle` returns a `MastraModelOutput` that looks like the one from a regular `stream()` call, but `fullStream` alone spans the initial turn and any auto-continuations. Aggregate properties (`text`, `toolCalls`, `toolResults`, `finishReason`, `messageList`, `getFullOutput()`) still resolve against the **first turn's** internal buffer. If you need an aggregate view across continuations, consume `fullStream` yourself and accumulate.
@@ -334,14 +345,14 @@ export const mastra = new Mastra({
 
 ### Subscribe to all task events
 
-Calling `stream()` with no filter returns a stream of every task event in the system. On connection, the stream emits a snapshot of all currently running tasks, then forwards live events as they happen.
+Pass `allResources: true` to receive every task event in the system, across all resources. On connection, the stream emits a snapshot of all currently running tasks, then forwards live events as they happen.
 
 ```typescript title="src/mastra/run.ts" oxfmt:false
 const bgManager = mastra.backgroundTaskManager;
 if (!bgManager) throw new Error('Background tasks are not enabled');
 
 const controller = new AbortController();
-const stream = bgManager.stream({ abortSignal: controller.signal });
+const stream = bgManager.stream({ allResources: true, abortSignal: controller.signal });
 
 for await (const chunk of stream) {
   switch (chunk.type) {
@@ -359,6 +370,12 @@ for await (const chunk of stream) {
 ```
 
 The stream stays open until the caller's `AbortSignal` fires. Always pass an `abortSignal` so you can disconnect cleanly.
+
+:::warning
+
+`allResources: true` delivers task arguments and results for every user. Use it only in trusted server-side code, never to serve a single user's request. Without `resourceId` or `allResources`, `stream()` only delivers tasks that have no `resourceId`. Agent tasks dispatched with memory always have a `resourceId`, so they won't appear in that stream.
+
+:::
 
 ### Filter the stream
 
@@ -380,6 +397,7 @@ const stream = bgManager.stream({
 | `threadId` | Only events from tasks scoped to this memory thread |
 | `resourceId` | Only events from tasks scoped to this resource |
 | `taskId` | Only events for a single task |
+| `allResources` | Include tasks from every resource when `resourceId` is omitted. Trusted server-side code only |
 | `abortSignal` | Closes the stream when the signal aborts |
 
 ### Look up task state directly

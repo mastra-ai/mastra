@@ -32,7 +32,7 @@ import { SimpleAuth } from '@mastra/core/server'
 export const mastra = new Mastra({
   server: {
     auth: new SimpleAuth({
-      users: {
+      tokens: {
         'my-api-key': {
           id: 'user-1',
           name: 'Alice',
@@ -102,7 +102,7 @@ import { StaticRBACProvider, DEFAULT_ROLES } from '@mastra/core/auth/ee'
 export const mastra = new Mastra({
   server: {
     auth: new SimpleAuth({
-      users: {
+      tokens: {
         'admin-key': { id: 'user-1', name: 'Alice', role: 'admin' },
         'viewer-key': { id: 'user-2', name: 'Bob', role: 'viewer' },
       },
@@ -129,7 +129,7 @@ Permissions follow the pattern `{resource}:{action}`, with optional resource-lev
 | `agents:execute` | Execute agents only |
 | `agents:read:my-id` | Read a specific agent by ID |
 
-Resources include `agents`, `workflows`, `tools`, `datasets`, `memory`, `scores`, `observability`, and others. Actions are `read`, `write`, `execute`, and `delete`.
+Resources include `agents`, `workflows`, `tools`, `datasets`, `memory`, `scores`, `observability`, and others. Actions are `read`, `write`, `create`, `delete`, `execute`, `publish`, and `share`.
 
 ### Map external provider roles
 

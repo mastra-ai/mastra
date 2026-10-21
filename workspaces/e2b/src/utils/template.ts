@@ -62,7 +62,8 @@ export type TemplateSpec =
  * every sandbox constructed with the same name shares one template. When
  * the name is missing the build runs once; if the build fails the sandbox
  * falls back to `fallbackTemplate` (or the default mountable template) so a
- * broken build degrades to a cold start instead of a wedged session.
+ * broken build degrades to a cold start instead of a wedged session. Set
+ * `fallbackTemplate: false` to fail closed instead.
  */
 export interface NamedTemplateSpec {
   /** Deterministic template ref (`name:tag`, e.g. content-hashed name). */
@@ -75,8 +76,12 @@ export interface NamedTemplateSpec {
    * fallback's own `fallbackTemplate` is ignored, and anything failing past
    * it lands on the default mountable template. Defaults to the default
    * mountable template.
+   *
+   * `false` disables fallback entirely: a failed named build, or a resolved
+   * ref that cannot create a sandbox, rejects `start()` with the original
+   * error instead of booting a sandbox without the template's contents.
    */
-  fallbackTemplate?: string | TemplateBuilder | NamedTemplateSpec;
+  fallbackTemplate?: string | TemplateBuilder | NamedTemplateSpec | false;
   /**
    * Ref (`name:tag`) of a previous successful build of this template. When
    * `name` does not exist yet but this ref does, the sandbox is created

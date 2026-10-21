@@ -1,7 +1,7 @@
 import { Agent } from '@mastra/core/agent';
-import type { AgentMemoryOption, MastraDBMessage } from '@mastra/core/agent';
+import type { AgentMemoryOption, MastraDBMessage, ModelWithRetries } from '@mastra/core/agent';
 import { modelSupportsAttachments } from '@mastra/core/llm';
-import type { WidenModelId } from '@mastra/core/llm';
+import type { WidenedMastraModelConfig, WidenModelId } from '@mastra/core/llm';
 import type { Mastra } from '@mastra/core/mastra';
 import type { MastraMemory } from '@mastra/core/memory';
 import type { ObservabilityContext } from '@mastra/core/observability';
@@ -27,7 +27,7 @@ import {
   parseMultiThreadObserverOutput,
   describeDegenerateOutput,
 } from './observer-agent';
-import { assertCompleteModelResponse, withRetry } from './retry';
+import { assertCompleteModelResponse, RETRY_CONFIG, withRetry } from './retry';
 import { createTemporaryOmMemoryContext } from './temporary-memory';
 import type { TokenCounter } from './token-counter';
 import { withOmTracingSpan } from './tracing';
@@ -181,7 +181,7 @@ export class ObserverRunner {
     } else if (typeof agentModel === 'function') {
       const resolveDynamicModel = agentModel;
       agentModel = (async args => {
-        const resolvedModel = await resolveDynamicModel(args);
+        const resolvedModel: WidenedMastraModelConfig | ModelWithRetries[] = await resolveDynamicModel(args);
         return Array.isArray(resolvedModel)
           ? resolvedModel.map(fallback => ({ ...fallback, maxRetries: 0 }))
           : resolvedModel;
@@ -352,7 +352,7 @@ export class ObserverRunner {
 
     const doGenerate = async () => {
       return withRetry(
-        () =>
+        (attemptSignal, onActivity) =>
           withOmTracingSpan({
             phase: 'observer',
             model: resolvedModel.model,
@@ -382,7 +382,8 @@ export class ObserverRunner {
                     modelSettings: { ...this.observationConfig.modelSettings },
                     providerOptions: this.observationConfig.providerOptions as any,
                     ...(attemptMemory ? { memory: attemptMemory } : {}),
-                    ...(abortSignal ? { abortSignal } : {}),
+                    abortSignal: attemptSignal,
+                    onChunk: onActivity,
                     ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
                     ...childObservabilityContext,
                   });
@@ -409,6 +410,7 @@ export class ObserverRunner {
         {
           label: 'observer',
           abortSignal,
+          idleTimeoutMs: RETRY_CONFIG.modelCallIdleTimeoutMs,
           maxRetries: this.observationConfig.maxRetries,
         },
       );
@@ -508,6 +510,7 @@ export class ObserverRunner {
     timeZone?: string,
     mainAgent?: ProcessorContext['agent'],
     currentModel?: ObservationModelContext,
+    wasTruncated?: boolean,
   ): Promise<{
     results: Map<string, MultiThreadObserverResult>;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
@@ -540,6 +543,7 @@ export class ObserverRunner {
       timeZone,
       mainAgent,
       currentModel,
+      wasTruncated,
     );
 
     for (const threadId of allThreadOrder) {
@@ -574,6 +578,7 @@ export class ObserverRunner {
     timeZone?: string,
     mainAgent?: ProcessorContext['agent'],
     currentModel?: ObservationModelContext,
+    wasTruncated?: boolean,
   ): Promise<{
     results: Map<string, MultiThreadObserverResult>;
     usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
@@ -631,6 +636,7 @@ export class ObserverRunner {
             priorExtractedValues: priorMetadataByThread?.get(threadId)?.extracted,
             model: resolvedModel.model,
             timeZone,
+            wasTruncated,
           },
         );
         results.set(threadId, {
@@ -671,7 +677,7 @@ export class ObserverRunner {
         messagesByThread,
         threadOrder,
         priorMetadataByThread,
-        undefined,
+        wasTruncated,
         this.observationConfig.threadTitle,
         activeExtractors,
         { attachmentFilter: multiThreadAttachmentFilter, timeZone },
@@ -680,7 +686,7 @@ export class ObserverRunner {
 
     const doGenerate = async () => {
       return withRetry(
-        () =>
+        (attemptSignal, onActivity) =>
           withOmTracingSpan({
             phase: 'observer-multi-thread',
             model: resolvedModel.model,
@@ -690,6 +696,7 @@ export class ObserverRunner {
             metadata: {
               omThreadCount: threadOrder.length,
               omPreviousObserverTokens: this.observationConfig.previousObserverTokens,
+              omWasTruncated: wasTruncated ?? false,
               omThreadTitleEnabled: this.observationConfig.threadTitle,
               ...(resolvedModel.selectedThreshold !== undefined
                 ? { omSelectedThreshold: resolvedModel.selectedThreshold }
@@ -707,7 +714,8 @@ export class ObserverRunner {
                     maxSteps: 1,
                     modelSettings: { ...this.observationConfig.modelSettings },
                     providerOptions: this.observationConfig.providerOptions as any,
-                    ...(abortSignal ? { abortSignal } : {}),
+                    abortSignal: attemptSignal,
+                    onChunk: onActivity,
                     ...(internalRequestContext ? { requestContext: internalRequestContext } : {}),
                     ...childObservabilityContext,
                   });
@@ -736,6 +744,7 @@ export class ObserverRunner {
         {
           label: 'observer-multi-thread',
           abortSignal,
+          idleTimeoutMs: RETRY_CONFIG.modelCallIdleTimeoutMs,
           maxRetries: this.observationConfig.maxRetries,
         },
       );

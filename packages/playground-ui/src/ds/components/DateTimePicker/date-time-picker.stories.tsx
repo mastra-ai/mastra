@@ -51,12 +51,7 @@ export const WithMinValue: Story = {
 
     return (
       <div className="w-70">
-        <DateTimePicker
-          value={value}
-          onValueChange={setValue}
-          minValue={minDate}
-          placeholder="Select a date (min: 7 days ago)"
-        />
+        <DateTimePicker value={value} onValueChange={setValue} minValue={minDate} />
       </div>
     );
   },
@@ -70,12 +65,7 @@ export const WithMaxValue: Story = {
 
     return (
       <div className="w-70">
-        <DateTimePicker
-          value={value}
-          onValueChange={setValue}
-          maxValue={maxDate}
-          placeholder="Select a date (max: 7 days ahead)"
-        />
+        <DateTimePicker value={value} onValueChange={setValue} maxValue={maxDate} />
       </div>
     );
   },

@@ -88,6 +88,38 @@ describe('durable agent API-error retry', () => {
     expect(await run(true)).toEqual(expected);
   });
 
+  it('runs the memory error processors like Agent does', async () => {
+    const run = async (durable: boolean) => {
+      const processAPIError = vi.fn(async ({ retryCount }: { retryCount: number }) => ({ retry: retryCount === 0 }));
+      const memory = new MockMemory();
+      memory.getErrorProcessors = async () => [{ id: 'memory-recovery', processAPIError }];
+      const agent = new Agent({
+        id: 'memory-error-processor',
+        name: 'memory-error-processor',
+        instructions: 'You are helpful.',
+        model: [{ model: makeFailThenAnswerModel() as LanguageModelV2, maxRetries: 0 }],
+        memory,
+      });
+      const memoryOptions = { memory: { thread: `thread-${durable}`, resource: 'resource-memory-error' } };
+      let text = '';
+      if (durable) {
+        const durableAgent = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
+        const { fullStream, cleanup } = await durableAgent.stream('hello', memoryOptions);
+        for await (const chunk of fullStream as AsyncIterable<any>) {
+          if (chunk.type === 'text-delta') text += chunk.payload?.text ?? '';
+        }
+        await cleanup?.();
+      } else {
+        text = await (await agent.stream('hello', memoryOptions)).text;
+      }
+      return { calls: processAPIError.mock.calls.length, text };
+    };
+
+    const expected = await run(false);
+    expect(expected).toEqual({ calls: 1, text: 'the retried answer' });
+    expect(await run(true)).toEqual(expected);
+  });
+
   it('lets an error processor rotate the response id before the retry', async () => {
     const rotations: Array<{ before: string | undefined; after: string | undefined }> = [];
     const memory = new MockMemory();
@@ -364,7 +396,8 @@ describe('durable error-processor resolution', () => {
     throw new Error('resolver unavailable');
   };
 
-  it('keeps the configured output processors when the error-processor resolver throws', async () => {
+  it('fails closed when the error-processor resolver throws', async () => {
+    const modelCall = vi.fn();
     const redactor: Processor = {
       id: 'output-redactor',
       processOutputStream: vi.fn(async ({ part }) =>
@@ -375,23 +408,16 @@ describe('durable error-processor resolution', () => {
       id: 'durable-error-resolver-throws',
       name: 'durable-error-resolver-throws',
       instructions: 'You are helpful.',
-      model: [{ model: makeFailThenAnswerModel(0) as LanguageModelV2, maxRetries: 0 }],
+      model: [{ model: makeFailThenAnswerModel(0, modelCall) as LanguageModelV2, maxRetries: 0 }],
       outputProcessors: [redactor],
       errorProcessors: throwingResolver,
     });
 
     const durableAgent = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
-    const stream = await durableAgent.stream('hello');
-    const chunks: any[] = [];
-    for await (const chunk of stream.fullStream) chunks.push(chunk);
-    await stream.cleanup?.();
 
-    const text = chunks
-      .filter(chunk => chunk.type === 'text-delta')
-      .map(chunk => chunk.payload.text)
-      .join('');
-    expect(redactor.processOutputStream).toHaveBeenCalled();
-    expect(text).toBe('[REDACTED]');
+    await expect(durableAgent.stream('hello')).rejects.toThrow('resolver unavailable');
+    expect(modelCall).not.toHaveBeenCalled();
+    expect(redactor.processOutputStream).not.toHaveBeenCalled();
   });
 
   it('resolves a dynamic error-processor list once and shares it with the request lane', async () => {

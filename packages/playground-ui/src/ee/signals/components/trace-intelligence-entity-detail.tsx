@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
+import type { ReactNode } from 'react';
 
 import { useEntityLearningProgress, useThemeEntities, useThemeSnapshots } from '../hooks';
 import { SankeySignals } from '../sankey-signals';

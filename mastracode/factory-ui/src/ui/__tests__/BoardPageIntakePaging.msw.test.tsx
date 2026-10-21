@@ -144,9 +144,7 @@ function stubReviewBoard() {
       requestedPages.push(page);
       return HttpResponse.json(pullRequestPages[page]);
     }),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
-      HttpResponse.json({ sessions: [] }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
   );
   return requestedPages;
 }
@@ -207,9 +205,7 @@ function stubWorkBoard() {
       if (page === '2') await secondPageGate;
       return HttpResponse.json(triageIssuePages[page]);
     }),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
-      HttpResponse.json({ sessions: [] }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
   );
   return { requestedTriagePages, releaseSecondPage };
 }
@@ -286,7 +282,7 @@ describe('Intake candidate paging', () => {
   it('announces loading without showing a card skeleton while an empty visible column scroll-loads', async () => {
     const { scrollSentinel } = stubIntersectionObserver(false);
     const { requestedTriagePages, releaseSecondPage } = stubWorkBoard();
-    const { client } = renderWorkBoard('?q=signup');
+    const { client } = renderWorkBoard('?search=signup');
 
     const triage = await screen.findByTestId('board-column-triage');
     expect(await within(triage).findByRole('button', { name: 'Load more candidates' })).toBeInTheDocument();

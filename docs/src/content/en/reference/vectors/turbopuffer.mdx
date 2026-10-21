@@ -75,6 +75,8 @@ The TurbopufferVector class provides vector search using [Turbopuffer](https://t
 
 ### `createIndex()`
 
+Turbopuffer has no explicit create-index operation. `createIndex()` validates the arguments and records the dimension and metric locally; the namespace is created in Turbopuffer on the first `upsert()`.
+
 <PropertiesTable
   content={[
   {
@@ -89,10 +91,10 @@ The TurbopufferVector class provides vector search using [Turbopuffer](https://t
   },
   {
     name: 'metric',
-    type: "'cosine' | 'euclidean' | 'dotproduct'",
+    type: "'cosine' | 'euclidean'",
     isOptional: true,
     defaultValue: 'cosine',
-    description: 'Distance metric for similarity search',
+    description: "Distance metric for similarity search. 'dotproduct' isn't supported and throws an error.",
   },
 ]}
 />
@@ -205,7 +207,7 @@ interface IndexStats {
 
 ### `updateVector()`
 
-Update a single vector by ID or by metadata filter. Either `id` or `filter` must be provided, but not both.
+Update a single vector by ID, or every vector that matches a metadata filter. Either `id` or `filter` must be provided, but not both.
 
 <PropertiesTable
   content={[
@@ -285,7 +287,7 @@ Query results are returned in this format:
 interface QueryResult {
   id: string
   score: number
-  metadata: Record<string, any>
+  metadata?: Record<string, any>
   vector?: number[] // Only included if includeVector is true
 }
 ```
@@ -315,17 +317,21 @@ schemaConfigForIndex: (indexName: string) => {
 
 ## Error handling
 
-The store throws typed errors that can be caught:
+The store throws `MastraError` instances from `@mastra/core/error`:
 
 ```typescript
+import { MastraError } from '@mastra/core/error'
+
 try {
   await store.query({
     indexName: 'index_name',
     queryVector: queryVector,
   })
 } catch (error) {
-  if (error instanceof VectorStoreError) {
-    console.log(error.code) // 'connection_failed' | 'invalid_dimension' | etc
+  if (error instanceof MastraError) {
+    console.log(error.id) // 'MASTRA_VECTOR_TURBOPUFFER_QUERY_FAILED'
+    console.log(error.domain) // 'STORAGE'
+    console.log(error.category) // 'USER' | 'THIRD_PARTY'
     console.log(error.details) // Additional error context
   }
 }

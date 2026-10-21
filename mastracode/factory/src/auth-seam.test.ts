@@ -4,6 +4,7 @@ import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  buildAuthDisabledRoutes,
   buildAuthRoutes,
   createFactoryRouteAuth,
   getWorkOSProvider,
@@ -368,5 +369,25 @@ describe('buildAuthRoutes', () => {
   it('a bare provider still gets /auth/me', () => {
     const routes = buildAuthRoutes(fakeProvider());
     expect(routes.map(r => r.path)).toEqual(['/auth/me']);
+  });
+});
+
+describe('buildAuthDisabledRoutes', () => {
+  it('registers only an unauthenticated GET /auth/me', () => {
+    const routes = buildAuthDisabledRoutes();
+    expect(routes.map(r => [r.method, r.path, r.requiresAuth])).toEqual([['GET', '/auth/me', false]]);
+  });
+
+  it('answers /auth/me with 404 JSON so the UI reads auth as disabled', async () => {
+    const [route] = buildAuthDisabledRoutes();
+    if (!route || !('handler' in route)) throw new Error('Missing /auth/me route');
+    const app = new Hono();
+    app.get(route.path, c => route.handler(c as never, async () => {}));
+
+    const res = await app.request('/auth/me');
+
+    expect(res.status).toBe(404);
+    expect(res.headers.get('content-type')).toContain('application/json');
+    expect(await res.json()).toEqual({ authEnabled: false, authenticated: false });
   });
 });

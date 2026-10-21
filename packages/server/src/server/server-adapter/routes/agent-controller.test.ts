@@ -22,6 +22,14 @@ describe('agent-controller routes', () => {
     }
   });
 
+  it('requires execute permission to take thread ownership', () => {
+    const route = AGENT_CONTROLLER_ROUTES.find(
+      r =>
+        r.method === 'POST' && r.path === '/agent-controller/:controllerId/sessions/:sessionId/threads/:threadId/owner',
+    );
+    expect(route?.requiresPermission).toBe('agent-controller:execute');
+  });
+
   it('does not register any legacy /harness routes', () => {
     const paths = new Set(SERVER_ROUTES.map(r => r.path));
     expect(paths.has('/agent-controller')).toBe(true);

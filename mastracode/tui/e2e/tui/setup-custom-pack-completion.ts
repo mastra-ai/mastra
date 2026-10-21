@@ -31,7 +31,6 @@ export const setupCustomPackCompletionScenario = {
       version: 1,
       modePackId: null,
       omPackId: null,
-      quietModePreferenceSelected: true,
     };
     settings.models = {
       ...settings.models,

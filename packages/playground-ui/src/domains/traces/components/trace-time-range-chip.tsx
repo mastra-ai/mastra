@@ -40,7 +40,16 @@ export const TRACE_TIME_RANGE_ITEM: FilterBarItem = {
 
 export type TraceTimeRangeChipProps = Pick<
   DateTimeRangePickerProps,
-  'preset' | 'onPresetChange' | 'dateFrom' | 'dateTo' | 'onDateChange' | 'onDateRangeChange' | 'disabled' | 'presets'
+  | 'preset'
+  | 'onPresetChange'
+  | 'dateFrom'
+  | 'dateTo'
+  | 'onDateChange'
+  | 'onDateRangeChange'
+  | 'disabled'
+  | 'maxRangeMs'
+  | 'minDate'
+  | 'presets'
 >;
 
 const isSegment = (target: EventTarget | null) =>

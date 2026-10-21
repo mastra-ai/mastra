@@ -162,6 +162,67 @@ describe('GithubIntegration collaborator permission', () => {
   });
 });
 
+describe('GithubIntegration installation Octokit', () => {
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  /** Stubbed GitHub API: counts token mints and answers 401 for revoked tokens. */
+  function stubGithubApi() {
+    const revoked = new Set<string>();
+    const minted: string[] = [];
+    const json = (status: number, body: unknown) =>
+      new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (url.endsWith('/app/installations/7/access_tokens')) {
+          const token = `ghs_${minted.length + 1}`;
+          minted.push(token);
+          return json(201, {
+            token,
+            expires_at: new Date(Date.now() + 60 * 60_000).toISOString(),
+            permissions: { metadata: 'read' },
+            repository_selection: 'all',
+          });
+        }
+        const token = new Headers(init?.headers).get('authorization')?.replace(/^token /, '') ?? '';
+        if (revoked.has(token)) return json(401, { message: 'Bad credentials' });
+        return json(200, { total_count: 0, repositories: [] });
+      }),
+    );
+    return { minted, revoked };
+  }
+
+  it('reuses one client and token across calls for the same installation', async () => {
+    const { minted } = stubGithubApi();
+    const github = new GithubIntegration(validConfig());
+
+    await github.getInstallationOctokit(7).apps.listReposAccessibleToInstallation();
+    await github.getInstallationOctokit(7).apps.listReposAccessibleToInstallation();
+
+    expect(github.getInstallationOctokit(7)).toBe(github.getInstallationOctokit(7));
+    expect(minted).toEqual(['ghs_1']);
+  });
+
+  it('mints a fresh token after GitHub rejects the cached one', async () => {
+    const { minted, revoked } = stubGithubApi();
+    const github = new GithubIntegration(validConfig());
+    await github.getInstallationOctokit(7).apps.listReposAccessibleToInstallation();
+
+    // Past auth-app's 5 s replication retry window, so the 401 surfaces.
+    vi.useFakeTimers({ toFake: ['Date'], now: Date.now() + 10_000 });
+    revoked.add('ghs_1');
+    await expect(github.getInstallationOctokit(7).apps.listReposAccessibleToInstallation()).rejects.toMatchObject({
+      status: 401,
+    });
+
+    await github.getInstallationOctokit(7).apps.listReposAccessibleToInstallation();
+    expect(minted).toEqual(['ghs_1', 'ghs_2']);
+  });
+});
+
 describe('GithubIntegration collaborator permission coalescing', () => {
   it('shares one in-flight request between overlapping lookups for the same login', async () => {
     const github = new GithubIntegration(validConfig());
@@ -835,6 +896,58 @@ describe('GithubIntegration OAuth', () => {
 
     timeout.mockRestore();
     fetch.mockRestore();
+  });
+});
+
+describe('GithubIntegration open issue discovery', () => {
+  const openIssue = (number: number) => ({
+    number,
+    title: `Issue ${number}`,
+    html_url: `https://github.com/acme/api/issues/${number}`,
+    state: 'open',
+    assignees: [{ login: 'ada' }],
+    labels: ['bug', { name: 'triage' }],
+    user: { login: 'grace' },
+    created_at: '2026-10-01T00:00:00Z',
+    updated_at: '2026-10-02T00:00:00Z',
+  });
+
+  it('lists open issues without pull requests, following pages until a short page', async () => {
+    const github = new GithubIntegration(validConfig());
+    const fullPage = Array.from({ length: 100 }, (_, index) => openIssue(index + 1));
+    const listForRepo = vi
+      .fn()
+      .mockResolvedValueOnce({ data: fullPage })
+      .mockResolvedValueOnce({ data: [openIssue(101), { ...openIssue(102), pull_request: {} }] });
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ issues: { listForRepo } } as any);
+
+    const issues = await github.listOpenIssueStates({ installationId: 7, repository: 'acme/api' });
+
+    expect(listForRepo).toHaveBeenCalledTimes(2);
+    expect(listForRepo).toHaveBeenLastCalledWith({ owner: 'acme', repo: 'api', state: 'open', per_page: 100, page: 2 });
+    expect(issues).toHaveLength(101);
+    expect(issues.at(-1)).toEqual({
+      number: 101,
+      title: 'Issue 101',
+      url: 'https://github.com/acme/api/issues/101',
+      state: 'open',
+      assignees: ['ada'],
+      labels: ['bug', 'triage'],
+      author: 'grace',
+      createdAt: '2026-10-01T00:00:00Z',
+      updatedAt: '2026-10-02T00:00:00Z',
+    });
+  });
+
+  it('stops after five pages', async () => {
+    const github = new GithubIntegration(validConfig());
+    const fullPage = Array.from({ length: 100 }, (_, index) => openIssue(index + 1));
+    const listForRepo = vi.fn().mockResolvedValue({ data: fullPage });
+    vi.spyOn(github, 'getInstallationOctokit').mockReturnValue({ issues: { listForRepo } } as any);
+
+    await github.listOpenIssueStates({ installationId: 7, repository: 'acme/api' });
+
+    expect(listForRepo).toHaveBeenCalledTimes(5);
   });
 });
 

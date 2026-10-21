@@ -20,8 +20,11 @@ export const workTransitionPolicy: BoardTransitionPolicy = context => {
   }
   // Planning is the approval boundary. When project auto-approval is off, only a
   // person or a successfully approved `submit_plan` result may move the card into Building.
+  // An agent cannot skip Planning from Intake or Triage either; maintainer-configured
+  // system rules may still route cards there.
+  const skipsPlanning = (fromStage === 'intake' || fromStage === 'triage') && actor.type === 'agent';
   if (
-    fromStage === 'planning' &&
+    (fromStage === 'planning' || skipsPlanning) &&
     toStage === 'execute' &&
     actor.type !== 'human' &&
     !plansAutoApproved &&
@@ -50,6 +53,31 @@ export const workTransitionPolicy: BoardTransitionPolicy = context => {
       type: 'reject',
       code: 'invalid_transition',
       reason: `Pull request #${item.metadata.openPullRequestNumber} is still open. The card moves to Done when it merges; a maintainer can still close the work.`,
+    };
+  }
+  // Self-review hit its round limit and parked the card for a person.
+  if (fromStage === 'intake' && actor.type === 'agent' && item.metadata?.selfReviewNeedsHuman === true) {
+    return {
+      type: 'reject',
+      code: 'approval_required',
+      reason:
+        'Self-review requested changes too many times and parked this work item for a maintainer. A maintainer must move it on from the Factory UI.',
+    };
+  }
+  // In Review without a change request, the card is waiting on self-review; an agent cannot close it from there.
+  if (
+    fromStage === 'review' &&
+    toStage === 'done' &&
+    actor.type === 'agent' &&
+    typeof item.metadata?.openPullRequestNumber !== 'number' &&
+    item.metadata?.reviewVerdict === undefined &&
+    item.metadata?.selfReviewVerdict !== 'approve'
+  ) {
+    return {
+      type: 'reject',
+      code: 'invalid_transition',
+      reason:
+        'This work item is in self-review and has no open change request yet. Record a self-review verdict instead; a maintainer can still close the work.',
     };
   }
   const triageType = item.triageType ?? requestedTriageType;

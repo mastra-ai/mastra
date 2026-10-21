@@ -63,8 +63,8 @@ export const mastra = new Mastra({
 
 - `start()` provisions a fresh sandbox (or reattaches when you passed `sandboxId`).
 - `executeCommand()` runs commands against it.
-- `stop()` tears down the remote sandbox while preserving its recovery checkpoint when it has one.
-- `destroy()` also releases the recovery checkpoint associated with a caller-supplied recovery `id`.
+- `stop()` releases this process's lease without touching the remote sandbox. The VM keeps running under the environment's idle policy, and a later `start()` with the same `id` or `sandboxId` reattaches to it.
+- `destroy()` releases the VM. On Railway, it also deletes the recovery checkpoint associated with a caller-supplied recovery `id`. On E2B, it only kills the VM, and any snapshot you captured remains yours to manage.
 
 A statically configured `PlatformSandbox` is shared across every request and agent using that configuration rather than creating separate sandboxes for requests or memory threads. `PlatformFilesystem` is also a separate provider: configuring both providers doesn't mount the environment bucket inside the sandbox.
 

@@ -13,7 +13,6 @@ import {
   settingsMemory,
   settingsProviders,
   settingsSession,
-  settingsThinking,
 } from './fixtures/settingsScopes';
 
 const PROVIDERS_URL = `${TEST_BASE_URL}/web/config/providers`;
@@ -44,7 +43,6 @@ beforeEach(() => {
     http.get(PROVIDERS_URL, () => HttpResponse.json(settingsProviders)),
     http.get(`${TEST_BASE_URL}/web/config/custom-providers`, () => HttpResponse.json({ providers: [] })),
     http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json(settingsDefaultModel)),
-    http.get(`${TEST_BASE_URL}/web/config/thinking`, () => HttpResponse.json(settingsThinking)),
     http.get(OM_URL, () => HttpResponse.json({ config: settingsMemory })),
   );
 });
@@ -57,17 +55,22 @@ describe('Settings ownership', () => {
         keyBody = await request.json();
         return HttpResponse.json({ ok: true });
       }),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
+        HttpResponse.json({ project: { ...settingsFactory, modelScope: 'factory' } }),
+      ),
     );
     const user = userEvent.setup();
     renderSettings('personal-models');
 
     expect(await screen.findByText('Your defaults')).toBeInTheDocument();
+    expect(await screen.findByText('This Factory uses organization credentials only')).toBeInTheDocument();
     expect(screen.queryByText('Factory defaults')).not.toBeInTheDocument();
     expect(screen.queryByText('Chat defaults')).not.toBeInTheDocument();
     expect(screen.queryByText('Custom providers')).not.toBeInTheDocument();
-    expect(screen.getByText('The model new chats start on. Applies to every mode.')).toBeInTheDocument();
+    expect(screen.getByText('The model new chats start on.')).toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: 'Connect with API key' }));
-    expect(await screen.findByText('Covered by org')).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: 'Add API key for OpenAI' })).toBeInTheDocument();
+    expect(screen.queryByText('Covered by org')).not.toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Add API key for OpenAI' }));
     await user.type(screen.getByPlaceholderText('Paste API key'), 'sk-personal');
     await user.click(screen.getByRole('button', { name: 'Save' }));
@@ -86,8 +89,9 @@ describe('Settings ownership', () => {
     renderSettings('models');
 
     expect(await screen.findByText('Factory defaults')).toBeInTheDocument();
-    expect(screen.getByText('Chat defaults')).toBeInTheDocument();
-    expect(screen.getByText('Thinking defaults')).toBeInTheDocument();
+    expect(await screen.findByRole('group', { name: 'Model and thinking' })).toBeInTheDocument();
+    expect(screen.queryByText('Chat defaults')).not.toBeInTheDocument();
+    expect(screen.queryByText('Thinking defaults')).not.toBeInTheDocument();
     expect(screen.queryByText('Your defaults')).not.toBeInTheDocument();
     await user.click(screen.getByRole('tab', { name: 'Connect with API key' }));
     await user.click(await screen.findByRole('button', { name: 'Update key for OpenAI' }));
@@ -123,12 +127,12 @@ describe('Settings ownership', () => {
     );
     const user = userEvent.setup();
     renderSettings('memory');
-    const input = await screen.findByDisplayValue('1000');
+    const input = await screen.findByDisplayValue('1,000');
     expect(requestedFactoryId).toBeNull();
     await user.clear(input);
     await user.type(input, '3000');
     await user.tab();
-    await waitFor(() => expect(body).toEqual({ resourceId: 'fp-1', observationThreshold: 3000 }));
+    await waitFor(() => expect(body).toEqual({ sessionId: 'fp-1', observationThreshold: 3000 }));
   });
 
   it('preserves the Factory memory scope when navigating from Your memory', async () => {
@@ -146,9 +150,9 @@ describe('Settings ownership', () => {
     );
     const user = userEvent.setup();
     renderSettings('memory');
-    await screen.findByDisplayValue('1000');
+    await screen.findByDisplayValue('1,000');
     await user.click(screen.getByRole('link', { name: 'Factory memory' }));
-    const input = await screen.findByDisplayValue('1000');
+    const input = await screen.findByDisplayValue('1,000');
     await waitFor(() => expect(requestedFactoryIds).toContain('fp-1'));
     expect(screen.queryByRole('group', { name: 'Who these settings apply to' })).not.toBeInTheDocument();
     await user.clear(input);

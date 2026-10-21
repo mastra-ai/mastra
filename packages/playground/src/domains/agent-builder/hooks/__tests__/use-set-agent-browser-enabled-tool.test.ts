@@ -33,14 +33,14 @@ describe('useSetAgentBrowserEnabledTool', () => {
 
   it('writes true to the form', async () => {
     const { tool, form } = renderTool();
-    await tool.execute!({ browserEnabled: true } as any);
+    await tool.execute!({ browserEnabled: true });
     expect(form().getValues('browserEnabled')).toBe(true);
   });
 
   it('writes false to the form', async () => {
     const { tool, form } = renderTool();
     form().setValue('browserEnabled', true);
-    await tool.execute!({ browserEnabled: false } as any);
+    await tool.execute!({ browserEnabled: false });
     expect(form().getValues('browserEnabled')).toBe(false);
   });
 

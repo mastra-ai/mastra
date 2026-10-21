@@ -177,7 +177,7 @@ async getParams(
   request: MyRequest
 ): Promise<{
   urlParams: Record<string, string>;
-  queryParams: Record<string, string>;
+  queryParams: Record<string, string | string[]>; // repeated keys (?tag=a&tag=b) become arrays
   body: unknown;
 }> {
   return {

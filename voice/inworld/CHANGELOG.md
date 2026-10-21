@@ -1,5 +1,29 @@
 # @mastra/voice-inworld
 
+## 0.4.5
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+## 0.4.5-alpha.0
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+## 0.4.4
+
+### Patch Changes
+
+- Tools that return nothing no longer produce an invalid `function_call_output`. The result is now serialised as `null` instead of being dropped, so the item always carries the required `output` string, matching the xAI realtime provider. The same fix is applied to the Inworld realtime provider, which uses the same `function_call_output` shape. Fixes [#26505](https://github.com/mastra-ai/mastra/issues/26505). ([#26624](https://github.com/mastra-ai/mastra/pull/26624))
+
+## 0.4.4-alpha.0
+
+### Patch Changes
+
+- Tools that return nothing no longer produce an invalid `function_call_output`. The result is now serialised as `null` instead of being dropped, so the item always carries the required `output` string, matching the xAI realtime provider. The same fix is applied to the Inworld realtime provider, which uses the same `function_call_output` shape. Fixes [#26505](https://github.com/mastra-ai/mastra/issues/26505). ([#26624](https://github.com/mastra-ai/mastra/pull/26624))
+
 ## 0.4.3
 
 ### Patch Changes

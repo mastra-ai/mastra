@@ -4,13 +4,12 @@ import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import { useFeedEventsConnected } from '../ui/domains/factory/context/FeedEventsProvider';
 import {
-  attentionKindsIn,
   fetchFactoryAttention,
   markAllFactoryAttentionRead,
   updateFactoryAttentionReceipt,
 } from '../ui/domains/factory/services/attention';
 import type {
-  FactoryAttentionGroup,
+  FactoryAttentionKind,
   FactoryAttentionItem,
   FactoryAttentionReceiptAction,
   FactoryAttentionView,
@@ -19,46 +18,36 @@ import type {
 /** The badge's standing safety net, and the page's fallback while its stream is down. */
 export const ATTENTION_POLL_MS = 5_000;
 
-/** How deep a preview reaches before the inbox page takes over. Shared, so the sidebar and the Overview share one cached query. */
-export const ATTENTION_PREVIEW_LIMIT = 25;
+/** The badge reads only the per-kind summaries, so one item keeps the poll cheap. */
+const SUMMARY_LIMIT = 1;
 
-export function useFactoryAttention(
-  factoryProjectId: string | undefined,
-  view: FactoryAttentionView,
-  limit: number,
-  group?: FactoryAttentionGroup,
-) {
+export function useFactoryAttentionSummary(factoryProjectId: string | undefined) {
   const { baseUrl } = useApiConfig();
   return useQuery({
-    queryKey: queryKeys.factoryAttention(factoryProjectId, view, limit, group),
+    queryKey: queryKeys.factoryAttention(factoryProjectId, 'open', SUMMARY_LIMIT),
     queryFn: factoryProjectId
-      ? ({ signal }) =>
-          fetchFactoryAttention(baseUrl, factoryProjectId, {
-            view,
-            limit,
-            signal,
-            ...(group ? { kinds: attentionKindsIn(group) } : {}),
-          })
+      ? ({ signal }) => fetchFactoryAttention(baseUrl, factoryProjectId, { view: 'open', limit: SUMMARY_LIMIT, signal })
       : skipToken,
     refetchInterval: ATTENTION_POLL_MS,
     staleTime: 2_000,
+    select: page => page.kinds,
   });
 }
 
 export function useFactoryAttentionHistory(
   factoryProjectId: string | undefined,
   view: FactoryAttentionView,
-  search: string,
+  kinds: readonly FactoryAttentionKind[],
 ) {
   const { baseUrl } = useApiConfig();
   const connected = useFeedEventsConnected();
   const initialPageParam: string | undefined = undefined;
   const queryFn = factoryProjectId
     ? ({ pageParam, signal }: { pageParam: string | undefined; signal: AbortSignal }) =>
-        fetchFactoryAttention(baseUrl, factoryProjectId, { view, before: pageParam, limit: 25, search, signal })
+        fetchFactoryAttention(baseUrl, factoryProjectId, { view, kinds, before: pageParam, limit: 25, signal })
     : skipToken;
   return useInfiniteQuery({
-    queryKey: [...queryKeys.factoryAttention(factoryProjectId, view, 25), 'history', search],
+    queryKey: [...queryKeys.factoryAttention(factoryProjectId, view, 25), 'history', kinds.join()],
     queryFn,
     initialPageParam,
     getNextPageParam: lastPage => lastPage.nextCursor,

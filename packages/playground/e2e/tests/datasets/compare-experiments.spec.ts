@@ -71,11 +71,12 @@ test.afterEach(async () => {
 /**
  * FEATURE: Dataset experiment comparison
  * USER STORY: As a user, I want to select two experiments from a dataset so I can compare their results.
- * BEHAVIOR UNDER TEST: Selecting compare checkboxes must keep me on the experiments page until I explicitly trigger
- * comparison, then navigate to the comparison view with the dataset and both experiment IDs encoded in the URL.
+ * BEHAVIOR UNDER TEST: Row checkboxes are always available; Compare stays disabled until two experiments of the same
+ * dataset are ticked, selecting keeps me on the experiments page, and Compare then navigates to the comparison view
+ * with the dataset and both experiment IDs encoded in the URL.
  */
 test.describe('Dataset experiment comparison', () => {
-  test.describe('when two experiments are selected in compare mode', () => {
+  test.describe('when two experiments of the same dataset are selected', () => {
     test('keeps checkbox selection on-page and opens the comparison view', async ({ page }) => {
       const { datasetId, experimentIds } = await seedDatasetWithExperiments();
       const [baselineId, contenderId] = experimentIds;
@@ -84,11 +85,11 @@ test.describe('Dataset experiment comparison', () => {
 
       await expect(page.getByText('Weather Agent')).toHaveCount(2);
 
-      await page.getByRole('button', { name: 'Compare' }).click();
-
       const baselineCheckbox = page.getByRole('checkbox', { name: `Select experiment ${baselineId}` });
       const contenderCheckbox = page.getByRole('checkbox', { name: `Select experiment ${contenderId}` });
-      const compareButton = page.getByRole('button', { name: 'Compare Experiments' });
+      const compareButton = page.getByRole('button', { name: 'Compare', exact: true });
+
+      await expect(compareButton).toBeDisabled();
 
       await baselineCheckbox.click();
       await expect(page).toHaveURL(`${BASE_URL}/experiments?dataset=${datasetId}`);

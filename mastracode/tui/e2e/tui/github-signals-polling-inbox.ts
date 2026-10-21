@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { chmodSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { expect } from './expect.js';
 import type { McE2ePrepareContext, McE2eScenario } from './types.js';
 
 const prFixture = {
@@ -231,6 +232,9 @@ values
     if (!serialized.includes('Read the GitHub polling notification from the inbox.')) {
       throw new Error('Expected user inbox-read prompt to reach AIMock');
     }
+    if (!/markedSeen\\*"?\s*:\s*1/.test(serialized)) {
+      throw new Error('Expected the notification_inbox read result to mark one notification seen');
+    }
   },
   async run({ terminal, runtime }) {
     runtime.startLiveOutput(terminal);
@@ -247,12 +251,19 @@ values
 
     await runtime.waitForScreenText(/notification from github/i, terminal, 60_000);
     await runtime.waitForScreenText(/mastra-ai\/mastra#17640 CI recovered/i, terminal, 60_000);
-    await runtime.waitForScreenText(/medium · pull-request-ci-recovered · delivered/i, terminal, 60_000);
+    expect(terminal.serialize().view).not.toMatch(/pull-request-ci-recovered · delivered/i);
+    await runtime.waitForScreenText(
+      /github-signals-polling-inbox notification context acknowledged\./i,
+      terminal,
+      30_000,
+    );
 
     terminal.submit('Read the GitHub polling notification from the inbox.');
     await runtime.waitForScreenText(/Read the GitHub polling notification from the inbox\./i, terminal, 8_000);
     await runtime.waitForScreenText(/mastra-ai\/mastra#17640 CI recovered/i, terminal, 30_000);
-    await runtime.waitForScreenText(/"markedSeen": 1/i, terminal, 30_000);
+    // The compact notification_inbox row previews only the first result lines; markedSeen is checked in the AIMock request.
+    await runtime.waitForScreenText(/▐notification_inbox▌action="read"/i, terminal, 30_000);
+    await runtime.waitForScreenText(/GitHub polling inbox notification read completed\./i, terminal, 30_000);
 
     await terminal.flushInput?.();
     await runtime.waitForScreenText(/→/, terminal, 15_000);

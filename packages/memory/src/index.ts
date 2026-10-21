@@ -2,6 +2,7 @@ import { embedMany } from '@internal/ai-sdk-v4';
 import type { TextPart } from '@internal/ai-sdk-v4';
 import { embedMany as embedManyV5 } from '@internal/ai-sdk-v5';
 import { embedMany as embedManyV6 } from '@internal/ai-v6';
+import { embedMany as embedManyV7 } from '@internal/ai-v7';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -30,6 +31,8 @@ import { SpanType, EntityType } from '@mastra/core/observability';
 import type { ObservabilityContext, MemoryOperationAttributes } from '@mastra/core/observability';
 import { TokenLimiterProcessor } from '@mastra/core/processors';
 import type {
+  ErrorProcessor,
+  ErrorProcessorOrWorkflow,
   InputProcessor,
   InputProcessorOrWorkflow,
   OutputProcessor,
@@ -133,6 +136,7 @@ type MemoryObservationalMemoryOptions = Omit<ObservationalMemoryOptions, 'model'
   onDebugEvent?: ObservationalMemoryConfig['onDebugEvent'];
   hooks?: ObservationalMemoryConfig['hooks'];
   autoModels?: ObservationalMemoryConfig['autoModels'];
+  canUseProvider?: ObservationalMemoryConfig['canUseProvider'];
   resolveModel?: ObservationalMemoryConfig['resolveModel'];
 };
 
@@ -236,6 +240,9 @@ export function extractWorkingMemoryContent(text: string): string | null {
 type MastraMessagePart = MastraDBMessage['content']['parts'][number];
 const UPDATE_WORKING_MEMORY_TOOL_NAME = 'updateWorkingMemory';
 
+// Google's documented dummy signature for Gemini function calls without a real one.
+const SKIP_THOUGHT_SIGNATURE_VALIDATOR = 'skip_thought_signature_validator';
+
 /**
  * Removes `updateWorkingMemory` tool invocations from stored message parts, one step
  * at a time. A step starts at a `step-start` part, or where a tool part is followed by
@@ -263,6 +270,28 @@ function removeWorkingMemoryToolInvocationParts(parts: MastraMessagePart[]): Mas
   return steps.flatMap(step => {
     if (!step.some(isWorkingMemoryCall)) return step;
     const remaining = step.filter(part => !isWorkingMemoryCall(part));
+    // Gemini signs only the first call of a parallel step and rejects a replayed step
+    // whose first call is unsigned. When the signed call was the working-memory call,
+    // mark the first surviving call with Google's documented skip-validator signature
+    // (#27231). The real signature is bound to the removed call, so it is not moved.
+    // A signature already on the surviving call wins.
+    const targetIndex = remaining.findIndex(part => part?.type === 'tool-invocation');
+    const target = remaining[targetIndex];
+    if (target?.type === 'tool-invocation') {
+      let providerMetadata = target.providerMetadata;
+      for (const removed of step) {
+        if (!isWorkingMemoryCall(removed)) continue;
+        for (const [provider, metadata] of Object.entries(removed.providerMetadata ?? {})) {
+          if (metadata?.thoughtSignature === undefined) continue;
+          if (providerMetadata?.[provider]?.thoughtSignature !== undefined) continue;
+          providerMetadata = {
+            ...providerMetadata,
+            [provider]: { ...providerMetadata?.[provider], thoughtSignature: SKIP_THOUGHT_SIGNATURE_VALIDATOR },
+          };
+        }
+      }
+      if (providerMetadata !== target.providerMetadata) remaining[targetIndex] = { ...target, providerMetadata };
+    }
     const onlyReasoningLeft = remaining.every(
       part =>
         part?.type === 'step-start' ||
@@ -488,11 +517,11 @@ export class Memory extends MastraMemory {
    * await store.close();
    * ```
    */
-  override async settled(): Promise<void> {
+  override async settled(scope?: { threadId?: string | null; resourceId?: string | null }): Promise<void> {
     await this.pendingVectorCleanup;
     // Only join an engine that already exists — never instantiate one just to drain it.
     const engine = this._omEngine ? await this._omEngine : this._omEngineInstance;
-    await engine?.settled();
+    await engine?.settled(scope);
     // Observational-memory cycles can start further vector cleanup; drain once more.
     await this.pendingVectorCleanup;
   }
@@ -1638,28 +1667,40 @@ ${workingMemory}`;
       await this.firstEmbed;
     }
 
-    let embedFn: typeof embedMany | typeof embedManyV5 | typeof embedManyV6;
-    const specVersion = this.embedder.specificationVersion;
-
-    switch (specVersion) {
+    const options = { values: chunks, maxRetries: 3 };
+    // Options share a public union; select the SDK-specific options alongside the model version.
+    const model = this.embedder;
+    let promise;
+    switch (model.specificationVersion) {
+      case 'v4':
+        promise = embedManyV7({
+          ...options,
+          ...(this.embedderOptions as Omit<Parameters<typeof embedManyV7>[0], 'model' | 'values'>),
+          model,
+        });
+        break;
       case 'v3':
-        embedFn = embedManyV6;
+        promise = embedManyV6({
+          ...options,
+          ...(this.embedderOptions as Omit<Parameters<typeof embedManyV6>[0], 'model' | 'values'>),
+          model,
+        });
         break;
       case 'v2':
-        embedFn = embedManyV5;
+        promise = embedManyV5({
+          ...options,
+          ...(this.embedderOptions as Omit<Parameters<typeof embedManyV5>[0], 'model' | 'values'>),
+          model,
+        });
         break;
       default:
-        embedFn = embedMany;
+        promise = embedMany({
+          ...options,
+          ...(this.embedderOptions as Omit<Parameters<typeof embedMany>[0], 'model' | 'values'>),
+          model,
+        });
         break;
     }
-
-    const promise = embedFn({
-      values: chunks,
-      maxRetries: 3,
-      // @ts-expect-error - embedder type mismatch
-      model: this.embedder,
-      ...(this.embedderOptions || {}),
-    });
 
     if (isFastEmbed && !this.firstEmbed) this.firstEmbed = promise;
     const { embeddings, usage } = await promise;
@@ -2369,6 +2410,7 @@ ${workingMemory}`;
       shareTokenBudget: omConfig.shareTokenBudget,
       model: omConfig.model,
       autoModels: omConfig.autoModels,
+      canUseProvider: omConfig.canUseProvider,
       resolveModel: omConfig.resolveModel,
       mastra: this._mastraInstance,
       onIndexObservations,
@@ -2383,6 +2425,7 @@ ${workingMemory}`;
             providerOptions: omConfig.observation.providerOptions,
             bufferTokens: omConfig.observation.bufferTokens,
             bufferOnIdle: omConfig.observation.bufferOnIdle,
+            observeOnContextOverflow: omConfig.observation.observeOnContextOverflow,
             bufferActivation: omConfig.observation.bufferActivation,
             blockAfter: omConfig.observation.blockAfter,
             previousObserverTokens: omConfig.observation.previousObserverTokens,
@@ -3594,11 +3637,11 @@ Notes:
 
     // Preserve the storage no-op contract when there is no vector migration to worry about:
     // if the thread already belongs to the target resource there is nothing to move, so return
-    // it untouched. When vector migration IS configured we deliberately do NOT short-circuit on
+    // it untouched. When a vector store is attached we deliberately do NOT short-circuit on
     // a same-resource call, because a previous attempt may have committed the storage move but
     // failed to migrate the vectors — short-circuiting there would make the documented retry a
     // no-op and leave the vectors stale. Re-running the (idempotent) migration repairs that state.
-    if (!migratesVectors) {
+    if (!this.vector) {
       const existing = await memoryStore.getThreadById({ threadId });
       if (existing && existing.resourceId === resourceId) {
         return existing;
@@ -3642,7 +3685,74 @@ Notes:
       }
     }
 
+    if (this.vector) {
+      try {
+        await this.moveObservationVectors(threadId, resourceId);
+      } catch (error) {
+        this.logger.error('Failed to move observation vectors during thread transfer', {
+          threadId,
+          resourceId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+        throw new Error(
+          `Thread "${threadId}" was transferred to resource "${resourceId}", but moving its ` +
+            `observation vectors failed. Its observations may not surface in recall search under the new ` +
+            `resource until the transfer is retried. Cause: ${error instanceof Error ? error.message : String(error)}`,
+          { cause: error },
+        );
+      }
+    }
+
     return thread;
+  }
+
+  /**
+   * Re-tag a thread's observation vectors with its new resource. Recall search filters
+   * observations by `resource_id`, so untouched vectors would hide the thread's past
+   * observations under the new owner. Each vector is updated on its own with its metadata
+   * merged, because filter-based updates replace the whole metadata object on some stores.
+   */
+  private async moveObservationVectors(threadId: string, resourceId: string): Promise<void> {
+    const vector = this.vector!;
+    const indexes = await this.getMemoryVectorIndexes([this.observationIndexPrefix]);
+    for (const indexName of indexes) {
+      const { dimension } = await vector.describeIndex({ indexName });
+      // Most stores need a query vector even for a metadata-filtered read; any unit vector will do.
+      const queryVector = Array.from({ length: dimension }, (_, i) => (i === 0 ? 1 : 0));
+      const moved = new Set<string>();
+      for (;;) {
+        const stale = await vector.query({
+          indexName,
+          queryVector,
+          // Vectorize caps topK at 20 when values and metadata are returned.
+          topK: 20,
+          includeVector: true,
+          filter: { thread_id: threadId, resource_id: { $ne: resourceId } },
+        });
+        const pending = stale.filter(result => !moved.has(result.id));
+        if (pending.length === 0) break;
+        for (const result of pending) {
+          moved.add(result.id);
+          // Stores that replace metadata would drop thread_id/group_id if we wrote resource_id alone.
+          if (!result.metadata) {
+            this.logger.warn('Skipping observation vector without metadata during thread transfer', {
+              indexName,
+              id: result.id,
+            });
+            continue;
+          }
+          await vector.updateVector({
+            indexName,
+            id: result.id,
+            // Some stores (Vectorize) reject metadata-only updates, so send the existing values back.
+            update: {
+              metadata: { ...result.metadata, resource_id: resourceId },
+              ...(result.vector ? { vector: result.vector } : {}),
+            },
+          });
+        }
+      }
+    }
   }
 
   /**
@@ -3687,6 +3797,9 @@ Notes:
     cloned.id = crypto.randomUUID();
     cloned.createdAt = now;
     cloned.updatedAt = now;
+    // The clone starts live even if the source generation it was read from has since been
+    // replaced by a reflection; that source's `supersededBy` must not carry over.
+    cloned.supersededBy = null;
     await memoryStore.insertObservationalMemoryRecord(cloned);
   }
 
@@ -4073,12 +4186,31 @@ Notes:
   }
 
   /**
+   * Extends the base implementation to add ObservationalMemory as an error processor.
+   * OM uses processAPIError to observe pending messages and retry when the provider
+   * rejects a request for exceeding the model's context window.
+   */
+  async getErrorProcessors(
+    configuredProcessors: ErrorProcessorOrWorkflow[] = [],
+    context?: RequestContext,
+  ): Promise<ErrorProcessor[]> {
+    const processors = await super.getErrorProcessors(configuredProcessors, context);
+
+    const om = await this.createOMProcessor(configuredProcessors, context);
+    if (om) {
+      processors.push(om as unknown as ErrorProcessor);
+    }
+
+    return processors;
+  }
+
+  /**
    * Creates an ObservationalMemory processor wrapping the shared engine.
    * Returns null if OM is not configured, not supported, or already present
    * in the user's configured processors.
    */
   private async createOMProcessor(
-    configuredProcessors: (InputProcessorOrWorkflow | OutputProcessorOrWorkflow)[] = [],
+    configuredProcessors: (InputProcessorOrWorkflow | OutputProcessorOrWorkflow | ErrorProcessorOrWorkflow)[] = [],
     context?: RequestContext,
   ): Promise<InputProcessor | null> {
     const hasObservationalMemory = configuredProcessors.some(

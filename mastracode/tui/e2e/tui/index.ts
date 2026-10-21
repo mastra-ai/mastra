@@ -1,4 +1,9 @@
-import { abortFollowupScenario } from './abort-followup.js';
+import {
+  abortEscapeDurableScenario,
+  abortEscapeEventedScenario,
+  abortEscapeOffScenario,
+  abortFollowupScenario,
+} from './abort-followup.js';
 import { abortQueuedFollowupScenario } from './abort-queued-followup.js';
 import { accountRotationScenario } from './account-rotation.js';
 import { accountRoutingTargetedScenario } from './account-routing-targeted.js';
@@ -65,6 +70,7 @@ import { customSlashCommandScenario } from './custom-slash-command.js';
 import { debugLoggingScenario } from './debug-logging.js';
 import { experimentalAgentDurableScenario, experimentalAgentEventedScenario } from './experimental-agent-runtime.js';
 import { experimentalAgentSettingsScenario } from './experimental-agent-settings.js';
+import { factoryClientModeScenario } from './factory-client-mode.js';
 import { fileAttachmentBlockedRetryScenario } from './file-attachment-blocked-retry.js';
 import { fileAttachmentHistoryReloadScenario } from './file-attachment-history-reload.js';
 import { fileAutocompleteScenario } from './file-autocomplete.js';
@@ -96,6 +102,8 @@ import {
 } from './initial-prompt.js';
 import { integrationCommandsScenario } from './integration-commands.js';
 import { knowledgeBrowserScenario } from './knowledge-browser.js';
+import { legacySettingsNoPromptScenario } from './legacy-settings-no-prompt.js';
+import { legacySettingsUpgradeScenario } from './legacy-settings-upgrade.js';
 import { legacyThreadModelRestoreScenario, savedThreadModelRestoreScenario } from './legacy-thread-model-restore.js';
 import { lifecycleHooksConfiguredScenario } from './lifecycle-hooks-configured.js';
 import { lifecycleHooksEventsScenario } from './lifecycle-hooks-events.js';
@@ -117,6 +125,7 @@ import { modelSearchScenario } from './model-search.js';
 import { modelSelectionApiKeyPromptScenario } from './model-selection-api-key-prompt.js';
 import { modelSelectionCancelEnvScenario } from './model-selection-cancel-env.js';
 import { modelsPackActivationPersistenceScenario } from './models-pack-activation-persistence.js';
+import { modelsPackKimiModelScenario } from './models-pack-kimi-model.js';
 import { modelsPackMemoryAutoScenario } from './models-pack-memory-auto.js';
 import { modelsPackMemoryModelScenario } from './models-pack-memory-model.js';
 import { multiAccountLoginScenario } from './multi-account-login.js';
@@ -127,6 +136,11 @@ import { notificationSignalInterruptScenario } from './notification-signal-inter
 import { notificationSignalRenderingScenario } from './notification-signal-rendering.js';
 import { notifyInputRequestHookScenario } from './notify-input-request-hook.js';
 import { omAttachmentObservationScenario } from './om-attachment-observation.js';
+import {
+  omAutoPreviewAnthropicOnlyScenario,
+  omAutoPreviewGoogleApiKeyScenario,
+  omAutoPreviewStoredGoogleKeyScenario,
+} from './om-auto-preview-credentials.js';
 import { omAutoSelectionScenario } from './om-auto-selection.js';
 import { omGlobalSettingsPersistenceScenario } from './om-global-settings-persistence.js';
 import { omModelOverrideReloadScenario } from './om-model-override-reload.js';
@@ -138,6 +152,7 @@ import { omThresholdPersistenceScenario } from './om-threshold-persistence.js';
 import { onboardingOmFollowsLoginScenario } from './onboarding-om-follows-login.js';
 import { openaiStrictSchemaScenario } from './openai-strict-schema.js';
 import { packFallbackScenario } from './pack-fallback.js';
+import { packFlagStartupScenario } from './pack-flag-startup.js';
 import { permissionRequestHookScenario } from './permission-request-hook.js';
 import { persistentGoalCommandsScenario } from './persistent-goal-commands.js';
 import { persistentGoalJudgeDecisionScenario } from './persistent-goal-judge-decision.js';
@@ -162,6 +177,7 @@ import {
   pluginsScaffoldInstallToolScenario,
   pluginsStreamingToolOutputScenario,
 } from './plugins.js';
+import { previewLinesSettingsScenario } from './preview-lines-settings.js';
 import { processShortcutsScenario } from './process-shortcuts.js';
 import { profileCommandScenario } from './profile-command.js';
 import { promptContextInstructionsScenario } from './prompt-context-instructions.js';
@@ -170,11 +186,6 @@ import { providerHistoryCompatScenario } from './provider-history-compat.js';
 import { providerHistoryRejectionRetryScenario } from './provider-history-rejection-retry.js';
 import { pruneCommandScenario } from './prune-command.js';
 import { pruneRenderStateScenario } from './prune-render-state.js';
-import { quietSettingsScenario } from './quiet-settings.js';
-import { quietShellDescriptionScenario } from './quiet-shell-description.js';
-import { quietShellGroupedScenario } from './quiet-shell-grouped.js';
-import { quietStreamingPreviewHeightScenario } from './quiet-streaming-preview-height.js';
-import { quietToolHistoryParityScenario } from './quiet-tool-history-parity.js';
 import { reportIssueCommandScenario } from './report-issue-command.js';
 import { requestAccessModalScenario } from './request-access-modal.js';
 import { resourceidDriftPromptAcceptScenario } from './resourceid-drift-prompt-accept.js';
@@ -188,6 +199,8 @@ import { setupCompletionPersistenceScenario } from './setup-completion-persisten
 import { setupCustomPackCompletionScenario } from './setup-custom-pack-completion.js';
 import { setupLoginRefreshScenario } from './setup-login-refresh.js';
 import { setupNestedModelSelectorScenario } from './setup-nested-model-selector.js';
+import { shellDescriptionScenario } from './shell-description.js';
+import { shellGroupedScenario } from './shell-grouped.js';
 import { shellPassthroughConfiguredSettingsScenario } from './shell-passthrough-configured-settings.js';
 import { shellPassthroughDuringRunScenario } from './shell-passthrough-during-run.js';
 import { shellPassthroughEnvOverrideScenario } from './shell-passthrough-env-override.js';
@@ -208,6 +221,7 @@ import { storageFallbackHistoryReloadScenario } from './storage-fallback-history
 import { storageSettingsScenario } from './storage-settings.js';
 import { storageStartupPgFallbackScenario } from './storage-startup-pg-fallback.js';
 import { streamErrorRetryScenario } from './stream-error-retry.js';
+import { streamingPreviewHeightScenario } from './streaming-preview-height.js';
 import { streamingRenderStabilityScenario } from './streaming-render-stability.js';
 import { streamingToolArgsScenario } from './streaming-tool-args.js';
 import { subagentDelegationScenario } from './subagent-delegation.js';
@@ -222,6 +236,7 @@ import { taskPromptContextNextTurnScenario } from './task-prompt-context-next-tu
 import { terminalResizeReflowScenario } from './terminal-resize-reflow.js';
 import { thinkPickerPerModelScenario } from './think-picker-per-model.js';
 import { threadHistoryScenario } from './thread-history.js';
+import { toolHistoryParityScenario } from './tool-history-parity.js';
 import { toolHistoryReloadScenario } from './tool-history-reload.js';
 import { toolSchemaCompatScenario } from './tool-schema-compat.js';
 import { toolSuspensionSameRunResumeScenario } from './tool-suspension-same-run-resume.js';
@@ -244,7 +259,11 @@ export type { McE2eScenario, McE2eScenarioRuntime, ScenarioName } from './types.
 
 export const scenarios: Record<ScenarioName, McE2eScenario> = {
   startup: startupScenario,
+  'factory-client-mode': factoryClientModeScenario,
   'abort-followup': abortFollowupScenario,
+  'abort-escape-off': abortEscapeOffScenario,
+  'abort-escape-durable': abortEscapeDurableScenario,
+  'abort-escape-evented': abortEscapeEventedScenario,
   'abort-queued-followup': abortQueuedFollowupScenario,
   'startup-interrupted': startupInterruptedScenario,
   'branch-context-long-name': branchContextLongNameScenario,
@@ -357,6 +376,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'model-selection-cancel-env': modelSelectionCancelEnvScenario,
   'mode-switch-applies-pack-model': modeSwitchAppliesPackModelScenario,
   'models-pack-activation-persistence': modelsPackActivationPersistenceScenario,
+  'models-pack-kimi-model': modelsPackKimiModelScenario,
   'models-pack-memory-auto': modelsPackMemoryAutoScenario,
   'models-pack-memory-model': modelsPackMemoryModelScenario,
   'notification-inbox-crud-flow': notificationInboxCrudFlowScenario,
@@ -368,6 +388,9 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'knowledge-browser': knowledgeBrowserScenario,
   'om-attachment-observation': omAttachmentObservationScenario,
   'om-auto-selection': omAutoSelectionScenario,
+  'om-auto-preview-google-api-key': omAutoPreviewGoogleApiKeyScenario,
+  'om-auto-preview-stored-google-key': omAutoPreviewStoredGoogleKeyScenario,
+  'om-auto-preview-anthropic-only': omAutoPreviewAnthropicOnlyScenario,
   'om-global-settings-persistence': omGlobalSettingsPersistenceScenario,
   'om-model-override-reload': omModelOverrideReloadScenario,
   'om-pack-startup-restore': omPackStartupRestoreScenario,
@@ -408,12 +431,14 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'prune-command': pruneCommandScenario,
   'prune-render-state': pruneRenderStateScenario,
   'cross-agent-settings': crossAgentSettingsScenario,
-  'quiet-settings': quietSettingsScenario,
-  'quiet-shell-description': quietShellDescriptionScenario,
-  'quiet-shell-grouped': quietShellGroupedScenario,
+  'legacy-settings-no-prompt': legacySettingsNoPromptScenario,
+  'legacy-settings-upgrade': legacySettingsUpgradeScenario,
+  'preview-lines-settings': previewLinesSettingsScenario,
+  'shell-description': shellDescriptionScenario,
+  'shell-grouped': shellGroupedScenario,
   'web-search-provider-settings': webSearchProviderSettingsScenario,
-  'quiet-streaming-preview-height': quietStreamingPreviewHeightScenario,
-  'quiet-tool-history-parity': quietToolHistoryParityScenario,
+  'streaming-preview-height': streamingPreviewHeightScenario,
+  'tool-history-parity': toolHistoryParityScenario,
   'report-issue-command': reportIssueCommandScenario,
   'request-access-modal': requestAccessModalScenario,
   'state-commands': stateCommandsScenario,
@@ -446,6 +471,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'account-rotation': accountRotationScenario,
   'account-routing-targeted': accountRoutingTargetedScenario,
   'pack-fallback': packFallbackScenario,
+  'pack-flag-startup': packFlagStartupScenario,
   'multi-account-login': multiAccountLoginScenario,
   'streaming-render-stability': streamingRenderStabilityScenario,
   'streaming-tool-args': streamingToolArgsScenario,

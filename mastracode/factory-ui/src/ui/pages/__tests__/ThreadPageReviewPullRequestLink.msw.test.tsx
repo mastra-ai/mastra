@@ -118,7 +118,7 @@ function stubThreadRoute(workItem: ReturnType<typeof createWireWorkItem>, subscr
         ],
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
       HttpResponse.json({ sessions: [workspaceSession] }),
     ),
     http.get(`${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}`, () =>
@@ -127,7 +127,7 @@ function stubThreadRoute(workItem: ReturnType<typeof createWireWorkItem>, subscr
     http.post(`${AC}/sessions`, () =>
       HttpResponse.json({ controllerId: 'code', resourceId: SESSION_ID, threadId: THREAD_ID }),
     ),
-    http.get(`${AC}/sessions/:resourceId`, () =>
+    http.get(`${AC}/sessions/:sessionId`, () =>
       HttpResponse.json({
         controllerId: 'code',
         resourceId: SESSION_ID,
@@ -137,18 +137,17 @@ function stubThreadRoute(workItem: ReturnType<typeof createWireWorkItem>, subscr
         settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
       }),
     ),
-    http.put(`${AC}/sessions/:resourceId/state`, () => HttpResponse.json({ ok: true })),
+    http.put(`${AC}/sessions/:sessionId/state`, () => HttpResponse.json({ ok: true })),
     http.get(
-      `${AC}/sessions/:resourceId/stream`,
+      `${AC}/sessions/:sessionId/stream`,
       () =>
         new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
           headers: { 'content-type': 'text/event-stream' },
         }),
     ),
-    http.get(`${AC}/sessions/:resourceId/permissions`, () => HttpResponse.json({})),
-    http.get(`${AC}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads: [] })),
-    http.get(`${AC}/sessions/:resourceId/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
-    http.get(`${AC}/modes`, () => HttpResponse.json({ modes: [] })),
+    http.get(`${AC}/sessions/:sessionId/permissions`, () => HttpResponse.json({})),
+    http.get(`${AC}/sessions/:sessionId/threads`, () => HttpResponse.json({ threads: [] })),
+    http.get(`${AC}/sessions/:sessionId/threads/:threadId/messages`, () => HttpResponse.json({ messages: [] })),
     http.get(`${TEST_BASE_URL}/web/workspace/rendered/list`, () =>
       HttpResponse.json({ workspacePath: `/ws/${SESSION_ID}`, root: '.artifacts', rootPath: '', entries: [] }),
     ),

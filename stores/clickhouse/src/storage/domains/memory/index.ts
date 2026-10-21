@@ -133,14 +133,37 @@ export class MemoryStorageClickhouse extends MemoryStorage {
         query_params: { messageIds },
       });
 
-      // Update thread timestamps
+      // Bump thread timestamps by inserting a newer version of each thread,
+      // like every other thread write: threads is a ReplacingMergeTree and
+      // reads take the newest row by updatedAt. An ALTER TABLE ... UPDATE
+      // mutation would rewrite whole data parts (often forbidden on managed
+      // deployments) and stamp the SAME updatedAt on every stored version,
+      // making the "latest" row ambiguous until parts merge (#25580).
       if (threadIds.length > 0) {
-        // Remove 'Z' suffix as ClickHouse DateTime64 expects format without timezone suffix
-        const now = new Date().toISOString().replace('Z', '');
-        await this.client.command({
-          query: `ALTER TABLE ${TABLE_THREADS} UPDATE updatedAt = {now:DateTime64(3)} WHERE id IN {threadIds:Array(String)}`,
-          query_params: { now, threadIds },
-        });
+        const now = Date.now();
+        const existingThreads = await this.getLatestThreads(threadIds);
+        if (existingThreads.size > 0) {
+          await this.client.insert({
+            table: TABLE_THREADS,
+            format: 'JSONEachRow',
+            values: Array.from(existingThreads.values()).map(existingThread => ({
+              id: existingThread.id,
+              resourceId: existingThread.resourceId,
+              title: existingThread.title,
+              metadata: serializeMetadata(existingThread.metadata),
+              createdAt: existingThread.createdAt,
+              // Strictly newer than the version read, so the bump always wins.
+              updatedAt: new Date(Math.max(now, new Date(existingThread.updatedAt).getTime() + 1))
+                .toISOString()
+                .replace('Z', ''),
+            })),
+            clickhouse_settings: {
+              date_time_input_format: 'best_effort',
+              use_client_time_zone: 1,
+              output_format_json_quote_64bit_integers: 0,
+            },
+          });
+        }
       }
     } catch (error) {
       throw new MastraError(

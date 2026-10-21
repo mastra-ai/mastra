@@ -34,20 +34,18 @@ export function usePullRequestSubscriptions(
   enabled: boolean,
   provider: ChangeRequestProvider = 'github',
 ) {
-  const { baseUrl, resourceId, projectPath } = useChatSessionContext();
+  const { baseUrl, sessionId } = useChatSessionContext();
   const { transcript, busy } = useChatTranscript();
   const queryClient = useQueryClient();
   const notificationIds = notificationKey(transcript.entries);
-  const sessionKey = `${resourceId}:${threadId}:${projectPath}`;
+  const sessionKey = `${sessionId}:${threadId}`;
   const previous = useRef({ busy, notificationIds, sessionKey });
   const active = enabled && Boolean(threadId);
 
   const query = useQuery({
-    queryKey: pullRequestSubscriptionsQueryKey(resourceId, threadId, projectPath, provider),
+    queryKey: pullRequestSubscriptionsQueryKey(sessionId, threadId, provider),
     queryFn:
-      active && threadId
-        ? () => listPullRequestSubscriptions(baseUrl, resourceId, threadId, projectPath, provider)
-        : skipToken,
+      active && threadId ? () => listPullRequestSubscriptions(baseUrl, sessionId, threadId, provider) : skipToken,
   });
 
   useEffect(() => {
@@ -62,9 +60,9 @@ export function usePullRequestSubscriptions(
     if (!runSettled && !newNotification) return;
     if (!active) return;
     void queryClient.invalidateQueries({
-      queryKey: pullRequestSubscriptionsQueryKey(resourceId, threadId, projectPath, provider),
+      queryKey: pullRequestSubscriptionsQueryKey(sessionId, threadId, provider),
     });
-  }, [active, busy, notificationIds, projectPath, provider, queryClient, resourceId, sessionKey, threadId]);
+  }, [active, busy, notificationIds, provider, queryClient, sessionId, sessionKey, threadId]);
 
   return query.data ?? NO_SUBSCRIPTIONS;
 }

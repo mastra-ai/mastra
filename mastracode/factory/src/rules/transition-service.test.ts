@@ -1440,7 +1440,21 @@ describe('FactoryTransitionService', () => {
     const service = new FactoryTransitionService({
       configVersion: 'rules-v1',
       storage,
+      selfReviewEnabled: async () => true,
     });
+
+    const result = await service.transition({ ...request(item, { stage: 'review' }), cause: 'board_drag' });
+
+    expect(result).toMatchObject({
+      status: 'accepted',
+      decisions: [{ type: 'invokeSkill', role: 'review', skillName: 'factory-self-review' }],
+    });
+  });
+
+  it('opens the builder session when a person drags a card into Review with self-review off', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const item = await createItem(storage, { stages: ['triage'] });
+    const service = new FactoryTransitionService({ configVersion: 'rules-v1', storage });
 
     const result = await service.transition({ ...request(item, { stage: 'review' }), cause: 'board_drag' });
 
@@ -2321,5 +2335,140 @@ describe('Work board plan-approval gate on the stock planning handoff', () => {
     });
 
     expect(result).toMatchObject({ status: 'accepted', stage: 'execute' });
+  });
+
+  it.each(['intake', 'triage'])(
+    'blocks a triage agent skipping Planning from %s into Building when plans are not auto-approved',
+    async stage => {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const service = new FactoryTransitionService({
+        configVersion: 'plan-gate-v1',
+        storage,
+        autoApprovePlans: async () => false,
+      });
+      const item = await createItem(storage, {
+        stages: [stage],
+        sourceKey: `skip-${stage}`,
+        metadata: { authorTrusted: true },
+      });
+
+      const result = await service.transition({
+        ...request(item, { stage: 'execute', identity: `skip-${stage}` }),
+        actor: { type: 'agent', bindingId: 'triage-binding', role: 'triage' },
+        ingress: { type: 'agent', identity: `skip-${stage}` },
+        triageType: 'bug',
+      });
+
+      expect(result).toMatchObject({ status: 'rejected', code: 'approval_required' });
+      expect(await storage.get({ orgId: 'org-1', id: item.id })).toMatchObject({
+        revision: item.revision,
+        stages: [stage],
+      });
+    },
+  );
+
+  it('lets a triage agent route a bug from triage straight into Building when plans are auto-approved', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const service = new FactoryTransitionService({
+      configVersion: 'plan-gate-v1',
+      storage,
+      autoApprovePlans: async () => true,
+    });
+    const item = await createItem(storage, {
+      stages: ['triage'],
+      sourceKey: 'fast-route',
+      metadata: { authorTrusted: true },
+    });
+
+    const result = await service.transition({
+      ...request(item, { stage: 'execute', identity: 'fast-route' }),
+      actor: { type: 'agent', bindingId: 'triage-binding', role: 'triage' },
+      ingress: { type: 'agent', identity: 'fast-route' },
+      triageType: 'bug',
+    });
+
+    expect(result).toMatchObject({ status: 'accepted', stage: 'execute' });
+    expect((result as { decisions: unknown[] }).decisions).toContainEqual(
+      expect.objectContaining({ type: 'invokeSkill', role: 'work' }),
+    );
+  });
+});
+
+describe('onTransitionCommitted', () => {
+  async function setup(
+    onTransitionCommitted: ConstructorParameters<typeof FactoryTransitionService>[0]['onTransitionCommitted'],
+  ) {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const board = defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'approval',
+      phases: {
+        approval: { title: 'Approval', kind: 'resting', next: 'shipped' },
+        shipped: { title: 'Shipped', kind: 'resting' },
+      },
+    });
+    const item = await createItem(storage, { board: 'release', stages: ['approval'] });
+    const service = new FactoryTransitionService({
+      storage,
+      configVersion: 'notify-test',
+      boards: createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+      onTransitionCommitted,
+    });
+    return { item, service, storage };
+  }
+
+  it('reports a committed stage change once, even when the request is replayed', async () => {
+    const onTransitionCommitted = vi.fn();
+    const { item, service } = await setup(onTransitionCommitted);
+    const input = request(item, { stage: 'shipped' });
+
+    expect(await service.transition(input)).toMatchObject({ status: 'accepted' });
+    expect(await service.transition(input)).toMatchObject({ status: 'accepted' });
+
+    await vi.waitFor(() => expect(onTransitionCommitted).toHaveBeenCalledOnce());
+    expect(onTransitionCommitted).toHaveBeenCalledWith({
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      workItemId: item.id,
+      fromStage: 'approval',
+      toStage: 'shipped',
+    });
+  });
+
+  it('says nothing for a rejected transition or a same-stage commit', async () => {
+    const onTransitionCommitted = vi.fn();
+    const { item, service } = await setup(onTransitionCommitted);
+
+    expect(
+      await service.transition(
+        request(item, { stage: 'shipped', expectedRevision: item.revision + 1, identity: 'stale' }),
+      ),
+    ).toMatchObject({ status: 'rejected' });
+    expect(await service.transition(request(item, { stage: 'approval', identity: 'same' }))).toMatchObject({
+      status: 'accepted',
+    });
+
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(onTransitionCommitted).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [
+      'throws',
+      () => {
+        throw new Error('notify failed');
+      },
+    ],
+    ['rejects', async () => Promise.reject(new Error('notify failed'))],
+  ])('keeps the transition when the notifier %s', async (_label, notifier) => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const onTransitionCommitted = vi.fn(notifier);
+    const { item, service, storage } = await setup(onTransitionCommitted);
+
+    expect(await service.transition(request(item, { stage: 'shipped' }))).toMatchObject({ status: 'accepted' });
+    await vi.waitFor(() => expect(warn).toHaveBeenCalled());
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages[0]).toBe('shipped');
+    warn.mockRestore();
   });
 });

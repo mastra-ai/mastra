@@ -97,6 +97,25 @@ describe('executeTarget', () => {
       expect(generate).not.toHaveBeenCalled();
     });
 
+    it('persists the agent result error as a JSON-serializable message and stack', async () => {
+      const mockAgent = createMockAgent('');
+      vi.mocked(mockAgent.generate).mockResolvedValueOnce({ text: '', error: new Error('model exploded') } as any);
+
+      const result = await executeTarget(mockAgent, 'agent', {
+        id: 'item-1',
+        datasetId: 'ds-1',
+        input: 'Hello',
+        groundTruth: null,
+        version: new Date(),
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      });
+
+      const stored = JSON.parse(JSON.stringify(result.output));
+      expect(stored.error.message).toBe('model exploded');
+      expect(stored.error.stack).toEqual(expect.stringContaining('model exploded'));
+    });
+
     it('handles string input and returns FullOutput', async () => {
       const mockAgent = createMockAgent('Hello response');
 

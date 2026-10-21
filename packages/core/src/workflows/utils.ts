@@ -292,6 +292,23 @@ export function createDeprecationProxy<T extends Record<string, any>>(
   });
 }
 
+/**
+ * Defines `writer` on execute params as a memoized getter so the stream is only
+ * allocated when step code actually reads it. The property stays enumerable so
+ * spreading the params still carries `writer` along.
+ */
+export function defineLazyWriter<T extends object, W>(
+  params: T,
+  createWriter: () => W,
+): NoInfer<T> & { writer: NoInfer<W> } {
+  let writer: W | undefined;
+  return Object.defineProperty(params, 'writer', {
+    enumerable: true,
+    configurable: true,
+    get: () => (writer ??= createWriter()),
+  }) as T & { writer: W };
+}
+
 const SINGLE_STEP_TYPES = ['step', 'agent', 'tool', 'classifier', 'mapping'] as const;
 
 /**
@@ -703,9 +720,13 @@ export function hydrateSerializedStepErrors(steps: WorkflowRunState['context']) 
 function cleanSingleResult(result: Record<string, unknown>): Record<string, unknown> {
   const { __state: _state, __stateDelta: _stateDelta, metadata, ...rest } = result;
 
-  // Strip nestedRunId from metadata but keep other user-defined fields
+  // Strip nested run identities from metadata but keep other user-defined fields
   if (metadata && typeof metadata === 'object' && !Array.isArray(metadata)) {
-    const { nestedRunId: _nestedRunId, ...userMetadata } = metadata as Record<string, unknown>;
+    const {
+      nestedRunId: _nestedRunId,
+      foreachNestedRunIds: _foreachNestedRunIds,
+      ...userMetadata
+    } = metadata as Record<string, unknown>;
     if (Object.keys(userMetadata).length > 0) {
       return { ...rest, metadata: userMetadata };
     }
@@ -852,7 +873,13 @@ export async function waitForSuspendedSnapshot(
   {
     timeoutMs = RESUME_SNAPSHOT_POLL_TIMEOUT_MS,
     missingSnapshotGraceReads = 1,
-  }: { timeoutMs?: number; missingSnapshotGraceReads?: number } = {},
+    onClaimedRunFinished,
+  }: {
+    timeoutMs?: number;
+    missingSnapshotGraceReads?: number;
+    /** Called when a `running`/`pending` row is seen and then disappears (its run finished and was cleaned up). */
+    onClaimedRunFinished?: () => void;
+  } = {},
 ): Promise<WorkflowRunState | null> {
   if (!workflowsStore) return null;
 
@@ -867,7 +894,12 @@ export async function waitForSuspendedSnapshot(
     if (snapshot) {
       if (!RESUME_SNAPSHOT_WAIT_STATUSES.has(snapshot.status)) return snapshot;
       observedTransitionableSnapshot = true;
-    } else if (!observedTransitionableSnapshot && ++missingReads >= missingSnapshotGraceReads) {
+    } else if (observedTransitionableSnapshot) {
+      if (onClaimedRunFinished) {
+        onClaimedRunFinished();
+        return null;
+      }
+    } else if (++missingReads >= missingSnapshotGraceReads) {
       return null;
     }
 

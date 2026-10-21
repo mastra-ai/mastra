@@ -218,7 +218,7 @@ export class SubagentExecutionComponent extends WidthAwareContainer implements I
   updateResult(_result: unknown, _isPartial: boolean): void {}
 
   getChatSpacingKind(): ChatSpacingKind {
-    return 'normal-tool';
+    return 'full-tool';
   }
 
   // ── Rendering ──────────────────────────────────────────────────────────

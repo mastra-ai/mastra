@@ -1,0 +1,204 @@
+{
+  "attachment": [
+    "auto/mistralai/ministral-14b-2512",
+    "auto/mistralai/ministral-3b-2512",
+    "auto/mistralai/ministral-8b-2512",
+    "auto/mistralai/mistral-large-2512",
+    "auto/mistralai/mistral-large-4",
+    "auto/mistralai/mistral-medium-3.5",
+    "auto/mistralai/mistral-small-2603",
+    "auto/openai/gpt-4.1",
+    "auto/openai/gpt-4.1-mini",
+    "auto/openai/gpt-4o",
+    "auto/openai/gpt-4o-mini",
+    "auto/openai/gpt-5",
+    "auto/openai/gpt-5-mini",
+    "auto/openai/gpt-5-nano",
+    "auto/openai/gpt-5.2",
+    "auto/openai/gpt-5.4",
+    "auto/openai/gpt-5.4-mini",
+    "auto/openai/gpt-5.5",
+    "auto/openai/gpt-5.6-luna",
+    "auto/openai/gpt-5.6-sol",
+    "auto/openai/gpt-5.6-terra",
+    "auto/openai/gpt-6-astra",
+    "auto/openai/gpt-6-luna",
+    "auto/openai/gpt-6-sol",
+    "auto/openai/gpt-6.1-sol",
+    "auto/openai/o3"
+  ],
+  "temperature": [
+    "auto/mistralai/codestral-2508",
+    "auto/mistralai/ministral-14b-2512",
+    "auto/mistralai/ministral-3b-2512",
+    "auto/mistralai/ministral-8b-2512",
+    "auto/mistralai/mistral-large-2512",
+    "auto/mistralai/mistral-large-4",
+    "auto/mistralai/mistral-medium-3.5",
+    "auto/mistralai/mistral-small-2603",
+    "auto/openai/gpt-4.1",
+    "auto/openai/gpt-4.1-mini",
+    "auto/openai/gpt-4o",
+    "auto/openai/gpt-4o-mini",
+    "auto/openai/gpt-5.2",
+    "auto/openai/gpt-5.4",
+    "auto/openai/gpt-5.4-mini",
+    "auto/openai/gpt-oss-120b",
+    "auto/openai/gpt-oss-20b",
+    "auto/openai/gpt-oss-safeguard-120b",
+    "auto/openai/gpt-oss-safeguard-20b"
+  ],
+  "structuredOutput": [
+    "auto/mistralai/codestral-2508",
+    "auto/mistralai/ministral-14b-2512",
+    "auto/mistralai/ministral-3b-2512",
+    "auto/mistralai/ministral-8b-2512",
+    "auto/mistralai/mistral-large-4",
+    "auto/mistralai/mistral-medium-3.5",
+    "auto/openai/gpt-4.1",
+    "auto/openai/gpt-4.1-mini",
+    "auto/openai/gpt-4o",
+    "auto/openai/gpt-4o-mini",
+    "auto/openai/gpt-5",
+    "auto/openai/gpt-5-mini",
+    "auto/openai/gpt-5-nano",
+    "auto/openai/gpt-5.2",
+    "auto/openai/gpt-5.4",
+    "auto/openai/gpt-5.4-mini",
+    "auto/openai/gpt-5.5",
+    "auto/openai/gpt-5.6-luna",
+    "auto/openai/gpt-5.6-sol",
+    "auto/openai/gpt-5.6-terra",
+    "auto/openai/gpt-6-astra",
+    "auto/openai/gpt-6-luna",
+    "auto/openai/gpt-6-sol",
+    "auto/openai/gpt-6.1-sol",
+    "auto/openai/gpt-oss-120b",
+    "auto/openai/gpt-oss-20b",
+    "auto/openai/gpt-oss-safeguard-120b",
+    "auto/openai/gpt-oss-safeguard-20b",
+    "auto/openai/o3"
+  ],
+  "reasoning": {
+    "auto/mistralai/mistral-large-4": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "auto/mistralai/mistral-medium-3.5": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "auto/mistralai/mistral-small-2603": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "auto/openai/gpt-5.6-luna": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "auto/openai/gpt-5.6-sol": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "auto/openai/gpt-5.4": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "auto/openai/o3": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "auto/openai/gpt-5-nano": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "auto/openai/gpt-5.6-terra": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "auto/openai/gpt-5-mini": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "auto/openai/gpt-6-astra": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "auto/openai/gpt-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "auto/openai/gpt-6.1-sol": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "auto/openai/gpt-5": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "auto/openai/gpt-oss-20b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "auto/openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "auto/openai/gpt-5.5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "auto/openai/gpt-6-luna": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "auto/openai/gpt-6-sol": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "auto/openai/gpt-5.4-mini": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ]
+  }
+}

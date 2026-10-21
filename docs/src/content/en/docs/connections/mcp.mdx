@@ -11,6 +11,8 @@ Mastra supports the [Model Context Protocol (MCP)](https://modelcontextprotocol.
 
 Use [`MCPClient`](/reference/tools/mcp-client) to connect to MCP servers. Use [`MCPServer`](/reference/tools/mcp-server) to expose Mastra agents, tools, workflows, prompts, and resources to other MCP-compatible systems. Both speak the MCP `2026-07-28` revision over stdio and Streamable HTTP.
 
+For hosted MCP servers such as Neon and Canva, [Connect](/docs/mastra-platform/connect/providers#mcp-providers) on Mastra platform can manage the OAuth flow and credentials for you, so agents get the server's tools through [`tools()`](/docs/mastra-platform/connect/tools) without a hand-configured `MCPClient`.
+
 :::note
 Upgrading from `@mastra/mcp` 1.x? See the [migration guide](/reference/migrations/mcp-v2).
 :::

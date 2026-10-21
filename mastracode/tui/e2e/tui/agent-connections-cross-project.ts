@@ -131,12 +131,12 @@ export const agentConnectionsCrossProjectScenario = {
     await expect(terminal.getByText(/Project:|Resource ID:|>/gi, { full: true, strict: false })).toBeVisible();
 
     terminal.submit('Find the peer reviewer in the other project and connect to it.');
-    await runtime.waitForScreenText(/• agent_connections_list\b/i, terminal, 20_000);
-    await runtime.waitForScreenText(/• agent_connect\b/i, terminal, 20_000);
+    await runtime.waitForScreenText(/▐agent_connections_list▌/, terminal, 20_000);
+    await runtime.waitForScreenText(/▐agent_connect▌ids=/, terminal, 20_000);
     await runtime.waitForScreenText(/Cross-project peer connected/i, terminal, 20_000);
 
     terminal.submit('Send the cross-project peer a hello.');
-    await runtime.waitForScreenText(/• agent_signal_send\b/i, terminal, 20_000);
+    await runtime.waitForScreenText(/▐send▌code-agent:/, terminal, 20_000);
     await runtime.waitForScreenText(/Cross-project hello sent/i, terminal, 20_000);
     if (!peerWoken) throw new Error('Expected the peer process to be running');
     // The peer's own model call proves the signal crossed resources and woke its thread.
@@ -146,13 +146,10 @@ export const agentConnectionsCrossProjectScenario = {
     // The woken run itself succeeded: AIMock answered the peer's request.
     assert.equal(peerCall.status, 200, `Peer model call to ${peerCall.url} failed`);
     await expect(
-      terminal.getByText(
-        /agent_connections_list ✗|agent_connect .*✗|agent_signal_send .*✗|Failed to (list|connect|send)/i,
-        {
-          full: true,
-          strict: false,
-        },
-      ),
+      terminal.getByText(/▐(agent_connections_list|agent_connect|send)▌.*✗|Failed to (list|connect|send)/i, {
+        full: true,
+        strict: false,
+      }),
     ).not.toBeVisible();
     runtime.printScreen('after cross-project flow', terminal);
     terminal.keyCtrlC();

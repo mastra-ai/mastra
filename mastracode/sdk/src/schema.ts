@@ -42,6 +42,10 @@ export interface MastraCodeState {
   projectName?: string;
   /** Factory project that owns this session. */
   factoryProjectId?: string;
+  /** Whether this session uses organization or owner-scoped models and credentials. */
+  factoryModelScope?: 'factory' | 'user';
+  /** Stable user id of the Factory session owner. */
+  factoryOwnerUserId?: string;
   /** Authoritative organization id seeded by factory at session construction. */
   factoryOrgId?: string;
   /**
@@ -73,6 +77,13 @@ export interface MastraCodeState {
    * inherits the machine owner's personal configuration.
    */
   skipGlobalInstructions?: boolean;
+  /**
+   * Directories under the working directory whose project instruction files
+   * (AGENTS.md, CLAUDE.md) load, the session's own checkout first. Hosts that
+   * boot several checkouts under one working directory set it; unset, the
+   * working directory itself is the only root.
+   */
+  instructionRoots?: string[];
   configDir: string;
   homeDir?: string;
   gitBranch?: string;
@@ -166,9 +177,17 @@ export const stateSchema = z
       })
       .optional(),
     subagentModelId: z.string().optional(),
+    // Per-agentType subagent selections, written by session.subagents.model.set
+    // (key shape: subagentModelId_<agentType>). Declared so state validation
+    // keeps them — Zod strips unknown keys.
+    subagentModelId_explore: z.string().optional(),
+    subagentModelId_plan: z.string().optional(),
+    subagentModelId_execute: z.string().optional(),
     projectPath: z.string().optional(),
     projectName: z.string().optional(),
     factoryProjectId: z.string().optional(),
+    factoryModelScope: z.enum(['factory', 'user']).optional(),
+    factoryOwnerUserId: z.string().optional(),
     factoryOrgId: z.string().optional(),
     factoryOrgUnresolved: z.boolean().optional(),
     projectRepositoryId: z.string().optional(),
@@ -179,6 +198,8 @@ export const stateSchema = z
     baseRef: z.string().optional(),
     // Skip the operator machine's home-directory instruction files.
     skipGlobalInstructions: z.boolean().optional(),
+    // Checkouts whose instruction files load, the session's own first.
+    instructionRoots: z.array(z.string()).optional(),
     configDir: z.string().default(DEFAULT_CONFIG_DIR),
     homeDir: z.string().optional(),
     gitBranch: z.string().optional(),

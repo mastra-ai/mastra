@@ -10,6 +10,7 @@ import { Box, Container, getKeybindings, Input, SelectList, SettingsList, Spacer
 import type { Focusable, SelectItem, SettingItem, TUI } from '@earendil-works/pi-tui';
 import type { OMModel } from '@mastra/core/agent-controller';
 import { theme, getSettingsListTheme, getSelectListTheme } from '../theme.js';
+import { ModelSelectorComponent } from './model-selector.js';
 import type { ModelItem } from './model-selector.js';
 
 // =============================================================================
@@ -43,8 +44,10 @@ export interface OMSettingsCallbacks {
   onClose: () => void;
 }
 
+const AUTO_MODEL_ID = '__auto__';
+
 class OMModelSubmenu extends Container implements Focusable {
-  private readonly selector: SelectList;
+  private readonly selector: ModelSelectorComponent;
   private _focused = false;
 
   get focused(): boolean {
@@ -53,6 +56,7 @@ class OMModelSubmenu extends Container implements Focusable {
 
   set focused(value: boolean) {
     this._focused = value;
+    this.selector.focused = value;
   }
 
   constructor(args: {
@@ -66,36 +70,30 @@ class OMModelSubmenu extends Container implements Focusable {
     title: string;
   }) {
     super();
-    const autoItem: SelectItem = {
-      value: '__auto__',
-      label: `  Auto (${getShortModelName(args.effectiveModelId)})`,
-      description: 'Follow the active main model provider',
+    const autoModel: ModelItem = {
+      id: AUTO_MODEL_ID,
+      provider: 'auto',
+      modelName: 'auto',
+      displayName: `Auto (${getShortModelName(args.effectiveModelId)})`,
+      hasApiKey: true,
+      useCount: Number.MAX_SAFE_INTEGER,
     };
-    const modelItems: SelectItem[] = args.models.map(model => ({ value: model.id, label: `  ${model.id}` }));
-    this.selector = new SelectList(
-      [autoItem, ...modelItems],
-      Math.min(modelItems.length + 1, 12),
-      getSelectListTheme(),
-    );
-    const selectedModelId = args.model === 'auto' ? undefined : args.model;
-    const currentIndex = selectedModelId
-      ? Math.max(0, modelItems.findIndex(item => item.value === selectedModelId) + 1)
-      : 0;
-    this.selector.setSelectedIndex(currentIndex);
-    this.selector.onSelect = async item => {
-      if (item.value === '__auto__') {
-        await args.onAuto();
-        args.onDone(`Auto (${getShortModelName(args.effectiveModelId)})`);
-        return;
-      }
-      const model = args.models.find(candidate => candidate.id === item.value);
-      if (!model) return;
-      await args.onModel(model);
-      args.onDone(getShortModelName(model.id));
-    };
-    this.selector.onCancel = () => args.onDone();
-    this.addChild(new Text(theme.bold(theme.fg('accent', args.title)), 0, 0));
-    this.addChild(new Spacer(1));
+    this.selector = new ModelSelectorComponent({
+      tui: args.tui,
+      models: [autoModel, ...args.models],
+      currentModelId: args.model === 'auto' ? AUTO_MODEL_ID : args.model,
+      title: args.title,
+      onSelect: async model => {
+        if (model.id === AUTO_MODEL_ID) {
+          await args.onAuto();
+          args.onDone(autoModel.displayName);
+          return;
+        }
+        await args.onModel(model);
+        args.onDone(getShortModelName(model.id));
+      },
+      onCancel: () => args.onDone(),
+    });
     this.addChild(this.selector);
   }
 
@@ -341,8 +339,7 @@ export class OMSettingsComponent extends Box implements Focusable {
       {
         id: 'obs-threshold',
         label: 'Messages before observation',
-        description:
-          'Message tokens before the Observer runs. ' + 'More means a larger message window per observation.',
+        description: 'Message tokens before the Observer runs. More means a larger message window per observation.',
         currentValue: formatTokens(config.observationThreshold),
         submenu: (_currentValue, done) =>
           new ThresholdSubmenu(
@@ -402,8 +399,7 @@ export class OMSettingsComponent extends Box implements Focusable {
       {
         id: 'observe-attachments',
         label: 'Observe attachments',
-        description:
-          'Forward image and file attachments to the Observer LLM. ' + 'Auto checks model capabilities to decide',
+        description: 'Forward image and file attachments to the Observer LLM. Auto checks model capabilities to decide',
         currentValue: formatAttachmentValue(config.observeAttachments),
         submenu: (_currentValue, done) => {
           const items: SelectItem[] = [

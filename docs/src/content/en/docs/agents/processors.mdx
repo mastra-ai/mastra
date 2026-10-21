@@ -168,6 +168,8 @@ new Agent({
 
 An `errorProcessors` list passed to a single `generate()` or `stream()` call works differently: it replaces the agent's resolved list for that call, defaults included.
 
+An agent's memory can contribute error processors of its own, for example to recover when a request exceeds the model's context window. They run after the processors above and stay in place when a call passes its own `errorProcessors` list.
+
 Each array also accepts a function that returns an array, so processors can be built per-request from `RequestContext`:
 
 ```typescript
@@ -391,17 +393,19 @@ import type { Processor } from '@mastra/core/processors'
 export class ResponseValidator implements Processor {
   id = 'response-validator'
 
-  async processOutputStep({ text, abort, retryCount }) {
+  async processOutputStep({ messages, text, abort, retryCount }) {
     const isValid = await validateResponse(text)
 
     if (!isValid && retryCount < 3) {
       abort('Response did not meet requirements. Try again.', { retry: true })
     }
 
-    return []
+    return messages
   }
 }
 ```
+
+Return `messages` to leave the conversation unchanged. Returning `[]` replaces the message list with an empty array, removing the conversation history and the latest response.
 
 For more on retry behavior, see [Retry mechanism](#retry-mechanism) in Advanced patterns.
 
@@ -879,16 +883,19 @@ const moderationWorkflow = createWorkflow({
   .parallel([
     createStep(
       new PIIDetector({
+        model: '__GATEWAY_OPENAI_MODEL_NANO__',
         strategy: 'redact',
       }),
     ),
     createStep(
       new PromptInjectionDetector({
+        model: '__GATEWAY_OPENAI_MODEL_NANO__',
         strategy: 'block',
       }),
     ),
     createStep(
       new ModerationProcessor({
+        model: '__GATEWAY_OPENAI_MODEL_NANO__',
         strategy: 'block',
       }),
     ),
@@ -923,7 +930,7 @@ import type { Processor } from '@mastra/core/processors'
 export class QualityChecker implements Processor {
   id = 'quality-checker'
 
-  async processOutputStep({ text, abort, retryCount }) {
+  async processOutputStep({ messages, text, abort, retryCount }) {
     const qualityScore = await evaluateQuality(text)
 
     if (qualityScore < 0.7 && retryCount < 3) {
@@ -934,7 +941,7 @@ export class QualityChecker implements Processor {
       })
     }
 
-    return []
+    return messages
   }
 }
 

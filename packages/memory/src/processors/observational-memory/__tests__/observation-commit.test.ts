@@ -6,9 +6,14 @@ import { Extractor } from '../extractor';
 import type { ExtractorOnExtractedContext } from '../extractor';
 import { ObservationStrategy } from '../observation-strategies/base';
 import type { StrategyDeps } from '../observation-strategies/base';
-import type { ObservationRunOpts, ObserverOutput, ProcessedObservation } from '../observation-strategies/types';
+import type {
+  ObservationPersistOutcome,
+  ObservationRunOpts,
+  ObserverOutput,
+  ProcessedObservation,
+} from '../observation-strategies/types';
 
-type PersistOutcome = 'commit' | 'skip' | 'fail';
+type PersistOutcome = 'commit' | 'covered' | 'skip' | 'fail';
 
 /** Strategy whose persist step commits, skips, or fails, exposing the commit settlement hooks receive. */
 class CommitStrategy extends ObservationStrategy {
@@ -33,7 +38,16 @@ class CommitStrategy extends ObservationStrategy {
     return this.observationCommitted;
   }
   async prepare(): Promise<{ messages: MastraDBMessage[]; existingObservations: string }> {
-    return { messages: [], existingObservations: '' };
+    // A cycle with nothing to observe returns before the commit, so give it one message.
+    const message: MastraDBMessage = {
+      id: 'commit-message',
+      role: 'user',
+      threadId: 'commit-thread',
+      resourceId: 'commit-resource',
+      createdAt: new Date(),
+      content: { format: 2, parts: [{ type: 'text', text: 'The launch is on Friday.' }] },
+    };
+    return { messages: [message], existingObservations: '' };
   }
   async observe(): Promise<ObserverOutput> {
     const observations = 'User confirmed the launch date.';
@@ -56,9 +70,13 @@ class CommitStrategy extends ObservationStrategy {
       lastObservedAt: new Date(),
     };
   }
-  async persist(): Promise<boolean> {
+  async persist(processed: ProcessedObservation): Promise<ObservationPersistOutcome | void> {
     if (this.outcome === 'fail') throw new Error('commit failed');
-    return this.outcome === 'commit';
+    if (this.outcome === 'skip') return;
+    if (this.outcome === 'covered') {
+      return { status: 'committed', processed, record: this.opts.record, alreadyCovered: true };
+    }
+    return { status: 'committed', processed, record: this.opts.record };
   }
   async emitStartMarkers(): Promise<void> {}
   async emitEndMarkers(): Promise<void> {}
@@ -74,6 +92,7 @@ function createStrategy(outcome: PersistOutcome, hooks: readonly Extractor[] = [
     reflectionConfig: { observationTokens: 1000 },
     scope: 'thread',
     retrieval: false,
+    prepareObserverContext: (context: string | undefined) => ({ context, wasTruncated: false }),
   } as unknown as StrategyDeps;
   const opts = {
     record: { id: 'record-1' } as ObservationRunOpts['record'],
@@ -91,6 +110,15 @@ describe('Observation commit settlement', () => {
     await expect(strategy.run()).resolves.toMatchObject({ observed: true });
 
     await expect(strategy.committed).resolves.toBe(true);
+  });
+
+  it("settles false when another instance had already committed this cycle's messages", async () => {
+    const strategy = createStrategy('covered');
+
+    // The cycle still completes: its messages are observed, just not by this commit.
+    await expect(strategy.run()).resolves.toMatchObject({ observed: true });
+
+    await expect(strategy.committed).resolves.toBe(false);
   });
 
   it('settles false when the cycle skips its commit', async () => {

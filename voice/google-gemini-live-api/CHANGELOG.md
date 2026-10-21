@@ -1,5 +1,93 @@
 # @mastra/voice-google-gemini-live
 
+## 0.14.17
+
+### Patch Changes
+
+- Added `inputAudioTranscription` and `outputAudioTranscription` options to `GeminiLiveVoice` so you can pass BCP-47 language hints to Gemini Live transcription. Without hints, the server auto-detects the language and can transcribe short or accented speech in the wrong language. ([#27583](https://github.com/mastra-ai/mastra/pull/27583))
+
+  ```ts
+  const voice = new GeminiLiveVoice({
+    apiKey: process.env.GOOGLE_API_KEY,
+    inputAudioTranscription: { languageCodes: ['es-ES'] },
+  });
+  ```
+
+  Leaving the options out keeps the current behavior.
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+- Updated dependencies [[`fae54c5`](https://github.com/mastra-ai/mastra/commit/fae54c57917cd1f527937ca42b5ab7dfe1d55a2a)]:
+  - @mastra/schema-compat@1.3.16
+
+## 0.14.17-alpha.1
+
+### Patch Changes
+
+- Added `inputAudioTranscription` and `outputAudioTranscription` options to `GeminiLiveVoice` so you can pass BCP-47 language hints to Gemini Live transcription. Without hints, the server auto-detects the language and can transcribe short or accented speech in the wrong language. ([#27583](https://github.com/mastra-ai/mastra/pull/27583))
+
+  ```ts
+  const voice = new GeminiLiveVoice({
+    apiKey: process.env.GOOGLE_API_KEY,
+    inputAudioTranscription: { languageCodes: ['es-ES'] },
+  });
+  ```
+
+  Leaving the options out keeps the current behavior.
+
+## 0.14.17-alpha.0
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+- Updated dependencies [[`fae54c5`](https://github.com/mastra-ai/mastra/commit/fae54c57917cd1f527937ca42b5ab7dfe1d55a2a)]:
+  - @mastra/schema-compat@1.3.16-alpha.0
+
+## 0.14.16
+
+### Patch Changes
+
+- Updated dependencies [[`c6230e3`](https://github.com/mastra-ai/mastra/commit/c6230e30f76b4b912bad68f426d730da1cb67d83), [`cb015a1`](https://github.com/mastra-ai/mastra/commit/cb015a1be6560cbaf4deaef219cb02e63b263bc3)]:
+  - @mastra/schema-compat@1.3.15
+
+## 0.14.16-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`c6230e3`](https://github.com/mastra-ai/mastra/commit/c6230e30f76b4b912bad68f426d730da1cb67d83), [`cb015a1`](https://github.com/mastra-ai/mastra/commit/cb015a1be6560cbaf4deaef219cb02e63b263bc3)]:
+  - @mastra/schema-compat@1.3.15-alpha.0
+
+## 0.14.15
+
+### Patch Changes
+
+- Updated dependencies [[`ca92c02`](https://github.com/mastra-ai/mastra/commit/ca92c02696427baad81dd7a61b049ef37c332452)]:
+  - @mastra/schema-compat@1.3.14
+
+## 0.14.15-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`ca92c02`](https://github.com/mastra-ai/mastra/commit/ca92c02696427baad81dd7a61b049ef37c332452)]:
+  - @mastra/schema-compat@1.3.14-alpha.0
+
+## 0.14.14
+
+### Patch Changes
+
+- Fixed cleanup when the Gemini Live server closes the socket. A close from the server side (1011, goAway, a network drop) only changed state and emitted events, and the app's later `disconnect()` returned early with "Already disconnected". So the open `speaker` stream for the current reply never ended, leaving anything piping or awaiting it hung, and the `maxDuration` timer (up to 24h) kept the process alive and later called `disconnect()` on whatever session was current. The close and error handlers now end speaker streams and clear the session timers, including the `sessionExpiring` warning timer, which was never stored and so could not be cleared before. The events emitted on close are unchanged. ([#26698](https://github.com/mastra-ai/mastra/pull/26698))
+
+  Fixes [#26694](https://github.com/mastra-ai/mastra/issues/26694).
+
+## 0.14.14-alpha.0
+
+### Patch Changes
+
+- Fixed cleanup when the Gemini Live server closes the socket. A close from the server side (1011, goAway, a network drop) only changed state and emitted events, and the app's later `disconnect()` returned early with "Already disconnected". So the open `speaker` stream for the current reply never ended, leaving anything piping or awaiting it hung, and the `maxDuration` timer (up to 24h) kept the process alive and later called `disconnect()` on whatever session was current. The close and error handlers now end speaker streams and clear the session timers, including the `sessionExpiring` warning timer, which was never stored and so could not be cleared before. The events emitted on close are unchanged. ([#26698](https://github.com/mastra-ai/mastra/pull/26698))
+
+  Fixes [#26694](https://github.com/mastra-ai/mastra/issues/26694).
+
 ## 0.14.13
 
 ### Patch Changes

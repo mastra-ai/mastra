@@ -1,3 +1,4 @@
+import { ScrollArea as ScrollAreaPrimitive } from '@base-ui/react/scroll-area';
 import type { CSSProperties, ReactNode, RefObject } from 'react';
 import { useId, useMemo } from 'react';
 import {
@@ -47,6 +48,8 @@ export type DataListRootProps = Omit<ScrollAreaProps, 'children' | 'orientation'
   fit?: DataListFit;
   /** Surface treatment; defaults to `default` (rows on a raised card panel). */
   variant?: DataListVariant;
+  /** Disable the internal scroll area when a parent owns scrolling, allowing row effects to extend outside the list. */
+  scrollable?: boolean;
   /**
    * Edge fades from the underlying ScrollArea. DataList keeps the top fade off
    * by default so it does not fade the sticky top header.
@@ -106,13 +109,6 @@ const dataListGridStyles = [
   '[&_.data-list-row:has(+.data-list-subheader)]:rounded-b-lg',
   '[&_.data-list-subheader+.data-list-row>.data-list-sticky-start]:rounded-tl-lg',
   '[&_.data-list-row:has(+.data-list-subheader)>.data-list-sticky-start]:rounded-bl-lg',
-  // The fluid highlight follows the same ends: rounded only when the active
-  // row is the first/last of its section, square everywhere else. `:has()`
-  // cannot nest, so "last" is written as "no row follows the active one".
-  '[&:has(.data-list-row[data-fluid-hover-active]:not(.data-list-row~.data-list-row))_[data-slot=fluid-hover-highlight]]:rounded-t-lg',
-  '[&:has(.data-list-row[data-fluid-hover-active]):not(:has(.data-list-row[data-fluid-hover-active]~.data-list-row))_[data-slot=fluid-hover-highlight]]:rounded-b-lg',
-  '[&:has(.data-list-subheader+.data-list-row[data-fluid-hover-active])_[data-slot=fluid-hover-highlight]]:rounded-t-lg',
-  '[&:has(.data-list-row[data-fluid-hover-active]+.data-list-subheader)_[data-slot=fluid-hover-highlight]]:rounded-b-lg',
   '[&_.data-list-top]:bg-(--data-list-background)',
   '[&_.data-list-row>.data-list-sticky-start]:bg-background',
   // A sticky cell must stay opaque over horizontally scrolled cells, so it
@@ -227,9 +223,14 @@ function DataListBase({
   className,
   fit = 'content',
   variant = 'default',
+  scrollable = true,
   mask,
   scrollRef,
   reorder,
+  maxHeight,
+  autoScroll,
+  scrollButtons,
+  revealScrollbarOnHover,
   ...props
 }: DataListBaseProps) {
   const scopeId = useId();
@@ -249,8 +250,7 @@ function DataListBase({
 
   // One hover surface travels between rows (same primitive as menus/selects).
   // Subheaders, pagination and whitespace stay inert, so no gap-click routing.
-  const menu = useFluidMenu<HTMLDivElement>({ gapClick: false });
-
+  const menu = useFluidMenu({ gapClick: false });
   const grid = (
     <div
       // Lists scroll inside the ScrollArea viewport (below); the grid just lays out.
@@ -263,11 +263,23 @@ function DataListBase({
       {orderRules && <style>{orderRules}</style>}
       {/* The highlight is the old row hover color. It sits between each row's
           `before` surface (-z-2) and the row content (see `dataListRowOuterStyles`). */}
-      <FluidMenuItems menu={menu} className="rounded-none bg-fill-subtle">
+      <FluidMenuItems menu={menu} className="rounded-(--fluid-hover-item-radius) bg-fill-subtle">
         {children}
       </FluidMenuItems>
     </div>
   );
+
+  if (!scrollable) {
+    return (
+      // Preserve Base UI's render/style/ref contract without adding a clipping viewport.
+      <ScrollAreaPrimitive.Root
+        {...props}
+        className={cn('w-full rounded-xl p-1', dataListVariantClasses[variant], className)}
+      >
+        <DataListReorderContext.Provider value={reorder}>{grid}</DataListReorderContext.Provider>
+      </ScrollAreaPrimitive.Root>
+    );
+  }
 
   // DataList uses the DS ScrollArea: an overlay scrollbar, so the sticky header
   // spans the full width. Masks default to every overflowing edge except the
@@ -275,6 +287,10 @@ function DataListBase({
   return (
     <ScrollArea
       {...props}
+      maxHeight={maxHeight}
+      autoScroll={autoScroll}
+      scrollButtons={scrollButtons}
+      revealScrollbarOnHover={revealScrollbarOnHover}
       orientation="both"
       mask={getDataListMask(mask)}
       // Outer radius = row radius (8px) + 4px inset so the corners stay concentric.

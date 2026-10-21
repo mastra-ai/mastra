@@ -81,7 +81,10 @@ report, and removes the prepared trace file.
 workflow. Langfuse credentials come from `LANGFUSE_PUBLIC_KEY`,
 `LANGFUSE_SECRET_KEY`, and optional `LANGFUSE_BASE_URL`. The destination uses
 the normal Mastra login, or `MASTRA_API_TOKEN` together with `MASTRA_ORG_ID`,
-plus `--project`, `MASTRA_PROJECT_ID`, or the linked project configuration.
+plus `--target-project` (hidden alias `--project`), `MASTRA_PROJECT_ID`, or the
+linked project configuration. `--target-project` is always the destination; the
+source project is implied by the provider credentials and reported by name in
+the preparation summary.
 Interactive uploads and read-back also require `MASTRA_PLATFORM_ACCESS_TOKEN`;
 headless imports reuse `MASTRA_API_TOKEN` for those requests.
 
@@ -91,12 +94,12 @@ confirmation, uploads pending batches, verifies a sample, and writes a report.
 window and starts at the first unfinished phase. Internal size, batching,
 pacing, retry, and verification limits are intentionally not CLI options.
 
-The default window is the current 30-day Platform retention period. `--from`
-and `--to` accept ISO 8601 values inside that period; the end cannot be in the
-future, the start must precede the end, and the window cannot exceed 30 days.
-If only `--to` is set, the implicit start is clamped to the current retention
-boundary. A resumed import must use the original provider and target project,
-and its saved window cannot be changed.
+The default window is the current 30-day Platform retention period. `--since`
+and `--until` (hidden aliases `--from` and `--to`) accept ISO 8601 values inside
+that period; the end cannot be in the future, the start must precede the end,
+and the window cannot exceed 30 days. If only `--until` is set, the implicit
+start is clamped to the current retention boundary. A resumed import must use
+the original provider and target project, and its saved window cannot be changed.
 
 Dry runs, cancelled uploads, interruptions after preparation, and paused
 verification keep `traces.jsonl` for `--resume`. An interruption during

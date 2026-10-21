@@ -40,6 +40,8 @@ export default defineConfig({
     name: 'e2e:stores/oracledb',
     environment: 'node',
     include: ['src/**/*.test.ts', 'src/**/*.integration.test.ts'],
+    // Integration files share one database; the observational memory lifecycle test alters a table the shared suite reads.
+    fileParallelism: false,
     coverage: {
       reporter: ['text', 'json', 'html'],
     },

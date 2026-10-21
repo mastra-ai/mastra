@@ -1,14 +1,24 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Bar, CartesianGrid, ComposedChart, Line, Rectangle, ReferenceLine, Tooltip } from 'recharts';
+import { Bar, CartesianGrid, ComposedChart, LabelList, Line, Rectangle, ReferenceLine, Tooltip } from 'recharts';
+import type { LabelProps } from 'recharts';
 import { ChartSkeleton } from '@/ds/components/ChartSkeleton';
 import type { MetricsLineChartSeries } from '@/ds/components/MetricsLineChart';
 import { MetricsLineChartLegend, MetricsLineChartTooltip } from '@/ds/components/MetricsLineChart';
 import { CHART_GRID_PROPS, useChartSize } from '@/ds/primitives/chart-axes';
 import type { ChartXLabels } from '@/ds/primitives/chart-axes';
 import { singleBarBox, stackedSegmentBox } from '@/ds/primitives/chart-column-layout';
-import { CHART_TICK, Y_AXIS_WIDTH, compactNumber, timeXAxis, valueYAxis } from '@/ds/primitives/chart-frame';
+import type { SegmentBox } from '@/ds/primitives/chart-column-layout';
+import {
+  CHART_TICK,
+  Y_AXIS_WIDTH,
+  compactNumber,
+  dataMax,
+  isWholeData,
+  timeXAxis,
+  valueYAxis,
+} from '@/ds/primitives/chart-frame';
 import type { ChartHeight } from '@/ds/primitives/chart-frame';
-import { CHART_MARGIN } from '@/ds/primitives/chart-layout';
+import { CHART_AXIS_FONT_SIZE, CHART_MARGIN } from '@/ds/primitives/chart-layout';
 import { ChartPlot } from '@/ds/primitives/chart-plot';
 import { useChartDefsId } from '@/ds/primitives/use-chart-defs-id';
 import { cn } from '@/lib/utils';
@@ -24,6 +34,7 @@ const CAP_BODY = 0.55;
 const CAP_HEIGHT = 3;
 /** Opacity of the other columns while one is hovered. */
 const DIMMED = 0.3;
+const COLUMN_LABEL_SPACE = 16;
 
 type SegmentProps = {
   x?: number;
@@ -132,6 +143,7 @@ export type MetricsStackedBarChartProps = {
   xLabels?: ChartXLabels;
   /** Row field for the tooltip heading (e.g. a longer date); defaults to the x-axis label. */
   tooltipLabelKey?: string;
+  columnLabelKey?: string;
   /** Click a column (e.g. to open its traces); the plot shows a pointer cursor. */
   onBucketClick?: (row: Record<string, unknown>, index: number) => void;
   /** One dashed line over the bars, on its own hidden scale (e.g. a duration over counts). */
@@ -171,6 +183,7 @@ function BarPlot({
   timestampKey = 'tsMs',
   xLabels = 'auto',
   tooltipLabelKey,
+  columnLabelKey,
   onBucketClick,
   overlay,
   id,
@@ -197,6 +210,7 @@ function BarPlot({
 
   const format = valueFormatter ?? compactNumber.format;
   const plotWidth = size.width - (showYAxis ? Y_AXIS_WIDTH : 0);
+  const margin = columnLabelKey ? { ...CHART_MARGIN, top: CHART_MARGIN.top + COLUMN_LABEL_SPACE } : CHART_MARGIN;
 
   return (
     <>
@@ -204,7 +218,7 @@ function BarPlot({
       <ChartPlot height={height} plotRef={ref} onResize={onResize} clickable={!!onBucketClick}>
         <ComposedChart
           data={data}
-          margin={CHART_MARGIN}
+          margin={margin}
           onMouseMove={state => {
             const index = state?.activeTooltipIndex;
             setHovered.current(index === undefined || index === null ? undefined : Number(index));
@@ -226,13 +240,33 @@ function BarPlot({
           </defs>
           <CartesianGrid {...CHART_GRID_PROPS} />
           {timeXAxis({ data, xKey, timestampKey, xLabels, plotWidth })}
-          {valueYAxis({ show: showYAxis, size, formatter: axisFormatter ?? format, domain: yDomain })}
+          {valueYAxis({
+            show: showYAxis,
+            size,
+            formatter: axisFormatter ?? format,
+            domain: yDomain,
+            // A reference line above the bars stays on the axis.
+            max: Math.max(
+              dataMax(
+                data,
+                series.map(s => s.dataKey),
+                true,
+              ),
+              referenceLine?.value ?? 0,
+            ),
+            integer: isWholeData(
+              data,
+              series.map(s => s.dataKey),
+            ),
+          })}
           {overlay &&
             valueYAxis({
               id: 'overlay',
               show: false,
               size,
               formatter: overlay.valueFormatter ?? compactNumber.format,
+              max: dataMax(data, [overlay.dataKey]),
+              integer: isWholeData(data, [overlay.dataKey]),
               right: true,
             })}
           <Tooltip
@@ -256,7 +290,22 @@ function BarPlot({
               maxBarSize={28}
               isAnimationActive={false}
               shape={shapes[i]}
-            />
+            >
+              {columnLabelKey && (
+                <LabelList
+                  dataKey={columnLabelKey}
+                  content={(props: LabelProps) => (
+                    <ColumnLabel
+                      {...props}
+                      row={data[Number(props.index)]}
+                      keys={series.map(({ dataKey }) => dataKey)}
+                      self={i}
+                      color={s.color}
+                    />
+                  )}
+                />
+              )}
+            </Bar>
           ))}
           {overlay && (
             <Line
@@ -285,5 +334,37 @@ function BarPlot({
         </ComposedChart>
       </ChartPlot>
     </>
+  );
+}
+
+type ColumnLabelProps = LabelProps & {
+  row: MetricsStackedBarChartProps['data'][number] | undefined;
+  keys: string[];
+  self: number;
+  color: string;
+};
+
+function paintedTop(values: number[], self: number, box: SegmentBox) {
+  if (values.length > 1) return stackedSegmentBox(values, self, box, { gap: SEGMENT_GAP })?.y;
+  return singleBarBox(values[self] ?? 0, box)?.y;
+}
+
+function ColumnLabel({ x, y, width, height, value, row, keys, self, color }: ColumnLabelProps) {
+  if (value === undefined || value === null || value === '') return null;
+  const values = keys.map(key => Number(row?.[key]) || 0);
+  const topmost = values.findLastIndex(v => v > 0);
+  if (self !== (topmost === -1 ? keys.length - 1 : topmost)) return null;
+  const top = paintedTop(values, self, { y: Number(y), height: Math.max(Number(height), 0) }) ?? Number(y);
+  return (
+    <text
+      x={Number(x) + Number(width) / 2}
+      y={top - 6}
+      textAnchor="middle"
+      fontSize={CHART_AXIS_FONT_SIZE}
+      fill={color}
+      className="tabular-nums"
+    >
+      {String(value)}
+    </text>
   );
 }

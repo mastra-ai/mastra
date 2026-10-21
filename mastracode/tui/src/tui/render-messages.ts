@@ -59,6 +59,7 @@ import {
 import type { AssistantRenderPart } from './db-message-parts.js';
 import { formatToolResult, isTaskMutationTool } from './handlers/tool.js';
 import { pruneChatContainer } from './prune-chat.js';
+import { clearPendingTools } from './state.js';
 import type { TUIState } from './state.js';
 import { BOX_INDENT, getMarkdownTheme, theme } from './theme.js';
 
@@ -616,8 +617,7 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
       kind: notification.kind,
       priority: notification.priority,
       status: notification.status,
-      quietDisplayMode: state.quietMode ? 'quiet' : 'normal',
-      quietPreviewLineLimit: state.quietModeMaxToolPreviewLines,
+      previewLineLimit: state.previewLines,
       backgroundCompletion,
     });
     if (backgroundCompletion) {
@@ -638,7 +638,6 @@ export function renderSignalMessage(state: TUIState, message: MastraDBMessage): 
       message: summary.message,
       pending: summary.pending,
       bySource: summary.bySource,
-      quietDisplayMode: state.quietMode ? 'quiet' : 'normal',
     });
     addChildBeforeFollowUps(state, component);
     state.messageComponentsById.set(message.id, component);
@@ -680,11 +679,10 @@ export function addUserMessage(state: TUIState, message: MastraDBMessage, option
     const component = new ScheduleFireComponent({
       prompt: exactDisplayText,
       attributes: signalAttributes,
-      quietDisplayMode: state.quietMode ? 'quiet' : 'normal',
-      quietPreviewLineLimit: state.quietModeMaxToolPreviewLines,
+      previewLineLimit: state.previewLines,
     });
     component.setExpanded(state.toolOutputExpanded);
-    // Registered with the tool components so ctrl+e and quiet-mode changes reach it.
+    // Registered with the tool components so ctrl+e and preview-line changes reach it.
     state.allToolComponents.push(component as any);
     state.messageComponentsById.set(message.id, component);
     if (state.streamingComponent && state.session.displayState.get().isRunning) {
@@ -951,8 +949,7 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
 
   disposeAssistantRenderState(state);
   state.chatContainer.clear();
-  state.pendingTools.clear();
-  state.pendingTaskToolIds?.clear();
+  clearPendingTools(state);
   state.pendingSubagents.clear();
   state.followUpComponents = [];
   state.allToolComponents = [];
@@ -994,7 +991,6 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
         if (accumulatedParts.length === 0 && !(isFinal && hasTerminalMetadata(message))) return;
         const textMessage = buildAssistantSlice(message, accumulatedParts, { includeTerminalMetadata: isFinal });
         const textComponent = new AssistantMessageComponent(textMessage, state.hideThinkingBlock, getMarkdownTheme());
-        textComponent.setQuietModeDisplay(state.quietMode ? 'quiet' : 'normal');
         state.chatContainer.addChild(textComponent);
         accumulatedParts = [];
       };
@@ -1043,7 +1039,7 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
               subArgs?.task ?? '',
               state.ui,
               modelId,
-              { collapseOnComplete: false, expandOnComplete: state.quietMode, forked: subArgs?.forked },
+              { collapseOnComplete: false, expandOnComplete: true, forked: subArgs?.forked },
             );
             // Populate tool calls from metadata
             if (meta?.toolCalls) {
@@ -1089,7 +1085,7 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
               pluginRenderConfig.modelId,
               {
                 collapseOnComplete: false,
-                expandOnComplete: state.quietMode,
+                expandOnComplete: true,
                 forked: pluginRenderConfig.forked,
                 label: pluginRenderConfig.label,
                 maxActivityLines: pluginRenderConfig.maxActivityLines,
@@ -1255,14 +1251,10 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
           }
 
           if (!replacedWithInline) {
-            if (state.quietMode) {
-              toolComponent.setCompactToolModeColor(getCurrentModeColor(state));
-              toolComponent.setQuietModeDisplay('quiet');
-              toolComponent.setQuietPreviewLineLimit(state.quietModeMaxToolPreviewLines);
-            }
+            toolComponent.setCompactToolModeColor(getCurrentModeColor(state));
+            toolComponent.setPreviewLineLimit(state.previewLines);
             state.chatContainer.addChild(toolComponent);
             state.allToolComponents.push(toolComponent);
-          } else {
           }
         } else if (part.kind === 'account-switch') {
           flushAccumulated();
@@ -1301,16 +1293,6 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
                 error: typeof omData.error === 'string' ? omData.error : 'observation failed',
                 tokensAttempted: typeof omData.tokensAttempted === 'number' ? omData.tokensAttempted : undefined,
                 operationType: omData.operationType,
-              }),
-            );
-          } else if (part.event === 'thread-title') {
-            if (state.quietMode) continue;
-            // Render thread title update marker in history
-            state.chatContainer.addChild(
-              new OMMarkerComponent({
-                type: 'om_thread_title_updated',
-                newTitle: omData.newTitle,
-                oldTitle: omData.oldTitle,
               }),
             );
           }

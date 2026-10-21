@@ -236,4 +236,55 @@ describe('MODEL_GENERATION span output tool calls (#24291)', () => {
       spy.mockRestore();
     }
   });
+
+  it('keeps completed-step usage on the span when the stream is aborted with an incomplete aggregate', async () => {
+    endGenerationCalls.length = 0;
+    const spy = await mockTracedSpans();
+    const controller = new AbortController();
+
+    try {
+      const agent = new Agent({
+        id: 'aborted-incomplete-usage-span-agent',
+        name: 'Aborted Incomplete Usage Span Agent',
+        instructions: 'test',
+        model: new MockLanguageModelV2({
+          doStream: async () => ({
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'tool-call', toolCallId: 'call_1', toolName: 'get_weather', input: '{"city":"Paris"}' },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: undefined, outputTokens: 5, totalTokens: undefined, reasoningTokens: 2 },
+              },
+            ] as any),
+          }),
+        }),
+        tools: {
+          get_weather: createTool({
+            id: 'get_weather',
+            description: 'Get the weather',
+            inputSchema: z.object({ city: z.string() }),
+            execute: async ({ city }) => {
+              controller.abort();
+              return { city, forecast: 'sunny' };
+            },
+          }),
+        },
+      });
+
+      const res = await agent.stream('weather in Paris?', { abortSignal: controller.signal });
+      await res.consumeStream().catch(() => {});
+
+      expect(endGenerationCalls).toHaveLength(1);
+      expect(endGenerationCalls[0]).toMatchObject({
+        attributes: { finishReason: 'aborted', usageIncomplete: true },
+        usage: { outputTokens: 5, reasoningTokens: 2 },
+      });
+    } finally {
+      spy.mockRestore();
+    }
+  });
 });

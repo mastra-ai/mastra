@@ -5,6 +5,7 @@ import type {
   WorkItemRow,
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
+import { factoryDispatchFailureMetadata } from './dispatch-errors.js';
 
 type ApplicabilityRecord = Pick<FactoryDeferredDecisionRecord, 'id' | 'evaluationId' | 'createdAt' | 'decision'>;
 
@@ -12,6 +13,18 @@ type ApplicabilityRecord = Pick<FactoryDeferredDecisionRecord, 'id' | 'evaluatio
 export function skillDecisionRole(record: Pick<FactoryDeferredDecisionRecord, 'decision'>): string | undefined {
   const { type, role } = record.decision;
   return type === 'invokeSkill' && typeof role === 'string' ? role : undefined;
+}
+
+/**
+ * Whether a person may retry this decision: it failed, its failure is one a rerun
+ * can fix, and the card has not left the phase it was decided for. Overtaken is
+ * resolved by the caller (see `overtakenDecisionIds`) because it needs the card.
+ */
+export function decisionRetryable(
+  record: Pick<FactoryDeferredDecisionRecord, 'status' | 'failureCode'>,
+  overtaken: boolean,
+): boolean {
+  return record.status === 'failed' && !overtaken && factoryDispatchFailureMetadata(record.failureCode).canRetry;
 }
 
 /**

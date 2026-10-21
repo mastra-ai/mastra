@@ -38,7 +38,8 @@ export const mastra = new Mastra({
   {
     name: 'url',
     type: 'string',
-    description: 'Valkey connection URL. Falls back to `valkeyOptions.url`.',
+    description:
+      'Valkey connection URL. Falls back to `valkeyOptions.url`. `rediss://` and `valkeys://` URLs enable TLS unless `valkeyOptions.useTLS` is set.',
     isOptional: true,
     defaultValue: 'valkey://localhost:6379',
   },

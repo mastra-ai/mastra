@@ -1,12 +1,14 @@
 'use client';
 
-import { useRef, useState, useCallback, useEffect, type Dispatch, type RefObject, type SetStateAction } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
+import type { Dispatch, RefObject, SetStateAction } from 'react';
 
 export interface ItemRect {
   top: number;
   height: number;
   left: number;
   width: number;
+  radius: string;
 }
 
 export interface UseFluidHoverOptions {
@@ -274,27 +276,26 @@ export function useFluidHover<T extends HTMLElement>(
   const remeasureRafIdRef = useRef<number | null>(null);
 
   /**
-   * Publishes a rect for every registered item. Returns false when the
-   * measurement could not be completed (no container, or an item without a
-   * layout box) — nothing is published in that case, so the last complete
-   * measurement stands instead of being overwritten with zeroes.
+   * Publishes a rect for every registered item that has a layout box. Returns
+   * false when the measurement could not be completed (no container, or no
+   * item with a layout box) — nothing is published in that case, so the last
+   * complete measurement stands instead of being overwritten with zeroes.
    */
   const runMeasurement = useCallback(() => {
     const container = containerRef.current;
     if (!container) return false;
     const rects: ItemRect[] = [];
-    let everyItemHasLayout = true;
+    let laidOutItemCount = 0;
     itemsRef.current.forEach((element, index) => {
       // An element inside a display:none / not-yet-laid-out popup has no
-      // offsetParent and reports every offset as 0. Publishing that would pin
-      // overlays to the top of the list, so treat the whole pass as
-      // incomplete. A boxless element is the only case: `position: fixed`
+      // offsetParent and reports every offset as 0. When every item is like
+      // that, publishing would pin overlays to the top of the list, so the
+      // whole pass counts as incomplete. A boxless item among laid-out ones
+      // (a row in a collapsed section) is just left out. `position: fixed`
       // items also have no offsetParent but do have a size.
       const hasLayoutBox = element.offsetParent !== null || element.offsetWidth > 0 || element.offsetHeight > 0;
-      if (!hasLayoutBox) {
-        everyItemHasLayout = false;
-        return;
-      }
+      if (!hasLayoutBox) return;
+      laidOutItemCount++;
       // Use offset* instead of getBoundingClientRect so measurements are
       // unaffected by CSS transforms (e.g. scaleY animation on the parent
       // motion.div). offsetTop/offsetLeft are layout values relative to the
@@ -317,18 +318,26 @@ export function useFluidHover<T extends HTMLElement>(
         height: element.offsetHeight,
         left,
         width: element.offsetWidth,
+        radius: getComputedStyle(element).borderRadius,
       };
     });
-    if (!everyItemHasLayout) return false;
-    // Skip the state update when nothing moved (a cheap top/left/width/height
-    // compare) so redundant remeasures don't churn re-renders.
+    if (itemsRef.current.size > 0 && laidOutItemCount === 0) return false;
+    // Skip the state update when nothing moved (a cheap per-field compare) so
+    // redundant remeasures don't churn re-renders.
     const prev = itemRectsRef.current;
     let changed = prev.length !== rects.length;
     for (let i = 0; !changed && i < rects.length; i++) {
       const p = prev[i];
       const r = rects[i];
       if (p === r) continue; // both undefined (sparse slot)
-      changed = !p || !r || p.top !== r.top || p.left !== r.left || p.width !== r.width || p.height !== r.height;
+      changed =
+        !p ||
+        !r ||
+        p.top !== r.top ||
+        p.left !== r.left ||
+        p.width !== r.width ||
+        p.height !== r.height ||
+        p.radius !== r.radius;
     }
     if (changed) {
       itemRectsRef.current = rects;

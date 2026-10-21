@@ -237,20 +237,21 @@ Visit [Choosing the right pattern](#choosing-the-right-pattern) to understand wh
 
 ## Conditional logic with `.branch()`
 
-Use `.branch()` to choose which step to run based on a condition. All steps in a branch need the same `inputSchema` and `outputSchema` because branching requires consistent schemas so workflows can follow different paths.
+Use `.branch()` to run the steps whose conditions evaluate to `true`. Every condition is evaluated, and every condition that returns `true` runs its step, so a run can execute more than one branch. All steps in a branch need the same `inputSchema` and `outputSchema` because branching requires consistent schemas so workflows can follow different paths.
 
 ```mermaid
 flowchart LR
-  accTitle: Choosing a workflow step with conditional branching
-  accDescr: The workflow runs step1, then follows either branch A or branch B before committing and ending.
+  accTitle: Choosing workflow steps with conditional branching
+  accDescr: The workflow runs step1, then runs every branch whose condition is true before committing and ending.
 
   start(( start )) -- ".then(step1)" --> step1([step1])
   step1 -- out --> branchCall@{ shape: text, label: ".branch([A, B])" }
   branchCall --> stepA([A])
-  branchCall accent1@--> stepB([B])
+  branchCall --> stepB([B])
+  stepA accent2@-- "out<br/>.commit()" --> stop(( end ))
   stepB accent2@-- "out<br/>.commit()" --> stop(( end ))
 
-  class stepB,stop accent
+  class stepA,stepB,stop accent
 ```
 
 ```typescript {30-33} title="src/mastra/workflows/test-workflow.ts" oxfmt:false
@@ -330,11 +331,13 @@ export const ticketTriage = createWorkflow({
   .commit()
 ```
 
-The `choice` field retains the configured criteria-key union, so `inputData.answers.route.choice` is typed as `'billing' | 'support' | 'other'`. Score answers expose `score`. Boolean answers expose the `P(true)` value as `probability`. Apply an explicit threshold when routing.
+The `choice` field retains the configured criteria-key union, so `inputData.answers.route.choice` is typed as `'billing' | 'support' | 'other' | undefined`. Score answers expose `score`. Boolean answers expose the `P(true)` value as `probability`. Apply an explicit threshold when routing.
+
+When the decision model refuses a question, its answer is `{ type: 'refusal' }` and `choice`, `score`, and `probability` are `undefined`. In the example above, a refused `route` question matches no condition. Add a condition on `inputData.answers.route.type === 'refusal'` to handle it explicitly.
 
 ### Output structure
 
-When using conditional branching, only one branch executes based on which condition evaluates to `true` first. The output structure is similar to `.parallel()`, where the result is keyed by the executed step's `id`.
+When using conditional branching, every condition that evaluates to `true` runs its step. The output structure is similar to `.parallel()`, where the result is keyed by each executed step's `id`. Because more than one condition can be true, write mutually exclusive conditions when exactly one path should run, and don't end with an unconditional `true` fallback unless you want that fallback to run alongside the matching branch.
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
@@ -371,7 +374,7 @@ const finalStep = createStep({
   }),
   outputSchema: z.object({ message: z.string() }),
   execute: async ({ inputData }) => {
-    // Only one branch will have executed
+    // Conditions here are mutually exclusive, so only one branch runs
     const result = inputData['high-value-step']?.result || inputData['low-value-step']?.result
     return { message: result }
   },
@@ -391,13 +394,13 @@ export const testWorkflow = createWorkflow({
   .commit()
 
 // When executed with { value: 15 }
-// Only the high-value-step executes, output structure:
+// The high-value-step condition is true, so that step executes, output structure:
 // {
 //   "high-value-step": { result: "High value: 15" }
 // }
 
 // When executed with { value: 5 }
-// Only the low-value-step executes, output structure:
+// The low-value-step condition is true, so that step executes, output structure:
 // {
 //   "low-value-step": { result: "Low value: 5" }
 // }
@@ -405,11 +408,11 @@ export const testWorkflow = createWorkflow({
 
 **Key points:**
 
-- Only one branch executes based on condition evaluation order
-- The output is keyed by the executed step's `id`
+- Every condition that evaluates to `true` runs its step, so a run can execute more than one branch
+- Use mutually exclusive conditions when exactly one path should execute
+- The output is keyed by each executed step's `id`
 - Subsequent steps should handle all possible branch outputs
 - Use optional fields in the `inputSchema` when the next step needs to handle multiple possible branches
-- Conditions are evaluated in the order they're defined
 
 ## Input data mapping
 
@@ -595,6 +598,34 @@ export const testWorkflow = createWorkflow({})
   .dowhile(step2, async ({ inputData: { number } }) => number < 10)
   .commit();
 ```
+
+### Passing data between iterations
+
+Each iteration of `.dountil()` or `.dowhile()` receives the previous iteration's output as its `inputData`. When input validation is enabled (the default), that output is validated against the loop body's `inputSchema` before the body runs. With an object schema such as `z.object()`, keys the schema doesn't declare are removed. Schemas that allow unknown keys, such as `.passthrough()`, keep them.
+
+When the loop body is a nested workflow, the output is validated against the nested workflow's `inputSchema` and then against its first step's `inputSchema`. A value is only available on the next iteration if the nested workflow returns it and both schemas declare it. This includes values produced inside the nested workflow, such as feedback from a step that suspended and resumed.
+
+To carry data across iterations, declare it in the body's `inputSchema` and return it from the body's last step:
+
+```typescript title="src/mastra/workflows/test-workflow.ts"
+const loopSchema = z.object({
+  draft: z.string(),
+  feedback: z.string().optional(),
+  attempts: z.number(),
+})
+
+const reviewStep = createStep({
+  id: 'review',
+  inputSchema: loopSchema,
+  outputSchema: loopSchema,
+  execute: async ({ inputData }) => {
+    // ...
+    return { draft, feedback, attempts: inputData.attempts + 1 }
+  },
+})
+```
+
+For values that don't belong in the step's input, such as counters or audit data, use [workflow state](/docs/workflows/workflow-state) instead.
 
 ### Looping with `.foreach()`
 
@@ -922,7 +953,7 @@ Use this section as a reference for selecting the appropriate control flow metho
 | `.then(step)` | Sequential processing | `T` | `U` | N/A (one at a time) |
 | `.parallel([a, b])` | Different operations on same input | `T` | `{ a: U, b: V }` | All run simultaneously |
 | `.foreach(step)` | Same operation on each array item | `T[]` | `U[]` | Configurable (default: 1) |
-| `.branch([...])` | Conditional path selection | `T` | `{ selectedStep: U }` | Only one branch runs |
+| `.branch([...])` | Conditional path selection | `T` | `{ stepId: U }` | All branches whose condition is true run simultaneously by default; `perStep: true` schedules only the first matching branch |
 
 ### `.parallel()` vs `.foreach()`
 

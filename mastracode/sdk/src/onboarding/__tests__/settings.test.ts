@@ -1,4 +1,4 @@
-import { chmodSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it, vi } from 'vitest';
@@ -34,7 +34,6 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
       version: 0,
       modePackId: null,
       omPackId: null,
-      quietModePreferenceSelected: true,
     },
     models: {
       activeModelPackId: 'anthropic',
@@ -60,8 +59,7 @@ function createSettings(overrides?: Partial<GlobalSettings>): GlobalSettings {
       theme: 'auto',
       thinkingLevel: 'off',
       subagentsEnabled: false,
-      quietMode: false,
-      quietModeMaxToolPreviewLines: 2,
+      previewLines: 2,
     },
     storage,
     customProviders: [],
@@ -520,7 +518,7 @@ describe('customProviders parsing/persistence', () => {
       expect(settings.customProviders).toEqual([]);
       expect(settings.preferences.thinkingLevel).toBe('off');
       expect(settings.preferences.subagentsEnabled).toBe(false);
-      expect(settings.preferences.quietModeMaxToolPreviewLines).toBe(2);
+      expect(settings.preferences.previewLines).toBe(2);
       expect(settings.shellPassthrough).toEqual({ mode: 'default' });
     });
   });
@@ -591,46 +589,37 @@ describe('customProviders parsing/persistence', () => {
     });
   });
 
-  it('normalizes quiet mode preview line limits', () => {
+  it('normalizes preview line limits', () => {
     withTempSettingsFile(filePath => {
-      writeFileSync(
-        filePath,
-        JSON.stringify({ onboarding: {}, models: {}, preferences: { quietModeMaxToolPreviewLines: 2.9 }, storage: {} }),
-        'utf-8',
-      );
-      expect(loadSettings(filePath).preferences.quietModeMaxToolPreviewLines).toBe(2);
+      const load = (preferences: Record<string, unknown>) => {
+        writeFileSync(filePath, JSON.stringify({ onboarding: {}, models: {}, preferences, storage: {} }), 'utf-8');
+        return loadSettings(filePath).preferences.previewLines;
+      };
 
-      writeFileSync(
-        filePath,
-        JSON.stringify({ onboarding: {}, models: {}, preferences: { quietModeMaxToolPreviewLines: -4 }, storage: {} }),
-        'utf-8',
-      );
-      expect(loadSettings(filePath).preferences.quietModeMaxToolPreviewLines).toBe(0);
-
-      writeFileSync(
-        filePath,
-        JSON.stringify({ onboarding: {}, models: {}, preferences: { quietModeMaxToolPreviewLines: 999 }, storage: {} }),
-        'utf-8',
-      );
-      expect(loadSettings(filePath).preferences.quietModeMaxToolPreviewLines).toBe(8);
+      expect(load({ previewLines: 2.9 })).toBe(2);
+      expect(load({ previewLines: -4 })).toBe(0);
+      expect(load({ previewLines: -1 })).toBe(0);
+      expect(load({ previewLines: 999 })).toBe(8);
+      expect(load({ previewLines: 99 })).toBe(8);
+      expect(load({ previewLines: 0 })).toBe(0);
 
       writeFileSync(filePath, '{}', 'utf-8');
       vi.spyOn(JSON, 'parse').mockReturnValueOnce({
-        onboarding: { quietModePreferenceSelected: true },
+        onboarding: {},
         models: {},
-        preferences: { quietModeMaxToolPreviewLines: Number.NaN },
+        preferences: { previewLines: Number.NaN },
         storage: {},
       });
-      expect(loadSettings(filePath).preferences.quietModeMaxToolPreviewLines).toBe(2);
+      expect(loadSettings(filePath).preferences.previewLines).toBe(2);
       vi.mocked(JSON.parse).mockRestore();
 
       vi.spyOn(JSON, 'parse').mockReturnValueOnce({
-        onboarding: { quietModePreferenceSelected: true },
+        onboarding: {},
         models: {},
-        preferences: { quietModeMaxToolPreviewLines: Number.POSITIVE_INFINITY },
+        preferences: { previewLines: Number.POSITIVE_INFINITY },
         storage: {},
       });
-      expect(loadSettings(filePath).preferences.quietModeMaxToolPreviewLines).toBe(2);
+      expect(loadSettings(filePath).preferences.previewLines).toBe(2);
       vi.mocked(JSON.parse).mockRestore();
     });
   });
@@ -813,62 +802,189 @@ describe('customProviders parsing/persistence', () => {
     });
   });
 
-  it('defaults new installs to quiet mode with the preference selected', () => {
-    withTempSettingsFile(filePath => {
-      const settings = loadSettings(filePath);
+  describe('preview lines migration from legacy quiet-mode keys', () => {
+    const LEGACY_PREFERENCES = { quietMode: false, quietModeMaxToolPreviewLines: 4 };
+    const LEGACY_ONBOARDING = { skippedAt: '2026-01-01T00:00:00.000Z', version: 1, quietModePreferenceSelected: true };
 
-      expect(settings.preferences.quietMode).toBe(true);
-      expect(settings.onboarding.quietModePreferenceSelected).toBe(true);
+    function readFile(filePath: string) {
+      return JSON.parse(readFileSync(filePath, 'utf-8'));
+    }
+
+    it('migrates the legacy preview limit and persists it without touching legacy keys', () => {
+      withTempSettingsFile(filePath => {
+        writeFileSync(
+          filePath,
+          JSON.stringify({ onboarding: LEGACY_ONBOARDING, models: {}, preferences: LEGACY_PREFERENCES, storage: {} }),
+          'utf-8',
+        );
+
+        expect(loadSettings(filePath).preferences.previewLines).toBe(4);
+
+        const persisted = readFile(filePath);
+        expect(persisted.preferences.previewLines).toBe(4);
+        expect(persisted.preferences.quietMode).toBe(false);
+        expect(persisted.preferences.quietModeMaxToolPreviewLines).toBe(4);
+        expect(persisted.onboarding.quietModePreferenceSelected).toBe(true);
+      });
     });
-  });
 
-  it('marks existing classic users as needing the quiet mode preference prompt', () => {
-    withTempSettingsFile(filePath => {
-      writeFileSync(
-        filePath,
-        JSON.stringify({ onboarding: {}, models: {}, preferences: { quietMode: false }, storage: {} }),
-        'utf-8',
-      );
+    it('migrates a legacy quiet mode user the same way and keeps quietMode true', () => {
+      withTempSettingsFile(filePath => {
+        writeFileSync(
+          filePath,
+          JSON.stringify({
+            onboarding: LEGACY_ONBOARDING,
+            models: {},
+            preferences: { quietMode: true, quietModeMaxToolPreviewLines: 8 },
+            storage: {},
+          }),
+          'utf-8',
+        );
 
-      const settings = loadSettings(filePath);
+        expect(loadSettings(filePath).preferences.previewLines).toBe(8);
 
-      expect(settings.preferences.quietMode).toBe(false);
-      expect(settings.onboarding.quietModePreferenceSelected).toBe(false);
+        const persisted = readFile(filePath);
+        expect(persisted.preferences.previewLines).toBe(8);
+        expect(persisted.preferences.quietMode).toBe(true);
+        expect(persisted.preferences.quietModeMaxToolPreviewLines).toBe(8);
+      });
     });
-  });
 
-  it('does not prompt existing users who already enabled quiet mode', () => {
-    withTempSettingsFile(filePath => {
-      writeFileSync(
-        filePath,
-        JSON.stringify({ onboarding: {}, models: {}, preferences: { quietMode: true }, storage: {} }),
-        'utf-8',
-      );
+    it('prefers previewLines over the legacy key and leaves the legacy key alone', () => {
+      withTempSettingsFile(filePath => {
+        writeFileSync(
+          filePath,
+          JSON.stringify({
+            onboarding: LEGACY_ONBOARDING,
+            models: {},
+            preferences: { ...LEGACY_PREFERENCES, previewLines: 1 },
+            storage: {},
+          }),
+          'utf-8',
+        );
 
-      const settings = loadSettings(filePath);
-
-      expect(settings.preferences.quietMode).toBe(true);
-      expect(settings.onboarding.quietModePreferenceSelected).toBe(true);
+        expect(loadSettings(filePath).preferences.previewLines).toBe(1);
+        const persisted = readFile(filePath);
+        expect(persisted.preferences.previewLines).toBe(1);
+        expect(persisted.preferences.quietModeMaxToolPreviewLines).toBe(4);
+      });
     });
-  });
 
-  it('preserves existing quiet mode preference selections', () => {
-    withTempSettingsFile(filePath => {
-      writeFileSync(
-        filePath,
-        JSON.stringify({
-          onboarding: { quietModePreferenceSelected: true },
-          models: {},
-          preferences: { quietMode: false },
-          storage: {},
-        }),
-        'utf-8',
-      );
+    it('falls back to the legacy key when previewLines is invalid and persists the resolved value', () => {
+      withTempSettingsFile(filePath => {
+        writeFileSync(
+          filePath,
+          JSON.stringify({
+            onboarding: {},
+            models: {},
+            preferences: { previewLines: 'x', quietModeMaxToolPreviewLines: 4 },
+            storage: {},
+          }),
+          'utf-8',
+        );
+        expect(loadSettings(filePath).preferences.previewLines).toBe(4);
+        expect(readFile(filePath).preferences.previewLines).toBe(4);
+        expect(readFile(filePath).preferences.quietModeMaxToolPreviewLines).toBe(4);
 
-      const settings = loadSettings(filePath);
+        writeFileSync(
+          filePath,
+          JSON.stringify({
+            onboarding: {},
+            models: {},
+            preferences: { previewLines: 'x', quietModeMaxToolPreviewLines: 'y' },
+            storage: {},
+          }),
+          'utf-8',
+        );
+        expect(loadSettings(filePath).preferences.previewLines).toBe(2);
+        expect(readFile(filePath).preferences.previewLines).toBe(2);
+        expect(readFile(filePath).preferences.quietModeMaxToolPreviewLines).toBe('y');
+      });
+    });
 
-      expect(settings.preferences.quietMode).toBe(false);
-      expect(settings.onboarding.quietModePreferenceSelected).toBe(true);
+    it('clamps legacy preview limits when migrating', () => {
+      withTempSettingsFile(filePath => {
+        const migrate = (legacy: unknown) => {
+          writeFileSync(
+            filePath,
+            JSON.stringify({
+              onboarding: {},
+              models: {},
+              preferences: { quietModeMaxToolPreviewLines: legacy },
+              storage: {},
+            }),
+            'utf-8',
+          );
+          const value = loadSettings(filePath).preferences.previewLines;
+          expect(readFile(filePath).preferences.quietModeMaxToolPreviewLines).toEqual(legacy);
+          return value;
+        };
+
+        expect(migrate(99)).toBe(8);
+        expect(migrate(-1)).toBe(0);
+        expect(migrate(3.7)).toBe(3);
+        expect(migrate('x')).toBe(2);
+      });
+    });
+
+    it('preserves all legacy keys across a load/save round-trip', () => {
+      withTempSettingsFile(filePath => {
+        writeFileSync(
+          filePath,
+          JSON.stringify({
+            onboarding: LEGACY_ONBOARDING,
+            models: {},
+            preferences: { ...LEGACY_PREFERENCES, previewLines: 4 },
+            storage: {},
+          }),
+          'utf-8',
+        );
+
+        const settings = loadSettings(filePath);
+        settings.preferences.previewLines = 6;
+        saveSettings(settings, filePath);
+
+        const persisted = readFile(filePath);
+        expect(persisted.preferences.previewLines).toBe(6);
+        expect(persisted.preferences.quietMode).toBe(false);
+        expect(persisted.preferences.quietModeMaxToolPreviewLines).toBe(4);
+        expect(persisted.onboarding.quietModePreferenceSelected).toBe(true);
+      });
+    });
+
+    it('does not add the legacy onboarding key for classic users who never answered the prompt', () => {
+      withTempSettingsFile(filePath => {
+        writeFileSync(
+          filePath,
+          JSON.stringify({ onboarding: {}, models: {}, preferences: { quietMode: false }, storage: {} }),
+          'utf-8',
+        );
+
+        expect(loadSettings(filePath).preferences.previewLines).toBe(2);
+        const persisted = readFile(filePath);
+        expect(persisted.preferences.previewLines).toBe(2);
+        expect(persisted.preferences.quietMode).toBe(false);
+        expect(persisted.onboarding).not.toHaveProperty('quietModePreferenceSelected');
+      });
+    });
+
+    it('returns default preview lines for new installs without writing, and first save has no legacy keys', () => {
+      withTempSettingsFile(filePath => {
+        const settings = loadSettings(filePath);
+
+        expect(settings.preferences.previewLines).toBe(2);
+        expect(settings.preferences).not.toHaveProperty('quietMode');
+        expect(settings.preferences).not.toHaveProperty('quietModeMaxToolPreviewLines');
+        expect(settings.onboarding).not.toHaveProperty('quietModePreferenceSelected');
+        expect(existsSync(filePath)).toBe(false);
+
+        saveSettings(settings, filePath);
+        const persisted = readFile(filePath);
+        expect(persisted.preferences.previewLines).toBe(2);
+        expect(persisted.preferences).not.toHaveProperty('quietMode');
+        expect(persisted.preferences).not.toHaveProperty('quietModeMaxToolPreviewLines');
+        expect(persisted.onboarding).not.toHaveProperty('quietModePreferenceSelected');
+      });
     });
   });
 

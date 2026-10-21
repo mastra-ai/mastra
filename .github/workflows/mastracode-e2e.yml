@@ -17,7 +17,7 @@ permissions: {}
 jobs:
   mastracode-e2e:
     name: Mastra Code E2E
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 20
     permissions:
       contents: read
@@ -63,7 +63,7 @@ jobs:
 
       - name: Upload ACP conformance reports
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: acp-conformance
           path: |
@@ -78,7 +78,7 @@ jobs:
 
   mastracode-web-e2e:
     name: Mastra Code web host OM scenarios
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     timeout-minutes: 20
     permissions:
       contents: read

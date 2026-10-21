@@ -1,9 +1,9 @@
 import { Button } from '@mastra/playground-ui/components/Button';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { Logo } from '@mastra/playground-ui/components/Logo';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { textStyle } from '@mastra/playground-ui/primitives/text';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ChevronDown } from 'lucide-react';
 import { useParams } from 'react-router';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useChatCommands } from '../context/ChatCommandsProvider';
@@ -25,7 +25,7 @@ function FactoryMetadata({ label, value, font = 'mono' }: { label: string; value
 export function EmptyThreadState() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const { data: activeFactory } = useFactoryQuery(factoryId);
-  const { projectPath, resourceId, factorySessionState } = useChatSessionContext();
+  const { sessionId, resourceId, factorySessionState } = useChatSessionContext();
   const { prefillComposer } = useChatCommands();
   if (!activeFactory) return null;
 
@@ -77,17 +77,13 @@ export function EmptyThreadState() {
               {activeFactory.name}
             </Txt>
           </Txt>
-          <ChevronDown
-            aria-hidden="true"
-            size={14}
-            className="transition-transform duration-200 group-open:rotate-180 motion-reduce:transition-none"
-          />
+          <DisclosureChevron className="size-3.5 group-open:rotate-180" />
         </summary>
         <dl className="mx-auto mt-3 grid w-full min-w-0 gap-1 text-left">
           <FactoryMetadata label="Factory" value={activeFactory.name} font="body" />
           {resourceId && <FactoryMetadata label="Resource ID" value={resourceId} />}
           {gitBranch && <FactoryMetadata label="Branch" value={gitBranch} />}
-          {projectPath && <FactoryMetadata label="Workspace" value={projectPath} />}
+          {sessionId && sessionId !== resourceId && <FactoryMetadata label="Session ID" value={sessionId} />}
         </dl>
       </details>
     </section>

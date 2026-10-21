@@ -233,6 +233,9 @@ interface Span<TType extends SpanType> {
   /** Tags for categorizing traces (only present on root spans) */
   tags?: string[]
 
+  /** Spans in other traces this span is related to */
+  links?: SpanLink[]
+
   /** End the span */
   end(options?: EndSpanOptions<TType>): void
 
@@ -686,6 +689,9 @@ interface AgentRunAttributes {
 
   /** Maximum steps allowed */
   maxSteps?: number
+
+  /** When the run's model streamed its first chunk, copied from the agent's own first generation */
+  completionStartTime?: Date
 }
 ```
 
@@ -783,6 +789,9 @@ interface ModelStepAttributes {
 
   /** Result warnings */
   warnings?: Record<string, any>
+
+  /** When the step's first inference streamed its first chunk */
+  completionStartTime?: Date
 }
 ```
 
@@ -871,6 +880,8 @@ interface ToolCallAttributes {
   toolDescription?: string
   toolCallId?: string
   success?: boolean
+  /** True when a dataset experiment tool mock intercepted the call (served, mismatched, exhausted or denied) and the tool never ran */
+  mocked?: boolean
 }
 ```
 
@@ -925,6 +936,12 @@ interface MCPServerRequestAttributes {
 
   /** Client implementation version, when the client reported one */
   clientVersion?: string
+
+  /** W3C `traceparent` the caller sent, when it parses */
+  callerTraceparent?: string
+
+  /** W3C `tracestate` the caller sent with a valid `traceparent`, capped at 512 characters */
+  callerTracestate?: string
 }
 ```
 
@@ -943,8 +960,9 @@ interface ProcessorRunAttributes {
   /**
    * Milliseconds spent inside `processOutputStream`, summed across every
    * chunk. Only set on output stream processor spans. The span's own duration
-   * covers the whole stream, model latency included, so this is what
-   * separates a slow processor from a slow model.
+   * covers its step, from the first chunk to the step's end with model latency
+   * and tool calls included, so this is what separates a slow processor from
+   * the rest of the step.
    */
   hookDurationMs?: number
 
@@ -1145,6 +1163,23 @@ interface StartSpanOptions<TType extends SpanType> {
 
   /** Options passed when using a custom sampler strategy */
   customSamplerOptions?: CustomSamplerOptions
+
+  /** Spans in other traces this span is related to. Links with invalid IDs are ignored. */
+  links?: SpanLink[]
+}
+```
+
+### `SpanLink`
+
+A reference to a span in another trace, such as the caller's span when an `MCPServer` serves a request. Unlike a parent, a link doesn't put the two spans in the same trace.
+
+```typescript
+interface SpanLink {
+  /** Trace ID of the linked span (1-32 hexadecimal characters) */
+  traceId: string
+
+  /** Span ID of the linked span (1-16 hexadecimal characters) */
+  spanId: string
 }
 ```
 

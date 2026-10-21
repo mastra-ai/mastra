@@ -24,7 +24,7 @@ import { TemplateSuccess } from '@/domains/templates/template-success';
 import { cn } from '@/lib/utils';
 
 export default function Template() {
-  const { templateSlug } = useParams()! as { templateSlug: string };
+  const { templateSlug } = useParams() as { templateSlug: string };
   const crumbs = [
     { id: 'templates', label: 'Templates', to: '/templates' },
     { id: 'template', label: decodeRouteParam(templateSlug) },

@@ -277,7 +277,6 @@ describe('tool event handlers', () => {
     const ctx = {
       addChildBeforeFollowUps: vi.fn(child => ctx.state.chatContainer.children.push(child)),
       state: {
-        quietMode: false,
         options: { backgroundToolsEnabled: true },
         pluginManager: {
           getToolRenderConfig: vi.fn(() => ({ type: 'subagent', agentType: 'alexandria' })),

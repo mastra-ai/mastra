@@ -20,6 +20,7 @@ import type { MastraSandboxOptions, SandboxStartOptions } from './mastra-sandbox
 import type { MountManager } from './mount-manager';
 import { ProcessHandle, SandboxProcessManager } from './process-manager';
 import type { SpawnProcessOptions } from './process-manager';
+import { DEFAULT_MAX_RETAINED_PROCESS_OUTPUT_BYTES } from './process-manager/process-handle';
 import type { WorkspaceSandbox } from './sandbox';
 import type { CommandResult } from './types';
 
@@ -617,12 +618,42 @@ describe('MastraSandbox Base Class', () => {
   });
 
   describe('Built-in executeCommand', () => {
-    it('retains full command output by default', async () => {
-      const output = 'x'.repeat(1024 * 1024 + 5);
+    it('applies a subclass foreground default without limiting background spawns', async () => {
+      class TimedSandbox extends ProcessBackedSandbox {
+        protected defaultCommandTimeout = 300;
+      }
+      const manager = new ExecuteCommandProcessManager('ok');
+      const sandbox = new TimedSandbox(manager);
+
+      await sandbox.executeCommand!('echo ok');
+      expect(manager.lastOptions?.timeout).toBe(300);
+      await sandbox.executeCommand!('echo ok', [], { timeout: 0 });
+      expect(manager.lastOptions?.timeout).toBe(0);
+      await sandbox.processes!.spawn('echo ok');
+      expect(manager.lastOptions?.timeout).toBeUndefined();
+      await new ProcessBackedSandbox(manager).executeCommand!('echo ok');
+      expect(manager.lastOptions?.timeout).toBeUndefined();
+    });
+
+    it('bounds retained command output by default', async () => {
+      const output = 'a'.repeat(5) + 'x'.repeat(DEFAULT_MAX_RETAINED_PROCESS_OUTPUT_BYTES);
       const manager = new ExecuteCommandProcessManager(output);
       const sandbox = new ProcessBackedSandbox(manager);
 
       const result = await sandbox.executeCommand!('node', ['script.js']);
+
+      expect(manager.lastOptions?.maxRetainedBytes).toBe(DEFAULT_MAX_RETAINED_PROCESS_OUTPUT_BYTES);
+      expect(result.stdout).toBe('x'.repeat(DEFAULT_MAX_RETAINED_PROCESS_OUTPUT_BYTES));
+      expect(result.stdoutTruncated).toBe(true);
+      expect(result.stdoutDroppedBytes).toBe(5);
+    });
+
+    it('retains full command output when the caller passes Infinity', async () => {
+      const output = 'x'.repeat(DEFAULT_MAX_RETAINED_PROCESS_OUTPUT_BYTES + 5);
+      const manager = new ExecuteCommandProcessManager(output);
+      const sandbox = new ProcessBackedSandbox(manager);
+
+      const result = await sandbox.executeCommand!('node', ['script.js'], { maxRetainedBytes: Infinity });
 
       expect(result.stdout).toBe(output);
       expect(result.stdoutTruncated).toBe(false);

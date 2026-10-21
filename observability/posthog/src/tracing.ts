@@ -396,6 +396,17 @@ export class PosthogExporter extends TrackingExporter<
     const { userId, sessionId, ...customMetadata } = span.metadata ?? {};
     Object.assign(traceProperties, customMetadata);
 
+    // A served MCP request is always a root span. Keep the caller's W3C context
+    // on the trace, since PostHog has no span links to point at the caller.
+    if (span.type === SpanType.MCP_SERVER_REQUEST) {
+      const { callerTraceparent, callerTracestate } = (span.attributes ?? {}) as {
+        callerTraceparent?: string;
+        callerTracestate?: string;
+      };
+      if (callerTraceparent) traceProperties.callerTraceparent = callerTraceparent;
+      if (callerTracestate) traceProperties.callerTracestate = callerTracestate;
+    }
+
     return {
       distinctId,
       event: '$ai_trace',

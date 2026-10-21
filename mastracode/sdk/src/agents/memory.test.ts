@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { LOCAL_KNOWLEDGE_ORG_ID } from '../knowledge-scope.js';
 
 const memoryConstructorMock = vi.fn();
+const memorySettledMock = vi.fn(async (): Promise<void> => {});
 const getOmScopeMock = vi.fn();
 const resolveModelMock = vi.fn();
 const loadSettingsMock = vi.fn();
@@ -15,6 +16,10 @@ vi.mock('@mastra/memory', async () => ({
     constructor(config: unknown) {
       memoryConstructorMock(config);
       this.config = config;
+    }
+
+    settled() {
+      return memorySettledMock.call(this);
     }
   },
   Subconscious: class {
@@ -37,6 +42,7 @@ vi.mock('../utils/project.js', () => ({
 vi.mock('./model.js', async () => ({
   getActiveMemoryRoute: (await vi.importActual<typeof import('./model.js')>('./model.js')).getActiveMemoryRoute,
   resolveModel: resolveModelMock,
+  canUseProvider: () => false,
 }));
 
 vi.mock('../onboarding/settings.js', () => ({
@@ -148,6 +154,8 @@ async function createMemoryConfig(
 describe('getDynamicMemory', () => {
   beforeEach(() => {
     memoryConstructorMock.mockReset();
+    memorySettledMock.mockReset();
+    memorySettledMock.mockImplementation(async () => {});
     getOmScopeMock.mockReset();
     resolveModelMock.mockReset();
     resolveModelMock.mockImplementation((modelId: string) => ({ modelId }));
@@ -300,7 +308,8 @@ describe('getDynamicMemory', () => {
     const { config, requestContext } = await createMemoryConfig({ projectPath: '/tmp/project' }, 'thread', vector);
 
     expect(config.vector).toBe(vector);
-    expect(config.embedder).toBe('fastembed-small');
+    // fastembed.small, wrapped so @mastra/fastembed only loads on the first embedding.
+    expect(config.embedder).toMatchObject({ provider: 'fastembed', modelId: 'bge-small-en-v1.5' });
     expect(config.options.observationalMemory.experimental_subconscious?.config).toEqual({
       defaultScope: 'resource',
       pins: true,
@@ -676,6 +685,85 @@ describe('getDynamicMemory', () => {
     expect(requestContext.get('om.reflector.effectiveModelId')).toBe('custom-provider/custom-model');
   });
 
+  it('settles both the current memory and one replaced by a config change', async () => {
+    vi.resetModules();
+    getOmScopeMock.mockReturnValue('thread');
+    const { getDynamicMemory } = await import('./memory.js');
+    const factory = getDynamicMemory({ storage: true } as never);
+    const first = factory({
+      requestContext: createRequestContext({ projectPath: '/tmp/project', observationThreshold: 30_000 }) as never,
+    });
+    let releaseFirst!: () => void;
+    const firstPending = new Promise<void>(resolve => (releaseFirst = resolve));
+    memorySettledMock.mockImplementation(function (this: unknown) {
+      return this === first ? firstPending : Promise.resolve();
+    });
+    // A threshold change replaces the cached instance while the first may still be working.
+    const second = factory({
+      requestContext: createRequestContext({ projectPath: '/tmp/project', observationThreshold: 40_000 }) as never,
+    });
+    expect(second).not.toBe(first);
+
+    let settled = false;
+    const settling = factory.settled().then(() => (settled = true));
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(settled).toBe(false);
+
+    releaseFirst();
+    await settling;
+    expect(memorySettledMock.mock.contexts).toEqual(expect.arrayContaining([first, second]));
+  });
+
+  it('drains every memory and raises no unhandled rejection when one fails to settle', async () => {
+    vi.resetModules();
+    getOmScopeMock.mockReturnValue('thread');
+    const { getDynamicMemory } = await import('./memory.js');
+    const factory = getDynamicMemory({ storage: true } as never);
+    const first = factory({
+      requestContext: createRequestContext({ projectPath: '/tmp/project', observationThreshold: 30_000 }) as never,
+    });
+    let releaseSecond!: () => void;
+    const secondPending = new Promise<void>(resolve => (releaseSecond = resolve));
+    let second: unknown;
+    memorySettledMock.mockImplementation(function (this: unknown) {
+      if (this === first) return Promise.reject(new Error('OM engine failed to start'));
+      return this === second ? secondPending : Promise.resolve();
+    });
+    const unhandled = vi.fn();
+    process.on('unhandledRejection', unhandled);
+    try {
+      // A threshold change retires the first instance, whose settled() rejects in the background.
+      second = factory({
+        requestContext: createRequestContext({ projectPath: '/tmp/project', observationThreshold: 40_000 }) as never,
+      });
+
+      let settled = false;
+      const settling = factory.settled().then(() => (settled = true));
+      await new Promise(resolve => setTimeout(resolve, 0));
+      // The rejected first instance doesn't end the drain early.
+      expect(settled).toBe(false);
+
+      releaseSecond();
+      await expect(settling).resolves.toBe(true);
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(unhandled).not.toHaveBeenCalled();
+    } finally {
+      process.off('unhandledRejection', unhandled);
+    }
+  });
+
+  it('always gives Factory sessions thread-scoped OM, whatever the session state or config says', async () => {
+    getOmScopeMock.mockReturnValue('resource');
+    const { config } = await createMemoryConfig({
+      projectPath: '/tmp/project',
+      factoryProjectId: 'factory-1',
+      omScope: 'resource',
+    });
+
+    expect(getOmScopeMock).not.toHaveBeenCalled();
+    expect(config.options.observationalMemory.scope).toBe('thread');
+  });
+
   it('uses controller state overrides and disables async buffering for resource-scoped OM', async () => {
     const { config, requestContext } = await createMemoryConfig({
       projectPath: '/tmp/project',
@@ -723,6 +811,8 @@ describe('getDynamicMemory', () => {
 describe('model-route OM models', () => {
   beforeEach(() => {
     memoryConstructorMock.mockReset();
+    memorySettledMock.mockReset();
+    memorySettledMock.mockImplementation(async () => {});
     getOmScopeMock.mockReset();
     getOmScopeMock.mockReturnValue('thread');
     resolveModelMock.mockReset();

@@ -15,17 +15,17 @@ export const updateStartupPromptScenario: McE2eScenario = {
     runtime.startLiveOutput(terminal);
 
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal);
-    await runtime.waitForScreenText(/A new version of Mastra Code is available: v99\.1\.0/i, terminal, 10_000);
+    await runtime.waitForScreenText(/Mastra Code v\S+ → v99\.1\.0/i, terminal, 10_000);
     await runtime.waitForScreenText(/What's new/i, terminal);
     await runtime.waitForScreenText(/Startup update prompt e2e fixture entry/i, terminal);
-    await runtime.waitForScreenText(/Would you like to update now/i, terminal);
+    await runtime.waitForScreenText(/Update now\?/i, terminal);
     await runtime.waitForScreenText(/Yes/i, terminal);
     await runtime.waitForScreenText(/No/i, terminal);
 
     terminal.write('\x1b[B');
     terminal.write('\r');
 
-    await runtime.waitForScreenText(/Update skipped\. Run \/update to update later\./i, terminal, 8_000);
+    await runtime.waitForScreenText(/Skipped v99\.1\.0\. Run \/update to install it later\./i, terminal, 8_000);
     terminal.submit(
       `!node -e 'const fs=require("fs"); const s=JSON.parse(fs.readFileSync(process.env.MASTRA_APP_DATA_DIR+"/settings.json","utf8")); console.log("STARTUP_UPDATE_DISMISSED="+s.updateDismissedVersion);'`,
     );

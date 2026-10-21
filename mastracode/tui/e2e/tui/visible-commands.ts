@@ -30,12 +30,19 @@ export const visibleCommandsScenario: McE2eScenario = {
     terminal.submit('/knowledge');
     await runtime.waitForScreenText(/Unknown command:\s*\/knowledge/i, terminal);
 
+    terminal.submit('/theme status');
+    await runtime.waitForScreenText(/Theme:\s+(dark|light)\s+\(preference:/i, terminal);
+    runtime.printScreen('after /theme status', terminal);
+
     terminal.submit('/theme');
-    await runtime.waitForScreenText(/Theme:\s+(dark|light|auto)/i, terminal);
+    await runtime.waitForScreenText(/preview · Enter select · Esc cancel/i, terminal);
     runtime.printScreen('after /theme', terminal);
 
+    terminal.write('\x1b');
+    await runtime.waitForScreenTextAbsent(/preview · Enter select · Esc cancel/i, terminal);
+
     terminal.submit('/theme neon');
-    await runtime.waitForScreenText(/Usage:\s+\/theme \[auto\|dark\|light\]/i, terminal);
+    await runtime.waitForScreenText(/Could not load theme:/i, terminal);
     runtime.printScreen('after invalid /theme', terminal);
 
     terminal.keyCtrlC();

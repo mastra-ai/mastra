@@ -248,12 +248,12 @@ export function filterObservedMessages(opts: {
     }
 
     if (messagesToRemove.length > 0) {
-      messageList.removeByIds(messagesToRemove);
+      messageList.removeByIds(messagesToRemove, { pruned: true });
     }
 
     const unobserved = getUnobservedPartsPreservingToolCallPairs(markerMessage);
     if (unobserved.length === 0) {
-      if (markerMessage.id) messageList.removeByIds([markerMessage.id]);
+      if (markerMessage.id) messageList.removeByIds([markerMessage.id], { pruned: true });
     } else if (unobserved.length < (markerMessage.content?.parts?.length ?? 0)) {
       markerMessage.content.parts = unobserved;
     }
@@ -293,7 +293,7 @@ export function filterObservedMessages(opts: {
     }
 
     if (messagesToRemove.length > 0) {
-      messageList.removeByIds(messagesToRemove);
+      messageList.removeByIds(messagesToRemove, { pruned: true });
     }
   }
 }

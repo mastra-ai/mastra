@@ -3,7 +3,7 @@ import path from 'node:path';
 import { generateTypes } from '@internal/types-builder';
 import { defineConfig } from 'tsdown';
 
-const DATA_FILE_NAME = 'pricing-data.jsonl';
+const DATA_FILE_NAME = 'pricing-data.json';
 
 export default defineConfig({
   entry: ['src/index.ts'],

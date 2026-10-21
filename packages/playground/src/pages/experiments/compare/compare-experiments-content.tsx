@@ -1,38 +1,48 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
-import { useDatasetExperiment } from '@mastra/react/hooks/datasets';
-import { ArrowLeftRightIcon } from 'lucide-react';
+import { useDatasetExperimentsQueries } from '@mastra/react/hooks/datasets';
+import { useMemo } from 'react';
 import { useSearchParams } from 'react-router';
 import { ExperimentIdLink } from './experiment-id-link';
 import { ExperimentsComparison } from '@/domains/experiments/components/comparison/experiments-comparison';
 
+function ExperimentIdLinks({ experimentIds }: { experimentIds: string[] }) {
+  return experimentIds.map((id, index) => (
+    <span key={id} className="flex items-center gap-2">
+      {index > 0 && index === experimentIds.length - 1 && 'and'}
+      <span className="flex items-center">
+        <ExperimentIdLink experimentId={id} />
+        {index < experimentIds.length - 2 && ','}
+      </span>
+    </span>
+  ));
+}
+
 export function CompareExperimentsContent({
   datasetId,
-  experimentIdA,
-  experimentIdB,
+  baselineId,
+  contenderIds,
 }: {
   datasetId: string;
-  experimentIdA: string;
-  experimentIdB: string;
+  baselineId: string;
+  contenderIds: string[];
 }) {
   const [, setSearchParams] = useSearchParams();
+  const experimentIds = useMemo(() => [baselineId, ...contenderIds], [baselineId, contenderIds]);
   // Fetch each experiment by id: the global list is paginated and may not contain them.
   // The server 404s when an experiment does not belong to `datasetId`, which enforces same-dataset comparison.
-  const experimentA = useDatasetExperiment({
-    datasetId: datasetId,
-    experimentId: experimentIdA,
-  });
-  const experimentB = useDatasetExperiment({
-    datasetId: datasetId,
-    experimentId: experimentIdB,
-  });
-  const isLoading = experimentA.isLoading || experimentB.isLoading;
-  const error = experimentA.error ?? experimentB.error;
+  const { data: experimentsById, isLoading, error } = useDatasetExperimentsQueries({ datasetId, experimentIds });
+
+  const setBaseline = (experimentId: string) => {
+    const params = new URLSearchParams({ dataset: datasetId, baseline: experimentId });
+    for (const id of experimentIds) {
+      if (id !== experimentId) params.append('contender', id);
+    }
+    setSearchParams(params);
+  };
 
   if (error && is401UnauthorizedError(error)) {
     return (
@@ -72,8 +82,8 @@ export function CompareExperimentsContent({
     );
   }
 
-  // 404 (or no data): the experiment does not exist or belongs to another dataset.
-  if (!isLoading && (error || !experimentA.data || !experimentB.data)) {
+  // 404 (or no data): an experiment does not exist or belongs to another dataset.
+  if (!isLoading && (error || experimentIds.some(id => !experimentsById[id]))) {
     return (
       <>
         <Txt as="h1" variant="heading" className="sr-only">
@@ -84,9 +94,7 @@ export function CompareExperimentsContent({
             <Txt as="p">Experiments must belong to the same dataset ({datasetId}) to be compared.</Txt>
             <Txt className="mt-2 flex items-center justify-center gap-2">
               One of
-              <ExperimentIdLink experimentId={experimentIdA} />
-              and
-              <ExperimentIdLink experimentId={experimentIdB} />
+              <ExperimentIdLinks experimentIds={experimentIds} />
               was not found in it.
             </Txt>
           </div>
@@ -95,41 +103,19 @@ export function CompareExperimentsContent({
     );
   }
 
+  // The single scroller of the comparison, on both axes, so the table's sticky titles pin to it.
   return (
-    <div className="grid h-full min-w-min content-start items-start overflow-x-auto overflow-y-auto">
-      {/* Padding lives on the toolbar only: the comparison table runs edge to edge. */}
+    <div className="h-full overflow-auto">
       <div className="grid w-full content-start">
-        <div className="flex items-center justify-between gap-4 px-4 py-3">
-          <div className="flex min-w-0 items-center gap-3">
-            <Txt as="h1" variant="heading" tone="ink">
-              Experiments comparison
-            </Txt>
-
-            <Txt variant="caption" tone="muted" className="flex items-center gap-2">
-              <ExperimentIdLink experimentId={experimentIdA} />
-              and
-              <ExperimentIdLink experimentId={experimentIdB} />
-            </Txt>
-          </div>
-
-          <Tooltip>
-            <TooltipTrigger
-              render={
-                <Button
-                  onClick={() =>
-                    setSearchParams({ dataset: datasetId, baseline: experimentIdB, contender: experimentIdA })
-                  }
-                  icon={<ArrowLeftRightIcon />}
-                >
-                  Swap sides
-                </Button>
-              }
-            />
-            <TooltipContent>Switch baseline and contender</TooltipContent>
-          </Tooltip>
-        </div>
-
-        <ExperimentsComparison datasetId={datasetId} experimentIdA={experimentIdA} experimentIdB={experimentIdB} />
+        <Txt as="h1" variant="heading" className="sr-only">
+          Experiments comparison
+        </Txt>
+        <ExperimentsComparison
+          datasetId={datasetId}
+          baselineId={baselineId}
+          contenderIds={contenderIds}
+          onSetBaseline={setBaseline}
+        />
       </div>
     </div>
   );

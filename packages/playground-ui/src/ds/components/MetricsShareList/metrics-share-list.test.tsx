@@ -164,4 +164,25 @@ describe('MetricsShareList', () => {
       'var(--chart-share-1)',
     ]);
   });
+
+  it('puts the column headers between the strip and the rows with headerPlacement="below-strip"', () => {
+    const { container } = render(
+      <MetricsShareList rows={[row('a', 3), row('b', 1)]} valueLabel="Spend" headerPlacement="below-strip" />,
+    );
+    const order = [...(container.firstElementChild?.children ?? [])].map(el =>
+      el.querySelector('[data-testid="metrics-share-segment"]')
+        ? 'strip'
+        : el.tagName === 'UL'
+          ? 'rows'
+          : el.textContent?.includes('Spend')
+            ? 'header'
+            : 'other',
+    );
+    expect(order).toEqual(['strip', 'header', 'rows']);
+  });
+
+  it('keeps the column headers above the strip by default', () => {
+    const { container } = render(<MetricsShareList rows={[row('a', 3)]} valueLabel="Spend" />);
+    expect(container.firstElementChild?.firstElementChild?.textContent).toContain('Spend');
+  });
 });

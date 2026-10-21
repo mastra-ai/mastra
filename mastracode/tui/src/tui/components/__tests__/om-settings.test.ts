@@ -101,6 +101,56 @@ describe('OM settings auto selection', () => {
     expect(rendered.match(/deepseek-v4-flash \(set by active pack\)/g)).toHaveLength(2);
     expect(rendered).not.toContain('gpt-5.4-mini');
   });
+
+  it('opens a searchable model picker from the observer setting', () => {
+    const onObserverModelChange = vi.fn();
+    const component = new OMSettingsComponent(
+      {
+        observerModel: 'auto',
+        observerModelId: 'anthropic/claude-haiku-4-5',
+        observerAutoModelId: 'anthropic/claude-haiku-4-5',
+        reflectorModel: 'auto',
+        reflectorModelId: 'anthropic/claude-haiku-4-5',
+        reflectorAutoModelId: 'anthropic/claude-haiku-4-5',
+        observationThreshold: 30_000,
+        reflectionThreshold: 40_000,
+        cavemanObservations: false,
+        observeAttachments: 'auto',
+      },
+      {
+        onObserverModelChange,
+        onObserverAuto: vi.fn(),
+        onReflectorModelChange: vi.fn(),
+        onReflectorAuto: vi.fn(),
+        onObservationThresholdChange: vi.fn(),
+        onReflectionThresholdChange: vi.fn(),
+        onCavemanObservationsChange: vi.fn(),
+        onObserveAttachmentsChange: vi.fn(),
+        onClose: vi.fn(),
+      },
+      makeModels(),
+      { requestRender: vi.fn() } as unknown as TUI,
+    );
+
+    component.handleInput('\r');
+    let rendered = component
+      .render(WIDTH)
+      .map(line => stripAnsi(line))
+      .join('\n');
+    expect(rendered).toContain('Type to search');
+    expect(rendered).toContain('Auto (claude-haiku-4-5)');
+
+    for (const ch of 'codex') component.handleInput(ch);
+    rendered = component
+      .render(WIDTH)
+      .map(line => stripAnsi(line))
+      .join('\n');
+    expect(rendered).toContain('openai/gpt-5-codex');
+    expect(rendered).not.toContain('openai/gpt-5-mini');
+
+    component.handleInput('\r');
+    expect(onObserverModelChange).toHaveBeenCalledWith(expect.objectContaining({ id: 'openai/gpt-5-codex' }));
+  });
 });
 
 describe('OM model picker (ModelSelectorComponent)', () => {

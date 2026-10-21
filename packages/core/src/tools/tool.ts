@@ -227,7 +227,7 @@ export class Tool<
    * Schema for validating request context values.
    * When provided, the request context will be validated against this schema before tool execution.
    */
-  requestContextSchema?: PublicSchema<TRequestContext>;
+  requestContextSchema?: PublicSchema<TRequestContext, any>;
 
   /**
    * Tool execution function
@@ -268,6 +268,23 @@ export class Tool<
    * authoritative per-tool approval decision and is always evaluated by the agent runtime.
    */
   needsApprovalFn?: NeedsApprovalFn;
+
+  /**
+   * Runs before the approval gate for calls that require approval and can reject the call
+   * with `{ proceed: false, output }`, returning `output` to the model without suspending
+   * or executing.
+   * @example
+   * ```typescript
+   * beforeApproval: async ({ orderId }) => {
+   *   if (!(await orderExists(orderId))) {
+   *     return { proceed: false, output: { error: `Order ${orderId} not found` } };
+   *   }
+   * }
+   * ```
+   */
+  beforeApproval?: NonNullable<
+    ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContext>['beforeApproval']
+  >;
 
   /**
    * Enables strict tool input generation for providers that support it.
@@ -388,6 +405,7 @@ export class Tool<
     this.requestContextSchema = opts.requestContextSchema;
     this.mastra = opts.mastra;
     this.requireApproval = opts.requireApproval || false;
+    this.beforeApproval = opts.beforeApproval;
     this.strict = opts.strict;
     this.outputValidation = opts.outputValidation;
     this.providerOptions = opts.providerOptions;

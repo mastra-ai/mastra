@@ -99,9 +99,25 @@ export {
 
 // Preparation utilities
 export { prepareForDurableExecution, type PreparationOptions, type PreparationResult } from './preparation';
+export { validateModelTimeoutSettings } from '../../llm/model/model-settings';
 
 // Run registry for non-serializable state
-export { RunRegistry, ExtendedRunRegistry, globalRunRegistry, type ExtendedRunRegistryEntry } from './run-registry';
+export {
+  RunRegistry,
+  ExtendedRunRegistry,
+  globalRunRegistry,
+  getRunRegistryEntry,
+  setRunRegistryEntry,
+  deleteRunRegistryEntry,
+  takeRunScorerInstances,
+  type ExtendedRunRegistryEntry,
+} from './run-registry';
+
+// Shared resumeGenerate argument normalization (Agent order + deprecated runId-first order)
+export { normalizeResumeGenerateArgs } from './utils/resume-generate-args';
+
+// Lets shared test suites simulate a process crash
+export { __resetExecutionFencesForTests } from './execution-fence';
 
 // Shared thread-stream runtime, so durable-agent integrations outside core
 // (e.g. @mastra/inngest) can register their runs the same way DurableAgent does.
@@ -126,6 +142,7 @@ export {
   AGENT_CONTROL_TOPIC,
   AgentStreamEventTypes,
   AgentControlEventTypes,
+  DURABLE_STOP_WHEN_ERROR_ID,
   DurableAgentDefaults,
   DurableStepIds,
 } from './constants';
@@ -151,6 +168,7 @@ export type {
   AgentStreamEvent,
   AgentChunkEventData,
   AgentStepFinishEventData,
+  DurableAgentStepFinishResult,
   AgentFinishEventData,
   AgentErrorEventData,
   AgentSuspendedEventData,
@@ -201,6 +219,7 @@ export {
 // Shared workflow utilities
 export {
   executeDurableAgentScorers,
+  loadRunStoredMessages,
   modelConfigSchema,
   modelListEntrySchema,
   accumulatedUsageSchema,

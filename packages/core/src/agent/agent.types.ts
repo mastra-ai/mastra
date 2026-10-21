@@ -6,7 +6,13 @@ import type { SystemMessage } from '../llm';
 import type { ProviderOptions } from '../llm/model/provider-options';
 import type { MastraLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import type { CompletionConfig, CompletionRunResult } from '../loop/network/validation';
-import type { LoopConfig, LoopOptions, PrepareStepFunction, ToolCallConcurrency } from '../loop/types';
+import type {
+  AgentLoopResumeClaim,
+  LoopConfig,
+  LoopOptions,
+  PrepareStepFunction,
+  ToolCallConcurrency,
+} from '../loop/types';
 import type { VersionOverrides } from '../mastra/types';
 import type { ObservabilityContext, TracingOptions } from '../observability';
 import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
@@ -132,6 +138,11 @@ export interface DelegationStartResult {
   modifiedInstructions?: string;
   /** Modified maxSteps for the sub-agent (optional) */
   modifiedMaxSteps?: number;
+  /**
+   * Metadata to attach to the sub-agent thread when it is created for this delegation (optional).
+   * Not applied when resuming an existing sub-agent thread.
+   */
+  threadMetadata?: Record<string, unknown>;
 }
 
 /**
@@ -451,6 +462,15 @@ export type NetworkOptions<OUTPUT = undefined> = {
   /** Memory configuration for conversation persistence and retrieval */
   memory?: AgentMemoryOption;
 
+  /**
+   * Scopes this run acts with, as `<type>:<value>` addresses such as `org:acme`, `resource:u1`,
+   * or `thread:t1`. Unioned with the Agent's `scopes` and the reserved `mastra__scopes`
+   * request-context key. `resource:` and `thread:` scopes set the Memory resource and thread;
+   * they must match `memory.resource`/`memory.thread` and the reserved ID keys when those are
+   * also set, or the call throws. Never accepted from an HTTP request body.
+   */
+  scopes?: string[];
+
   /** Whether to automatically resume suspended tools */
   autoResumeSuspendedTools?: boolean;
 
@@ -594,6 +614,15 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
 
   /** Memory configuration for conversation persistence and retrieval */
   memory?: AgentMemoryOption;
+
+  /**
+   * Scopes this run acts with, as `<type>:<value>` addresses such as `org:acme`, `resource:u1`,
+   * or `thread:t1`. Unioned with the Agent's `scopes` and the reserved `mastra__scopes`
+   * request-context key. `resource:` and `thread:` scopes set the Memory resource and thread;
+   * they must match `memory.resource`/`memory.thread` and the reserved ID keys when those are
+   * also set, or the call throws. Never accepted from an HTTP request body.
+   */
+  scopes?: string[];
 
   /**
    * Serverless runtime helpers. Use these when the platform freezes the
@@ -891,8 +920,11 @@ export type InnerAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptions
   resumeContext?: {
     resumeData: any;
     snapshot: WorkflowRunState;
+    claim?: AgentLoopResumeClaim;
   };
   toolCallId?: string;
+  /** Internal: The run's resolved scopes, persisted in suspend snapshots for resume */
+  resolvedScopes?: string[];
 } & ([NonNullable<OUTPUT>] extends [never]
     ? { structuredOutput?: never }
     : OUTPUT extends {}

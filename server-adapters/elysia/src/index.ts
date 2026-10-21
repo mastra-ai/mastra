@@ -9,6 +9,7 @@ import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
   getCustomHTTPExceptionResponse,
+  isSafeObjectKey,
   isZodError,
   normalizeQueryParams,
   redactStreamChunk,
@@ -365,6 +366,9 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
     // Handle native FormData
     if (data instanceof FormData) {
       for (const [key, value] of data.entries()) {
+        if (!isSafeObjectKey(key)) {
+          continue;
+        }
         if (value instanceof File) {
           const arrayBuffer = await value.arrayBuffer();
           result[key] = Buffer.from(arrayBuffer);
@@ -384,6 +388,9 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
 
     // Handle Elysia's pre-parsed object format
     for (const [key, value] of Object.entries(data)) {
+      if (!isSafeObjectKey(key)) {
+        continue;
+      }
       if (value && typeof value === 'object' && 'arrayBuffer' in value && typeof value.arrayBuffer === 'function') {
         const arrayBuffer = await value.arrayBuffer();
         result[key] = Buffer.from(arrayBuffer);

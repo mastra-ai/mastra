@@ -20,7 +20,6 @@ export const modeSwitchAppliesPackModelScenario = {
       skippedAt: null,
       version: 1,
       modePackId: packId,
-      quietModePreferenceSelected: true,
     };
     settings.customModelPacks = [
       {

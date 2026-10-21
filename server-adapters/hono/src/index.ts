@@ -12,6 +12,7 @@ import {
   checkRouteFGA,
   getFGAProvider,
   getCustomHTTPExceptionResponse,
+  isSafeObjectKey,
   isZodError,
   normalizeQueryParams,
   redactStreamChunk,
@@ -26,6 +27,7 @@ export { createAuthMiddleware } from './auth-middleware';
 export type { HonoAuthMiddlewareOptions } from './auth-middleware';
 // Browser stream setup (Hono-specific WebSocket implementation)
 export { setupBrowserStream } from './browser-stream';
+export type { HonoBrowserStreamConfig } from './browser-stream';
 
 type HasPermissionFn = (userPerms: string[], required: string) => boolean;
 let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
@@ -347,6 +349,9 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     const result: Record<string, unknown> = {};
 
     for (const [key, value] of formData.entries()) {
+      if (!isSafeObjectKey(key)) {
+        continue;
+      }
       if (value instanceof File) {
         const arrayBuffer = await value.arrayBuffer();
         result[key] = Buffer.from(arrayBuffer);

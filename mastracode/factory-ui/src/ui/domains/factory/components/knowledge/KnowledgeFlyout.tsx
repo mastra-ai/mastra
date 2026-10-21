@@ -10,8 +10,9 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
  */
 
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { ChevronDown, ExternalLink, Pin, Sparkles, X } from 'lucide-react';
+import { ExternalLink, Pin, Sparkles, X } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Badge } from '@mastra/playground-ui/components/Badge';
@@ -26,7 +27,7 @@ const RUNG_LABELS: Record<KnowledgeRung, string> = { org: 'Org', resource: 'Proj
 
 function SectionHeader({ title, count }: { title: string; count?: number }) {
   return (
-    <CollapsibleTrigger className="group border-border flex w-full items-center gap-2 border-t px-4 py-3 text-left">
+    <CollapsibleTrigger className="border-border flex w-full items-center gap-2 border-t px-4 py-3 text-left">
       <Txt as="span" variant="subheading" tone="ink">
         {title}
       </Txt>
@@ -35,10 +36,7 @@ function SectionHeader({ title, count }: { title: string; count?: number }) {
           {count}
         </Txt>
       ) : null}
-      <ChevronDown
-        size={14}
-        className="text-muted-foreground ml-auto transition-transform group-data-[state=open]:rotate-180"
-      />
+      <DisclosureChevron className="text-muted-foreground ml-auto size-3.5" />
     </CollapsibleTrigger>
   );
 }

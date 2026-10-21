@@ -10,40 +10,23 @@
  * Two shapes are ported:
  *   - `normal` — two tool steps (`STEP_COUNT`), then an answer: three step-finish chunks in all, the
  *     extra one closing the answering step.
- *   - `abort`  — aborted once the step tool reports it is parked, so no timer decides it. Plain's
- *     abort surface (the aborted step's `tool-result` delivered a second time, the finish reported as
- *     `tripwire`) differs from the wrapped engines' and is declared below against COR-1415; every
- *     other field of the stream is still compared exactly.
+ *   - `abort`  — aborted once the step tool reports it is parked, so no timer decides it.
  *
- *   - `error`  — one tool step, then the model call itself fails (`doStream` throws). The script model
- *     is what makes this shape inexpressible to the parity helper: its recording model always turns a
- *     tape into a stream, and a turn that fails on the model call leaves the helper's own
- *     `finish.stepResult` declaration with nothing to strip, so `expectEngineParity` rejects the
- *     scenario as a stale declaration before it compares anything (COR-1429). Each engine is therefore
- *     checked directly here, with no per-scenario override, and the checks are the harness's own for
- *     this shape — `onError` once, no `onFinish`, a step reported before the error.
+ *   - `error`  — one tool step, then the model call itself fails. COR-1429 lets this run through the
+ *     parity helper while preserving the callback checks: `onError` once, no `onFinish`, and a step
+ *     reported before the error.
  *
  * The engines also genuinely disagree on what the callbacks themselves see — the harness's own
  * recorded pairing for the callback contract is red, and the helper does not compare callbacks — so
  * each engine's contract is pinned literally below, with plain's as the reference. Two of those
- * divergences are ticketed under COR-1390: plain's `onFinish` payload carries keys the wrappers do not,
- * and the wrappers report `onError` after both steps where plain reports it between them.
+ * divergences are ticketed under COR-1390: the wrappers report `onError` after both steps where plain
+ * reports it between them.
  */
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
-import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod';
-import { EventEmitterPubSub } from '../../../events/event-emitter';
-import { Mastra } from '../../../mastra';
-import { MockMemory } from '../../../memory/mock';
-import { InMemoryStore } from '../../../storage';
-import { createTool } from '../../../tools';
-import { Agent } from '../../agent';
-import { createDurableAgent } from '../create-durable-agent';
-import { createEventedAgent } from '../create-evented-agent';
-import type { Deferred } from './abort-parity-support';
-import { ABORT_ARTIFACT, aborted, deferred, toolResultCount } from './abort-parity-support';
 import type {
+  Deferred,
   EngineHandle,
   EngineParityResults,
   EngineParityScenario,
@@ -51,8 +34,19 @@ import type {
   ModelScript,
   ParityEngine,
   ParitySnapshot,
-} from './parity-harness';
-import { expectEngineParity, textOnlyTape, toolCallTape } from './parity-harness';
+} from '../../../loop/test-utils/aimock/parity';
+import {
+  FAILED_STEP_WARNINGS_DIFFERENCE,
+  aborted,
+  deferred,
+  expectEngineParity,
+  textOnlyTape,
+  toolCallTape,
+  toolResultCount,
+} from '../../../loop/test-utils/aimock/parity';
+import { MockMemory } from '../../../memory/mock';
+import { createTool } from '../../../tools';
+import { Agent } from '../../agent';
 
 const ENGINES: ParityEngine[] = ['plain', 'durable', 'evented'];
 const AGENT_ID = 't36-agent';
@@ -64,8 +58,7 @@ const ABORT_BLOCK_AT = 1;
 /** What the failing model reports on the second call of the `error` shape (harness: `T36 model failure`). */
 const ERROR_MESSAGE = 'T36 model failure';
 
-/** The shapes that run through the parity helper; `error` is driven directly (see `runErrorDirect`). */
-type StreamedVariant = 'normal' | 'abort';
+type StreamedVariant = 'normal' | 'abort' | 'error';
 
 /** The harness's script: run `STEP_COUNT` numbered steps, then answer. */
 const script: ModelScript = {
@@ -135,8 +128,15 @@ async function runT36(variant: StreamedVariant): Promise<{
   const controllers = new Map<ParityEngine, AbortController>();
 
   const scenario: EngineParityScenario = {
-    model: script,
-    ...(variant === 'abort' ? { differences: { durable: ABORT_ARTIFACT, evented: ABORT_ARTIFACT } } : {}),
+    model:
+      variant === 'error'
+        ? {
+            respond: request => {
+              if (toolResultCount(request) > 0) throw new Error(ERROR_MESSAGE);
+              return toolCallTape(STEP_TOOL, { n: 1 }, 'step-1');
+            },
+          }
+        : script,
     buildAgent: ({ engine, model }: { engine: ParityEngine; model: LanguageModelV2 }) => {
       const parked = deferred<void>();
       const release = deferred<void>();
@@ -168,6 +168,10 @@ async function runT36(variant: StreamedVariant): Promise<{
         memory,
       });
     },
+    differences:
+      variant === 'error'
+        ? { durable: FAILED_STEP_WARNINGS_DIFFERENCE, evented: FAILED_STEP_WARNINGS_DIFFERENCE }
+        : undefined,
     run: async (handle: EngineHandle) => {
       const state = states.get(handle.engine)!;
       const controller = new AbortController();
@@ -217,9 +221,8 @@ const PLAIN_PUBLIC_CHUNK_TYPES = [
 
 /**
  * `Object.keys(payload).sort()` for each `onStepFinish`, measured on all three engines (harness case
- * T36, `normal` shape; the callback contract it records is `names` + `payloadKeys`). The values are
- * identical durable vs evented, so the wrapped contract is expressed as plain's list minus the
- * `runId` key only plain sends.
+ * T36, `normal` shape; the callback contract it records is `names` + `payloadKeys`). Every engine
+ * sends the same keys.
  */
 const PLAIN_STEP_FINISH_KEYS = [
   'content',
@@ -246,17 +249,7 @@ const PLAIN_STEP_FINISH_KEYS = [
   'warnings',
 ];
 
-/** Durable and evented observe the same callback contract, without plain's `runId` payload key. */
-const WRAPPED_STEP_FINISH_KEYS = PLAIN_STEP_FINISH_KEYS.filter(key => key !== 'runId');
-
-/**
- * `Object.keys(payload).sort()` for `onFinish`, measured on all three engines (same run as above).
- * COR-1390: plain's `onFinish` payload carries `runId`, `error`, `messages`, `model`, `object` and
- * `usedFallbackValue`, none of which reach the wrapped engines' `onFinish`, so the two key sets are
- * pinned separately rather than derived from each other. Pinning the wrapped set at its current keys
- * is what makes this go stale — and red — when COR-1390 lands. The parity helper compares streams,
- * not callbacks, so the ticket is declared here instead of in `differences`.
- */
+/** `Object.keys(payload).sort()` for `onFinish`, measured on all three engines (same run as above). */
 const PLAIN_FINISH_KEYS = [
   'content',
   'dynamicToolCalls',
@@ -285,10 +278,6 @@ const PLAIN_FINISH_KEYS = [
   'usedFallbackValue',
   'warnings',
 ];
-
-const WRAPPED_FINISH_KEYS = PLAIN_FINISH_KEYS.filter(
-  key => !['runId', 'error', 'messages', 'model', 'object', 'usedFallbackValue'].includes(key),
-);
 
 /** `onAbort` received the same key set on every engine. */
 const ON_ABORT_KEYS = ['steps', 'text'];
@@ -334,10 +323,10 @@ const CALLBACK_CONTRACTS: Record<ParityEngine, EngineCallbackContract> = {
       'step-finish',
     ],
     payloadKeys: [
-      { name: 'onStepFinish', keys: WRAPPED_STEP_FINISH_KEYS },
-      { name: 'onStepFinish', keys: WRAPPED_STEP_FINISH_KEYS },
-      { name: 'onStepFinish', keys: WRAPPED_STEP_FINISH_KEYS },
-      { name: 'onFinish', keys: WRAPPED_FINISH_KEYS },
+      { name: 'onStepFinish', keys: PLAIN_STEP_FINISH_KEYS },
+      { name: 'onStepFinish', keys: PLAIN_STEP_FINISH_KEYS },
+      { name: 'onStepFinish', keys: PLAIN_STEP_FINISH_KEYS },
+      { name: 'onFinish', keys: PLAIN_FINISH_KEYS },
     ],
     requests: 3,
   },
@@ -357,27 +346,22 @@ const CALLBACK_CONTRACTS: Record<ParityEngine, EngineCallbackContract> = {
       'step-finish',
     ],
     payloadKeys: [
-      { name: 'onStepFinish', keys: WRAPPED_STEP_FINISH_KEYS },
-      { name: 'onStepFinish', keys: WRAPPED_STEP_FINISH_KEYS },
-      { name: 'onStepFinish', keys: WRAPPED_STEP_FINISH_KEYS },
-      { name: 'onFinish', keys: WRAPPED_FINISH_KEYS },
+      { name: 'onStepFinish', keys: PLAIN_STEP_FINISH_KEYS },
+      { name: 'onStepFinish', keys: PLAIN_STEP_FINISH_KEYS },
+      { name: 'onStepFinish', keys: PLAIN_STEP_FINISH_KEYS },
+      { name: 'onFinish', keys: PLAIN_FINISH_KEYS },
     ],
     requests: 3,
   },
 };
 
-/**
- * The public stream plain produced for the `abort` shape: the abort lands while the step tool is
- * parked, and plain delivers that step's `tool-result` a second time before the `abort` chunk
- * (COR-1415). Pinned literally so a plain-side change — including the fix — fails here.
- */
+/** The public stream produced for the `abort` shape. */
 const PLAIN_ABORT_PUBLIC_CHUNK_TYPES = [
   'start',
   'step-start',
   'tool-call',
   'tool-result',
   'step-finish',
-  'tool-result',
   'abort',
   'finish',
 ];
@@ -396,7 +380,7 @@ const ABORT_CONTRACTS: Record<ParityEngine, EngineCallbackContract> = {
     callbacks: ['onStepFinish', 'onAbort'],
     onChunk: ['start', 'tool-call', 'tool-result', 'step-finish'],
     payloadKeys: [
-      { name: 'onStepFinish', keys: WRAPPED_STEP_FINISH_KEYS },
+      { name: 'onStepFinish', keys: PLAIN_STEP_FINISH_KEYS },
       { name: 'onAbort', keys: ON_ABORT_KEYS },
     ],
     requests: 1,
@@ -405,142 +389,12 @@ const ABORT_CONTRACTS: Record<ParityEngine, EngineCallbackContract> = {
     callbacks: ['onStepFinish', 'onAbort'],
     onChunk: ['start', 'tool-call', 'tool-result', 'step-finish'],
     payloadKeys: [
-      { name: 'onStepFinish', keys: WRAPPED_STEP_FINISH_KEYS },
+      { name: 'onStepFinish', keys: PLAIN_STEP_FINISH_KEYS },
       { name: 'onAbort', keys: ON_ABORT_KEYS },
     ],
     requests: 1,
   },
 };
-
-/**
- * What a direct run of the `error` shape recorded on one engine — the harness's `error` contract
- * fields, read without the parity helper (see the file header for why this shape cannot go through
- * it).
- */
-interface ErrorCaseState {
-  /** Names of the non-`onChunk` callbacks, in the order they fired. */
-  names: string[];
-  /** Payload key sets (`Object.keys(payload).sort()`) per callback firing. */
-  payloadKeys: Array<{ name: string; keys: string[] }>;
-  /** Chunk types the public `onChunk` callback saw, in order. */
-  chunkTypes: string[];
-  /** Chunk types the public stream yielded, in order. */
-  publicChunkTypes: string[];
-  /** Model calls the run made. */
-  requests: number;
-  threw?: string;
-  /** Set when `getFullOutput()` rejected — the harness's `fullOutputError`. */
-  fullOutputError?: string;
-}
-
-/**
- * Drives one engine through the `error` shape, mirroring what the parity helper does per engine
- * (wrapper, host, one streamed turn), because the helper cannot run a model whose `doStream` throws
- * (COR-1429).
- */
-async function runErrorDirect(engine: ParityEngine): Promise<ErrorCaseState> {
-  const requests: unknown[] = [];
-  const model = new MockLanguageModelV2({
-    doStream: async (options: unknown) => {
-      requests.push(options);
-      // The harness's script model: one tool step, then the model call itself fails.
-      if (requests.length > 1) throw new Error(ERROR_MESSAGE);
-      return {
-        stream: convertArrayToReadableStream(toolCallTape(STEP_TOOL, { n: 1 }, 'step-1') as never[]),
-        rawCall: { rawPrompt: null, rawSettings: {} },
-      };
-    },
-  });
-  const state: ErrorCaseState = {
-    names: [],
-    payloadKeys: [],
-    chunkTypes: [],
-    publicChunkTypes: [],
-    requests: 0,
-  };
-  const step = createTool({
-    id: STEP_TOOL,
-    description: 'Perform numbered step n.',
-    inputSchema: z.object({ n: z.number() }),
-    execute: async ({ n }) => ({ done: n }),
-  });
-  const agent = new Agent({
-    id: AGENT_ID,
-    name: AGENT_ID,
-    instructions: 'Follow the script.',
-    model: model as LanguageModelV2,
-    tools: { step },
-    memory: new MockMemory(),
-  });
-  const pubsub = new EventEmitterPubSub();
-  const runner =
-    engine === 'plain'
-      ? agent
-      : engine === 'durable'
-        ? createDurableAgent({ agent, pubsub })
-        : createEventedAgent({ agent });
-  const host = new Mastra({
-    agents: { [AGENT_ID]: runner } as never,
-    storage: new InMemoryStore(),
-    logger: false,
-  });
-
-  const record = (name: string, payload: unknown) => {
-    state.names.push(name);
-    state.payloadKeys.push({ name, keys: Object.keys((payload as object) ?? {}).sort() });
-  };
-  const options = {
-    maxSteps: MAX_STEPS,
-    runId: `t36-error-${engine}`,
-    memory: { thread: 'thread-t36', resource: 'resource-t36' },
-    onChunk: (chunk: { type: string }) => {
-      state.chunkTypes.push(chunk.type);
-    },
-    onStepFinish: (payload: unknown) => record('onStepFinish', payload),
-    onFinish: (payload: unknown) => record('onFinish', payload),
-    onError: (payload: unknown) => record('onError', payload),
-    onAbort: (payload: unknown) => record('onAbort', payload),
-  };
-
-  let cleanup: (() => Promise<void>) | undefined;
-  let output: { fullStream: AsyncIterable<{ type: string }>; getFullOutput: () => Promise<unknown> } | undefined;
-  try {
-    if (engine === 'plain') {
-      output = (await agent.stream('go', options)) as never;
-    } else {
-      // A settled stream is the harness's `the run settled` check: a run that hung would time out.
-      const result = await (
-        runner as unknown as {
-          stream: (input: string, options: unknown) => Promise<{ output: never; cleanup: () => Promise<void> }>;
-        }
-      ).stream('go', options);
-      output = result.output;
-      cleanup = result.cleanup;
-    }
-  } catch (error) {
-    state.threw = String((error as Error)?.message ?? error).slice(0, 200);
-  }
-  if (output) {
-    try {
-      for await (const chunk of output.fullStream) state.publicChunkTypes.push(chunk.type);
-    } catch (error) {
-      state.threw = state.threw ?? String((error as Error)?.message ?? error).slice(0, 200);
-    }
-    try {
-      await output.getFullOutput();
-    } catch (error) {
-      state.fullOutputError = String((error as Error)?.message ?? error).slice(0, 200);
-    }
-  }
-  state.requests = requests.length;
-  // Pair the teardown so a throwing cleanup cannot leave this run's host alive.
-  try {
-    if (cleanup) await cleanup();
-  } finally {
-    await host.shutdown();
-  }
-  return state;
-}
 
 /**
  * The public stream all three engines produced for the `error` shape — the harness records these as
@@ -650,67 +504,44 @@ describe('T36 callback order parity', () => {
       expect(state.payloadKeys, `${engine}: callback payload keys`).toEqual(contract.payloadKeys);
     }
 
-    // Plain's abort surface, pinned literally: the extra `tool-result` for the parked step and the
-    // `tripwire` finish reason are COR-1415, declared for the wrapped engines above.
     expect(results.plain!.turns.at(-1)!.chunkTypes, 'plain: public chunk types').toEqual(
       PLAIN_ABORT_PUBLIC_CHUNK_TYPES,
     );
     expect(results.plain!.turns.at(-1)!.finishReason, 'plain: finish reason').toBe('aborted');
-    expect(results.plain!.turns.at(-1)!.finishChunk?.reason, 'plain: finish chunk reason').toBe('tripwire');
-    expect(results.plain!.turns.at(-1)!.toolResults, 'plain: tool results').toHaveLength(2);
+    expect(results.plain!.turns.at(-1)!.finishChunk?.reason, 'plain: finish chunk reason').toBe('abort');
+    expect(results.plain!.turns.at(-1)!.toolResults, 'plain: tool results').toHaveLength(1);
   });
 
   it('reports a failed model call through onError, and never onFinish, without a throw', async () => {
-    const states = new Map<ParityEngine, ErrorCaseState>();
-    for (const engine of ENGINES) states.set(engine, await runErrorDirect(engine));
+    const { results, states } = await runT36('error');
 
     for (const engine of ENGINES) {
       const state = states.get(engine)!;
+      const snapshot = state.snapshot!;
       const contract = ERROR_CONTRACTS[engine];
 
-      // harness: `the run settled` (the awaited call above) and did not throw out of the stream.
       expect(state.threw, `${engine}: stream did not throw`).toBeUndefined();
-
-      // harness: `onError fires exactly once, and no onFinish`.
       expect(
         state.names.filter(name => name === 'onError'),
         `${engine}: onError once`,
       ).toEqual(['onError']);
       expect(state.names, `${engine}: no onFinish`).not.toContain('onFinish');
-
-      // harness: `a step is reported before the error is`.
       expect(state.names.indexOf('onStepFinish'), `${engine}: a step finished before onError`).toBeGreaterThanOrEqual(
         0,
       );
       expect(state.names.indexOf('onStepFinish'), `${engine}: a step finished before onError`).toBeLessThan(
         state.names.indexOf('onError'),
       );
-
-      // harness: `no model call after the failure` (one step tool call, then the failing call).
-      expect(state.requests, `${engine}: model calls`).toBe(contract.requests);
-
-      // harness: `onChunk types are an in-order subsequence of the public stream`.
+      expect(results[engine]!.requests, `${engine}: model calls`).toHaveLength(contract.requests);
       expect(state.chunkTypes, `${engine}: onChunk chunk types`).toEqual(contract.onChunk);
-      expect(
-        isSubsequence(state.chunkTypes, state.publicChunkTypes),
-        `${engine}: onChunk chunk types are an in-order subsequence of the public stream (${state.chunkTypes.join()})`,
-      ).toBe(true);
-      expect(state.publicChunkTypes, `${engine}: public chunk types`).toEqual(ERROR_PUBLIC_CHUNK_TYPES);
-
-      // harness: `each callback received the recorded payload keys`. Keyed by callback name so the
-      // engines may report the same error at different points in the sequence (see the note below).
-      const stepFinishKeys = engine === 'plain' ? PLAIN_STEP_FINISH_KEYS : WRAPPED_STEP_FINISH_KEYS;
+      expect(isSubsequence(state.chunkTypes, snapshot.chunkTypes), `${engine}: onChunk subsequence`).toBe(true);
+      expect(snapshot.chunkTypes, `${engine}: public chunk types`).toEqual(ERROR_PUBLIC_CHUNK_TYPES);
       for (const entry of state.payloadKeys) {
         expect(entry.keys, `${engine}: ${entry.name} payload keys`).toEqual(
-          entry.name === 'onError' ? ['error'] : stepFinishKeys,
+          entry.name === 'onError' ? ['error'] : PLAIN_STEP_FINISH_KEYS,
         );
       }
-
-      // The failure reaches the output reads on every engine: the run cannot be read as a result.
-      expect(state.fullOutputError, `${engine}: getFullOutput rejects`).toContain(ERROR_MESSAGE);
-
-      // harness: `callbacks fired in the recorded order`. Each engine's own recorded order is pinned,
-      // so the wrapped order goes red when COR-1390 moves `onError` back between the two steps.
+      expect(snapshot.error?.message, `${engine}: failure reaches output`).toContain(ERROR_MESSAGE);
       expect(state.names, `${engine}: callback names`).toEqual(ERROR_CALLBACK_NAMES[engine]);
     }
   });

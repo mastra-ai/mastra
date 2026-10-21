@@ -107,15 +107,38 @@ Use a consistent `serviceName` to filter data from a specific application or dep
 
 ## Query observability data
 
-Query hosted observability data from the terminal with the Mastra CLI:
+Browse hosted traces from the terminal with the Mastra CLI:
 
 ```bash npm2yarn
 npx mastra api trace list
 ```
 
-The CLI can infer platform credentials from your project environment. See the [`mastra api` CLI reference](/reference/cli/mastra#mastra-api) for available commands, filtering, pagination, credential resolution, and `curl` examples.
+The CLI reads `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` from your project environment and targets the US observability endpoint by default. See [CLI target resolution](/reference/cli/mastra#target-resolution) for other authentication options and regional endpoints.
+
+Use `mastra api trace query` to find completed traces by their fields or related spans. For example, find traces whose root span took more than five seconds:
+
+```bash
+npx mastra api trace query '{
+  "timeRange": {
+    "from": "2026-08-01T00:00:00.000Z",
+    "to": "2026-08-08T00:00:00.000Z"
+  },
+  "where": {
+    "op": "gt",
+    "left": { "path": "durationMs" },
+    "right": { "literal": 5000 }
+  },
+  "page": { "limit": 25 }
+}'
+```
+
+Choose a time range containing your exported traces. Any range works as long as `from` is earlier than `to`, with no maximum duration. Results appear in `data.traces`.
+
+Mastra Platform uses the same trace-query endpoints and request format as Mastra Server. Use the [Advanced trace queries reference](/reference/observability/tracing/advanced-queries#send-an-http-request) for HTTP requests, supported filters, pagination, polling, and field discovery.
 
 You can query exported feedback over HTTP. See the [Feedback API](/docs/mastra-platform/api#feedback-api) for its current status, regional endpoints, authentication, project scoping, and supported query parameters such as `traceId` and `environment`.
+
+You can query exported metrics over HTTP, with `MastraClient`, or with `mastra api metric`. See the [Metrics API](/docs/mastra-platform/api#metrics-api) for regional endpoints, authentication, project scoping, and supported endpoints.
 
 ## Import existing traces
 
@@ -156,15 +179,17 @@ If `mastra init` configured observability for the project, use the token it wrot
 
 You can run `--dry-run` without this token because a dry run doesn't contact the collector or query API.
 
-Specify the destination with `--project`, or set `MASTRA_PROJECT_ID`. You can use a project name, slug, or ID with `--project`:
+`--target-project` names the destination: the Mastra Platform project that receives the traces. Specify it with a project name, slug, or ID, or set `MASTRA_PROJECT_ID`:
 
 ```bash
-npx mastra traces import langfuse --project my-project --dry-run
+npx mastra traces import langfuse --target-project my-mastra-project --dry-run
 ```
 
-The `--project` flag takes precedence over `MASTRA_PROJECT_ID`. Without either value, the CLI uses the project linked in `.mastra-project.json`.
+The `--target-project` flag takes precedence over `MASTRA_PROJECT_ID`. Without either value, the CLI uses the project linked in `.mastra-project.json`.
 
-For a headless environment, set the API token and organization ID. The command uses `MASTRA_API_TOKEN` for project discovery, upload, and read-back. Set the project ID or pass `--project`:
+The source project isn't a command-line option. The provider credentials in `.env` select it, and the preparation summary names it before anything is uploaded.
+
+For a headless environment, set the API token and organization ID. The command uses `MASTRA_API_TOKEN` for project discovery, upload, and read-back. Set the project ID or pass `--target-project`:
 
 ```bash title=".env"
 MASTRA_API_TOKEN=<mastra-api-token>
@@ -174,7 +199,7 @@ MASTRA_PROJECT_ID=<project-id>
 
 ### Configure Langfuse
 
-Create [project API keys in Langfuse](https://langfuse.com/docs/api-and-data-platform/features/public-api), then add them to `.env` or `.env.local` in the directory where you run the command:
+Langfuse API keys belong to one Langfuse project, so they also select the source project. Create [project API keys in Langfuse](https://langfuse.com/docs/api-and-data-platform/features/public-api), then add them to `.env` or `.env.local` in the directory where you run the command:
 
 ```bash title=".env"
 LANGFUSE_PUBLIC_KEY=<langfuse-public-key>
@@ -192,12 +217,12 @@ LANGFUSE_BASE_URL=https://us.cloud.langfuse.com
 Run a dry run before uploading:
 
 ```bash
-npx mastra traces import langfuse --project my-project --dry-run
+npx mastra traces import langfuse --target-project my-mastra-project --dry-run
 ```
 
 The dry run reads the source, prepares valid Mastra traces locally, and reports:
 
-- The source and destination projects.
+- The source Langfuse project by name and ID, and the destination Mastra Platform project.
 - The fixed import window.
 - Prepared and skipped trace and span counts.
 - The size of the prepared local data.
@@ -207,22 +232,24 @@ It doesn't upload traces. The command prints a `--resume` command that uploads t
 
 ### Choose the import window
 
-By default, the command selects the last 30 days, ending when the import starts. Use `--from` and `--to` to choose a smaller window:
+By default, the command selects the last 30 days, ending when the import starts. Use `--since` and `--until` to choose a smaller window:
 
 ```bash
 npx mastra traces import langfuse \
-  --project my-project \
-  --from "$FROM" \
-  --to "$TO" \
+  --target-project my-mastra-project \
+  --since "$SINCE" \
+  --until "$UNTIL" \
   --dry-run
 ```
 
-Set `FROM` and `TO` to ISO 8601 dates or timestamps. The following rules apply:
+Set `SINCE` and `UNTIL` to ISO 8601 dates or timestamps. The following rules apply:
 
-- `--to` can't be in the future or outside the current 30-day Platform retention period.
-- `--from` must be earlier than `--to` and inside the current retention period.
+- `--until` can't be in the future or outside the current 30-day Platform retention period.
+- `--since` must be earlier than `--until` and inside the current retention period.
 - The selected window can't exceed 30 days.
-- If only `--to` is set, the default start is the later of 30 days before `--to` and the current retention boundary.
+- If only `--until` is set, the default start is the later of 30 days before `--until` and the current retention boundary.
+
+Commands written with the earlier `--from` and `--to` names still work.
 
 Trace eligibility is based on the root observation's start time. The Langfuse adapter discovers roots in the selected window and then reads all currently available observations for each selected trace. It skips the complete trace if the available parent-child tree or timestamps are invalid.
 
@@ -231,13 +258,13 @@ Trace eligibility is based on the root observation's start time. The Langfuse ad
 Run the command without `--dry-run` to upload the prepared traces:
 
 ```bash
-npx mastra traces import langfuse --project my-project
+npx mastra traces import langfuse --target-project my-mastra-project
 ```
 
 The CLI displays the preparation summary and asks for confirmation before upload. Pass `--yes` to skip this prompt in an automated environment:
 
 ```bash
-npx mastra traces import langfuse --project my-project --yes
+npx mastra traces import langfuse --target-project my-mastra-project --yes
 ```
 
 The importer keeps every trace in one upload request and checkpoints progress only after Mastra Platform acknowledges the batch. Temporary source and destination failures use bounded retries.
@@ -253,10 +280,10 @@ Use the exact command printed by the CLI when a dry run, cancellation, interrupt
 ```bash
 npx mastra traces import langfuse \
   --resume 00000000-0000-0000-0000-000000000000 \
-  --project my-project
+  --target-project my-mastra-project
 ```
 
-A resumed import must use the original provider and destination project. Its saved date window can't be changed, so `--from`, `--to`, and `--dry-run` can't be combined with `--resume`.
+A resumed import must use the original provider and destination project. Its saved date window can't be changed, so `--since`, `--until`, and `--dry-run` can't be combined with `--resume`.
 
 Resume behavior depends on where the command stopped:
 
@@ -286,7 +313,9 @@ These files can contain trace content. Mastra creates the import directory and f
 For Langfuse imports:
 
 - Observations become Mastra spans with their parent-child relationships and timestamps.
+- Langfuse `AGENT`, `TOOL`, and `EVALUATOR` observations, and plain spans that carry OpenTelemetry GenAI attributes such as `gen_ai.operation.name: invoke_agent`, keep their primitive type and name. Mastra Platform shows them in the Primitive type and Primitive name columns and includes them in those filters, like native traces.
 - Supported fields such as names, input, output, errors, model details, usage, cost, tags, and source context are mapped when present.
+- Environments you set in Langfuse, such as `staging`, are kept. Langfuse's built-in `default` environment isn't copied. Those traces have no environment in Mastra, and Mastra Studio shows them for every environment.
 - Destination trace and span IDs are deterministic. Original Langfuse IDs remain in span metadata for correlation.
 - Unknown Langfuse observation types become generic spans and produce a warning instead of being silently discarded.
 - Only trace observations are imported. Scores, feedback, datasets, attachments, and logs aren't imported.

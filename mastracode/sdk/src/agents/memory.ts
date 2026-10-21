@@ -1,10 +1,9 @@
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { Knowledge } from '@mastra/core/knowledge';
-import type { GatewayLanguageModel } from '@mastra/core/llm';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
-import { fastembed } from '@mastra/fastembed';
+import type { fastembed } from '@mastra/fastembed';
 import { Memory, Subconscious } from '@mastra/memory';
 import { DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD } from '../constants.js';
 import { LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeScopeIdentity } from '../knowledge-scope.js';
@@ -13,10 +12,26 @@ import { loadSettings } from '../onboarding/settings.js';
 import { ANTHROPIC_PROMPT_CACHE_TTL } from '../providers/anthropic-prompt-cache.js';
 import type { MastraCodeState } from '../schema.js';
 import { getOmScope } from '../utils/project.js';
-import { getActiveMemoryRoute, resolveModel } from './model.js';
+import { canUseProvider, getActiveMemoryRoute, resolveModel } from './model.js';
+
+/**
+ * `fastembed.small`, loaded on the first embedding. Importing `@mastra/fastembed` up front loads ONNX
+ * Runtime and a native tokenizer (~11 MB) into every session, including ones that never embed.
+ */
+const lazyFastembedSmall: typeof fastembed.small = {
+  specificationVersion: 'v3',
+  provider: 'fastembed',
+  modelId: 'bge-small-en-v1.5',
+  maxEmbeddingsPerCall: 256,
+  supportsParallelCalls: true,
+  async doEmbed(options) {
+    const { fastembed } = await import('@mastra/fastembed');
+    return fastembed.small.doEmbed(options);
+  },
+};
 
 /** Route-backed OM fallback entry. */
-type MemoryModelRouteEntry = { id: string; model: GatewayLanguageModel };
+type MemoryModelRouteEntry = { id: string; model: ReturnType<typeof resolveModel> };
 
 /**
  * Resolve the active model route's memory models, starting at a same-thread
@@ -26,7 +41,7 @@ type MemoryModelRouteEntry = { id: string; model: GatewayLanguageModel };
 function resolveRouteMemoryModels(
   state: MastraCodeState | undefined,
   threadId: string | null | undefined,
-  resolve: (modelId: string) => GatewayLanguageModel,
+  resolve: (modelId: string) => ReturnType<typeof resolveModel>,
 ): MemoryModelRouteEntry[] | 'auto' | undefined {
   const memoryRoute = getActiveMemoryRoute(state, threadId);
   if (memoryRoute[0]?.memoryModelId === 'auto') return 'auto';
@@ -98,7 +113,7 @@ function resolveOmRoleModelForRequest(
   requestContext: RequestContext,
   settingsPath?: string,
   options?: { disableSettingsOmSeed?: boolean },
-): 'auto' | GatewayLanguageModel | MemoryModelRouteEntry[] {
+): 'auto' | ReturnType<typeof resolveModel> | MemoryModelRouteEntry[] {
   const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
   const state = controller?.getState() as MastraCodeState | undefined;
   const resolveOptions = { remapForCodexOAuth: true, requestContext, anthropicPromptCacheScope: 'system' } as const;
@@ -115,7 +130,12 @@ function resolveOmRoleModelForRequest(
     // These two keys are declared in the span-context allowlist
     // (`mastracode/sdk/src/index.ts`), so traces can report intent separately from
     // the effective concrete model without either being mistaken for a model ID.
-    requestContext.set(`om.${role}.effectiveModelId`, resolveAutoOMModelId(getMainModelId(requestContext)));
+    requestContext.set(
+      `om.${role}.effectiveModelId`,
+      resolveAutoOMModelId(getMainModelId(requestContext), providerId =>
+        canUseProvider(providerId, { requestContext }),
+      ),
+    );
     return 'auto' as const;
   };
 
@@ -259,6 +279,8 @@ export function getDynamicMemory(
   // Memory bound to one storage is never reused after storage changes.
   let cachedMemory: Memory | null = null;
   let cachedMemoryKey: string | null = null;
+  // Instances replaced by a config change may still have background work in flight.
+  const retiredMemories = new Set<Memory>();
 
   // Observer/reflector model functions — read the current model ID from
   // controller state via requestContext (propagated by OM's agent.generate).
@@ -273,7 +295,7 @@ export function getDynamicMemory(
   const resolveMemoryModel = (modelId: string, { requestContext }: { requestContext?: RequestContext }) =>
     resolveModel(modelId, { remapForCodexOAuth: true, requestContext, anthropicPromptCacheScope: 'system' });
 
-  return ({ requestContext }: { requestContext: RequestContext }) => {
+  const resolveMemory = ({ requestContext }: { requestContext: RequestContext }) => {
     const controller = requestContext.get('controller') as AgentControllerRequestContext<MastraCodeState> | undefined;
     const state = controller?.getState() as MastraCodeState | undefined;
     const subconsciousEnabled = isSubconsciousEnabled(vector);
@@ -300,7 +322,12 @@ export function getDynamicMemory(
 
     const subconsciousAvailable = subconsciousEnabled && !orgUnresolvedRefusal;
 
-    const omScope = state?.omScope ?? getOmScope(state?.projectPath);
+    // Factory sessions share a memory resource across a Factory's runs and a
+    // user's sessions, so their scope is fixed to thread: one shared record would
+    // hand every run the others' work and invalidate their prompt caches. Recall
+    // search still reaches the whole resource. Neither session state, the env
+    // var, nor a repository's database.json can switch it.
+    const omScope = isFactory ? 'thread' : (state?.omScope ?? getOmScope(state?.projectPath));
 
     // The Factory row is authoritative and read per invocation, so a stored
     // threshold/attachment change reaches the running Memory without a session.
@@ -340,11 +367,22 @@ export function getDynamicMemory(
       : DYNAMIC_AGENTS_MD_INSTRUCTION;
     const reflectionInstruction = caveman ? CAVEMAN_OM_INSTRUCTION : undefined;
 
+    if (cachedMemory) {
+      const retired = cachedMemory;
+      retiredMemories.add(retired);
+      // settled() rejects if the instance's OM engine failed to start; that must not surface as
+      // an unhandled rejection from a background retirement.
+      void retired
+        .settled()
+        .catch(() => {})
+        .finally(() => retiredMemories.delete(retired));
+    }
+
     cachedMemory = new Memory({
       storage,
       ...(knowledge ? { knowledge } : {}),
       vector: vector || false,
-      embedder: vector ? fastembed.small : undefined,
+      embedder: vector ? lazyFastembedSmall : undefined,
       options: {
         // Generate a durable title from the first user message. Every client uses
         // the same title in its thread list and active-session chrome. Title
@@ -357,7 +395,12 @@ export function getDynamicMemory(
                 model: ({ requestContext }) => {
                   const resolved = getObserverModel({ requestContext });
                   if (resolved === 'auto') {
-                    return resolveMemoryModel(resolveAutoOMModelId(getMainModelId(requestContext)), { requestContext });
+                    return resolveMemoryModel(
+                      resolveAutoOMModelId(getMainModelId(requestContext), providerId =>
+                        canUseProvider(providerId, { requestContext }),
+                      ),
+                      { requestContext },
+                    );
                   }
                   return Array.isArray(resolved) ? resolved[0]!.model : resolved;
                 },
@@ -368,6 +411,7 @@ export function getDynamicMemory(
             : {
                 enabled: true,
                 autoModels: MASTRACODE_AUTO_OM_MODELS,
+                canUseProvider,
                 resolveModel: resolveMemoryModel,
                 temporalMarkers: true,
                 retrieval: vector ? { vector: true } : true,
@@ -407,4 +451,15 @@ export function getDynamicMemory(
 
     return cachedMemory;
   };
+
+  return Object.assign(resolveMemory, {
+    /**
+     * Wait for background memory work (buffered observations, reflections, indexing) in every
+     * instance this factory created. Await before closing storage.
+     */
+    async settled(): Promise<void> {
+      // Drain every instance even if one rejects, so teardown can still close storage.
+      await Promise.allSettled([cachedMemory?.settled(), ...[...retiredMemories].map(memory => memory.settled())]);
+    },
+  });
 }

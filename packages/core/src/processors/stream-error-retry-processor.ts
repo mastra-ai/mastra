@@ -132,9 +132,12 @@ export function isRetryableOpenAIResponsesStreamError(error: unknown): boolean {
  * Matcher for transient HTTP 400 (Bad Request) failures. Providers like OpenAI
  * occasionally return 400 during service degradation that succeeds on retry.
  * Recommended with `maxRetries: 1` since a 400 could also be genuinely invalid.
+ * Authorization failures are never matched: OpenAI stream error frames such as
+ * `invalid_api_key` can surface with a derived `statusCode: 400`.
  */
 export function isBadRequestError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
+  if (isKnownTerminalAuthorizationError(error)) return false;
 
   if ('statusCode' in error && (error as { statusCode?: unknown }).statusCode === 400) return true;
 

@@ -166,7 +166,7 @@ The `partTypes` option accepts `MastraPartType` values. Each value is prefix-mat
 ## Filtering behavior
 
 - **Part type filtering** applies to both `input.rememberedMessages` and `output` when they contain agent message arrays.
-- **Tool name filtering** only affects messages that contain tool invocations. Text-only messages pass through.
+- **Tool name filtering** only affects messages that contain tool invocations. Messages without tool invocations are filtered by `partTypes` only, and pass through when `partTypes` isn't set.
 - **System messages** (`systemMessages`, `taggedSystemMessages`) are never filtered, regardless of `partTypes` or `toolNames`.
 - **Message limits** (`maxRememberedMessages`, `maxOutputMessages`) apply after type and tool filtering, taking the most recent messages.
-- When both `partTypes` and `toolNames` are set, a message must satisfy both filters to be kept.
+- When both `partTypes` and `toolNames` are set, a message with tool invocations must satisfy both filters to be kept.

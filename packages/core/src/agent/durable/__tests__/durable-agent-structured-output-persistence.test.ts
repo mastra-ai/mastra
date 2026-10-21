@@ -161,16 +161,67 @@ describe('structured output persistence (issue #26432)', () => {
     },
   );
 
-  // A separate structuring model is not run on the durable path yet (#26431), so the caller
-  // gets no object. Persisting one parsed from the main model's text would disagree with it.
-  it('does not save structuredOutput when a structuring model is configured (durable)', async () => {
-    const { metadata } = await runAndRecall(
-      'durable',
-      { schema, model: createJsonModel(JSON.stringify(expected)) },
-      JSON.stringify(expected),
+  // With `structuredOutput.model`, the main model answers in prose and a separate
+  // structuring model produces the object (#26431).
+  it.each(['plain', 'durable'] as const)('runs the structuring model and saves its object (%s)', async engine => {
+    const structuringModel = createJsonModel(JSON.stringify(expected));
+    const { object, metadata } = await runAndRecall(
+      engine,
+      { schema, model: structuringModel },
+      'It is Alice, who is 30 years old.',
     );
 
-    expect(metadata).toBeDefined();
-    expect(metadata?.structuredOutput).toBeUndefined();
+    expect(structuringModel.doStreamCalls).toHaveLength(1);
+    expect(object).toEqual(expected);
+    expect(metadata?.structuredOutput).toEqual(expected);
+  });
+});
+
+describe('durable structuring model (#26431)', () => {
+  it('fails the run when the structuring pass fails under errorStrategy strict', async () => {
+    const memory = new MockMemory();
+    const agent = new Agent({
+      id: 'so-strict-durable',
+      name: 'Structured Output Strict Agent',
+      instructions: 'Return the person',
+      model: createJsonModel('It is Alice, who is 30 years old.') as LanguageModelV2,
+      memory,
+    });
+    const durable = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
+    new Mastra({ agents: { [agent.id]: durable }, storage: new InMemoryStore(), logger: false });
+
+    const result = await durable.stream('Who is it?', {
+      structuredOutput: { schema, model: createJsonModel('not json') as LanguageModelV2 },
+      memory: { thread: THREAD, resource: RESOURCE },
+    });
+    const outcome = await result.output.getFullOutput().then(
+      full => ({ object: full.object, error: full.error }),
+      error => ({ object: undefined, error }),
+    );
+    result.cleanup();
+
+    expect(outcome.object).toBeUndefined();
+    expect(outcome.error).toBeDefined();
+  });
+
+  it('persists a model-instance structuring model so other workers can resolve it', async () => {
+    const agent = new Agent({
+      id: 'so-model-instance',
+      name: 'Structured Output Model Instance Agent',
+      instructions: 'Return the person',
+      model: createJsonModel('Alice') as LanguageModelV2,
+    });
+    const durable = createDurableAgent({ agent, pubsub: new EventEmitterPubSub() });
+
+    const prepared = await durable.prepare('Who is it?', {
+      structuredOutput: { schema, model: createJsonModel('{}') as LanguageModelV2 },
+    });
+
+    const so = (prepared.workflowInput as any).options.structuredOutput;
+    expect(so.structuringModelConfig).toMatchObject({
+      provider: 'mock-provider',
+      modelId: 'mock-model-id',
+      originalConfig: 'mock-provider/mock-model-id',
+    });
   });
 });

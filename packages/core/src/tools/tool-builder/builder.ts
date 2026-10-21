@@ -14,7 +14,9 @@ import {
 import type { SchemaCompatLayer } from '@mastra/schema-compat';
 import type { JSONSchema7Definition } from 'json-schema';
 import { z } from 'zod/v4';
+import { verifyRunLease } from '../../agent/run-lease-fence';
 import { MastraFGAPermissions } from '../../auth/ee';
+import type { ActorSignal } from '../../auth/ee';
 import {
   backgroundOverrideJsonSchema,
   backgroundOverrideZodSchema,
@@ -29,7 +31,12 @@ import { executeWithContext } from '../../observability/utils';
 import { RequestContext } from '../../request-context';
 import { isStandardSchemaWithJSON, toStandardSchema, standardSchemaToJSONSchema } from '../../schema';
 import type { StandardSchemaWithJSON } from '../../schema';
-import { getNeedsApprovalFn, isVercelTool, isProviderDefinedTool } from '../../tools/toolchecks';
+import {
+  getNeedsApprovalFn,
+  isVercelTool,
+  isProviderDefinedTool,
+  markBuiltBeforeApproval,
+} from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
 import { isZodObject, safeExtendZodObject } from '../../utils/zod-utils';
 
@@ -38,6 +45,9 @@ import { markBuilderValidatedInput } from '../builder-validation-context';
 import { createToolObserve } from '../observe';
 import { ToolStream } from '../stream';
 import type {
+  BeforeApprovalContext,
+  BeforeApprovalFn,
+  BeforeApprovalRuntime,
   CoreTool,
   McpMetadata,
   MastraToolInvocationOptions,
@@ -314,7 +324,7 @@ export class CoreToolBuilder extends MastraBase {
     if (!isVercelTool(this.originalTool) && !isProviderDefinedTool(this.originalTool)) {
       if (isBackgroundEligible || this.isResumableTool) {
         let schema = this.originalTool.inputSchema;
-        if (typeof schema === 'function') {
+        if (typeof schema === 'function' && !isStandardSchemaWithJSON(schema)) {
           schema = schema();
         }
         if (!schema) {
@@ -393,7 +403,7 @@ export class CoreToolBuilder extends MastraBase {
         z.object({});
 
       // If schema is a function, call it to get the actual schema
-      if (typeof schema === 'function') {
+      if (typeof schema === 'function' && !isStandardSchemaWithJSON(schema)) {
         schema = schema();
       }
 
@@ -410,7 +420,7 @@ export class CoreToolBuilder extends MastraBase {
     }
 
     // If schema is a function, call it to get the actual schema
-    if (typeof schema === 'function') {
+    if (typeof schema === 'function' && !isStandardSchemaWithJSON(schema)) {
       schema = schema();
     }
 
@@ -427,7 +437,7 @@ export class CoreToolBuilder extends MastraBase {
     }
 
     let schema = originalSchema;
-    if (typeof schema === 'function') {
+    if (typeof schema === 'function' && !isStandardSchemaWithJSON(schema)) {
       schema = schema();
     }
 
@@ -452,7 +462,7 @@ export class CoreToolBuilder extends MastraBase {
       }
 
       // If schema is a function, call it to get the actual schema
-      if (typeof schema === 'function') {
+      if (typeof schema === 'function' && !isStandardSchemaWithJSON(schema)) {
         schema = schema();
       }
 
@@ -467,7 +477,7 @@ export class CoreToolBuilder extends MastraBase {
       let schema = this.originalTool.resumeSchema;
 
       // If schema is a function, call it to get the actual schema
-      if (typeof schema === 'function') {
+      if (typeof schema === 'function' && !isStandardSchemaWithJSON(schema)) {
         schema = schema();
       }
 
@@ -481,7 +491,7 @@ export class CoreToolBuilder extends MastraBase {
       let schema = this.originalTool.suspendSchema;
 
       // If schema is a function, call it to get the actual schema
-      if (typeof schema === 'function') {
+      if (typeof schema === 'function' && !isStandardSchemaWithJSON(schema)) {
         schema = schema();
       }
 
@@ -600,6 +610,44 @@ export class CoreToolBuilder extends MastraBase {
     };
   }
 
+  /** Enforces the TOOLS_EXECUTE FGA permission for this tool when an FGA provider is configured. */
+  private async requireToolExecuteFGA(
+    options: ToolOptions,
+    mcpMeta: McpMetadata | undefined,
+    requestContext: RequestContext | undefined,
+    actor: ActorSignal | undefined,
+  ) {
+    const fgaProvider = (options.mastra as any)?.getServer?.()?.fga;
+    if (!fgaProvider) return;
+    const { getAgentToolFGAResourceId, getMCPToolFGAResourceId, getStandaloneToolFGAResourceId, requireFGA } =
+      await import('../../auth/ee/fga-check');
+    const toolResourceId = mcpMeta?.serverName
+      ? getMCPToolFGAResourceId(mcpMeta.serverName, options.name)
+      : options.agentId
+        ? getAgentToolFGAResourceId(options.agentId, options.name)
+        : getStandaloneToolFGAResourceId(options.name);
+    await requireFGA({
+      fgaProvider,
+      user: requestContext?.get('user'),
+      resource: { type: 'tool', id: toolResourceId },
+      permission: MastraFGAPermissions.TOOLS_EXECUTE,
+      requestContext,
+      actor,
+      context: {
+        resourceId: options.resourceId,
+      },
+      metadata: {
+        toolName: options.name,
+        agentId: options.agentId,
+        agentName: options.agentName,
+        runId: options.runId,
+        threadId: options.threadId,
+        executionResourceId: options.resourceId,
+        mcpMetadata: mcpMeta,
+      },
+    });
+  }
+
   private createExecute(
     tool: ToolToConvert,
     options: ToolOptions,
@@ -639,6 +687,8 @@ export class CoreToolBuilder extends MastraBase {
       try {
         let result;
         let suspendData = null;
+
+        await verifyRunLease(options.runId);
 
         if (isVercelTool(tool)) {
           // Handle Vercel tools (AI SDK tools)
@@ -905,37 +955,7 @@ export class CoreToolBuilder extends MastraBase {
             mastra: options.mastra && 'observability' in options.mastra ? (options.mastra as Mastra) : undefined,
           });
 
-      const fgaProvider = (options.mastra as any)?.getServer?.()?.fga;
-      const user = toolRequestContext?.get('user');
-      if (fgaProvider) {
-        const { getAgentToolFGAResourceId, getMCPToolFGAResourceId, getStandaloneToolFGAResourceId, requireFGA } =
-          await import('../../auth/ee/fga-check');
-        const toolResourceId = mcpMeta?.serverName
-          ? getMCPToolFGAResourceId(mcpMeta.serverName, options.name)
-          : options.agentId
-            ? getAgentToolFGAResourceId(options.agentId, options.name)
-            : getStandaloneToolFGAResourceId(options.name);
-        await requireFGA({
-          fgaProvider,
-          user,
-          resource: { type: 'tool', id: toolResourceId },
-          permission: MastraFGAPermissions.TOOLS_EXECUTE,
-          requestContext: toolRequestContext,
-          actor: execOptions?.actor,
-          context: {
-            resourceId: options.resourceId,
-          },
-          metadata: {
-            toolName: options.name,
-            agentId: options.agentId,
-            agentName: options.agentName,
-            runId: options.runId,
-            threadId: options.threadId,
-            executionResourceId: options.resourceId,
-            mcpMetadata: mcpMeta,
-          },
-        });
-      }
+      await this.requireToolExecuteFGA(options, mcpMeta, toolRequestContext, execOptions?.actor);
 
       try {
         logger.debug(start, { ...logData, ...rest, model: logModelObject });
@@ -1182,11 +1202,53 @@ export class CoreToolBuilder extends MastraBase {
       requireApproval = true;
     }
 
+    const originalBeforeApproval =
+      'beforeApproval' in this.originalTool && typeof this.originalTool.beforeApproval === 'function'
+        ? (this.originalTool.beforeApproval as BeforeApprovalFn)
+        : undefined;
+    const mcpMeta =
+      !isVercelTool(this.originalTool) && 'mcpMetadata' in this.originalTool
+        ? (this.originalTool as { mcpMetadata?: McpMetadata }).mcpMetadata
+        : undefined;
+    // The hook can return data to the model, so it must pass the same TOOLS_EXECUTE check as
+    // execute before it runs; a denial propagates exactly as it would from execute.
+    // The agent runtime validates input with `validateInput` before calling the hook, so the hook
+    // receives parsed input and never runs for invalid calls.
+    const beforeApproval: BeforeApprovalFn | undefined = originalBeforeApproval
+      ? markBuiltBeforeApproval(
+          async (input: unknown, context: BeforeApprovalContext, runtime?: BeforeApprovalRuntime) => {
+            await this.requireToolExecuteFGA(
+              this.options,
+              mcpMeta,
+              runtime?.requestContext ?? this.options.requestContext,
+              runtime?.actor,
+            );
+            return originalBeforeApproval(input, context);
+          },
+        )
+      : undefined;
+
     const definition = {
       type: 'function' as const,
       description: this.originalTool.description,
       requireApproval,
       needsApprovalFn,
+      beforeApproval,
+      validateInput: (input: unknown) => {
+        const validation = validateToolInput(
+          (inputValidationSchema ?? originalSchema) as StandardSchemaWithJSON | undefined,
+          input,
+          this.options.name,
+        );
+        // suspendedToolRunId is only required when resumeData is provided (matches execute).
+        if (
+          validation.error?.message?.includes('suspendedToolRunId: Required') &&
+          !(input as Record<string, unknown> | undefined)?.resumeData
+        ) {
+          return { data: input };
+        }
+        return validation;
+      },
       hasSuspendSchema: !!this.getSuspendSchema(),
       execute: this.originalTool.execute
         ? this.createExecute(

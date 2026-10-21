@@ -1,3 +1,5 @@
+import { recordExplicitRuleOverrides } from '../../rules/event-rules.js';
+import { factoryRuleStage, isTerminalFactoryRuleStage } from '../../rules/types.js';
 import type { FactoryGitLabEventName, FactoryGitLabRuleContext, FactoryRuleHandler } from '../../rules/types.js';
 
 export type GitLabRuleOverrides = Partial<
@@ -57,6 +59,13 @@ function issueOpened(context: FactoryGitLabRuleContext) {
 function retriageIssue(context: FactoryGitLabRuleContext) {
   if (!context.item || context.item.source !== 'gitlab-issue' || !context.item.url) return;
   if (context.actor.type === 'gitlab' && context.actor.factoryAuthored) return;
+  // The stage checks below use Work lane names; other boards opt in with their own rules.
+  if (context.board !== 'work') return;
+  // Re-triage would take over a card that is being built or reviewed.
+  const stage = factoryRuleStage(context.item.stages);
+  if (stage === 'execute' || stage === 'review') return;
+  // A finished card has nothing left to triage.
+  if (isTerminalFactoryRuleStage(context.item.stages)) return;
   const reason = context.event === 'issueCommented' ? 'a comment was added' : 'the issue changed';
   return {
     type: 'invokeSkill',
@@ -68,15 +77,19 @@ function retriageIssue(context: FactoryGitLabRuleContext) {
 }
 
 function issueClosed(context: FactoryGitLabRuleContext) {
-  if (!context.item || context.item.source !== 'gitlab-issue' || context.board !== 'work') return;
-  if (context.item.stages.some(stage => stage === 'done' || stage === 'canceled')) return;
+  if (!context.item || context.item.source !== 'gitlab-issue') return;
+  // The card's board decides where a closed source sends it; boards that declare no
+  // `sourceClosed` mapping keep the card where it is, as do cards already finished.
+  const closure = context.boardClosure;
+  if (!context.board || !closure || closure.itemTerminal) return;
+  // GitLab reports no close reason, so every closure counts as completed.
   return {
     type: 'transition',
     idempotencyKey: `${context.ingress.id}:issue-closed`,
-    board: 'work',
-    stage: 'done',
+    board: context.board,
+    stage: closure.completed.phase,
     message: {
-      text: `GitLab issue #${context.issue?.number ?? ''} was closed; this Work card was moved to Done.`,
+      text: `GitLab issue #${context.issue?.number ?? ''} was closed; this ${closure.boardTitle} card was moved to ${closure.completed.title}.`,
     },
   } as const;
 }
@@ -214,5 +227,5 @@ export function resolveGitLabRules(overrides?: GitLabRuleOverrides): GitLabEvent
     }
     if (handler !== undefined) rules[key] = handler;
   }
-  return Object.freeze(rules) as GitLabEventRules;
+  return recordExplicitRuleOverrides(Object.freeze(rules) as GitLabEventRules, overrides);
 }
