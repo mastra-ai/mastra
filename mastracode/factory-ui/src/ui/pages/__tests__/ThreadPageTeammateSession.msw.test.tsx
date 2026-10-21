@@ -1,5 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { createSignal } from '@mastra/core/signals';
+import type { ModelCatalogEntry } from '@mastra/factory/routes/config';
 import { SESSION_OWNER_SIGNAL_TAG } from '@mastra/factory/session-owner-signal';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -47,9 +48,39 @@ function takeoverSignal(name: string): MastraDBMessage {
   }).toDBMessage({ threadId: SESSION_ID, resourceId: SESSION_ID });
 }
 
-async function confirmTakeover(user: ReturnType<typeof userEvent.setup>) {
+const openAIKeyModel: ModelCatalogEntry = {
+  id: 'openai/gpt-4o-mini',
+  provider: 'openai',
+  modelName: 'gpt-4o-mini',
+  hasApiKey: true,
+  credentialLabel: 'OpenAI API key',
+  credentialHolder: 'personal',
+};
+
+function serveModelCatalogs({
+  sessionScope,
+  viewerModels,
+}: {
+  sessionScope: 'factory' | 'user';
+  viewerModels: ModelCatalogEntry[];
+}) {
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/config/models`, ({ request }) => {
+      const query = new URL(request.url).searchParams;
+      if (query.get('scope') === 'user') return HttpResponse.json({ models: viewerModels });
+      return HttpResponse.json({ modelScope: sessionScope, defaultModelId: null, models: [openAIKeyModel] });
+    }),
+  );
+}
+
+async function openTakeoverConfirm(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('button', { name: 'Take ownership' }));
-  expect(await screen.findByText(/Its next turn runs as you, and a running agent stops\./)).toBeInTheDocument();
+  return screen.findByRole('button', { name: 'Cancel' });
+}
+
+async function confirmTakeover(user: ReturnType<typeof userEvent.setup>) {
+  await openTakeoverConfirm(user);
+  expect(await screen.findByText(/a running agent stops\./)).toBeInTheDocument();
   await user.click(screen.getByRole('button', { name: 'Take ownership' }));
 }
 
@@ -225,6 +256,44 @@ describe("a teammate's Factory session", () => {
       await waitForMutationsIdle(client);
 
       expect(await screen.findByText('You’re steering Caleb’s session')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Take ownership' })).toBeEnabled();
+    });
+  });
+
+  describe('before a teammate confirms the takeover', () => {
+    it('says billing stays on the organization’s credentials when the Factory pays for its sessions', async () => {
+      serveModelCatalogs({ sessionScope: 'factory', viewerModels: [] });
+      openWardSessionAs('user-damien');
+
+      await openTakeoverConfirm(userEvent.setup());
+
+      expect(await screen.findByText(/Billing stays on the organization’s credentials/)).toBeInTheDocument();
+      expect(screen.queryByText(/prompt cache/)).not.toBeInTheDocument();
+    });
+
+    it('names the viewer’s own credential and the model the session keeps when each owner pays', async () => {
+      serveModelCatalogs({ sessionScope: 'user', viewerModels: [openAIKeyModel] });
+      openWardSessionAs('user-damien');
+
+      await openTakeoverConfirm(userEvent.setup());
+
+      expect(
+        await screen.findByText(/Billing moves to your OpenAI API key, still on GPT-4o Mini\./),
+      ).toBeInTheDocument();
+      expect(screen.getByText(/the next turn re-reads the whole thread without the prompt cache/)).toBeInTheDocument();
+    });
+
+    it('asks the viewer to connect the session’s provider first when they have none', async () => {
+      serveModelCatalogs({ sessionScope: 'user', viewerModels: [] });
+      openWardSessionAs('user-damien');
+
+      await openTakeoverConfirm(userEvent.setup());
+
+      expect(await screen.findByText(/You have no OpenAI connection/)).toBeInTheDocument();
+      expect(screen.getByRole('link', { name: 'Your models' })).toHaveAttribute(
+        'href',
+        `/factories/${FACTORY_ID}/settings/personal-models`,
+      );
       expect(screen.getByRole('button', { name: 'Take ownership' })).toBeEnabled();
     });
   });
