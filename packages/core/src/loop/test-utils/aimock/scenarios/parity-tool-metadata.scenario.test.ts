@@ -198,6 +198,57 @@ function runT34(target: ParityTarget, variant: Variant) {
 }
 
 describeParity('tool-metadata parity', target => {
+  it.each([undefined, T34_PROVIDER_METADATA])(
+    'keeps original call metadata in transform callbacks (%j)',
+    async callMetadata => {
+      const seen = new Map<ParityEngine, unknown[]>();
+      const spec: VariantSpec = { ...SPECS['to-model-output'], callMetadata };
+      const results = await expectParity(target, {
+        model: { respond: request => (toolResultCount(request) === 0 ? toolCallTape(spec) : textOnlyTape('done')) },
+        buildAgent: ({ engine, model }) => {
+          const metadata: unknown[] = [];
+          seen.set(engine, metadata);
+          return new Agent({
+            id: 't34-transform-metadata',
+            name: 'T34 transform metadata',
+            instructions: 'Follow the script.',
+            model,
+            memory: new MockMemory(),
+            tools: {
+              echo: createTool({
+                id: 'echo',
+                description: 'Echo the number.',
+                inputSchema: z.object({ n: z.number() }),
+                execute: async ({ n }) => ({ n, secret: 'raw' }),
+                toModelOutput: spec.toModelOutput,
+                transform: {
+                  transcript: {
+                    output: context => {
+                      metadata.push(context.providerMetadata);
+                      return context.output;
+                    },
+                  },
+                },
+              }),
+            },
+          });
+        },
+        input: 'Go.',
+        options: TURN_OPTIONS,
+      });
+      for (const engine of ['plain', target] as const) {
+        expect(seen.get(engine)?.length).toBeGreaterThan(0);
+        expect(seen.get(engine)?.every(metadata => JSON.stringify(metadata) === JSON.stringify(callMetadata))).toBe(
+          true,
+        );
+        expect(payloadOfType(observationOf(results, engine).turns[0]!, 'tool-result').providerMetadata).toEqual({
+          ...callMetadata,
+          ...spec.resultMetadata,
+        });
+      }
+    },
+  );
+
   for (const variant of VARIANTS) {
     it(`${variant}: ${VARIANT_TITLES[variant]}`, async () => {
       const results = await runT34(target, variant);

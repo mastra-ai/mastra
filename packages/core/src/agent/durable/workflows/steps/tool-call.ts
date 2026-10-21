@@ -2069,6 +2069,7 @@ export function createDurableToolCallStep() {
                 payload: { toolCallId, toolName, args, result, providerMetadata, providerExecuted },
               },
               {
+                transformInput: { args, providerMetadata: typedInput.providerMetadata },
                 policy: toolPayloadTransform,
                 toolTransform: (tool as { transform?: any })?.transform,
                 tools: toolsForTransform,
