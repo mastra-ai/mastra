@@ -56,6 +56,7 @@ import { IntakeRoutes } from './intake.js';
 import { KnowledgeRoutes } from './knowledge.js';
 import { OAuthRoutes } from './oauth.js';
 import type { RouteAuth } from './route.js';
+import { buildSandboxPreviewRoutes } from './sandbox-preview.js';
 import { SkillRoutes } from './skills.js';
 import { buildSourceControlSessionRoutes } from './source-control-sessions.js';
 import { buildSourceControlSettingsRoutes } from './source-control-settings.js';
@@ -731,6 +732,12 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
   }
 
   return [
+    ...buildSandboxPreviewRoutes({
+      auth: deps.auth,
+      sessions: sourceControlSessions,
+      origin: process.env.MASTRACODE_PREVIEW_ORIGIN,
+      secret: process.env.MASTRACODE_PREVIEW_SIGNING_KEY ?? process.env.WORKOS_COOKIE_PASSWORD,
+    }),
     ...buildFsRoutes({
       root: deps.fsRoot,
       sessionFs: {

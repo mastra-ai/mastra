@@ -5,6 +5,7 @@ import { createFactoryMessagingTools } from './messaging-tools.js';
 import type { FactoryMessagingToolDependencies } from './messaging-tools.js';
 import { createFactoryReadTools } from './read-tools.js';
 import type { FactoryReadToolDependencies } from './read-tools.js';
+import { createSandboxPreviewTools } from './sandbox-preview-tools.js';
 import type { FactoryToolScope } from './scope.js';
 import { createFactorySessionTools } from './session-tools.js';
 import type { FactorySessionToolDependencies } from './session-tools.js';
@@ -47,6 +48,7 @@ export function createFactoryTools({ scope, deps }: CreateFactoryToolsOptions): 
     ...messagingTools,
     ...createFactoryWorkItemTools(scope, deps),
     ...createFactorySessionTools(scope, deps),
+    ...createSandboxPreviewTools(scope, deps),
     ...createFactoryApprovalTools(scope, deps),
   };
 }

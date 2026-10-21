@@ -165,7 +165,16 @@ export class PlatformClient {
     return this.requestAtPath(`/${this.sandboxProvider}`, path, options);
   }
 
-  private async requestAtPath(providerPath: string, path: string, options: PlatformRequestOptions): Promise<Response> {
+  async requestRaw(path: string, options: PlatformRequestOptions = {}): Promise<Response> {
+    return this.requestAtPath(`/${this.sandboxProvider}`, path, options, true);
+  }
+
+  private async requestAtPath(
+    providerPath: string,
+    path: string,
+    options: PlatformRequestOptions,
+    allowHttpError = false,
+  ): Promise<Response> {
     const url = new URL(`${this.proxyUrl}/v1${providerPath}/projects/${encodeURIComponent(this.projectId)}${path}`);
     for (const [key, value] of Object.entries(options.query ?? {})) {
       if (value !== undefined) url.searchParams.set(key, String(value));
@@ -187,7 +196,7 @@ export class PlatformClient {
     // AbortSignal — long-running routes (exec) provide their own longer signal.
     const signal = fetchOptions.signal ?? AbortSignal.timeout(DEFAULT_REQUEST_TIMEOUT_MS);
     const response = await this.fetch(url, { ...fetchOptions, headers, signal });
-    if (!response.ok) {
+    if (!response.ok && !allowHttpError) {
       throw new PlatformApiError(response.status, await response.text());
     }
     return response;

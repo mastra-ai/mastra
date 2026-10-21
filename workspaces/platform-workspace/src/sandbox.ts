@@ -37,8 +37,7 @@ import { getSandboxTemplateBuildEnvs, serializeSandboxTemplate } from './templat
 export type PlatformSandboxNetworkIsolation = 'ISOLATED' | 'PRIVATE';
 
 export type PlatformSandboxTemplate =
-  | SandboxTemplateBuilder
-  | (() => SandboxTemplateBuilder | undefined | Promise<SandboxTemplateBuilder | undefined>);
+  SandboxTemplateBuilder | (() => SandboxTemplateBuilder | undefined | Promise<SandboxTemplateBuilder | undefined>);
 
 /**
  * In-process `sandboxId → instanceUrl` map that lets
@@ -441,6 +440,56 @@ export class PlatformSandbox extends MastraSandbox {
    */
   get sandboxId(): string | undefined {
     return this.status === 'running' ? this._sandboxId : undefined;
+  }
+
+  /** Sidecar-managed long-running processes survive the initiating HTTP request. */
+  async startPersistentProcess(command: string, cwd?: string): Promise<{ id: string; pid: number }> {
+    if (!this.sandboxId) throw new Error('Sandbox is not running');
+    const response = await this._client.request(`/sandbox/${encodeURIComponent(this.sandboxId)}/processes`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ command, cwd }),
+    });
+    return response.json() as Promise<{ id: string; pid: number }>;
+  }
+
+  async getPersistentProcess(id: string): Promise<{
+    id: string;
+    pid: number;
+    command: string;
+    running: boolean;
+    stdout: string;
+    stderr: string;
+    exitCode?: number;
+  }> {
+    if (!this.sandboxId) throw new Error('Sandbox is not running');
+    const response = await this._client.request(
+      `/sandbox/${encodeURIComponent(this.sandboxId)}/processes/${encodeURIComponent(id)}`,
+    );
+    return response.json() as Promise<{
+      id: string;
+      pid: number;
+      command: string;
+      running: boolean;
+      stdout: string;
+      stderr: string;
+      exitCode?: number;
+    }>;
+  }
+
+  async stopPersistentProcess(id: string): Promise<void> {
+    if (!this.sandboxId) throw new Error('Sandbox is not running');
+    await this._client.request(`/sandbox/${encodeURIComponent(this.sandboxId)}/processes/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+    });
+  }
+
+  async previewRequest(port: number, path: string): Promise<Response> {
+    if (!this.sandboxId) throw new Error('Sandbox is not running');
+    if (!Number.isInteger(port) || port < 1024 || port > 65535 || port === 47000 || !path.startsWith('/')) {
+      throw new Error('Invalid preview port or path');
+    }
+    return this._client.requestRaw(`/sandbox/${encodeURIComponent(this.sandboxId)}/preview/${port}${path}`);
   }
 
   private readonly _client: PlatformClient;
