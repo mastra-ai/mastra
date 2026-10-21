@@ -49,7 +49,7 @@ export function McpClientsSection() {
           <ConnectStep>Settings → Connectors → Add custom connector, paste the URL</ConnectStep>
         </SettingsRow>
         <SettingsRow label="ChatGPT">
-          <ConnectStep>Settings → Connectors → Create, paste the URL, choose OAuth</ConnectStep>
+          <ConnectStep>Plugins → + → Add custom MCP server, paste the URL, choose OAuth</ConnectStep>
         </SettingsRow>
       </SettingsContainer>
     </SettingsSubsection>

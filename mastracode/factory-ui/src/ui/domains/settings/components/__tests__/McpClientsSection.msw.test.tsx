@@ -46,7 +46,7 @@ describe('McpClientsSection', () => {
       const url = `${TEST_BASE_URL}/web/factory/projects/fp-1/mcp`;
       expect(await screen.findByText(url)).toBeInTheDocument();
       expect(screen.getByText('Settings → Connectors → Add custom connector, paste the URL')).toBeInTheDocument();
-      expect(screen.getByText('Settings → Connectors → Create, paste the URL, choose OAuth')).toBeInTheDocument();
+      expect(screen.getByText('Plugins → + → Add custom MCP server, paste the URL, choose OAuth')).toBeInTheDocument();
 
       await user.click(screen.getByRole('button', { name: 'Copy MCP URL' }));
 
