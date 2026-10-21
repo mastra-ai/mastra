@@ -25,7 +25,7 @@ overrides:
   brace-expansion@>=1.0.0 <1.1.21: 1.1.21
   brace-expansion@>=4.0.0 <5.0.12: 5.0.12
   jose@>=4.14.0 <6.2.12: 6.2.12
-  hono@<4.13.8: 4.13.8
+  hono@<4.13.8: 4.13.11
   better-auth: ^1.7.7
   '@better-auth/drizzle-adapter@<1.7.7': 1.7.7
   '@modelcontextprotocol/sdk@>=1.0.0 <1.32.0': 1.32.1
