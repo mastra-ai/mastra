@@ -42,6 +42,7 @@ import {
   agentThreadStreamRuntime,
   prepareForDurableExecution,
   createDurableAgentStream,
+  DurableStepIds,
   emitErrorEvent,
   runDurableStreamUntilIdle,
   runResumeDurableStreamUntilIdle,
@@ -1242,6 +1243,31 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           ...(resumeOptions?.requestContext?.entries() ?? []),
         ]),
       });
+      // The resumed segment only receives new pubsub chunks. Restore text from the
+      // suspended iteration so output.text includes what streamed before approval.
+      const outerSnapshot = (await resumableSnapshot).snapshot;
+      const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
+      const nestedRunId =
+        outerSnapshot?.context?.[InngestDurableStepIds.AGENTIC_EXECUTION]?.metadata?.nestedRunId ?? runId;
+      const nestedRun = await workflowsStore?.getWorkflowRunById({
+        runId: nestedRunId,
+        workflowName: InngestDurableStepIds.AGENTIC_EXECUTION,
+      });
+      const nestedSnapshot =
+        typeof nestedRun?.snapshot === 'string' ? JSON.parse(nestedRun.snapshot) : nestedRun?.snapshot;
+      const llmStep = nestedSnapshot?.context?.[DurableStepIds.LLM_EXECUTION];
+      const accumulatedSteps: Array<{ text?: string; finishReason?: string }> =
+        nestedSnapshot?.context?.input?.accumulatedSteps ?? [];
+      const resumedText =
+        llmStep?.status === 'success'
+          ? {
+              priorText: accumulatedSteps
+                .filter(step => step.finishReason !== 'retry')
+                .map(step => step.text ?? '')
+                .join(''),
+              stepText: llmStep.output.text ?? '',
+            }
+          : undefined;
       const resumeOffset = await getPubsubOffset(runId);
 
       // Install a fresh abort controller scoped to the resumed segment and
@@ -1301,6 +1327,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         runId,
         offset: resumeOffset,
         messageId: crypto.randomUUID(),
+        resumedText,
         model: {
           modelId: undefined,
           provider: undefined,

@@ -9,11 +9,10 @@ import { createSharedAgent, describeForAllEngines, runLoopScenario, useLoopScena
  * The model streams text and a tool call in one step, the call waits for approval,
  * and the run is approved. The suspended stream's `text` settles with the text streamed
  * before the approval, and the resumed stream's `text` holds both the pre-approval and
- * the post-approval text. Inngest's resumed text still omits the pre-approval text.
+ * the post-approval text.
  */
 describeForAllEngines('AIMock loop scenario: text across a tool approval', engine => {
   const getMock = useLoopScenarioAimock();
-  const itFailsOnInngest = engine === 'inngest' ? it.fails : it;
 
   async function suspendWithText() {
     const lookups: string[] = [];
@@ -62,8 +61,7 @@ describeForAllEngines('AIMock loop scenario: text across a tool approval', engin
     expect(await output.finishReason).toBe('suspended');
   });
 
-  // Inngest currently returns only the post-approval text; keep the parity assertion active as an expected failure.
-  itFailsOnInngest('includes the text streamed before an approval in the resumed stream text', async () => {
+  it('includes the text streamed before an approval in the resumed stream text', async () => {
     const { shared, output, lookups, toolCallId } = await suspendWithText();
 
     const resumed = await shared.agent.approveToolCall({ runId: output.runId, toolCallId });
