@@ -73,15 +73,14 @@ function serveModelCatalogs({
   );
 }
 
-async function openTakeoverConfirm(user: ReturnType<typeof userEvent.setup>) {
+async function openTakeoverDialog(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('button', { name: 'Take ownership' }));
-  return screen.findByRole('button', { name: 'Cancel' });
+  return screen.findByRole('alertdialog', { name: 'Take Ward Peeters’s session?' });
 }
 
 async function confirmTakeover(user: ReturnType<typeof userEvent.setup>) {
-  await openTakeoverConfirm(user);
-  expect(screen.getByText('Take Ward Peeters’s session?')).toBeInTheDocument();
-  await user.click(screen.getByRole('button', { name: 'Take ownership' }));
+  const dialog = await openTakeoverDialog(user);
+  await user.click(within(dialog).getByRole('button', { name: 'Take ownership' }));
 }
 
 function openWardSessionAs(
@@ -242,10 +241,11 @@ describe("a teammate's Factory session", () => {
       openWardSessionAs('user-damien');
       const user = userEvent.setup();
 
-      await user.click(await screen.findByRole('button', { name: 'Take ownership' }));
-      await user.click(screen.getByRole('button', { name: 'Cancel' }));
+      const dialog = await openTakeoverDialog(user);
+      await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
 
-      expect(await screen.findByText('You’re steering Ward Peeters’s session')).toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+      expect(screen.getByText('You’re steering Ward Peeters’s session')).toBeInTheDocument();
       expect(transfers).toEqual([]);
     });
 
@@ -275,20 +275,22 @@ describe("a teammate's Factory session", () => {
       serveModelCatalogs({ sessionScope: 'factory', viewerModels: [] });
       openWardSessionAs('user-damien');
 
-      await openTakeoverConfirm(userEvent.setup());
+      const dialog = await openTakeoverDialog(userEvent.setup());
 
-      expect(await screen.findByText('The Factory keeps paying, and the model stays the same.')).toBeInTheDocument();
-      expect(screen.queryByText(/cached/)).not.toBeInTheDocument();
+      expect(
+        await within(dialog).findByText('The Factory keeps paying, and the model stays the same.'),
+      ).toBeInTheDocument();
+      expect(within(dialog).queryByText(/cached/)).not.toBeInTheDocument();
     });
 
     it('names the viewer’s own credential and the model the session keeps when each owner pays', async () => {
       serveModelCatalogs({ sessionScope: 'user', viewerModels: [openAIKeyModel] });
       openWardSessionAs('user-damien');
 
-      await openTakeoverConfirm(userEvent.setup());
+      const dialog = await openTakeoverDialog(userEvent.setup());
 
       expect(
-        await screen.findByText(
+        await within(dialog).findByText(
           'Your OpenAI API key pays from your next message, on the same GPT-4o Mini. This session is cached on Ward Peeters’s account, so that reply re-reads all of it and costs more.',
         ),
       ).toBeInTheDocument();
@@ -298,33 +300,32 @@ describe("a teammate's Factory session", () => {
       serveModelCatalogs({ sessionScope: 'user', viewerModels: [] });
       openWardSessionAs('user-damien');
 
-      await openTakeoverConfirm(userEvent.setup());
+      const dialog = await openTakeoverDialog(userEvent.setup());
 
       expect(
-        await screen.findByText(/You have no OpenAI connection, so GPT-4o Mini can’t run for you\./),
+        await within(dialog).findByText(/You have no OpenAI connection, so GPT-4o Mini can’t run for you\./),
       ).toBeInTheDocument();
-      expect(screen.getByRole('link', { name: 'Your models' })).toHaveAttribute(
+      expect(within(dialog).getByRole('link', { name: 'Your models' })).toHaveAttribute(
         'href',
         `/factories/${FACTORY_ID}/settings/personal-models`,
       );
-      expect(screen.getByRole('button', { name: 'Take ownership' })).toBeEnabled();
+      expect(within(dialog).getByRole('button', { name: 'Take ownership' })).toBeEnabled();
     });
 
     it('says the running agent stops only while one is running', async () => {
       openWardSessionAs('user-damien', { agentRunning: true });
 
-      await openTakeoverConfirm(userEvent.setup());
+      const dialog = await openTakeoverDialog(userEvent.setup());
 
-      expect(await screen.findByText('The running agent stops.')).toBeInTheDocument();
+      expect(await within(dialog).findByText(/The running agent stops\./)).toBeInTheDocument();
     });
 
     it('says nothing about stopping an agent when none is running', async () => {
       openWardSessionAs('user-damien');
 
-      await openTakeoverConfirm(userEvent.setup());
+      const dialog = await openTakeoverDialog(userEvent.setup());
 
-      expect(screen.getByText('Take Ward Peeters’s session?')).toBeInTheDocument();
-      expect(screen.queryByText('The running agent stops.')).not.toBeInTheDocument();
+      expect(within(dialog).queryByText(/The running agent stops/)).not.toBeInTheDocument();
     });
   });
 

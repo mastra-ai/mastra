@@ -1,6 +1,5 @@
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import type { ModelCatalogEntry } from '@mastra/factory/routes/config';
-import { Notice } from '@mastra/playground-ui/components/Notice';
 import { resolveModel } from '@mastra/playground-ui/utils/model';
 import { Link } from 'react-router';
 
@@ -53,20 +52,20 @@ export function TakeoverBillingMessage({ factoryId, ownerLabel }: { factoryId: s
   const billing = takeoverBilling({ modelScope, activeModelId, yourModels });
 
   if (billing.kind === 'factory') {
-    return <Notice.Message>The Factory keeps paying, and the model stays the same.</Notice.Message>;
+    return 'The Factory keeps paying, and the model stays the same.';
   }
-  if (billing.kind === 'unknown') return <Notice.Message>Its next message runs as you.</Notice.Message>;
+  if (billing.kind === 'unknown') return 'Its next message runs as you.';
   if (billing.kind === 'missing') {
     return (
-      <Notice.Message>
+      <>
         You have no {providerDisplayName(billing.provider)} connection, so {billing.modelName} can’t run for you.
         Connect one in{' '}
         <Link to={settingsSectionPath(factoryId, 'personal-models')} className="underline underline-offset-2">
           Your models
         </Link>
         , or pick another model once it’s yours.
-      </Notice.Message>
+      </>
     );
   }
-  return <Notice.Message>{paidByMessage(billing, ownerLabel)}</Notice.Message>;
+  return paidByMessage(billing, ownerLabel);
 }
