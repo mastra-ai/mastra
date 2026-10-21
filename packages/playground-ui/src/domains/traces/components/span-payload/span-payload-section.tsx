@@ -1,9 +1,10 @@
-import { Maximize2, Minimize2 } from 'lucide-react';
+import { Minimize2 } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { SpanPayloadJson } from './span-payload-json';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { Card, CardContent } from '@/ds/components/Card';
 import { CollapsibleBox, useCollapsibleBox } from '@/ds/components/CollapsibleBox';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { DataPanelSectionHeading } from '@/ds/components/DataPanel/data-panel-section-heading';
@@ -23,6 +24,11 @@ export interface SpanPayloadSectionProps {
    * (JSON fallback): the section then shows Raw only and hides the toggle.
    */
   children: ReactNode;
+  /**
+   * Wraps the content in a card, with the clipping inside it so the rounded frame stays intact.
+   * Turn off for content that brings its own frame, like the error banner.
+   */
+  framed?: boolean;
   /** `panel` matches `DataPanel.CodeSection`; `details` matches `DataDetailsPanel.CodeSection`. */
   layout?: 'panel' | 'details';
   defaultView?: SpanPayloadView;
@@ -52,7 +58,8 @@ function ViewToggle({ view, onChange }: { view: SpanPayloadView; onChange: (view
 
 /**
  * A span payload section with a Preview / JSON button group. All JSON views share
- * the same syntax highlighting while preserving the stored payload.
+ * the same syntax highlighting while preserving the stored payload. Long content is
+ * clipped with a fade and an Expand button, like the experiment comparison sections.
  */
 export function SpanPayloadSection({
   title,
@@ -60,6 +67,7 @@ export function SpanPayloadSection({
   raw,
   hasPreview = true,
   children,
+  framed = true,
   layout = 'panel',
   defaultView = 'rich',
   className,
@@ -70,6 +78,7 @@ export function SpanPayloadSection({
 
   const hasRich = hasPreview && children != null;
   const showJson = !hasRich || view === 'raw';
+  const content = showJson ? <SpanPayloadJson value={raw} bare={framed} /> : children;
 
   return (
     <div
@@ -82,21 +91,30 @@ export function SpanPayloadSection({
           {title}
         </DataPanelSectionHeading>
         <div className="ml-auto flex items-center gap-2">
-          {(box.isClipped || box.isExpanded) && (
-            <Button
-              size="sm"
-              variant="ghost"
-              icon={box.isExpanded ? <Minimize2 /> : <Maximize2 />}
-              onClick={box.toggleExpanded}
-            >
-              {box.isExpanded ? 'Collapse' : 'Expand'}
-            </Button>
-          )}
           <CopyButton content={JSON.stringify(raw, null, 2)} size="sm" variant="ghost" />
           {hasRich && <ViewToggle view={view} onChange={setView} />}
         </div>
       </div>
-      <CollapsibleBox state={box}>{showJson ? <SpanPayloadJson value={raw} /> : children}</CollapsibleBox>
+      <div className="min-w-0">
+        {framed ? (
+          <Card data-slot="span-payload-card" className="min-w-0 overflow-hidden">
+            <CollapsibleBox state={box} expandLabel="Expand">
+              <CardContent>{content}</CardContent>
+            </CollapsibleBox>
+          </Card>
+        ) : (
+          <CollapsibleBox state={box} expandLabel="Expand">
+            {content}
+          </CollapsibleBox>
+        )}
+        {box.isExpanded && box.isClipped && (
+          <div className="flex justify-center pt-1">
+            <Button size="sm" variant="ghost" icon={<Minimize2 />} onClick={() => box.setExpanded(false)}>
+              Collapse
+            </Button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

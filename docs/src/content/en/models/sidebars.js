@@ -336,6 +336,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/commandcode',
+          label: 'CommandCode',
+        },
+        {
+          type: 'doc',
           id: 'providers/coralbricks',
           label: 'CoralBricks',
         },
@@ -348,11 +353,6 @@ const sidebars = {
           type: 'doc',
           id: 'providers/cortecs',
           label: 'Cortecs',
-        },
-        {
-          type: 'doc',
-          id: 'providers/crof',
-          label: 'CrofAI',
         },
         {
           type: 'doc',
@@ -593,6 +593,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/lilac',
           label: 'Lilac',
+        },
+        {
+          type: 'doc',
+          id: 'providers/liquid',
+          label: 'Liquid Inference',
         },
         {
           type: 'doc',
@@ -873,6 +878,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/qvac',
           label: 'QVAC',
+        },
+        {
+          type: 'doc',
+          id: 'providers/reflection',
+          label: 'Reflection',
         },
         {
           type: 'doc',

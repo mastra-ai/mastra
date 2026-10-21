@@ -2,9 +2,12 @@ import { useBrowserSessionProbe, useCloseBrowser } from '@mastra/react/hooks/age
 import { useCallback, useState, useMemo, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 import type { StreamStatus } from '../hooks/use-browser-stream';
+import { requestBrowserStreamTicket } from '../utils/browser-stream-ticket';
+import { buildBrowserStreamUrl } from '../utils/browser-stream-url';
 import { createBrowserFrameStore } from './browser-frame-store';
 import { BrowserFrameStoreContext, BrowserSessionContext } from './browser-session-context';
 import type { BrowserViewMode } from './browser-session-context';
+import { useStudioConfig } from '@/domains/configuration/context/studio-config-state';
 
 export interface BrowserSessionProviderProps {
   children: ReactNode;
@@ -100,10 +103,16 @@ export function BrowserSessionProvider({ children, agentId, threadId, enabled = 
   const shouldConnectRef = useRef(shouldConnect);
   const agentIdRef = useRef(agentId);
   const threadIdRef = useRef(threadId);
+  // Studio config as refs for the same reason: `connect` mints an upgrade ticket
+  // per attempt, and reading the config through refs keeps `connect` stable
+  // across probe updates.
+  const studioConfigRef = useRef<{ baseUrl?: string; apiPrefix?: string; headers?: Record<string, string> }>({});
+  const { baseUrl, apiPrefix, headers } = useStudioConfig();
   useEffect(() => {
     shouldConnectRef.current = shouldConnect;
     agentIdRef.current = agentId;
     threadIdRef.current = threadId;
+    studioConfigRef.current = { baseUrl, apiPrefix, headers };
   });
 
   // Stream state
@@ -122,6 +131,8 @@ export function BrowserSessionProvider({ children, agentId, threadId, enabled = 
   const reconnectAttemptRef = useRef(0);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const currentConnectionRef = useRef<{ agentId?: string; threadId?: string } | null>(null);
+  /** Invalidates an in-flight ticket request when a newer connect or a disconnect happens. */
+  const connectAttemptRef = useRef(0);
   const maxReconnectAttempts = 5;
 
   const clearReconnectTimeout = useCallback(() => {
@@ -133,6 +144,8 @@ export function BrowserSessionProvider({ children, agentId, threadId, enabled = 
 
   const disconnect = useCallback(() => {
     clearReconnectTimeout();
+    // Invalidate any connect() that is still waiting for a ticket.
+    connectAttemptRef.current += 1;
     currentConnectionRef.current = null;
     if (wsRef.current) {
       wsRef.current.close();
@@ -186,115 +199,132 @@ export function BrowserSessionProvider({ children, agentId, threadId, enabled = 
 
     setStatusState('connecting');
 
-    // Construct WebSocket URL based on current protocol
-    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.host}/browser/${agentId}/stream?threadId=${encodeURIComponent(threadId)}`;
+    // A ticket is consumed by the upgrade it authorizes, so every attempt mints a
+    // fresh one. The WebSocket API can't set request headers, so a
+    // header-authenticated deployment presents its credentials on this request
+    // rather than in the handshake URL. Config is read through a ref to keep
+    // `connect` stable across probe updates.
+    const attempt = ++connectAttemptRef.current;
+    const { baseUrl: studioBaseUrl, apiPrefix: studioApiPrefix, headers: studioHeaders } = studioConfigRef.current;
 
-    try {
-      const ws = new WebSocket(wsUrl);
-      intentionalCloseRef.current = false;
-      wsRef.current = ws;
+    void requestBrowserStreamTicket({
+      agentId,
+      threadId,
+      baseUrl: studioBaseUrl,
+      apiPrefix: studioApiPrefix,
+      headers: studioHeaders,
+    }).then(ticket => {
+      // A newer connect() or a disconnect() superseded this attempt.
+      if (attempt !== connectAttemptRef.current) return;
 
-      ws.onopen = () => {
-        setStatusState('connected');
-        reconnectAttemptRef.current = 0;
-      };
+      const wsUrl = buildBrowserStreamUrl({ agentId, threadId, ticket });
 
-      ws.onmessage = event => {
-        const data = event.data as string;
+      try {
+        const ws = new WebSocket(wsUrl);
+        intentionalCloseRef.current = false;
+        wsRef.current = ws;
 
-        // Check if message is JSON (status/error messages start with '{')
-        if (data.startsWith('{')) {
-          try {
-            const parsed = JSON.parse(data) as {
-              status?: string;
-              error?: string;
-              url?: string;
-              viewport?: { width: number; height: number };
-            };
+        ws.onopen = () => {
+          setStatusState('connected');
+          reconnectAttemptRef.current = 0;
+        };
 
-            if (parsed.status) {
-              switch (parsed.status) {
-                case 'browser_starting':
-                  setStatusState('browser_starting');
-                  break;
-                case 'streaming':
-                  setStatusState('streaming');
-                  setHasSession(true);
-                  break;
-                case 'browser_closed':
-                  setStatusState('browser_closed');
-                  setHasSession(false);
-                  setViewModeState('collapsed');
-                  break;
-                case 'stopped':
-                  setStatusState('disconnected');
-                  break;
-                case 'error':
-                  setStatusState('error');
-                  setHasSession(false);
-                  break;
+        ws.onmessage = event => {
+          const data = event.data as string;
+
+          // Check if message is JSON (status/error messages start with '{')
+          if (data.startsWith('{')) {
+            try {
+              const parsed = JSON.parse(data) as {
+                status?: string;
+                error?: string;
+                url?: string;
+                viewport?: { width: number; height: number };
+              };
+
+              if (parsed.status) {
+                switch (parsed.status) {
+                  case 'browser_starting':
+                    setStatusState('browser_starting');
+                    break;
+                  case 'streaming':
+                    setStatusState('streaming');
+                    setHasSession(true);
+                    break;
+                  case 'browser_closed':
+                    setStatusState('browser_closed');
+                    setHasSession(false);
+                    setViewModeState('collapsed');
+                    break;
+                  case 'stopped':
+                    setStatusState('disconnected');
+                    break;
+                  case 'error':
+                    setStatusState('error');
+                    setHasSession(false);
+                    break;
+                }
               }
-            }
 
-            if (parsed.url) {
-              setCurrentUrlState(parsed.url);
-            }
+              if (parsed.url) {
+                setCurrentUrlState(parsed.url);
+              }
 
-            if (parsed.viewport) {
-              setViewport(parsed.viewport);
+              if (parsed.viewport) {
+                setViewport(parsed.viewport);
+              }
+            } catch {
+              // If JSON parsing fails, treat as frame data
+              frameStoreRef.current.setFrame(data);
             }
-          } catch {
-            // If JSON parsing fails, treat as frame data
+          } else {
+            // Plain text is base64 frame data
             frameStoreRef.current.setFrame(data);
+            // Ensure we're in streaming status when receiving frames
+            setStatusState(prev => (prev !== 'streaming' ? 'streaming' : prev));
+            setHasSession(true);
           }
-        } else {
-          // Plain text is base64 frame data
-          frameStoreRef.current.setFrame(data);
-          // Ensure we're in streaming status when receiving frames
-          setStatusState(prev => (prev !== 'streaming' ? 'streaming' : prev));
-          setHasSession(true);
-        }
-      };
+        };
 
-      ws.onerror = () => {
-        // Error event doesn't provide useful info, wait for close
-      };
+        ws.onerror = () => {
+          // Error event doesn't provide useful info, wait for close
+        };
 
-      ws.onclose = event => {
-        // Ignore close events from superseded sockets
-        if (wsRef.current !== ws) return;
+        ws.onclose = event => {
+          // Ignore close events from superseded sockets
+          if (wsRef.current !== ws) return;
 
-        wsRef.current = null;
+          wsRef.current = null;
 
-        // Intentional closes (component unmount, thread change) are already handled
-        // by `disconnect()` resetting state; nothing to do here.
-        if (intentionalCloseRef.current) return;
+          // Intentional closes (component unmount, thread change) are already handled
+          // by `disconnect()` resetting state; nothing to do here.
+          if (intentionalCloseRef.current) return;
 
-        // Reflect the lost socket in UI state regardless of how it closed. Without
-        // this, a clean remote close (server-initiated shutdown) would leave
-        // `status` / `hasSession` stuck on their last values.
-        setHasSession(false);
+          // Reflect the lost socket in UI state regardless of how it closed. Without
+          // this, a clean remote close (server-initiated shutdown) would leave
+          // `status` / `hasSession` stuck on their last values.
+          setHasSession(false);
 
-        if (!event.wasClean && reconnectAttemptRef.current < maxReconnectAttempts) {
-          // Unclean close with retries left — schedule a reconnect.
-          reconnectAttemptRef.current += 1;
-          const delay = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current - 1), 10000);
-          setStatusState('disconnected');
-          reconnectTimeoutRef.current = setTimeout(() => {
-            connect();
-          }, delay);
-        } else if (reconnectAttemptRef.current >= maxReconnectAttempts) {
-          // Exhausted retries — surface as an error.
-          setStatusState('error');
-        } else {
-          // Clean remote close — no retry, just mark disconnected.
-          setStatusState('disconnected');
-        }
-      };
-    } catch {
-      setStatusState('error');
-    }
+          if (!event.wasClean && reconnectAttemptRef.current < maxReconnectAttempts) {
+            // Unclean close with retries left — schedule a reconnect.
+            reconnectAttemptRef.current += 1;
+            const delay = Math.min(1000 * Math.pow(2, reconnectAttemptRef.current - 1), 10000);
+            setStatusState('disconnected');
+            reconnectTimeoutRef.current = setTimeout(() => {
+              connect();
+            }, delay);
+          } else if (reconnectAttemptRef.current >= maxReconnectAttempts) {
+            // Exhausted retries — surface as an error.
+            setStatusState('error');
+          } else {
+            // Clean remote close — no retry, just mark disconnected.
+            setStatusState('disconnected');
+          }
+        };
+      } catch {
+        setStatusState('error');
+      }
+    });
   }, [clearReconnectTimeout]);
 
   // Auto-connect whenever we should be connected for this agent/thread.

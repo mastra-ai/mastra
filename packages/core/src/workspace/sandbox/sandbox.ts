@@ -508,6 +508,29 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
   writeFiles?(files: SandboxFileInput[], options?: WriteFilesOptions): Promise<void>;
 
   // ---------------------------------------------------------------------------
+  // Native filesystem (Optional)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Direct access to the sandbox's own disk through the provider's file API.
+   * Optional fast path - providers with a native file API implement this so
+   * file operations don't need a shell command each. Callers should fall back
+   * to `executeCommand` when unavailable.
+   *
+   * Paths are absolute paths inside the sandbox. The provider owns containment:
+   * no workspace-root or symlink confinement is implied, so a caller that needs
+   * it must check paths itself.
+   *
+   * @example
+   * ```typescript
+   * const content = sandbox.filesystem
+   *   ? await sandbox.filesystem.readFile('/workspace/app/package.json', { encoding: 'utf-8' })
+   *   : (await sandbox.executeCommand?.('cat', ['/workspace/app/package.json']))?.stdout;
+   * ```
+   */
+  readonly filesystem?: WorkspaceFilesystem;
+
+  // ---------------------------------------------------------------------------
   // Process Management (Optional)
   // ---------------------------------------------------------------------------
 

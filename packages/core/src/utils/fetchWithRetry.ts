@@ -39,7 +39,11 @@ export async function fetchWithRetry(
       if (!response.ok) {
         lastError = new Error(`Request failed with status: ${response.status} ${response.statusText}`);
 
-        if (!shouldRetryResponse(response)) {
+        const retry = shouldRetryResponse(response);
+        // The response is discarded here, so release its body to free the connection.
+        await response.body?.cancel().catch(() => {});
+
+        if (!retry) {
           throw lastError;
         }
       } else {

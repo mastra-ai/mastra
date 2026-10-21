@@ -229,4 +229,51 @@ describe('ObservationalMemoryProcessor ended-turn reuse (#19740)', () => {
       expect(persisted.some(message => message.id === 'msg-2')).toBe(true);
     });
   });
+
+  it('preserves accumulated response identity when finalizing an iteration-split processor list', async () => {
+    const messageList = new MessageList({
+      threadId,
+      resourceId,
+      generateMessageId: () => 'current-response',
+    });
+    messageList.add(
+      {
+        id: 'response',
+        role: 'assistant',
+        content: {
+          format: 2,
+          parts: [
+            { type: 'reasoning', reasoning: 'thinking' },
+            { type: 'text', text: 'answer' },
+          ],
+        },
+        createdAt: new Date(),
+      } as MastraDBMessage,
+      'response',
+    );
+    messageList.splitResponseMessageAtPartOffset('response', 1);
+
+    const end = vi.fn().mockResolvedValue({ record: {} });
+    const state: Record<string, unknown> = { __omTurn: { end, ended: false } };
+
+    await expect(processor.processOutputResult(buildOutputResultArgs(messageList, state) as any)).resolves.toBe(
+      messageList,
+    );
+
+    expect(messageList.get.response.db().map(message => message.id)).toEqual(['response', 'current-response']);
+    expect(end).toHaveBeenCalledTimes(1);
+    const persistenceMessageList = end.mock.calls[0]?.[0] as MessageList;
+    expect(persistenceMessageList).not.toBe(messageList);
+    expect(persistenceMessageList.get.response.db()).toEqual([
+      expect.objectContaining({
+        id: 'response',
+        content: expect.objectContaining({
+          parts: [
+            expect.objectContaining({ type: 'reasoning', reasoning: 'thinking' }),
+            expect.objectContaining({ type: 'text', text: 'answer' }),
+          ],
+        }),
+      }),
+    ]);
+  });
 });

@@ -1,14 +1,20 @@
+import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
 import { Knowledge } from '@mastra/core/knowledge';
 import { Mastra } from '@mastra/core/mastra';
-import { RequestContext } from '@mastra/core/request-context';
+import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import type { MastraEmbeddingModel, MastraVector } from '@mastra/core/vector';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { Memory, Subconscious } from '../../../index';
-import { formatLocalTimestamp, resolveCuratorScope, SubconsciousCurateExtractor } from '../subconscious/curate';
+import {
+  dispatchCuratorObservation,
+  formatLocalTimestamp,
+  resolveCuratorScope,
+  SubconsciousCurateExtractor,
+} from '../subconscious/curate';
 
 const semanticInfrastructure = {
   vector: {} as MastraVector,
@@ -281,6 +287,55 @@ describe('Subconscious observation curator', () => {
       }),
     );
     expect(sendMessage.mock.calls[0]![1]!.ifIdle!.streamOptions).not.toHaveProperty('abortSignal');
+  });
+
+  it("runs on its own thread when the parent's request context names the parent's thread", async () => {
+    const { memory, context } = fixture();
+    // An agent run puts its thread and resource ids in the request context it hands on.
+    context.requestContext.set(MASTRA_THREAD_ID_KEY, 'alpha');
+    context.requestContext.set(MASTRA_RESOURCE_ID_KEY, 'user-42');
+    const prompts: string[] = [];
+    const agent = new Agent({
+      id: 'curator',
+      name: 'Curator',
+      instructions: 'Curate.',
+      memory,
+      model: new MockLanguageModelV2({
+        doStream: async ({ prompt }) => {
+          prompts.push(JSON.stringify(prompt));
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'curate-1', modelId: 'curate-model', timestamp: new Date() },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Nothing durable.' },
+              { type: 'text-end', id: 'text-1' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+            ]),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          };
+        },
+      }),
+    });
+    const config = new Subconscious({ defaultScope: 'resource' }).resolved.observation.find(
+      agent => agent.name === 'curate',
+    )!;
+
+    const accepted = await dispatchCuratorObservation(agent, context, config, context.rawObservations).accepted;
+    expect(accepted.action).toBe('wake');
+    if (accepted.action === 'wake') await accepted.output.consumeStream();
+
+    expect(prompts).toHaveLength(1);
+    const { messages: curatorMessages } = await memory.recall({
+      threadId: 'subconscious:alpha:curate',
+      resourceId: 'user-42',
+    });
+    expect(curatorMessages.map(message => message.role)).toEqual(['signal', 'assistant']);
+    expect(await memory.getThreadById({ threadId: 'alpha' })).toBeNull();
+    // The parent's own context is untouched, and other values still reach the curator.
+    expect(context.requestContext.get(MASTRA_THREAD_ID_KEY)).toBe('alpha');
+    expect(context.requestContext.get('organizationId')).toBe('acme');
   });
 
   it('treats instruction-like observation text as delimited, untrusted evidence', async () => {

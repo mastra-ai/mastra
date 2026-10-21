@@ -17,6 +17,7 @@
 import type { Context } from 'hono';
 
 import { factoryUserOrgId } from '../auth.js';
+import { providerDisplayName } from '../provider-display-name.js';
 import type {
   CredentialRecord,
   LoginSessionKind,
@@ -36,14 +37,21 @@ export { getCredentialProviderId as getAuthProviderId } from '@mastra/code-sdk/p
  * Providers that support a browser-driven OAuth sign-in flow, keyed by
  * *catalog* provider id (what the routes and settings UI use). All flows need
  * no inbound connection to the server: Anthropic uses paste-code PKCE, the
- * rest use RFC 8628-style device codes.
+ * rest use RFC 8628-style device codes. `subscription` names the plan the
+ * sign-in bills, as shown under a reply and in the composer.
  */
-export const WEB_OAUTH_FLOW_KINDS: Readonly<Record<string, LoginSessionKind>> = {
-  anthropic: 'paste-code',
-  openai: 'device-code',
-  'github-copilot': 'device-code',
-  xai: 'device-code',
+export const WEB_OAUTH_PROVIDERS: Readonly<Record<string, { flow: LoginSessionKind; subscription: string }>> = {
+  anthropic: { flow: 'paste-code', subscription: 'Claude Pro/Max' },
+  openai: { flow: 'device-code', subscription: 'ChatGPT Plus/Pro' },
+  'github-copilot': { flow: 'device-code', subscription: 'GitHub Copilot' },
+  xai: { flow: 'device-code', subscription: 'SuperGrok/X Premium+' },
 };
+
+export function credentialLabel(provider: string, credentialType: CredentialRecord['credential']['type']) {
+  return credentialType === 'api_key'
+    ? `${providerDisplayName(provider)} API key`
+    : WEB_OAUTH_PROVIDERS[provider]?.subscription;
+}
 
 export type CredentialContext =
   | { mode: 'local' }
@@ -60,11 +68,18 @@ export async function getTenantCredentialsStorage(
   if (!credentials) return undefined;
   try {
     await credentials.ensureReady();
-  } catch {
+  } catch (error) {
+    // Callers degrade to "no credentials", so this log is the only trace of why.
+    if (error !== lastReportedInitError) {
+      lastReportedInitError = error;
+      console.error('[factory] model credential storage is unavailable; providers will show as not set:', error);
+    }
     return undefined;
   }
   return credentials;
 }
+
+let lastReportedInitError: unknown;
 
 /**
  * Org key for tenant rows. Personal accounts get an org bootstrapped by the

@@ -692,6 +692,42 @@ describe('AgentChannels', () => {
         expect(dispatchApproval).toHaveBeenCalledTimes(1);
       });
 
+      it('passes byUser on approve (#27093)', async () => {
+        const toolDisplay = vi.fn((event: any) =>
+          event.kind === 'approved' ? { kind: 'post', message: `Onaylandı: ${event.byUser}` } : undefined,
+        );
+        const { adapter, click, dispatchApproval } = await setup(toolDisplay);
+
+        await click('tool_approve:tool-call-1');
+
+        expect(toolDisplay).toHaveBeenCalledWith(
+          expect.objectContaining({ kind: 'approved', byUser: 'Clicker' }),
+          expect.anything(),
+        );
+        expect(adapter.editMessage).toHaveBeenCalledWith('channel-1:thread-1', 'card-1', 'Onaylandı: Clicker');
+        expect(dispatchApproval).toHaveBeenCalledTimes(1);
+      });
+
+      it('passes byUser as undefined when approved in a DM (#27093)', async () => {
+        const toolDisplay = vi.fn(() => undefined);
+        const { click } = await setup(toolDisplay, true);
+
+        await click('tool_approve:tool-call-1');
+
+        expect(toolDisplay).toHaveBeenCalledWith(
+          expect.objectContaining({ kind: 'approved', byUser: undefined }),
+          expect.anything(),
+        );
+      });
+
+      it('shows the approving user on the default approved card (#27093)', async () => {
+        const { adapter, click } = await setup(() => undefined);
+
+        await click('tool_approve:tool-call-1');
+
+        expect(JSON.stringify(adapter.editMessage.mock.calls[0]![2])).toContain('Approved by Clicker');
+      });
+
       it('edits the card with the renderer output on deny and passes byUser', async () => {
         const toolDisplay = vi.fn((event: any) =>
           event.kind === 'denied' ? { kind: 'post', message: `Reddedildi: ${event.byUser}` } : undefined,
@@ -1271,6 +1307,50 @@ describe('AgentChannels', () => {
       await (agentChannels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
 
       expect(mockAgent.sendMessage).toHaveBeenCalledTimes(1);
+    });
+
+    it('runs on a Slack block-only message and passes the block text to the agent', async () => {
+      const db = new InMemoryDB();
+      const memoryStore = new InMemoryMemory({ db });
+      const mockMastra = {
+        getStorage: () => ({ getStore: () => memoryStore }),
+        getServer: () => null,
+      } as any;
+
+      await agentChannels.initialize(mockMastra);
+
+      const chatThread = {
+        id: 'channel-1:thread-1',
+        channelId: 'channel-1',
+        isDM: true,
+        adapter: agentChannels.adapters.discord,
+        isSubscribed: vi.fn().mockResolvedValue(true),
+        subscribe: vi.fn().mockResolvedValue(undefined),
+        mentionUser: vi.fn((userId: string) => `<@${userId}>`),
+        messages: (async function* () {})(),
+      } as any;
+      const message = {
+        id: 'message-1',
+        text: '',
+        formatted: { type: 'root', children: [] },
+        raw: {
+          blocks: [
+            {
+              type: 'section',
+              text: { type: 'mrkdwn', text: 'Deploy failed: <https://ci.example.com/runs/9|run 9>' },
+            },
+          ],
+        },
+        author: { userId: 'user-1', userName: 'tyler', fullName: 'Tyler Barnes' },
+        attachments: [],
+      } as any;
+
+      await (agentChannels as any).processChatMessage(chatThread, message, mockMastra, new RequestContext());
+
+      expect(mockAgent.sendMessage).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(mockAgent.sendMessage.mock.calls[0])).toContain(
+        'Deploy failed: [run 9](https://ci.example.com/runs/9)',
+      );
     });
 
     it('consumes the run stream when the signal outcome is `wake`', async () => {
@@ -1939,6 +2019,31 @@ describe('AgentChannels', () => {
           }),
         }),
       );
+    });
+
+    it('passes the per-message requestContext to both resolvers', async () => {
+      const resolveResourceId = vi.fn(async ({ requestContext }: any) => `tenant:${requestContext.get('tenantId')}`);
+      const resolveThreadId = vi.fn(async ({ requestContext }: any) => `thread:${requestContext.get('tenantId')}`);
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        resolveResourceId,
+        resolveThreadId,
+      });
+      channels.__setAgent(mockAgent);
+
+      const mockMastra = makeMastra();
+      await channels.initialize(mockMastra);
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+      const requestContext = new RequestContext();
+      requestContext.set('tenantId', 't-1');
+
+      await (channels as any).processChatMessage(chatThread, message, mockMastra, requestContext);
+
+      expect(resolveResourceId.mock.calls[0]![0].requestContext).toBe(requestContext);
+      expect(resolveThreadId.mock.calls[0]![0].requestContext).toBe(requestContext);
+      const memoryStore = await mockMastra.getStorage().getStore('memory');
+      const stored = await memoryStore.getThreadById({ threadId: 'thread:t-1' });
+      expect(stored).toMatchObject({ id: 'thread:t-1', resourceId: 'tenant:t-1' });
     });
 
     it('returning defaultThreadId keeps the built-in random id', async () => {
@@ -2949,6 +3054,44 @@ describe('AgentChannels', () => {
       spy.mockRestore();
     });
 
+    it('lets resolvers read a value the handler wrote on the request context', async () => {
+      const chatMod = await getChatModule();
+      let registeredDMWrapper: ((thread: any, message: any) => unknown) | undefined;
+      const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onDirectMessage').mockImplementation((handler: any) => {
+        registeredDMWrapper = handler;
+      });
+
+      const onDirectMessage = vi.fn(async (thread: any, msg: any, defaultHandler: any, ctx: any) => {
+        ctx.requestContext.set('user', { id: 'user-from-handler' });
+        await defaultHandler(thread, msg);
+      });
+      const resolveResourceId = vi.fn(async ({ requestContext }: any) => `resource:${requestContext.get('user').id}`);
+      const resolveThreadId = vi.fn(async ({ requestContext }: any) => `thread:${requestContext.get('user').id}`);
+
+      const channels = new AgentChannels({
+        adapters: { discord: createMockAdapter('discord') },
+        handlers: { onDirectMessage },
+        resolveResourceId,
+        resolveThreadId,
+      });
+      channels.__setAgent(mockAgent);
+      const mockMastra = makeMastra();
+      await channels.initialize(mockMastra);
+      vi.spyOn(channels as any, 'dispatchInboundMessage').mockImplementation(async () => {});
+
+      const chatThread = makeChatThread({ adapter: channels.adapters.discord });
+      await registeredDMWrapper!(chatThread, message);
+
+      const handlerRequestContext = onDirectMessage.mock.calls[0]![3].requestContext;
+      expect(resolveResourceId.mock.calls[0]![0].requestContext).toBe(handlerRequestContext);
+      expect(resolveThreadId.mock.calls[0]![0].requestContext).toBe(handlerRequestContext);
+      const memoryStore = await mockMastra.getStorage().getStore('memory');
+      const stored = await memoryStore.getThreadById({ threadId: 'thread:user-from-handler' });
+      expect(stored).toMatchObject({ id: 'thread:user-from-handler', resourceId: 'resource:user-from-handler' });
+
+      spy.mockRestore();
+    });
+
     it('forwards handler signal metadata to sendMessage', async () => {
       const chatMod = await getChatModule();
       let registeredDMWrapper: ((thread: any, message: any) => unknown) | undefined;
@@ -3254,6 +3397,38 @@ describe('thread history', () => {
     expect(serialized).not.toContain('[Thread context');
     expect(serialized).not.toContain('message 0');
     expect(serialized).toContain('hi there');
+  });
+
+  it('includes Slack layout-block text in history rows without repeating the fallback', async () => {
+    const t = await setup({ threadContext: { maxMessages: 10 } });
+    const alert = historyMessage(1, {
+      author: bot,
+      text: '❌ Lint — failure',
+      raw: {
+        blocks: [
+          { type: 'header', text: { type: 'plain_text', text: '❌ Lint — failure' } },
+          {
+            type: 'section',
+            text: {
+              type: 'mrkdwn',
+              text: 'Lint failed on `main`. <https://github.com/acme/web-app/actions/runs/1|View workflow run>',
+            },
+          },
+          { type: 'context', elements: [{ type: 'mrkdwn', text: 'Commit: `3f8b55a`' }] },
+        ],
+      },
+    });
+    await t.run(makeChatThread([historyMessage(0), alert, historyMessage(2)]));
+
+    expect(t.signals().map(s => s.contents)).toEqual([
+      'message 0',
+      [
+        '❌ Lint — failure',
+        'Lint failed on `main`. [View workflow run](https://github.com/acme/web-app/actions/runs/1)',
+        'Commit: `3f8b55a`',
+      ].join('\n\n'),
+      'message 2',
+    ]);
   });
 
   it('emits no gap and no separate root when the root falls inside the window', async () => {

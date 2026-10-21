@@ -45,6 +45,10 @@ const LEGACY_PROVIDER_IDS: Record<string, string> = {
   [KIMI_CODING_CREDENTIAL_ID]: KIMI_CODING_PROVIDER_ID,
 };
 
+export function normalizeLegacyProviderId(providerId: string): string {
+  return LEGACY_PROVIDER_IDS[providerId] ?? providerId;
+}
+
 /**
  * Map model ids saved by older Mastra Code versions (packs, OM settings,
  * thread metadata) to the current catalog id:
@@ -59,9 +63,8 @@ export function normalizeLegacyModelId(modelId: string): string {
     normalized = normalized.slice('mastracode/'.length);
   }
   const slash = normalized.indexOf('/');
-  const providerId = slash > 0 ? normalized.slice(0, slash) : undefined;
-  const replacement = providerId ? LEGACY_PROVIDER_IDS[providerId] : undefined;
-  return replacement ? `${replacement}${normalized.slice(slash)}` : normalized;
+  if (slash <= 0) return normalized;
+  return `${normalizeLegacyProviderId(normalized.slice(0, slash))}${normalized.slice(slash)}`;
 }
 
 /** Credential-store id that authenticates a catalog provider id. */

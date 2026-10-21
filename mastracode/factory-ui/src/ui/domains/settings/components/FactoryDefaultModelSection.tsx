@@ -25,13 +25,7 @@ function skippedReasonSummary(reasons: Array<{ reason: string }>) {
   return [...counts.entries()].map(([reason, count]) => `${reason.replaceAll('-', ' ')} (${count})`).join(', ');
 }
 
-export function FactoryDefaultModelSection({
-  models,
-  modelsLoaded,
-}: {
-  models: AvailableModelOption[];
-  modelsLoaded: boolean;
-}) {
+export function FactoryDefaultModelSection({ models }: { models: AvailableModelOption[] }) {
   const { factoryId } = useParams<{ factoryId: string }>();
   const projectQuery = useFactoryProjectQuery(factoryId);
   const setDefaultModel = useSetFactoryDefaultModelMutation(factoryId);
@@ -102,12 +96,7 @@ export function FactoryDefaultModelSection({
                 size="sm"
                 disabled={projectQuery.isPending || setDefaultModel.isPending}
               />
-              <FactoryThinkingControl
-                factoryId={factoryId}
-                modelId={defaultModelId}
-                models={models}
-                modelsLoaded={modelsLoaded}
-              />
+              <FactoryThinkingControl factoryId={factoryId} />
             </ButtonsGroup>
           </div>
           {applyResult && (

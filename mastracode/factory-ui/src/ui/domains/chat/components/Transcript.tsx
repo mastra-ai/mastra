@@ -10,6 +10,7 @@ import { memo, useCallback, useMemo, useState } from 'react';
 
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
+import type { ThreadOwner } from '../services/reply-credential';
 import {
   useApproveAgentControllerToolMutation,
   useRespondAgentControllerSuspensionMutation,
@@ -23,18 +24,17 @@ import { draws, messageText, renderableParts } from './transcript-parts';
 import { isRecord } from './transcript-shared';
 import { NotificationCard, NotificationSummaryCard } from './TranscriptNotifications';
 import { ApprovalCard, SubagentCard, SuspensionCard } from './TranscriptPromptCards';
-import { isTimeGap } from './TranscriptSignals';
+import { isTurnDivider } from './TranscriptSignals';
 
 import type { MessageEntry, NoticeEntry, SuspensionPrompt, TimelineEntry } from '../services/transcript';
 
 export function Transcript({ tail }: { tail?: ReactNode }) {
-  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { sessionId, sessionEnabled, baseUrl, owner } = useChatSessionContext();
   const { transcript, resolvePrompt, busy, viewerId } = useChatTranscript();
   const { entries } = transcript;
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: projectPath,
+    sessionId,
     baseUrl,
     enabled: sessionEnabled,
   };
@@ -67,6 +67,7 @@ export function Transcript({ tail }: { tail?: ReactNode }) {
         onRespond={onRespond}
         running={busy}
         viewerId={viewerId}
+        owner={owner}
         tail={tail}
       />
     </ArrivalScope>
@@ -81,6 +82,7 @@ export function TranscriptEntries({
   onRespond,
   running = false,
   viewerId,
+  owner,
   tail,
 }: {
   entries: TimelineEntry[];
@@ -92,6 +94,8 @@ export function TranscriptEntries({
   running?: boolean;
   /** The signed-in user; anyone else's message gets their avatar beside it. */
   viewerId?: string;
+  /** Whose personal credentials the thread runs on; names their replies for other viewers. */
+  owner?: ThreadOwner;
   /** Rendered inside the live turn (the activity line), so the reserved room stays under it. */
   tail?: ReactNode;
 }) {
@@ -120,7 +124,7 @@ export function TranscriptEntries({
   // rail and history, but claims no room and no trip — the reader stays with the stream.
   const steers = (entry: TimelineEntry | undefined): boolean => entry?.kind === 'message' && Boolean(entry.steer);
 
-  const turnGroups = groupTurns(entries, { key: entry => entry.id, opensTurn, introduces: isTimeGap });
+  const turnGroups = groupTurns(entries, { key: entry => entry.id, opensTurn, introduces: isTurnDivider });
   const [restoredTurnKey] = useState(() => (restoredHistory ? turnGroups.at(-1)?.key : undefined));
 
   return (
@@ -166,6 +170,7 @@ export function TranscriptEntries({
                   }
                   isSubmitting={isSubmitting}
                   viewerId={viewerId}
+                  owner={owner}
                   onApprove={onApprove}
                   onRespond={onRespond}
                 />
@@ -196,6 +201,7 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
   redundantSuspension,
   isSubmitting,
   viewerId,
+  owner,
   onApprove,
   onRespond,
 }: {
@@ -205,6 +211,7 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
   redundantSuspension: boolean;
   isSubmitting: boolean;
   viewerId?: string;
+  owner?: ThreadOwner;
   onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
 }) {
@@ -217,6 +224,7 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
           reply={reply}
           isSubmitting={isSubmitting}
           viewerId={viewerId}
+          owner={owner}
           onRespond={onRespond}
         />
       );

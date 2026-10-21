@@ -6,7 +6,7 @@ import type { ProviderInfo } from '../../../../api/types';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { ModelCombobox } from '../../settings/components/ModelCombobox';
 import { SharedCredentialNotice } from '../../settings/components/SharedCredentialNotice';
-import { providerDisplayName } from '../../settings/components/provider-display-name';
+import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import { useState } from 'react';
 import { useProviderModels } from '../hooks/useProviderModels';
 import { ProviderBrandIcon } from './ProviderBrandIcon';

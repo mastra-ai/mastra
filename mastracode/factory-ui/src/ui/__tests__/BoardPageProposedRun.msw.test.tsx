@@ -349,7 +349,7 @@ describe('Board card with a proposed run', () => {
     const release = await within(card).findByRole('button', { name: 'Start suggested run: Build' });
     expect(within(card).queryByText(/^Suggested:/)).toBeNull();
     expect(release).toHaveAttribute('data-variant', 'primary');
-    expect(within(card).getByRole('link', { name: 'Open session' })).toHaveAttribute('data-variant', 'default');
+    expect(within(card).getByRole('link', { name: 'Open session' })).toHaveAttribute('data-variant', 'ghost');
 
     await user.click(release);
 

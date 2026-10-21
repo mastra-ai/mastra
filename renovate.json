@@ -271,7 +271,7 @@
     {
       "groupName": "typescript",
       "matchFileNames": ["+(package.json)", "**/package.json", "!./examples/**", "!./docs/**"],
-      "matchPackageNames": ["typescript", "/^@typescript-eslint//", "typescript-eslint"],
+      "matchPackageNames": ["typescript"],
       "matchUpdateTypes": ["major", "minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "dependencyDashboardApproval": false,
@@ -281,7 +281,7 @@
       "groupName": "formatting & linting",
       "commitMessageTopic": "Formatting & linting",
       "matchFileNames": ["+(package.json)", "**/package.json"],
-      "matchPackageNames": ["eslint", "oxfmt", "/^eslint-/", "@vitest/eslint-plugin", "!@typescript-eslint/"],
+      "matchPackageNames": ["oxfmt", "oxlint", "oxlint-tsgolint", "oxlint-tailwindcss", "eslint-plugin-storybook"],
       "matchUpdateTypes": ["major", "minor", "patch"],
       "matchDepTypes": ["dependencies", "devDependencies"],
       "dependencyDashboardApproval": false,

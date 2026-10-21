@@ -20,7 +20,7 @@ import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { AddApiKeyDialog } from './AddApiKeyDialog';
 import { ProviderOAuthDialog } from './ProviderOAuthDialog';
-import { providerDisplayName } from './provider-display-name';
+import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import { credentialAt } from './provider-credential';
 import type { ProviderCredential as Credential } from './provider-credential';
 

@@ -7,7 +7,7 @@ description: "Browse Scaleway model IDs, capabilities, context windows, and pric
 
 # <img src="https://models.dev/logos/scaleway.svg" alt="Scaleway logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Scaleway
 
-Access 17 Scaleway models through Mastra's model router. Authentication is handled automatically using the `SCALEWAY_API_KEY` environment variable.
+Access 16 Scaleway models through Mastra's model router. Authentication is handled automatically using the `SCALEWAY_API_KEY` environment variable.
 
 Learn more in the [Scaleway documentation](https://www.scaleway.com/en/docs/generative-apis/).
 
@@ -68,6 +68,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": 0.468,
     "outputCost": 0.936
+  },
+  {
+    "model": "scaleway/deepseek-v4.1-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 256000,
+    "maxOutput": 32768,
+    "inputCost": 0.672,
+    "outputCost": 2.016
   },
   {
     "model": "scaleway/gemma-4-26b-a4b-it",
@@ -154,18 +166,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.35
   },
   {
-    "model": "scaleway/pixtral-12b-2409",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 4096,
-    "inputCost": 0.2,
-    "outputCost": 0.2
-  },
-  {
     "model": "scaleway/qwen3-235b-a22b-instruct-2507",
     "imageInput": false,
     "audioInput": false,
@@ -176,18 +176,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 16384,
     "inputCost": 0.75,
     "outputCost": 2.25
-  },
-  {
-    "model": "scaleway/qwen3-coder-30b-a3b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 128000,
-    "maxOutput": 32768,
-    "inputCost": 0.2,
-    "outputCost": 0.8
   },
   {
     "model": "scaleway/qwen3-embedding-8b",

@@ -8,12 +8,12 @@
         "type": "toggle"
       }
     ],
-    "minimaxai/minimax-m3": [
+    "moonshotai/kimi-k2.6": [
       {
         "type": "toggle"
       }
     ],
-    "moonshotai/kimi-k2.6": [
+    "minimaxai/minimax-m3": [
       {
         "type": "toggle"
       }

@@ -10,6 +10,7 @@ import { resolveTarget } from './resolve-target';
 import {
   createItemScorerResolver,
   EXPERIMENT_ITEM_SCORER_NOT_FOUND,
+  flushForTrajectoryScorers,
   resolveScorers,
   resolveStepScorers,
   runScorersForItem,
@@ -628,6 +629,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
                   }
                 : undefined;
 
+            await flushForTrajectoryScorers(mastra, itemScorers, execResult.traceId);
             const flatScores = await runScorersForItem(
               itemScorers,
               itemWithMetadataSnapshot(),

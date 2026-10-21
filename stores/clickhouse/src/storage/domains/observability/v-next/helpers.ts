@@ -275,6 +275,7 @@ export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown>
     isEvent: span.isEvent,
     startedAt: toISOString(span.startedAt),
     endedAt: toISOString(endedAt),
+    timeToFirstChunkMs: span.timeToFirstChunkMs ?? null,
     tags: normalizeTags(span.tags),
     metadataSearch: buildMetadataSearch(metadata),
     metadataRaw: jsonEncode(metadata),

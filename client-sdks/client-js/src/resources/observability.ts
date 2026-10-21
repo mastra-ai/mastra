@@ -2,6 +2,8 @@ import type { SpanType } from '@mastra/core/observability';
 import type {
   QueryThreadsInput,
   QueryThreadsResult,
+  ThreadQueryRequest,
+  ThreadQueryResponse,
   SpanQueryRequest,
   SpanQueryResponse,
   TraceQueryPredicate,
@@ -23,6 +25,8 @@ import type {
   TraceQueryGroupResponse,
   AggregateTracesArgs,
   AggregateTracesResponse,
+  AggregateSpansArgs,
+  AggregateSpansResponse,
   GetTraceQueryFieldsArgs,
   GetTraceQueryFieldsResponse,
   GetTraceQueryValuesArgs,
@@ -187,8 +191,12 @@ export type QueryTracesGroupedInput = QueryTracesBaseInput & {
 
 export type QueryTracesUngroupedInput = QueryTracesKeysetInput | QueryTracesPaginatedInput | QueryTracesDeltaInput;
 export type QueryTracesInput = QueryTracesUngroupedInput | QueryTracesGroupedInput;
-export type QueryTraceThreadsInput = QueryThreadsInput;
-export type QueryTraceThreadsResult = QueryThreadsResult;
+export type QueryTraceThreadsInput = ThreadQueryRequest | QueryThreadsInput;
+export type QueryTraceThreadsResult<T extends QueryTraceThreadsInput = ThreadQueryRequest> = T extends {
+  timeRange: unknown;
+}
+  ? ThreadQueryResponse
+  : QueryThreadsResult;
 export type QuerySpansInput = SpanQueryRequest;
 export type QuerySpansResult = SpanQueryResponse;
 
@@ -328,6 +336,15 @@ export class Observability extends BaseResource {
     return this.request('/observability/traces/aggregate', { method: 'POST', body: params });
   }
 
+  /**
+   * Groups and measures individual completed spans selected by a time range and optional span-query predicate.
+   * Token and cost measures count usage recorded on each span itself. Check `capabilities.spanAggregate` from
+   * `getObservabilityCapabilities()` first; servers without it return 404 or 501.
+   */
+  aggregateSpans(params: AggregateSpansArgs): Promise<AggregateSpansResponse> {
+    return this.request('/observability/spans/aggregate', { method: 'POST', body: params });
+  }
+
   /** Returns canonical and observed fields available to the advanced trace-query grammar. */
   getTraceQueryFields(
     params: GetTraceQueryFieldsArgs,
@@ -355,12 +372,12 @@ export class Observability extends BaseResource {
   }
 
   /**
-   * Queries thread identities using eligible-trace and cross-trace predicates.
+   * Queries full-history thread rows using a trace or thread activity window.
    *
-   * @param params - Thread query with its eligible trace selection
-   * @returns Matching thread identities
+   * @param params - Thread query with its qualification window, filters and pagination
+   * @returns Matching thread rows. Legacy requests retain their identity-only response.
    */
-  queryTraceThreads(params: QueryTraceThreadsInput): Promise<QueryTraceThreadsResult> {
+  queryTraceThreads<T extends QueryTraceThreadsInput>(params: T): Promise<QueryTraceThreadsResult<T>> {
     return this.request('/observability/threads/query', { method: 'POST', body: params });
   }
 

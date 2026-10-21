@@ -10,10 +10,12 @@ export interface FlushMessagesOptions {
   /**
    * Runs inside the thread's save queue, immediately before unsaved messages
    * are drained. A rejection skips the save, leaves the messages unsaved, and
-   * rejects the flush with that error. Storage errors are still logged, not
-   * thrown, except a run fence conflict, which rejects the flush like the guard.
+   * rejects the flush with that error. Unless throwOnError is enabled, storage
+   * errors are logged, except a run fence conflict, which rejects like the guard.
    */
   beforePersist?: () => Promise<void>;
+  /** Reject this flush on storage failure without rejecting the shared queue. */
+  throwOnError?: boolean;
 }
 
 export class SaveQueueManager {
@@ -89,29 +91,29 @@ export class SaveQueueManager {
     messageList: MessageList,
     memoryConfig?: MemoryConfigInternal,
     beforePersist?: FlushMessagesOptions['beforePersist'],
+    throwOnError = false,
   ) {
     const prev = this.saveQueues.get(threadId) || Promise.resolve();
-    let guardFailed = false;
-    let guardError: unknown;
+    let saveFailed = false;
+    let saveError: unknown;
     const next = prev
       .then(async () => {
         if (beforePersist) {
           try {
             await beforePersist();
           } catch (err) {
-            guardFailed = true;
-            guardError = err;
+            saveFailed = true;
+            saveError = err;
             return;
           }
         }
         await this.persistUnsavedMessages(threadId, messageList, memoryConfig);
       })
       .catch(err => {
-        // Storage refused the write because the guarded run lost ownership.
-        // That is the guard failing late, so the caller must see it too.
-        if (beforePersist && isRunFenceConflictError(err)) {
-          guardFailed = true;
-          guardError = err;
+        // Strict callers need storage failures too; the queue itself must still resolve.
+        if (throwOnError || (beforePersist && isRunFenceConflictError(err))) {
+          saveFailed = true;
+          saveError = err;
           return;
         }
         this.logger?.error?.('Error in enqueueSave', { err, threadId });
@@ -123,10 +125,10 @@ export class SaveQueueManager {
       });
     this.saveQueues.set(threadId, next);
     // The queue chain itself never rejects, so later saves aren't poisoned;
-    // only this caller sees the guard's rejection.
-    if (!beforePersist) return next;
+    // only this caller sees the guard or strict save rejection.
+    if (!beforePersist && !throwOnError) return next;
     return next.then(() => {
-      if (guardFailed) throw guardError;
+      if (saveFailed) throw saveError;
     });
   }
 
@@ -154,13 +156,21 @@ export class SaveQueueManager {
     messageList: MessageList,
     memoryConfig?: MemoryConfigInternal,
   ) {
-    const newMessages = filterMessagesForPersistence(messageList.drainUnsavedMessages());
+    const drained = messageList.drainUnsavedMessagesForSave();
+    const newMessages = filterMessagesForPersistence(drained.messages);
     if (newMessages.length > 0 && this.memory) {
       const savedAt = Date.now();
-      const saved = await this.memory.saveMessages({
-        messages: newMessages,
-        memoryConfig,
-      });
+      let saved: Awaited<ReturnType<MastraMemory['saveMessages']>>;
+      try {
+        saved = await this.memory.saveMessages({
+          messages: newMessages,
+          memoryConfig,
+        });
+      } catch (error) {
+        // Nothing else writes drained messages, so a later save must retry them.
+        drained.restore();
+        throw error;
+      }
       if (saved?.messages?.length) {
         // Bookkeeping only: a failure here must not turn a successful save into an error.
         try {
@@ -211,7 +221,7 @@ export class SaveQueueManager {
   ) {
     if (!threadId) return;
     this.clearDebounce(threadId);
-    return this.enqueueSave(threadId, messageList, memoryConfig, options?.beforePersist);
+    return this.enqueueSave(threadId, messageList, memoryConfig, options?.beforePersist, options?.throwOnError);
   }
 
   /**

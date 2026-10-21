@@ -31,7 +31,7 @@ describe('MySQLStore configuration validation', () => {
 
 const store = new MySQLStore(TEST_CONFIG);
 // MySQL does not persist tool mocks / tool mock reports — it rejects them.
-createTestSuite(store, { toolMocks: false, workflowResultsNoopWhenRunMissing: false });
+createTestSuite(store, { toolMocks: false, workflowResultsNoopWhenRunMissing: false, skillsMetadataFilter: false });
 
 describe('MySQL dataset field fidelity', () => {
   const writer = store.stores.datasets;

@@ -390,7 +390,7 @@ export async function dispatchEvent(
       state.taskToolInsertIndex = -1;
       await ectx.renderExistingMessages(isCurrent);
       if (!isCurrent()) break;
-      await state.controller.loadOMProgress(state.session, isCurrent);
+      await state.local?.controller.loadOMProgress(state.local.session, isCurrent);
       if (!isCurrent()) break;
       // Refresh git branch async so TUI status line reflects the current branch
       getCurrentGitBranchAsync(state.projectInfo.rootPath).then(freshBranch => {
@@ -411,7 +411,7 @@ export async function dispatchEvent(
         state.githubPrGradientAnimator?.stop();
         // Load the objective from the durable ThreadState slot, falling back to
         // the legacy thread-metadata goal for pre-migration threads.
-        await state.goalManager.loadFromThread(state, isCurrent);
+        if (state.local) await state.goalManager.loadFromThread(state.local, isCurrent);
         if (!isCurrent()) break;
         if (!state.goalManager.getGoal()) {
           state.goalManager.loadFromThreadMetadata(metadata);
@@ -439,7 +439,7 @@ export async function dispatchEvent(
       // do not bleed into unrelated new threads.
       const shouldPersistPendingGoal = state.goalManager?.consumePersistOnNextThreadCreate() ?? false;
       if (shouldPersistPendingGoal) {
-        state.goalManager?.saveToThread(state).catch(() => {});
+        if (state.local) state.goalManager?.saveToThread(state.local).catch(() => {});
       } else {
         state.goalManager?.loadFromThreadMetadata(event.thread.metadata as Record<string, unknown> | undefined);
       }

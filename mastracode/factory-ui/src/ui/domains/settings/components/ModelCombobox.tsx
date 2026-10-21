@@ -6,7 +6,7 @@ import { useMemo } from 'react';
 
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
 import { ProviderBrandIcon } from '../../workspaces/components/ProviderBrandIcon';
-import { providerDisplayName } from './provider-display-name';
+import { providerDisplayName } from '@mastra/factory/provider-display-name';
 
 /** Value the picker reports when the caller's `auto` choice is picked. */
 const AUTO_VALUE = 'auto';

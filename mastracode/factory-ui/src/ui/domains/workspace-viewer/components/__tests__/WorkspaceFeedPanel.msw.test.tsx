@@ -14,7 +14,6 @@ if (!Element.prototype.scrollIntoView) {
 }
 
 const WORKSPACE = 'session-1';
-const THREAD = 'thread-1';
 const FACTORY_ID = 'fp-1';
 const ITEM_ID = 'item-1';
 const COMMENTS_URL = `${TEST_BASE_URL}/web/factory/work-items/${ITEM_ID}/comments`;
@@ -60,9 +59,6 @@ function wireComment(id: string, body: string): WorkItemComment {
 
 function installWorkspaceHandlers() {
   server.use(
-    http.get(`${TEST_BASE_URL}/web/workspace/files`, () =>
-      HttpResponse.json({ workspacePath: WORKSPACE, threadId: THREAD, files: [] }),
-    ),
     http.get(`${TEST_BASE_URL}/web/workspace/changes`, () =>
       HttpResponse.json({ workspacePath: WORKSPACE, available: true, additions: 0, deletions: 0, changes: [] }),
     ),
@@ -84,7 +80,6 @@ describe('workspace panel comment feed', () => {
     renderWithProviders(
       <WorkspaceViewerPanel
         workspacePath={WORKSPACE}
-        threadId={THREAD}
         workItem={workItem(2)}
         factoryProjectId={FACTORY_ID}
         onSizeChange={onSizeChange}
@@ -110,12 +105,7 @@ describe('workspace panel comment feed', () => {
   it('labels an empty feed row "None yet"', async () => {
     installWorkspaceHandlers();
     renderWithProviders(
-      <WorkspaceViewerPanel
-        workspacePath={WORKSPACE}
-        threadId={THREAD}
-        workItem={workItem(0)}
-        factoryProjectId={FACTORY_ID}
-      />,
+      <WorkspaceViewerPanel workspacePath={WORKSPACE} workItem={workItem(0)} factoryProjectId={FACTORY_ID} />,
     );
 
     expect(await screen.findByRole('button', { name: /Comments\s?None yet/ })).toBeInTheDocument();
@@ -123,7 +113,7 @@ describe('workspace panel comment feed', () => {
 
   it('offers no comments row when the thread has no work item', async () => {
     installWorkspaceHandlers();
-    renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} threadId={THREAD} />);
+    renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
 
     await screen.findByRole('button', { name: /Files/ });
     expect(screen.queryByRole('button', { name: /Comments/ })).not.toBeInTheDocument();
@@ -142,7 +132,6 @@ describe('workspace panel comment feed', () => {
     const { client } = renderWithProviders(
       <WorkspaceViewerPanel
         workspacePath={WORKSPACE}
-        threadId={THREAD}
         workItem={workItem(1)}
         factoryProjectId={FACTORY_ID}
         visible={false}

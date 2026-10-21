@@ -8,7 +8,7 @@ import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../
 import type { ProviderInfo } from '../../../../../api/types';
 import { useAvailableModelsQuery } from '../../../../../hooks/useAvailableModels';
 import type { AvailableModelOption } from '../../../../../hooks/useAvailableModels';
-import { providerDisplayName } from '../provider-display-name';
+import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import { ProviderAccessSection } from '../ProviderAccessSection';
 
 const PROVIDERS_URL = `${TEST_BASE_URL}/web/config/providers`;

@@ -68,7 +68,7 @@ function makeContext(modelId = 'provider/old') {
   const stateSet = vi.fn(async (nextState: Record<string, unknown>) => {
     sessionState = { ...sessionState, ...nextState };
   });
-  return {
+  const result = {
     ctx: {
       state: {
         controller: {
@@ -97,6 +97,9 @@ function makeContext(modelId = 'provider/old') {
     modelSwitch,
     modeSwitch,
   };
+  const { state } = result.ctx;
+  state.local = { controller: state.controller, session: state.session };
+  return result;
 }
 
 describe('model pack application', () => {
