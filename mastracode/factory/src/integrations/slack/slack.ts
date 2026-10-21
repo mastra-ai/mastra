@@ -1052,6 +1052,11 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
       // thread without the bot replying. Word boundary so messages that
       // merely start with "aside..." (e.g. "asides can wait") still route.
       if (/^aside\b/i.test(message.text)) return ingestAside(thread, message, deps);
+      const command = message.isMention ? muteCommand(message.text) : undefined;
+      if (command) return setThreadMuted(thread, message, ctx, command === 'mute');
+      // A muted thread ignores everything that doesn't tag the bot, and the
+      // skipped messages never reach the session.
+      if (!message.isMention && (await isThreadMuted(thread, ctx))) return;
       // A subscribed follow-up from an unlinked sender must not run either
       // (e.g. the link was removed mid-conversation), and it must still
       // resolve a factory (e.g. the default was cleared or its factory
@@ -1066,10 +1071,57 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
       acknowledgeReceipt(thread, deps);
       await defaultHandler(thread, message);
     },
-    onMention: newSessionChatHandler,
+    onMention: async (thread, message, defaultHandler, ctx) => {
+      // `@bot mute` in a thread the bot never joined has nothing to mute, and
+      // must not start a session about the word "mute".
+      if (muteCommand(message.text)) return;
+      await newSessionChatHandler(thread, message, defaultHandler, ctx);
+    },
     onDirectMessage: newSessionChatHandler,
   };
 };
+
+/** Thread metadata key; one Factory runs one Slack app, so this is per bot. */
+const MUTED_KEY = 'factory_muted';
+
+/** `mute` or `unmute` when that word, with the mentions taken out, is the whole message. */
+function muteCommand(text: string): 'mute' | 'unmute' | undefined {
+  const rest = text
+    .replace(/<@[^>]+>/g, ' ')
+    .replace(/(?<!\w)@[\w.-]+/g, ' ')
+    .trim()
+    .replace(/[.!]+$/, '')
+    .toLowerCase();
+  return rest === 'mute' || rest === 'unmute' ? rest : undefined;
+}
+
+async function isThreadMuted(thread: HandlerThread, ctx: ChannelHandlerContext): Promise<boolean> {
+  const internal = await findInternalThread(ctx.mastra, thread);
+  return internal?.metadata?.[MUTED_KEY] === 'true';
+}
+
+/**
+ * Stored on the Mastra thread next to `channel_subscribed`, so a mute holds
+ * across deploys and replicas. Anyone in the thread may mute or unmute: it
+ * only changes what the bot listens to, and every run still goes through the
+ * sender's link gate. A reaction confirms it without posting.
+ */
+async function setThreadMuted(
+  thread: HandlerThread,
+  message: HandlerMessage,
+  ctx: ChannelHandlerContext,
+  muted: boolean,
+): Promise<void> {
+  const internal = await findInternalThread(ctx.mastra, thread);
+  const store = await ctx.mastra?.getStorage()?.getStore('memory');
+  if (!internal || !store) return;
+  await store.patchThread({ id: internal.id, metadata: { ...internal.metadata, [MUTED_KEY]: String(muted) } });
+  try {
+    await thread.adapter.addReaction(thread.id, message.id, muted ? 'mute' : 'loud_sound');
+  } catch (error) {
+    console.warn('[slack] mute reaction failed', { thread: thread.id, error });
+  }
+}
 
 /** Slack app credentials, passed in explicitly rather than read from env here. */
 interface SlackCredentials {
