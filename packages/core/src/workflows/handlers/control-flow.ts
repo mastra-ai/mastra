@@ -42,6 +42,9 @@ import {
 import type { ForeachProgress } from '../utils';
 import type { ExecuteStepParams } from './step';
 
+/** Minimum time between two item-end checkpoints of one foreach (#26214). */
+const FOREACH_CHECKPOINT_INTERVAL_MS = 1000;
+
 function publishStepEvent(
   engine: DefaultExecutionEngine,
   pubsub: PubSub,
@@ -1077,7 +1080,6 @@ export async function executeForeach(
   const prevForeachOutput = (prevPayload?.suspendPayload?.__workflow_meta?.foreachOutput ||
     []) as PersistedForeachStepResult[];
   const foreachProgress: ForeachProgress = { ...restartProgress };
-  const checkpointWrites: Promise<void>[] = [];
   for (const [index, { output, nestedRunId }] of Object.entries(foreachProgress)) {
     prevForeachOutput[Number(index)] = {
       status: 'success',
@@ -1094,6 +1096,87 @@ export async function executeForeach(
 
   const totalCount = prevOutput.length;
   let completedCount = 0;
+
+  /** The running foreach result that carries the progress checkpointed so far. */
+  const runningWithProgress = (): StepResult<any, any, any, any> => ({
+    payload: prevOutput,
+    startedAt: Date.now(),
+    ...stepInfo,
+    // A resumed foreach keeps the per-item suspend state that resumed siblings read.
+    ...(prevPayload?.suspendPayload !== undefined ? { suspendPayload: prevPayload.suspendPayload } : {}),
+    status: 'running',
+    metadata: { ...stepInfo.metadata, foreachProgress },
+  });
+
+  // Item-end checkpoints (#26214) go through one serialized chain: at most one write is
+  // in flight, items that finish meanwhile are folded into the next write, and writes
+  // start at least FOREACH_CHECKPOINT_INTERVAL_MS apart. Each write is a full-snapshot
+  // upsert, so overlapping writes could land out of order and a stale one would erase
+  // finished items; the interval bounds how many full snapshots a large foreach rewrites.
+  // Items that finish inside the last interval before a crash run again on restart.
+  let checkpointDirtyIndex: number | undefined;
+  let checkpointRunning = false;
+  let checkpointChain: Promise<void> = Promise.resolve();
+  let checkpointFailure: { error: unknown } | undefined;
+  let lastCheckpointAt = 0;
+  let foreachEnded = false;
+  let wakeCheckpoint: (() => void) | undefined;
+
+  const runCheckpoints = async () => {
+    try {
+      while (checkpointDirtyIndex !== undefined && !foreachEnded && !checkpointFailure) {
+        const wait = lastCheckpointAt + FOREACH_CHECKPOINT_INTERVAL_MS - Date.now();
+        if (wait > 0) {
+          await new Promise<void>(resolve => {
+            const timer = setTimeout(resolve, wait);
+            wakeCheckpoint = () => {
+              clearTimeout(timer);
+              resolve();
+            };
+          });
+          wakeCheckpoint = undefined;
+          // The foreach's own result write supersedes a checkpoint that has not started yet.
+          if (foreachEnded) return;
+        }
+        const k = checkpointDirtyIndex;
+        checkpointDirtyIndex = undefined;
+        lastCheckpointAt = Date.now();
+        try {
+          await engine.persistStepUpdate({
+            workflowId,
+            runId,
+            resourceId,
+            serializedStepGraph,
+            stepResults: { ...stepResults, [stepId]: runningWithProgress() },
+            executionContext,
+            workflowStatus: 'running',
+            requestContext,
+            phase: `foreach-item-end.${k}`,
+          });
+        } catch (error) {
+          checkpointFailure = { error };
+          engine.getLogger()?.warn(`Foreach checkpoint for step ${stepId} failed`, { runId, error });
+        }
+      }
+    } finally {
+      // Reset synchronously so an item finishing right after the loop exits starts a new chain.
+      checkpointRunning = false;
+    }
+  };
+
+  const scheduleCheckpoint = (k: number) => {
+    checkpointDirtyIndex = k;
+    if (checkpointRunning) return;
+    checkpointRunning = true;
+    checkpointChain = runCheckpoints();
+  };
+
+  /** Drop a checkpoint that has not started, wait for the one in flight, and surface its failure. */
+  const settleCheckpoints = async () => {
+    foreachEnded = true;
+    wakeCheckpoint?.();
+    await checkpointChain;
+  };
 
   // Use a fastq callback-based queue for fluid concurrency.
   // Unlike the previous batch approach (Promise.all on slices), this starts the
@@ -1225,6 +1308,21 @@ export async function executeForeach(
 
       const result = stepExecResult.result as ForeachStepResult;
 
+      if (result.status === 'success') {
+        // Record the finished item and put the progress back on the shared foreach result
+        // before any await, so a sibling's item-start write cannot drop it (#26214).
+        const nestedRunId = result.metadata?.nestedRunId;
+        foreachProgress[k] = {
+          output: result.output,
+          ...(typeof nestedRunId === 'string' ? { nestedRunId } : {}),
+        };
+        stepResults[stepId] = runningWithProgress();
+        executionContext.activeStepsPath[stepId] = executionContext.executionPath;
+        scheduleCheckpoint(k);
+      } else if (Object.keys(foreachProgress).length > 0) {
+        stepResults[stepId] = runningWithProgress();
+      }
+
       if (result.status !== 'success') {
         await handleNonSuccessResult(result, k);
       } else {
@@ -1243,40 +1341,6 @@ export async function executeForeach(
       // round-trip through the workflow snapshot. For non-suspended results we
       // clear it to keep the snapshot small.
       prevForeachOutput[k] = result.status === 'suspended' ? result : { ...result, suspendPayload: {} };
-
-      if (result.status === 'success') {
-        // Checkpoint finished items on the still-running foreach so a crash
-        // before the rest finish does not run them again on restart (#26214).
-        foreachProgress[k] = {
-          output: result.output,
-          ...(nestedRunIds[k] ? { nestedRunId: nestedRunIds[k] } : {}),
-        };
-        stepResults[stepId] = {
-          payload: prevOutput,
-          startedAt: Date.now(),
-          ...stepInfo,
-          // A resumed foreach keeps the per-item suspend state that resumed siblings read.
-          ...(prevPayload?.suspendPayload !== undefined ? { suspendPayload: prevPayload.suspendPayload } : {}),
-          status: 'running',
-          metadata: { ...stepInfo.metadata, foreachProgress },
-        };
-        executionContext.activeStepsPath[stepId] = executionContext.executionPath;
-        // Not awaited here: holding the queue slot for the write would change which
-        // items start before a sibling suspends and stops the queue.
-        const write = engine.persistStepUpdate({
-          workflowId,
-          runId,
-          resourceId,
-          serializedStepGraph,
-          stepResults,
-          executionContext,
-          workflowStatus: 'running',
-          requestContext,
-          phase: `foreach-item-end.${k}`,
-        });
-        write.catch(() => {});
-        checkpointWrites.push(write);
-      }
     } catch (err) {
       const errorObj = err instanceof Error ? err : new Error(String(err));
       const thrownResult: PersistedForeachStepResult = {
@@ -1357,9 +1421,21 @@ export async function executeForeach(
       resolveCompletion = resolve;
     });
   }
-  await Promise.all(checkpointWrites);
-  // The item-end checkpoints mark the foreach as active; it is not once every item has ended.
-  delete executionContext.activeStepsPath[stepId];
+  try {
+    await settleCheckpoints();
+  } finally {
+    // The item-end checkpoints mark the foreach as active; it is not once every item has ended.
+    delete executionContext.activeStepsPath[stepId];
+  }
+  if (checkpointFailure) {
+    const error = getErrorFromUnknown(checkpointFailure.error);
+    await engine.errorChildSpan({
+      span: loopSpan,
+      operationId: `workflow.${workflowId}.run.${runId}.foreach.${executionContext.executionPath.join('-')}.span.error`,
+      errorOptions: { error },
+    });
+    throw error;
+  }
 
   // Handle cancellation
   if (canceledResult) {
