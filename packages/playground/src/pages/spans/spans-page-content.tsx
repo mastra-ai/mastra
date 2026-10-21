@@ -7,6 +7,7 @@ import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/compone
 import { resolveTracesDateWindow } from '@mastra/playground-ui/domains/traces/components/traces-explorer';
 import { TracesListView } from '@mastra/playground-ui/domains/traces/components/traces-list-view';
 import type { TracesListViewTrace } from '@mastra/playground-ui/domains/traces/components/traces-list-view';
+import { recoveryRefetchInterval } from '@mastra/playground-ui/domains/traces/hooks/use-traces-list-source';
 import { resolveTraceQueryTimeRange } from '@mastra/playground-ui/domains/traces/trace-query-filters';
 import type { TraceFilterGroup, TraceFilterToken } from '@mastra/playground-ui/domains/traces/trace-query-filters';
 import type { TraceDatePreset } from '@mastra/playground-ui/domains/traces/types';
@@ -76,8 +77,14 @@ export function SpansPageContent() {
     return { timeRange, orderBy: [{ field: 'startedAt', direction: sort }], ...(where ? { where } : {}) };
   }, [timeRange, sort, tokens, groups, withContextFields]);
 
+  // Like the traces list with delta polling: a timer or a window focus would reload every loaded page
+  // and reset the cursor chain, so the list only reloads to recover from a transient failure.
   const { spans, hasNextPage, isFetchingNextPage, setEndOfListElement, isLoading, isError, error } = useQuerySpans({
     query,
+    queryOptions: {
+      refetchInterval: ({ state }) => recoveryRefetchInterval(state.error),
+      refetchOnWindowFocus: false,
+    },
   });
 
   // Switching to `custom` keeps the current dates so the picker opens on them; any other preset drops them.

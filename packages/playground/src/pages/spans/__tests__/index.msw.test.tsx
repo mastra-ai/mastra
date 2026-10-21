@@ -1,5 +1,7 @@
 import type { GetObservabilityCapabilitiesResponse, QuerySpansInput, QuerySpansResult } from '@mastra/client-js';
+import { TRACES_LIST_REFETCH_INTERVAL_MS } from '@mastra/playground-ui/domains/traces/hooks/use-traces-list-source';
 import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
+import { focusManager } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useEffect, useImperativeHandle } from 'react';
@@ -139,6 +141,8 @@ describe('Spans page', () => {
   afterEach(() => {
     layoutStubs.rect.mockRestore();
     globalThis.ResizeObserver = layoutStubs.resizeObserver;
+    vi.useRealTimers();
+    focusManager.setFocused(undefined);
   });
   // Let the list virtualizer's debounce timer fire before jsdom tears down `window`.
   afterAll(() => new Promise(resolve => setTimeout(resolve, 200)));
@@ -305,6 +309,64 @@ describe('Spans page', () => {
 
       await screen.findByText('Failed to load spans');
       expect(screen.getByRole('group', { name: 'Span filters' })).toBeTruthy();
+    });
+  });
+
+  describe('when the span query fails transiently', () => {
+    it('retries until the list loads', async () => {
+      setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
+      // The client retries 5xx on its own, so the server stays down until the page shows the failure.
+      let serverDown = true;
+      server.use(
+        http.post(SPANS_QUERY_URL, () =>
+          serverDown ? HttpResponse.json({ error: 'busy' }, { status: 503 }) : HttpResponse.json(spansFirstPage),
+        ),
+      );
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'], shouldAdvanceTime: true });
+
+      renderPage();
+      await screen.findByText('Failed to load spans');
+      serverDown = false;
+      await act(() => vi.advanceTimersByTimeAsync(TRACES_LIST_REFETCH_INTERVAL_MS));
+
+      expect(await screen.findByText('agent run: weather')).toBeTruthy();
+    });
+  });
+
+  describe('when the server refuses the span query', () => {
+    it('does not retry it', async () => {
+      const requests = setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
+      server.use(
+        http.post(SPANS_QUERY_URL, async ({ request }) => {
+          requests.push((await request.json()) as QuerySpansInput);
+          return HttpResponse.json({ error: 'range too wide' }, { status: 422 });
+        }),
+      );
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'], shouldAdvanceTime: true });
+
+      renderPage();
+      await screen.findByText('Failed to load spans');
+      const requestsAfterFailure = requests.length;
+      await act(() => vi.advanceTimersByTimeAsync(TRACES_LIST_REFETCH_INTERVAL_MS * 3));
+
+      expect(requests).toHaveLength(requestsAfterFailure);
+    });
+  });
+
+  describe('when the window regains focus', () => {
+    it('does not reload the loaded pages', async () => {
+      const requests = setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
+
+      renderPage();
+      await screen.findByText('agent run: weather');
+      const requestsAfterLoad = requests.length;
+      await act(async () => {
+        focusManager.setFocused(false);
+        focusManager.setFocused(true);
+        await new Promise(resolve => setTimeout(resolve, 100));
+      });
+
+      expect(requests).toHaveLength(requestsAfterLoad);
     });
   });
 
