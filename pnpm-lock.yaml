@@ -4599,9 +4599,9 @@ importers:
         specifier: ^2.9.0
         version: 2.9.1
     devDependencies:
-      '@ai-sdk/alibaba-v6':
-        specifier: npm:@ai-sdk/alibaba@1.0.67
-        version: '@ai-sdk/alibaba@1.0.67(zod@4.6.7)'
+      '@ai-sdk/alibaba-v7':
+        specifier: npm:@ai-sdk/alibaba@2.0.69
+        version: '@ai-sdk/alibaba@2.0.69(zod@4.6.7)'
       '@ai-sdk/anthropic-v5':
         specifier: npm:@ai-sdk/anthropic@2.0.109
         version: '@ai-sdk/anthropic@2.0.109(zod@4.6.7)'
@@ -4614,12 +4614,12 @@ importers:
       '@ai-sdk/azure':
         specifier: ^2.0.142
         version: 2.0.142(zod@4.6.7)
-      '@ai-sdk/cerebras-v6':
-        specifier: npm:@ai-sdk/cerebras@2.0.91
-        version: '@ai-sdk/cerebras@2.0.91(zod@4.6.7)'
-      '@ai-sdk/deepinfra-v6':
-        specifier: npm:@ai-sdk/deepinfra@2.0.89
-        version: '@ai-sdk/deepinfra@2.0.89(zod@4.6.7)'
+      '@ai-sdk/cerebras-v7':
+        specifier: npm:@ai-sdk/cerebras@3.0.71
+        version: '@ai-sdk/cerebras@3.0.71(zod@4.6.7)'
+      '@ai-sdk/deepinfra-v7':
+        specifier: npm:@ai-sdk/deepinfra@3.0.71
+        version: '@ai-sdk/deepinfra@3.0.71(zod@4.6.7)'
       '@ai-sdk/deepseek-v7':
         specifier: npm:@ai-sdk/deepseek@3.0.67
         version: '@ai-sdk/deepseek@3.0.67(zod@4.6.7)'
@@ -4632,9 +4632,9 @@ importers:
       '@ai-sdk/google-v7':
         specifier: npm:@ai-sdk/google@4.0.99
         version: '@ai-sdk/google@4.0.99(zod@4.6.7)'
-      '@ai-sdk/groq-v6':
-        specifier: npm:@ai-sdk/groq@3.0.77
-        version: '@ai-sdk/groq@3.0.77(zod@4.6.7)'
+      '@ai-sdk/groq-v7':
+        specifier: npm:@ai-sdk/groq@4.0.63
+        version: '@ai-sdk/groq@4.0.63(zod@4.6.7)'
       '@ai-sdk/mistral-v6':
         specifier: npm:@ai-sdk/mistral@3.0.74
         version: '@ai-sdk/mistral@3.0.74(zod@4.6.7)'
@@ -4665,12 +4665,12 @@ importers:
       '@ai-sdk/provider-v4':
         specifier: npm:@ai-sdk/provider@1.1.3
         version: '@ai-sdk/provider@1.1.3'
-      '@ai-sdk/togetherai-v6':
-        specifier: npm:@ai-sdk/togetherai@2.0.91
-        version: '@ai-sdk/togetherai@2.0.91(zod@4.6.7)'
-      '@ai-sdk/xai-v6':
-        specifier: npm:@ai-sdk/xai@3.0.143
-        version: '@ai-sdk/xai@3.0.143(zod@4.6.7)'
+      '@ai-sdk/togetherai-v7':
+        specifier: npm:@ai-sdk/togetherai@3.0.72
+        version: '@ai-sdk/togetherai@3.0.72(zod@4.6.7)'
+      '@ai-sdk/xai-v7':
+        specifier: npm:@ai-sdk/xai@5.0.24
+        version: '@ai-sdk/xai@5.0.24(zod@4.6.7)'
       '@ast-grep/napi':
         specifier: ^0.40.5
         version: 0.40.5
@@ -10225,9 +10225,9 @@ packages:
     peerDependencies:
       zod: 4.6.7
 
-  '@ai-sdk/alibaba@1.0.67':
-    resolution: {integrity: sha512-zDpPsxcA1K7ADg+zQwmDXsiRMtS3COK1BXO7mFpGbkkiAdsfOHZFriizcCpFbglg6SvpkGLAXzhVYh8tub5j2w==}
-    engines: {node: '>=18'}
+  '@ai-sdk/alibaba@2.0.69':
+    resolution: {integrity: sha512-Ac2kgsu/U7S5fEUvUblIuJa9UiPGq7gILhxKecO4LPhKnEn/w07nwo6+isLw04E3/gxTMcSBf+L7a41+PqZeSg==}
+    engines: {node: '>=22'}
     peerDependencies:
       zod: 4.6.7
 
@@ -10279,9 +10279,9 @@ packages:
     peerDependencies:
       zod: 4.6.7
 
-  '@ai-sdk/cerebras@2.0.91':
-    resolution: {integrity: sha512-F8KkfSW5fs6ZP3pZVgIi3jtK2XSh/tRZMAtxEJzxMsfPkZfP/bagz5/CzrnoAkibobS5f6iD6TABpBEs7mjvhA==}
-    engines: {node: '>=18'}
+  '@ai-sdk/cerebras@3.0.71':
+    resolution: {integrity: sha512-QxPxPjFq+seUmMEE6QwJ8y5dmNpUTq7FYImuOxyNN/SDWdpUjyu/hs6TainwB+RZpUbuwDFbPVrOJ2+5xMBOJQ==}
+    engines: {node: '>=22'}
     peerDependencies:
       zod: 4.6.7
 
@@ -10291,9 +10291,9 @@ packages:
     peerDependencies:
       zod: ^3.0.0
 
-  '@ai-sdk/deepinfra@2.0.89':
-    resolution: {integrity: sha512-PtJ4dEPajcueXa8Ef3+f4bPm8VYW+uVOHVvlODucQdSlpxMSFKOZuU9JY239zA6RF/OpQCXi7nEc3wY5FzGvdg==}
-    engines: {node: '>=18'}
+  '@ai-sdk/deepinfra@3.0.71':
+    resolution: {integrity: sha512-dh4NHDlT2cDJj91YL54f+LQjilE8ouO+ssQ+W1QjpdGjJI3e0+1ZxM13vHgu0gTTO6+JwR/8BI/vRfG9o1DC5w==}
+    engines: {node: '>=22'}
     peerDependencies:
       zod: 4.6.7
 
@@ -10375,9 +10375,9 @@ packages:
     peerDependencies:
       zod: 4.6.7
 
-  '@ai-sdk/groq@3.0.77':
-    resolution: {integrity: sha512-kK8s+ktIAmOCmNZU7isS/N86wu6Pg1bW88z9GvvbcxEbCNa+++3/ZS22dk32uMqiGBqYnt06vxku3ew1Ut+2QA==}
-    engines: {node: '>=18'}
+  '@ai-sdk/groq@4.0.63':
+    resolution: {integrity: sha512-848iFLbM9oOA4XitjDeRuF6rLSDYJBIodGGWjCnI6RFfcK4AkRKz6ddTg2Pu2jj5qJgH3yDF0rIgkFW4QljoDw==}
+    engines: {node: '>=22'}
     peerDependencies:
       zod: 4.6.7
 
@@ -10420,6 +10420,12 @@ packages:
   '@ai-sdk/openai-compatible@2.0.85':
     resolution: {integrity: sha512-a3FXe1dTNv4XmlIehVl1cJUmOTMHFBSCIy9a6PdWzL7Tj5GgQAs+kEhjhQhEv9AxY1HFjH3EV2aK4NbWcrRJhw==}
     engines: {node: '>=18'}
+    peerDependencies:
+      zod: 4.6.7
+
+  '@ai-sdk/openai-compatible@3.0.71':
+    resolution: {integrity: sha512-8uvAsESbfoiUUa3DEXnM6bcpwObpsDrbv+6DgmkaiBJsONL0sBhglJhC61+X9yIxEuwE0YXwiQ7hfitxyzuFDQ==}
+    engines: {node: '>=22'}
     peerDependencies:
       zod: 4.6.7
 
@@ -10525,9 +10531,9 @@ packages:
     peerDependencies:
       zod: 4.6.7
 
-  '@ai-sdk/togetherai@2.0.91':
-    resolution: {integrity: sha512-vxi1AHHVN/JZS2me8/AyX8pyxg9sAbTwTLjHUj2q+YThdyAZYhv91vIsWmDeT9GEvEme/YFKVCR9YyAEMRskZA==}
-    engines: {node: '>=18'}
+  '@ai-sdk/togetherai@3.0.72':
+    resolution: {integrity: sha512-lJi21XrpmrXO+PpcZBDIlAVok/b4BGF6U7TmnuQLPwBiKmrab0b86TFbbQOvbMB1CITxBLfaBMPV7aQL8yCxeQ==}
+    engines: {node: '>=22'}
     peerDependencies:
       zod: 4.6.7
 
@@ -10549,9 +10555,9 @@ packages:
     peerDependencies:
       zod: 4.6.7
 
-  '@ai-sdk/xai@3.0.143':
-    resolution: {integrity: sha512-sBfWEoAPwY1naF+I86CevJHp1CcPdGBLkFG+YV6NxRC/oFSD65JNWrLyiXXxbAHiRltg6z5bA5gqRfy1QO7x2A==}
-    engines: {node: '>=18'}
+  '@ai-sdk/xai@5.0.24':
+    resolution: {integrity: sha512-pLo/jWgPIp5PES6FCA7ocv9P3jrxJexslMY9X60G2lyRBvkg46Vcu5kqN3Z/BsGdnB2RrAIiEx97LZM/MWH3IQ==}
+    engines: {node: '>=22'}
     peerDependencies:
       zod: 4.6.7
 
@@ -17012,6 +17018,7 @@ packages:
   '@opentelemetry/propagator-jaeger@2.11.0':
     resolution: {integrity: sha512-RUOqgoIqXOPQTOhpBrs07Y8sBlxVoLY5Fka6ueZ0prW+k6fWQsba/nHDY4gm+gmfuwtRqbX5Y9YKhDvktjbIqQ==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Package no longer supported. See https://github.com/open-telemetry/opentelemetry-js/pull/7077
     peerDependencies:
       '@opentelemetry/api': '>=1.0.0 <1.10.0'
 
@@ -17172,48 +17179,56 @@ packages:
   '@opentelemetry/sdk-trace-base@2.10.0':
     resolution: {integrity: sha512-GuYQQT7QD2EeO8lcZLRQzcbOyhqAzL+6WWTKTU9mSUBYBazkEDl+VrQcXQhbB08OWM9anD1aHleVadzulpOaUQ==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.3.0 <1.10.0'
 
   '@opentelemetry/sdk-trace-base@2.11.0':
     resolution: {integrity: sha512-H19x/TX/LZdqiYOjM7fqtSxwlplC5pgelavqbQdHbhdq0q/AI/TGkM2dfGuuynTXmJPeF2HoZVoPDu+TGoW78A==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.3.0 <1.10.0'
 
   '@opentelemetry/sdk-trace-base@2.2.0':
     resolution: {integrity: sha512-xWQgL0Bmctsalg6PaXExmzdedSp3gyKV8mQBwK/j9VGdCDu2fmXIb2gAehBKbkXCpJ4HPkgv3QfoJWRT4dHWbw==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.3.0 <1.10.0'
 
   '@opentelemetry/sdk-trace-base@2.5.0':
     resolution: {integrity: sha512-VzRf8LzotASEyNDUxTdaJ9IRJ1/h692WyArDBInf5puLCjxbICD6XkHgpuudis56EndyS7LYFmtTMny6UABNdQ==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.3.0 <1.10.0'
 
   '@opentelemetry/sdk-trace-base@2.9.0':
     resolution: {integrity: sha512-cp9zmTl62R8PJrpvFcmc8N2JQU/xfa0S+61q511Nji+QxCfZ8Ifvg7H27G8cANe4crg4RTrWsVvanHiXjSp6ag==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.3.0 <1.10.0'
 
   '@opentelemetry/sdk-trace-node@2.10.0':
     resolution: {integrity: sha512-GZK/G6oZyBLGlH1pUgeDch7D91KoHd2uotUGIkWCPi9GI5T9X0p4L7nNAMDR1BQjkRYoDqo+ddfVx9t5Uhys+Q==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.0.0 <1.10.0'
 
   '@opentelemetry/sdk-trace-node@2.11.0':
     resolution: {integrity: sha512-CuvCMJmZxswhNLlM2LfuLOW3h3fZujA4hsG4B+Sz4dX2zvaXO8Ng74cnDHWD64gLszTlhiG3c0iNUjj4g+0/sA==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.0.0 <1.10.0'
 
   '@opentelemetry/sdk-trace-node@2.9.0':
     resolution: {integrity: sha512-ec9a7ps37huy5itYk0MalaZdSLlM6AXWp/FhtEjgMpp5leEGojBDvAl/UWttQnkMZOvFHKzRESn8TD3yKTF5nQ==}
     engines: {node: ^18.19.0 || >=20.6.0}
+    deprecated: Use @opentelemetry/sdk-trace package
     peerDependencies:
       '@opentelemetry/api': '>=1.0.0 <1.10.0'
 
@@ -32074,11 +32089,10 @@ snapshots:
     dependencies:
       zod: 4.6.7
 
-  '@ai-sdk/alibaba@1.0.67(zod@4.6.7)':
+  '@ai-sdk/alibaba@2.0.69(zod@4.6.7)':
     dependencies:
-      '@ai-sdk/openai-compatible': 2.0.85(zod@4.6.7)
-      '@ai-sdk/provider': 3.0.19
-      '@ai-sdk/provider-utils': 4.0.61(zod@4.6.7)
+      '@ai-sdk/provider': 4.0.29
+      '@ai-sdk/provider-utils': 5.0.62(zod@4.6.7)
       zod: 4.6.7
 
   '@ai-sdk/amazon-bedrock@3.0.140(zod@4.6.7)':
@@ -32138,11 +32152,11 @@ snapshots:
       zod: 4.6.7
     optional: true
 
-  '@ai-sdk/cerebras@2.0.91(zod@4.6.7)':
+  '@ai-sdk/cerebras@3.0.71(zod@4.6.7)':
     dependencies:
-      '@ai-sdk/openai-compatible': 2.0.85(zod@4.6.7)
-      '@ai-sdk/provider': 3.0.19
-      '@ai-sdk/provider-utils': 4.0.61(zod@4.6.7)
+      '@ai-sdk/openai-compatible': 3.0.71(zod@4.6.7)
+      '@ai-sdk/provider': 4.0.29
+      '@ai-sdk/provider-utils': 5.0.62(zod@4.6.7)
       zod: 4.6.7
 
   '@ai-sdk/cohere@1.2.10(zod@4.6.7)':
@@ -32151,11 +32165,11 @@ snapshots:
       '@ai-sdk/provider-utils': 2.2.8(zod@4.6.7)
       zod: 4.6.7
 
-  '@ai-sdk/deepinfra@2.0.89(zod@4.6.7)':
+  '@ai-sdk/deepinfra@3.0.71(zod@4.6.7)':
     dependencies:
-      '@ai-sdk/openai-compatible': 2.0.85(zod@4.6.7)
-      '@ai-sdk/provider': 3.0.19
-      '@ai-sdk/provider-utils': 4.0.61(zod@4.6.7)
+      '@ai-sdk/openai-compatible': 3.0.71(zod@4.6.7)
+      '@ai-sdk/provider': 4.0.29
+      '@ai-sdk/provider-utils': 5.0.62(zod@4.6.7)
       zod: 4.6.7
 
   '@ai-sdk/deepseek@1.0.63(zod@4.6.7)':
@@ -32260,10 +32274,10 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.41(zod@4.6.7)
       zod: 4.6.7
 
-  '@ai-sdk/groq@3.0.77(zod@4.6.7)':
+  '@ai-sdk/groq@4.0.63(zod@4.6.7)':
     dependencies:
-      '@ai-sdk/provider': 3.0.19
-      '@ai-sdk/provider-utils': 4.0.61(zod@4.6.7)
+      '@ai-sdk/provider': 4.0.29
+      '@ai-sdk/provider-utils': 5.0.62(zod@4.6.7)
       zod: 4.6.7
 
   '@ai-sdk/mistral@2.0.37(zod@4.6.7)':
@@ -32309,6 +32323,12 @@ snapshots:
     dependencies:
       '@ai-sdk/provider': 3.0.19
       '@ai-sdk/provider-utils': 4.0.61(zod@4.6.7)
+      zod: 4.6.7
+
+  '@ai-sdk/openai-compatible@3.0.71(zod@4.6.7)':
+    dependencies:
+      '@ai-sdk/provider': 4.0.29
+      '@ai-sdk/provider-utils': 5.0.62(zod@4.6.7)
       zod: 4.6.7
 
   '@ai-sdk/openai@1.3.24(zod@4.6.7)':
@@ -32450,11 +32470,11 @@ snapshots:
       zod: 4.6.7
     optional: true
 
-  '@ai-sdk/togetherai@2.0.91(zod@4.6.7)':
+  '@ai-sdk/togetherai@3.0.72(zod@4.6.7)':
     dependencies:
-      '@ai-sdk/openai-compatible': 2.0.85(zod@4.6.7)
-      '@ai-sdk/provider': 3.0.19
-      '@ai-sdk/provider-utils': 4.0.61(zod@4.6.7)
+      '@ai-sdk/openai-compatible': 3.0.71(zod@4.6.7)
+      '@ai-sdk/provider': 4.0.29
+      '@ai-sdk/provider-utils': 5.0.62(zod@4.6.7)
       zod: 4.6.7
 
   '@ai-sdk/ui-utils@1.2.11(zod@4.6.7)':
@@ -32478,11 +32498,10 @@ snapshots:
       '@ai-sdk/provider-utils': 3.0.41(zod@4.6.7)
       zod: 4.6.7
 
-  '@ai-sdk/xai@3.0.143(zod@4.6.7)':
+  '@ai-sdk/xai@5.0.24(zod@4.6.7)':
     dependencies:
-      '@ai-sdk/openai-compatible': 2.0.85(zod@4.6.7)
-      '@ai-sdk/provider': 3.0.19
-      '@ai-sdk/provider-utils': 4.0.61(zod@4.6.7)
+      '@ai-sdk/provider': 4.0.29
+      '@ai-sdk/provider-utils': 5.0.62(zod@4.6.7)
       zod: 4.6.7
 
   '@algolia/abtesting@1.25.0':
