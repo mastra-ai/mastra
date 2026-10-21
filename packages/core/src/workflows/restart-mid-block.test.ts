@@ -13,11 +13,13 @@
  * into fresh storage with a freshly built workflow and restarts.
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { EventEmitterPubSub } from '../events/event-emitter';
 import { Mastra } from '../mastra';
 import { MockStore } from '../storage/mock';
 import { createWorkflow } from './create';
+import { DefaultExecutionEngine } from './default';
 import type { WorkflowRunState } from './types';
 import { createStep } from './workflow';
 
@@ -204,4 +206,72 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
       expect(JSON.stringify(stored)).not.toContain('foreachProgress');
     },
   );
+
+  describe('foreach item-end checkpoints', () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+    async function setup(concurrency: number) {
+      const storage = new MockStore();
+      const item = step('item', async ({ inputData }) => ({ doubled: inputData * 2 }));
+      const workflow = createWorkflow({ id: 'foreach-checkpoints', inputSchema: anySchema, outputSchema: anySchema })
+        .foreach(item.step, { concurrency })
+        .commit();
+      new Mastra({ logger: false, storage, workflows: { wf: workflow } });
+      const store = (await storage.getStore('workflows'))!;
+      return { workflow, store };
+    }
+
+    it('never lets an older checkpoint overwrite one with more finished items', async () => {
+      const { workflow, store } = await setup(3);
+
+      // Storage that applies each write when it resolves, and resolves later writes first,
+      // the way concurrent upserts on a pooled connection can land.
+      const persist = store.persistWorkflowSnapshot.bind(store);
+      const applied: WorkflowRunState[] = [];
+      let calls = 0;
+      vi.spyOn(store, 'persistWorkflowSnapshot').mockImplementation(async (args: any) => {
+        const snapshot = JSON.parse(JSON.stringify(args.snapshot));
+        await sleep(Math.max(0, 40 - 10 * calls++));
+        applied.push(snapshot);
+        return persist({ ...args, snapshot });
+      });
+      // Stretch the window between an item finishing and its progress being recorded,
+      // and between a sibling starting and its item-start write.
+      const publish = EventEmitterPubSub.prototype.publish;
+      vi.spyOn(EventEmitterPubSub.prototype, 'publish').mockImplementation(async function (
+        this: EventEmitterPubSub,
+        topic,
+        event: any,
+        options,
+      ) {
+        const payload = event?.data?.payload;
+        if (event?.data?.type === 'workflow-step-progress' && payload?.currentIndex === 0) await sleep(40);
+        return publish.call(this, topic, event, options);
+      });
+      const onStart = DefaultExecutionEngine.prototype.onStepExecutionStart;
+      vi.spyOn(DefaultExecutionEngine.prototype, 'onStepExecutionStart').mockImplementation(
+        async function (this: DefaultExecutionEngine, params) {
+          if (params.executionContext.foreachIndex === 2) await sleep(20);
+          return onStart.call(this, params);
+        },
+      );
+
+      const result = await (await workflow.createRun()).start({ inputData: [0, 1, 2, 3] });
+      expect(result.status).toBe('success');
+
+      const recorded = new Set<string>();
+      for (const snapshot of applied) {
+        const foreach = snapshot.context.item;
+        if (snapshot.status !== 'running' || foreach?.status !== 'running') continue;
+        const keys = Object.keys((foreach.metadata?.foreachProgress as object | undefined) ?? {});
+        expect(keys, 'a later checkpoint dropped finished items').toEqual(expect.arrayContaining([...recorded]));
+        keys.forEach(key => recorded.add(key));
+      }
+      expect(recorded.size).toBeGreaterThan(0);
+    });
+  });
 });

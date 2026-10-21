@@ -110,6 +110,26 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     this.lastPersistedStatusByRun.delete(runId);
   }
 
+  /** Tail of each run's queue of foreach snapshot writes, see `serializeForeachSnapshotWrite`. */
+  protected foreachSnapshotWriteTails = new Map<string, Promise<void>>();
+
+  /**
+   * Runs a run's foreach snapshot writes one at a time, in call order. Item-start and item-end
+   * writes are full-snapshot upserts that carry the foreach progress, so if they overlapped an
+   * older one could land last and erase items that already finished (#26214).
+   */
+  async serializeForeachSnapshotWrite(runId: string, write: () => Promise<void>): Promise<void> {
+    const previous = this.foreachSnapshotWriteTails.get(runId) ?? Promise.resolve();
+    const current = previous.then(write);
+    const tail = current.catch(() => {});
+    this.foreachSnapshotWriteTails.set(runId, tail);
+    try {
+      await current;
+    } finally {
+      if (this.foreachSnapshotWriteTails.get(runId) === tail) this.foreachSnapshotWriteTails.delete(runId);
+    }
+  }
+
   /** Returns the current step's zero-based retry attempt, or zero outside an attempt. */
   getOrGenerateRetryCount(_stepId: Step['id']) {
     return retryCountStorage.getStore() ?? 0;

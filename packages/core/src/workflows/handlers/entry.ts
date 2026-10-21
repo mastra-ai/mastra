@@ -242,12 +242,19 @@ export async function persistStepUpdate(
     };
 
     const workflowsStore = await engine.mastra?.getStorage()?.getStore('workflows');
-    await workflowsStore?.persistWorkflowSnapshot({
-      workflowName: workflowId,
-      runId,
-      resourceId,
-      snapshot: engine.options?.pruneSnapshot ? engine.options.pruneSnapshot({ snapshot, workflowStatus }) : snapshot,
-    });
+    const write = async () => {
+      await workflowsStore?.persistWorkflowSnapshot({
+        workflowName: workflowId,
+        runId,
+        resourceId,
+        snapshot: engine.options?.pruneSnapshot ? engine.options.pruneSnapshot({ snapshot, workflowStatus }) : snapshot,
+      });
+    };
+    if (executionContext.foreachIndex !== undefined || phase?.startsWith('foreach-item-end.')) {
+      await engine.serializeForeachSnapshotWrite(runId, write);
+    } else {
+      await write();
+    }
     engine.setLastPersistedStatus(runId, workflowStatus);
   });
 }
