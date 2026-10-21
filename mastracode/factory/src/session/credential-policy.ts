@@ -1,7 +1,5 @@
-import {
-  resolveAuthenticatedCredentialTenant,
-  type CredentialTenant,
-} from '@mastra/code-sdk/agents/credential-resolver';
+import { resolveAuthenticatedCredentialTenant } from '@mastra/code-sdk/agents/credential-resolver';
+import type { CredentialTenant } from '@mastra/code-sdk/agents/credential-resolver';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 
@@ -35,26 +33,28 @@ export async function resolveFactoryModelPolicy(
   const principal = resolveAuthenticatedCredentialTenant(requestContext);
   if (!principal) return undefined;
   const controller = requestContext.get('controller') as AgentControllerRequestContext | undefined;
-  if (!controller?.resourceId) return { tenant: principal };
+  if (!controller?.sessionId || !controller.resourceId) return { tenant: principal };
+  const { sessionId, resourceId } = controller;
 
-  const sourceSession = await deps.sourceControl.getBySessionId(controller.resourceId);
+  const sourceSession = await deps.sourceControl.getBySessionId(sessionId);
   const binding =
     principal.orgId && controller.threadId
       ? await deps.workItems.findRunBindingByThread({
           orgId: principal.orgId,
-          resourceId: controller.resourceId,
-          sessionId: controller.resourceId,
+          resourceId,
+          sessionId,
           threadId: controller.threadId,
           rejectAmbiguous: true,
         })
       : null;
   if (!sourceSession) {
-    if (!binding && (controller.resourceId === principal.userId || controller.resourceId.startsWith('channel:')))
+    if (!binding && (resourceId === principal.userId || resourceId.startsWith('channel:')))
       return { tenant: principal };
-    // Session-less Factory pages address the Factory itself: the resourceId is the project id.
+    // Session-less Factory pages address the Factory itself: session and resource are both the
+    // project id. A run session under its Factory's resource whose row is gone is not a page.
     const factoryProject =
-      !binding && FACTORY_PROJECT_ID.test(controller.resourceId)
-        ? await deps.projects.getById({ id: controller.resourceId })
+      !binding && sessionId === resourceId && FACTORY_PROJECT_ID.test(resourceId)
+        ? await deps.projects.getById({ id: resourceId })
         : null;
     if (factoryProject && factoryProject.orgId === principal.orgId) {
       return {

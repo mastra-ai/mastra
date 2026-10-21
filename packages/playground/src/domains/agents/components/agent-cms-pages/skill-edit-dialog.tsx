@@ -106,9 +106,7 @@ export function SkillEditDialog({
   const hasFilesystem = workspaceInfo?.capabilities?.hasFilesystem ?? true;
 
   const builderDefaultWorkspaceId = useMemo(() => {
-    const ws = (builderSettings?.configuration?.agent as Record<string, unknown> | undefined)?.workspace as
-      | { type: string; workspaceId?: string }
-      | undefined;
+    const ws = builderSettings?.configuration?.agent?.workspace as { type: string; workspaceId?: string } | undefined;
     return ws?.type === 'id' ? ws.workspaceId : undefined;
   }, [builderSettings]);
 
@@ -305,7 +303,7 @@ export function SkillEditDialog({
           {!isReadOnly && (
             <>
               {authEnabled && (
-                <Select value={visibility} onValueChange={next => setVisibility(next as 'private' | 'public')}>
+                <Select value={visibility} onValueChange={next => setVisibility(next)}>
                   <SelectTrigger size="sm" aria-label="Visibility" className="w-fit gap-1.5">
                     <SelectValue placeholder="Visibility" />
                   </SelectTrigger>

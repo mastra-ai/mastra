@@ -656,7 +656,65 @@ export function createForeachWorkflows(ctx: WorkflowCreatorContext) {
     workflows['foreach-occurrence-parent'] = { workflow };
   }
 
+  // Tests: a failing foreach iteration fails the run (#26390). Each workflow runs two items
+  // concurrently. Item 2 waits until the run reports item 1's failed iteration, so item 1 is
+  // always the first failure regardless of engine scheduling.
+  for (const id of ['foreach-iteration-fails', 'foreach-two-iterations-fail', 'foreach-time-travel-refail']) {
+    const gate = createIterationGate();
+    let item2Attempts = 0;
+    const item = z.object({ n: z.number() });
+
+    const boom = createStep({
+      id: 'boom',
+      inputSchema: item,
+      outputSchema: item,
+      retries: 0,
+      execute: async ({ inputData }) => {
+        if (inputData.n === 1) {
+          throw new Error(id === 'foreach-time-travel-refail' ? 'always fails' : 'first failure');
+        }
+        if (id === 'foreach-iteration-fails') return inputData;
+        const attempt = ++item2Attempts;
+        await gate.firstFailureReported;
+        // On a time-travel replay item 2 succeeds, after item 1 has failed again.
+        if (id === 'foreach-time-travel-refail' && attempt > 1) return inputData;
+        throw new Error('second failure');
+      },
+    });
+
+    const workflow = createWorkflow({
+      steps: [boom],
+      id,
+      inputSchema: z.array(item),
+      outputSchema: z.array(item),
+      options: { validateInputs: false },
+    });
+    workflow.foreach(boom, { concurrency: 2 }).commit();
+
+    workflows[id] = {
+      workflow,
+      mocks: { gate },
+      resetMocks: () => {
+        gate.reset();
+        item2Attempts = 0;
+      },
+    };
+  }
+
   return workflows;
+}
+
+function createIterationGate() {
+  let release!: () => void;
+  const gate = {
+    firstFailureReported: Promise.resolve(),
+    release: () => release(),
+    reset: () => {
+      gate.firstFailureReported = new Promise<void>(resolve => (release = resolve));
+    },
+  };
+  gate.reset();
+  return gate;
 }
 
 /**
@@ -987,5 +1045,129 @@ export function createForeachTests(ctx: WorkflowTestContext, registry?: Workflow
         });
       },
     );
+
+    // #26390: the evented engine left the run hanging when a foreach iteration failed, and
+    // iterations failing after that could fail the run again or replace the first error.
+    describe('when a foreach iteration fails (#26390)', () => {
+      async function startRun(id: string) {
+        const entry = registry![id]!;
+        entry.resetMocks?.();
+        const { workflow } = entry;
+        const run = await workflow.createRun();
+        const failedIterations: number[] = [];
+        let resolveItem2Failed!: () => void;
+        const item2Failed = new Promise<void>(resolve => (resolveItem2Failed = resolve));
+        let resolveItem2Succeeded!: () => void;
+        const item2Succeeded = new Promise<void>(resolve => (resolveItem2Succeeded = resolve));
+        const unwatch = run.watch((event: any) => {
+          if (event.type !== 'workflow-step-progress') return;
+          const { currentIndex, iterationStatus } = event.payload ?? {};
+          if (iterationStatus === 'success' && currentIndex === 1) resolveItem2Succeeded();
+          if (iterationStatus !== 'failed') return;
+          failedIterations.push(currentIndex);
+          if (currentIndex === 0) entry.mocks.gate.release();
+          if (currentIndex === 1) resolveItem2Failed();
+        });
+        return { workflow, run, failedIterations, item2Failed, item2Succeeded, unwatch };
+      }
+
+      // Bounds a wait that hangs when the bug is present, so the failure names the symptom.
+      async function within<T>(promise: Promise<T>, symptom: string): Promise<T> {
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        try {
+          return await Promise.race([
+            promise,
+            new Promise<never>((_, reject) => {
+              timer = setTimeout(() => reject(new Error(`${symptom} (#26390)`)), 10_000);
+            }),
+          ]);
+        } finally {
+          clearTimeout(timer);
+        }
+      }
+
+      it('fails the run with the error of the failing iteration', async () => {
+        const { run, unwatch } = await startRun('foreach-iteration-fails');
+        try {
+          const result: any = await within(
+            run.start({ inputData: [{ n: 1 }, { n: 2 }] }),
+            'the run never finished after a foreach iteration failed',
+          );
+          expect(result.status, 'run status after a foreach iteration failed').toBe('failed');
+          expect(result.error?.message).toBe('first failure');
+          expect(result.steps.boom.status).toBe('failed');
+        } finally {
+          unwatch();
+        }
+      });
+
+      it('keeps the first failure when another iteration fails after it', async () => {
+        const { workflow, run, failedIterations, item2Failed, unwatch } = await startRun('foreach-two-iterations-fail');
+        try {
+          const result: any = await within(
+            run.start({ inputData: [{ n: 1 }, { n: 2 }] }),
+            'the run never finished after a foreach iteration failed',
+          );
+          expect(result.status).toBe('failed');
+          expect(result.error?.message, 'run error when two iterations fail').toBe('first failure');
+
+          // Item 2's failure is recorded before its progress event goes out on every engine.
+          await within(item2Failed, 'the second failing iteration was never reported');
+          const stored: any = await workflow.getWorkflowRunById(run.runId);
+          expect(stored?.status, 'stored run status after the second iteration failed').toBe('failed');
+          expect(stored?.error?.message, 'a later failing iteration failed the run again with its own error').toBe(
+            'first failure',
+          );
+          expect(stored?.steps?.boom?.status, 'stored foreach status after the second iteration failed').toBe('failed');
+          expect(
+            stored?.steps?.boom?.error?.message,
+            'a later failing iteration replaced the first failure on the stored foreach',
+          ).toBe('first failure');
+          expect(failedIterations, 'failed iterations reported, in order, each once').toEqual([0, 1]);
+        } finally {
+          unwatch();
+        }
+      });
+
+      it.skipIf(!ctx.timeTravel)(
+        'fails a time-travel replay when a previously failed iteration fails again',
+        async () => {
+          const { workflow, run, item2Failed, item2Succeeded, failedIterations, unwatch } =
+            await startRun('foreach-time-travel-refail');
+          const { gate } = registry!['foreach-time-travel-refail']!.mocks;
+          try {
+            const first: any = await within(
+              run.start({ inputData: [{ n: 1 }, { n: 2 }] }),
+              'the run never finished after a foreach iteration failed',
+            );
+            expect(first.status).toBe('failed');
+            await within(item2Failed, 'the second failing iteration was never reported');
+
+            gate.reset();
+            const replay: any = await within(
+              run.timeTravel({ step: 'boom' }),
+              'the time-travel replay never finished after the previously failed iteration failed again',
+            );
+            expect(replay.status, 'time-travel replay status').toBe('failed');
+            expect(replay.error?.message).toBe('always fails');
+            expect(replay.steps.boom.status).toBe('failed');
+
+            await within(item2Succeeded, 'the replayed second iteration was never reported');
+            const stored: any = await workflow.getWorkflowRunById(run.runId);
+            expect(stored?.status, 'stored run status after the replay failed').toBe('failed');
+            expect(
+              stored?.steps?.boom?.error?.message,
+              'the replay kept a failure from the previous attempt on the stored foreach',
+            ).toBe('always fails');
+            expect(
+              failedIterations,
+              'the replay ran the failure path more than once: failed iterations reported across the run and its replay',
+            ).toEqual([0, 1, 0]);
+          } finally {
+            unwatch();
+          }
+        },
+      );
+    });
   });
 }

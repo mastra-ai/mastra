@@ -1,6 +1,6 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import { ActivityWick } from '@mastra/playground-ui/components/Activity';
 import type { ActivityStatus } from '@mastra/playground-ui/components/Activity';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { ContextMenu } from '@mastra/playground-ui/components/ContextMenu';
 import { DataList } from '@mastra/playground-ui/components/DataList';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
@@ -15,9 +15,12 @@ import type { DragPayload } from '../boardDrag';
 
 const stopRowClick = (event: MouseEvent) => event.stopPropagation();
 
-// Mouse: row click opens details, right-click opens the menu; these buttons serve keyboard and touch.
-const REVEAL_ON_KEYBOARD_FOCUS =
-  'transition-opacity duration-200 ease-out motion-reduce:transition-none pointer-fine:pointer-events-none pointer-fine:opacity-0 pointer-fine:group-has-[:focus-visible,[aria-expanded=true]]/row-end:pointer-events-auto pointer-fine:group-has-[:focus-visible,[aria-expanded=true]]/row-end:opacity-100';
+// The row's details and actions buttons swap in for its timestamp on a mouse hover, keyboard focus anywhere in the
+// row, an open menu, or the selected row; touch always shows them.
+const REVEAL_ROW_CONTROLS =
+  'transition-opacity duration-200 ease-out motion-reduce:transition-none pointer-fine:pointer-events-none pointer-fine:opacity-0 pointer-fine:group-hover/data-list-row:pointer-events-auto pointer-fine:group-hover/data-list-row:opacity-100 pointer-fine:group-has-[:focus-visible]/data-list-row:pointer-events-auto pointer-fine:group-has-[:focus-visible]/data-list-row:opacity-100 pointer-fine:group-has-[[aria-expanded=true]]/row-end:pointer-events-auto pointer-fine:group-has-[[aria-expanded=true]]/row-end:opacity-100';
+const HIDE_WHILE_ROW_CONTROLS_SHOW =
+  'pointer-fine:group-hover/data-list-row:opacity-0 pointer-fine:group-has-[:focus-visible]/data-list-row:opacity-0 pointer-fine:group-has-[[aria-expanded=true]]/row-end:opacity-0';
 
 // A list of hundreds of rows reads as a wall of buttons when each shows its action, so a mouse sees it on hover
 // in place of the labels; it stays in the tab order (visually hidden, not removed) and always shows on touch.
@@ -43,7 +46,7 @@ export function BoardListRow({
   cardRef,
   detailsRef,
   expanded,
-  onOpen,
+  onToggleDetails,
   dragPayload,
   busy = false,
   locked = false,
@@ -58,7 +61,7 @@ export function BoardListRow({
   cardRef: RefCallback<HTMLElement>;
   detailsRef?: (element: HTMLElement | null) => void;
   expanded: boolean;
-  onOpen: () => void;
+  onToggleDetails: () => void;
   dragPayload?: DragPayload;
   busy?: boolean;
   locked?: boolean;
@@ -97,7 +100,8 @@ export function BoardListRow({
           >
             {cells.labels}
           </span>
-          <span className="flex shrink-0 items-center empty:hidden">{cells.status}</span>
+          {/* Shrinks (an error truncates) so a long status never spills over the title. */}
+          <span className="flex max-w-80 min-w-0 items-center empty:hidden">{cells.status}</span>
         </span>
         <span
           onClick={stopRowClick}
@@ -121,7 +125,10 @@ export function BoardListRow({
             as="span"
             variant="meta"
             tone="muted"
-            className="pointer-events-none col-start-1 row-start-1 tabular-nums transition-opacity duration-200 motion-reduce:transition-none max-sm:hidden pointer-coarse:hidden pointer-fine:group-has-[:focus-visible,[aria-expanded=true]]/row-end:opacity-0"
+            className={cn(
+              'pointer-events-none col-start-1 row-start-1 tabular-nums transition-opacity duration-200 motion-reduce:transition-none max-sm:hidden pointer-coarse:hidden',
+              HIDE_WHILE_ROW_CONTROLS_SHOW,
+            )}
           >
             <time dateTime={createdAt}>{relativeTime(createdAt)}</time>
           </Txt>
@@ -137,9 +144,9 @@ export function BoardListRow({
             aria-expanded={expanded}
             onClick={event => {
               stopRowClick(event);
-              onOpen();
+              onToggleDetails();
             }}
-            className={REVEAL_ON_KEYBOARD_FOCUS}
+            className={REVEAL_ROW_CONTROLS}
           >
             <Maximize2 size={13} aria-hidden />
           </Button>
@@ -154,7 +161,7 @@ export function BoardListRow({
                   disabled={locked}
                   aria-label={`Actions for ${title}`}
                   onClick={stopRowClick}
-                  className={REVEAL_ON_KEYBOARD_FOCUS}
+                  className={REVEAL_ROW_CONTROLS}
                 >
                   <EllipsisVertical size={13} aria-hidden />
                 </Button>
@@ -183,11 +190,11 @@ export function BoardListRow({
       onDragStart={event => {
         if (dragPayload) setDragPayload(event, dragPayload);
       }}
-      onSelectRow={onOpen}
+      onSelectRow={onToggleDetails}
       className={cn(
-        'group min-h-10 grid-cols-[auto_5rem_minmax(0,1fr)_var(--spacing-avatar-sm)_3.5rem] items-center gap-x-3 px-3 py-1 max-sm:grid-cols-[auto_minmax(0,1fr)_auto] max-sm:gap-y-1 max-sm:py-2',
+        'group min-h-10 grid-cols-[auto_5rem_minmax(0,1fr)_var(--spacing-avatar-sm)_3.5rem] items-center gap-x-3 rounded-lg px-3 py-1 max-sm:grid-cols-[auto_minmax(0,1fr)_auto] max-sm:gap-y-1 max-sm:py-2',
         locked && 'cursor-wait opacity-70',
-        highlighted && 'before:bg-warning-subtle',
+        highlighted && 'ring-2 ring-warning-indicator/60 ring-offset-2 ring-offset-background',
       )}
     >
       {activityStatus && <ActivityWick status={activityStatus} />}

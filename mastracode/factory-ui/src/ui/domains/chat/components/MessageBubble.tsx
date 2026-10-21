@@ -21,6 +21,8 @@ import type { ThreadOwner } from '../services/reply-credential';
 import type { MessageEntry, SuspensionPrompt } from '../services/transcript';
 import { PROVIDER_AUTH_REQUIRED_ERROR } from '../services/transcript';
 import { Arriving } from '@mastra/playground-ui/components/Arrival';
+import { SignalActivity } from '@mastra/playground-ui/components/ai/activity';
+import { TranscriptDivider } from '@mastra/playground-ui/components/ai/transcript-divider';
 import {
   Message,
   MessageActions,
@@ -42,10 +44,9 @@ import {
 } from './TranscriptNotifications';
 import {
   HIDDEN_REACTIVE_SIGNAL_TAGS,
-  SignalRow,
   signalRowView,
+  skillSignalActivation,
   SUPPRESSED_STATE_SIGNAL_IDS,
-  TimeGap,
 } from './TranscriptSignals';
 import type { MastraErrorPart } from '@mastra/core/agent/message-list';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -236,7 +237,7 @@ export function MessageBubble({
   const skillActivation =
     entry.message.role === 'user' && parts.length === 1 && parts[0].type === 'text'
       ? parseSkillActivation(parts[0].text)
-      : undefined;
+      : skillSignalActivation(entry);
   if (skillActivation) return <SkillMessage activation={skillActivation} />;
   if (isSkillNotificationSignal(entry)) return null;
 
@@ -262,14 +263,14 @@ export function MessageBubble({
   if (signalRow) {
     if (signalRow.kind === 'state') {
       if (SUPPRESSED_STATE_SIGNAL_IDS.has(signalRow.stateId)) return null;
-      return <SignalRow kind="state" label={signalRow.stateId} mode={signalRow.mode} message={signalRow.text} />;
+      return <SignalActivity kind="state" label={signalRow.stateId} mode={signalRow.mode} message={signalRow.text} />;
     }
-    if (signalRow.kind === 'gap') return <TimeGap text={signalRow.text} />;
+    if (signalRow.kind === 'divider') return <TranscriptDivider label={signalRow.label} title={signalRow.title} />;
     if (signalRow.kind === 'reminder') {
-      return <SignalRow kind="reminder" label="System reminder" message={signalRow.text} />;
+      return <SignalActivity kind="reminder" label="System reminder" message={signalRow.text} />;
     }
     if (!signalRow.tagName || HIDDEN_REACTIVE_SIGNAL_TAGS.has(signalRow.tagName)) return null;
-    return <SignalRow kind="reactive" label={signalRow.tagName} message={signalRow.text} />;
+    return <SignalActivity kind="reactive" label={signalRow.tagName} message={signalRow.text} />;
   }
 
   const status = statusMetadata(entry);

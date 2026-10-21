@@ -61,7 +61,7 @@ A separate provider per MCP server does one thing and not another:
 
 The specification recommends support for **Client ID Metadata Documents (CIMD)**, which identify a client through an HTTPS metadata URL. It also defines pre-registration. Clients that support all registration options should prefer existing pre-registered information when available. Legacy Dynamic Client Registration (DCR) remains optional for compatibility but is deprecated for new implementations. See the versioned [client registration rules](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/client-registration).
 
-Mastra's provider accepts pre-registered client information and supports a DCR-based flow. Don't infer CIMD support from the presence of OAuth support. Check the registration mechanism supported by your client integration and authorization server before choosing a deployment.
+`MCPOAuthClientProvider` never registers a client at runtime and doesn't support DCR. Configure exactly one client identity: `clientInformation` for a client pre-registered with the authorization server, or `clientMetadataUrl` for CIMD. Check that your authorization server supports the mechanism you choose before deploying. See the [OAuth client reference](/reference/tools/mcp-client#oauth-authentication) for configuration examples.
 
 Mastra's interactive `authenticate()` flow uses a local loopback callback server. It isn't a hosted multi-user login endpoint. A hosted application must own its callback endpoint and associate each authorization attempt with the correct user and provider. See [interactive browser authentication](/reference/tools/mcp-client#interactive-browser-authentication).
 
@@ -115,7 +115,7 @@ Protecting Mastra routes with `server.auth` and providing interoperable OAuth di
 
 Alongside the MCP transport, Mastra registers REST routes used by Studio to list servers, inspect tools, execute tools, and read resources. See the [MCP routes reference](/reference/server/routes#mcp) for the full list. These paths use the default `/api` prefix.
 
-The `POST /api/mcp/:serverId/tools/:toolId/execute` route calls `executeTool()` directly, without a protocol client. With a Mastra FGA provider configured, `MCPServer.executeTool()` enforces tool execution permission using the user in `requestContext`. The REST tool list also filters tools through FGA. These permission checks don't replace route authentication.
+The `POST /api/mcp/:serverId/tools/:toolId/execute` route calls `executeTool()` directly, without a protocol client. With a Mastra FGA provider configured, `MCPServer.executeTool()` enforces tool execution permission using the user in `requestContext`. The REST tool list also filters tools through FGA, but these permission checks don't replace route authentication.
 
 Built-in authentication for these routes depends on `server.auth`. Without it, `requiresAuth: true` doesn't enforce authentication. Custom middleware that checks only the `/mcp` or `/sse` transport paths leaves the REST routes open. If you use custom middleware instead of `server.auth`, default-deny `/api/mcp/*` and allow access only after authentication.
 

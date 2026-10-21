@@ -24,18 +24,17 @@ import { draws, messageText, renderableParts } from './transcript-parts';
 import { isRecord } from './transcript-shared';
 import { NotificationCard, NotificationSummaryCard } from './TranscriptNotifications';
 import { ApprovalCard, SubagentCard, SuspensionCard } from './TranscriptPromptCards';
-import { isTimeGap } from './TranscriptSignals';
+import { isTurnDivider } from './TranscriptSignals';
 
 import type { MessageEntry, NoticeEntry, SuspensionPrompt, TimelineEntry } from '../services/transcript';
 
 export function Transcript({ tail }: { tail?: ReactNode }) {
-  const { resourceId, sessionEnabled, projectPath, baseUrl, owner } = useChatSessionContext();
+  const { sessionId, sessionEnabled, baseUrl, owner } = useChatSessionContext();
   const { transcript, resolvePrompt, busy, viewerId } = useChatTranscript();
   const { entries } = transcript;
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: projectPath,
+    sessionId,
     baseUrl,
     enabled: sessionEnabled,
   };
@@ -125,7 +124,7 @@ export function TranscriptEntries({
   // rail and history, but claims no room and no trip — the reader stays with the stream.
   const steers = (entry: TimelineEntry | undefined): boolean => entry?.kind === 'message' && Boolean(entry.steer);
 
-  const turnGroups = groupTurns(entries, { key: entry => entry.id, opensTurn, introduces: isTimeGap });
+  const turnGroups = groupTurns(entries, { key: entry => entry.id, opensTurn, introduces: isTurnDivider });
   const [restoredTurnKey] = useState(() => (restoredHistory ? turnGroups.at(-1)?.key : undefined));
 
   return (

@@ -777,6 +777,95 @@ describe('MastraModelOutput', () => {
       expect(toolCalls[0]!.payload).toMatchObject({ toolCallId, toolName: 'my-tool', args: {} });
     });
 
+    it('records streamed args once at step end when no final tool-call arrives', async () => {
+      const runId = 'test-run';
+      const toolCallId = 'tool-1';
+
+      const stream = createChunkStream([
+        {
+          type: 'tool-call-input-streaming-start',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId, toolName: 'my-tool' },
+        },
+        {
+          type: 'tool-call-delta',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId, toolName: 'my-tool', argsTextDelta: '{"query":' },
+        },
+        {
+          type: 'tool-call-delta',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId, toolName: 'my-tool', argsTextDelta: '"SELECT 1"}' },
+        },
+        {
+          type: 'tool-call-input-streaming-end',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId },
+        },
+        createStepFinishChunk(runId),
+        createFinishChunk(runId),
+      ] as ChunkType[]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      const emitted: ChunkType[] = [];
+      for await (const chunk of output.fullStream) {
+        emitted.push(chunk);
+      }
+
+      const toolCallChunks = emitted.filter(c => c.type === 'tool-call');
+      expect(toolCallChunks).toHaveLength(1);
+      expect(toolCallChunks[0]!.payload).toMatchObject({ toolCallId, args: { query: 'SELECT 1' } });
+      expect(emitted.findIndex(c => c.type === 'tool-call')).toBeLessThan(
+        emitted.findIndex(c => c.type === 'step-finish'),
+      );
+      expect((await output.toolCalls).map(tc => tc.payload.args)).toEqual([{ query: 'SELECT 1' }]);
+    });
+
+    it('emits a repeated tool-call with the same id only once', async () => {
+      const runId = 'test-run';
+      const toolCallId = 'tool-1';
+      const toolCall = {
+        type: 'tool-call',
+        runId,
+        from: ChunkFrom.AGENT,
+        payload: { toolCallId, toolName: 'my-tool', args: { query: 'SELECT 1' } as any },
+      } as ChunkType;
+
+      const stream = createChunkStream([
+        toolCall,
+        structuredClone(toolCall),
+        createStepFinishChunk(runId),
+        createFinishChunk(runId),
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      const emitted: ChunkType[] = [];
+      for await (const chunk of output.fullStream) {
+        emitted.push(chunk);
+      }
+
+      expect(emitted.filter(c => c.type === 'tool-call')).toHaveLength(1);
+      expect(await output.toolCalls).toHaveLength(1);
+    });
+
     it('does not record a pending no-args tool-call when the run bails with a tripwire', async () => {
       const runId = 'test-run';
       const toolCallId = 'tool-1';

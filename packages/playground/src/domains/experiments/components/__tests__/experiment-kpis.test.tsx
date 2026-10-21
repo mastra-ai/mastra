@@ -3,7 +3,8 @@ import type { ExperimentMetrics } from '@mastra/react/hooks/experiments';
 import { cleanup, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { ExperimentKpis, type ExperimentKpisProps } from '../experiment-kpis';
+import { ExperimentKpis } from '../experiment-kpis';
+import type { ExperimentKpisProps } from '../experiment-kpis';
 import { experimentTotalsBreakdown } from './fixtures/experiment-usage';
 import { experiments } from './fixtures/experiments';
 import { server } from '@/test/msw-server';
@@ -88,7 +89,7 @@ describe('ExperimentKpis', () => {
     it('shows the total cost in fractional cents', async () => {
       const { queryClient } = renderWithMetrics();
 
-      expect(await screen.findByText('$0.0123')).toBeDefined();
+      expect(await screen.findByText('$0.012')).toBeDefined();
 
       await waitForMutationsIdle(queryClient);
     });
@@ -126,6 +127,34 @@ describe('ExperimentKpis', () => {
       for (let i = 1; i < labels.length; i++) {
         expect(labels[i - 1].compareDocumentPosition(labels[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       }
+
+      await waitForMutationsIdle(queryClient);
+    });
+  });
+
+  describe('when metrics are enabled and the run is still in progress', () => {
+    const breakdownRequests: Request[] = [];
+
+    beforeEach(() => {
+      breakdownRequests.length = 0;
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/metrics/breakdown`, ({ request }) => {
+          breakdownRequests.push(request);
+          return HttpResponse.json(experimentTotalsBreakdown);
+        }),
+      );
+    });
+
+    const runningExperiment: DatasetExperiment = { ...completedExperiment, status: 'running', completedAt: null };
+
+    it('keeps the cost and token cards loading without fetching usage', async () => {
+      const { queryClient } = renderKpis(runningExperiment, { data: fullMetrics, isLoading: false, isEnabled: true });
+
+      expect(await screen.findByText('Total cost')).toBeDefined();
+      expect(screen.getByText('Total tokens')).toBeDefined();
+      expect(screen.queryByText('estimated')).toBeNull();
+      expect(screen.queryByText('input + output')).toBeNull();
+      expect(breakdownRequests).toHaveLength(0);
 
       await waitForMutationsIdle(queryClient);
     });

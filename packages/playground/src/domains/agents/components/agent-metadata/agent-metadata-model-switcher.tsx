@@ -70,6 +70,8 @@ export const AgentMetadataModelSwitcher = ({
         });
         console.info('Model updated:', result);
       } catch (error) {
+        setSelectedModel(defaultModel);
+        setSelectedProvider(defaultProvider || '');
         console.error('Failed to update model:', error);
       } finally {
         setLoading(false);

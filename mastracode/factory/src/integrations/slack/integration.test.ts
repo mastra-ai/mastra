@@ -51,6 +51,33 @@ describe('SlackIntegration.channels', () => {
     );
   });
 
+  it("names the tool's current step in the typing status when its args describe it", () => {
+    const integration = new SlackIntegration({ signingSecret: 'secret' });
+    const typingStatus = integration.channels(ctxWith()).adapters.slack.typingStatus;
+    if (typeof typingStatus !== 'function') throw new Error('Expected a typing status function');
+    const ctx = { currentStatus: undefined, channelTools: new Set<string>() } as any;
+    const status = (args: unknown) =>
+      typingStatus({ type: 'tool-call', payload: { toolName: 'execute_command', args } } as any, ctx);
+
+    // Sentence-case descriptions read after the app name: "<App> is listing the repo root".
+    expect(status({ description: 'Listing the repo root', command: 'ls' })).toBe('is listing the repo root');
+    // Acronyms and identifiers keep their case.
+    expect(status({ description: 'PR lookup for #27350' })).toBe('is PR lookup for #27350');
+    // Multi-line bodies (issue/PR creators) contribute their first line only, whitespace collapsed.
+    expect(status({ description: '\n  Fix the   flaky\tlogin test\n\nIt fails when…' })).toBe(
+      'is fix the flaky login test',
+    );
+    // Long descriptions are clipped so Slack's inline status stays one line.
+    const long = 'A'.repeat(200);
+    expect(status({ description: long })).toHaveLength('is '.length + 80);
+    expect(status({ description: long })!.endsWith('…')).toBe(true);
+    // No usable description falls back to the generic status.
+    expect(status({ command: 'ls' })).toBe('is working...');
+    expect(status({ description: '   \n ' })).toBe('is working...');
+    expect(status({ description: 42 })).toBe('is working...');
+    expect(status('{"description":"raw string"}')).toBe('is working...');
+  });
+
   it('defaults streaming when an explicit undefined value is provided', () => {
     const integration = new SlackIntegration({
       signingSecret: 'secret',
@@ -72,6 +99,15 @@ describe('SlackIntegration.channels', () => {
 
     expect(config.adapters.slack.toolDisplay).toBe('hidden');
     expect(config.adapters.slack.typingStatus).toBeTypeOf('function');
+  });
+
+  it('lets a caller opt into the Thinking Steps widget', () => {
+    const integration = new SlackIntegration({
+      signingSecret: 'secret',
+      adapterOptions: { toolDisplay: 'grouped' },
+    });
+
+    expect(integration.channels(ctxWith()).adapters.slack.toolDisplay).toBe('grouped');
   });
 
   it('preserves an explicit typingStatus: false override', () => {
@@ -156,6 +192,7 @@ describe('SlackIntegration.channels', () => {
       }),
     );
     const session = {
+      identity: { getId: () => 'us-1', getResourceId: () => 'us-1' },
       mode: { get: () => 'build' },
       thread: {
         getId: () => 'us-1',

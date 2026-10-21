@@ -307,13 +307,13 @@ const response = await agent.generate("Hello!", {
     },
     {
         "name": "structuredOutputMode",
-        "type": "\"outputFormat\" | \"jsonTool\" | \"auto\" | undefined",
+        "type": "\"auto\" | \"outputFormat\" | \"jsonTool\" | undefined",
         "description": "",
         "isOptional": true
     },
     {
         "name": "thinking",
-        "type": "{ type: \"adaptive\"; display?: \"omitted\" | \"summarized\" | undefined; } | { type: \"enabled\"; budgetTokens?: number | undefined; } | { type: \"disabled\"; } | undefined",
+        "type": "{ type: \"adaptive\"; display?: \"omitted\" | \"summarized\" | \"updates\" | undefined; blockBinding?: { prefixMismatchBehavior: \"error\" | \"drop_block\"; } | undefined; } | { type: \"enabled\"; budgetTokens?: number | undefined; } | { ...; } | { ...; } | { ...; } | undefined",
         "description": "",
         "isOptional": true
     },
@@ -386,6 +386,12 @@ const response = await agent.generate("Hello!", {
     {
         "name": "anthropicBeta",
         "type": "string[] | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
+        "name": "safeguards",
+        "type": "{ type: \"dangerous_tool_use\"; classifierContext?: Record<string, unknown> | undefined; }[] | undefined",
         "description": "",
         "isOptional": true
     },

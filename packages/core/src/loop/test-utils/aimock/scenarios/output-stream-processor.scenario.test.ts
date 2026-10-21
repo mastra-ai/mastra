@@ -194,6 +194,34 @@ describeForAllEngines('Support agent output stream processors', engine => {
     expect(output.tripwire).toMatchObject({ reason: 'Support replies are paused', processorId: 'kill-switch' });
   });
 
+  // Technical: abort() with no reason from processOutputStream must default to the same
+  // "Tripwire triggered by <id>" reason as every other hook, on every engine. Durable and
+  // evented used to report "Stream part blocked by <id>" instead. (#27538)
+  it('a reply stopped without a reason reports which processor stopped it (#27538)', async () => {
+    const blockAll: Processor = {
+      id: 'kill-switch',
+      processOutputStream: async ({ part, abort }) => {
+        if (part.type === 'text-delta') abort();
+        return part;
+      },
+    };
+
+    const { output, chunks } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: CUSTOMER_QUESTION,
+      collectChunks: true,
+      outputProcessors: [blockAll],
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat' }, { content: CARD_REPLY });
+      },
+    });
+
+    const tripwire = chunks!.find(c => c.type === 'tripwire') as { payload: { reason: string } } | undefined;
+    expect(tripwire?.payload.reason).toBe('Tripwire triggered by kill-switch');
+    expect(output.tripwire).toMatchObject({ reason: 'Tripwire triggered by kill-switch', processorId: 'kill-switch' });
+  });
+
   // Technical: a processor's writer.custom() data chunk must reach the stream once and be saved
   // as a data part on the assistant message, so the UI can re-render it from history.
   it('a progress card pushed by a processor is streamed and saved with the reply', async () => {
