@@ -126,13 +126,13 @@ function aggCardsFor(
   });
 }
 
-function dry(mods: Mods) {
+function dry(mods: Mods, windows: string[]) {
   const selection = loadSelection();
   if (!selection) throw new Error('No project selection; run the profile phase first');
   let n = 0;
   for (const [role, project] of pickProjects(selection.projects)) {
     const scope = scopeOf(project, 'project');
-    for (const window of ['24h', '7d', '30d']) {
+    for (const window of windows) {
       const bodies = [
         ...obs698Bodies(new Date(), window),
         ...obs698Bodies(new Date(), window, 'executionSource').filter(([card]) => card.startsWith('a:breakdown')),
@@ -314,7 +314,7 @@ switch (positionals[0]) {
   case 'dry': {
     const { raw, mods } = await connect(values.platform, 1);
     try {
-      dry(mods);
+      dry(mods, values.windows.split(','));
     } finally {
       await raw.close();
     }

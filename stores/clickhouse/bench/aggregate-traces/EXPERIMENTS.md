@@ -93,6 +93,7 @@ Numbers are warm medians on the representative project per bucket, 30-day window
 | X48 | prod       | OBS-696 Metrics page on `aggregateTraces()` (`mobs-metrics-page.ts`): 7 org card shapes + 5 project card shapes, p99/largest × project/org × 24 h/7 d/30 d, whole-page concurrent loads, `metrics` vs `aggregateTraces()` parity                                     | Every card fits alone (max 452 MiB / 3.8 s). The org page at 30 d on the largest org does not: fired together, the 6 token/cost cards time out at 9 s every load. Project page fits to 30 d, at the edge (6.6–9.3 s). Runs/failure cards stay on `metrics` (nested runs); tokens can move, cost/threads/usage-over-time cannot yet                                                    | done   |
 | X49 | prod       | OBS-696 org Metrics page fit at 30 d (`mobs-org-page-fit.ts`): usageId adoption, fallback statement split + rewrites, fallback off, token/cost from `metrics` by project, shared statement, load shapes, concurrency caps, `mastra_model_usage` back-fill assessment | Fits with `c2m` (token/cost from `metrics` grouped by `projectId`, O3s+O3f merged, KPIs from `metrics`) capped at 3 in flight: 24 h ≤ 0.75 s, 7 d ≤ 2 s, 30 d statements ≤ 3.5 s in 14/16 loads; the rest hit replication fetch bursts on the 3-vCPU bench node. Rewrites/load shapes alone don't fit; fallback off loses ≤ 72% of 30 d tokens. Back-fill `mastra_model_usage` (`'m:' |        | metricId`, + `spanId`) recommended for Platform | done |
 | X51 | prod       | OBS-698 project Metrics page as shipped in mastra#27908–#27910 (`mobs-obs698-page.ts`): 9 `aggregateTraces()` requests through the page's 3-in-flight limiter + the 15 `metrics` requests that stay, p99/largest × 24 h/7 d/30 d, cold ×1 + warm ×3, vs today's page | Memory fits (≤ 404 MiB/statement). 24 h and 7 d fit warm; 30 d does not (3 of 6 warm loads lose cards at 9 s, pages 8–21 s vs ~2 s today). Cold at 7 d it also fails 7 of today's cards. Cause: 6 of 9 requests read the token/cost fallback (~2 GiB each, largest project 30 d). PRs stay drafts                                                                                     |
+| X53 | prod       | OBS-698 project Metrics page at 14 d, the range the page is now capped at (`mobs-obs698-page.ts`, X51's method), p99/largest, cold ×1 + warm ×3, vs today's page                                                                                                     | Memory fits (≤ 211 MiB/statement). Warm #2/#3 fit (slowest statement ≤ 5.1 s, pages 4.6–5.3 s vs ~1.3 s today); both warm #1 loads (right after an all-failed cold load) lose the Tokens KPI's previous-window request at 9.0–9.5 s, which reads 5× the current window on the largest project. Cold, both pages fail every request. Does not fit by the gate; PRs stay drafts         |
 
 ## Entries
 
@@ -923,6 +924,39 @@ Largest project, 30 d, per aggregate card (warm median of the slowest statement 
 With 1 + 2 the initial load keeps two fallback readers (cost total and cost series). Re-run `mobs-obs698-page.ts page --windows 30d` on the changed page before the PRs leave draft.
 
 Reproduce: `npx tsx mobs-obs698-page.ts dry`, then `page --label x50 --windows 24h,7d,30d --variants obs698,today,exec --reps 3`, then `report --label x50` (results in `results/mobs-obs698-page.jsonl`). Run before renumbering, so the results keep the label `x50`.
+
+### X53: the project Metrics page at 14 d, the range OBS-698 now caps it at (prod replica, read-only, 2026-10-21)
+
+**Question.** X51 showed the OBS-698 page doesn't fit at 30 d, so the page now allows at most 14 days (mastra#27908). Does a whole load fit mobs-query's 1 GiB / 9 s at 14 d on the p99 and largest project?
+
+**Method.** X51's harness and method, unchanged: `mobs-obs698-page.ts page --label x53 --windows 14d --variants obs698,today,exec --reps 3`, against Platform `main` 47b476843 at `/tmp/platform-obs698`. The interval is `1h` (337 buckets × limit 10 ≤ 10 k), as the page picks; all 20 bodies plan and compile offline first (`dry --windows 14d`). Cold ×1 then warm ×3 per project and variant, 24 loads. Run after w73's span-aggregate matrix and parity run on the replica had finished, with no other benchmark running.
+
+**Results** (warm columns: median / max over 3 loads):
+
+| Project | Variant | Cold page ms | Cold failed | Warm page ms   | Warm slowest statement ms | Warm loads with a failed card    | Max MiB | Max concurrent MiB | Warm read per load |
+| ------- | ------- | ------------ | ----------- | -------------- | ------------------------- | -------------------------------- | ------- | ------------------ | ------------------ |
+| p99     | obs698  | 35,931       | 24 of 24    | 5,267 / 11,227 | 5,085 / 9,462             | 1 (warm #1: `a:kpi-tokens-prev`) | 154     | 503                | 3.9 GiB            |
+| p99     | today   | 24,758       | 17 of 17    | 1,269 / 1,295  | 625 / 642                 | 0                                | 57      | 342                | 1.2 GiB            |
+| p99     | exec    | 9,313        | 1 of 1      | 750 / 855      | 698 / 797                 | 0                                | 147     | 147                | 0.4 GiB            |
+| largest | obs698  | 29,521       | 24 of 24    | 4,857 / 9,149  | 4,502 / 9,001             | 1 (warm #1: `a:kpi-tokens-prev`) | 211     | 643                | 4.5 GiB            |
+| largest | today   | 26,527       | 17 of 17    | 1,325 / 1,784  | 723 / 1,042               | 0                                | 61      | 371                | 1.4 GiB            |
+| largest | exec    | 9,424        | 1 of 1      | 467 / 665      | 418 / 615                 | 0                                | 122     | 122                | 0.3 GiB            |
+
+- **The one failing request is `a:kpi-tokens-prev`**, the Tokens KPI's previous window (days 14–28 back). On the largest project it reads 1.7 GiB per load vs 332 MiB for the current window, and 745–751 MiB vs 418 MiB on the p99 project. Its statement, per warm load: p99 9,462 (failed) / 5,085 / 2,718 ms; largest 9,001 (failed) / 4,332 / 4,502 ms. The current window takes 6.2 / 1.9 / 1.9 s and 5.6 / 1.4 / 1.6 s. Not investigated why the earlier window reads more; both go through the token/cost fallback.
+- **Warm #2 and #3 fit on both projects**: no failed card, slowest statement ≤ 5.1 s, pages 4.6–5.3 s (today's page: 1.1–1.8 s).
+- **Warm #1 is the first load after a cold load whose statements were all aborted at 9 s**, so its cache is only partly filled (as in X51). Every other card succeeds on it; the next slowest statements are `a:kpi-tokens` at 6.2 s and 5.6 s.
+- **Cold, both pages fail every request at 14 d.** Unlike X51's 7 d, today's page fails cold here too (all 17 at 9 s), so the new page takes nothing down that would have loaded.
+- Memory fits everywhere: ≤ 211 MiB per statement, ≤ 643 MiB at once.
+
+**Verdict.** **Does not fit by this run's gate** (every warm load keeps every card and no statement over 9 s). Both projects' first warm load loses the Tokens KPI's previous-window request at 9.0–9.5 s; the KPI then shows its error state while every other card loads. Steady warm loads (#2, #3) fit with ≥ 3.9 s to spare. The OBS-698 PRs stay drafts.
+
+**Options (not run).** Each removes or shrinks the previous-window request:
+
+1. Drop the Tokens KPI's comparison ("vs previous 14d") while the cap is in place. One fewer fallback read; the KPI shows the total only.
+2. Read the previous window from `metrics` (today's `m:kpi-tokens-*`, ≤ 1.8 s at 14 d here) and the current window from `aggregateTraces()`. The two windows would then count different records (X48: ≤ 1.1% apart).
+3. Back-fill `mastra_model_usage` and turn the fallback off (X49 candidate 6).
+
+Reproduce: `npx tsx mobs-obs698-page.ts dry --windows 14d`, then `page --label x53 --windows 14d --variants obs698,today,exec --reps 3`, then `report --label x53` (results in `results/mobs-obs698-page.jsonl`).
 
 ### X46: `aggregateSpans()` contract affordability (prod replica, read-only, 2026-10-19)
 
