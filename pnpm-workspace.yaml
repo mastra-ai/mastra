@@ -289,6 +289,8 @@ minimumReleaseAgeExclude:
   - postcss-selector-parser@7.1.6
   # Renovate security update: simple-git@4.0.1
   - simple-git@4.0.1
+  # Renovate security update: vite@8.2.4
+  - vite@8.2.4
 trustPolicyExclude:
   # Vanta 2026-10-02: 7.4.6 fixes GHSA-g84c-rxfj-3j2c; earlier 7.4.x had trusted publisher
   # but 7.4.6 lacks that evidence (pnpm trustPolicy no-downgrade).
