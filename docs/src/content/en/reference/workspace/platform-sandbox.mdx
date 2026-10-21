@@ -331,7 +331,7 @@ await handle.kill()
 
 A process has no time limit unless you pass `timeout` to `spawn()` or the constructor. Call `get(pid)` to attach to a process this manager didn't start, for example after your app restarts. Output written before attaching isn't available.
 
-When the lease a process started with expires, the manager reattaches and the process keeps running, but output written before the reattach is lost. If the process exits in that window, `wait()` reports a failure without its real exit code.
+When the lease a process started with expires, the manager reattaches and the process keeps running. Output written between the lease expiring and the reattach is lost. If the process exits in that window, `wait()` reports exit code `1` instead of its real exit code.
 
 ## Constructor parameters
 
