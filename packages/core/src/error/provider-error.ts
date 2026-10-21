@@ -49,6 +49,8 @@ const MODEL_REJECTED =
 const TOOL_HISTORY_REJECTED =
   /no tool output found for (?:function|tool) call|tool_call_ids.*(?:response|respond)|tool_use.*tool_result/i;
 const INVALID_REQUEST_CODE = /invalid_request_error|invalid_prompt/i;
+// The envelope type every OpenAI and Anthropic 400 carries; a code beside it is the provider naming the rejection.
+const INVALID_REQUEST_ENVELOPE = /^invalid_request_error$/i;
 const TIMED_OUT = /timed ?out|timeout|deadline[_ ]exceeded/i;
 const RATE_LIMITED = /rate[_ ]limit|too many requests|resource_exhausted|throttl/i;
 const UNAVAILABLE =
@@ -118,7 +120,7 @@ export function classifyProviderError(error: unknown): ProviderFailureKind {
   const facts = collectFacts(error);
   const evidence = [...facts.codes, ...facts.texts].join('\n');
   const verdict = providerVerdict(facts.statusCode, facts.codes.join('\n'), evidence);
-  if (verdict === 'invalid_request') return narrowInvalidRequest(evidence, facts.statusCode);
+  if (verdict === 'invalid_request') return narrowInvalidRequest(evidence, facts.statusCode, facts.codes);
   if (verdict) return verdict;
   return (
     usageKind(evidence) ??
@@ -140,11 +142,12 @@ function providerVerdict(status: number | undefined, codes: string, evidence: st
 }
 
 // A request the provider named invalid is final; its wording may only say which final kind.
-function narrowInvalidRequest(evidence: string, status: number | undefined): ProviderFailureKind {
+function narrowInvalidRequest(evidence: string, status: number | undefined, codes: string[]): ProviderFailureKind {
   // Anthropic reports an exhausted credit balance as a 400 invalid request.
   if (BILLING_EXHAUSTED.test(evidence)) return 'quota';
-  // Claude Max reports an exhausted usage cap as a 400; a frame the provider coded invalid, or a 404 or 422, names something else.
-  if (status === 400 && usageKind(evidence) === 'quota') return 'quota';
+  // Claude Max reports an exhausted usage cap as a 400 with no code of its own; a coded rejection, a 404 or a 422 names something else.
+  const uncodedRejection = status === 400 && codes.every(code => INVALID_REQUEST_ENVELOPE.test(code));
+  if (uncodedRejection && usageKind(evidence) === 'quota') return 'quota';
   return terminalKindFromWording(evidence) ?? 'invalid_request';
 }
 
