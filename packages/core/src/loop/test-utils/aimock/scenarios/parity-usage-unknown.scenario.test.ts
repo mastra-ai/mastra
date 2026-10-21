@@ -25,24 +25,31 @@ const cases = [
 
 describeParity('unknown provider usage parity', target => {
   it.each(cases)('$name: stream and resolved usage preserve measurement uncertainty', async testCase => {
+    const executionCounts = new Map<string, number>();
     const results = await expectParity(target, {
       model: {
-        respond: (_request, index): ModelTape => {
-          const usage = index === 0 ? testCase.first : testCase.second;
+        respond: (request): ModelTape => {
+          const hasToolResult = request.prompt.some(
+            message =>
+              message.role === 'tool' &&
+              Array.isArray(message.content) &&
+              message.content.some(part => part.type === 'tool-result' && part.toolCallId === 'usage-call'),
+          );
+          const usage = hasToolResult ? testCase.second : testCase.first;
           return [
             { type: 'stream-start', warnings: [] },
-            ...(index === 0
+            ...(!hasToolResult
               ? [{ type: 'tool-call' as const, toolCallId: 'usage-call', toolName: 'step', input: '{}' }]
               : [
                   { type: 'text-start' as const, id: 'usage-text' },
                   { type: 'text-delta' as const, id: 'usage-text', delta: 'done' },
                   { type: 'text-end' as const, id: 'usage-text' },
                 ]),
-            { type: 'finish', finishReason: index === 0 ? 'tool-calls' : 'stop', ...(usage ? { usage } : {}) },
+            { type: 'finish', finishReason: hasToolResult ? 'stop' : 'tool-calls', ...(usage ? { usage } : {}) },
           ];
         },
       },
-      buildAgent: ({ model }) =>
+      buildAgent: ({ engine, model }) =>
         new Agent({
           id: 'unknown-usage-agent',
           name: 'Usage-aware assistant',
@@ -53,7 +60,10 @@ describeParity('unknown provider usage parity', target => {
               id: 'step',
               description: 'Take a step',
               inputSchema: z.object({}),
-              execute: async () => 'ok',
+              execute: async () => {
+                executionCounts.set(engine, (executionCounts.get(engine) ?? 0) + 1);
+                return 'ok';
+              },
             }),
           },
         }),
@@ -63,6 +73,14 @@ describeParity('unknown provider usage parity', target => {
     for (const engine of ['plain', target] as const) {
       const result = results[engine]!;
       expect(result.requests).toHaveLength(2);
+      expect(executionCounts.get(engine)).toBe(1);
+      const toolResults = result.requests[1]!.prompt.flatMap(message =>
+        message.role === 'tool' && Array.isArray(message.content)
+          ? message.content.filter(part => part.type === 'tool-result')
+          : [],
+      );
+      expect(toolResults).toHaveLength(1);
+      expect(toolResults[0]).toMatchObject({ toolCallId: 'usage-call', toolName: 'step' });
       const turn = result.turns[0]!;
       expect(turn.text).toBe('done');
       for (const usage of [turn.usage, turn.fullOutput.usage, turn.finishChunk?.usage]) {
