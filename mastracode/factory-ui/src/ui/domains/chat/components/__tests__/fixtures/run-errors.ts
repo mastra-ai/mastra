@@ -1,5 +1,7 @@
 import type { MastraDBMessage } from '@mastra/client-js';
-import type { AvailableModelOption, ModelCredentialHolder } from '../../../../../../hooks/useAvailableModels';
+import type { ModelCredentialHolder } from '@mastra/factory/routes/config';
+
+import type { AvailableModelOption } from '../../../../../../hooks/useAvailableModels';
 
 export const runErrorModels: AvailableModelOption[] = [
   { id: 'openai/gpt-5', provider: 'openai', modelName: 'GPT-5', hasApiKey: true, credentialHolder: 'personal' },

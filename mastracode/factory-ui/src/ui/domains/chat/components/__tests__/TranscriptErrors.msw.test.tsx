@@ -44,6 +44,7 @@ function ErrorSession({
     <MemoryRouter initialEntries={['/factories/factory-1/sessions/session-1']}>
       <ChatSessionContext.Provider
         value={{
+          sessionId: 'session-1',
           resourceId: 'session-1',
           sessionThreadId: 'thread-1',
           sessionEnabled: true,
@@ -60,7 +61,13 @@ function ErrorSession({
         <ChatConnectionContext.Provider
           value={{
             status: connectionStatus,
-            state: { controllerId: 'code', resourceId: 'session-1', modeId: 'build', modelId: 'openai/gpt-5' },
+            state: {
+              controllerId: 'code',
+              sessionId: 'session-1',
+              resourceId: 'session-1',
+              modeId: 'build',
+              modelId: 'openai/gpt-5',
+            },
           }}
         >
           <ChatModelsProvider>
@@ -152,32 +159,40 @@ describe('chat run errors', () => {
   });
 
   it.each([
+    { reason: 'busy', busy: true, connectionStatus: 'ready' as const },
+    { reason: 'reconnecting', busy: false, connectionStatus: 'reconnecting' as const },
+  ])('disables continuing while the session is $reason', ({ busy, connectionStatus }) => {
+    renderWithProviders(
+      <ErrorSession
+        messages={[failedReply('Internal Server Error')]}
+        busy={busy}
+        connectionStatus={connectionStatus}
+      />,
+    );
+
+    expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
+  });
+
+  it.each([
+    { failure: 'Internal Server Error', name: 'AI_APICallError', action: 'Continue', role: 'button' as const },
+    { failure: 'context_length_exceeded', name: 'AI_APICallError', action: 'Change model', role: 'button' as const },
     {
-      reason: 'busy',
-      busy: true,
-      connectionStatus: 'ready' as const,
-      messages: [failedReply('Internal Server Error')],
-      disabled: true,
+      failure: 'Sign-in rejected.',
+      name: 'ProviderAuthRequiredError',
+      action: 'Review credentials',
+      role: 'link' as const,
     },
-    {
-      reason: 'reconnecting',
-      busy: false,
-      connectionStatus: 'reconnecting' as const,
-      messages: [failedReply('Internal Server Error')],
-      disabled: true,
-    },
-    {
-      reason: 'superseded',
-      busy: false,
-      connectionStatus: 'ready' as const,
-      messages: [failedReply('Internal Server Error'), nextUserMessage],
-      disabled: false,
-    },
-  ])('prevents continuing a $reason failure', ({ busy, connectionStatus, messages, disabled }) => {
-    renderWithProviders(<ErrorSession messages={messages} busy={busy} connectionStatus={connectionStatus} />);
-    const button = screen.queryByRole('button', { name: 'Continue' });
-    if (disabled) expect(button).toBeDisabled();
-    else expect(button).not.toBeInTheDocument();
+  ])('offers $action on the latest failure only', async ({ failure, name, action, role }) => {
+    const earlierFailure = {
+      ...failedReply(failure, name),
+      id: 'earlier-failure',
+      createdAt: new Date('2026-10-19T09:00:00Z'),
+    };
+    const requestBetween = { ...nextUserMessage, id: 'request-between', createdAt: new Date('2026-10-19T09:30:00Z') };
+    renderWithProviders(<ErrorSession messages={[earlierFailure, requestBetween, failedReply(failure, name)]} />);
+
+    expect(await screen.findAllByRole(role, { name: action })).toHaveLength(1);
+    expect(screen.getAllByRole('button', { name: 'Error details' })).toHaveLength(2);
   });
 
   it('offers credential settings for an exhausted quota instead of retrying it', async () => {
