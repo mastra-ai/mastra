@@ -3,6 +3,7 @@ import { createCipheriv, createDecipheriv } from 'node:crypto';
 const ENVELOPE_PREFIX = 'mastra:factory-secret:v1:';
 const ALGORITHM = 'aes-256-gcm';
 const IV_BYTES = 12;
+const MAX_NESTED_ENVELOPES = 4;
 
 interface SecretEnvelopeV1 {
   keyId: string;
@@ -88,41 +89,63 @@ export function createFactorySecretEncryption(config: FactorySecretEncryptionCon
       return `${ENVELOPE_PREFIX}${Buffer.from(JSON.stringify(envelope), 'utf8').toString('base64url')}`;
     },
 
-    async decrypt<T>(value: unknown): Promise<DecryptedFactorySecret<T>> {
-      if (typeof value !== 'string') {
-        return { value: structuredClone(value) as T, needsReencryption: true };
-      }
-      if (!value.startsWith(ENVELOPE_PREFIX)) {
-        // JSON text written by the plaintext encryptor, or a raw pre-encryption
-        // secret string. Decode it the same way the plaintext encryptor does so
-        // migration encrypts the original value, not its JSON text.
-        try {
-          return { value: JSON.parse(value) as T, needsReencryption: true };
-        } catch {
-          return { value: value as T, needsReencryption: true };
-        }
-      }
-
-      const envelope = parseEnvelope(value);
-      const key = keys.get(envelope.keyId);
-      if (!key) throw new Error(`[FactorySecretEncryption] Unknown key id "${envelope.keyId}".`);
-
-      try {
-        const decipher = createDecipheriv(ALGORITHM, key, Buffer.from(envelope.iv, 'base64url'));
-        decipher.setAuthTag(Buffer.from(envelope.tag, 'base64url'));
-        const plaintext = Buffer.concat([
-          decipher.update(Buffer.from(envelope.ciphertext, 'base64url')),
-          decipher.final(),
-        ]).toString('utf8');
-        return {
-          value: JSON.parse(plaintext) as T,
-          needsReencryption: envelope.keyId !== config.primary.id,
-        };
-      } catch {
-        throw new Error('[FactorySecretEncryption] Unable to decrypt encrypted value.');
-      }
-    },
+    decrypt,
   };
+
+  async function decrypt<T>(value: unknown, depth = 0): Promise<DecryptedFactorySecret<T>> {
+    if (typeof value !== 'string') {
+      return { value: structuredClone(value) as T, needsReencryption: true };
+    }
+    if (!value.startsWith(ENVELOPE_PREFIX)) {
+      // JSON text written by the plaintext encryptor, or a raw pre-encryption
+      // secret string. Decode it the same way the plaintext encryptor does so
+      // migration encrypts the original value, not its JSON text.
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(value);
+      } catch {
+        return { value: value as T, needsReencryption: true };
+      }
+      return { value: (await unwrapNestedEnvelope<T>(parsed, depth)) ?? (parsed as T), needsReencryption: true };
+    }
+
+    const envelope = parseEnvelope(value);
+    const key = keys.get(envelope.keyId);
+    if (!key) throw new Error(`[FactorySecretEncryption] Unknown key id "${envelope.keyId}".`);
+
+    let decoded: unknown;
+    try {
+      const decipher = createDecipheriv(ALGORITHM, key, Buffer.from(envelope.iv, 'base64url'));
+      decipher.setAuthTag(Buffer.from(envelope.tag, 'base64url'));
+      const plaintext = Buffer.concat([
+        decipher.update(Buffer.from(envelope.ciphertext, 'base64url')),
+        decipher.final(),
+      ]).toString('utf8');
+      decoded = JSON.parse(plaintext);
+    } catch {
+      throw new Error('[FactorySecretEncryption] Unable to decrypt encrypted value.');
+    }
+    const nested = await unwrapNestedEnvelope<T>(decoded, depth);
+    if (nested !== undefined) return { value: nested, needsReencryption: true };
+    return { value: decoded as T, needsReencryption: envelope.keyId !== config.primary.id };
+  }
+
+  /**
+   * Older plaintext encryptors treated an envelope as a raw legacy secret and
+   * rewrote it as JSON text, which a keyed boot then re-encrypted. Peel those
+   * layers back to the real value so the row is repaired on the next write.
+   * A user-supplied secret can also look like an envelope, so anything that
+   * does not decrypt with our keys is kept as the literal value.
+   */
+  async function unwrapNestedEnvelope<T>(value: unknown, depth: number): Promise<T | undefined> {
+    if (typeof value !== 'string' || !value.startsWith(ENVELOPE_PREFIX)) return undefined;
+    if (depth >= MAX_NESTED_ENVELOPES) return undefined;
+    try {
+      return (await decrypt<T>(value, depth + 1)).value;
+    } catch {
+      return undefined;
+    }
+  }
 }
 
 /** Explicit plaintext compatibility for local, no-auth Factory development. */
@@ -133,6 +156,20 @@ export function createPlaintextFactorySecretEncryption(): FactorySecretEncryptio
     },
     async decrypt<T>(value: unknown): Promise<DecryptedFactorySecret<T>> {
       if (typeof value !== 'string') return { value: structuredClone(value) as T, needsReencryption: false };
+      if (value.startsWith(ENVELOPE_PREFIX)) {
+        // Never hand an envelope back as the secret, and never let migration
+        // rewrite it as plaintext JSON: that corrupts the row for keyed instances.
+        // A raw legacy secret can merely start with the prefix; keep those as-is.
+        try {
+          parseEnvelope(value);
+        } catch {
+          return { value: value as T, needsReencryption: true };
+        }
+        throw new Error(
+          '[FactorySecretEncryption] Value is encrypted, but this instance has no secret encryption key configured. ' +
+            "Configure 'secretEncryption' with the same key on every Factory instance.",
+        );
+      }
       try {
         return { value: JSON.parse(value) as T, needsReencryption: false };
       } catch {

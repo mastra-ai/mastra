@@ -130,6 +130,8 @@ const createLibConfig = (isProduction: boolean): UserConfig => ({
     rollupOptions: {
       output: {
         hoistTransitiveImports: false,
+        // Stable module URLs let React Fast Refresh retain state across watch builds.
+        ...(!isProduction && { chunkFileNames: '[name].[format].js' }),
       },
     },
   },

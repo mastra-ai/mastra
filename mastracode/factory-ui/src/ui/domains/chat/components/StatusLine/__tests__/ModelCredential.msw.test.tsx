@@ -1,3 +1,4 @@
+import type { ModelCredentialHolder } from '@mastra/factory/routes/config';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -6,7 +7,6 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../e2e/ui/render';
-import type { ModelCredentialHolder } from '../../../../../../hooks/useAvailableModels';
 import type { SessionModelCatalog } from '../../../../../../hooks/useSessionModelCatalog';
 import { ChatModelsContext } from '../../../context/ChatModelsContext';
 import type { ChatModelsApi } from '../../../context/ChatModelsContext';
@@ -63,6 +63,7 @@ function renderModelCredential({
     http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json(catalog)),
   );
   const session: ChatSessionContextApi = {
+    sessionId: 'session-1',
     resourceId: 'session-1',
     sessionThreadId: 'session-1',
     draftSessionId: draft ? 'draft-1' : undefined,

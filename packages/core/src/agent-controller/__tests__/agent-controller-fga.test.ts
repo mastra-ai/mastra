@@ -72,7 +72,7 @@ describe('AgentController FGA', () => {
     ).rejects.toBeInstanceOf(FGADeniedError);
 
     expect(created).not.toHaveBeenCalled();
-    expect(await controller.getSessionByResource('resource-1')).toBeUndefined();
+    expect(await controller.getSession('resource-1')).toBeUndefined();
     expect(provider.require).toHaveBeenCalledWith(
       { id: 'user-1', organizationMembershipId: 'om-1' },
       expect.objectContaining({
@@ -181,9 +181,7 @@ describe('AgentController FGA', () => {
     const provider = createProvider(true);
     controller.__registerMastra({ getServer: () => ({ fga: provider }) } as any);
 
-    await expect(controller.getSessionByResource('resource-1', undefined, createRequestContext())).resolves.toBe(
-      session,
-    );
+    await expect(controller.getSession('resource-1', createRequestContext())).resolves.toBe(session);
     expect(provider.require).toHaveBeenCalledWith(
       { id: 'user-1', organizationMembershipId: 'om-1' },
       expect.objectContaining({

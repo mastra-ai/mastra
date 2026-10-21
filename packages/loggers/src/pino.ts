@@ -5,6 +5,9 @@ import pretty from 'pino-pretty';
 
 type TransportMap = Record<string, LoggerTransport>;
 
+// pino 10.4 no longer exports `pino.MixinFn`, so derive it from the options type.
+type PinoMixinFn<CustomLevels extends string> = NonNullable<pino.LoggerOptions<CustomLevels>['mixin']>;
+
 export type { LogLevel } from '@mastra/core/logger';
 
 export interface PinoLoggerOptions<CustomLevels extends string = never> {
@@ -14,7 +17,7 @@ export interface PinoLoggerOptions<CustomLevels extends string = never> {
   overrideDefaultTransports?: boolean;
   formatters?: pino.LoggerOptions['formatters'];
   redact?: pino.LoggerOptions['redact'];
-  mixin?: pino.MixinFn<CustomLevels>;
+  mixin?: PinoMixinFn<CustomLevels>;
   customLevels?: { [level in CustomLevels]: number };
   /**
    * When false, disables pino-pretty and outputs raw JSON.
@@ -94,7 +97,7 @@ export class PinoLogger<CustomLevels extends string = never> extends MastraLogge
     // native record before serialization — for ALL destinations (stdout,
     // transports, files). Trace fields win on key conflicts.
     const userMixin = options.mixin;
-    const correlationMixin: pino.MixinFn<CustomLevels> = (mergeObject, level, logger) => {
+    const correlationMixin: PinoMixinFn<CustomLevels> = (mergeObject, level, logger) => {
       const userFields = userMixin ? userMixin(mergeObject, level, logger) : {};
       const ctx = this.#adapterContextRef.current;
       if (!ctx?.options.correlation) return userFields;

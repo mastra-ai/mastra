@@ -7,7 +7,7 @@ description: "Browse Deep Infra model IDs, capabilities, context windows, and pr
 
 # <img src="https://models.dev/logos/deepinfra.svg" alt="Deep Infra logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Deep Infra
 
-Access 76 Deep Infra models through Mastra's model router. Authentication is handled automatically using the `DEEPINFRA_API_KEY` environment variable.
+Access 77 Deep Infra models through Mastra's model router. Authentication is handled automatically using the `DEEPINFRA_API_KEY` environment variable.
 
 Learn more in the [Deep Infra documentation](https://deepinfra.com/models).
 
@@ -304,6 +304,18 @@ for await (const chunk of stream) {
     "outputCost": 0.3
   },
   {
+    "model": "deepinfra/meta-llama/Llama-Guard-4-12B",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 163840,
+    "maxOutput": 163840,
+    "inputCost": 0.18,
+    "outputCost": 0.18
+  },
+  {
     "model": "deepinfra/MiniMaxAI/MiniMax-M3",
     "imageInput": true,
     "audioInput": false,
@@ -462,7 +474,7 @@ for await (const chunk of stream) {
   {
     "model": "deepinfra/Qwen/Qwen3.5-27B",
     "imageInput": true,
-    "audioInput": true,
+    "audioInput": false,
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
@@ -510,7 +522,7 @@ for await (const chunk of stream) {
   {
     "model": "deepinfra/Qwen/Qwen3.6-27B",
     "imageInput": true,
-    "audioInput": true,
+    "audioInput": false,
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,

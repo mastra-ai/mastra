@@ -4,7 +4,7 @@ import type {
   SharedV2ProviderMetadata,
 } from '@ai-sdk/provider-v5';
 import type { LanguageModelRequestMetadata, LogProbs as LanguageModelV1LogProbs } from '@internal/ai-sdk-v4';
-import type { LanguageModelUsage } from '@internal/ai-sdk-v5';
+import type { LanguageModelUsage, ModelMessage } from '@internal/ai-sdk-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { z } from 'zod';
 
@@ -40,10 +40,11 @@ import type {
 } from '../../tools/types';
 import type { Workspace } from '../../workspace';
 import type { AgentExecutionOptions } from '../agent.types';
-import type { MessageList } from '../message-list';
+import type { AIV5ResponseMessage, MessageList } from '../message-list';
 import type { SerializedMessageListState } from '../message-list/state';
 import type { SaveQueueManager } from '../save-queue';
 import type { CreatedAgentSignal } from '../signals';
+import type { TripwireData } from '../trip-wire';
 import type { GoalConfig, StructuredOutputOptions } from '../types';
 import type { ExecutionFence } from './execution-fence';
 
@@ -364,6 +365,8 @@ export interface DurableAgenticWorkflowInput {
    * Only plain JSON-safe entries should appear here.
    */
   requestContextEntries?: Record<string, unknown>;
+  /** Initial processor rejection, with metadata snapshotted for cross-process execution. */
+  inputTripwire?: TripwireData;
 }
 
 /**
@@ -431,7 +434,7 @@ export interface DurableToolCallInput {
   /** Arguments for the tool */
   args: Record<string, unknown>;
   /** Provider-specific metadata */
-  providerMetadata?: Record<string, unknown>;
+  providerMetadata?: SharedV2ProviderMetadata;
   /** Whether the tool was already executed by the provider */
   providerExecuted?: boolean;
   /** Output if provider-executed */
@@ -656,6 +659,12 @@ export type DurableAgentStepFinishResult = AgentStepFinishEventData & { runId: s
 export interface AgentFinishEventData {
   output: DurableAgenticLoopOutput['output'];
   stepResult: DurableLLMStepOutput['stepResult'];
+  /** The run's conversation, as on the default loop's finish chunk. */
+  messages?: {
+    all: ModelMessage[];
+    user: ModelMessage[];
+    nonUser: AIV5ResponseMessage[];
+  };
 }
 
 /**

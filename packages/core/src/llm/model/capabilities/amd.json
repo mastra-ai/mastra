@@ -1,9 +1,23 @@
 {
-  "attachment": ["DeepSeek-V4-Flash-Vision-Exp", "DeepSeek-V4.1-Flash", "Qwen3.8-Flash-Next"],
+  "attachment": [
+    "DeepSeek-V4-Flash-Vision-Exp",
+    "DeepSeek-V4.1-Flash",
+    "Gemma-4-31B-IT",
+    "MiMo-V2.6-Flash",
+    "MiniCPM-V-4.7-1B",
+    "MiniCPM-V-4.7-35B-A3B",
+    "Qwen3.8-27B",
+    "Qwen3.8-Flash-Next"
+  ],
   "temperature": [
     "DeepSeek-V4-Flash",
     "DeepSeek-V4-Flash-Vision-Exp",
     "DeepSeek-V4.1-Flash",
+    "GLM-5.3-Flash",
+    "Gemma-4-31B-IT",
+    "MiMo-V2.6-Flash",
+    "MiniCPM-V-4.7-1B",
+    "MiniCPM-V-4.7-35B-A3B",
     "MiniCPM5-2B",
     "Qwen3.8-27B",
     "Qwen3.8-Flash-Next"
@@ -12,10 +26,21 @@
     "DeepSeek-V4-Flash",
     "DeepSeek-V4-Flash-Vision-Exp",
     "DeepSeek-V4.1-Flash",
+    "GLM-5.3-Flash",
+    "Gemma-4-31B-IT",
+    "MiMo-V2.6-Flash",
+    "MiniCPM-V-4.7-1B",
+    "MiniCPM-V-4.7-35B-A3B",
     "Qwen3.8-27B",
     "Qwen3.8-Flash-Next"
   ],
   "reasoning": {
+    "DeepSeek-V4-Flash-Vision-Exp": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "DeepSeek-V4.1-Flash": [
       {
         "type": "effort",
@@ -28,12 +53,6 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "DeepSeek-V4-Flash-Vision-Exp": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
     "Qwen3.8-27B": [
       {
         "type": "effort",
@@ -44,6 +63,12 @@
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "GLM-5.3-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }

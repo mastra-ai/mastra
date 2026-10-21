@@ -400,6 +400,7 @@ export abstract class Bundler extends MastraBundler {
     outputDirectory: string,
     rootDir = process.cwd(),
     pnpmOverrides?: Record<string, string>,
+    pnpmWorkspaceSettings?: NonNullable<Config['bundler']>['pnpmWorkspaceSettings'],
   ) {
     const deps = new DepsService(rootDir);
     deps.__setLogger(this.logger);
@@ -407,6 +408,7 @@ export abstract class Bundler extends MastraBundler {
       dir: join(outputDirectory, this.outputDir),
       pnpmOverrides,
       pnpmNodeLinker: this.pnpmNodeLinker,
+      pnpmWorkspaceSettings,
     };
 
     this.logger.info('Updating dependency lockfile and installing dependencies');
@@ -810,7 +812,12 @@ export const tools = [${toolsExports.join(', ')}]`,
       if (shouldSkipInstall()) {
         this.logger.info('Skipping dependency installation (MASTRA_BUILD_SKIP_INSTALL set)');
       } else {
-        await this.installDependencies(outputDirectory, projectRoot, transitiveWorkspaceDependencies.resolutions);
+        await this.installDependencies(
+          outputDirectory,
+          projectRoot,
+          transitiveWorkspaceDependencies.resolutions,
+          bundlerOptions.pnpmWorkspaceSettings,
+        );
       }
     } catch (error) {
       if (

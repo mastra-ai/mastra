@@ -130,6 +130,7 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
     rotateResponseMessageId,
     agentId,
     requireToolApproval,
+    returnScorerData,
     toolCallConcurrency,
     streamState: {
       serialize: serializeStreamState,

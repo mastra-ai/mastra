@@ -60,7 +60,8 @@ const { thread, clonedMessages } = await memory.cloneThread({
   {
     name: 'metadata',
     type: 'Record<string, unknown>',
-    description: "Optional metadata to merge with the source thread's metadata. Clone metadata is automatically added.",
+    description:
+      "Optional metadata for the new thread. The new thread's metadata contains only the supplied metadata plus an automatically added `clone` record with `sourceThreadId`, `clonedAt`, and optional `lastMessageId`. Source-thread metadata isn't copied.",
     isOptional: true,
   },
   {

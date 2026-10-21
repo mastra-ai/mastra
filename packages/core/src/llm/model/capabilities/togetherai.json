@@ -1,6 +1,7 @@
 {
   "attachment": [
     "MiniMaxAI/MiniMax-M3",
+    "Qwen/Qwen3.5-397B-A17B",
     "Qwen/Qwen3.5-9B",
     "deepseek-ai/DeepSeek-V4.1-Flash",
     "meta-models/Muse-Spark-Open-816B-A42B",
@@ -47,6 +48,8 @@
     "MiniMaxAI/MiniMax-M3",
     "Qwen/Qwen2.5-7B-Instruct-Turbo",
     "Qwen/Qwen3.5-9B",
+    "Qwen/Qwen3.6-Plus",
+    "Qwen/Qwen3.7-Max",
     "deepseek-ai/DeepSeek-V4-Flash-0731",
     "deepseek-ai/DeepSeek-V4-Pro-0813",
     "deepseek-ai/DeepSeek-V4.1-Flash",
@@ -54,6 +57,7 @@
     "moonshotai/Kimi-K3",
     "nvidia/NVIDIA-Nemotron-3.5-Super-VL",
     "nvidia/nemotron-3-ultra-550b-a55b",
+    "openai/gpt-oss-120b",
     "reflection/Beam-1.0-501B-A23B",
     "thinkingmachines/Inkling",
     "zai-org/GLM-5",
@@ -63,37 +67,28 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "moonshotai/Kimi-K3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "meta-models/Muse-Spark-Open-816B-A42B": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "reflection/Beam-1.0-501B-A23B": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "openai/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "thinkingmachines/Inkling": [
       {
         "type": "effort",
-        "values": ["max", "xhigh", "high", "medium", "low", "none"]
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "zai-org/GLM-5.1": [
+    "Qwen/Qwen3.5-397B-A17B": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Qwen/Qwen3.5-9B": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Qwen/Qwen3.6-Plus": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "MiniMaxAI/MiniMax-M3": [
       {
         "type": "toggle"
       }
@@ -103,16 +98,9 @@
         "type": "toggle"
       }
     ],
-    "zai-org/GLM-5.3-Flash": [
+    "zai-org/GLM-5.1": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "zai-org/GLM-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "toggle"
       }
     ],
     "zai-org/GLM-5.2": [
@@ -124,24 +112,49 @@
         "values": ["high", "max"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4.1-Flash": [
+    "zai-org/GLM-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "zai-org/GLM-5.3-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "meta-models/Muse-Spark-Open-816B-A42B": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "reflection/Beam-1.0-501B-A23B": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3.5-Super-VL": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nvidia/nemotron-3-ultra-550b-a55b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4.1-Flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "deepseek-ai/DeepSeek-V3-1": [
       {
         "type": "toggle"
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4-Pro-0813": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ],
     "deepseek-ai/DeepSeek-V4-Flash-0731": [
@@ -153,29 +166,25 @@
         "values": ["high", "max"]
       }
     ],
-    "Qwen/Qwen3.5-9B": [
+    "deepseek-ai/DeepSeek-V4-Pro-0813": [
       {
         "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["high", "max"]
       }
     ],
-    "Qwen/Qwen3.5-397B-A17B": [
+    "openai/gpt-oss-120b": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
-    "Qwen/Qwen3.6-Plus": [
+    "moonshotai/Kimi-K3": [
       {
-        "type": "toggle"
-      }
-    ],
-    "nvidia/NVIDIA-Nemotron-3.5-Super-VL": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "nvidia/nemotron-3-ultra-550b-a55b": [
-      {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
       }
     ]
   }

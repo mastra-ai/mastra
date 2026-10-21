@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -114,8 +114,14 @@ describe('DatasetItemVersionsComparePage', () => {
       expect(screen.getByRole('button', { name: /Default View/ })).toBeDefined();
       expect(screen.getAllByText('Input')).toHaveLength(2);
       expect(screen.getAllByText('Tool Mocks')).toHaveLength(2);
-      expect(screen.getAllByText('Request Context')).toHaveLength(2);
-      expect(screen.getAllByText('Not set in this version')).toHaveLength(2);
+      // Left = v2, which sets Tool Mocks and Request Context; right = v1, which sets neither.
+      const [newerCard, olderCard] = Array.from(
+        container.querySelector('.md\\:grid-cols-2')!.children,
+      ) as HTMLElement[];
+      expect(within(newerCard).getByText('Request Context')).toBeDefined();
+      expect(within(newerCard).queryByText('Not set in this version')).toBeNull();
+      expect(within(olderCard).getByText('Request Context')).toBeDefined();
+      expect(within(olderCard).getAllByText('Not set in this version')).toHaveLength(2);
       expect(screen.queryByText('No version selected')).toBeNull();
     });
 

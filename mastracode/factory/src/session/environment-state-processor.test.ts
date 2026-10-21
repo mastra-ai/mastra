@@ -17,7 +17,8 @@ const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 function requestContext(sessionId = 'sess-1', state: Record<string, unknown> = { factoryProjectId: PROJECT_ID }) {
   const context = new RequestContext();
   context.set('controller', {
-    resourceId: sessionId,
+    sessionId,
+    resourceId: PROJECT_ID,
     threadId: 'thread-1',
     getState: () => state,
   });

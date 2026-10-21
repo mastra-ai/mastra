@@ -18,6 +18,12 @@
   ],
   "structuredOutput": ["deepseek-v4-flash", "deepseek-v4-pro", "gemini-2.5-flash", "gemini-2.5-pro"],
   "reasoning": {
+    "claude-fable-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "gemini-2.5-pro": [
       {
         "type": "effort",
@@ -25,6 +31,15 @@
       },
       {
         "type": "budget_tokens"
+      }
+    ],
+    "claude-sonnet-4-6": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "max"]
       }
     ],
     "deepseek-v4-flash": [
@@ -39,7 +54,10 @@
         "values": ["none", "high", "max"]
       }
     ],
-    "claude-fable-5": [
+    "claude-opus-4-8": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
@@ -47,32 +65,14 @@
     ],
     "gemini-2.5-flash": [
       {
+        "type": "toggle"
+      },
+      {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high", "max"]
       },
       {
-        "type": "toggle"
-      },
-      {
         "type": "budget_tokens"
-      }
-    ],
-    "claude-opus-4-8": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      },
-      {
-        "type": "toggle"
-      }
-    ],
-    "claude-sonnet-4-6": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "max"]
-      },
-      {
-        "type": "toggle"
       }
     ],
     "qwen/qwen3.7-plus": [

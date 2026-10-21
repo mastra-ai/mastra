@@ -15,13 +15,12 @@
         "type": "toggle"
       }
     ],
-    "gpt-oss-120b": [
+    "DeepSeek-V3.2": [
       {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "type": "toggle"
       }
     ],
-    "DeepSeek-V3.2": [
+    "gemma-4-31B-it": [
       {
         "type": "toggle"
       }
@@ -31,9 +30,10 @@
         "type": "toggle"
       }
     ],
-    "gemma-4-31B-it": [
+    "gpt-oss-120b": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ]
   }

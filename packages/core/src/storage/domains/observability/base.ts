@@ -65,6 +65,7 @@ import type {
   GetScorePercentilesArgs,
   GetScorePercentilesResponse,
 } from './scores';
+import type { SpanAggregateResponse, TrustedSpanAggregatePlan } from './span-aggregate';
 import type { SpanQueryResponse, TrustedSpanQueryPlan } from './span-query';
 import type { ThreadQueryResponse, TrustedThreadRowsQueryPlan } from './thread-query';
 import type { TraceAggregateResponse } from './trace-aggregate';
@@ -117,12 +118,15 @@ import type { ObservabilityStorageStrategy, TracingStorageStrategy } from './typ
  * - `metric-discovery`: `getMetricNames`, `getMetricLabelKeys`, `getMetricLabelValues`
  * - `span-query`: `querySpans` over completed spans
  * - `span-query-context-fields`: identity, context and parent/root entity predicates added to `querySpans`
+ * - `span-aggregate`: `aggregateSpans`, including every `querySpans` predicate field
  * - `trace-query`: `queryTraces`
  * - `trace-aggregate`: `aggregateTraces`
  * - `trace-query-root-duration`: `durationMs` predicates in trace/thread queries
  * - `trace-query-context-ids`: `runId`, `sessionId`, `userId` and `organizationId` predicates in trace/thread queries
  * - `trace-query-time-to-first-chunk`: `timeToFirstChunkMs` on trace and span query results and predicates
  * - `trace-query-root-span-fields`: root span `name` and `spanType` in trace-scope predicates, aggregate `groupBy` and `countDistinct`
+ * - `trace-query-root-entity-id`: root span `entityId` in trace-scope predicates, aggregate `groupBy` and `countDistinct`
+ * - `trace-query-time-to-first-chunk-sort`: `orderBy` on `timeToFirstChunkMs` in trace and span queries
  * - `trace-query-discovery`: `getTraceQueryObservedFields`, `getTraceQueryValues`
  * - `thread-query`: `queryThreads`
  * - `trace-query-tenant-scope`: enforcing a trusted tenant scope on trace/thread queries
@@ -140,6 +144,7 @@ export type ObservabilityStorageFeature =
   | 'metric-discovery'
   | 'span-query'
   | 'span-query-context-fields'
+  | 'span-aggregate'
   | 'trace-query'
   | 'trace-aggregate'
   | 'trace-query-root-duration'
@@ -150,7 +155,9 @@ export type ObservabilityStorageFeature =
   | 'feedback'
   | 'trace-query-context-ids'
   | 'trace-query-time-to-first-chunk'
-  | 'trace-query-root-span-fields';
+  | 'trace-query-root-span-fields'
+  | 'trace-query-root-entity-id'
+  | 'trace-query-time-to-first-chunk-sort';
 
 /**
  * Base storage class for observability data (traces, metrics, logs, scores, feedback).
@@ -434,6 +441,18 @@ export class ObservabilityStorage extends StorageDomain {
       domain: ErrorDomain.MASTRA_OBSERVABILITY,
       category: ErrorCategory.SYSTEM,
       text: 'This storage provider does not support trace aggregation',
+    });
+  }
+
+  /**
+   * Executes a validated span-aggregate plan.
+   */
+  async aggregateSpans(_plan: TrustedSpanAggregatePlan): Promise<SpanAggregateResponse> {
+    throw new MastraError({
+      id: 'OBSERVABILITY_STORAGE_AGGREGATE_SPANS_NOT_IMPLEMENTED',
+      domain: ErrorDomain.MASTRA_OBSERVABILITY,
+      category: ErrorCategory.SYSTEM,
+      text: 'This storage provider does not support span aggregation',
     });
   }
 

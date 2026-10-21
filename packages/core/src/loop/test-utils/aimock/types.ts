@@ -1,5 +1,6 @@
 import type { JournalEntry, LLMock } from '@copilotkit/aimock';
 import type { AgentConfig, ToolsInput } from '../../../agent';
+import type { MessageListInput } from '../../../agent/message-list';
 import type { MastraServerCache } from '../../../cache';
 import type { PubSub } from '../../../events/pubsub';
 import type { MastraMemory } from '../../../memory';
@@ -123,8 +124,8 @@ export interface RunLoopScenarioOptions {
    * Runs once before the loop starts.
    */
   fixtures: (llm: LLMock) => void;
-  /** The user prompt that kicks off the loop. */
-  prompt: string;
+  /** The input that kicks off the loop: a user prompt, or messages (e.g. ending on an assistant prefill). */
+  prompt: string | MessageListInput;
   /**
    * Default options for the agent (e.g. `autoResumeSuspendedTools`).
    * Applied to the Agent constructor via `defaultOptions` config.

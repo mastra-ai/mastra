@@ -7,6 +7,7 @@
  * into the tool execution context.
  */
 
+import { posix as posixPath } from 'node:path';
 import { z } from 'zod/v4';
 import type { ToolBackgroundConfig } from '../../background-tasks/types';
 import { RequestContext } from '../../request-context';
@@ -18,6 +19,7 @@ import type { FileReadTracker, FileWriteLock, WorkspaceFilesystem } from '../fil
 import type { WorkspaceSandbox } from '../sandbox';
 import { supportsComputer } from '../sandbox';
 import type { Workspace } from '../workspace';
+import { applyPatchDidWrite, applyPatchTool, getApplyPatchWritePaths } from './apply-patch';
 import { isAstGrepAvailable, astEditTool } from './ast-edit';
 import { computerClickTool } from './computer-click';
 import { computerDoubleClickTool } from './computer-double-click';
@@ -278,6 +280,8 @@ function wrapWithReadTracker(
   readTracker: FileReadTracker,
   config: { requireReadBeforeWrite?: DynamicToolConfigValue<ToolConfigWithArgsContext> },
   mode: 'read' | 'write',
+  getWritePaths?: (input: any) => string[],
+  didWrite?: (result: unknown) => boolean,
 ): any {
   return {
     ...tool,
@@ -294,42 +298,52 @@ function wrapWithReadTracker(
 
       // Pre-execution: enforce read-before-write policy and/or attach
       // optimistic-concurrency mtime for write tools.
+      const writePaths: string[] = getWritePaths ? getWritePaths(input) : [input.path];
       if (mode === 'write' && fs) {
-        // Optimistic concurrency: attach the mtime from the last read
-        // *before* stat so it's preserved even when the file has been
-        // deleted externally (stat throws FileNotFoundError). Records from a
-        // different filesystem scope must not leak their mtime here.
-        const record = await readTracker.getReadRecord(input.path);
-        if (record && record.scope === scope) {
-          enrichedContext = { ...enrichedContext, __expectedMtime: record.modifiedAtRead };
-        }
+        const expectedMtimes: Record<string, Date> = {};
+        for (const path of writePaths) {
+          // Optimistic concurrency: attach the mtime from the last read
+          // *before* stat so it's preserved even when the file has been
+          // deleted externally (stat throws FileNotFoundError). Records from a
+          // different filesystem scope must not leak their mtime here.
+          const record = await readTracker.getReadRecord(path);
+          if (record && record.scope === scope) {
+            expectedMtimes[path] = record.modifiedAtRead;
+          }
 
-        try {
-          const stat = await fs.stat(input.path);
+          try {
+            const stat = await fs.stat(path);
 
-          // Policy gate: require the agent to have read the file first.
-          // Only evaluate when explicitly configured (opt-in policy).
-          // Safe default true = fail-closed if a dynamic function throws.
-          if (config.requireReadBeforeWrite !== undefined) {
-            const shouldRequireRead = await resolveDynamicValue(
-              config.requireReadBeforeWrite,
-              { args: input, requestContext: enrichedContext.requestContext ?? {}, workspace: effectiveWorkspace },
-              true,
-            );
-            if (shouldRequireRead) {
-              const check = await readTracker.needsReRead(input.path, stat.modifiedAt, scope);
-              if (check.needsReRead) {
-                throw new FileReadRequiredError(input.path, check.reason!);
+            // Policy gate: require the agent to have read the file first.
+            // Only evaluate when explicitly configured (opt-in policy).
+            // Safe default true = fail-closed if a dynamic function throws.
+            if (config.requireReadBeforeWrite !== undefined) {
+              const shouldRequireRead = await resolveDynamicValue(
+                config.requireReadBeforeWrite,
+                { args: input, requestContext: enrichedContext.requestContext ?? {}, workspace: effectiveWorkspace },
+                true,
+              );
+              if (shouldRequireRead) {
+                const check = await readTracker.needsReRead(path, stat.modifiedAt, scope);
+                if (check.needsReRead) {
+                  throw new FileReadRequiredError(path, check.reason!);
+                }
               }
             }
+          } catch (error) {
+            if (!(error instanceof FileNotFoundError)) {
+              throw error;
+            }
+            // Missing file: if a read record exists the expectedMtime is
+            // already attached, so downstream writeFile can treat this as
+            // stale. Otherwise it's a genuinely new file.
           }
-        } catch (error) {
-          if (!(error instanceof FileNotFoundError)) {
-            throw error;
-          }
-          // Missing file: if a read record exists the expectedMtime is
-          // already attached, so downstream writeFile can treat this as
-          // stale. Otherwise it's a genuinely new file.
+        }
+
+        if (getWritePaths) {
+          enrichedContext = { ...enrichedContext, __expectedMtimes: expectedMtimes };
+        } else if (expectedMtimes[input.path]) {
+          enrichedContext = { ...enrichedContext, __expectedMtime: expectedMtimes[input.path] };
         }
       }
 
@@ -343,8 +357,10 @@ function wrapWithReadTracker(
         } catch {
           // Ignore stat errors for tracking
         }
-      } else if (mode === 'write') {
-        await readTracker.clearReadRecord(input.path);
+      } else if (mode === 'write' && (didWrite?.(result) ?? true)) {
+        for (const path of writePaths) {
+          await readTracker.clearReadRecord(path);
+        }
       }
 
       return result;
@@ -388,10 +404,18 @@ function wrapWithToolHooks(
   };
 }
 
-function wrapWithWriteLock(tool: any, writeLock: FileWriteLock): any {
+function wrapWithWriteLock(tool: any, writeLock: FileWriteLock, getWritePaths?: (input: any) => string[]): any {
   return {
     ...tool,
     execute: async (input: any, context: any = {}) => {
+      if (getWritePaths) {
+        // Take one lock per path in a stable order so two multi-file calls
+        // can't each hold a lock the other is waiting for.
+        const keys = [...new Set(getWritePaths(input).map(p => posixPath.normalize(p.replace(/\\/g, '/'))))].sort();
+        const run = (i: number): Promise<any> =>
+          i === keys.length ? tool.execute(input, context) : writeLock.withLock(keys[i]!, () => run(i + 1));
+        return run(0);
+      }
       if (!input.path) {
         throw new Error('wrapWithWriteLock: input.path is required');
       }
@@ -484,8 +508,15 @@ export async function createWorkspaceTools(
       useWriteLock?: boolean;
       targets?: ResolveTargets;
       isAvailable?: () => boolean;
+      /** Only register when the tool's own `enabled` is set; top-level `enabled` doesn't turn it on. */
+      optIn?: boolean;
+      /** Every path the call writes, for tools that touch more than `input.path`. */
+      getWritePaths?: (input: any) => string[];
+      /** Whether a successful result actually changed files; read records are kept when it didn't. */
+      didWrite?: (result: unknown) => boolean;
     },
   ) => {
+    if (opts?.optIn && toolsConfig?.[name]?.enabled === undefined) return;
     const config = await resolveToolConfig(toolsConfig, name, effectiveConfigContext);
     if (!config.enabled) return;
     if (opts?.requireWrite && isReadOnly) return;
@@ -526,7 +557,15 @@ export async function createWorkspaceTools(
     }
 
     if (opts?.readTrackerMode) {
-      wrapped = wrapWithReadTracker(wrapped, workspace, getReadTracker(), config, opts.readTrackerMode);
+      wrapped = wrapWithReadTracker(
+        wrapped,
+        workspace,
+        getReadTracker(),
+        config,
+        opts.readTrackerMode,
+        opts.getWritePaths,
+        opts.didWrite,
+      );
     } else {
       wrapped = wrapTool(wrapped, workspace, opts?.targets ?? {});
     }
@@ -552,7 +591,7 @@ export async function createWorkspaceTools(
 
     // Write lock is outermost — serializes the entire enriched execute pipeline
     if (opts?.useWriteLock) {
-      wrapped = wrapWithWriteLock(wrapped, getWriteLock());
+      wrapped = wrapWithWriteLock(wrapped, getWriteLock(), opts.getWritePaths);
     }
 
     tools[exposedName] = wrapped;
@@ -592,6 +631,16 @@ export async function createWorkspaceTools(
       readTrackerMode: 'write',
       useWriteLock: true,
       isAvailable: isAstGrepAvailable,
+    });
+
+    // Multi-file patch tool — opt-in only, so existing agents keep write_file/edit_file
+    await addTool(WORKSPACE_TOOLS.FILESYSTEM.APPLY_PATCH, () => applyPatchTool, {
+      requireWrite: true,
+      readTrackerMode: 'write',
+      useWriteLock: true,
+      optIn: true,
+      getWritePaths: getApplyPatchWritePaths,
+      didWrite: applyPatchDidWrite,
     });
   }
 
