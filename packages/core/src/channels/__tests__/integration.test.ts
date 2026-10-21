@@ -235,6 +235,7 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s inbound channel exec
 
   it.each([
     { attachment: 'late', decision: undefined },
+    { attachment: 'late-history', decision: undefined },
     { attachment: 'config', decision: undefined },
     { attachment: 'instance', decision: undefined },
     { attachment: 'replacement', decision: undefined },
@@ -342,7 +343,21 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s inbound channel exec
             : overriddenId
               ? new EventedAgent(wrapperOptions)
               : createEventedAgent({ agent: inner });
-      if (attachment === 'late' || attachment === 'replacement' || attachment === 'id-late' || attachment === 'rebind')
+      const memoryCallStacks: string[] = [];
+      if (attachment === 'late-history') {
+        const getMemory = agent.getMemory.bind(agent);
+        vi.spyOn(agent, 'getMemory').mockImplementation((...args) => {
+          memoryCallStacks.push(new Error().stack ?? '');
+          return getMemory(...args);
+        });
+      }
+      if (
+        attachment === 'late' ||
+        attachment === 'late-history' ||
+        attachment === 'replacement' ||
+        attachment === 'id-late' ||
+        attachment === 'rebind'
+      )
         agent.setChannels(channels);
       else channels = agent.getChannels()!;
       if (attachment === 'rebind') inner.setChannels(channels);
@@ -415,6 +430,18 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s inbound channel exec
           author: { userId: 'U1', userName: 'alice', fullName: 'Alice', isBot: false, isMe: false },
           metadata: { dateSent: new Date(), edited: false },
         };
+        if (attachment === 'late-history') {
+          adapter.fetchMessages = async () => ({
+            messages: [
+              {
+                ...message,
+                id: 'prior-1',
+                text: 'Earlier question from the platform thread',
+                metadata: { dateSent: new Date(Date.now() - 60_000), edited: false },
+              },
+            ],
+          });
+        }
         const sdk = channels.sdk as unknown as {
           processMessage(adapter: unknown, threadId: string, message: Message): Promise<void>;
         };
@@ -502,6 +529,12 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s inbound channel exec
           'Transient fork instructions',
         );
         expect(runIds.size).toBe(1);
+        if (attachment === 'late-history') {
+          expect(
+            memoryCallStacks.some(stack => stack.includes('persistThreadHistorySignals')),
+            'first-mention history must read memory through the execution owner',
+          ).toBe(true);
+        }
         if (overriddenId) {
           const memoryStore = await storage.getStore('memory');
           const { threads } = await memoryStore!.listThreads({ filter: { resourceId } });
