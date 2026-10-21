@@ -2921,6 +2921,8 @@ export class DurableAgent<
       actor: options?.actor,
     });
 
+    validateModelTimeoutSettings(options?.modelSettings?.timeout);
+
     // 1. Claim the run before preparing it, so a run that is already executing
     // fails before any span or memory write is made for this call.
     const runId = options?.runId ?? crypto.randomUUID();
@@ -4512,6 +4514,8 @@ export class DurableAgent<
       runId: options?.runId,
       actor: options?.actor,
     });
+
+    validateModelTimeoutSettings(options?.modelSettings?.timeout);
 
     // 1. Claim the run before preparing it — see stream().
     const runId = options?.runId ?? crypto.randomUUID();
