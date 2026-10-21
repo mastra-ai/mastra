@@ -1,6 +1,7 @@
 'use client';
 
-import { useRef, useState, useCallback, useEffect, type Dispatch, type RefObject, type SetStateAction } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
+import type { Dispatch, RefObject, SetStateAction } from 'react';
 
 export interface ItemRect {
   top: number;

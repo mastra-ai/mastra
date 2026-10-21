@@ -58,7 +58,7 @@ export interface EnvironmentVariablesEditorController<TRow extends EnvironmentVa
   rowHasDuplicateKey: (index: number) => boolean;
 }
 
-type DefaultEnvironmentVariablesEditorOptions = UseEnvironmentVariablesEditorOptions<EnvironmentVariableRow>;
+type DefaultEnvironmentVariablesEditorOptions = UseEnvironmentVariablesEditorOptions;
 
 type CustomEnvironmentVariablesEditorOptions<TRow extends EnvironmentVariableRow> =
   UseEnvironmentVariablesEditorOptions<TRow> & EnvironmentVariablesEditorRowFactories<TRow>;

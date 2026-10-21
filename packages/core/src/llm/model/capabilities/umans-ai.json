@@ -11,12 +11,6 @@
     "umans-kimi-k3"
   ],
   "reasoning": {
-    "umans-coder": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "umans-kimi-k3": [
       {
         "type": "toggle"
@@ -26,7 +20,13 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "umans-deepseek-v4-flash-0731": [
+    "umans-coder": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "umans-deepseek-v4.1-flash": [
       {
         "type": "toggle"
       },
@@ -35,7 +35,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "umans-deepseek-v4.1-flash": [
+    "umans-deepseek-v4-flash-0731": [
       {
         "type": "toggle"
       },

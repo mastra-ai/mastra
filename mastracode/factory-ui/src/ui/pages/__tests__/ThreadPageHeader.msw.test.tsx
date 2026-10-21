@@ -72,7 +72,7 @@ const userSession = {
 
 function stubThreadRoute({
   gateSession = false,
-  userSessionTitle = userSession.title as string | undefined,
+  userSessionTitle = userSession.title,
   threads = [] as Array<{ id: string; title: string }>,
 } = {}) {
   const sessionGate = deferred();

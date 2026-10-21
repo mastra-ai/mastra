@@ -166,12 +166,7 @@ export function CSVImportDialog({ datasetId, open, onOpenChange, onSuccess }: CS
     const hasSchemas = dataset?.inputSchema || dataset?.groundTruthSchema;
 
     if (hasSchemas) {
-      const result = validateCsvRows(
-        mappedRows,
-        dataset?.inputSchema as Record<string, unknown> | null | undefined,
-        dataset?.groundTruthSchema as Record<string, unknown> | null | undefined,
-        10,
-      );
+      const result = validateCsvRows(mappedRows, dataset?.inputSchema, dataset?.groundTruthSchema, 10);
       setSchemaValidation(result);
 
       if (result.validCount === 0) {

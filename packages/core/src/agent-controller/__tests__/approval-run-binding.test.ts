@@ -20,7 +20,8 @@ import { Agent } from '../../agent';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage/mock';
 import { AgentController } from '../agent-controller';
-import { SUSPENDED_RUN_AGENT_KEY, THREAD_OWNER_ID_CONTEXT_KEY, type Session } from '../session';
+import { SUSPENDED_RUN_AGENT_KEY, THREAD_OWNER_ID_CONTEXT_KEY } from '../session';
+import type { Session } from '../session';
 import { createMockWorkspace } from '../test-utils';
 import type { AgentControllerRequestContext } from '../types';
 

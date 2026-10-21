@@ -7,7 +7,7 @@ description: "Browse Novita AI model IDs, capabilities, context windows, and pri
 
 # <img src="https://models.dev/logos/novita-ai.svg" alt="Novita AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Novita AI
 
-Access 85 Novita AI models through Mastra's model router. Authentication is handled automatically using the `NOVITA_API_KEY` environment variable.
+Access 86 Novita AI models through Mastra's model router. Authentication is handled automatically using the `NOVITA_API_KEY` environment variable.
 
 Learn more in the [Novita AI documentation](https://novita.ai/docs/guides/introduction).
 
@@ -215,6 +215,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   },
   {
     "model": "novita-ai/deepseek/deepseek-v4.1-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 393216,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "novita-ai/deepseek/deepseek-v4.1-flash-1017",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,

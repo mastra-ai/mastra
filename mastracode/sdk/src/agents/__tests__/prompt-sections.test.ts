@@ -10,7 +10,8 @@ vi.mock('../../tools/index.js', () => ({
 }));
 
 import { getDynamicInstructions, getDynamicInstructionSections } from '../instructions.js';
-import { buildFullPrompt, buildFullPromptSections, joinPromptSections, type PromptContext } from '../prompts/index.js';
+import { buildFullPrompt, buildFullPromptSections, joinPromptSections } from '../prompts/index.js';
+import type { PromptContext } from '../prompts/index.js';
 
 let projectPath: string;
 

@@ -8,14 +8,14 @@ import {
   TRACE_AGGREGATE_MIXED_COST_UNIT,
   TRACE_AGGREGATE_USAGE_METRIC_NAMES,
   traceAggregateRowSchema,
-  type TraceAggregateCountDistinctField,
+  type TraceAggregateDimension,
   type TraceAggregateRequest,
   type TraceAggregateResponse,
   type TraceAggregateRow,
   type TraceAggregateRowCost,
   type TraceQueryTenantScope,
+  type TrustedSpanAggregatePlan,
   type TrustedTraceAggregateHavingPredicate,
-  type TrustedTraceAggregateMeasureName,
   type TrustedTraceAggregatePlan,
 } from '@mastra/core/storage';
 import { TokenMetrics } from '@mastra/core/observability';
@@ -39,7 +39,7 @@ import {
  * re-checked here.
  *
  * Token and cost measures read `metrics` rows: usage is first summed per
- * candidate trace (`computeTraceUsage`), then per group. See the `TrustedTraceAggregatePlan`
+ * candidate trace (`computeUsage`), then per group. See the `TrustedTraceAggregatePlan`
  * JSDoc in core for the contract this implements.
  */
 
@@ -104,27 +104,29 @@ function isPricingFailure(metric: RawTraceAggregateMetric): boolean {
  * pruned only by `timestamp >= from` (no upper bound) and the trusted tenant scope. Traces with no
  * qualifying row are absent from the result, i.e. not usage-bearing.
  */
-function computeTraceUsage(
+function computeUsage(
   metrics: RawTraceAggregateMetric[],
-  roots: RawTraceQuerySpan[],
-  plan: TrustedTraceAggregatePlan,
+  rows: RawTraceQuerySpan[],
+  plan: AggregatePlan,
+  scope: AggregateScope,
 ): Map<string, TraceUsage> {
-  const candidates = new Set(roots.map(root => root.traceId));
+  const candidates = new Set(rows.map(scope.usageKey));
   const fromMs = Date.parse(plan.timeRange.from);
   const seen = new Set<string>();
   const usage = new Map<string, TraceUsage>();
   for (const metric of metrics) {
-    if (metric.traceId === null || !candidates.has(metric.traceId)) continue;
+    const key = scope.metricKey(metric);
+    if (key === null || !candidates.has(key)) continue;
     if (!usageMetricNames.has(metric.name)) continue;
     if (Date.parse(metric.timestamp) < fromMs) continue;
     if (!matchesScope(metric, plan.scope)) continue;
     if (seen.has(metric.metricId)) continue;
     seen.add(metric.metricId);
 
-    let trace = usage.get(metric.traceId);
+    let trace = usage.get(key);
     if (!trace) {
       trace = { tokens: new Map(), cost: 0, priced: false, hasPricingFailure: false, costUnits: new Set() };
-      usage.set(metric.traceId, trace);
+      usage.set(key, trace);
     }
     trace.tokens.set(metric.name, (trace.tokens.get(metric.name) ?? 0) + metric.value);
     if (!costMetricNames.has(metric.name)) continue;
@@ -149,8 +151,20 @@ export function traceAggregatePercentile(sortedValues: number[], p: number): num
   return lowerValue + (rank - lower) * (upperValue - lowerValue);
 }
 
-function countDistinctValue(root: RawTraceQuerySpan, field: TraceAggregateCountDistinctField): string | null {
-  return field === 'traceId' ? root.traceId : traceQueryDimensionValue(root, field);
+/** Either aggregate plan: both share group, measure, `having`, `orderBy`, and bucket semantics. */
+type AggregatePlan = TrustedTraceAggregatePlan | TrustedSpanAggregatePlan;
+
+/** What differs between trace and span aggregation once the population is selected. */
+export interface AggregateScope {
+  dimensionValue(row: RawTraceQuerySpan, dimension: string): string | null;
+  /** Key a row's usage is aggregated under. */
+  usageKey(row: RawTraceQuerySpan): string;
+  /** Key of the row a metric belongs to, or `null` when it cannot belong to any. */
+  metricKey(metric: RawTraceAggregateMetric): string | null;
+}
+
+function countDistinctValue(row: RawTraceQuerySpan, field: string, scope: AggregateScope): string | null {
+  return field === 'traceId' ? row.traceId : scope.dimensionValue(row, field);
 }
 
 function durationMs(root: RawTraceQuerySpan): number {
@@ -158,7 +172,7 @@ function durationMs(root: RawTraceQuerySpan): number {
 }
 
 type MeasureValue = number | null;
-type MeasureValues = Map<TrustedTraceAggregateMeasureName, MeasureValue>;
+type MeasureValues = Map<string, MeasureValue>;
 
 interface GroupValues {
   measures: MeasureValues;
@@ -166,18 +180,19 @@ interface GroupValues {
   cost?: TraceAggregateRowCost;
 }
 
-function hasCostMeasure(plan: TrustedTraceAggregatePlan): boolean {
+function hasCostMeasure(plan: AggregatePlan): boolean {
   return plan.measures.some(measure => measure.type === 'canonical' && measure.name.startsWith('cost.'));
 }
 
 function computeMeasures(
   roots: RawTraceQuerySpan[],
-  plan: TrustedTraceAggregatePlan,
+  plan: AggregatePlan,
   usage: Map<string, TraceUsage>,
+  scope: AggregateScope,
 ): GroupValues {
   const values: MeasureValues = new Map();
   const count = roots.length;
-  const usageBearing = roots.flatMap(root => usage.get(root.traceId!) ?? []);
+  const usageBearing = roots.flatMap(root => usage.get(scope.usageKey(root)) ?? []);
   const priced = usageBearing.filter(trace => trace.priced);
   const covered = priced.filter(trace => !trace.hasPricingFailure).length;
   const costUnits = new Set(priced.flatMap(trace => [...trace.costUnits]));
@@ -192,7 +207,7 @@ function computeMeasures(
     if (measure.type === 'countDistinct') {
       const distinct = new Set<string>();
       for (const root of roots) {
-        const value = countDistinctValue(root, measure.field);
+        const value = countDistinctValue(root, measure.field, scope);
         if (value !== null) distinct.add(value);
       }
       values.set(measure.name, distinct.size);
@@ -277,11 +292,14 @@ function computeMeasures(
  * measure is UNKNOWN, `not` keeps UNKNOWN, `and` / `or` follow Kleene logic, and only TRUE keeps
  * the group.
  */
-function evaluateHaving(predicate: TrustedTraceAggregateHavingPredicate, measures: MeasureValues): boolean | null {
+function evaluateHaving(
+  predicate: TrustedTraceAggregateHavingPredicate<string>,
+  measures: MeasureValues,
+): boolean | null {
   switch (predicate.type) {
     case 'boolean': {
       const results = predicate.args.map(arg => evaluateHaving(arg, measures));
-      const decisive = predicate.operator === 'and' ? false : true;
+      const decisive = predicate.operator !== 'and';
       if (results.includes(decisive)) return decisive;
       return results.includes(null) ? null : !decisive;
     }
@@ -337,8 +355,9 @@ function compareNullable<T extends number | string>(
   return direction === 'desc' ? -order : order;
 }
 
-function compareGroups(left: Group, right: Group, plan: TrustedTraceAggregatePlan): number {
+function compareGroups(left: Group, right: Group, plan: AggregatePlan): number {
   const orderBy = plan.orderBy;
+  const dimensions: readonly string[] = plan.dimensions;
   const primary =
     orderBy.target === 'measure'
       ? compareNullable(
@@ -347,8 +366,8 @@ function compareGroups(left: Group, right: Group, plan: TrustedTraceAggregatePla
           orderBy.direction,
         )
       : compareNullable(
-          left.dimensions[plan.dimensions.indexOf(orderBy.dimension)]!,
-          right.dimensions[plan.dimensions.indexOf(orderBy.dimension)]!,
+          left.dimensions[dimensions.indexOf(orderBy.dimension)]!,
+          right.dimensions[dimensions.indexOf(orderBy.dimension)]!,
           orderBy.direction,
         );
   if (primary !== 0) return primary;
@@ -359,15 +378,12 @@ function compareGroups(left: Group, right: Group, plan: TrustedTraceAggregatePla
   return 0;
 }
 
-function projectValues(
-  values: GroupValues,
-  plan: TrustedTraceAggregatePlan,
-): Pick<TraceAggregateRow, 'measures' | 'cost'> {
+function projectValues(values: GroupValues, plan: AggregatePlan): Pick<TraceAggregateRow, 'measures' | 'cost'> {
   const measures = Object.fromEntries(plan.measures.map(measure => [measure.name, values.measures.get(measure.name)!]));
   return { measures: measures as TraceAggregateRow['measures'], ...(values.cost && { cost: values.cost }) };
 }
 
-function rowDimensions(group: Group, plan: TrustedTraceAggregatePlan): TraceAggregateRow['dimensions'] {
+function rowDimensions(group: Group, plan: AggregatePlan): TraceAggregateRow['dimensions'] {
   const dimensions: Record<string, string | null> = {};
   plan.dimensions.forEach((dimension, index) => {
     dimensions[dimension] = group.dimensions[index]!;
@@ -375,16 +391,34 @@ function rowDimensions(group: Group, plan: TrustedTraceAggregatePlan): TraceAggr
   return dimensions;
 }
 
+const traceScope: AggregateScope = {
+  dimensionValue: (root, dimension) => traceQueryDimensionValue(root, dimension as TraceAggregateDimension),
+  usageKey: root => root.traceId!,
+  metricKey: metric => metric.traceId,
+};
+
 export function evaluateTraceAggregate(
   data: TraceAggregateFixtureData,
   plan: TrustedTraceAggregatePlan,
 ): TraceAggregateResponse {
-  const roots = selectTraceQueryRoots(data, plan);
-  const usage = computeTraceUsage(data.metrics ?? [], roots, plan);
+  return evaluateAggregate(selectTraceQueryRoots(data, plan), data.metrics ?? [], plan, traceScope);
+}
+
+/**
+ * Groups, measures, filters, orders, limits, and buckets an already-selected population. Shared
+ * by the trace and span evaluators so the two scopes cannot drift.
+ */
+export function evaluateAggregate(
+  roots: RawTraceQuerySpan[],
+  metrics: RawTraceAggregateMetric[],
+  plan: AggregatePlan,
+  scope: AggregateScope,
+): TraceAggregateResponse {
+  const usage = computeUsage(metrics, roots, plan, scope);
 
   const groupsByKey = new Map<string, Group>();
   for (const root of roots) {
-    const dimensions = plan.dimensions.map(dimension => traceQueryDimensionValue(root, dimension));
+    const dimensions = plan.dimensions.map(dimension => scope.dimensionValue(root, dimension));
     const key = JSON.stringify(dimensions);
     let group = groupsByKey.get(key);
     if (!group) {
@@ -395,7 +429,7 @@ export function evaluateTraceAggregate(
   }
 
   const groups = [...groupsByKey.values()];
-  for (const group of groups) group.values = computeMeasures(group.roots, plan, usage);
+  for (const group of groups) group.values = computeMeasures(group.roots, plan, usage, scope);
 
   const surviving = plan.having
     ? groups.filter(group => evaluateHaving(plan.having!, group.values.measures) === true)
@@ -424,7 +458,7 @@ export function evaluateTraceAggregate(
       rows.push({
         ...(dimensions && { dimensions }),
         bucket: new Date(bucketMs).toISOString(),
-        ...projectValues(computeMeasures(buckets.get(bucketMs)!, plan, usage), plan),
+        ...projectValues(computeMeasures(buckets.get(bucketMs)!, plan, usage, scope), plan),
       });
     }
   }
@@ -454,6 +488,11 @@ interface AggregateRootSpec {
   cursorId: number;
   traceId: string;
   entityName: string | null;
+  /** Root span name; defaults to `traceId`. */
+  name?: string;
+  /** Root span type; defaults to `agent_run`. */
+  spanType?: string;
+  entityId?: string;
   startedAt: string;
   durationMs: number;
   error?: boolean;
@@ -467,7 +506,10 @@ interface AggregateRootSpec {
 function aggregateRoot(spec: AggregateRootSpec): RawTraceQuerySpan[] {
   const organizationId = spec.organizationId ?? 'org-a';
   const root = span(spec.cursorId, spec.traceId, spec.traceId, {
+    name: spec.name ?? spec.traceId,
+    spanType: spec.spanType ?? 'agent_run',
     entityName: spec.entityName,
+    entityId: spec.entityId ?? null,
     environment: spec.environment ?? 'production',
     organizationId,
     threadId: spec.threadId,
@@ -515,14 +557,22 @@ function aggregateRoot(spec: AggregateRootSpec): RawTraceQuerySpan[] {
  * | research-2  | 5   | 12000 | yes | t-10   | acme       | yes    | staging, org-b            |
  * | scheduler-1 | 1   | 1000  |     | t-11   |            |        | percentiles interpolate   |
  * | scheduler-2 | 3   | 3000  |     | t-11   |            |        |                           |
- * | unnamed-1   | 2   | 700   |     | t-12   |            |        | `entityName: null`        |
+ * | unnamed-1   | 2   | 700   |     | t-12   |            |        | `entityName: null`, `entityId: nightly-scorer` |
+ *
+ * `billing-2` also has a child `scorer_run` span with `entityId: nightly-scorer`, which only span-scope
+ * `entityId` predicates match.
  *
  * Whole-window groups by `entityName`: triage 6 (2 errors, p95 8000), billing 5 (1 error,
  * p95 2500), support 4 (1 error, p95 6000), research 2 (1 error, p95 12000), scheduler 2
  * (p95 2900), null 1. Total 20 traces, 5 errors.
  *
- * Excluded records: a superseded `triage-6` root (lower `cursorId`, error + 60 s duration), a
+ * Excluded records: a superseded `triage-6` root (lower `cursorId`, error, 4 s, ending before the
+ * current copy), a
  * pending `triage-pending` root, and a `triage-late` root starting exactly at `to`.
+ *
+ * Root spans are `agent_run` named after their `traceId`, except: triage roots share the name
+ * `triage run`, scheduler roots are `workflow_run` named `nightly-sync`, and the superseded
+ * `triage-6` copy is a `workflow_run` named `triage retry` (so it must not surface).
  */
 export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
   spans: [
@@ -530,6 +580,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
       cursorId: 100,
       traceId: 'triage-1',
       entityName: 'triage',
+      name: 'triage run',
       startedAt: '2026-08-01T10:00:00.000Z',
       durationMs: 1000,
       threadId: 't-1',
@@ -540,6 +591,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
       cursorId: 110,
       traceId: 'triage-2',
       entityName: 'triage',
+      name: 'triage run',
       startedAt: '2026-08-01T11:00:00.000Z',
       durationMs: 2000,
       error: true,
@@ -551,6 +603,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
       cursorId: 120,
       traceId: 'triage-3',
       entityName: 'triage',
+      name: 'triage run',
       startedAt: '2026-08-02T10:00:00.000Z',
       durationMs: 3000,
       threadId: 't-2',
@@ -561,6 +614,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
       cursorId: 130,
       traceId: 'triage-4',
       entityName: 'triage',
+      name: 'triage run',
       startedAt: '2026-08-03T10:00:00.000Z',
       durationMs: 4000,
       threadId: 't-3',
@@ -571,6 +625,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
       cursorId: 140,
       traceId: 'triage-5',
       entityName: 'triage',
+      name: 'triage run',
       startedAt: '2026-08-05T10:00:00.000Z',
       durationMs: 8000,
       error: true,
@@ -582,8 +637,10 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
       cursorId: 150,
       traceId: 'triage-6',
       entityName: 'triage',
+      name: 'triage retry',
+      spanType: 'workflow_run',
       startedAt: '2026-08-05T11:00:00.000Z',
-      durationMs: 60_000,
+      durationMs: 4000,
       error: true,
       threadId: 't-4',
     }),
@@ -591,6 +648,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
       cursorId: 151,
       traceId: 'triage-6',
       entityName: 'triage',
+      name: 'triage run',
       startedAt: '2026-08-05T11:00:00.000Z',
       durationMs: 8000,
       threadId: 't-4',
@@ -613,6 +671,19 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
       durationMs: 1500,
       threadId: 't-5',
       tenant: 'globex',
+    }),
+    // A child scorer span reusing a root entityId: trace-scope `entityId` must not match it.
+    span(211, 'billing-2', 'billing-2-scorer', {
+      parentSpanId: 'billing-2',
+      name: 'nightly-scorer',
+      spanType: 'scorer_run',
+      entityType: 'scorer',
+      entityId: 'nightly-scorer',
+      entityName: null,
+      organizationId: 'org-a',
+      threadId: 't-5',
+      startedAt: '2026-08-02T10:00:00.500Z',
+      endedAt: '2026-08-02T10:00:01.000Z',
     }),
     ...aggregateRoot({
       cursorId: 220,
@@ -707,6 +778,8 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
       cursorId: 500,
       traceId: 'scheduler-1',
       entityName: 'scheduler',
+      name: 'nightly-sync',
+      spanType: 'workflow_run',
       startedAt: '2026-08-01T10:00:00.000Z',
       durationMs: 1000,
       threadId: 't-11',
@@ -715,6 +788,8 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
       cursorId: 510,
       traceId: 'scheduler-2',
       entityName: 'scheduler',
+      name: 'nightly-sync',
+      spanType: 'workflow_run',
       startedAt: '2026-08-03T10:00:00.000Z',
       durationMs: 3000,
       threadId: 't-11',
@@ -723,6 +798,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
       cursorId: 600,
       traceId: 'unnamed-1',
       entityName: null,
+      entityId: 'nightly-scorer',
       startedAt: '2026-08-02T10:00:00.000Z',
       durationMs: 700,
       threadId: 't-12',
@@ -738,6 +814,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
       cursorId: 710,
       traceId: 'triage-late',
       entityName: 'triage',
+      name: 'triage run',
       startedAt: '2026-08-08T00:00:00.000Z',
       durationMs: 1000,
       threadId: 't-1',
@@ -921,6 +998,60 @@ export const TRACE_AGGREGATE_CONFORMANCE_CASES: TraceAggregateConformanceCase[] 
         { dimensions: { 'metadata.tenant': null }, measures: { count: 2, 'countDistinct.threadId': 2 } },
         { dimensions: { 'metadata.tenant': 'globex' }, measures: { count: 1, 'countDistinct.threadId': 1 } },
       ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'groups by root span type',
+    request: { timeRange: aggregateRange, groupBy: ['spanType'], measures: ['count', 'errorCount'] },
+    expected: {
+      rows: [
+        { dimensions: { spanType: 'agent_run' }, measures: { count: 18, errorCount: 5 } },
+        { dimensions: { spanType: 'workflow_run' }, measures: { count: 2, errorCount: 0 } },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'groups by root span name with orderBy and limit',
+    request: {
+      timeRange: aggregateRange,
+      groupBy: ['name'],
+      measures: ['count', 'errorCount'],
+      orderBy: { field: 'count', direction: 'desc' },
+      limit: 2,
+    },
+    expected: {
+      rows: [
+        { dimensions: { name: 'triage run' }, measures: { count: 6, errorCount: 2 } },
+        { dimensions: { name: 'nightly-sync' }, measures: { count: 2, errorCount: 0 } },
+      ],
+      truncated: true,
+    },
+  },
+  {
+    name: 'drills into a root span type group by filtering on it',
+    request: {
+      timeRange: aggregateRange,
+      where: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'workflow_run' } },
+      groupBy: ['name'],
+      measures: ['count', 'countDistinct.spanType'],
+    },
+    expected: {
+      rows: [{ dimensions: { name: 'nightly-sync' }, measures: { count: 2, 'countDistinct.spanType': 1 } }],
+      truncated: false,
+    },
+  },
+  {
+    name: 'drills into a root span name group by filtering on it',
+    request: {
+      timeRange: aggregateRange,
+      where: { op: 'eq', left: { path: 'name' }, right: { literal: 'triage run' } },
+      groupBy: ['spanType', 'entityName'],
+      measures: ['count'],
+    },
+    expected: {
+      rows: [{ dimensions: { spanType: 'agent_run', entityName: 'triage' }, measures: { count: 6 } }],
       truncated: false,
     },
   },
@@ -1110,6 +1241,41 @@ export const TRACE_AGGREGATE_CONFORMANCE_CASES: TraceAggregateConformanceCase[] 
       ],
       truncated: false,
     },
+  },
+  {
+    name: 'entityId groups the traces that have no entityName',
+    request: {
+      timeRange: aggregateRange,
+      where: { op: 'notExists', path: 'entityName' },
+      groupBy: ['entityId'],
+      measures: ['count'],
+    },
+    expected: {
+      rows: [{ dimensions: { entityId: 'nightly-scorer' }, measures: { count: 1 } }],
+      truncated: false,
+    },
+  },
+  {
+    name: 'drills into an entityId group by filtering on the root entityId only',
+    request: {
+      timeRange: aggregateRange,
+      where: { op: 'eq', left: { path: 'entityId' }, right: { literal: 'nightly-scorer' } },
+      groupBy: ['entityId'],
+      measures: ['count', 'countDistinct.traceId'],
+    },
+    expected: {
+      rows: [{ dimensions: { entityId: 'nightly-scorer' }, measures: { count: 1, 'countDistinct.traceId': 1 } }],
+      truncated: false,
+    },
+  },
+  {
+    name: 'span-scope entityId also matches child spans that share a root entityId',
+    request: {
+      timeRange: aggregateRange,
+      where: { spans: { some: { op: 'eq', left: { path: 'entityId' }, right: { literal: 'nightly-scorer' } } } },
+      measures: ['count'],
+    },
+    expected: { rows: [{ measures: { count: 2 } }], truncated: false },
   },
   {
     name: 'null in the second dimension sorts last within the first dimension tie-break',
@@ -1924,6 +2090,605 @@ export const TRACE_AGGREGATE_TOKEN_EDGE_CONFORMANCE_CASES: TraceAggregateConform
           measures: { count: 2, 'tokens.input.sum': 150, 'tokens.output.sum': 10, 'cost.sum': 0.875 },
           cost: { coverage: 1, unit: 'usd' },
         },
+      ],
+      truncated: false,
+    },
+  },
+];
+
+// ---------------------------------------------------------------------------------------------
+// 365-day fixture: the widest window the planner accepts, at the finest interval it allows
+// over that window (`1d`, 365 buckets). It proves stores honor whole-window group ranking and
+// never cut a series short when `interval` and `limit` combine over a long range.
+// ---------------------------------------------------------------------------------------------
+
+const YEAR_FROM_MS = Date.parse('2025-10-01T00:00:00.000Z');
+const DAY_MS = 24 * 60 * 60 * 1000;
+const yearRange = { from: '2025-10-01T00:00:00.000Z', to: '2026-10-01T00:00:00.000Z' };
+
+/** Start of the window's `offset`-th UTC day; day 0 is `from`, day 364 is the last bucket. */
+const yearDay = (offset: number) => new Date(YEAR_FROM_MS + offset * DAY_MS).toISOString();
+const yearAt = (offset: number, time: string) =>
+  new Date(YEAR_FROM_MS + offset * DAY_MS + Date.parse(`1970-01-01T${time}Z`)).toISOString();
+
+interface YearRootSpec {
+  cursorId: number;
+  traceId: string;
+  entityName: string | null;
+  day: number;
+  time?: string;
+  durationMs: number;
+  error?: boolean;
+}
+
+function yearRoot(spec: YearRootSpec): RawTraceQuerySpan[] {
+  return aggregateRoot({
+    cursorId: spec.cursorId,
+    traceId: spec.traceId,
+    entityName: spec.entityName,
+    startedAt: yearAt(spec.day, spec.time ?? '12:00:00.000'),
+    durationMs: spec.durationMs,
+    error: spec.error,
+    threadId: `year-${spec.entityName ?? 'unnamed'}`,
+    environment: spec.entityName === null ? 'staging' : 'production',
+  });
+}
+
+/**
+ * Window `[2025-10-01, 2026-10-01)`: exactly 365 days, 365 aligned `1d` buckets. Days are
+ * offsets from `from`; roots start at 12:00 UTC unless noted. All roots are `org-a`.
+ *
+ * | group   | traces | days (count if > 1)                                       | ms   | errors              |
+ * |---------|--------|-----------------------------------------------------------|------|---------------------|
+ * | alpha   | 12     | 0 (00:00:00.000), 30, 61, 91, 122, 152, 183, 213, 244,     | 1000 | days 30, 183        |
+ * |         |        | 274, 305, 364 (23:59:59.999)                               |      |                     |
+ * | beta    | 12     | 10 (2), 50, 100 (2), 150, 200, 250, 300, 340, 350, 360     | 2000 | one on day 100      |
+ * | gamma   | 11     | 20, 80, 140, 180 (6, 01:00–06:00), 260, 320                | 3000 | two on 180, one 260 |
+ * |         |        |                                                            | (5000 on day 180)   |
+ * | delta   | 4      | 0, 120, 240, 363                                           | 9000 |                     |
+ * | null    | 2      | 45, 290 (environment `staging`)                            | 500  |                     |
+ *
+ * Whole-window ranking by count: alpha 12 and beta 12 tie (alpha first by dimension), then
+ * gamma 11, delta 4, null 2. Gamma alone holds the largest bucket (6 traces on day 180), so
+ * any ranking computed per bucket — or a row-based `LIMIT` — picks the wrong groups.
+ * Total 41 traces, 6 errors; sorted durations are 500×2, 1000×12, 2000×12, 3000×5, 5000×6,
+ * 9000×4, so p50 (rank 20) is 2000 and p95 (rank 38) is 9000 with no interpolation.
+ *
+ * Excluded records: `year-early` starts 1 ms before `from`, `year-late` starts exactly at
+ * `to`, and `beta-07` has a superseded copy (lower `cursorId`, ending earlier on the same day)
+ * recorded as a failed `gamma` run that must not surface.
+ */
+export const TRACE_AGGREGATE_YEAR_FIXTURE_DATA: TraceQueryFixtureData = {
+  spans: [
+    ...yearRoot({
+      cursorId: 3000,
+      traceId: 'alpha-01',
+      entityName: 'alpha',
+      day: 0,
+      time: '00:00:00.000',
+      durationMs: 1000,
+    }),
+    ...yearRoot({ cursorId: 3001, traceId: 'alpha-02', entityName: 'alpha', day: 30, durationMs: 1000, error: true }),
+    ...yearRoot({ cursorId: 3002, traceId: 'alpha-03', entityName: 'alpha', day: 61, durationMs: 1000 }),
+    ...yearRoot({ cursorId: 3003, traceId: 'alpha-04', entityName: 'alpha', day: 91, durationMs: 1000 }),
+    ...yearRoot({ cursorId: 3004, traceId: 'alpha-05', entityName: 'alpha', day: 122, durationMs: 1000 }),
+    ...yearRoot({ cursorId: 3005, traceId: 'alpha-06', entityName: 'alpha', day: 152, durationMs: 1000 }),
+    ...yearRoot({ cursorId: 3006, traceId: 'alpha-07', entityName: 'alpha', day: 183, durationMs: 1000, error: true }),
+    ...yearRoot({ cursorId: 3007, traceId: 'alpha-08', entityName: 'alpha', day: 213, durationMs: 1000 }),
+    ...yearRoot({ cursorId: 3008, traceId: 'alpha-09', entityName: 'alpha', day: 244, durationMs: 1000 }),
+    ...yearRoot({ cursorId: 3009, traceId: 'alpha-10', entityName: 'alpha', day: 274, durationMs: 1000 }),
+    ...yearRoot({ cursorId: 3010, traceId: 'alpha-11', entityName: 'alpha', day: 305, durationMs: 1000 }),
+    ...yearRoot({
+      cursorId: 3011,
+      traceId: 'alpha-12',
+      entityName: 'alpha',
+      day: 364,
+      time: '23:59:59.999',
+      durationMs: 1000,
+    }),
+    ...yearRoot({
+      cursorId: 3100,
+      traceId: 'beta-01',
+      entityName: 'beta',
+      day: 10,
+      time: '10:00:00.000',
+      durationMs: 2000,
+    }),
+    ...yearRoot({
+      cursorId: 3101,
+      traceId: 'beta-02',
+      entityName: 'beta',
+      day: 10,
+      time: '14:00:00.000',
+      durationMs: 2000,
+    }),
+    ...yearRoot({ cursorId: 3102, traceId: 'beta-03', entityName: 'beta', day: 50, durationMs: 2000 }),
+    ...yearRoot({
+      cursorId: 3103,
+      traceId: 'beta-04',
+      entityName: 'beta',
+      day: 100,
+      time: '10:00:00.000',
+      durationMs: 2000,
+      error: true,
+    }),
+    ...yearRoot({
+      cursorId: 3104,
+      traceId: 'beta-05',
+      entityName: 'beta',
+      day: 100,
+      time: '14:00:00.000',
+      durationMs: 2000,
+    }),
+    ...yearRoot({ cursorId: 3105, traceId: 'beta-06', entityName: 'beta', day: 150, durationMs: 2000 }),
+    // Superseded copy of `beta-07`; it precedes the current copy so completion-only writers keep the latter,
+    // and ends before it, as a re-exported root does.
+    ...yearRoot({ cursorId: 3106, traceId: 'beta-07', entityName: 'gamma', day: 200, durationMs: 1000, error: true }),
+    ...yearRoot({ cursorId: 3107, traceId: 'beta-07', entityName: 'beta', day: 200, durationMs: 2000 }),
+    ...yearRoot({ cursorId: 3108, traceId: 'beta-08', entityName: 'beta', day: 250, durationMs: 2000 }),
+    ...yearRoot({ cursorId: 3109, traceId: 'beta-09', entityName: 'beta', day: 300, durationMs: 2000 }),
+    ...yearRoot({ cursorId: 3110, traceId: 'beta-10', entityName: 'beta', day: 340, durationMs: 2000 }),
+    ...yearRoot({ cursorId: 3111, traceId: 'beta-11', entityName: 'beta', day: 350, durationMs: 2000 }),
+    ...yearRoot({ cursorId: 3112, traceId: 'beta-12', entityName: 'beta', day: 360, durationMs: 2000 }),
+    ...yearRoot({ cursorId: 3200, traceId: 'gamma-01', entityName: 'gamma', day: 20, durationMs: 3000 }),
+    ...yearRoot({ cursorId: 3201, traceId: 'gamma-02', entityName: 'gamma', day: 80, durationMs: 3000 }),
+    ...yearRoot({
+      cursorId: 3202,
+      traceId: 'gamma-03',
+      entityName: 'gamma',
+      day: 180,
+      time: '01:00:00.000',
+      durationMs: 5000,
+      error: true,
+    }),
+    ...yearRoot({
+      cursorId: 3203,
+      traceId: 'gamma-04',
+      entityName: 'gamma',
+      day: 180,
+      time: '02:00:00.000',
+      durationMs: 5000,
+      error: true,
+    }),
+    ...yearRoot({
+      cursorId: 3204,
+      traceId: 'gamma-05',
+      entityName: 'gamma',
+      day: 180,
+      time: '03:00:00.000',
+      durationMs: 5000,
+    }),
+    ...yearRoot({
+      cursorId: 3205,
+      traceId: 'gamma-06',
+      entityName: 'gamma',
+      day: 180,
+      time: '04:00:00.000',
+      durationMs: 5000,
+    }),
+    ...yearRoot({
+      cursorId: 3206,
+      traceId: 'gamma-07',
+      entityName: 'gamma',
+      day: 180,
+      time: '05:00:00.000',
+      durationMs: 5000,
+    }),
+    ...yearRoot({
+      cursorId: 3207,
+      traceId: 'gamma-08',
+      entityName: 'gamma',
+      day: 180,
+      time: '06:00:00.000',
+      durationMs: 5000,
+    }),
+    ...yearRoot({ cursorId: 3208, traceId: 'gamma-09', entityName: 'gamma', day: 140, durationMs: 3000 }),
+    ...yearRoot({ cursorId: 3209, traceId: 'gamma-10', entityName: 'gamma', day: 260, durationMs: 3000, error: true }),
+    ...yearRoot({ cursorId: 3210, traceId: 'gamma-11', entityName: 'gamma', day: 320, durationMs: 3000 }),
+    ...yearRoot({ cursorId: 3300, traceId: 'delta-1', entityName: 'delta', day: 0, durationMs: 9000 }),
+    ...yearRoot({ cursorId: 3301, traceId: 'delta-2', entityName: 'delta', day: 120, durationMs: 9000 }),
+    ...yearRoot({ cursorId: 3302, traceId: 'delta-3', entityName: 'delta', day: 240, durationMs: 9000 }),
+    ...yearRoot({ cursorId: 3303, traceId: 'delta-4', entityName: 'delta', day: 363, durationMs: 9000 }),
+    ...yearRoot({ cursorId: 3400, traceId: 'unnamed-y1', entityName: null, day: 45, durationMs: 500 }),
+    ...yearRoot({ cursorId: 3401, traceId: 'unnamed-y2', entityName: null, day: 290, durationMs: 500 }),
+    ...yearRoot({
+      cursorId: 3500,
+      traceId: 'year-early',
+      entityName: 'alpha',
+      day: -1,
+      time: '23:59:59.999',
+      durationMs: 1000,
+    }),
+    ...yearRoot({
+      cursorId: 3501,
+      traceId: 'year-late',
+      entityName: 'alpha',
+      day: 365,
+      time: '00:00:00.000',
+      durationMs: 1000,
+    }),
+  ],
+  scores: [],
+  feedback: [],
+};
+
+const alpha = { entityName: 'alpha' };
+const beta = { entityName: 'beta' };
+const gamma = { entityName: 'gamma' };
+const delta = { entityName: 'delta' };
+const unnamedYear = { entityName: null };
+
+/** `[day, count, errorCount]` per non-empty bucket, bucket-ascending, read off the fixture table. */
+type YearPoint = readonly [day: number, count: number, errorCount: number];
+const alphaPoints: YearPoint[] = [
+  [0, 1, 0],
+  [30, 1, 1],
+  [61, 1, 0],
+  [91, 1, 0],
+  [122, 1, 0],
+  [152, 1, 0],
+  [183, 1, 1],
+  [213, 1, 0],
+  [244, 1, 0],
+  [274, 1, 0],
+  [305, 1, 0],
+  [364, 1, 0],
+];
+const betaPoints: YearPoint[] = [
+  [10, 2, 0],
+  [50, 1, 0],
+  [100, 2, 1],
+  [150, 1, 0],
+  [200, 1, 0],
+  [250, 1, 0],
+  [300, 1, 0],
+  [340, 1, 0],
+  [350, 1, 0],
+  [360, 1, 0],
+];
+const gammaPoints: YearPoint[] = [
+  [20, 1, 0],
+  [80, 1, 0],
+  [140, 1, 0],
+  [180, 6, 2],
+  [260, 1, 1],
+  [320, 1, 0],
+];
+const deltaPoints: YearPoint[] = [
+  [0, 1, 0],
+  [120, 1, 0],
+  [240, 1, 0],
+  [363, 1, 0],
+];
+const unnamedPoints: YearPoint[] = [
+  [45, 1, 0],
+  [290, 1, 0],
+];
+
+function yearSeries(
+  dimensions: Record<string, string | null>,
+  points: YearPoint[],
+  withErrors = false,
+): TraceAggregateExpectedResponse['rows'] {
+  return points.map(([offset, count, errorCount]) => {
+    const measures: Record<string, number> = withErrors ? { count, errorCount } : { count };
+    return { dimensions, bucket: yearDay(offset), measures };
+  });
+}
+
+export const TRACE_AGGREGATE_YEAR_CONFORMANCE_CASES: TraceAggregateConformanceCase[] = [
+  {
+    name: 'year: whole-window ranking over 365 days with the out-of-window and superseded roots excluded',
+    request: { timeRange: yearRange, groupBy: ['entityName'], measures: ['count', 'errorCount'] },
+    expected: {
+      rows: [
+        { dimensions: alpha, measures: { count: 12, errorCount: 2 } },
+        { dimensions: beta, measures: { count: 12, errorCount: 1 } },
+        { dimensions: gamma, measures: { count: 11, errorCount: 3 } },
+        { dimensions: delta, measures: { count: 4, errorCount: 0 } },
+        { dimensions: unnamedYear, measures: { count: 2, errorCount: 0 } },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'year: daily series with limit 2 keep the top groups whole and drop the group with the largest bucket',
+    request: {
+      timeRange: yearRange,
+      groupBy: ['entityName'],
+      interval: '1d',
+      measures: ['count', 'errorCount'],
+      limit: 2,
+    },
+    expected: {
+      rows: [...yearSeries(alpha, alphaPoints, true), ...yearSeries(beta, betaPoints, true)],
+      truncated: true,
+    },
+  },
+  {
+    name: 'year: a count tie at the limit boundary keeps the dimension-ascending group',
+    request: { timeRange: yearRange, groupBy: ['entityName'], interval: '1d', measures: ['count'], limit: 1 },
+    expected: { rows: yearSeries(alpha, alphaPoints), truncated: true },
+  },
+  {
+    name: 'year: ordering by dimension descending keeps the null group last with every series complete',
+    request: {
+      timeRange: yearRange,
+      groupBy: ['entityName'],
+      interval: '1d',
+      measures: ['count'],
+      orderBy: { field: 'entityName', direction: 'desc' },
+      limit: 5,
+    },
+    expected: {
+      rows: [
+        ...yearSeries(gamma, gammaPoints),
+        ...yearSeries(delta, deltaPoints),
+        ...yearSeries(beta, betaPoints),
+        ...yearSeries(alpha, alphaPoints),
+        ...yearSeries(unnamedYear, unnamedPoints),
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'year: the ungrouped daily series includes the first and last bucket of the window',
+    // The row cap counts `limit × buckets` even without groups, so the default limit of 100 is rejected here.
+    request: { timeRange: yearRange, interval: '1d', measures: ['count'], limit: 1 },
+    expected: {
+      rows: (
+        [
+          [0, 2],
+          [10, 2],
+          [20, 1],
+          [30, 1],
+          [45, 1],
+          [50, 1],
+          [61, 1],
+          [80, 1],
+          [91, 1],
+          [100, 2],
+          [120, 1],
+          [122, 1],
+          [140, 1],
+          [150, 1],
+          [152, 1],
+          [180, 6],
+          [183, 1],
+          [200, 1],
+          [213, 1],
+          [240, 1],
+          [244, 1],
+          [250, 1],
+          [260, 1],
+          [274, 1],
+          [290, 1],
+          [300, 1],
+          [305, 1],
+          [320, 1],
+          [340, 1],
+          [350, 1],
+          [360, 1],
+          [363, 1],
+          [364, 1],
+        ] as const
+      ).map(([offset, count]) => ({ bucket: yearDay(offset), measures: { count } })),
+      truncated: false,
+    },
+  },
+  {
+    name: 'year: whole-window totals, rates, percentiles, and distinct traces over 365 days',
+    request: {
+      timeRange: yearRange,
+      measures: ['count', 'errorRate', 'duration.p50', 'duration.p95', 'countDistinct.traceId'],
+    },
+    expected: {
+      rows: [
+        {
+          measures: {
+            count: 41,
+            errorRate: 6 / 41,
+            'duration.p50': 2000,
+            'duration.p95': 9000,
+            'countDistinct.traceId': 41,
+          },
+        },
+      ],
+      truncated: false,
+    },
+    tolerance: { 'duration.p50': 100, 'duration.p95': 100 },
+  },
+  {
+    name: 'year: the largest limit the row cap accepts at a daily interval over two dimensions',
+    request: {
+      timeRange: yearRange,
+      groupBy: ['entityName', 'environment'],
+      interval: '1d',
+      measures: ['count'],
+      limit: 27,
+    },
+    expected: {
+      rows: [
+        ...yearSeries({ ...alpha, environment: 'production' }, alphaPoints),
+        ...yearSeries({ ...beta, environment: 'production' }, betaPoints),
+        ...yearSeries({ ...gamma, environment: 'production' }, gammaPoints),
+        ...yearSeries({ ...delta, environment: 'production' }, deltaPoints),
+        ...yearSeries({ ...unnamedYear, environment: 'staging' }, unnamedPoints),
+      ],
+      truncated: false,
+    },
+  },
+];
+
+// ---------------------------------------------------------------------------------------------
+// Root versions: a root exported again (a resumed or completed run) replaces its earlier export.
+// ---------------------------------------------------------------------------------------------
+
+const versionRange = { from: '2026-09-01T00:00:00Z', to: '2026-09-08T00:00:00Z' };
+
+/**
+ * Window `[2026-09-01, 2026-09-08)`, `production` / `org-a`. Each trace's later export (higher
+ * `cursorId`) ends after its earlier one, as a re-exported root does, and both share `startedAt`.
+ * Superseded versions differ in status, `entityName` and duration; two of them end the day before
+ * their current version, so they sit in another `endedAt` partition.
+ *
+ * | trace | current                       | superseded                    | partitions |
+ * |-------|-------------------------------|-------------------------------|------------|
+ * | v-1   | alpha, success, 2000 ms       | beta, error, 1000 ms          | same       |
+ * | v-2   | alpha, error, 3000 ms         | alpha, success, 500 ms        | same       |
+ * | v-3   | beta, success, 4000 ms        | alpha, error, 1000 ms         | different  |
+ * | v-4   | beta, success, 1000 ms        | —                             |            |
+ * | v-5   | gamma, error, 6000 ms         | beta, success, 2000 ms        | different  |
+ *
+ * Current population: 5 traces, 2 errors; alpha 2 (1 error, max 3000), beta 2 (0 errors,
+ * max 4000), gamma 1 (1 error, max 6000). A filter applied to every version instead of the current
+ * one counts alpha 3 and beta 4, and `status` 4 errors + 5 successes.
+ */
+export const TRACE_AGGREGATE_VERSION_FIXTURE_DATA: TraceAggregateFixtureData = {
+  spans: [
+    ...aggregateRoot({
+      cursorId: 10,
+      traceId: 'v-1',
+      entityName: 'beta',
+      startedAt: '2026-09-01T10:00:00.000Z',
+      durationMs: 1000,
+      error: true,
+      threadId: 'vt-1',
+    }),
+    ...aggregateRoot({
+      cursorId: 11,
+      traceId: 'v-1',
+      entityName: 'alpha',
+      startedAt: '2026-09-01T10:00:00.000Z',
+      durationMs: 2000,
+      threadId: 'vt-1',
+    }),
+    ...aggregateRoot({
+      cursorId: 20,
+      traceId: 'v-2',
+      entityName: 'alpha',
+      startedAt: '2026-09-02T10:00:00.000Z',
+      durationMs: 500,
+      threadId: 'vt-2',
+    }),
+    ...aggregateRoot({
+      cursorId: 21,
+      traceId: 'v-2',
+      entityName: 'alpha',
+      startedAt: '2026-09-02T10:00:00.000Z',
+      durationMs: 3000,
+      error: true,
+      threadId: 'vt-2',
+    }),
+    ...aggregateRoot({
+      cursorId: 30,
+      traceId: 'v-3',
+      entityName: 'alpha',
+      startedAt: '2026-09-02T23:59:58.000Z',
+      durationMs: 1000,
+      error: true,
+      threadId: 'vt-3',
+    }),
+    ...aggregateRoot({
+      cursorId: 31,
+      traceId: 'v-3',
+      entityName: 'beta',
+      startedAt: '2026-09-02T23:59:58.000Z',
+      durationMs: 4000,
+      threadId: 'vt-3',
+    }),
+    ...aggregateRoot({
+      cursorId: 40,
+      traceId: 'v-4',
+      entityName: 'beta',
+      startedAt: '2026-09-03T10:00:00.000Z',
+      durationMs: 1000,
+      threadId: 'vt-4',
+    }),
+    ...aggregateRoot({
+      cursorId: 50,
+      traceId: 'v-5',
+      entityName: 'beta',
+      startedAt: '2026-09-04T23:59:57.000Z',
+      durationMs: 2000,
+      threadId: 'vt-5',
+    }),
+    ...aggregateRoot({
+      cursorId: 51,
+      traceId: 'v-5',
+      entityName: 'gamma',
+      startedAt: '2026-09-04T23:59:57.000Z',
+      durationMs: 6000,
+      error: true,
+      threadId: 'vt-5',
+    }),
+  ],
+  scores: [],
+  feedback: [],
+};
+
+const statusIs = (status: string) => ({ op: 'eq', left: { path: 'status' }, right: { literal: status } }) as const;
+const entityIs = (entityName: string) =>
+  ({ op: 'eq', left: { path: 'entityName' }, right: { literal: entityName } }) as const;
+
+export const TRACE_AGGREGATE_VERSION_CONFORMANCE_CASES: TraceAggregateConformanceCase[] = [
+  {
+    name: 'versions: the unfiltered population counts each trace once',
+    request: { timeRange: versionRange, measures: ['count', 'errorCount', 'duration.max'] },
+    expected: { rows: [{ measures: { count: 5, errorCount: 2, 'duration.max': 6000 } }], truncated: false },
+  },
+  {
+    name: 'versions: status=error counts current versions that failed',
+    request: { timeRange: versionRange, where: statusIs('error'), measures: ['count'] },
+    expected: { rows: [{ measures: { count: 2 } }], truncated: false },
+  },
+  {
+    name: 'versions: status=success counts current versions that succeeded',
+    request: { timeRange: versionRange, where: statusIs('success'), measures: ['count'] },
+    expected: { rows: [{ measures: { count: 3 } }], truncated: false },
+  },
+  {
+    name: 'versions: entityName=alpha matches current versions only',
+    request: { timeRange: versionRange, where: entityIs('alpha'), measures: ['count', 'duration.max'] },
+    expected: { rows: [{ measures: { count: 2, 'duration.max': 3000 } }], truncated: false },
+  },
+  {
+    name: 'versions: entityName=beta matches current versions only',
+    request: { timeRange: versionRange, where: entityIs('beta'), measures: ['count', 'duration.max'] },
+    expected: { rows: [{ measures: { count: 2, 'duration.max': 4000 } }], truncated: false },
+  },
+  {
+    name: 'versions: groupBy status follows the current version',
+    request: { timeRange: versionRange, groupBy: ['status'], measures: ['count', 'duration.max'] },
+    expected: {
+      rows: [
+        { dimensions: { status: 'success' }, measures: { count: 3, 'duration.max': 4000 } },
+        { dimensions: { status: 'error' }, measures: { count: 2, 'duration.max': 6000 } },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'versions: groupBy entityName follows the current version',
+    request: { timeRange: versionRange, groupBy: ['entityName'], measures: ['count', 'errorCount', 'duration.max'] },
+    expected: {
+      rows: [
+        { dimensions: { entityName: 'alpha' }, measures: { count: 2, errorCount: 1, 'duration.max': 3000 } },
+        { dimensions: { entityName: 'beta' }, measures: { count: 2, errorCount: 0, 'duration.max': 4000 } },
+        { dimensions: { entityName: 'gamma' }, measures: { count: 1, errorCount: 1, 'duration.max': 6000 } },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'versions: daily buckets place each trace once, by its startedAt',
+    request: { timeRange: versionRange, interval: '1d', measures: ['count'] },
+    expected: {
+      rows: [
+        { bucket: '2026-09-01T00:00:00.000Z', measures: { count: 1 } },
+        { bucket: '2026-09-02T00:00:00.000Z', measures: { count: 2 } },
+        { bucket: '2026-09-03T00:00:00.000Z', measures: { count: 1 } },
+        { bucket: '2026-09-04T00:00:00.000Z', measures: { count: 1 } },
       ],
       truncated: false,
     },

@@ -462,7 +462,7 @@ for await (const chunk of stream) {
   {
     "model": "deepinfra/Qwen/Qwen3.5-27B",
     "imageInput": true,
-    "audioInput": true,
+    "audioInput": false,
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
@@ -510,7 +510,7 @@ for await (const chunk of stream) {
   {
     "model": "deepinfra/Qwen/Qwen3.6-27B",
     "imageInput": true,
-    "audioInput": true,
+    "audioInput": false,
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
@@ -539,7 +539,7 @@ for await (const chunk of stream) {
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 256000,
-    "maxOutput": 65536,
+    "maxOutput": 131072,
     "inputCost": 2.5,
     "outputCost": 7.5
   },
@@ -708,8 +708,8 @@ for await (const chunk of stream) {
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 131072,
-    "inputCost": 0.075,
-    "outputCost": 0.25
+    "inputCost": 0.15,
+    "outputCost": 0.5
   }
 ]}
 />

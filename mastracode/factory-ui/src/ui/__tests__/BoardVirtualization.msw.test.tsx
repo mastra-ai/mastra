@@ -221,7 +221,7 @@ describe('Large factory boards', () => {
         }),
         http.get(`${TEST_BASE_URL}/web/github/projects/repo-1/issues/1`, () =>
           HttpResponse.json({
-            ...largeCandidatePage(1).issues[0]!,
+            ...largeCandidatePage(1).issues[0],
             description: 'Candidate description',
           } satisfies GithubIssueDetail),
         ),

@@ -3,16 +3,10 @@
   "temperature": ["deepseek-v4-flash", "glm-5.3"],
   "structuredOutput": ["deepseek-v4-flash", "glm-5.3", "gpt-5.6-sol"],
   "reasoning": {
-    "gpt-5.6-sol": [
+    "glm-5.3": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "claude-opus-4-8": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "high", "max"]
       }
     ],
     "deepseek-v4-flash": [
@@ -24,13 +18,19 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.3": [
+    "claude-opus-5": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "claude-opus-5": [
+    "gpt-5.6-sol": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "claude-opus-4-8": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]

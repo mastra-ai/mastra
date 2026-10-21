@@ -10,7 +10,13 @@ import { controlTriggerOpenState } from '@/ds/primitives/control-size';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
 import { fieldTriggerErrorBorder, fieldTriggerStyle, fieldTriggerWidthStyle } from '@/ds/primitives/form-element';
-import { menuItemCheckClass, menuItemClass, menuPopupClass, menuPositionerClass } from '@/ds/primitives/menu-item';
+import {
+  menuItemCheckClass,
+  menuItemClass,
+  menuPopupClass,
+  menuPositionerClass,
+  menuSeparatorClass,
+} from '@/ds/primitives/menu-item';
 import { menuScrollPopupClass, MenuScrollArea } from '@/ds/primitives/menu-scroll-area';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { transitions } from '@/ds/primitives/transitions';
@@ -56,7 +62,7 @@ function collectItems(children: React.ReactNode, acc: Array<{ value: unknown; la
   });
 }
 
-type SelectRootProps<Value> = SelectPrimitive.Root.Props<Value, false>;
+type SelectRootProps<Value> = SelectPrimitive.Root.Props<Value>;
 type SelectChangeDetails = Parameters<NonNullable<SelectRootProps<unknown>['onValueChange']>>[1];
 
 /**
@@ -78,7 +84,7 @@ function Select<Value = string>({ children, items, onValueChange, ...props }: Se
 
   return (
     <SelectPrimitive.Root
-      items={derivedItems as SelectRootProps<Value>['items']}
+      items={derivedItems}
       onValueChange={onValueChange ? (value, eventDetails) => onValueChange(value as Value, eventDetails) : undefined}
       {...props}
     >
@@ -218,7 +224,7 @@ const SelectContent = React.forwardRef<HTMLDivElement, SelectContentProps>(
     // Default to the nearest SideDialog/Drawer popup so the dropdown stays
     // interactive inside a modal drawer; an explicit `container` still wins.
     const resolvedContainer = usePortalContainer(container);
-    const menu = useFluidMenu<HTMLDivElement>();
+    const menu = useFluidMenu();
     const positionerProps: SelectContentPositionerProps = {
       side,
       align,
@@ -266,4 +272,18 @@ const SelectItem = React.forwardRef<HTMLDivElement, SelectItemProps>(({ classNam
 ));
 SelectItem.displayName = 'SelectItem';
 
-export { Select, SelectGroup, SelectValue, SelectTrigger, SelectContent, SelectItem };
+export type SelectSeparatorProps = Omit<SelectPrimitive.Separator.Props, 'className'> & {
+  className?: string;
+};
+
+const SelectSeparator = React.forwardRef<HTMLDivElement, SelectSeparatorProps>(({ className, ...props }, ref) => (
+  <SelectPrimitive.Separator
+    ref={ref}
+    data-slot="select-separator"
+    className={cn(menuSeparatorClass, className)}
+    {...props}
+  />
+));
+SelectSeparator.displayName = 'SelectSeparator';
+
+export { Select, SelectGroup, SelectValue, SelectTrigger, SelectContent, SelectItem, SelectSeparator };

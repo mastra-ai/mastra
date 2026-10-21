@@ -21,12 +21,14 @@ import type { FactoryStorage } from '@mastra/core/storage';
 import type { FactorySandbox } from '@mastra/core/workspace';
 import type { Context } from 'hono';
 import type { RouteAuth } from '../../routes/route.js';
+import { canReadSessionResource, canViewSourceControlSession } from '../../routes/session-access.js';
 import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL } from '../../rules/types.js';
 import { requireExec } from '../../sandbox/materialization.js';
 import type { ExecutableSandbox } from '../../sandbox/materialization.js';
 import { peekSessionSandbox } from '../../sandbox/session-sandbox.js';
 import { sanitizeSegment } from '../../sandbox/workdir.js';
 import { waitForPendingFilesystemCapture } from '../../session/filesystem-capture.js';
+import { sessionMemoryResourceId, listFactorySessionThreads } from '../../session/session-threads.js';
 import { normalizeSessionTitle } from '../../session/session-title.js';
 import type { StateSigner } from '../../state-signing.js';
 import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
@@ -140,7 +142,10 @@ export interface MountGithubRoutesOptions {
   projects?: FactoryProjectsStorage;
   sessionRetirement?: import('../../sandbox/session-retirement.js').SessionRetirementCoordinator;
   /** Work-items domain — session deletion strips the refs work items hold on it. */
-  workItems?: Pick<import('../../storage/domains/work-items/base.js').WorkItemsStorage, 'clearSessionReferences'>;
+  workItems?: Pick<
+    import('../../storage/domains/work-items/base.js').WorkItemsStorage,
+    'clearSessionReferences' | 'hasRunBindingForSession'
+  >;
   /** Authoritative Factory rule ingress for normalized, signature-verified GitHub deliveries. */
   ingestFactoryEvent?: (event: ParsedGithubWebhook) => Promise<unknown>;
 }
@@ -548,20 +553,20 @@ export function buildGithubRoutes(options: MountGithubRoutesOptions): ApiRoute[]
         const tenant = auth.tenant(loose(c));
         if (!tenant?.orgId) return c.json({ error: 'unauthorized' }, 401);
 
+        // Sessions read by session id; resourceId is the older address.
+        const sessionId = c.req.query('sessionId');
         const resourceId = c.req.query('resourceId');
         const threadId = c.req.query('threadId');
-        const sessionScope = c.req.query('scope');
-        if (!resourceId || !threadId) return c.json({ error: 'resourceId and threadId are required' }, 400);
+        const target = !threadId
+          ? null
+          : sessionId
+            ? { orgId: tenant.orgId, sessionId, threadId }
+            : resourceId
+              ? { orgId: tenant.orgId, resourceId, threadId }
+              : null;
+        if (!target) return c.json({ error: 'sessionId (or resourceId) and threadId are required' }, 400);
 
-        const subscriptions = await listPullRequestSubscriptionsForThread(
-          {
-            orgId: tenant.orgId,
-            resourceId,
-            threadId,
-            sessionScope,
-          },
-          github.integrationStorage,
-        );
+        const subscriptions = await listPullRequestSubscriptionsForThread(target, github.integrationStorage);
         return c.json({
           subscriptions: subscriptions.map(subscription => ({
             id: subscription.id,
@@ -1458,14 +1463,14 @@ function buildProjectGitRoutes({
         const session = await github.sourceControlStorage.sessions.getBySessionId(c.req.param('sessionId'));
         // Private sessions 404 (not 403) for non-owners so their IDs do not
         // leak existence; the body must match the genuinely-missing case.
-        if (
-          !session ||
-          session.orgId !== resolved.tenant.orgId ||
-          (session.visibility === 'private' && session.userId !== resolved.tenant.userId)
-        ) {
+        if (!session || !canViewSourceControlSession(session, resolved.tenant)) {
           return c.json({ error: 'Session not found' }, 404);
         }
-        return c.json({ session });
+        const resourceId = await sessionMemoryResourceId(controller, session, workItems);
+        if (!canReadSessionResource(session, resourceId, resolved.tenant)) {
+          return c.json({ error: 'Session not found' }, 404);
+        }
+        return c.json({ session: { ...session, resourceId } });
       },
     }),
     registerApiRoute('/web/user-sessions/:sessionId', {
@@ -1487,7 +1492,7 @@ function buildProjectGitRoutes({
               error,
             });
           });
-          await controller?.deleteSession({ resourceId: session.sessionId });
+          await controller?.deleteSession({ sessionId: session.sessionId });
         } catch (error) {
           console.error('[GitHub Sessions] Failed to tear down live controller session', {
             sessionId: session.sessionId,
@@ -1531,7 +1536,7 @@ function buildProjectGitRoutes({
         }
         if (!controller) return c.json({ error: 'Sessions are not available on this server.' }, 503);
 
-        const threads = await controller.queryThreads({ resourceId: sessionId });
+        const threads = await listFactorySessionThreads(controller, row, workItems);
         const thread = threads.sort((a, b) => b.updatedAt.getTime() - a.updatedAt.getTime())[0];
         if (!thread) return c.json({ error: 'This session has no conversation to name yet.' }, 409);
 
@@ -1546,7 +1551,7 @@ function buildProjectGitRoutes({
           const title = await nameSession(sessionId, async () => {
             const generated = await controller.generateThreadTitle({
               threadId: thread.id,
-              resourceId: sessionId,
+              sessionId,
               requestContext,
               ...(stored?.observerModelId ? { model: titleModel(stored.observerModelId) } : {}),
             });
@@ -1770,7 +1775,7 @@ function buildProjectGitRoutes({
                   changeRequestId: pullRequestNumber.toString(),
                   sessionId,
                   ownerId: userId,
-                  resourceId: sessionId,
+                  resourceId: project.factoryProjectId,
                   threadId: sessionId,
                   source: 'factory-pr-create',
                   subscribedByUserId: userId,

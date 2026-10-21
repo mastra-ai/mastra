@@ -58,7 +58,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek/deepseek-v4.1-flash": [
+    "deepseek/deepseek-v4-pro-0813": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -70,7 +70,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek/deepseek-v4-pro-0813": [
+    "deepseek/deepseek-v4.1-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]

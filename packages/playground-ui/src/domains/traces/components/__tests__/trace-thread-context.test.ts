@@ -5,6 +5,7 @@ import { describe, expect, it } from 'vitest';
 import { getTraceThreadId } from '../trace-thread-context';
 import { panelTraceSpans } from './fixtures/trace-span-panel';
 
+// oxlint-disable-next-line typescript/no-unnecessary-type-assertion -- find can return undefined once the generated SDK types are available.
 const agentRoot = panelTraceSpans.spans.find(
   span => span.parentSpanId == null,
 ) as (typeof panelTraceSpans.spans)[number];

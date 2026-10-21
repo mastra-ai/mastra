@@ -128,10 +128,16 @@ export default function Experiments() {
     });
   };
 
-  // Any selection clears; otherwise pick the listed experiments, up to the compare cap.
+  // Any selection clears; otherwise pick the listed experiments sharing the first one's dataset, up to the cap.
   const toggleAllExperiments = (visibleExperimentIds: string[]) => {
+    const datasetByExperimentId = new Map(experiments.map(exp => [exp.id, exp.datasetId]));
+    const datasetId = datasetByExperimentId.get(visibleExperimentIds[0]);
     setSelectedExperimentIds(current =>
-      current.length > 0 ? [] : visibleExperimentIds.slice(0, MAX_COMPARED_EXPERIMENTS),
+      current.length > 0
+        ? []
+        : visibleExperimentIds
+            .filter(id => datasetByExperimentId.get(id) === datasetId)
+            .slice(0, MAX_COMPARED_EXPERIMENTS),
     );
   };
 
@@ -143,12 +149,17 @@ export default function Experiments() {
   }, [experiments, selectedExperimentIds]);
   // The first pick is the baseline, so its dataset decides which experiments can join the comparison.
   const comparableDatasetId = experiments.find(exp => exp.id === selectedIds[0])?.datasetId ?? undefined;
-  const comparableDatasetName = namedDatasets.find(dataset => dataset.id === comparableDatasetId)?.name;
+  const comparableDataset = comparableDatasetId
+    ? {
+        id: comparableDatasetId,
+        name: namedDatasets.find(ds => ds.id === comparableDatasetId)?.name ?? comparableDatasetId,
+      }
+    : undefined;
   const compareDisabledReason =
     selectedIds.length < 2
       ? 'Select at least two experiments to compare'
       : selectedDatasetIds.size !== 1
-        ? 'Only experiments from the same dataset, highlighted in the list, can be compared'
+        ? 'Only experiments from the same dataset can be compared'
         : undefined;
 
   const executeCompare = () => {
@@ -244,8 +255,7 @@ export default function Experiments() {
             onCompare: executeCompare,
             compareDisabledReason,
           }}
-          comparableDatasetId={comparableDatasetId}
-          comparableDatasetName={comparableDatasetName}
+          comparableDataset={comparableDataset}
         />
       }
     >

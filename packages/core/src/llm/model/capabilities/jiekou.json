@@ -169,30 +169,13 @@
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "claude-opus-4-6": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "max"]
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1024,
-        "max": 127999
-      }
-    ],
-    "gemini-2.5-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
     "gemini-2.5-flash-lite-preview-06-17": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "gemini-2.5-flash-preview-05-20": [
+    "gemini-2.5-flash-lite": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
@@ -204,7 +187,24 @@
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "gemini-2.5-flash-lite": [
+    "gemini-2.5-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "claude-opus-4-6": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "max"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1024,
+        "max": 127999
+      }
+    ],
+    "gemini-2.5-flash-preview-05-20": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]

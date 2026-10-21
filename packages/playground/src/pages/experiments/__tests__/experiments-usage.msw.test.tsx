@@ -93,7 +93,7 @@ describe('Experiments page usage columns', () => {
       expect(await within(row).findByText('12.4K')).toBeDefined();
       expect(within(row).getByText('5m')).toBeDefined();
       expect(within(row).getByText('2.5s')).toBeDefined();
-      expect(within(row).getByText('$0.0123')).toBeDefined();
+      expect(within(row).getByText('$0.012')).toBeDefined();
     });
 
     it('fetches metrics for all listed experiments in one token and one duration breakdown', async () => {

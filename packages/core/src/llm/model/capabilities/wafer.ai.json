@@ -21,6 +21,11 @@
         "values": ["none", "low", "medium", "high", "max"]
       }
     ],
+    "GLM-5.1": [
+      {
+        "type": "toggle"
+      }
+    ],
     "glm5.2-fast": [
       {
         "type": "toggle"
@@ -28,11 +33,6 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
-      }
-    ],
-    "GLM-5.1": [
-      {
-        "type": "toggle"
       }
     ],
     "Kimi-K2.6": [
