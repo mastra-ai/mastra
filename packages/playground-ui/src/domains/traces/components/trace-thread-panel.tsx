@@ -9,7 +9,6 @@ export interface TraceThreadPanelProps {
   threadId: string;
   withQueryTrace: boolean;
   withFeedback: boolean;
-  onOpenScore: (traceId: string, scoreId: string) => void;
   /** Close the thread drawer, revealing the trace panel underneath. */
   onClose: () => void;
   /** Sibling-drawer elevation (see `DataPanel`); defaults to 2, above the trace panel. */
@@ -24,7 +23,6 @@ export function TraceThreadPanel({
   threadId,
   withQueryTrace,
   withFeedback,
-  onOpenScore,
   onClose,
   depth = 2,
   title,
@@ -54,7 +52,6 @@ export function TraceThreadPanel({
             threadId={threadId}
             withQueryTrace={withQueryTrace}
             withFeedback={withFeedback}
-            onOpenScore={onOpenScore}
             onSelectedSpanChange={selected => setHasSelectedSpan(selected !== null)}
           />
         ) : null}

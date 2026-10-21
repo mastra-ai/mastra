@@ -9,6 +9,7 @@ import type { ThreadTraceSelectedSpan } from '@/domains/traces/components/thread
 
 import { ThreadViewSkeleton } from '@/domains/traces/components/thread-view-skeleton';
 import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
+import { useTracePanelHost } from '@/domains/traces/components/trace-panel-host';
 import { TraceThreadItemView } from '@/domains/traces/components/trace-thread-item-view';
 import { TracesErrorContent } from '@/domains/traces/components/traces-error-content';
 import { useTracesListSource } from '@/domains/traces/hooks/use-traces-list-source';
@@ -30,8 +31,6 @@ export interface ThreadViewByTraceProps {
   withFeedback: boolean;
   /** Fires when a span detail opens or closes (`null`). */
   onSelectedSpanChange?: (selected: ThreadTraceSelectedSpan | null) => void;
-  /** Opens a score from a trace's Scores tab; the app owns routing. */
-  onOpenScore: (traceId: string, scoreId: string) => void;
   /** Turns loaded per page: the latest ones on open, then older ones as the reader scrolls up. */
   pageSize?: number;
 }
@@ -47,7 +46,6 @@ export function ThreadViewByTrace({
   withQueryTrace,
   withFeedback,
   onSelectedSpanChange,
-  onOpenScore,
   pageSize = 10,
 }: ThreadViewByTraceProps) {
   const legacyFilters = useMemo<UseTracesListSourceArgs['legacyFilters']>(() => ({ threadId }), [threadId]);
@@ -118,7 +116,7 @@ export function ThreadViewByTrace({
       <ThreadTrace.List data-testid="thread-view-by-trace">
         {traceIds.map((traceId, index) => (
           <ThreadTrace.Row key={traceId} traceId={traceId}>
-            <ThreadTraceRowContent turn={index + 1} withFeedback={withFeedback} onOpenScore={onOpenScore} />
+            <ThreadTraceRowContent turn={index + 1} withFeedback={withFeedback} />
           </ThreadTrace.Row>
         ))}
       </ThreadTrace.List>
@@ -130,14 +128,13 @@ export function ThreadViewByTrace({
 function ThreadTraceRowContent({
   turn,
   withFeedback,
-  onOpenScore,
 }: {
   /** 1-based position among the loaded turns. */
   turn: number;
   withFeedback: boolean;
-  onOpenScore: (traceId: string, scoreId: string) => void;
 }) {
   const { traceId, highlightSpans } = useThreadTraceRow();
+  const { openScore } = useTracePanelHost();
   const { Link, paths } = useLinkComponent();
   const traceHref = paths.traceLink(traceId);
   // Same query the span tree observes (passive: the tree drives refetches).
@@ -194,7 +191,7 @@ function ThreadTraceRowContent({
                 key={traceId}
                 traceId={traceId}
                 spanId={rootSpanId}
-                onScoreSelect={scoreId => onOpenScore(traceId, scoreId)}
+                onScoreSelect={openScore ? scoreId => openScore(traceId, scoreId) : undefined}
               />
             ) : null}
           </ThreadTrace.TabContent>

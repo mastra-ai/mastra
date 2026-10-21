@@ -28,3 +28,4 @@ export { TracesErrorContent, type TracesErrorContentProps } from './traces-error
 export { NoTracesInfo, type NoTracesInfoProps } from './no-traces-info';
 export * from './thread-trace';
 export * from './span-payload';
+export { TracePanelHostProvider, useTracePanelHost, type TracePanelHost } from './trace-panel-host';

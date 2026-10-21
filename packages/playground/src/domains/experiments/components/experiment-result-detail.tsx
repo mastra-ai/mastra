@@ -1,19 +1,13 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
 
-import { TraceScoresTab } from '@mastra/playground-ui/domains/scores';
-import { SpanFeedbackTab } from '@mastra/playground-ui/domains/traces/components/span-feedback-tab';
 import { TraceFeedbackTab } from '@mastra/playground-ui/domains/traces/components/trace-feedback-tab';
-import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
+import { TraceSpanPanel } from '@mastra/playground-ui/domains/traces/components/trace-span-panel';
 import { useExperimentTrace } from '@mastra/react/hooks/experiments';
-import { useTraceSpanScores } from '@mastra/react/hooks/scores';
-import { useSpanFeedback, useTraceFeedback } from '@mastra/react/hooks/traces';
 import { ExperimentResultPanel } from '@/domains/experiments/components/experiment-result-panel';
 import type { ExperimentResultPanelProps } from '@/domains/experiments/components/experiment-result-panel';
 import { ExperimentScorePanel } from '@/domains/experiments/components/experiment-score-panel';
 import { useExperimentResultDetailState } from '@/domains/experiments/hooks/use-experiment-result-detail-state';
 import type { ExperimentResultDetailState } from '@/domains/experiments/hooks/use-experiment-result-detail-state';
-import { TraceSpanPanel } from '@/domains/traces/components/trace-span-panel';
-import { traceScoreLink } from '@/lib/app-routing';
 
 export type ExperimentResultDetailProps = Omit<
   ExperimentResultPanelProps,
@@ -43,7 +37,6 @@ export function ExperimentResultDetail({
   ...panelProps
 }: ExperimentResultDetailProps) {
   const internalState = useExperimentResultDetailState(scores, result?.id);
-  const { navigate } = useLinkComponent();
   const {
     featuredTraceId,
     setFeaturedTraceId,
@@ -91,21 +84,6 @@ export function ExperimentResultDetail({
   });
   const traceSpans = traceData?.spans;
   const anchorSpan = traceSpans?.find(span => !span.parentSpanId);
-  const { data: traceFeedback } = useTraceFeedback({
-    traceId: featuredTraceId ?? undefined,
-    queryOptions: { enabled: withFeedback && !!featuredTraceId },
-  });
-  const { data: spanFeedback } = useSpanFeedback({
-    traceId: featuredTraceId ?? undefined,
-    spanId: featuredSpanId,
-    queryOptions: { enabled: withFeedback && !!featuredTraceId && !!featuredSpanId },
-  });
-  const { data: anchorSpanScores } = useTraceSpanScores({
-    traceId: featuredTraceId ?? undefined,
-    spanId: anchorSpan?.spanId,
-    page: 0,
-    queryOptions: { enabled: !!featuredTraceId && !!anchorSpan?.spanId },
-  });
 
   return (
     <>
@@ -146,34 +124,13 @@ export function ExperimentResultDetail({
         anchorSpanId={anchorSpan?.spanId}
         withQueryTrace={withQueryTrace}
         withFeedback={withFeedback}
-        onOpenScore={(traceId, scoreId) => navigate(traceScoreLink(traceId, scoreId))}
-        feedbackTabBadge={withFeedback ? (traceFeedback?.pagination?.total ?? undefined) : undefined}
-        feedbackTabSlot={withFeedback ? ({ traceId }) => <TraceFeedbackTab traceId={traceId} /> : undefined}
-        scoresTabBadge={anchorSpanScores?.pagination?.total ?? undefined}
-        scoresTabSlot={({ traceId, rootSpanId }) =>
-          rootSpanId ? (
-            <TraceScoresTab
-              traceId={traceId}
-              spanId={rootSpanId}
-              onScoreSelect={scoreId => {
-                if (scores?.some(score => score.id === scoreId)) {
-                  setFeaturedTraceId(null);
-                  setFeaturedSpanId(undefined);
-                  setFeaturedScoreId(scoreId);
-                }
-              }}
-            />
-          ) : null
-        }
-        spanFeedbackTabBadge={withFeedback ? (spanFeedback?.pagination?.total ?? undefined) : undefined}
-        spanFeedbackTabSlot={
-          withFeedback
-            ? ({ traceId, spanId }) =>
-                traceId && spanId ? (
-                  <SpanFeedbackTab key={`${traceId}:${spanId}`} traceId={traceId} spanId={spanId} />
-                ) : null
-            : undefined
-        }
+        onScoreSelect={scoreId => {
+          if (scores?.some(score => score.id === scoreId)) {
+            setFeaturedTraceId(null);
+            setFeaturedSpanId(undefined);
+            setFeaturedScoreId(scoreId);
+          }
+        }}
       />
     </>
   );

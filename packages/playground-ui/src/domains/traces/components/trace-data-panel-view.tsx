@@ -100,14 +100,14 @@ export interface TraceDataPanelViewProps {
    * scoring UI the consumer wants.
    */
   scoresTabSlot?: (args: { traceId: string; rootSpanId: string | undefined }) => ReactNode;
-  /** Optional count shown in the "Scores" tab label. */
+  /** Rendered as-is after the "Scores" tab label, e.g. `<TabCount count={n} />` for `Scores (n)`. */
   scoresTabBadge?: ReactNode;
   /**
    * When provided, a "Feedback" tab appears; the slot renders the trace-level
    * feedback UI. Trace feedback is not scoped to a span — the span panel owns that.
    */
   feedbackTabSlot?: (args: { traceId: string }) => ReactNode;
-  /** Optional count rendered after the "Feedback" tab label, e.g. `Feedback (3)`. */
+  /** Rendered as-is after the "Feedback" tab label, e.g. `<TabCount count={n} />` for `Feedback (n)`. */
   feedbackTabBadge?: ReactNode;
   /** Span ids to feature in the timeline; every other span is faded. */
   featuredSpanIds?: string[];
@@ -199,9 +199,7 @@ export function TraceDataPanelView({
             <Icon size="xs">
               <MessageSquareReplyIcon />
             </Icon>
-            <span className="@max-[501px]:sr-only">
-              Feedback{feedbackTabBadge != null && <> ({feedbackTabBadge})</>}
-            </span>
+            <span className="@max-[501px]:sr-only">Feedback{feedbackTabBadge}</span>
           </>
         ),
       });
@@ -215,7 +213,7 @@ export function TraceDataPanelView({
             <Icon size="xs">
               <ScorersIcon />
             </Icon>
-            <span className="@max-[501px]:sr-only">Scores{scoresTabBadge != null && <> ({scoresTabBadge})</>}</span>
+            <span className="@max-[501px]:sr-only">Scores{scoresTabBadge}</span>
           </>
         ),
       });

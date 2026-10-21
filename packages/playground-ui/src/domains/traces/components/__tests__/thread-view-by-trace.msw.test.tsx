@@ -9,6 +9,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 
 import { feedbackRecord, listFeedbackResponse } from '../../hooks/__tests__/fixtures/trace-feedback';
 import { ThreadViewByTrace } from '../thread-view-by-trace';
+import { TracePanelHostProvider } from '../trace-panel-host';
 import {
   queryPageFromList,
   THREAD_ID,
@@ -185,29 +186,30 @@ const installScore = () => {
 const renderView = ({
   withFeedback = true,
   withQueryTrace = true,
-  onOpenScore = () => {},
+  openScore,
   paths,
   pageSize,
 }: {
   withFeedback?: boolean;
   withQueryTrace?: boolean;
-  onOpenScore?: (traceId: string, scoreId: string) => void;
+  openScore?: (traceId: string, scoreId: string) => void;
   paths?: ComponentProps<typeof TestLinkProvider>['paths'];
   pageSize?: number;
 } = {}) =>
   renderWithProviders(
     <TestLinkProvider paths={paths}>
-      <BrowserToolCallsProvider>
-        <ActivatedSkillsProvider>
-          <ThreadViewByTrace
-            threadId={THREAD_ID}
-            withQueryTrace={withQueryTrace}
-            withFeedback={withFeedback}
-            pageSize={pageSize}
-            onOpenScore={onOpenScore}
-          />
-        </ActivatedSkillsProvider>
-      </BrowserToolCallsProvider>
+      <TracePanelHostProvider value={{ openScore }}>
+        <BrowserToolCallsProvider>
+          <ActivatedSkillsProvider>
+            <ThreadViewByTrace
+              threadId={THREAD_ID}
+              withQueryTrace={withQueryTrace}
+              withFeedback={withFeedback}
+              pageSize={pageSize}
+            />
+          </ActivatedSkillsProvider>
+        </BrowserToolCallsProvider>
+      </TracePanelHostProvider>
     </TestLinkProvider>,
   );
 
@@ -676,7 +678,7 @@ describe('ThreadViewByTrace', () => {
         installHandlers();
         installFeedbackHandlers();
         installScore();
-        renderView();
+        renderView({ openScore: () => {} });
 
         const row = within((await screen.findByText('Chef agent run')).closest('[data-trace-id]') as HTMLElement);
         fireEvent.click(row.getByRole('tab', { name: /Scores/ }));
@@ -741,19 +743,19 @@ describe('ThreadViewByTrace', () => {
       server.events.removeAllListeners('request:start');
     });
 
-    it('hands the trace and score ids to onOpenScore when a score is selected', async () => {
+    it("hands the trace and score ids to the host's openScore when a score is selected", async () => {
       installHandlers();
       installFeedbackHandlers();
       installScore();
-      const onOpenScore = vi.fn<(traceId: string, scoreId: string) => void>();
-      renderView({ onOpenScore });
+      const openScore = vi.fn<(traceId: string, scoreId: string) => void>();
+      renderView({ openScore });
 
       const row = (await screen.findByText('Chef agent run')).closest('[data-trace-id]') as HTMLElement;
       const traceId = row.getAttribute('data-trace-id');
       fireEvent.click(within(row).getByRole('tab', { name: /Scores/ }));
       fireEvent.click(await within(row).findByRole('button', { name: /^Score / }));
 
-      expect(onOpenScore).toHaveBeenCalledWith(traceId, 'score-1');
+      expect(openScore).toHaveBeenCalledWith(traceId, 'score-1');
     });
 
     it('does not fetch feedback until the Feedback tab is opened', async () => {

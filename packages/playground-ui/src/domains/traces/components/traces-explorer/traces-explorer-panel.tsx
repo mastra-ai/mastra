@@ -1,43 +1,79 @@
 import { useTraceSpanScores } from '@mastra/react/hooks/scores';
-import { useSpanFeedback, useTraceFeedback, useTraceOrBranchSpans, useTraceUsage } from '@mastra/react/hooks/traces';
-import { useState } from 'react';
-import type { ComponentProps, ReactNode } from 'react';
-import { useTraceListNavigation } from '../../hooks/use-trace-list-navigation';
+import { useTraceOrBranchSpans, useTraceUsage } from '@mastra/react/hooks/traces';
+import type { TraceUsageSummary } from '@mastra/react/hooks/traces';
+import { memo, useState } from 'react';
 import type { SpanTab } from '../../types';
-import { SpanFeedbackTab } from '../span-feedback-tab';
-import { TraceFeedbackTab } from '../trace-feedback-tab';
+import { useTracePanelHost } from '../trace-panel-host';
 import { TraceSpanPanel } from '../trace-span-panel';
-import type { TraceSpanPanelProps } from '../trace-span-panel';
 import { useTraceUsageColumns, useTracesConfig, useTracesList, useTracesSelection } from './traces-explorer-context';
 import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
-import { ScoreDataPanel, TraceScoresTab } from '@/domains/scores';
+import { ScoreDataPanel } from '@/domains/scores';
 
 export type TracesExplorerPanelProps = {
-  /** Opens a score of one of the full thread's traces (the host owns routing). */
-  onOpenScore: (traceId: string, scoreId: string) => void;
-  renderCreateDatasetDialog?: ComponentProps<typeof TraceAsItemDialog>['renderCreateDatasetDialog'];
-  /** Host integration actions rendered alongside the trace controls. */
-  headerActionsSlot?: (args: { traceId: string; spans: TraceSpanPanelProps['spans'] }) => ReactNode;
-  /** Builds the href of the dedicated trace page; without it the drawer offers no "Open trace page" link. */
+  /**
+   * Builds the href of the dedicated trace page; without it the drawer offers no "Open trace page" link.
+   * Pass a stable function: a new one on every render re-renders the drawer on every list poll.
+   */
   traceHref?: (traceId: string) => string;
   /** Shows "Add full trace to dataset" in the trace actions menu. Defaults to `true`. */
   withAddTraceToDataset?: boolean;
 };
 
+/**
+ * Reads the list only to derive the open trace's neighbours and usage, then hands them to the
+ * drawer as primitives and a structurally shared summary. A poll tick that replaces the rows
+ * re-renders this wrapper, but not the drawer unless one of those values changed.
+ */
+export function TracesExplorerPanel({ traceHref, withAddTraceToDataset = true }: TracesExplorerPanelProps = {}) {
+  const { rows, autoRefetch, isLoading: isListLoading } = useTracesList();
+  const { selectedTraceId: traceId } = useTracesSelection();
+  const { usageEnabled } = useTraceUsageColumns();
+
+  const rowIds = rows.map(row => row.traceId);
+  const index = traceId ? rowIds.indexOf(traceId) : -1;
+  const isListed = index >= 0;
+
+  // Same key as the list's usage query when the trace is listed, so React Query serves it from cache.
+  // Waits for the list so a deep-linked trace doesn't fetch its own usage before the rows arrive.
+  // `select` output is structurally shared, so the summary keeps its identity across refetches.
+  const { data: usage } = useTraceUsage<TraceUsageSummary | undefined>({
+    traceIds: isListed ? rowIds : traceId ? [traceId] : [],
+    enabled: usageEnabled && !isListLoading,
+    autoRefetch,
+    queryOptions: { select: usageByTraceId => (traceId ? usageByTraceId.get(traceId) : undefined) },
+  });
+
+  return (
+    <TracesExplorerTraceDrawer
+      traceHref={traceHref}
+      withAddTraceToDataset={withAddTraceToDataset}
+      usage={usage}
+      previousTraceId={isListed ? rowIds[index - 1] : undefined}
+      nextTraceId={isListed ? rowIds[index + 1] : undefined}
+    />
+  );
+}
+
+type TracesExplorerTraceDrawerProps = Required<Pick<TracesExplorerPanelProps, 'withAddTraceToDataset'>> &
+  Pick<TracesExplorerPanelProps, 'traceHref'> & {
+    usage: TraceUsageSummary | undefined;
+    previousTraceId: string | undefined;
+    nextTraceId: string | undefined;
+  };
+
 type DatasetDialogTarget = { traceId: string; rootSpanId: string | undefined };
 
-export function TracesExplorerPanel({
-  onOpenScore,
-  renderCreateDatasetDialog,
-  headerActionsSlot,
+const TracesExplorerTraceDrawer = memo(function TracesExplorerTraceDrawer({
   traceHref,
-  withAddTraceToDataset = true,
-}: TracesExplorerPanelProps) {
+  withAddTraceToDataset,
+  usage,
+  previousTraceId,
+  nextTraceId,
+}: TracesExplorerTraceDrawerProps) {
+  const { renderCreateDatasetDialog } = useTracePanelHost();
   const { withQueryTrace, withFeedback } = useTracesConfig();
-  const { rows, autoRefetch, isLoading: isListLoading } = useTracesList();
   const { selection, selectTrace, closeTrace, selectSpan, setSpanTab, setSpanView, selectScore, highlightSpans } =
     useTracesSelection();
-  const { usageEnabled } = useTraceUsageColumns();
   const traceId = selection.traceId;
   const spanId = selection.spanId;
 
@@ -45,47 +81,15 @@ export function TracesExplorerPanel({
   // Keyed by trace id so selecting another trace (row click, prev/next) falls back to the trace panel.
   const [fullThreadTraceId, setFullThreadTraceId] = useState<string | null>(null);
 
-  // Tab badge counts; the tab bodies re-use these first-page queries through React Query's cache.
-  const { data: traceFeedbackData } = useTraceFeedback({
-    traceId,
-    queryOptions: { enabled: withFeedback && !!traceId },
-  });
-  const { data: spanFeedbackData } = useSpanFeedback({
-    traceId,
-    spanId,
-    queryOptions: { enabled: withFeedback && !!traceId && !!spanId },
-  });
-
   const {
     spans,
     anchorSpanId,
     isLoading: isLoadingSpans,
   } = useTraceOrBranchSpans({ traceId: traceId ?? null, listMode: 'traces', anchorSpanId: null });
-  const anchorSpan = anchorSpanId
-    ? spans?.find(s => s.spanId === anchorSpanId)
-    : spans?.find(s => s.parentSpanId == null);
-
-  const { data: spanScoresData } = useTraceSpanScores({
-    traceId,
-    spanId: anchorSpan?.spanId,
-    queryOptions: { enabled: !!traceId && !!anchorSpan?.spanId },
-  });
-  const featuredScore = selection.scoreId
-    ? spanScoresData?.scores?.find(score => score.id === selection.scoreId)
-    : undefined;
-
-  // Same key as the list's usage query when the trace is listed, so React Query serves it from cache.
-  // Waits for the list so a deep-linked trace doesn't fetch its own usage before the rows arrive.
-  const rowIds = rows.map(row => row.traceId);
-  const isListed = !!traceId && rowIds.includes(traceId);
-  const { data: usageByTraceId } = useTraceUsage({
-    traceIds: isListed ? rowIds : traceId ? [traceId] : [],
-    enabled: usageEnabled && !isListLoading,
-    autoRefetch,
-  });
-  const usage = traceId ? usageByTraceId?.get(traceId) : undefined;
-
-  const { handlePreviousTrace, handleNextTrace } = useTraceListNavigation(rows, traceId, null, selectTrace);
+  // Same anchor as TraceSpanPanel's Scores tab, so both read one cached scores query.
+  const rootSpanId = (
+    anchorSpanId ? spans?.find(s => s.spanId === anchorSpanId) : spans?.find(s => s.parentSpanId == null)
+  )?.spanId;
 
   const isFullThreadOpen = !!traceId && fullThreadTraceId === traceId;
   const depth = isFullThreadOpen ? 3 : 2;
@@ -108,37 +112,22 @@ export function TracesExplorerPanel({
         isFullThreadOpen={isFullThreadOpen}
         withQueryTrace={withQueryTrace}
         withFeedback={withFeedback}
-        onOpenScore={onOpenScore}
         onFullThreadOpenChange={open => setFullThreadTraceId(open ? (traceId ?? null) : null)}
         onSpanSelect={id => selectSpan(id ?? null)}
         onSaveAsDatasetItem={withAddTraceToDataset ? setDatasetDialogTarget : undefined}
-        initialSpanId={spanId}
-        onPrevious={handlePreviousTrace}
-        onNext={handleNextTrace}
+        onPrevious={previousTraceId ? () => selectTrace(previousTraceId) : undefined}
+        onNext={nextTraceId ? () => selectTrace(nextTraceId) : undefined}
         showPartialThread
         featuredSpanIds={selection.highlightSpanIds}
         onHighlightSpans={highlightSpans}
-        feedbackTabBadge={withFeedback ? (traceFeedbackData?.pagination?.total ?? undefined) : undefined}
-        feedbackTabSlot={withFeedback ? ({ traceId: tid }) => <TraceFeedbackTab traceId={tid} /> : undefined}
-        scoresTabBadge={spanScoresData?.pagination?.total ?? undefined}
-        scoresTabSlot={({ traceId: tid, rootSpanId }) =>
-          rootSpanId ? <TraceScoresTab traceId={tid} spanId={rootSpanId} onScoreSelect={selectScore} /> : null
-        }
+        onScoreSelect={selectScore}
         spanView={selection.spanView}
         onSpanViewChange={setSpanView}
         spanActiveTab={selection.spanTab ?? 'details'}
         onSpanTabChange={tab => setSpanTab(tab as SpanTab)}
-        spanFeedbackTabBadge={withFeedback ? (spanFeedbackData?.pagination?.total ?? undefined) : undefined}
-        spanFeedbackTabSlot={
-          withFeedback
-            ? ({ traceId: tid, spanId: sid }) =>
-                tid && sid ? <SpanFeedbackTab key={`${tid}:${sid}`} traceId={tid} spanId={sid} /> : null
-            : undefined
-        }
-        headerActionsSlot={traceId && headerActionsSlot ? headerActionsSlot({ traceId, spans }) : undefined}
         traceHref={traceId && traceHref ? traceHref(traceId) : undefined}
       />
-      <ScoreDataPanel depth={depth} score={featuredScore} onClose={() => selectScore(null)} />
+      <TracesExplorerScorePanel traceId={traceId} spanId={rootSpanId} depth={depth} />
       {withAddTraceToDataset && (
         <TraceAsItemDialog
           rootSpanId={datasetDialogTarget?.rootSpanId}
@@ -150,4 +139,25 @@ export function TracesExplorerPanel({
       )}
     </>
   );
+});
+
+type TracesExplorerScorePanelProps = {
+  traceId: string | undefined;
+  spanId: string | undefined;
+  depth: 2 | 3;
+};
+
+/** Owns the score lookup so a scores refetch re-renders only the score drawer, not the trace drawer. */
+function TracesExplorerScorePanel({ traceId, spanId, depth }: TracesExplorerScorePanelProps) {
+  const { selection, selectScore } = useTracesSelection();
+  // Same first-page query as the Scores tab, served from React Query's cache.
+  const { data } = useTraceSpanScores({
+    traceId,
+    spanId,
+    page: 0,
+    queryOptions: { enabled: !!traceId && !!spanId },
+  });
+  const score = selection.scoreId ? data?.scores?.find(item => item.id === selection.scoreId) : undefined;
+
+  return <ScoreDataPanel depth={depth} score={score} onClose={() => selectScore(null)} />;
 }

@@ -83,6 +83,22 @@ export const twoTracesPage: TraceQueryKeysetTraceResponse = {
   page: { next: null },
 };
 
+/** `twoTracesPage` after a poll brings in an older trace: the neighbours of `trace-weather` are unchanged. */
+export const threeTracesPage: TraceQueryKeysetTraceResponse = {
+  traces: [
+    ...twoTracesPage.traces,
+    {
+      ...weatherTrace,
+      traceId: 'trace-search',
+      rootSpanId: 'span-search',
+      startedAt: '2026-09-15T10:00:00.000Z',
+      createdAt: '2026-09-15T10:00:00.000Z',
+      inputPreview: 'Search the docs',
+    },
+  ],
+  page: { next: null },
+};
+
 export const emptyTracesPage: TraceQueryKeysetTraceResponse = { traces: [], page: { next: null } };
 
 export const emptyLightTraces: Awaited<ReturnType<MastraClient['listTracesLight']>> = {
@@ -125,6 +141,29 @@ export const weatherTraceUsage: MetricBreakdownResponse = {
 export const emptyScores: ListScoresResponse = {
   scores: [],
   pagination: { total: 0, page: 0, perPage: 10, hasMore: false },
+};
+
+export const WEATHER_SCORE_ID = 'score-weather-1';
+
+/** One score on the root span of `trace-weather`. */
+export const weatherRootScores: ListScoresResponse = {
+  scores: [
+    {
+      id: WEATHER_SCORE_ID,
+      scorerId: 'relevance',
+      entityId: 'weather-agent',
+      runId: 'run-weather',
+      score: 0.9,
+      scorer: { id: 'relevance', name: 'Relevance' },
+      source: 'LIVE',
+      entity: {},
+      traceId: 'trace-weather',
+      spanId: 'span-weather',
+      createdAt: new Date('2026-09-15T12:00:02.000Z'),
+      updatedAt: new Date('2026-09-15T12:00:02.000Z'),
+    },
+  ],
+  pagination: { total: 1, page: 0, perPage: 10, hasMore: false },
 };
 
 export const emptyFeedback: ListFeedbackResponse = {

@@ -1,10 +1,19 @@
 import { useSpanDetail, useThreadHasOtherTraces } from '@mastra/react/hooks/traces';
 import { MessagesSquareIcon } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
+import { TraceScoresTab } from '@/domains/scores/components/trace-scores-tab';
 import { SpanDataPanelView } from '@/domains/traces/components/span-data-panel-view';
+import { SpanFeedbackTab } from '@/domains/traces/components/span-feedback-tab';
 import { TraceDataPanel } from '@/domains/traces/components/trace-data-panel';
 import type { TraceDataPanelView } from '@/domains/traces/components/trace-data-panel-view';
+import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
 import { TraceMessagesPanel } from '@/domains/traces/components/trace-messages-panel';
+import { useTracePanelHost } from '@/domains/traces/components/trace-panel-host';
+import {
+  SpanFeedbackCount,
+  TraceFeedbackCount,
+  TraceScoresCount,
+} from '@/domains/traces/components/trace-panel-tab-counts';
 import { getTraceThreadId } from '@/domains/traces/components/trace-thread-context';
 import { TraceThreadPanel } from '@/domains/traces/components/trace-thread-panel';
 import { useTraceSpanNavigation } from '@/domains/traces/hooks/use-trace-span-navigation';
@@ -25,7 +34,6 @@ function getEntityHref(
   if (normalizedEntityType.includes('agent')) return paths.agentLink(entityId) || undefined;
   return undefined;
 }
-type SpanDataPanelViewProps = ComponentProps<typeof SpanDataPanelView>;
 
 export interface TraceSpanPanelProps {
   /** Keep the panel mounted and pass `undefined` to close it, so the drawer animates out. */
@@ -40,12 +48,9 @@ export interface TraceSpanPanelProps {
 
   // Trace-panel pass-through.
   anchorSpanId?: string;
-  initialSpanId?: string | null;
   onPrevious?: () => void;
   onNext?: () => void;
   onSaveAsDatasetItem?: TraceDataPanelViewProps['onSaveAsDatasetItem'];
-  feedbackTabBadge?: ReactNode;
-  feedbackTabSlot?: TraceDataPanelViewProps['feedbackTabSlot'];
   /** Enables the "Messages" column (reconstructed turn) when the displayed root is a complete agent trace with a thread id. */
   showPartialThread?: boolean;
   /** Span ids featured in the timeline (non-featured spans are faded). */
@@ -58,12 +63,10 @@ export interface TraceSpanPanelProps {
   onFullThreadOpenChange?: (open: boolean) => void;
   /** Full-thread view: lists through the trace-query API; `false` falls back to `listTracesLight`. */
   withQueryTrace: boolean;
-  /** Full-thread view: shows the per-trace Feedback tab. */
+  /** Shows the trace and span Feedback tabs (and the full-thread view's per-trace Feedback tab). */
   withFeedback: boolean;
-  /** Full-thread view: opens a score of one of the thread's traces (the app owns routing). */
-  onOpenScore: (traceId: string, scoreId: string) => void;
-  scoresTabBadge?: ReactNode;
-  scoresTabSlot?: TraceDataPanelViewProps['scoresTabSlot'];
+  /** Called when a score card of the Scores tab is clicked; defaults to the host's `openScore`. */
+  onScoreSelect?: (scoreId: string) => void;
   usage?: TraceDataPanelViewProps['usage'];
   traceHref?: string;
   /** Drawer width; defaults to `wide`. */
@@ -72,8 +75,6 @@ export interface TraceSpanPanelProps {
   depth?: TraceDataPanelViewProps['depth'];
   /** Rendered inside the drawer above the trace header (e.g. feedback context). */
   headerSlot?: ReactNode;
-  /** Integration actions displayed alongside the trace controls. */
-  headerActionsSlot?: ReactNode;
   /** Accessible drawer name; defaults to the trace id. */
   title?: string;
   showUnavailableFeaturesMsg?: TraceDataPanelViewProps['showUnavailableFeaturesMsg'];
@@ -83,14 +84,12 @@ export interface TraceSpanPanelProps {
   // Span-panel pass-through.
   spanActiveTab?: string;
   onSpanTabChange?: (tab: string) => void;
-  spanFeedbackTabBadge?: ReactNode;
-  spanFeedbackTabSlot?: SpanDataPanelViewProps['feedbackTabSlot'];
 }
 
 /**
  * Shared trace → span drilldown drawer: `TraceDataPanel` with a nested `SpanDataPanelView`.
- * Encapsulates the span-detail fetch and prev/next span navigation that the traces page
- * and the agent chat traces aside used to duplicate.
+ * Owns the span-detail fetch, prev/next span navigation and the Feedback/Scores tabs
+ * (each tab fetches its own count), so call sites only wire selection and routing.
  */
 export function TraceSpanPanel({
   traceId,
@@ -100,12 +99,9 @@ export function TraceSpanPanel({
   onSpanSelect,
   onClose,
   anchorSpanId,
-  initialSpanId,
   onPrevious,
   onNext,
   onSaveAsDatasetItem,
-  feedbackTabBadge,
-  feedbackTabSlot,
   showPartialThread,
   featuredSpanIds,
   onHighlightSpans,
@@ -113,23 +109,18 @@ export function TraceSpanPanel({
   onFullThreadOpenChange,
   withQueryTrace,
   withFeedback,
-  onOpenScore,
-  scoresTabBadge,
-  scoresTabSlot,
+  onScoreSelect,
   usage,
   traceHref,
   size,
   depth,
   headerSlot,
-  headerActionsSlot,
   title,
   showUnavailableFeaturesMsg,
   spanView,
   onSpanViewChange,
   spanActiveTab,
   onSpanTabChange,
-  spanFeedbackTabBadge,
-  spanFeedbackTabSlot,
 }: TraceSpanPanelProps) {
   const { data: spanDetailData, isLoading: isLoadingSpanDetail } = useSpanDetail({
     traceId: traceId,
@@ -138,11 +129,15 @@ export function TraceSpanPanel({
   });
   const { handlePreviousSpan, handleNextSpan } = useTraceSpanNavigation(spans, selectedSpanId, onSpanSelect);
   const { Link, paths } = useLinkComponent();
+  const host = useTracePanelHost();
+  const handleScoreSelect =
+    onScoreSelect ?? (traceId && host.openScore ? (scoreId: string) => host.openScore?.(traceId, scoreId) : undefined);
 
   // The trace summary links the entity to its page; the app's link provider owns the routes.
   const rootSpan = anchorSpanId
     ? spans?.find(s => s.spanId === anchorSpanId)
     : spans?.find(s => s.parentSpanId == null);
+  const rootSpanId = rootSpan?.spanId;
   const entityHref = getEntityHref(paths, rootSpan?.entityType, rootSpan?.entityId);
   const threadId = getTraceThreadId(rootSpan, anchorSpanId);
   const hasMessagesPanel = !!(traceId && showPartialThread && threadId);
@@ -165,7 +160,7 @@ export function TraceSpanPanel({
         onClose={onClose}
         onSpanSelect={onSpanSelect}
         onSaveAsDatasetItem={onSaveAsDatasetItem}
-        initialSpanId={initialSpanId ?? selectedSpanId}
+        initialSpanId={selectedSpanId}
         onPrevious={onPrevious}
         onNext={onNext}
         placement="traces-list"
@@ -174,13 +169,13 @@ export function TraceSpanPanel({
         size={size}
         depth={depth}
         headerSlot={headerSlot}
-        headerActionsSlot={headerActionsSlot}
+        headerActionsSlot={traceId ? host.renderHeaderActions?.({ traceId, spans }) : undefined}
         title={title}
         showUnavailableFeaturesMsg={showUnavailableFeaturesMsg}
         spanView={spanView}
         onSpanViewChange={onSpanViewChange}
-        feedbackTabBadge={feedbackTabBadge}
-        feedbackTabSlot={feedbackTabSlot}
+        feedbackTabBadge={withFeedback && traceId ? <TraceFeedbackCount traceId={traceId} /> : undefined}
+        feedbackTabSlot={withFeedback ? renderTraceFeedbackTab : undefined}
         featuredSpanIds={featuredSpanIds}
         messagesPanelSlot={
           hasMessagesPanel ? <TraceMessagesPanel traceId={traceId} onHighlightSpans={onHighlightSpans} /> : undefined
@@ -202,8 +197,12 @@ export function TraceSpanPanel({
               )
             : undefined
         }
-        scoresTabBadge={scoresTabBadge}
-        scoresTabSlot={scoresTabSlot}
+        scoresTabBadge={traceId && rootSpanId ? <TraceScoresCount traceId={traceId} spanId={rootSpanId} /> : undefined}
+        scoresTabSlot={({ traceId: tid, rootSpanId: sid }) =>
+          sid ? (
+            <TraceScoresTab key={`${tid}:${sid}`} traceId={tid} spanId={sid} onScoreSelect={handleScoreSelect} />
+          ) : null
+        }
         spanPanelSlot={
           traceId && selectedSpanId ? (
             <SpanDataPanelView
@@ -217,8 +216,10 @@ export function TraceSpanPanel({
               onClose={() => onSpanSelect(undefined)}
               activeTab={spanActiveTab}
               onTabChange={onSpanTabChange}
-              feedbackTabBadge={spanFeedbackTabBadge}
-              feedbackTabSlot={spanFeedbackTabSlot}
+              feedbackTabBadge={
+                withFeedback ? <SpanFeedbackCount traceId={traceId} spanId={selectedSpanId} /> : undefined
+              }
+              feedbackTabSlot={withFeedback ? renderSpanFeedbackTab : undefined}
             />
           ) : null
         }
@@ -228,11 +229,19 @@ export function TraceSpanPanel({
         open={!!(traceId && isFullThreadOpen && threadId)}
         depth={depth && depth > 1 ? 3 : 2}
         threadId={threadId ?? ''}
-        onOpenScore={onOpenScore}
         withQueryTrace={withQueryTrace}
         withFeedback={withFeedback}
         onClose={() => onFullThreadOpenChange?.(false)}
       />
     </>
   );
+}
+
+function renderTraceFeedbackTab({ traceId }: { traceId: string }) {
+  return <TraceFeedbackTab traceId={traceId} />;
+}
+
+// Keyed per span so the tab's pagination resets when the selection changes.
+function renderSpanFeedbackTab({ traceId, spanId }: { traceId: string; spanId: string }) {
+  return <SpanFeedbackTab key={`${traceId}:${spanId}`} traceId={traceId} spanId={spanId} />;
 }

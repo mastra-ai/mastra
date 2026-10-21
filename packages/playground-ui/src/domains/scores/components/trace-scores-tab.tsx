@@ -17,7 +17,8 @@ const REASON_PREVIEW_LENGTH = 100;
 export type TraceScoresTabProps = {
   traceId: string;
   spanId: string;
-  onScoreSelect: (scoreId: string) => void;
+  /** Opens a score's detail; without it the cards are read-only. */
+  onScoreSelect?: (scoreId: string) => void;
 };
 
 /**
@@ -50,34 +51,47 @@ export function TraceScoresTab({ traceId, spanId, onScoreSelect }: TraceScoresTa
   return (
     <div className="grid content-start gap-3">
       {scores.map(score => (
-        <TraceScoreCard key={score.id} score={score} onSelect={() => onScoreSelect(score.id)} />
+        <TraceScoreCard
+          key={score.id}
+          score={score}
+          onSelect={onScoreSelect ? () => onScoreSelect(score.id) : undefined}
+        />
       ))}
       <TraceScoresPagination pagination={scoresData?.pagination} onPageChange={setPage} />
     </div>
   );
 }
 
-function TraceScoreCard({ score, onSelect }: { score: ClientScoreRowData; onSelect: () => void }) {
+function TraceScoreCard({ score, onSelect }: { score: ClientScoreRowData; onSelect: (() => void) | undefined }) {
   const createdAt = new Date(score.createdAt);
   const scorerName = String(score.scorer?.name || score.scorer?.id || 'Scorer');
+  const summary = (
+    <>
+      <MetricsKpiCard.Label>{scorerName}</MetricsKpiCard.Label>
+      <MetricsKpiCard.Value>{String(score.score)}</MetricsKpiCard.Value>
+      <Txt as="span" variant="meta" tone="muted" className="tabular-nums">
+        <Txt as="span" variant="meta" font="mono">
+          {getShortId(score.id)}
+        </Txt>{' '}
+        · {formatDate(createdAt, 'date-time-seconds')}
+      </Txt>
+    </>
+  );
 
   return (
-    <MetricsKpiCard className="relative min-w-0 cursor-pointer">
-      <button
-        type="button"
-        onClick={onSelect}
-        aria-label={`Score ${getShortId(score.id)}`}
-        className="grid cursor-pointer gap-1 text-left after:absolute after:inset-0 after:content-['']"
-      >
-        <MetricsKpiCard.Label>{scorerName}</MetricsKpiCard.Label>
-        <MetricsKpiCard.Value>{String(score.score)}</MetricsKpiCard.Value>
-        <Txt as="span" variant="meta" tone="muted" className="tabular-nums">
-          <Txt as="span" variant="meta" font="mono">
-            {getShortId(score.id)}
-          </Txt>{' '}
-          · {formatDate(createdAt, 'date-time-seconds')}
-        </Txt>
-      </button>
+    <MetricsKpiCard className={cn('relative min-w-0', onSelect && 'cursor-pointer')}>
+      {onSelect ? (
+        <button
+          type="button"
+          onClick={onSelect}
+          aria-label={`Score ${getShortId(score.id)}`}
+          className="grid cursor-pointer gap-1 text-left after:absolute after:inset-0 after:content-['']"
+        >
+          {summary}
+        </button>
+      ) : (
+        <div className="grid gap-1">{summary}</div>
+      )}
       {score.reason && <TraceScoreReason reason={score.reason} />}
     </MetricsKpiCard>
   );

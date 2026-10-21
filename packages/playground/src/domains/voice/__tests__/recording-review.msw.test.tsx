@@ -1,3 +1,4 @@
+import { TraceSpanPanel } from '@mastra/playground-ui/domains/traces/components/trace-span-panel';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
@@ -6,8 +7,8 @@ import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LiveKitRecordingReview } from '../components/livekit-recording-review';
 import { recordedTrace, recordingEnabledPackages, readyRecording, unavailableRecording } from './fixtures/recording';
-import { TraceSpanPanel } from '@/domains/traces/components/trace-span-panel';
-import { emptyScorers } from '@/pages/traces/__tests__/fixtures/traces';
+import { StudioTracePanelHost } from '@/domains/traces/components/studio-trace-panel-host';
+import { emptyScorers, emptyTraceSpanScores } from '@/pages/traces/__tests__/fixtures/traces';
 import { TestLinkProvider } from '@/test/link-provider';
 import { defaultSystemPackages, server } from '@/test/msw-server';
 import { renderWithProviders } from '@/test/render';
@@ -35,20 +36,24 @@ describe('LiveKitRecordingReview', () => {
         http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(recordingEnabledPackages)),
         http.get(`${BASE_URL}/api/scores/scorers`, () => HttpResponse.json(emptyScorers)),
         http.get(`${BASE_URL}/voice/livekit/recordings/:traceId`, () => HttpResponse.json(readyRecording)),
+        http.get(`${BASE_URL}/api/observability/traces/:traceId/:spanId/scores`, () =>
+          HttpResponse.json(emptyTraceSpanScores),
+        ),
       );
       renderWithProviders(
         <TestLinkProvider>
-          <TraceSpanPanel
-            traceId={recordedTrace.traceId}
-            spans={recordedTrace.spans}
-            isLoadingSpans={false}
-            selectedSpanId={null}
-            onSpanSelect={() => {}}
-            onClose={() => {}}
-            withQueryTrace={false}
-            withFeedback={false}
-            onOpenScore={() => {}}
-          />
+          <StudioTracePanelHost>
+            <TraceSpanPanel
+              traceId={recordedTrace.traceId}
+              spans={recordedTrace.spans}
+              isLoadingSpans={false}
+              selectedSpanId={null}
+              onSpanSelect={() => {}}
+              onClose={() => {}}
+              withQueryTrace={false}
+              withFeedback={false}
+            />
+          </StudioTracePanelHost>
         </TestLinkProvider>,
         { router: true },
       );

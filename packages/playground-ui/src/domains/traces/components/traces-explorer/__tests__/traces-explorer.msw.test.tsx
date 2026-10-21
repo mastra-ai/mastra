@@ -8,6 +8,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { TRACES_LIST_REFETCH_INTERVAL_MS } from '../../../hooks/use-traces-list-source';
 import { TRACE_FILTER_BAR_OPERATORS } from '../../../trace-filters';
 import { serializeTraceColumnPreferences } from '../../../trace-list-columns';
+import { TracePanelHostProvider } from '../../trace-panel-host';
+import type { TracePanelHost } from '../../trace-panel-host';
 import { TracesExplorer, useTracesFilterBar, useTracesFilterBarFields } from '../index';
 import type { TracesExplorerLayoutProps, TracesExplorerPanelProps } from '../index';
 import { DEFAULT_TRACES_FILTERS, EMPTY_TRACES_SELECTION } from '../traces-explorer-actions';
@@ -29,8 +31,11 @@ import {
   emptyTraceQueryFields,
   emptyTracesPage,
   noRootDurationCapabilities,
+  threeTracesPage,
   traceQueryCapabilities,
   twoTracesPage,
+  WEATHER_SCORE_ID,
+  weatherRootScores,
   weatherRootSpan,
   weatherTraceSpans,
   weatherTraceUsage,
@@ -178,16 +183,18 @@ function Harness({
         }
       >
         <TracesExplorer.List />
-        <TracesExplorer.Panel onOpenScore={() => {}} traceHref={traceHref} {...panelProps} />
+        <TracesExplorer.Panel traceHref={traceHref} {...panelProps} />
       </TracesExplorer.Layout>
     </TracesExplorer>
   );
 }
 
-const renderExplorer = (props: HarnessProps = {}) =>
+const renderExplorer = (props: HarnessProps = {}, host: TracePanelHost = {}) =>
   renderWithProviders(
     <TestLinkProvider>
-      <Harness {...props} />
+      <TracePanelHostProvider value={host}>
+        <Harness {...props} />
+      </TracePanelHostProvider>
     </TestLinkProvider>,
   );
 
@@ -881,6 +888,113 @@ describe('TracesExplorer', () => {
         await settle(queryClient);
 
         expect(onToolbarRender).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
+  describe('when the first listed trace is open', () => {
+    const openFirstTrace = async () => {
+      setExplorerHandlers();
+      const onChange = vi.fn<(next: TracesExplorerState) => void>();
+      const { queryClient } = renderExplorer({
+        onChange,
+        initialSelection: { ...EMPTY_TRACES_SELECTION, traceId: 'trace-weather' },
+      });
+      const dialog = await screen.findByRole('dialog', { name: 'Trace details' });
+      await settle(queryClient);
+      return { onChange, dialog };
+    };
+
+    it('disables the previous trace button', async () => {
+      const { dialog } = await openFirstTrace();
+
+      await waitFor(() =>
+        expect(within(dialog).getByRole('button', { name: 'Go to previous trace' }).hasAttribute('disabled')).toBe(
+          true,
+        ),
+      );
+    });
+
+    it('selects the next listed trace from the next trace button', async () => {
+      const { onChange, dialog } = await openFirstTrace();
+      const next = within(dialog).getByRole('button', { name: 'Go to next trace' });
+      await waitFor(() => expect(next.hasAttribute('disabled')).toBe(false));
+
+      fireEvent.click(next);
+
+      await waitFor(() => expect(onChange.mock.calls.at(-1)?.[0].selection.traceId).toBe('trace-booking'));
+    });
+  });
+
+  describe('when a score is selected from the Scores tab', () => {
+    const openScore = async () => {
+      setExplorerHandlers();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/:spanId/scores`, () =>
+          HttpResponse.json(weatherRootScores),
+        ),
+      );
+      const onChange = vi.fn<(next: TracesExplorerState) => void>();
+      const { queryClient } = renderExplorer({
+        onChange,
+        initialSelection: { ...EMPTY_TRACES_SELECTION, traceId: 'trace-weather' },
+      });
+      const dialog = await screen.findByRole('dialog', { name: 'Trace details' });
+      await settle(queryClient);
+      fireEvent.click(await within(dialog).findByRole('tab', { name: 'Scores (1)' }));
+      fireEvent.click(await within(dialog).findByRole('button', { name: `Score ${WEATHER_SCORE_ID.slice(0, 8)}` }));
+      return { onChange };
+    };
+
+    it('opens the score drawer', async () => {
+      await openScore();
+
+      expect(await screen.findByRole('dialog', { name: `Score ${WEATHER_SCORE_ID}` })).toBeTruthy();
+    });
+
+    it('clears the score from the selection when the score drawer closes', async () => {
+      const { onChange } = await openScore();
+      const scoreDialog = await screen.findByRole('dialog', { name: `Score ${WEATHER_SCORE_ID}` });
+
+      fireEvent.click(within(scoreDialog).getByRole('button', { name: 'Close score' }));
+
+      await waitFor(() => expect(onChange.mock.calls.at(-1)?.[0].selection.scoreId).toBeUndefined());
+      expect(onChange.mock.calls.at(-1)?.[0].selection.traceId).toBe('trace-weather');
+    });
+  });
+
+  describe('when an auto-refresh tick brings in another trace while a trace is open', () => {
+    it('does not re-render the trace drawer', async () => {
+      setExplorerHandlers();
+      // The host's header actions render with the drawer, so each call is one drawer render.
+      const renderHeaderActions = vi.fn<NonNullable<TracePanelHost['renderHeaderActions']>>(() => null);
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
+      try {
+        const { queryClient } = renderExplorer(
+          { initialSelection: { ...EMPTY_TRACES_SELECTION, traceId: 'trace-weather' } },
+          { renderHeaderActions },
+        );
+        await screen.findByRole('dialog', { name: 'Trace details' });
+        await settle(queryClient);
+        server.use(
+          http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
+            onTraceQuery(await request.json());
+            return HttpResponse.json(threeTracesPage);
+          }),
+        );
+        renderHeaderActions.mockClear();
+
+        act(() => {
+          vi.advanceTimersByTime(TRACES_LIST_REFETCH_INTERVAL_MS);
+        });
+        vi.useRealTimers();
+        // The open drawer is modal, so the list rows are hidden from the accessibility tree.
+        await screen.findByText('Search the docs');
+        await settle(queryClient);
+
+        expect(renderHeaderActions).not.toHaveBeenCalled();
       } finally {
         vi.useRealTimers();
       }

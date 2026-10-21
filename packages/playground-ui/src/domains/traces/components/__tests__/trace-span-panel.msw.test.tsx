@@ -6,10 +6,22 @@ import { useState } from 'react';
 import type { ComponentProps } from 'react';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
+import { TracePanelHostProvider } from '../trace-panel-host';
+import type { TracePanelHost } from '../trace-panel-host';
 import { TraceSpanPanel } from '../trace-span-panel';
 import type { TraceSpanPanelProps } from '../trace-span-panel';
 import { queryPageFromList } from './fixtures/thread-traces';
-import { TRACE_ID, panelTraceSpans, spanDetailById } from './fixtures/trace-span-panel';
+import {
+  ANCHOR_SCORE_ID,
+  TRACE_ID,
+  anchorSpanScores,
+  childSpanFeedback,
+  emptyFeedback,
+  emptyScores,
+  panelTraceSpans,
+  spanDetailById,
+  traceFeedback,
+} from './fixtures/trace-span-panel';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -32,14 +44,26 @@ afterAll(() => {
 });
 
 const onSpanDetailRequest = vi.fn<(spanId: string) => void>();
+const onFeedbackRequest = vi.fn<(url: URL) => void>();
 
 const threadTraceList = (count: number) => ({
   spans: Array.from({ length: count }, (_, i) => ({ ...panelTraceSpans.spans[0], traceId: `thread-trace-${i}` })),
   pagination: { page: 0, perPage: 25, total: count, hasMore: false },
 });
 
-const installHandlers = ({ threadTraceCount = 2 }: { threadTraceCount?: number } = {}) => {
+const installHandlers = ({
+  threadTraceCount = 2,
+  feedback = emptyFeedback,
+  spanFeedback = emptyFeedback,
+  scores = emptyScores,
+}: {
+  threadTraceCount?: number;
+  feedback?: typeof emptyFeedback;
+  spanFeedback?: typeof emptyFeedback;
+  scores?: typeof emptyScores;
+} = {}) => {
   onSpanDetailRequest.mockClear();
+  onFeedbackRequest.mockClear();
   server.use(
     http.post(`${TEST_BASE_URL}/api/observability/traces/query`, () =>
       HttpResponse.json(queryPageFromList(threadTraceList(threadTraceCount))),
@@ -54,10 +78,13 @@ const installHandlers = ({ threadTraceCount = 2 }: { threadTraceCount?: number }
       const detail = spanDetailById[spanId];
       return detail ? HttpResponse.json(detail) : HttpResponse.json({ error: 'not found' }, { status: 404 });
     }),
+    http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/:spanId/scores`, () => HttpResponse.json(scores)),
     http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () => HttpResponse.json(panelTraceSpans)),
-    http.get(`${TEST_BASE_URL}/api/observability/feedback`, () =>
-      HttpResponse.json({ feedback: [], pagination: { page: 0, perPage: 10, total: 0, hasMore: false } }),
-    ),
+    http.get(`${TEST_BASE_URL}/api/observability/feedback`, ({ request }) => {
+      const url = new URL(request.url);
+      onFeedbackRequest(url);
+      return HttpResponse.json(url.searchParams.toString().includes('spanId') ? spanFeedback : feedback);
+    }),
     http.get(`${TEST_BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json({ servers: [], totalCount: 0 })),
     http.get(`${TEST_BASE_URL}/api/scores/scorers`, () => HttpResponse.json({})),
   );
@@ -94,10 +121,13 @@ function Harness({
 const renderPanel = (
   props: Partial<TraceSpanPanelProps> & { initialSpanId?: string | null } = {},
   paths?: ComponentProps<typeof TestLinkProvider>['paths'],
+  host: TracePanelHost = {},
 ) =>
   renderWithProviders(
     <TestLinkProvider paths={paths}>
-      <Harness {...props} />
+      <TracePanelHostProvider value={host}>
+        <Harness {...props} />
+      </TracePanelHostProvider>
     </TestLinkProvider>,
   );
 
@@ -413,6 +443,107 @@ describe('TraceSpanPanel', () => {
     // Anchor spans render the trace-context fields (session/request/user…) even though they have a parent.
     expect(screen.getByText('Session Id')).not.toBeNull();
     expect(screen.getByText('session-42')).not.toBeNull();
+  });
+
+  describe('when the trace has feedback', () => {
+    it('then the Feedback tab shows its count', async () => {
+      installHandlers({ feedback: traceFeedback });
+      const { queryClient } = renderPanel();
+
+      expect(await screen.findByRole('tab', { name: 'Feedback (2)' })).not.toBeNull();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+  });
+
+  describe('when the selected span has feedback', () => {
+    it('then the span Feedback tab shows its count', async () => {
+      installHandlers({ spanFeedback: childSpanFeedback });
+      const { queryClient } = renderPanel({ initialSpanId: 'span-child-1' });
+
+      expect(await screen.findByRole('heading', { name: /span-child-1/ })).not.toBeNull();
+      expect(await screen.findByRole('tab', { name: 'Feedback (1)' })).not.toBeNull();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+  });
+
+  describe('when feedback is disabled', () => {
+    it('then no Feedback tab is shown and feedback is never requested', async () => {
+      installHandlers({ feedback: traceFeedback });
+      const { queryClient } = renderPanel({ withFeedback: false, initialSpanId: 'span-child-1' });
+
+      expect(await screen.findByRole('heading', { name: /span-child-1/ })).not.toBeNull();
+      expect(await screen.findByRole('tab', { name: /^Scores/ })).not.toBeNull();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+      expect(screen.queryByRole('tab', { name: /^Feedback/ })).toBeNull();
+      expect(onFeedbackRequest).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when the anchor span has scores', () => {
+    it('then the Scores tab shows its count', async () => {
+      installHandlers({ scores: anchorSpanScores });
+      const { queryClient } = renderPanel();
+
+      expect(await screen.findByRole('tab', { name: 'Scores (1)' })).not.toBeNull();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+
+    it('then clicking a score reports its id', async () => {
+      installHandlers({ scores: anchorSpanScores });
+      const onScoreSelect = vi.fn<(scoreId: string) => void>();
+      const { queryClient } = renderPanel({ onScoreSelect });
+
+      fireEvent.click(await screen.findByRole('tab', { name: 'Scores (1)' }));
+      // Score cards are labelled with the score's short (8-char) id.
+      fireEvent.click(await screen.findByRole('button', { name: `Score ${ANCHOR_SCORE_ID.slice(0, 8)}` }));
+
+      expect(onScoreSelect).toHaveBeenCalledWith(ANCHOR_SCORE_ID);
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+  });
+
+  describe('when a host provides openScore', () => {
+    it('then clicking a score opens it through the host', async () => {
+      installHandlers({ scores: anchorSpanScores });
+      const openScore = vi.fn<(traceId: string, scoreId: string) => void>();
+      const { queryClient } = renderPanel({}, undefined, { openScore });
+
+      fireEvent.click(await screen.findByRole('tab', { name: 'Scores (1)' }));
+      fireEvent.click(await screen.findByRole('button', { name: `Score ${ANCHOR_SCORE_ID.slice(0, 8)}` }));
+
+      expect(openScore).toHaveBeenCalledWith(TRACE_ID, ANCHOR_SCORE_ID);
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+  });
+
+  describe('when no host is mounted', () => {
+    it('then score cards are read-only', async () => {
+      installHandlers({ scores: anchorSpanScores });
+      const { queryClient } = renderPanel();
+
+      fireEvent.click(await screen.findByRole('tab', { name: 'Scores (1)' }));
+      await screen.findByText('Relevance');
+
+      expect(screen.queryByRole('button', { name: `Score ${ANCHOR_SCORE_ID.slice(0, 8)}` })).toBeNull();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
+  });
+
+  describe('when a host provides header actions', () => {
+    it('then the action renders with the trace spans', async () => {
+      installHandlers();
+      const renderHeaderActions = vi.fn<NonNullable<TracePanelHost['renderHeaderActions']>>(({ spans }) => (
+        <button type="button">Host action for {spans?.length} spans</button>
+      ));
+      const { queryClient } = renderPanel({}, undefined, { renderHeaderActions });
+
+      expect(
+        await screen.findByRole('button', { name: `Host action for ${panelTraceSpans.spans.length} spans` }),
+      ).not.toBeNull();
+      expect(renderHeaderActions).toHaveBeenCalledWith({ traceId: TRACE_ID, spans: panelTraceSpans.spans });
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    });
   });
 
   describe('resizable columns', () => {

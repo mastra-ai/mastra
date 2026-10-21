@@ -41,7 +41,7 @@ export interface SpanDataPanelViewProps {
    * whatever feedback UI the consumer wants.
    */
   feedbackTabSlot?: (args: { span: SpanRecord; traceId: string; spanId: string }) => ReactNode;
-  /** Optional indicator rendered after the "Feedback" tab label (e.g. a needs-review dot). */
+  /** Rendered as-is after the "Feedback" tab label, e.g. `<TabCount count={n} />` for `Feedback (n)`. */
   feedbackTabBadge?: ReactNode;
   /**
    * Whether this span is the displayed root of the current view (trace root or
@@ -271,7 +271,7 @@ function SpanDataPanelContent({
       <DataPanel.Header>
         <TabList variant="pill-ghost" size="sm">
           <Tab value="details">Details</Tab>
-          <Tab value="feedback">Feedback{feedbackTabBadge != null && <> ({feedbackTabBadge})</>}</Tab>
+          <Tab value="feedback">Feedback{feedbackTabBadge}</Tab>
         </TabList>
       </DataPanel.Header>
 

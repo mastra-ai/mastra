@@ -4,6 +4,10 @@ import { TraceStatus } from '@mastra/core/storage';
 
 type GetTraceResponse = Awaited<ReturnType<MastraClient['getTrace']>>;
 type GetSpanResponse = Awaited<ReturnType<MastraClient['getSpan']>>;
+type ListFeedbackResponse = Awaited<ReturnType<MastraClient['listFeedback']>>;
+type ListScoresBySpanResponse = Awaited<ReturnType<MastraClient['listScoresBySpan']>>;
+type Feedback = ListFeedbackResponse['feedback'][number];
+type Score = ListScoresBySpanResponse['scores'][number];
 
 export const TRACE_ID = 'trace-panel';
 
@@ -49,6 +53,56 @@ export const childSpanTwo = {
 export const panelTraceSpans: GetTraceResponse = {
   traceId: TRACE_ID,
   spans: [rootSpan, childSpanOne, childSpanTwo],
+};
+
+const feedbackRecord = (feedbackId: string, spanId?: string): Feedback => ({
+  feedbackId,
+  timestamp: new Date('2026-08-30T12:00:02.000Z'),
+  traceId: TRACE_ID,
+  spanId,
+  feedbackType: 'thumbs',
+  value: 1,
+});
+
+const feedbackPage = (feedback: Feedback[]): ListFeedbackResponse => ({
+  feedback,
+  pagination: { page: 0, perPage: 10, total: feedback.length, hasMore: false },
+});
+
+export const emptyFeedback = feedbackPage([]);
+
+/** Two trace-level records: the trace Feedback tab counts them. */
+export const traceFeedback = feedbackPage([feedbackRecord('feedback-1'), feedbackRecord('feedback-2')]);
+
+/** One record scoped to the first tool call span. */
+export const childSpanFeedback = feedbackPage([feedbackRecord('feedback-span', 'span-child-1')]);
+
+export const ANCHOR_SCORE_ID = 'score-anchor-1';
+
+const anchorScore: Score = {
+  id: ANCHOR_SCORE_ID,
+  scorerId: 'relevance',
+  entityId: 'weather-agent',
+  runId: 'run-1',
+  score: 0.9,
+  scorer: { id: 'relevance', name: 'Relevance' },
+  source: 'LIVE',
+  entity: {},
+  traceId: TRACE_ID,
+  spanId: 'span-root',
+  createdAt: new Date('2026-08-30T12:00:03.000Z'),
+  updatedAt: new Date('2026-08-30T12:00:03.000Z'),
+};
+
+export const emptyScores: ListScoresBySpanResponse = {
+  scores: [],
+  pagination: { page: 0, perPage: 10, total: 0, hasMore: false },
+};
+
+/** One score on the root (anchor) span. */
+export const anchorSpanScores: ListScoresBySpanResponse = {
+  scores: [anchorScore],
+  pagination: { page: 0, perPage: 10, total: 1, hasMore: false },
 };
 
 export const spanDetailById: Record<string, GetSpanResponse> = {

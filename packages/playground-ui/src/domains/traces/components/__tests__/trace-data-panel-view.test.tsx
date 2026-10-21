@@ -10,6 +10,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 
 import { TraceDataPanelView } from '../trace-data-panel-view';
 import type { TraceDataPanelViewProps } from '../trace-data-panel-view';
+import { TabCount } from '../trace-panel-tab-counts';
 import { deepTraceFixture, nestedSpanFixture, rootSpanFixture } from './fixtures/trace-data-panel-view';
 import { installHighlightApi } from '@/test/highlight-api';
 import type { HighlightApiHarness } from '@/test/highlight-api';
@@ -971,7 +972,9 @@ describe('TraceDataPanelView — side column views', () => {
           scores for {traceId}/{rootSpanId}
         </div>
       ));
-      render(<TraceDataPanelView {...baseProps} scoresTabSlot={scoresTabSlot} scoresTabBadge={3} />);
+      render(
+        <TraceDataPanelView {...baseProps} scoresTabSlot={scoresTabSlot} scoresTabBadge={<TabCount count={3} />} />,
+      );
 
       expect(scoresTabSlot).toHaveBeenCalledWith({ traceId: 'trace-1', rootSpanId: 'root' });
       expect(within(sideColumn() as HTMLElement).getByText('scores for trace-1/root')).toBeTruthy();
@@ -1005,7 +1008,7 @@ describe('TraceDataPanelView — side column views', () => {
           messagesPanelSlot={<div data-testid="messages-panel">messages</div>}
           feedbackTabSlot={() => <div>trace feedback here</div>}
           scoresTabSlot={() => <div>trace scores here</div>}
-          scoresTabBadge={3}
+          scoresTabBadge={<TabCount count={3} />}
         />,
       );
 
