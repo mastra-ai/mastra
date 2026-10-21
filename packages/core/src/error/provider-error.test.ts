@@ -337,6 +337,32 @@ const classifications: Array<[name: string, error: unknown, kind: ProviderFailur
     }),
     'context_overflow',
   ],
+  [
+    'OpenAI model_not_found under invalid_request_error',
+    apiError(
+      404,
+      'The model `gpt-9` does not exist or you do not have access to it.',
+      '{"error":{"message":"The model `gpt-9` does not exist or you do not have access to it.","type":"invalid_request_error","param":null,"code":"model_not_found"}}',
+    ),
+    'model_rejected',
+  ],
+  [
+    'code-only context_length_exceeded under invalid_request_error',
+    {
+      type: 'error',
+      error: { type: 'invalid_request_error', code: 'context_length_exceeded', message: 'Request too large.' },
+    },
+    'context_overflow',
+  ],
+  [
+    'unsupported_parameter under invalid_request_error',
+    apiError(
+      400,
+      "'temperature' is not supported with this model.",
+      '{"error":{"message":"\'temperature\' is not supported with this model.","type":"invalid_request_error","param":"temperature","code":"unsupported_parameter"}}',
+    ),
+    'model_rejected',
+  ],
   ['400 without a reason', apiError(400, 'Bad Request'), 'invalid_request'],
   ['persisted "Bad Request" without a status', { name: 'AI_APICallError', message: 'Bad Request' }, 'invalid_request'],
   ['plain error', new Error('Network connection lost'), 'unknown'],
@@ -364,6 +390,20 @@ describe('classifyProviderError', () => {
 describe('toPersistedErrorIdentity', () => {
   it.each(classifications)('classifies %s like the live error, as %s', (_name, error, kind) => {
     expect(classifyProviderError(toPersistedErrorIdentity(error))).toBe(kind);
+  });
+
+  it('keeps the ordinary identity of an error whose reason points back at itself', () => {
+    const circular: Error & { statusCode: number; reason?: unknown } = Object.assign(
+      new Error('Provider rejected the request'),
+      { statusCode: 400 },
+    );
+    circular.reason = circular;
+    expect(toPersistedErrorIdentity(circular)).toEqual({
+      name: 'Error',
+      message: 'Provider rejected the request',
+      statusCode: 400,
+    });
+    expect(classifyProviderError(circular)).toBe('invalid_request');
   });
 
   it('keeps the provider sentence that sits behind a wrapping cause', () => {
@@ -407,6 +447,9 @@ describe('providerErrorFacts', () => {
     expect(
       providerErrorFacts({ code: 'bad_request', type: 'invalid_request_error', message: 'Invalid timeout' }),
     ).toEqual({ code: 'invalid_request_error' });
+    expect(
+      providerErrorFacts({ type: 'invalid_request_error', code: 'model_not_found', message: 'Request rejected.' }),
+    ).toEqual({ code: 'model_not_found' });
     expect(
       providerErrorFacts(
         Object.assign(new Error('Upstream call failed'), {

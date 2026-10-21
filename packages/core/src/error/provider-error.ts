@@ -40,7 +40,7 @@ const CONTEXT_OVERFLOW = [
   /maximum prompt length/i,
   /prompt is too long/i,
   /input is too long/i,
-  /exceed\w*\b[^.]{0,40}\bcontext (?:window|length|limit|size)/i,
+  /exceed(?:s|ed|ing)?\b[^.]{0,40}\bcontext (?:window|length|limit|size)/i,
   /input token count[^.]{0,40}exceeds the maximum/i,
   /reduce the length of the (?:messages|prompt|input)/i,
 ];
@@ -196,8 +196,9 @@ function innermostReason(error: unknown, depth: number): string | undefined {
     return !trimmed || HTTP_REASON_PHRASE.test(trimmed) ? undefined : trimmed;
   }
   if (typeof error !== 'object') return undefined;
-  const own = innermostReason(readField(error, 'reason'), depth);
-  if (own) return own;
+  const own = readField(error, 'reason');
+  const ownReason = typeof own === 'string' ? innermostReason(own, depth) : undefined;
+  if (ownReason) return ownReason;
   for (const key of ['error', 'response', 'data']) {
     const nested = innermostReason(readField(error, key), depth + 1);
     if (nested) return nested;
@@ -230,9 +231,10 @@ const CODE_PRECEDENCE = [
   RATE_LIMITED,
   TIMED_OUT,
   UNAVAILABLE,
-  INVALID_REQUEST_CODE,
-  MODEL_REJECTED,
   ...CONTEXT_OVERFLOW,
+  MODEL_REJECTED,
+  TOOL_HISTORY_REJECTED,
+  INVALID_REQUEST_CODE,
 ];
 
 function decisiveCode(codes: string[]): string | undefined {
