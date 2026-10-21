@@ -356,6 +356,17 @@ describe('ChatChannelOutputProcessor', () => {
       expect(JSON.stringify(posts)).not.toContain('Running the tests now.');
     });
 
+    it('still shows the typing status while hidden text streams', async () => {
+      const { channels, calls, chatThread } = makeChannels({ streaming: false, textDisplay: 'hidden' });
+      await drive(
+        channels,
+        [...reply, { type: 'step-finish', payload: {} }, { type: 'finish', payload: {} }],
+        chatThread,
+      );
+      const typingStatuses = calls.filter(c => c.kind === 'startTyping').map(c => (c as any).status);
+      expect(typingStatuses).toContain('is typing…');
+    });
+
     it('passes text through to the agent stream unchanged', async () => {
       const { channels, chatThread } = makeChannels({ streaming: false, textDisplay: 'hidden' });
       const render = (channels as any)._buildRenderContext(chatThread, 'test', {});

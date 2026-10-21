@@ -114,7 +114,7 @@ await slack.configure({
     isOptional: true,
     defaultValue: "'show'",
     description:
-      "Whether the agent's reply text is posted to Slack. `'hidden'` never posts it, so the agent speaks only through tools you give it. Tool display, approval prompts, errors, and typing status are unaffected.",
+      "Whether the agent's reply text is posted to Slack. `'hidden'` never posts it, so the agent's own messages reach Slack only through tools you give it. Tool display, approval prompts, errors, and typing status are unaffected.",
   },
   {
     name: 'toolDisplay',

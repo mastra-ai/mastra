@@ -195,7 +195,7 @@ Use this escape hatch if your agent is prompted to emit a platform-specific dial
 
 ### Reply only through a tool
 
-Set `textDisplay: 'hidden'` to stop posting the agent's reply text. The agent then speaks in the channel only through tools you give it, for example a tool that posts to the thread. This keeps intermediate narration such as "Running the tests now" out of the thread, and lets the agent decide when to post:
+Set `textDisplay: 'hidden'` to stop posting the agent's reply text. The agent's own messages then reach the thread only through tools you give it, for example a tool that posts to the thread. This keeps intermediate narration such as "Running the tests now" out of the thread, and lets the agent decide when to post:
 
 ```typescript title="src/mastra/agents/your-agent.ts" oxfmt:false
 channels: {

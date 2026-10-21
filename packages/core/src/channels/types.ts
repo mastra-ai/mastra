@@ -76,8 +76,8 @@ export interface ChannelAdapterBaseConfig {
   /**
    * Whether the agent's reply text is posted to the channel.
    * - `'show'` (default) - reply text streams (or posts) to the thread as it does today.
-   * - `'hidden'` - reply text is never posted. The agent speaks in the channel only
-   *   through tools you give it (for example a reply tool that posts to the thread).
+   * - `'hidden'` - reply text is never posted. The agent's own messages reach the
+   *   channel only through tools you give it (for example a reply tool that posts to the thread).
    *
    * Tool display, approval prompts, error messages, and typing status are unaffected.
    */

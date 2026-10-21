@@ -185,12 +185,10 @@ export class ChatChannelOutputProcessor {
     // Skip the approval card when no human decision is pending (e.g. the
     // controller auto-resolves the tool's policy). The chunk still flows on so
     // the run itself can resolve the approval.
-    const isHiddenText = render.textDisplay === 'hidden' && TEXT_CHUNK_TYPES.has(part.type);
     const renderPart =
-      !isHiddenText &&
-      (part.type !== 'tool-call-approval' ||
-        !this.#agentChannels ||
-        (await this.#agentChannels.shouldRenderToolApproval(requestContext, (part as any).payload?.toolName)));
+      part.type !== 'tool-call-approval' ||
+      !this.#agentChannels ||
+      (await this.#agentChannels.shouldRenderToolApproval(requestContext, (part as any).payload?.toolName));
     if (renderPart) {
       session.queue.push(part as AgentChunkType<any>);
     }
@@ -251,7 +249,10 @@ export class ChatChannelOutputProcessor {
 
   #openSession(render: ChatChannelRenderContext): RenderSession {
     const queue = createChunkQueue();
-    const wrapped = render.wrapStream(queue.iterable);
+    // Hidden text is dropped after the typing-status wrapper, so a run that is
+    // only writing text still shows as typing.
+    const typed = render.wrapStream(queue.iterable);
+    const wrapped = render.textDisplay === 'hidden' ? withoutText(typed) : typed;
 
     // Seed the approval-card stash on resumed runs so the driver can resolve
     // `messageId` for the incoming `tool-result` even though it never saw the
@@ -311,5 +312,11 @@ export class ChatChannelOutputProcessor {
     driverPromise.catch(() => {});
 
     return { queue, driverPromise };
+  }
+}
+
+async function* withoutText(stream: AsyncIterable<AgentChunkType<any>>): AsyncIterable<AgentChunkType<any>> {
+  for await (const chunk of stream) {
+    if (!TEXT_CHUNK_TYPES.has(chunk.type)) yield chunk;
   }
 }
