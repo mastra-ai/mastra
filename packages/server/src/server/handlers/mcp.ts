@@ -1,7 +1,7 @@
 import { MastraError } from '@mastra/core/error';
 import type { Mastra } from '@mastra/core/mastra';
-import { MCP_SERVER_EVENT_ERROR_IDS } from '@mastra/core/mcp';
 import type {
+  MCP_SERVER_EVENT_ERROR_IDS,
   MCPServerBase as MastraMCPServerImplementation,
   MCPServerEventStreamFrame,
   MCPServerEventsInspector,
@@ -416,20 +416,25 @@ function getEventsInspector(server: MastraMCPServerImplementation): MCPServerEve
   return inspector;
 }
 
-const EVENT_ERROR_RESPONSES: Record<string, { status: 400 | 403 | 404 | 429; message: string }> = {
-  [MCP_SERVER_EVENT_ERROR_IDS.unknownEvent]: { status: 404, message: 'Event not found' },
-  [MCP_SERVER_EVENT_ERROR_IDS.unsupportedDelivery]: {
+type EventErrorId = (typeof MCP_SERVER_EVENT_ERROR_IDS)[keyof typeof MCP_SERVER_EVENT_ERROR_IDS];
+
+// Keyed by the literal ids rather than the core constant, so @mastra/server still
+// runs against a @mastra/core release that doesn't export MCP_SERVER_EVENT_ERROR_IDS.
+// The record type keeps the ids in sync with core at compile time.
+const EVENT_ERROR_RESPONSES: Record<EventErrorId, { status: 400 | 403 | 404 | 429; message: string }> = {
+  MCP_SERVER_UNKNOWN_EVENT: { status: 404, message: 'Event not found' },
+  MCP_SERVER_EVENT_UNSUPPORTED_DELIVERY: {
     status: 400,
     message: 'This event does not support streaming; poll it instead',
   },
-  [MCP_SERVER_EVENT_ERROR_IDS.invalidArguments]: { status: 400, message: 'Invalid event arguments' },
-  [MCP_SERVER_EVENT_ERROR_IDS.notEmittable]: {
+  MCP_SERVER_EVENT_INVALID_ARGUMENTS: { status: 400, message: 'Invalid event arguments' },
+  MCP_SERVER_EVENT_NOT_EMITTABLE: {
     status: 400,
     message: 'This event is fed by a poll source and cannot be emitted',
   },
-  [MCP_SERVER_EVENT_ERROR_IDS.invalidPayload]: { status: 400, message: 'Invalid event data' },
-  [MCP_SERVER_EVENT_ERROR_IDS.forbidden]: { status: 403, message: 'Not allowed to use this event' },
-  [MCP_SERVER_EVENT_ERROR_IDS.tooManyStreams]: { status: 429, message: 'Too many open event streams' },
+  MCP_SERVER_EVENT_INVALID_PAYLOAD: { status: 400, message: 'Invalid event data' },
+  MCP_SERVER_EVENT_FORBIDDEN: { status: 403, message: 'Not allowed to use this event' },
+  MCP_SERVER_EVENT_TOO_MANY_STREAMS: { status: 429, message: 'Too many open event streams' },
 };
 
 /**
@@ -438,7 +443,7 @@ const EVENT_ERROR_RESPONSES: Record<string, { status: 400 | 403 | 404 | 429; mes
  */
 function toEventsHttpError(error: unknown, mastra: Mastra | undefined, context: string): HTTPException {
   if (error instanceof HTTPException) return error;
-  const known = error instanceof MastraError ? EVENT_ERROR_RESPONSES[error.id] : undefined;
+  const known = error instanceof MastraError ? EVENT_ERROR_RESPONSES[error.id as EventErrorId] : undefined;
   if (known) return new HTTPException(known.status, { message: known.message });
   mastra?.getLogger()?.error(`MCP event request failed: ${context}`, { error });
   return new HTTPException(500, { message: 'Event request failed' });
