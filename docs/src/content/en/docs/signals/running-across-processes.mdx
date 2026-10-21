@@ -1,89 +1,114 @@
 ---
 title: 'Running across processes | Signals'
-description: 'Coordinate Mastra agent threads across instances with shared PubSub, thread leases, and remote signal routing.'
+description: 'Run Mastra agent threads across multiple processes with a shared PubSub backend and thread leases.'
 packages:
   - '@mastra/core'
   - '@mastra/redis-streams'
+  - '@mastra/valkey-streams'
+  - '@mastra/google-cloud-pubsub'
 ---
 
 # Running across processes
 
-## The failure mode
+A single Mastra process can keep every thread in memory. Once more than one instance can receive a signal, the instance that receives the request isn't always the instance running the agent. The signal has to reach the process that owns the thread, and only one process should run that thread at a time.
 
-Signals coordinate runs through a pub/sub backend. When a signal arrives on a backend that implements `LeaseProvider`, Mastra acquires a lease on the target thread so a single process owns the conversation at a time, then either wakes the agent or routes the input into the running loop. Backends without leasing fall back to a no-op that always grants ownership, which is fine in a single process but not across instances.
+Mastra uses the [PubSub](/docs/server/pubsub) backend to move signals between processes and a [lease](/reference/pubsub/lease-provider) to elect one owner per thread. This page covers how that coordination works and what changes when you deploy more than one instance.
 
-The default in-memory pub/sub can't cross instance boundaries. On serverless platforms like Vercel, or any multi-instance deployment, a follow-up signal can be routed to a different instance than the one running the agent.
+## Why you need a shared backend
 
-Without a shared pub/sub, that instance can't reach the active run and starts its own, leaving the original run untouched and the thread processed twice.
+The default [`EventEmitterPubSub`](/reference/pubsub/event-emitter) delivers events inside one process. That is enough for a single server, but it can't reach another instance.
 
-Reasoning interruption is process-local. The default loop can cancel and replace a model request, and durable or evented agents can do the same while their step runs in the process that accepted the input. It doesn't apply to the Inngest engine or to steps that run in a different process from the one that accepted the input. [Durable agents](/docs/harness/durable-agents) covers how those runs are recovered and resumed.
+Consider two API instances sharing the same database. A user starts a run on instance A. Their next message hits instance B. Without a shared backend, B can't publish to A's run, so B starts a second run on the same thread. Both processes call the model, both write messages, and the thread ends up with two competing runs.
+
+A shared backend fixes the delivery problem: B publishes the signal on the thread topic, and A consumes it. A lease fixes the ownership problem: only one process can claim the thread, so the other process routes to the owner instead of starting a competing run.
+
+Every instance that can handle the same thread needs the same PubSub backend and the same storage. Instances with different backends can't coordinate, even when they point at the same database.
 
 ## Choose a topology
 
-:::note[Outline]
+Choose a backend based on where the processes run, not on how many agents you have. A lease is a time-limited ownership claim: it makes one process responsible for a thread so another process doesn't start a competing run.
 
-Compare the supported topologies:
+| Deployment | Backend | What it provides |
+| - | - | - |
+| One process | [`EventEmitterPubSub`](/reference/pubsub/event-emitter) (default) | In-process delivery and leases |
+| Several processes on one host | [`UnixSocketPubSub`](/reference/pubsub/unix-socket-pubsub) | Delivery and leases over a Unix domain socket |
+| Several hosts | [`RedisStreamsPubSub`](/reference/pubsub/redis-streams) or [`ValkeyStreamsPubSub`](/reference/pubsub/valkey-streams) | Cross-host delivery, retained events, and leases |
+| Several hosts with Google Cloud Pub/Sub | [`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub) | Cross-host delivery without leases |
 
-- Single process: in-memory PubSub.
-- Multiple processes on one host: `UnixSocketPubSub`.
-- Distributed hosts: Redis or Valkey Streams.
-- Google Cloud Pub/Sub: cross-process delivery without lease guarantees.
+[`UnixSocketPubSub`](/reference/pubsub/unix-socket-pubsub) elects one process as the socket broker. If that process exits, the remaining processes elect a new broker. It doesn't work across machines.
 
-Link to the [PubSub guide](/docs/server/pubsub) instead of repeating backend configuration.
+[`GoogleCloudPubSub`](/reference/pubsub/google-cloud-pubsub) delivers events across processes but doesn't implement leases. Mastra can't tell which instance owns a thread, so every instance that receives a signal can try to run it. Use it only when another layer already guarantees that one process handles a given thread at a time.
 
-:::
+For configuration examples and the complete backend comparison, see the [PubSub guide](/docs/server/pubsub).
 
 ## Thread ownership and leases
 
-:::note[Outline]
+Mastra acquires a lease on a thread before a process starts a run. The lease key is scoped to the thread, and the process that holds it is the only process allowed to run that thread. Other processes route signals to it.
 
-Cover one owner per thread, the 15-second TTL renewed every 5 seconds, lease loss aborting the run, and fencing generations on durable recovery. Link to the [`LeaseProvider` reference](/reference/pubsub/lease-provider).
+The default lease lasts 15 seconds (`MASTRA_AGENT_THREAD_LEASE_TTL_MS`). The owner renews it every third of that TTL, so every 5 seconds by default (`MASTRA_AGENT_THREAD_LEASE_RENEW_INTERVAL_MS`). The gap allows a missed renewal or two before another process can take over.
 
-:::
+If renewal fails and the local deadline passes, the owner stops the run. It can no longer prove that another process hasn't already claimed the thread, and letting the run continue would mean two owners writing to the same conversation. A new owner can then start the next run from the stored thread.
+
+[Durable agents](/docs/harness/durable-agents#run-ownership) use the same lease when their workflows store doesn't support run fencing. Stores that support run fencing record the claim in storage instead, and reject writes from an execution that lost it. The [`LeaseProvider` reference](/reference/pubsub/lease-provider) documents the contract a backend must implement.
 
 ## Route signals to another process
 
-:::note[Outline]
+When a signal arrives, the runtime first looks for the thread's current owner. If an owner is advertised, the signal is published on the thread topic and the owner either joins its active run or starts one from its queue.
 
-Explain remote owner routing and `requireClaimedOwner` for idle wakes.
+If no owner is advertised, the receiving process tries to claim the thread. Winning the claim means this process runs the agent; losing it means another process claimed the thread first, so this process forwards the signal and `accepted` resolves to `deliver` rather than `wake`. [`sendSignal()`](/reference/agents/agent#sendsignalsignal-options) documents the accepted result.
 
-:::
+For an idle wake that must not start a run on an arbitrary instance, set `ifIdle.requireClaimedOwner: true`. The wake then only goes to an already advertised owner. If no owner responds within the discovery window, `accepted` rejects instead of falling back to a local run. This suits work that should stay on the process already handling a thread, such as a worker that owns a long-running conversation.
 
 ## Delivery guarantees and duplicates
 
-:::note[Outline]
+PubSub backends can redeliver an event after a timeout, a failed acknowledgement, or a crash. The runtime is built for at-least-once delivery: a redelivered signal doesn't start a second run for the same logical message while the owner still has its bookkeeping.
 
-PubSub can redeliver. Stream parts carry run, stream, and source identity, so consumers must tolerate duplicates.
-
-:::
+That protection doesn't make every event exactly-once. If you consume PubSub events directly, or build your own side effects around signals, make those handlers idempotent. Don't assume a backend delivers each event once.
 
 ## Signals and process crashes
 
-:::note[Outline]
+What survives a crash depends on where the data lives:
 
-Runtime queues are in-process. Explicitly persisted signals, state signals, and notifications survive with shared storage. Shared PubSub is not a durable input queue. Durable-agent run recovery restores the run, not the in-memory signal queue.
+- Signals waiting in a runtime queue are held in process memory. If the process crashes before the run consumes them, they're lost.
+- Signals sent with `persist` behavior are written to memory storage. They survive a restart when that storage is shared.
+- [State signals](/docs/signals/state-signals) and their tracking are stored on the thread. They survive a restart when storage is shared.
+- [Notifications](/docs/signals/notifications) are durable records in notification storage. Their dispatcher can retry delivery after a restart.
+- A shared PubSub backend is transport, not a durable input queue. Retained events can help a subscriber reconnect, but they don't replace storage.
+- Durable-agent recovery restores a run from its checkpoints. It doesn't restore the signal queue that the crashed process held in memory.
 
-:::
+If a signal must survive the process that accepted it, persist it or store the fact that it happened in your own system. Don't rely on PubSub retention as the system of record.
 
 ## Serverless
 
-:::note[Outline]
+Serverless functions can freeze as soon as they return a response. If the function accepted a wake and then returns without draining the run, the run can stop mid-flight.
 
-Await `accepted`; pass `wake.output` to `waitUntil`; do not fire-and-forget.
+Don't fire-and-forget the accepted result. Pass it to your platform's `waitUntil` so the task stays alive after the response:
 
-:::
+```typescript title="src/routes/signal.ts"
+const result = agent.sendSignal(signal, { resourceId, threadId })
+
+ctx.waitUntil(
+  result.accepted.then(async accepted => {
+    if (accepted.action === 'wake') {
+      await accepted.output.consumeStream()
+    }
+  }),
+)
+```
+
+When another process owns the thread, `accepted` resolves to `deliver` and there is no local output to drain. When this invocation wins the lease, it gets `wake` and must keep the function alive until the output settles.
+
+Use a shared PubSub backend and shared storage on serverless platforms too. Short-lived instances make in-memory queues and in-process delivery especially fragile.
 
 ## Graceful shutdown
 
-:::note[Outline]
+Stop accepting new webhook or signal requests first, then let in-flight work settle. The generated Mastra server handles `SIGINT` and `SIGTERM`, stops accepting connections, drains active requests, and calls [`mastra.shutdown()`](/docs/deployment/mastra-server#graceful-shutdown-and-rolling-deploys). If you embed Mastra in your own server, call `mastra.shutdown()` from your shutdown hook.
 
-Drain or stop polling and webhook handling, and stop dispatcher work cleanly.
-
-:::
+Signal providers have their own lifecycle. Call [`provider.stop()`](/reference/signals/signal-provider#stop) to stop polling and clear the provider's in-memory subscriptions. Stop routing webhooks to a [`WebhookSignalProvider`](/reference/signals/webhook-signal-provider) before shutdown so new requests don't arrive while the process is exiting.
 
 ## Configuration
 
-Configure a shared pub/sub backed by Redis Streams on the `Mastra` instance so leases and signals coordinate across instances:
+A shared Redis Streams backend handles both signal delivery and thread leases:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -98,17 +123,11 @@ export const mastra = new Mastra({
 })
 ```
 
-`RedisStreamsPubSub` implements both the event delivery contract and distributed leasing. A single backend handles cross-instance signal delivery and lease ownership. Vercel's managed Redis integration and Upstash Redis both work well. For more on when a distributed pub/sub is needed, see the [PubSub guide](/docs/server/pubsub) and the [`RedisStreamsPubSub` reference](/reference/pubsub/redis-streams).
+Use the same `keyPrefix` on every instance that should coordinate, and a different prefix for separate environments sharing one Redis server. Vercel's managed Redis integration and Upstash Redis both work with `RedisStreamsPubSub`.
 
-:::note[Outline]
+The lease settings are environment variables:
 
-Document `MASTRA_AGENT_THREAD_LEASE_TTL_MS` and `MASTRA_AGENT_THREAD_LEASE_RENEW_INTERVAL_MS`. Link to the PubSub guide and `LeaseProvider` reference instead of repeating backend tables.
+- `MASTRA_AGENT_THREAD_LEASE_TTL_MS` sets the lease lifetime. The default is `15000` milliseconds.
+- `MASTRA_AGENT_THREAD_LEASE_RENEW_INTERVAL_MS` sets the renewal interval. The default is one third of the TTL, and a value that isn't shorter than the TTL falls back to that default.
 
-:::
-
-## Related
-
-- [PubSub guide](/docs/server/pubsub)
-- [`RedisStreamsPubSub`](/reference/pubsub/redis-streams)
-- [`LeaseProvider`](/reference/pubsub/lease-provider)
-- [Sending signals](/docs/signals/sending-signals)
+Keep both values consistent across instances. A shorter TTL frees a crashed owner's thread sooner, but leaves less room for a slow renewal; a longer TTL does the opposite. Leave the defaults unless your deployment has a specific reason to change them. For backend options beyond Redis Streams, see the [PubSub guide](/docs/server/pubsub) and the [`RedisStreamsPubSub` reference](/reference/pubsub/redis-streams).

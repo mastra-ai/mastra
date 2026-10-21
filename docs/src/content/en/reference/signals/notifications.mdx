@@ -198,6 +198,24 @@ Use [`Agent.sendNotificationSignal()`](/reference/agents/agent#sendnotifications
 ]}
 />
 
+## Coalescing pending records
+
+`sendNotificationSignal()` can merge a new notification into an existing pending record instead of creating another one. Merging only considers records on the same thread, source, kind, agent, and resource.
+
+Two keys control merging:
+
+- `dedupeKey` identifies the same event. Reuse it when a retry or duplicate webhook should update the existing record.
+- `coalesceKey` groups related events. Use it when several events should become one record, such as multiple failures from the same pipeline.
+
+Both keys use the same matching rules. The difference is intent: a dedupe key represents one event that may arrive twice, while a coalesce key represents a set of related events.
+
+When a notification merges:
+
+- The latest `summary` and `payload` replace the previous values.
+- `priority` updates when the new notification provides one.
+- `attributes` and `metadata` merge, with the new values taking precedence.
+- `coalescedCount` increments.
+
 ## Priorities and statuses
 
 `NotificationPriority` controls default delivery timing.

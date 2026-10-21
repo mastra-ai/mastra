@@ -12,7 +12,7 @@ A thread stream is the ordered output and lifecycle of a [thread](/docs/memory/o
 
 ## Quickstart
 
-Subscribe before you send input. A run starts in response to a signal, so a subscription created afterward misses the beginning of the stream. This example uses the JavaScript client SDK against a running Mastra server. If your code owns the `Agent` instance, see the [Agent example](/docs/signals/overview#use-an-agent).
+Subscribe before you send input. A run starts in response to a signal, so a subscription created afterward misses the beginning of the stream. If an existing subscription's connection drops, reconnect can resume output that is still retained; see [Reconnect](#reconnect). This example uses the JavaScript client SDK against a running Mastra server. If your code owns the `Agent` instance, see the [Agent example](/docs/signals/overview#use-an-agent).
 
 ```typescript title="src/app/chat.ts"
 import { MastraClient } from '@mastra/client-js'
@@ -39,7 +39,7 @@ await subscription.processDataStream({
 })
 ```
 
-The example creates a client, subscribes to the thread, sends a message, and reads the chunks from that subscription. `sendMessage()` returns when Mastra accepts the input; the output arrives through `onChunk`.
+The example creates a client with [`client.getAgent()`](/reference/client-js/mastra-client#methods), subscribes to the thread, sends a message, and reads the chunks with [`processDataStream()`](/reference/client-js/agents#subscribetothread). [`sendMessage()`](/reference/agents/agent#sendmessagemessage-options) returns when Mastra accepts the input; the output arrives through `onChunk`.
 
 ## Read the stream
 
@@ -77,7 +77,7 @@ Explain `hideSignals`: it filters signals for one subscriber only, does not chan
 
 :::note[Outline]
 
-Compare `abort()` with `unsubscribe()`. Explain that pending signals survive an abort unless `clearPendingSignals` is true.
+Compare [`abort()`](/reference/client-js/agents#subscribetothread) with [`unsubscribe()`](/reference/client-js/agents#subscribetothread). Explain that pending signals survive an abort unless `clearPendingSignals` is true.
 
 :::
 
@@ -90,6 +90,8 @@ Use `reconnect: true` for long-lived subscriptions. Visit [`client.getAgent().su
 Cover resumable streams and retained PubSub history: what a reconnect resumes, when missed parts are still available, and how that differs from the stored messages in thread history. Link to the streaming reference.
 
 :::
+
+### SSE heartbeats for custom endpoints
 
 If you expose your own Server-Sent Events (SSE) endpoint for thread subscriptions, send periodic heartbeat frames while the stream is idle. This keeps browsers, proxies, and load balancers from closing the connection before the next signal or model chunk arrives.
 

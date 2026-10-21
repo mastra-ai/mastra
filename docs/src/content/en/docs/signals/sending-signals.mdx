@@ -8,11 +8,11 @@ packages:
 
 # Sending signals
 
-Signals are how input reaches a thread outside the original `agent.stream()` call. This page starts with `sendMessage()`, the method most applications need, then covers queued follow-ups, input from your system, and the durable notification and state paths. The examples call methods on an `Agent`; if your app talks to a running Mastra server, use the same methods through the [client SDK](/reference/client-js/agents) or the [server routes](/reference/server/routes#agent-message-routes). The [Agent reference](/reference/agents/agent#thread-signals) is canonical for signatures.
+Signals are how input reaches a thread outside the original [`agent.stream()`](/reference/streaming/agents/stream) call. This page starts with [`sendMessage()`](/reference/agents/agent#sendmessagemessage-options), the method most applications need, then covers queued follow-ups, input from your system, and the durable notification and state paths. The examples call methods on an `Agent`; if your app talks to a running Mastra server, use the same methods through the [client SDK](/reference/client-js/agents) or the [server routes](/reference/server/routes#agent-message-routes). The [Agent reference](/reference/agents/agent#thread-signals) is canonical for signatures.
 
 ## Send a message
 
-Use [`sendMessage()`](/reference/agents/agent#sendmessagemessage-options) for user-authored input. Pass the thread identifiers so Mastra knows where the input belongs:
+Use `sendMessage()` for user-authored input. Pass the thread identifiers so Mastra knows where the input belongs:
 
 ```typescript title="src/mastra/signals.ts"
 await agent.sendMessage('Compare that with the previous option.', {
@@ -97,7 +97,14 @@ const result = agent.sendSignal(
 await result.persisted
 ```
 
-Every send returns an `accepted` promise. It resolves once Mastra has decided what to do, not when a run finishes: `wake` means this process started a run, `deliver` means the input joined an existing run or another process acknowledged an idle wake and now owns it, `persist` and `discard` mean nothing ran, and `blocked` means a suspended thread couldn't accept a new idle wake. When the action is `wake`, the result also carries the run's `output` stream. A routing failure rejects `accepted`; a run that fails after starting reports the error on that output. Use [`persisted`](/reference/agents/agent#sendsignalsignal-options) to wait for a storage write.
+Every send returns an `accepted` promise. It resolves once Mastra has decided what to do, not when a run finishes:
+
+- `wake`: this process started a run.
+- `deliver`: the input joined an existing run, or another process acknowledged an idle wake and now owns it.
+- `persist` and `discard`: nothing ran.
+- `blocked`: a suspended thread couldn't accept a new idle wake.
+
+When the action is `wake`, the result also carries the run's `output` stream. A routing failure rejects `accepted`; a run that fails after starting reports the error on that output. Use [`persisted`](/reference/agents/agent#sendsignalsignal-options) to wait for a storage write.
 
 ## When the agent sees your input
 
@@ -110,16 +117,6 @@ The interrupt window closes as soon as the request produces text, a tool call, o
 Reasoning that already streamed may remain visible until the client reloads history. Per-step input processors finish before Mastra cancels the request they prepared. Output processors settle before the next request, and their side effects aren't undone. Usage totals exclude interrupted requests, though providers may still bill for them.
 
 Signals reach the model as XML elements: user messages as `<user>`, reactive context as `<system-reminder>` by default, and external events as `<notification>`. Accepted signals are written into thread history, so later requests see them alongside the messages they followed. [State signals](/docs/signals/state-signals) and [Notifications](/docs/signals/notifications) have their own context shapes.
-
-## Stop a run or clear queued input
-
-Aborting a run preserves queued input by default. Pass `clearPendingSignals: true` to drop the queue as well:
-
-```typescript
-subscription.abort({ clearPendingSignals: true })
-```
-
-Without a subscription, call [`agent.abortThreadStream()`](/reference/agents/agent#abortthreadstreamoptions) with the same option. Listeners stay subscribed, and a later message can start a new run. With shared PubSub, the clear request is forwarded to the process that owns the run, but it only clears that process's local queue. Neither abort nor cancellation revokes an acceptance that already resolved. Continuation runs started with `continueWithMessages()` are separate from the run that was aborted, so aborting the original run doesn't cancel them.
 
 ## Input that outlives the conversation
 
@@ -148,7 +145,19 @@ Mastra creates or coalesces a durable inbox record and applies the agent's deliv
 
 Use [`sendStateSignal()`](/reference/agents/agent#sendstatesignalstate-options) when the thread needs a named, durable lane of structured context, such as browser state or a background watcher result. State signals are not chat messages; they are snapshots or deltas that the model sees as context. The [State signals guide](/docs/signals/state-signals) covers when to send a snapshot versus a delta and how to compute state in a processor.
 
-If you are building on AgentController, its `Session` wraps these methods and manages the thread subscription for you. The mapping is:
+## Stop a run or clear queued input
+
+Aborting a run preserves queued input by default. Pass `clearPendingSignals: true` to drop the queue as well:
+
+```typescript
+subscription.abort({ clearPendingSignals: true })
+```
+
+Without a subscription, call [`agent.abortThreadStream()`](/reference/agents/agent#abortthreadstreamoptions) with the same option. Listeners stay subscribed, and a later message can start a new run. With shared PubSub, the clear request is forwarded to the process that owns the run, but it only clears that process's local queue. Neither abort nor cancellation revokes an acceptance that already resolved. Continuation runs are separate from the run that was aborted, so aborting the original run doesn't cancel them.
+
+## AgentController and Session
+
+Most applications use the `Agent` methods directly. If you build on AgentController, its `Session` wraps the same methods and manages the thread subscription for you:
 
 | Task | `Agent` | AgentController `Session` |
 | - | - | - |
