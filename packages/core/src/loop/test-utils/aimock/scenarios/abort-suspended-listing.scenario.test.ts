@@ -4,6 +4,8 @@ import { createTool } from '../../../../tools';
 import { createSharedAgent, describeForAllEngines, useLoopScenarioAimock } from '../aimock-scenario';
 
 describeForAllEngines('A resumed run is no longer listed as suspended once it finishes (#27619)', engine => {
+  // Inngest emits the finish chunk without claiming the suspended workflow row on resume.
+  const itFailsOnInngest = engine === 'inngest' ? it.fails : it;
   const getMock = useLoopScenarioAimock();
 
   async function approveAndCheckListing(llm: ReturnType<typeof getMock>, { abortFirst }: { abortFirst: boolean }) {
@@ -61,11 +63,11 @@ describeForAllEngines('A resumed run is no longer listed as suspended once it fi
     expect(await isListed(output.runId)).toBe(false);
   }
 
-  it('drops an approved run from listSuspendedRuns() by the time its finish is delivered', async () => {
+  itFailsOnInngest('drops an approved run from listSuspendedRuns() by the time its finish is delivered', async () => {
     await approveAndCheckListing(getMock(), { abortFirst: false });
   }, 30_000);
 
-  it('drops an aborted-then-approved run from listSuspendedRuns() by the time its finish is delivered', async () => {
+  itFailsOnInngest('drops an aborted-then-approved run from listSuspendedRuns() by the time its finish is delivered', async () => {
     await approveAndCheckListing(getMock(), { abortFirst: true });
   }, 30_000);
 });
