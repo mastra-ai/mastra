@@ -1,5 +1,23 @@
 # mastra
 
+## 1.35.0-alpha.12
+
+### Minor Changes
+
+- You can now share a Factory session with your organization from its sidebar menu ("Share with organization") and make it private again ("Make private"). Shared sessions show a people icon next to their name. Only the session's owner sees these options. ([#27072](https://github.com/mastra-ai/mastra/pull/27072))
+
+### Patch Changes
+
+- Fixed Factory's monospace text to use Commit Mono, the same font as Studio. Code, identifiers, timestamps and keyboard shortcuts used to fall back to the system monospace font, which looked different and smaller than the rest of the interface. ([#27821](https://github.com/mastra-ai/mastra/pull/27821))
+
+- Opening a Factory session you can't access now shows a "Session not found" page with a link to start a new session. Before, the page kept requesting the session in an endless loop and never showed an error. ([#27921](https://github.com/mastra-ai/mastra/pull/27921))
+
+- MCP server pages in Studio now show the server's event types (experimental), with their delivery modes and argument and payload schemas. Opening an event lets you stream it (or poll it, for poll-only types), shows each occurrence with its data, the cursor, and a marker where events may have been skipped. Under `mastra dev` you can also send a test event and watch it arrive in the open stream. ([#27674](https://github.com/mastra-ai/mastra/pull/27674))
+
+- Updated dependencies [[`a92384b`](https://github.com/mastra-ai/mastra/commit/a92384bf9093beb9071953292a936ca722370ce5), [`a8f9157`](https://github.com/mastra-ai/mastra/commit/a8f9157fafe38f5acf68e37c8874ebd192ef8e10), [`4471372`](https://github.com/mastra-ai/mastra/commit/4471372b0338523a2f57407a90b1d913e68f17cc), [`0e9a577`](https://github.com/mastra-ai/mastra/commit/0e9a5774151385c93524883e2b1bea40e2a644de), [`b8fe2ae`](https://github.com/mastra-ai/mastra/commit/b8fe2aec651efeaad6d607d816565453a341cdef), [`f54f8b2`](https://github.com/mastra-ai/mastra/commit/f54f8b2df2aa24e1ef4d171c733576e7c62bb1b0), [`03868f8`](https://github.com/mastra-ai/mastra/commit/03868f840401865af433040ba7ff90f585dea2e1), [`e35e335`](https://github.com/mastra-ai/mastra/commit/e35e335f19ee0c7c1e03bf247aebd24c3e041459), [`cc977b4`](https://github.com/mastra-ai/mastra/commit/cc977b4ce7def6727cdd63af3478d2b8b83daf07), [`16d8f44`](https://github.com/mastra-ai/mastra/commit/16d8f44e3a1486d7319c1baeca6115d37f6c4cea)]:
+  - @mastra/core@1.79.0-alpha.12
+  - @mastra/deployer@1.79.0-alpha.12
+
 ## 1.35.0-alpha.11
 
 ### Patch Changes
