@@ -77,6 +77,11 @@ export interface ChannelLogContext {
   [key: string]: unknown;
 }
 
+type ChannelAgent = Pick<
+  Agent<any, any, any, any>,
+  'id' | 'getMastraInstance' | 'sendMessage' | 'approveToolCall' | 'declineToolCall' | 'getMemory'
+>;
+
 /** Platforms whose chat-SDK adapters render interactive approval buttons. */
 const APPROVAL_BUTTON_PLATFORMS = new Set(['slack', 'discord', 'teams', 'gchat', 'google-chat', 'telegram']);
 
@@ -93,7 +98,7 @@ export class AgentChannels {
   private chat: Chat | null = null;
   /** Stored initialization promise so webhook handlers can await readiness on serverless cold starts. */
   private initPromise: Promise<void> | null = null;
-  private agent!: Agent<any, any, any, any>;
+  private agent!: ChannelAgent;
   private logger?: IMastraLogger;
   private customState: StateAdapter | undefined;
   private stateAdapter!: StateAdapter;
@@ -191,7 +196,7 @@ export class AgentChannels {
    * Bind this AgentChannels to its owning agent. Called by Agent constructor.
    * @internal
    */
-  __setAgent(agent: Agent<any, any, any, any>): void {
+  __setAgent(agent: ChannelAgent): void {
     this.agent = agent;
   }
 

@@ -891,6 +891,9 @@ export class DurableAgent<
     this.#cleanupTimeoutMs = cleanupTimeoutMs ?? 30_000;
     this.#shouldCache = shouldCache;
     this.userShouldPersistSnapshot = shouldPersistSnapshot;
+
+    // Keep processor access on the wrapped agent, but dispatch through this wrapper.
+    this.#wrappedAgent.getChannels()?.__setAgent(this);
   }
 
   /** @internal Read one request-context value captured in a suspended durable run snapshot. */
@@ -2053,6 +2056,7 @@ export class DurableAgent<
 
   override setChannels(agentChannels: any) {
     this.#wrappedAgent.setChannels(agentChannels);
+    agentChannels.__setAgent(this);
   }
 
   // --- PubSub (base Agent fields — DurableAgent has its own pubsub) ---
