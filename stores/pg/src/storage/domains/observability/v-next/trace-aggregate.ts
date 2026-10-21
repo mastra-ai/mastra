@@ -296,7 +296,7 @@ function compileUsageCtes(schema: string, plan: TrustedTraceAggregatePlan, param
     ...scopeConditions,
   ];
   const costRow = `"name" = ANY(${param(coreStorage.TRACE_AGGREGATE_COST_METRIC_NAMES)}::text[])`;
-  const priced = `${costRow} AND "estimatedCost" IS NOT NULL AND "costUnit" IS NOT NULL AND NOT "hasError"`;
+  const priced = `${costRow} AND "estimatedCost" IS NOT NULL AND "costUnit" IS NOT NULL AND (NOT "hasError" OR "partialCost")`;
   const failed = `${costRow} AND ("hasError" OR ("estimatedCost" IS NOT NULL AND "costUnit" IS NULL))`;
   const tokenColumns = USAGE_METRIC_NAMES.map(
     (name, index) => `SUM("value") FILTER (WHERE "name" = ${param(name)}) AS "t${index}"`,
@@ -304,7 +304,8 @@ function compileUsageCtes(schema: string, plan: TrustedTraceAggregatePlan, param
   return [
     `usage_rows AS (
     SELECT DISTINCT ON (m."metricId") m."traceId", m."name", m."value", m."estimatedCost", m."costUnit",
-      COALESCE(jsonb_typeof(m."costMetadata" -> 'error'), 'null') <> 'null' AS "hasError"
+      COALESCE(jsonb_typeof(m."costMetadata" -> 'error'), 'null') <> 'null' AS "hasError",
+      COALESCE(m."costMetadata" ->> 'error' = 'partial_cost', FALSE) AS "partialCost"
     FROM ${qualifiedTable(schema, TABLE_METRIC_EVENTS)} m
     WHERE ${rowConditions.join('\n      AND ')}
     ORDER BY m."metricId", m."timestamp"
