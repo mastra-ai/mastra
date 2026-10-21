@@ -763,6 +763,8 @@ or set `MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER`. Pass `mcp: false` to turn the 
 
 The endpoint serves one MCP event type (SEP-3415, experimental in `@mastra/mcp`), `factory.activity`, so clients can notice changes without re-reading work items. It is poll-only: call `events/poll`; `events/stream` and webhooks aren't offered.
 
+Claude and ChatGPT don't consume these events yet: Claude connectors have no events support, and ChatGPT only uses webhook delivery. Today they're for clients that call `events/poll` themselves.
+
 ```json
 {
   "method": "events/poll",
