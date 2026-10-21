@@ -96,6 +96,7 @@ Numbers are warm medians on the representative project per bucket, 30-day window
 | X52 | prod       | OBS-392 review (platform#3633, mastra#27857): bound the per-span usage read of `aggregateSpans()` (`mobs-span-usage-bound.ts`): which spans carry usage, usage lag after span start, unbounded vs `to + 30 d` vs `traceId` semi-joins, largest project + org, 7 d now/14 d back/90 d back + org 180 d branch path | Usage lands on branch spans too (3.9% of rows on `processor_run`, 6 h sample). Longest usage lag 8.9 d, longest span 27.8 d. `to + 30 d` returns the same rows and reads 2–100× less 90 d back (largest project `model_generation` 3.7 → 1.4 GiB), nothing extra near now. Semi-joins help only small selections, read more for `model_generation`, fail 1 GiB at org 180 d. Branch path with tokens/cost at org 180 d: 3.7–4.0 s / ≤ 876 MiB bounded. Shipped as a Platform host limit | done   |
 | X53 | prod       | OBS-698 project Metrics page at 14 d, the range the page is now capped at (`mobs-obs698-page.ts`, X51's method), p99/largest, cold ×1 + warm ×3, vs today's page                                                                                                                                                  | Memory fits (≤ 211 MiB/statement). Warm #2/#3 fit (slowest statement ≤ 5.1 s, pages 4.6–5.3 s vs ~1.3 s today); both warm #1 loads (right after an all-failed cold load) lose the Tokens KPI's previous-window request at 9.0–9.5 s, which reads 5× the current window on the largest project. Cold, both pages fail every request. Does not fit by the gate; PRs stay drafts                                                                                                           |
 | X54 | prod       | OBS-698 project Metrics page with the Tokens KPI left on `metrics` and no 14-day cap (`mobs-obs698-page.ts`, X51's method), p99/largest × 24h/7d/30d, cold ×1 + warm ×3, per card                                                                                                                                 | Memory fits (≤ 419 MiB/statement). Every card fits at 24 h and 7 d. At 30 d on the largest project, Top entities and the environment Trace breakdown lose 2 of 3 warm loads at 9 s and Trace latency loses 1 (contention; it reads 111 MiB). Users and sessions and Cost coverage fit (≤ 4.7 s). The 4 `cost.sum` requests read ~2 GiB each there. No card dropped yet                                                                                                                  |
+| X55 | prod       | OBS-718: `querySpans()` / `aggregateSpans()` through the deployed mobs-query routes (`mobs-span-endpoints.ts`): contract (20 cases), hand-SQL parity, cost via `query_log`, largest org + a member stand-in for p99, 24 h–180 d, cold ×1 + warm ×3                                                                | Contract holds; 0 mismatches in 23 grouped checks + 5 paging checks. Aggregates fit wherever allowed (≤ 3.6 s, ≤ 712 MiB). `/spans/query` fails the largest org from ~10 d (1 GiB; 953 MiB at 7 d), `where` doesn't help. `parentEntity*`/`rootEntity*` never stored on spans. Prod reads run on the 16 vCPU nodes                                                                                                                                                                      | done   |
 
 ## Entries
 
@@ -1058,6 +1059,81 @@ The execution-source tab fires only when opened, so it runs alone (the `exec` va
 - Nothing has been dropped yet; the OBS-698 PRs stay drafts.
 
 Reproduce: `npx tsx mobs-obs698-page.ts dry`, then `page --label x54 --windows 24h,7d,30d --variants obs698-kpim,today,exec --reps 3`, then `report --label x54` (results in `results/mobs-obs698-page.jsonl`).
+
+### X55: `querySpans()` / `aggregateSpans()` on deployed mobs-query (production routes, read-only, 2026-10-21)
+
+**Question** (OBS-718): do `POST /api/observability/spans/query` and `/spans/aggregate`, as deployed at `observability.mastra.ai` (Platform main 8d3324b26, `@mastra/core` 1.79.0), keep their contract, return the same spans as hand-written SQL, and fit 1 GiB / 9 s per statement at the largest org?
+
+**Method** (`mobs-span-endpoints.ts`). Requests go to production mobs-query as Daniel's Platform login (admin-cli token, never printed), one at a time. Replica-side cost comes from `clusterAllReplicas(system.query_log)`. mobs-query sets no `query_id` or `log_comment`, so statements are matched to each HTTP call by start/end time (±300 ms), its 1 GiB memory setting, and the statement's own CTEs (`members AS (` for aggregates; `WITH candidates AS (` on `mastra_span_events` and the `{page:Array(Tuple` payload read for queries). Hand SQL runs on the replica.
+
+- **Scopes.** The routes only serve orgs the caller is a member of; there is no staff bypass. The largest org (rank 1 of 980 orgs with traces in 30 d) is a member org, so `L-org` and its largest project `L-project` are the real thing. The p99 org (rank 9) is not, so it got only the 403 checks. `M-org` stands in for it: the biggest other member org (rank 45, one project, 56% of the p99 org's 7-day span volume). All 7 member orgs have both flags on.
+- **Windows** end on the hour, at least 1 h ago (2 h for correctness), so late rows can't move numbers between reads. Retention is 180 d (`/capabilities`).
+- **Runs.** Cold ×1 (the first request for the cell in the session) + warm ×3; any non-200 stops the cell, so no limit is hit twice. ~560 requests in total (400 of them performance), ~45 min.
+
+**Contract** (20 cases, all as expected):
+
+| Check                                                                                                 | Result                                                                                                |
+| ----------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| Non-member org (p99) on `/spans/query`, `/spans/aggregate`, ± project header                          | 403                                                                                                   |
+| `/capabilities` for a non-member org                                                                  | 200 with `spanQuery`/`spanAggregate` false                                                            |
+| Malformed JSON                                                                                        | 400 on both routes                                                                                    |
+| Unknown measure; `groupBy: ['model']`                                                                 | 422 `invalid_request`; 422 `field_not_allowed`                                                        |
+| Org-wide aggregate, 15 d: no `where`; `spanType = model_generation`; branch type + `model_generation` | 422 `time_range_too_large` (L and M orgs)                                                             |
+| Org-wide aggregate, 15 d, `spanType = tool_call` (branch)                                             | 200 (served from `mastra_trace_branches`, no 14-day cap)                                              |
+| Project aggregate, 15 d, no `where`                                                                   | 200                                                                                                   |
+| `/spans/query`, 32 d                                                                                  | 200: the 31-day cap went away in mastra#27042                                                         |
+| `interval: 1h`, `limit: 1000`, 24 h                                                                   | 422 `too_many_rows` (`limit × buckets ≤ 10,000`; `limit` is per bucket)                               |
+| Org request rows; project request rows                                                                | 0 rows from another org; 0 from another project (1,000 + 474 rows)                                    |
+| Org A's header with org B's project id                                                                | **200 with no rows**, not 403: the tenant fence holds, but nothing tells the caller the pair is wrong |
+
+Not checked live: flag off → 404 (no member org has a flag off; covered by `span-aggregate.test.ts`), and 503/504. From the code, `server_memory`/`server_concurrency` → 503 with `Retry-After: 2`, a statement timeout → 504, a statement's own memory, read or result limit → 422 (`request-logging.ts`, covered by `trace-aggregate.test.ts`, whose handler `/spans/aggregate` shares). The request budget is 20 s (`TRACE_QUERY_BUDGET_MS = 2 × 9 s + 2 s`), and `withQueryRetry` makes at most two calls per statement.
+
+**Correctness** (windows ending 2 h ago): 23 grouped comparisons against hand SQL. Shapes: all spans by `spanType` × `status`; `tool_call` by `entityName` with `errorCount`; `model_generation` by `parentEntityName` with input/output token sums. Scopes M/L × project/org × 24 h/7 d, minus the largest org's ungrouped 7 d. Result: **0 mismatched groups, 0 missing groups**. That covers both read paths (`mastra_trace_branches` for `tool_call`, `mastra_span_events` otherwise), per-span usage under the `to + 30 d` bound (8.87 B input tokens on the largest org at 7 d match to the token), and errors. Aggregate `count` equals `querySpans()` paged to the end in all 5 cases (1–36 pages, up to 35,174 spans), with no span on two pages.
+
+**`parentEntityName` is never stored.** Every grouping by it returned one NULL group. On the replica, `parentEntityType/Id/Name` and `rootEntityType/Name` are NULL on all 12.1 M spans of the last 7 d, for all 572 orgs, in every month since June, in both span tables. Cause: the SDK's exported span has no parent/root entity fields (they exist only on the correlation context logs and metrics carry), and mobs-collector's `formatAiSpanRecord` (`servers/mobs-collector/src/lib/ai-signals.ts:451`) doesn't set them. The writer and tables have the columns. So 4 of the span aggregate registry's groupable dimensions (`parentEntityType/Name`, `rootEntityType/Name`), and the matching `/spans/query` filters, are always NULL on Platform. "Tokens per agent" still works: `model_generation` spans carry the agent as `entityName` (`entityType = agent`, 8,473 of 8,474 match an `agent_run` name in the same trace), so S3 below groups by `entityName`.
+
+**Performance.** Shapes:
+
+- S1: `agent_run` by `status`, `interval` 1 h (1 d from 30 d), `limit` 10.
+- S2: `tool_call` by `entityName`, `count`/`errorRate`/`duration.p95`.
+- S3: `model_generation` by `entityName`, `count` + input/output tokens + `cost.sum`.
+- S4: one `/spans/query` page (100) of failed tool calls.
+- S5: five `/spans/query` pages of 1,000.
+
+Warm columns: median end-to-end ms / worst statement ms / worst statement MiB; ✗ = failed cold, not repeated.
+
+| Shape  | Scope     | 24 h              | 7 d                  | 30 d                     | 180 d                    |
+| ------ | --------- | ----------------- | -------------------- | ------------------------ | ------------------------ |
+| S1     | L-project | 554 / 116 / 113   | 493 / 90 / 135       | 700 / 363 / 561          | 632 / 234 / 558          |
+| S1     | L-org     | 398 / 41 / 142    | 537 / 58 / 171       | 716 / 410 / 636          | 632 / 838 / 678          |
+| S1     | M-org     | 368 / 35 / 98     | 420 / 44 / 137       | 460 / 66 / 149           | 442 / 81 / 155           |
+| S2     | L-project | 523 / 88 / 77     | 565 / 111 / 123      | 473 / 85 / 246           | 695 / 3,585 / 245        |
+| S2     | L-org     | 547 / 254 / 131   | 655 / 1,639 / 219    | 702 / 175 / 515          | 788 / 2,156 / 712        |
+| S2     | M-org     | 716 / 239 / 111   | 483 / 179 / 131      | 529 / 113 / 141          | 797 / 1,334 / 154        |
+| S3     | L-project | 687 / 237 / 116   | 764 / 253 / 206      | 1,165 / 874 / 578        | 1,170 / 2,007 / 580      |
+| S3     | L-org     | 781 / 352 / 271   | 1,567 / 1,092 / 566  | ✗ `time_range_too_large` | ✗ `time_range_too_large` |
+| S3     | M-org     | 656 / 139 / 110   | 717 / 238 / 216      | ✗ `time_range_too_large` | ✗ `time_range_too_large` |
+| S4     | L-project | 613 / 83 / 115    | 639 / 165 / 124      | 3,410 / 2,051 / 718      | 2,470 / 2,130 / 768      |
+| S4     | L-org     | 941 / 350 / 254   | 2,593 / 1,823 / 953  | **✗ 422, 1,022 MiB**     | **✗ 422, 1,023 MiB**     |
+| S4     | M-org     | 688 / 107 / 132   | 694 / 114 / 132      | 2,507 / 256 / 219        | 2,542 / 650 / 239        |
+| S5 (5) | L-project | 5,573 / 538 / 72  | 6,394 / 118 / 72     | 12,336 / 4,738 / 718     | 11,425 / 1,511 / 747     |
+| S5 (5) | L-org     | 7,166 / 525 / 257 | 12,105 / 2,054 / 934 | **✗ 422, 1,023 MiB**     | **✗ 422, 1,023 MiB**     |
+| S5 (5) | M-org     | 5,650 / 73 / 105  | 5,371 / 186 / 106    | 5,443 / 213 / 201        | 6,249 / 506 / 233        |
+
+- **`aggregateSpans()` fits wherever the planner allows it.** Worst warm statement: 3.6 s, 712 MiB. Branch shapes (S1, S2) fit org-wide over all 180 d at ≤ 712 MiB, matching X50. S3 is capped at 14 d org-wide, as designed; at 7 d it takes 566 MiB and reads 3.8 GiB (the usage read). On the largest project over 180 d it takes 580 MiB.
+- **`/spans/query` does not fit the largest org past 7 d.** At 7 d its first statement already peaks at 939–953 MiB (93% of the cap). At 10, 30 and 180 d it fails with ClickHouse 241 at 1,023 MiB within 0.5 s and returns 422. That contradicts mobs-query's own comment ("org-wide 30-day requests on largest org peak at 760 MiB"). A filter doesn't help: `candidates` collapses copies of every span in the window (`ORDER BY … LIMIT 1 BY` identity) before applying `where`. S4 (failed tool calls) costs the same as S5 (no filter): 792 vs 784 MiB read per page at 7 d. The aggregate route pushes positive `spanType`/`name` conjuncts below the collapse (`positiveSpanConjuncts`). Project scope fits (≤ 768 MiB at 180 d), as does the M org.
+- **Each `/spans/query` page repeats the window's full scan**, so paging costs the same per page: 5 pages ≈ 12 s at 30 d on the largest project (worst page statement 4.7 s).
+- **End-to-end time is mostly not ClickHouse at small windows.** It's 350–550 ms per request at 24 h, with statements at 30–250 ms. Some `/spans/query` cells spend 2 s or more outside the matched statements (M-org 30 d S4: 2.5 s against 256 ms), probably the legacy-preview reads for rows written before previews were stored, which these fingerprints don't match.
+- **Cold**: no cell timed out. The slowest first statements were 4.3 s (S2, 30 d, largest project and org) and 3.3 s (S2, M-org, 180 d). `OSReadBytes` was ≤ 344 MiB per call, so the data was mostly in page cache: these are not forced-cold runs like X43's.
+- **Nodes**: every matched statement ran on the two 16 vCPU nodes (hashes `deb10f`, `2b8f2e`), none on the 3 vCPU node the X41–X54 benchmarks used. This confirms X49's open question: production mobs-query does not read from the bench node.
+
+**Proposed issues (not filed)**:
+
+1. `/spans/query` org-wide exceeds 1 GiB on the largest org from ~10 d (7 d: 953 MiB), even with a selective `where`. Fix: prefilter immutable positive conjuncts (`spanType`, `name`) before the copy collapse, as `compileClickHouseSpanSelection` does. Also cap or narrow org-wide windows the way aggregates are capped, and correct the 760 MiB comment.
+2. Span `parentEntity*`/`rootEntity*` are always NULL on Platform. Either fill them (from the span tree or the SDK's correlation context) in mobs-collector, or drop them from the span aggregate dimensions and span query fields until they are.
+3. (minor) An `X-Mastra-Project-Id` from another org returns 200 with no rows; a 403 like the non-member org case would surface the mistake.
+
+Reproduce: `npx tsx mobs-span-endpoints.ts access`, then `contract`, `check`, `perf --reps 3` (S1 alone: `perf --reps 3 --shapes S1`), then `report` (results in `results/mobs-span-endpoints-*.json*`). The first call may open the admin-cli browser login.
 
 ### X46: `aggregateSpans()` contract affordability (prod replica, read-only, 2026-10-19)
 
