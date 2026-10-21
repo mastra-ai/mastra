@@ -187,7 +187,7 @@ The CLI `--permission-mode` flag maps directly onto these via `permissionModeToP
 
 ### Custom policies
 
-Implement the `ResolutionPolicy` interface to make per-event decisions:
+Implement the `ResolutionPolicy` interface to make per-event decisions. A policy only responds when a tool requests approval; it does not choose which tools the agent can use. For a read-only run, also select Explore mode with `mode: 'fast'`, whose tool set excludes writes and shell commands.
 
 ```typescript title="src/strict-policy.ts"
 import { createMastraCode, runMC, type ResolutionPolicy } from 'mastracode'
@@ -209,6 +209,7 @@ const run = runMC({
   controller,
   session,
   prompt: 'Audit the codebase for secrets',
+  mode: 'fast',
   policy: readOnlyPolicy,
 })
 

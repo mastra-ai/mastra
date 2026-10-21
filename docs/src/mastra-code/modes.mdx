@@ -72,11 +72,11 @@ Use Plan mode when you want to analyze architecture, design an approach, or crea
 - `task_write`, `task_update`, `task_complete`, and `task_check`: Track plan work
 - `list-workflows` and `get-workflow`: Inspect saved workflows
 
-Plan mode has no `execute_command` tool, so the agent cannot run shell commands even when they would only read state. Writing is limited to Markdown files inside the session's plan directory.
+Plan mode has no `execute_command` tool, so the agent cannot run shell commands even when they would only read state. Writing is limited to Markdown files directly inside the project's plan directory.
 
 ### Plan submission
 
-The agent writes the plan to a Markdown file in the session's plan directory, then calls `submit_plan` with that file's `path`. The plan file contains the overview, implementation steps, and verification details. The tool call suspends so you can review the file before the agent continues.
+The agent writes the plan to a Markdown file directly inside the project's plan directory, then calls `submit_plan` with that file's `path`. The plan file contains the overview, implementation steps, and verification details. The tool call suspends so you can review the file before the agent continues.
 
 After submission, you can:
 

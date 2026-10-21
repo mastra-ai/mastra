@@ -83,7 +83,7 @@ The picker offers a pair for every bundled light/dark family: `catppuccin-latte/
 - `vars` (optional): named palette. Values must be hex colors (`#rrggbb` or `#rgb`).
 - `colors` (optional): any subset of the color keys below. Values are a hex color or the name of a `var`. The loader ignores unknown keys, but the JSON schema is stricter and flags them so typos show up in your editor.
 
-Without a `bg`, foreground colors and panel shades contrast-adapt against the terminal's actual background (WCAG-based), so the theme stays readable whatever your terminal is set to.
+Without a `bg`, foreground colors contrast-adapt against the terminal's actual background (WCAG-based). Omitted panel and overlay color keys keep the built-in values instead of being derived from that background, so set `bg` or provide those colors explicitly when you need the panels to match your terminal.
 
 <details>
   <summary>JSON Schema</summary>
@@ -214,7 +214,7 @@ Common source vocabularies and where they land:
 Specific source hints:
 
 - **pi** (`vars` + `colors`): structure is nearly identical — keep `vars`, remap `colors` keys per the table.
-- **VS Code** (`.json` theme): use `editor.foreground`/`editor.background` for `text`/`appearance`, `editor.selectionBackground` for `selectedBg`, and `tokenColors` scopes (keyword → `textHighlight`, string → `success`-family, comment → `muted`).
+- **VS Code** (`.json` theme): use `editor.foreground` for `text`, `editor.background` for `bg`, `editor.selectionBackground` for `selectedBg`, and `tokenColors` scopes (keyword → `textHighlight`, string → `success`-family, comment → `muted`). Set `appearance` to `"dark"` or `"light"` based on the source theme's variant.
 - **Terminal schemes** (ANSI 16): foreground → `text`, blue → `accent`, green/red/yellow → `success`/`error`/`warning`, bright black → `muted`, magenta → `textHighlight`.
 - **base16**: base05 → `text`, base03 → `muted`, base0D → `accent`, base0B/base08/base0A → `success`/`error`/`warning`, base0E → `textHighlight`, base02 → `selectedBg`.
 
