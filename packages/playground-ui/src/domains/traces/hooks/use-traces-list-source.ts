@@ -44,7 +44,7 @@ export function useTracesListSource({
   limit,
   enabled = true,
 }: UseTracesListSourceArgs) {
-  const [now, setNow] = useState(() => new Date());
+  const [tickNow, setTickNow] = useState(() => new Date());
   const [autoRefetch, setAutoRefetch] = useState(initialAutoRefetch);
   const delta = withDeltaPolling && withQueryTrace !== false;
   // A fixed window polls in place. Transient failures keep polling (a blip must not silence the
@@ -56,15 +56,13 @@ export function useTracesListSource({
       : false;
   const refetchOnWindowFocus = autoRefetch && !delta;
 
-  // With delta, `now` stays frozen between polls, so re-anchor it when the filters or dates change:
-  // the new list and the new cursor start from the current time. Done during render so no request
-  // goes out with the stale `now`. Sorting is not part of the selection and keeps the cursor.
+  // Delta polls need the same time range every poll, so `now` only moves when the filters or dates
+  // change: the new list and the new cursor start from the current time. Sorting is not part of the
+  // selection and keeps the cursor.
   const selection = JSON.stringify(buildQuery(SELECTION_CLOCK));
-  const [anchoredSelection, setAnchoredSelection] = useState(selection);
-  if (selection !== anchoredSelection) {
-    setAnchoredSelection(selection);
-    if (delta) setNow(new Date());
-  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- `selection` is the trigger, not an input.
+  const anchoredNow = useMemo(() => new Date(), [selection]);
+  const now = delta ? anchoredNow : tickNow;
 
   const built = buildQuery(now);
   // Delta polls must keep the exact time range, so a rolling window reaches into the future
@@ -101,16 +99,9 @@ export function useTracesListSource({
   // Moving the query key refreshes the cursor chain once, without a second polling request.
   useEffect(() => {
     if (delta || !autoRefetch || !rolling || result.error) return;
-    const timer = setInterval(() => setNow(new Date()), TRACES_LIST_REFETCH_INTERVAL_MS);
+    const timer = setInterval(() => setTickNow(new Date()), TRACES_LIST_REFETCH_INTERVAL_MS);
     return () => clearInterval(timer);
   }, [delta, autoRefetch, rolling, result.error]);
-
-  // Once the clock reaches the horizon, re-anchor the window: the list reloads and delta re-bootstraps.
-  useEffect(() => {
-    if (!delta || !autoRefetch || !rolling) return;
-    const timer = setTimeout(() => setNow(new Date()), now.getTime() + TRACES_LIST_DELTA_HORIZON_MS - Date.now());
-    return () => clearTimeout(timer);
-  }, [delta, autoRefetch, rolling, now]);
 
   // A rolling tick moves the query key; keep the previous rows when the data is the same so
   // consumers keyed on `rows` don't re-render every tick.
