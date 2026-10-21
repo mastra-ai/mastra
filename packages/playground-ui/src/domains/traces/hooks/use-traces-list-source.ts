@@ -21,6 +21,11 @@ export function fixedWindowRefetchInterval(error: unknown): number | false {
   return isRejectedTraceListRequest(error) ? false : TRACES_LIST_REFETCH_INTERVAL_MS;
 }
 
+/** With delta polling the list only reloads to recover from a transient failure; delta polls bring new traces. */
+function deltaListRefetchInterval(error: unknown): number | false {
+  return error && !isRejectedTraceListRequest(error) ? TRACES_LIST_REFETCH_INTERVAL_MS : false;
+}
+
 export interface UseTracesListSourceArgs {
   query: (now: Date) => TraceQueryArgs;
   orderBy?: TraceQueryArgs['orderBy'];
@@ -51,11 +56,15 @@ export function useTracesListSource({
   const delta = withDeltaPolling && withQueryTrace !== false;
   // A fixed window polls in place. Transient failures keep polling (a blip must not silence the
   // list), but a request the server refuses ends it: each retry would only clear the error, flash
-  // the placeholder list, and fail again.
-  const refetchInterval =
-    autoRefetch && !rolling && !delta
-      ? (query: { state: { error: unknown } }) => fixedWindowRefetchInterval(query.state.error)
-      : false;
+  // the placeholder list, and fail again. With delta polling the list stays put and only retries
+  // a transient failure.
+  const refetchInterval = !autoRefetch
+    ? false
+    : delta
+      ? (query: { state: { error: unknown } }) => deltaListRefetchInterval(query.state.error)
+      : !rolling
+        ? (query: { state: { error: unknown } }) => fixedWindowRefetchInterval(query.state.error)
+        : false;
   const refetchOnWindowFocus = autoRefetch && !delta;
 
   // Delta polls need the same time range every poll, so `now` only moves when the filters or dates

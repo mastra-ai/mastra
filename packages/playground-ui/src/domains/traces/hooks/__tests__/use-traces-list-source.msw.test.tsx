@@ -9,6 +9,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   TRACES_LIST_DELTA_HORIZON_MS,
   TRACES_LIST_DELTA_POLL_INTERVAL_MS,
+  TRACES_LIST_REFETCH_INTERVAL_MS,
   useTracesListSource,
 } from '../use-traces-list-source';
 import { freshTrace, lastTraceQueryPage, traceQueryDeltaBatch } from './fixtures/trace-query';
@@ -295,6 +296,78 @@ describe('useTracesListSource', () => {
         fixed().timeRange,
         fixed().timeRange,
       ]);
+    });
+
+    describe('when the list fails to load', () => {
+      /** The list answers `status` first, then its page; delta polls answer idle batches. */
+      function failingListHandlers(status: number) {
+        const listRequests: TraceQueryBody[] = [];
+        server.use(
+          http.post(`${OBSERVABILITY_URL}/traces/query`, async ({ request }) => {
+            const body = (await request.json()) as TraceQueryBody;
+            if (body.mode === 'delta') return HttpResponse.json(traceQueryDeltaBatch('delta-idle'));
+            listRequests.push(body);
+            return listRequests.length === 1
+              ? HttpResponse.json({ error: 'failed' }, { status })
+              : HttpResponse.json(lastTraceQueryPage);
+          }),
+        );
+        return { listRequests };
+      }
+
+      it.each([{ rolling: true }, { rolling: false }])(
+        'retries a transient failure until the list loads (rolling: $rolling)',
+        async ({ rolling }) => {
+          const requests = failingListHandlers(503);
+          vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'], shouldAdvanceTime: true });
+          const { result } = renderHook(() => useTracesListSource({ query, rolling, withDeltaPolling: true }), {
+            wrapper: Wrapper,
+          });
+          await waitFor(() => expect(result.current.error).toBeTruthy());
+
+          await act(async () => {
+            await vi.advanceTimersByTimeAsync(TRACES_LIST_REFETCH_INTERVAL_MS);
+          });
+
+          await waitFor(() => expect(result.current.rows.map(row => row.spanId)).toEqual(['span-b']));
+          expect(result.current.error).toBeNull();
+          expect(requests.listRequests).toHaveLength(2);
+        },
+      );
+
+      it('stops retrying once the list loads', async () => {
+        const requests = failingListHandlers(503);
+        vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'], shouldAdvanceTime: true });
+        const { result } = renderHook(() => useTracesListSource({ query, withDeltaPolling: true }), {
+          wrapper: Wrapper,
+        });
+        await waitFor(() => expect(result.current.error).toBeTruthy());
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(TRACES_LIST_REFETCH_INTERVAL_MS);
+        });
+        await waitFor(() => expect(result.current.rows).toHaveLength(1));
+
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(TRACES_LIST_REFETCH_INTERVAL_MS * 3);
+        });
+
+        expect(requests.listRequests).toHaveLength(2);
+      });
+
+      it('does not retry a request the server refuses', async () => {
+        const requests = failingListHandlers(422);
+        vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'], shouldAdvanceTime: true });
+        const { result } = renderHook(() => useTracesListSource({ query, withDeltaPolling: true }), {
+          wrapper: Wrapper,
+        });
+        await waitFor(() => expect(result.current.error).toBeTruthy());
+
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(TRACES_LIST_REFETCH_INTERVAL_MS * 3);
+        });
+
+        expect(requests.listRequests).toHaveLength(1);
+      });
     });
 
     describe('when the filters change', () => {
