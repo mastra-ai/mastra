@@ -45,6 +45,7 @@ import {
   HIDDEN_REACTIVE_SIGNAL_TAGS,
   SignalRow,
   signalRowView,
+  skillSignalActivation,
   SUPPRESSED_STATE_SIGNAL_IDS,
 } from './TranscriptSignals';
 import type { MastraErrorPart } from '@mastra/core/agent/message-list';
@@ -236,7 +237,7 @@ export function MessageBubble({
   const skillActivation =
     entry.message.role === 'user' && parts.length === 1 && parts[0].type === 'text'
       ? parseSkillActivation(parts[0].text)
-      : undefined;
+      : skillSignalActivation(entry);
   if (skillActivation) return <SkillMessage activation={skillActivation} />;
   if (isSkillNotificationSignal(entry)) return null;
 

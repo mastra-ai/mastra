@@ -1061,7 +1061,9 @@ describe('GithubRules', () => {
     expect(deliveredSignals).toEqual([
       expect.objectContaining({
         threadId: 'session-issue-42',
-        contents: expect.stringContaining('<skill name="factory-triage">'),
+        type: 'reactive',
+        tagName: 'skill',
+        attributes: { name: 'factory-triage' },
         user: { workosId: 'user-1', organizationId: 'org-1' },
       }),
     ]);

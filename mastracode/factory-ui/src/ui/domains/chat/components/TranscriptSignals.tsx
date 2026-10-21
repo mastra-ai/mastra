@@ -1,6 +1,9 @@
 import { mastraDBMessageToSignal } from '@mastra/core/signals';
 import { SESSION_OWNER_SIGNAL_TAG } from '@mastra/factory/session-owner-signal';
 
+import { parseSkillBody } from '@mastra/playground-ui/domains/chat/messages/skill-activation';
+import type { SkillActivation } from '@mastra/playground-ui/domains/chat/messages/skill-activation';
+
 import type { MessageEntry, TimelineEntry } from '../services/transcript';
 import { isRecord } from './transcript-shared';
 
@@ -19,6 +22,15 @@ export function signalPartsText(entry: MessageEntry): string {
     .flatMap(part => (part.type === 'text' && part.text ? [part.text] : []))
     .join('\n')
     .trim();
+}
+
+/** A typed `skill` signal (how Factory starts a skill run), parsed for the skill row. */
+export function skillSignalActivation(entry: MessageEntry): SkillActivation | undefined {
+  if (entry.message.role !== 'signal') return undefined;
+  const signal = entry.message.content.metadata?.signal;
+  if (!isRecord(signal) || signal.type !== 'reactive' || signal.tagName !== 'skill') return undefined;
+  const name = isRecord(signal.attributes) ? signal.attributes.name : undefined;
+  return typeof name === 'string' ? parseSkillBody(name, signalPartsText(entry)) : undefined;
 }
 
 export const HIDDEN_REACTIVE_SIGNAL_TAGS = new Set(['github-subscribe-pr', 'github-unsubscribe-pr']);
