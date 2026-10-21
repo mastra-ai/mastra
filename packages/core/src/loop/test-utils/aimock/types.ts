@@ -1,5 +1,6 @@
 import type { JournalEntry, LLMock } from '@copilotkit/aimock';
 import type { AgentConfig, ToolsInput } from '../../../agent';
+import type { MastraServerCache } from '../../../cache';
 import type { PubSub } from '../../../events/pubsub';
 import type { MastraMemory } from '../../../memory';
 import type { RequestContext } from '../../../request-context';
@@ -386,6 +387,8 @@ export interface RunLoopScenarioOptions {
    * Use for testing the signal integration (subscribe → sendMessage → receive response).
    */
   pubsub?: PubSub;
+  /** Shared cache for durable/evented pubsub scenarios. */
+  cache?: MastraServerCache;
   /**
    * When set, {@link runLoopScenario} iterates `output.fullStream` itself
    * (instead of the default `consumeStream` drain) and returns every emitted

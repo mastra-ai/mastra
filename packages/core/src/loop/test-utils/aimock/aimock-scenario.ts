@@ -110,6 +110,7 @@ export async function createSharedAgent(
     | 'errorProcessors'
     | 'defaultOptions'
     | 'pubsub'
+    | 'cache'
     | 'engine'
     | 'inputProcessors'
   > = {},
@@ -144,6 +145,7 @@ async function buildScenarioAgent({
   errorProcessors,
   defaultOptions,
   pubsub,
+  cache,
   engine,
   inputProcessors,
   fsRouted,
@@ -271,6 +273,7 @@ async function buildScenarioAgent({
     storage: new InMemoryStore(),
     ...(backgroundTasks ? { backgroundTasks } : {}),
     ...(eventedPubsub ? { pubsub: eventedPubsub } : pubsub ? { pubsub } : {}),
+    ...(cache ? { cache } : {}),
   });
 
   if (isFs) {
