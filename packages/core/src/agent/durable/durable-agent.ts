@@ -2664,11 +2664,12 @@ export class DurableAgent<
     let wrote = false;
     const writeTerminalState = async () => {
       wrote = true;
+      // Publishing the error can let generate() remove the registry entry.
+      const entry = totalTimeout ? getRunRegistryEntry(runId, this.#mastra) : undefined;
       // The observable deadline must not wait for memory or snapshot I/O.
       if (error) await reportError(error);
       try {
         if (totalTimeout) {
-          const entry = getRunRegistryEntry(runId, this.#mastra);
           const memoryContext = entry?.requestContext?.get('MastraMemory') as
             | { thread?: { id: string }; resourceId?: string; memoryConfig?: MemoryConfig }
             | undefined;
@@ -2682,7 +2683,8 @@ export class DurableAgent<
             !memoryContext.memoryConfig?.observationalMemory &&
             !entry.tripwire
           ) {
-            await authorizeDurableMemory(getDurableMemoryAuthorizationChecks(entry), {
+            // A resumed workflow can have cached permission checks for its previous actor.
+            await authorizeDurableMemory(new Map(), {
               mastra: this.#mastra,
               user: entry.requestContext?.get('user'),
               threadId: memoryContext.thread.id,
@@ -3719,6 +3721,7 @@ export class DurableAgent<
       if (!reg) continue;
       reg.executionFence = executionFence;
       reg.resumeToolCallId = resolvedOptions.toolCallId;
+      reg.actor = resolvedOptions.actor;
     }
 
     // Install a fresh abort controller for the resumed segment. The original
