@@ -80,6 +80,10 @@ describe('evented agent Redis Streams step-finish transport', () => {
       for await (const chunk of output.fullStream) chunks.push(chunk);
       expect(chunks.filter(chunk => chunk.type === 'tool-result')).toHaveLength(STEPS);
       expect(mock.getRequests()).toHaveLength(STEPS + 1);
+      // The stream output rebuilds the whole response from the step-finish deltas.
+      const steps = await output.output.steps;
+      const toolMessages = steps.at(-1)!.response.messages.filter(message => message.role === 'tool');
+      expect(toolMessages).toHaveLength(STEPS);
 
       const keys = await redis.keys(`${prefix}:agent.stream.*`);
       expect(keys).toHaveLength(1);
