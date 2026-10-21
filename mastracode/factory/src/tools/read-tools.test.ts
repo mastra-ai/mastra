@@ -310,7 +310,7 @@ describe('factory_inspect_work_item', () => {
     const lastMoved = new Date('2026-10-20T01:38:00Z');
     deps.messaging = async () => ({
       controller: {
-        getSessionByResource: async (sessionId: string) =>
+        getSession: async (sessionId: string) =>
           sessionId === `session-${TARGET}` ? { stream: { isActive: () => true } } : undefined,
         queryThreadById: async ({ threadId }: { threadId: string }) =>
           threadId === 't' ? { id: 't', updatedAt: lastMoved } : null,

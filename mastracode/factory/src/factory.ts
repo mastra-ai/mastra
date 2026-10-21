@@ -21,6 +21,7 @@
 
 import { MastraAuthStudio } from '@mastra/auth-studio';
 import { prepareAgentControllerMount } from '@mastra/code-sdk';
+import { getDynamicMemory } from '@mastra/code-sdk/agents/memory';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentControllerRequestContext, BuiltinToolId } from '@mastra/core/agent-controller';
 import { AgentControllerChannels } from '@mastra/core/channels';
@@ -28,7 +29,7 @@ import { EventEmitterPubSub } from '@mastra/core/events';
 import type { PubSub } from '@mastra/core/events';
 import type { Knowledge } from '@mastra/core/knowledge';
 import type { Mastra } from '@mastra/core/mastra';
-import type { RequestContext } from '@mastra/core/request-context';
+import { RequestContext } from '@mastra/core/request-context';
 import { hasAuthInit, isUserProvider } from '@mastra/core/server';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import type { FactoryStorage } from '@mastra/core/storage';
@@ -80,6 +81,7 @@ import {
   registerCustomProvidersSource,
 } from './routes/custom-provider-source.js';
 import { ProjectRoutes } from './routes/projects.js';
+import { createSessionAccessGuard } from './routes/session-access.js';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from './routes/surface.js';
 import type { FactoryApiRoutesDeps } from './routes/surface.js';
 import { TelemetryRoutes } from './routes/telemetry.js';
@@ -119,9 +121,12 @@ import { LiveSessions } from './session/live-sessions.js';
 import { hydrateSessionMemorySettings, layerPersonalMemorySettings } from './session/memory-settings-hydration.js';
 import { hasResolvedOrg } from './session/org-seed.js';
 import { FactoryReplyCredentialProcessor } from './session/reply-credential-processor.js';
+import { migrateSessionResources, privatizeOwnerResourceSessions } from './session/resource-migration.js';
 import { observeSessionRunEnd } from './session/run-audit.js';
+import { sessionMemoryResourceId, sessionStampCounts } from './session/session-threads.js';
 import { createSourceControlTools } from './session/source-control-tools.js';
 import { readFactoryThinkingLevel, resolveFactoryThinkingLevel } from './session/thinking-default.js';
+import { observeSessionThreadStamp } from './session/thread-session-stamp.js';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
 import { createStateSigner } from './state-signing.js';
@@ -768,6 +773,34 @@ export class MastraFactory {
     const intakeReady =
       integrations.some(integration => integration.intake !== undefined) && storage.isDomainReady('intake');
     const factoryReady = storage.isDomainReady('projects') && storage.isDomainReady('work-items');
+    // Sessions from before shared resources ran under their own id. Move them
+    // onto their Factory or owner before any session is served. Run bindings
+    // decide which sessions belong to a Factory, so it waits for work items.
+    if (storage.isDomainReady('source-control') && storage.isDomainReady('work-items')) {
+      await timedPhase('prepare.migrate.sessionResources', async () => {
+        try {
+          const mastraStorage = storage.getMastraStorage();
+          const memory = await mastraStorage.getStore('memory');
+          if (!memory) return;
+          // The sessions' own Memory, so a moved thread takes its observation vectors along.
+          const sessionMemory = getDynamicMemory(mastraStorage, vector);
+          await migrateSessionResources({
+            sessions: sourceControlStorage,
+            workItems: workItemsStorage,
+            ...(storage.isDomainReady('integrations') ? { integrations: integrationStorage } : {}),
+            memory,
+            threads: sessionMemory({ requestContext: new RequestContext() }),
+          });
+          await sessionMemory.settled();
+          await privatizeOwnerResourceSessions({ sessions: sourceControlStorage, workItems: workItemsStorage, memory });
+        } catch (error) {
+          // Unmoved sessions keep working under their own id; the next start retries.
+          console.warn(
+            `[factory] session resource migration stopped early: ${error instanceof Error ? error.message : error}`,
+          );
+        }
+      });
+    }
     const knowledgeEnabled =
       this.#config.knowledge !== undefined || process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
@@ -823,7 +856,7 @@ export class MastraFactory {
           abortSession: async (binding): Promise<void> => {
             const controller = this.#prepared?.base.controller;
             if (!controller) return;
-            const session = await controller.getSessionByResource(binding.resourceId);
+            const session = await controller.getSession(binding.sessionId);
             if (session?.stream.isActive()) session.abort();
           },
           // Session retirement supersedes the older direct sandbox release: it
@@ -846,6 +879,7 @@ export class MastraFactory {
           deliverFactorySessionNotification({
             controller: messaging.controller,
             sessions: sourceControlSessions,
+            runs: workItemsStorage,
             target,
             notification,
             ...options,
@@ -860,10 +894,46 @@ export class MastraFactory {
     const reportSessionRunEnd = createSessionRunEndReporter(sessionReports);
     // Repeated attempts of one delivery send one report: identical failures to
     // the same follower are deduplicated.
-    const failWake = async ({ resourceId, threadId }: { resourceId: string; threadId: string }, reason: string) => {
-      const message = `Factory session ${resourceId} can't be woken as its owner: ${reason}.`;
+    // A woken thread under a Factory or user resource names its session with its
+    // stamp, or is the session's own thread; an unmigrated thread still runs
+    // under its session id as its resource.
+    const resolveWakeSession = async ({
+      resourceId,
+      threadId,
+      thread,
+    }: {
+      resourceId: string;
+      threadId: string;
+      thread?: { metadata?: Record<string, unknown> } | null;
+    }) => {
+      const stored =
+        thread === undefined ? await this.#prepared?.base.controller.queryThreadById({ threadId }) : thread;
+      const stamp = stored?.metadata?.factorySessionId;
+      const candidates = [...new Set([typeof stamp === 'string' ? stamp : '', threadId, resourceId])].filter(Boolean);
+      for (const sessionId of candidates) {
+        const row = await sourceControlSessions.getBySessionId(sessionId);
+        // The stamp is client-writable metadata: a session only claims a
+        // thread that runs under its own memory resource, or under its own id
+        // as the resource from before resources were shared.
+        // A stamp (neither the thread's own id nor its legacy resource) only
+        // counts where the session's stamps are trusted.
+        const viaStamp = sessionId !== threadId && sessionId !== resourceId;
+        if (
+          row &&
+          (!viaStamp || sessionStampCounts(row, resourceId)) &&
+          (resourceId === sessionId ||
+            resourceId === (await sessionMemoryResourceId(this.#prepared?.base.controller, row, workItemsStorage)))
+        ) {
+          return { sessionId, row };
+        }
+      }
+      // Unresolved: report on the woken thread, never on a session a stamp merely names.
+      return { sessionId: threadId, row: null };
+    };
+    const failWake = async ({ sessionId, threadId }: { sessionId: string; threadId: string }, reason: string) => {
+      const message = `Factory session ${sessionId} can't be woken as its owner: ${reason}.`;
       await reportSessionRunEnd({
-        sessionId: resourceId,
+        sessionId,
         threadId,
         since: new Date(),
         outcome: { status: 'failed', reason: message, failureCode: 'wake-owner-unresolved' },
@@ -1055,8 +1125,7 @@ export class MastraFactory {
         ? {
             workItems: workItemsStorage,
             controller: {
-              getSessionByResource: async (resourceId: string) =>
-                this.#prepared?.base.controller.getSessionByResource(resourceId),
+              getSession: async (sessionId: string) => this.#prepared?.base.controller.getSession(sessionId),
             },
           }
         : {}),
@@ -1187,6 +1256,8 @@ export class MastraFactory {
         coAuthor: { name: 'mastra-platform[bot]' },
         ...(this.#config.disableBuiltinTools?.length ? { disableBuiltinTools: this.#config.disableBuiltinTools } : {}),
         modes: false,
+        // Subagents are disabled, matching the Mastra Code TUI default.
+        subagents: [],
         // Thinking defaults are stored per Factory, not in the host's settings.json.
         resolveDefaultThinkingLevel: ({ requestContext }) =>
           resolveFactoryThinkingLevel(requestContext, {
@@ -1215,20 +1286,27 @@ export class MastraFactory {
         disableGithubSignals: true,
         // A wake (notification or peer signal) has no signed-in request, so
         // tenant credential resolution would fail closed. Run it as the Factory
-        // session's owner in its org; Factory sessions are keyed by resourceId.
+        // session's owner in its org.
         // With auth on, a wake whose owner can't be resolved must not run (it
         // would fail on credentials with no hint why); it fails, and the
         // session's followers get a failed report naming the reason.
         prepareWakeRequestContext: async ({ requestContext, resourceId, threadId }) => {
           if (!storage.isDomainReady('source-control')) {
-            if (auth) await failWake({ resourceId, threadId }, 'session storage is not ready');
+            if (auth) await failWake({ sessionId: threadId, threadId }, 'session storage is not ready');
             return;
           }
-          const prepared = await prepareSessionRunContext(requestContext, resourceId, {
+          const { sessionId, row } = await resolveWakeSession({ resourceId, threadId });
+          // Only a session that owns the thread's resource may lend its owner;
+          // the unresolved fallback id must never be looked up as a session.
+          if (!row) {
+            if (auth) await failWake({ sessionId, threadId }, WAKE_OWNER_UNRESOLVED['session-not-found']);
+            return;
+          }
+          const prepared = await prepareSessionRunContext(requestContext, sessionId, {
             sessions: sourceControlSessions,
           });
           if (prepared !== 'prepared') {
-            if (auth) await failWake({ resourceId, threadId }, WAKE_OWNER_UNRESOLVED[prepared]);
+            if (auth) await failWake({ sessionId, threadId }, WAKE_OWNER_UNRESOLVED[prepared]);
             return;
           }
           await primeCustomProvidersForRequestContext(requestContext);
@@ -1241,22 +1319,22 @@ export class MastraFactory {
           ? {
               resumeWakeSession: async ({ resourceId, threadId }: { resourceId: string; threadId: string }) => {
                 const controller = this.#prepared?.base.controller;
-                if (!controller) return failWake({ resourceId, threadId }, 'the Factory is not started');
+                if (!controller) return failWake({ sessionId: threadId, threadId }, 'the Factory is not started');
                 const thread = await controller.queryThreadById({ threadId });
                 if (!thread || thread.resourceId !== resourceId) {
-                  return failWake({ resourceId, threadId }, `thread ${threadId} is not the session's`);
+                  return failWake({ sessionId: threadId, threadId }, `thread ${threadId} is not the session's`);
                 }
-                const row = storage.isDomainReady('source-control')
-                  ? await sourceControlSessions.getBySessionId(resourceId)
-                  : null;
+                const { sessionId, row } = storage.isDomainReady('source-control')
+                  ? await resolveWakeSession({ resourceId, threadId, thread })
+                  : { sessionId: threadId, row: null };
                 if (!row?.factoryProjectId)
-                  return failWake({ resourceId, threadId }, WAKE_OWNER_UNRESOLVED['session-not-found']);
+                  return failWake({ sessionId, threadId }, WAKE_OWNER_UNRESOLVED['session-not-found']);
                 if (!hasResolvedOrg(row.orgId)) {
-                  return failWake({ resourceId, threadId }, WAKE_OWNER_UNRESOLVED['organization-unresolved']);
+                  return failWake({ sessionId, threadId }, WAKE_OWNER_UNRESOLVED['organization-unresolved']);
                 }
-                if (await controller.getSessionByResource(resourceId)) return;
+                if (await controller.getSession(sessionId)) return;
                 await createSessionAsRowOwner(controller, {
-                  sessionId: resourceId,
+                  sessionId,
                   ownerResourceId: resourceId,
                   row,
                   tags: {
@@ -1283,7 +1361,7 @@ export class MastraFactory {
           // trust field the recovery writes is missing, now, not later when
           // the agent's tools are assembled. Unbound sessions never gain these
           // fields and pay one binding lookup per prompt.
-          if (context?.threadId && context.resourceId) {
+          if (context?.threadId && context.sessionId) {
             const current = context.getState();
             const trustStateComplete =
               Boolean(current.factoryProjectId) &&
@@ -1349,7 +1427,7 @@ export class MastraFactory {
                     workItems: workItemsStorage,
                     boards: this.#boards,
                     isRunning: async sessionId => {
-                      const session = await this.#prepared?.base.controller.getSessionByResource(sessionId);
+                      const session = await this.#prepared?.base.controller.getSession(sessionId);
                       return session?.stream.isActive() ?? false;
                     },
                     lastActivity: async threadId => {
@@ -1597,6 +1675,15 @@ export class MastraFactory {
             sandbox: sandboxConfig,
             ...(environmentBuilds ? { onRepositoryPush: environmentBuilds.onRepositoryPush } : {}),
             sessionRetirement,
+            moveThread: async ({ threadId, resourceId }) => {
+              // The sessions' own Memory, so a moved thread takes its observation vectors along.
+              const sessionMemory = getDynamicMemory(storage.getMastraStorage(), vector);
+              await sessionMemory({ requestContext: new RequestContext() }).updateThreadResourceId({
+                threadId,
+                resourceId,
+              });
+              await sessionMemory.settled();
+            },
             factoryStorage: storage,
             integrationStorage,
             sourceControlStorage,
@@ -1716,10 +1803,11 @@ export class MastraFactory {
           // middleware sets `c.set('mastra', mastra)` and BEFORE routes, so:
           //   1. gate   — validates the auth session, stashes the user, and 401s /
           //               redirects unauthenticated requests. Skips public `/auth/*`.
-          //   2. primers — hydrate the caller's model-credential and custom
+          //   2. access — 404s requests addressing another user's private session.
+          //   3. primers — hydrate the caller's model-credential and custom
           //               provider snapshots so the request's first model call
           //               resolves tenant credentials and custom providers.
-          //   3. spa    — serves the built UI for everything the server doesn't own.
+          //   4. spa    — serves the built UI for everything the server doesn't own.
           // `auth` also lands on `server.auth` so the core auth middleware (and
           // Studio's dual-auth routing — see `studio.auth` on the returned args)
           // authenticates core `/api/*` routes with the same provider.
@@ -1728,6 +1816,18 @@ export class MastraFactory {
             middleware: [
               ...timing,
               createFactoryAuthGate(auth),
+              createSessionAccessGuard({
+                auth: routeAuth,
+                sessions: sourceControlSessions,
+                projects: {
+                  get: async args => {
+                    if (!storage.isDomainReady('projects')) return null;
+                    await factoryProjectsStorage.ensureReady();
+                    return factoryProjectsStorage.get(args);
+                  },
+                },
+                controller: () => this.#prepared?.base.controller,
+              }),
               createTenantCredentialPrimer({ auth: routeAuth, credentials: modelCredentialsStorage }),
               createCustomProvidersPrimer({
                 auth: routeAuth,
@@ -1766,7 +1866,7 @@ export class MastraFactory {
         session,
         (outcome, since) =>
           reportSessionRunEnd({
-            sessionId: session.identity.getResourceId(),
+            sessionId: session.identity.getId(),
             threadId: session.thread.getId(),
             outcome,
             since,
@@ -1774,12 +1874,13 @@ export class MastraFactory {
         {
           onApprovalRequested: request =>
             notifyApprovalRequested({
-              sessionId: session.identity.getResourceId(),
+              sessionId: session.identity.getId(),
               threadId: session.thread.getId(),
               ...request,
             }),
         },
       );
+      observeSessionThreadStamp(session);
     });
 
     // Blocking: `createSession` awaits the organization seed so per-invocation

@@ -51,7 +51,13 @@ const TRACE_QUERY_CONTEXT_ID_FIELDS = new Set(['runId', 'sessionId', 'userId', '
 const OBSERVABILITY_TRACE_QUERY_TIME_TO_FIRST_CHUNK_STORAGE_FEATURE = 'trace-query-time-to-first-chunk';
 const TRACE_QUERY_TIME_TO_FIRST_CHUNK_FIELDS = new Set(['timeToFirstChunkMs']);
 const OBSERVABILITY_TRACE_QUERY_ROOT_SPAN_FIELDS_STORAGE_FEATURE = 'trace-query-root-span-fields';
-const TRACE_QUERY_ROOT_SPAN_FIELDS = new Set(['name', 'spanType']);
+const OBSERVABILITY_TRACE_QUERY_ROOT_ENTITY_ID_STORAGE_FEATURE = 'trace-query-root-entity-id';
+// Trace-scope fields read from the root span, keyed by the storage feature that added their SQL.
+const TRACE_QUERY_ROOT_SPAN_FIELD_FEATURES = new Map([
+  ['name', OBSERVABILITY_TRACE_QUERY_ROOT_SPAN_FIELDS_STORAGE_FEATURE],
+  ['spanType', OBSERVABILITY_TRACE_QUERY_ROOT_SPAN_FIELDS_STORAGE_FEATURE],
+  ['entityId', OBSERVABILITY_TRACE_QUERY_ROOT_ENTITY_ID_STORAGE_FEATURE],
+]);
 const OBSERVABILITY_TRACE_QUERY_TIME_TO_FIRST_CHUNK_SORT_STORAGE_FEATURE = 'trace-query-time-to-first-chunk-sort';
 const OBSERVABILITY_TRACE_QUERY_DISCOVERY_STORAGE_FEATURE = 'trace-query-discovery';
 const OBSERVABILITY_THREAD_QUERY_STORAGE_FEATURE = 'thread-query';
@@ -275,16 +281,19 @@ export function assertObservabilityTraceQueryTimeToFirstChunkSupported(
 }
 
 function rootSpanFieldIssues(
+  observabilityStore: ObservabilityStorage,
   predicate: TrustedTraceQueryPredicate | TrustedThreadPredicate | undefined,
 ): TraceQueryIssue[] {
   if (!predicate) return [];
-  if (predicate.type === 'boolean') return predicate.args.flatMap(rootSpanFieldIssues);
-  if (predicate.type === 'not') return rootSpanFieldIssues(predicate.arg);
-  // Only trace-scope `name`/`spanType` read the root; inside `spans.some` they are long-supported span fields.
+  if (predicate.type === 'boolean') return predicate.args.flatMap(arg => rootSpanFieldIssues(observabilityStore, arg));
+  if (predicate.type === 'not') return rootSpanFieldIssues(observabilityStore, predicate.arg);
+  // Only trace-scope root span fields read the root; inside `spans.some` they are long-supported span fields.
   if (predicate.type === 'relation') {
-    return predicate.collection === 'traces' ? rootSpanFieldIssues(predicate.predicate) : [];
+    return predicate.collection === 'traces' ? rootSpanFieldIssues(observabilityStore, predicate.predicate) : [];
   }
-  return TRACE_QUERY_ROOT_SPAN_FIELDS.has(predicate.field) ? [rootSpanFieldIssue(['where'], predicate.field)] : [];
+  return supportsObservabilityTraceQueryRootSpanField(observabilityStore, predicate.field)
+    ? []
+    : [rootSpanFieldIssue(['where'], predicate.field)];
 }
 
 function rootSpanFieldIssue(path: Array<string | number>, field: string): TraceQueryIssue {
@@ -295,17 +304,18 @@ function rootSpanFieldIssue(path: Array<string | number>, field: string): TraceQ
   };
 }
 
-export function supportsObservabilityTraceQueryRootSpanFields(observabilityStore: ObservabilityStorage) {
-  return getFeatures(observabilityStore)?.includes(OBSERVABILITY_TRACE_QUERY_ROOT_SPAN_FIELDS_STORAGE_FEATURE) === true;
-}
-
-export function isTraceQueryRootSpanField(path: string): boolean {
-  return TRACE_QUERY_ROOT_SPAN_FIELDS.has(path);
+/**
+ * Whether the store can serve `path` at trace scope. Fields that don't read the root span are
+ * always supported here; other gates cover them.
+ */
+export function supportsObservabilityTraceQueryRootSpanField(observabilityStore: ObservabilityStorage, path: string) {
+  const feature = TRACE_QUERY_ROOT_SPAN_FIELD_FEATURES.get(path);
+  return feature === undefined || getFeatures(observabilityStore)?.includes(feature) === true;
 }
 
 /**
- * Stores that predate trace-scope `name`/`spanType` have no SQL for them and would fail with a
- * 500, so requests that use them are rejected as invalid instead.
+ * Stores that predate a trace-scope root span field have no SQL for it and would fail with a
+ * 500, so requests that use it are rejected as invalid instead.
  */
 export function assertObservabilityTraceQueryRootSpanFieldsSupported(
   observabilityStore: ObservabilityStorage,
@@ -315,14 +325,14 @@ export function assertObservabilityTraceQueryRootSpanFieldsSupported(
     measures?: ReadonlyArray<{ type: string; field?: string }>;
   },
 ) {
-  if (supportsObservabilityTraceQueryRootSpanFields(observabilityStore)) return;
+  const supported = (field: string) => supportsObservabilityTraceQueryRootSpanField(observabilityStore, field);
   const issues = [
-    ...rootSpanFieldIssues(plan.where),
+    ...rootSpanFieldIssues(observabilityStore, plan.where),
     ...(plan.dimensions ?? []).flatMap((dimension, index) =>
-      isTraceQueryRootSpanField(dimension) ? [rootSpanFieldIssue(['groupBy', index], dimension)] : [],
+      supported(dimension) ? [] : [rootSpanFieldIssue(['groupBy', index], dimension)],
     ),
     ...(plan.measures ?? []).flatMap((measure, index) =>
-      measure.type === 'countDistinct' && measure.field !== undefined && isTraceQueryRootSpanField(measure.field)
+      measure.type === 'countDistinct' && measure.field !== undefined && !supported(measure.field)
         ? [rootSpanFieldIssue(['measures', index], measure.field)]
         : [],
     ),
@@ -334,8 +344,8 @@ export function assertObservabilityTraceQueryRootSpanValuesSupported(
   observabilityStore: ObservabilityStorage,
   plan: { predicateScope: string; path: string },
 ) {
-  if (plan.predicateScope !== 'trace' || !isTraceQueryRootSpanField(plan.path)) return;
-  if (supportsObservabilityTraceQueryRootSpanFields(observabilityStore)) return;
+  if (plan.predicateScope !== 'trace') return;
+  if (supportsObservabilityTraceQueryRootSpanField(observabilityStore, plan.path)) return;
   throw new coreStorage.TraceQueryValidationError([rootSpanFieldIssue(['path'], plan.path)]);
 }
 
@@ -441,6 +451,7 @@ export type ObservabilityStorageCapabilities = {
   traceQueryContextIds: boolean;
   traceQueryTimeToFirstChunk: boolean;
   traceQueryRootSpanFields: boolean;
+  traceQueryRootEntityId: boolean;
   traceQueryTimeToFirstChunkSort: boolean;
   traceQueryDiscovery: boolean;
   traceQueryTenantScope: boolean;
@@ -448,6 +459,7 @@ export type ObservabilityStorageCapabilities = {
   threadQuery: boolean;
   threadQueryRows: boolean;
   spanQuery: boolean;
+  spanQueryContextFields: boolean;
   /** Days of traces the store keeps. Omitted when the store does not report a limit. */
   traceRetentionDays?: number;
   feedback: boolean;
@@ -470,6 +482,7 @@ export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabili
   traceQueryContextIds: false,
   traceQueryTimeToFirstChunk: false,
   traceQueryRootSpanFields: false,
+  traceQueryRootEntityId: false,
   traceQueryTimeToFirstChunkSort: false,
   traceQueryDiscovery: false,
   traceQueryTenantScope: false,
@@ -477,6 +490,7 @@ export const NO_OBSERVABILITY_STORAGE_CAPABILITIES: ObservabilityStorageCapabili
   threadQuery: false,
   threadQueryRows: false,
   spanQuery: false,
+  spanQueryContextFields: false,
   feedback: false,
 };
 
@@ -552,6 +566,8 @@ export function getObservabilityStorageCapabilities(
       declares(OBSERVABILITY_TRACE_QUERY_TIME_TO_FIRST_CHUNK_STORAGE_FEATURE),
     traceQueryRootSpanFields:
       (traceQuery || threadQuery) && declares(OBSERVABILITY_TRACE_QUERY_ROOT_SPAN_FIELDS_STORAGE_FEATURE),
+    traceQueryRootEntityId:
+      (traceQuery || threadQuery) && declares(OBSERVABILITY_TRACE_QUERY_ROOT_ENTITY_ID_STORAGE_FEATURE),
     traceQueryTimeToFirstChunkSort:
       (traceQuery || spanQuery) && declares(OBSERVABILITY_TRACE_QUERY_TIME_TO_FIRST_CHUNK_SORT_STORAGE_FEATURE),
     traceQueryDiscovery:
@@ -566,6 +582,7 @@ export function getObservabilityStorageCapabilities(
     threadQueryRows:
       threadQuery && typeof coreStorage.planThreadRowsQuery === 'function' && declares('thread-query-rows'),
     spanQuery,
+    spanQueryContextFields: spanQuery && declares('span-query-context-fields'),
     feedback: newApiCore && declares(OBSERVABILITY_FEEDBACK_STORAGE_FEATURE),
   };
 }

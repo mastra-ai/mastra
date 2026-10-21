@@ -13,6 +13,7 @@ import type {
   SourceControlInstallation,
   SourceControlRepository,
   SourceControlSession,
+  SourceControlSessionVisibility,
   SourceControlSessionRepository,
   SourceControlStorageHandle,
   UpdateProjectRepositoryInput,
@@ -444,6 +445,19 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         row.originMutedAt = muted ? new Date() : null;
         row.updatedAt = new Date();
       }
+    },
+    setVisibility: async ({
+      sessionId,
+      visibility,
+    }: {
+      sessionId: string;
+      visibility: SourceControlSessionVisibility;
+    }): Promise<SourceControlSession | null> => {
+      const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
+      if (!row) return null;
+      row.visibility = visibility;
+      row.updatedAt = new Date();
+      return row;
     },
     getForBranch: async (args: SessionBranchKey): Promise<SourceControlSession | null> =>
       this.sessionsRows.find(

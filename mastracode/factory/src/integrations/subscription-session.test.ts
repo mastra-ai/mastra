@@ -68,11 +68,11 @@ describe('resolveSubscriptionSession', () => {
       threadId: 'thread-1',
     });
     onTestFinished(async () => {
-      await controller.deleteSession({ resourceId: 'session-1' });
+      await controller.deleteSession({ sessionId: 'session-1' });
     });
     if (cold) {
       await original.thread.transferOwnership({ toOwnerId: 'user-2' });
-      await controller.deleteSession({ resourceId: 'session-1' });
+      await controller.deleteSession({ sessionId: 'session-1' });
     } else {
       await original.thread.create();
       expect(original.thread.getId()).not.toBe('thread-1');

@@ -22,6 +22,7 @@ const NO_OBSERVABILITY_CAPABILITIES = {
   traceQueryContextIds: false,
   traceQueryTimeToFirstChunk: false,
   traceQueryRootSpanFields: false,
+  traceQueryRootEntityId: false,
   traceQueryTimeToFirstChunkSort: false,
   traceQueryDiscovery: false,
   traceQueryTenantScope: false,
@@ -29,6 +30,7 @@ const NO_OBSERVABILITY_CAPABILITIES = {
   threadQuery: false,
   threadQueryRows: false,
   spanQuery: false,
+  spanQueryContextFields: false,
   feedback: false,
 };
 
@@ -649,6 +651,22 @@ describe('System Handlers', () => {
           traceQueryTenantScope: true,
           threadQuery: true,
           spanQuery: true,
+        });
+      });
+
+      it.each([
+        { features: ['span-query', 'span-query-context-fields'], supported: true },
+        { features: ['span-query'], supported: false },
+        { features: ['span-query-context-fields'], supported: false },
+      ] as const)('reports expanded span filters for $features as $supported', async ({ features, supported }) => {
+        class SpanQueryStore extends BaseObservabilityStore {
+          getFeatures() {
+            return features;
+          }
+        }
+
+        expect(await capabilitiesFor(new SpanQueryStore())).toMatchObject({
+          spanQueryContextFields: supported,
         });
       });
 

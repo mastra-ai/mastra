@@ -227,6 +227,37 @@ describe('DurableAgent resume claim loser (#27365)', () => {
     expect(topicErrors).toEqual([]);
     expect(execute).not.toHaveBeenCalled();
   });
+
+  it('reports a resume that loses the persisted claim as AGENT_RESUME_ALREADY_CLAIMED (#27619)', async () => {
+    const execute = vi.fn(async () => ({ ok: true }));
+    const { storage, durableAgent } = setup(execute);
+    const runId = await suspend(durableAgent);
+    const topicErrors = await watchTopicErrors(runId);
+    const workflows = (await storage.getStore('workflows'))!;
+
+    // Another process claims the row after this resume read it as suspended but before its
+    // own claim lands, so the real claim CAS (suspended -> running) loses.
+    const updateWorkflowState = workflows.updateWorkflowState.bind(workflows);
+    let competed = false;
+    vi.spyOn(workflows, 'updateWorkflowState').mockImplementation(async args => {
+      if (!competed && args.runId === runId && args.opts.expectedStatus === 'suspended') {
+        competed = true;
+        await updateWorkflowState({ workflowName: args.workflowName, runId, opts: { ...args.opts } });
+      }
+      return updateWorkflowState(args);
+    });
+
+    const loser = await durableAgent.resume(runId, { approved: true });
+    const chunks = await drain(loser.fullStream);
+    loser.cleanup();
+
+    expect(chunks.find(chunk => chunk.type === 'error')?.payload?.error).toMatchObject({
+      id: 'AGENT_RESUME_ALREADY_CLAIMED',
+    });
+    expect(topicErrors).toEqual([]);
+    expect(execute).not.toHaveBeenCalled();
+    expect((await workflowRow(storage, runId))?.snapshot).toMatchObject({ status: 'running' });
+  });
 });
 
 describe('execution lease timing', () => {

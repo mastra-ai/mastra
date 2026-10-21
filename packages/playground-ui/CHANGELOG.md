@@ -1,5 +1,187 @@
 # @mastra/playground-ui
 
+## 65.0.0-alpha.11
+
+### Patch Changes
+
+- Updated dependencies [[`f1b596e`](https://github.com/mastra-ai/mastra/commit/f1b596e3219bd8721079611c62b92b8f0f6c12d9), [`4e6701a`](https://github.com/mastra-ai/mastra/commit/4e6701a8534e29fad29c7fe4c6787dc1ed56b419), [`f905746`](https://github.com/mastra-ai/mastra/commit/f905746159def2d386dca516657123f43ef90e24), [`72cb1e2`](https://github.com/mastra-ai/mastra/commit/72cb1e2b9453f7bb1bd08e4f9aa54da56fa20600), [`5b936b6`](https://github.com/mastra-ai/mastra/commit/5b936b65d229865dabba01e49e36c8e19e7b2ebc), [`0e5d045`](https://github.com/mastra-ai/mastra/commit/0e5d045be4ab67d1fba5eeb8125bc2ec43aa9519), [`0e4fa4f`](https://github.com/mastra-ai/mastra/commit/0e4fa4f0604bb2e6e63e5d1d203b2dcadd646a81), [`a7bfa1f`](https://github.com/mastra-ai/mastra/commit/a7bfa1ff7c592f368cf34be472c7d89e03b0098b)]:
+  - @mastra/core@1.79.0-alpha.11
+  - @mastra/client-js@1.56.0-alpha.11
+  - @mastra/memory@1.39.0-alpha.8
+  - @mastra/react@1.12.0-alpha.11
+  - @mastra/ai-sdk@1.11.2-alpha.0
+
+## 65.0.0-alpha.10
+
+### Minor Changes
+
+- Added retry and full-trace-page support to `TracesExplorer`, so hosts can recover from failed trace lists and link the trace drawer to a dedicated trace page. ([#27851](https://github.com/mastra-ai/mastra/pull/27851))
+
+  - `TracesExplorer.Layout` accepts `renderError` to replace the default error state. It receives the `error`, a `refetch` function, and `isFetching`.
+  - `TracesExplorer.Panel` accepts `traceHref` to add an "Open trace page" link for the selected trace.
+  - `useTracesList()` now returns `refetch`, and the new `useTracesListFetching()` hook reports whether the list is fetching.
+
+  ```tsx
+  <TracesExplorer.Layout
+    actionRow={<TracesExplorer.FilterBar />}
+    renderError={({ error, refetch, isFetching }) => (
+      <MyErrorState error={error} onRetry={refetch} retrying={isFetching} />
+    )}
+  >
+    <TracesExplorer.List />
+    <TracesExplorer.Panel traceHref={traceId => `/observe/traces/${traceId}`} />
+  </TracesExplorer.Layout>
+  ```
+
+### Patch Changes
+
+- Fixed the "Add item to dataset" dialog so the Input editor stays visible when Ground truth or Tool mocks contain long content. The editors now keep a fixed height and scroll their content instead of stretching the dialog. ([#27854](https://github.com/mastra-ai/mastra/pull/27854))
+
+  Added a `withAddTraceToDataset` prop on `TracesExplorer.Panel` so hosts can hide "Add full trace to dataset" from the trace actions menu. It defaults to `true`.
+
+  ```tsx
+  <TracesExplorer.Panel withAddTraceToDataset={false} />
+  ```
+
+  Removed the "Add tool mocks to item" action from the trace actions menu, along with the `onAddTraceMocksToItem` prop on `TraceDataPanelView` and `TraceSpanPanel`.
+
+- Updated dependencies [[`59c02f5`](https://github.com/mastra-ai/mastra/commit/59c02f53955dde397f343f2107060ed70bbe63c5), [`9c66073`](https://github.com/mastra-ai/mastra/commit/9c66073db33749ab622d54db7e8885f183451ca4), [`e5b6877`](https://github.com/mastra-ai/mastra/commit/e5b6877fbdb471485b99019eb50046b44e778aae), [`e5b6877`](https://github.com/mastra-ai/mastra/commit/e5b6877fbdb471485b99019eb50046b44e778aae), [`5035d61`](https://github.com/mastra-ai/mastra/commit/5035d619e9b3369ba9bda264ac0460528012168b), [`8c05e78`](https://github.com/mastra-ai/mastra/commit/8c05e78b099b26daf4bfa9b229190201c8bf581d)]:
+  - @mastra/core@1.79.0-alpha.10
+  - @mastra/memory@1.39.0-alpha.7
+  - @mastra/client-js@1.56.0-alpha.10
+  - @mastra/ai-sdk@1.11.2-alpha.0
+  - @mastra/react@1.12.0-alpha.10
+
+## 65.0.0-alpha.9
+
+### Minor Changes
+
+- Added `credits` to `BillingIllustration`: two coin stacks for the top right of a credits card. Put `billingIllustrationHoverGroup` on the card, and a coin drops onto the short stack when the card is hovered or focused. ([#27696](https://github.com/mastra-ai/mastra/pull/27696))
+
+  ```tsx
+  import {
+    BillingIllustration,
+    billingIllustrationHoverGroup,
+  } from '@mastra/playground-ui/components/BillingIllustration';
+
+  <div className={`${billingIllustrationHoverGroup} relative overflow-clip`}>
+    <BillingIllustration
+      name="credits"
+      tone="muted"
+      className="absolute top-1 right-1 h-21.5 w-auto mask-b-from-50% mask-l-from-50%"
+    />
+  </div>;
+  ```
+
+- Added plan drawings to `BillingIllustration`: `free`, `starter`, `teams` and `enterprise`, for plan cards and the current plan card on Billing. Put `billingIllustrationHoverGroup` on the card so its screens and windows light up when the card is hovered or focused. ([#27693](https://github.com/mastra-ai/mastra/pull/27693))
+
+  ```tsx
+  import {
+    BillingIllustration,
+    billingIllustrationHoverGroup,
+  } from '@mastra/playground-ui/components/BillingIllustration';
+
+  <div className={`${billingIllustrationHoverGroup} relative overflow-clip`}>
+    <BillingIllustration
+      name="teams"
+      tone="faded"
+      className="absolute -top-1.5 -right-1.5 size-28 mask-b-from-50% mask-l-from-50%"
+    />
+  </div>;
+  ```
+
+- Added `AddDatasetItemDialog`, a three-step dialog for creating dataset items: input and ground truth first, then optional tool mocks, then optional request context and expected trajectory. Tool mocks and request context are written as JSON, so any mock or context value the runtime supports can be declared. Trajectory steps can be reordered, and tool steps offer the target agent's tools as a picker. ([#27833](https://github.com/mastra-ai/mastra/pull/27833))
+
+  The dialog can be prefilled (`initialInput`, `initialGroundTruth`, `initialToolMocks`, `initialTrajectory`), and when no `datasetId` is given it asks which dataset to add to, with an optional "Create dataset" entry.
+
+  `TraceAsItemDialog` now opens this dialog, prefilled from the trace's input, output, recorded tool calls and trajectory. Recorded details the editor doesn't show, such as tool results, are kept on each step. Its `depth` prop was removed, since the dialog no longer stacks as a side panel.
+
+  ```tsx
+  <AddDatasetItemDialog
+    open={open}
+    onOpenChange={setOpen}
+    initialInput={JSON.stringify(input, null, 2)}
+    source={{ type: 'trace', referenceId: traceId }}
+  />
+  ```
+
+- Added `TracesExplorer`, a compound component that renders the full traces explorer (filter bar, columns menu, auto refresh, list, and trace details panel). It is controlled: you pass the selection, filters, and sort direction as values, and `onChange` receives the next `{ selection, filters }` once per user action (a filter edit and the selection it clears arrive together). Your app decides where that state lives (URL, local state, or storage). Each part re-renders only for the state it uses, so auto-refresh and trace clicks no longer re-render the whole page. ([#27803](https://github.com/mastra-ai/mastra/pull/27803))
+
+  **Removed** `useTraceUrlState` and `useTraceFilterPersistence`. URL and saved-filter handling now belongs to the host app.
+
+  **Before**
+
+  ```tsx
+  const url = useTraceUrlState(searchParams, setSearchParams);
+  // ...wire url.* into FilterBar, TracesListView, TraceSpanPanel by hand
+  ```
+
+  **After**
+
+  ```tsx
+  import {
+    DEFAULT_TRACES_FILTERS,
+    EMPTY_TRACES_SELECTION,
+    TracesExplorer,
+  } from '@mastra/playground-ui/domains/traces/components/traces-explorer';
+
+  const [state, setState] = useState({ selection: EMPTY_TRACES_SELECTION, filters: DEFAULT_TRACES_FILTERS });
+
+  <TracesExplorer
+    selection={state.selection}
+    filters={state.filters}
+    onChange={setState}
+    sortDirection={sortDirection}
+    onSortDirectionChange={setSortDirection}
+    metricsSupport={{ supported: true, isLoading: false }}
+  >
+    <TracesExplorer.Layout actionRow={<TracesExplorer.FilterBar />}>
+      <TracesExplorer.List />
+      <TracesExplorer.Panel onOpenScore={(traceId, scoreId) => openScore(traceId, scoreId)} />
+    </TracesExplorer.Layout>
+  </TracesExplorer>;
+  ```
+
+  Hosts can also:
+
+  - Turn off the trace query API or feedback with `features={{ traceQuery: false, feedback: false }}`. Each switch is combined with what the server supports, so it can only turn a feature off.
+  - Pass `initialFilters` (for example a `last-24h` default) so the host's default filters don't count as applied.
+  - Compose the filter bar: `<TracesExplorer.FilterBar>` accepts children, and `TracesExplorer.FilterChips` / `TracesExplorer.TimeRangeChip` (with `presets`, `minDate`, `maxRangeMs`) can be used inside your own design-system `FilterBar`, fed by `useTracesFilterBarFields()` (the fields to offer) and `useTracesFilterBar()` (the bar value and change handlers).
+
+  ```tsx
+  <TracesExplorer.FilterBar>
+    <TracesExplorer.FilterChips timeRange={<TracesExplorer.TimeRangeChip minDate={retentionCutoff} />} />
+    <FilterBar.Input placeholder="Filter traces…" />
+  </TracesExplorer.FilterBar>
+  ```
+
+- Added `SelectSeparator` to split groups of options in a `Select`, styled like the separators in other menus. ([#27833](https://github.com/mastra-ai/mastra/pull/27833))
+
+  ```tsx
+  <SelectContent>
+    <SelectItem value="create">Create dataset</SelectItem>
+    <SelectSeparator />
+    <SelectItem value="weather-qa">Weather QA</SelectItem>
+  </SelectContent>
+  ```
+
+  Added `showFormatButton` to `CodeEditor`. It shows a button next to the copy button that reformats the JSON with Prettier, and shows an error toast if the JSON is invalid. It only appears for editable JSON editors that have an `onChange`.
+
+  ```tsx
+  <CodeEditor value={json} onChange={setJson} showFormatButton />
+  ```
+
+### Patch Changes
+
+- No visual change: the Combobox parts let Base UI position the list under the field, instead of tracking the field element themselves. `ComboboxChips` now renders its chips inside Base UI's `InputGroup`. ([#27595](https://github.com/mastra-ai/mastra/pull/27595))
+
+- Updated dependencies [[`6362d32`](https://github.com/mastra-ai/mastra/commit/6362d32a905d32820dcab3b9a039ebc1cec4f444), [`6362d32`](https://github.com/mastra-ai/mastra/commit/6362d32a905d32820dcab3b9a039ebc1cec4f444), [`e3678a5`](https://github.com/mastra-ai/mastra/commit/e3678a564cf3bb5922112b4dca65973c5fdc0a92), [`9c4d65f`](https://github.com/mastra-ai/mastra/commit/9c4d65f41ee21e407f0015b0e745881288f69d05), [`7425858`](https://github.com/mastra-ai/mastra/commit/74258589417e9e91114c64571a67702d2e352b3f), [`5fb8ea6`](https://github.com/mastra-ai/mastra/commit/5fb8ea65342d0a5d2541e4ec25b8d37d3b9e14ea), [`a97ba85`](https://github.com/mastra-ai/mastra/commit/a97ba8578a2dc91a16d945276ca8c7a4ad32e38a), [`750a4ed`](https://github.com/mastra-ai/mastra/commit/750a4edf7826da9ba7321682912504c60f29712d), [`c236d64`](https://github.com/mastra-ai/mastra/commit/c236d64974c68e6c0f9bf6e3d6442e0184c5f49e), [`22df9d7`](https://github.com/mastra-ai/mastra/commit/22df9d76651b3b4d513388a7eae8e51dbfb36a1b), [`0971298`](https://github.com/mastra-ai/mastra/commit/0971298317be971ae1c3f0c1d949a31df7d71c7f), [`6362d32`](https://github.com/mastra-ai/mastra/commit/6362d32a905d32820dcab3b9a039ebc1cec4f444), [`e3678a5`](https://github.com/mastra-ai/mastra/commit/e3678a564cf3bb5922112b4dca65973c5fdc0a92), [`98c7e10`](https://github.com/mastra-ai/mastra/commit/98c7e109fca4995d19d7eb132fdb8411c860b151), [`e3678a5`](https://github.com/mastra-ai/mastra/commit/e3678a564cf3bb5922112b4dca65973c5fdc0a92), [`5d5ea03`](https://github.com/mastra-ai/mastra/commit/5d5ea032a4c64cefe5bc217f4cc761a9364ccbf4), [`7704aa1`](https://github.com/mastra-ai/mastra/commit/7704aa18b657ba89ddbf91bf193bb3dfbb56c5f2)]:
+  - @mastra/client-js@1.56.0-alpha.9
+  - @mastra/core@1.79.0-alpha.9
+  - @mastra/memory@1.39.0-alpha.6
+  - @mastra/react@1.12.0-alpha.9
+  - @mastra/ai-sdk@1.11.2-alpha.0
+
 ## 65.0.0-alpha.8
 
 ### Patch Changes

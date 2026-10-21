@@ -16,10 +16,10 @@
     "zai-org/glm-5.2"
   ],
   "reasoning": {
-    "moonshotai/kimi-k3": [
+    "zai-org/glm-5.2": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["high", "max"]
       }
     ],
     "deepseek/deepseek-v4-flash-latest": [
@@ -40,10 +40,10 @@
         "values": ["high", "max"]
       }
     ],
-    "zai-org/glm-5.2": [
+    "moonshotai/kimi-k3": [
       {
         "type": "effort",
-        "values": ["high", "max"]
+        "values": ["low", "high", "max"]
       }
     ]
   }

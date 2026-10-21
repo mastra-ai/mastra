@@ -17,6 +17,8 @@ import {
   TRACE_AGGREGATE_TOKEN_EDGE_CONFORMANCE_CASES,
   TRACE_AGGREGATE_TOKEN_EDGE_FIXTURE_DATA,
   TRACE_AGGREGATE_TOKEN_FIXTURE_DATA,
+  TRACE_AGGREGATE_VERSION_CONFORMANCE_CASES,
+  TRACE_AGGREGATE_VERSION_FIXTURE_DATA,
   TRACE_AGGREGATE_YEAR_CONFORMANCE_CASES,
   TRACE_AGGREGATE_YEAR_FIXTURE_DATA,
   traceAggregatePercentile,
@@ -25,6 +27,7 @@ import {
 import {
   evaluateTraceQuery,
   makeTraceQuerySpan as span,
+  THREAD_QUERY_FIXTURE_DATA,
   TRACE_QUERY_FIXTURE_DATA,
   traceQueryDimensionValue,
   type TraceQueryFixtureData,
@@ -472,6 +475,77 @@ describe('trace-aggregate 365-day conformance cases', () => {
       );
       expect(aggregate.rows).toEqual([{ measures: { count: traces.traces.length } }]);
       expect(traces.traces.length, testCase.name).toBe(41);
+    }
+  });
+});
+
+function groupRoots<T>(roots: T[], key: (root: T) => string | null): Map<string | null, T[]> {
+  const groups = new Map<string | null, T[]>();
+  for (const root of roots) groups.set(key(root), [...(groups.get(key(root)) ?? []), root]);
+  return groups;
+}
+
+describe('trace-aggregate root version conformance cases', () => {
+  it.each(TRACE_AGGREGATE_VERSION_CONFORMANCE_CASES)('$name', testCase => {
+    const actual = evaluateTraceAggregateRequest(TRACE_AGGREGATE_VERSION_FIXTURE_DATA, testCase.request);
+    expect(actual).toEqual(testCase.expected);
+    expect(traceAggregateResponseMismatch(actual, testCase)).toBeNull();
+  });
+
+  it('has superseded versions that differ from the current one in status, entityName and endedAt partition', () => {
+    const versions = groupRoots(
+      TRACE_AGGREGATE_VERSION_FIXTURE_DATA.spans.filter(root => root.parentSpanId === null),
+      root => root.traceId,
+    );
+    const pairs = [...versions.values()]
+      .filter(copies => copies.length === 2)
+      .map(([old, current]) => ({ old: old!, current: current! }));
+    expect(pairs.some(({ old, current }) => (old.error === null) !== (current.error === null))).toBe(true);
+    expect(pairs.some(({ old, current }) => old.entityName !== current.entityName)).toBe(true);
+    const day = (iso: string | null) => iso!.slice(0, 10);
+    expect(pairs.some(({ old, current }) => day(old.endedAt) === day(current.endedAt))).toBe(true);
+    expect(pairs.some(({ old, current }) => day(old.endedAt) !== day(current.endedAt))).toBe(true);
+  });
+
+  it('counts disjoint status filters to the unfiltered population', () => {
+    const count = (where?: TraceQueryPredicate) =>
+      evaluateTraceAggregateRequest(TRACE_AGGREGATE_VERSION_FIXTURE_DATA, {
+        timeRange: { from: '2026-09-01T00:00:00Z', to: '2026-09-08T00:00:00Z' },
+        ...(where ? { where } : {}),
+        measures: ['count'],
+      }).rows[0]?.measures.count;
+    const status = (literal: string): TraceQueryPredicate => ({
+      op: 'eq',
+      left: { path: 'status' },
+      right: { literal },
+    });
+    expect(count(status('error'))! + count(status('success'))!).toBe(count());
+  });
+
+  // The reference evaluator keeps the highest cursorId; ClickHouse, which can hold every version of
+  // a root until a merge, keeps the version that ended last. Fixtures model a re-exported root, which
+  // ends later, so both rules agree on them.
+  it.each([
+    ['TRACE_AGGREGATE_FIXTURE_DATA', TRACE_AGGREGATE_FIXTURE_DATA],
+    ['TRACE_AGGREGATE_TOKEN_FIXTURE_DATA', TRACE_AGGREGATE_TOKEN_FIXTURE_DATA],
+    ['TRACE_AGGREGATE_TOKEN_EDGE_FIXTURE_DATA', TRACE_AGGREGATE_TOKEN_EDGE_FIXTURE_DATA],
+    ['TRACE_AGGREGATE_VERSION_FIXTURE_DATA', TRACE_AGGREGATE_VERSION_FIXTURE_DATA],
+    ['TRACE_AGGREGATE_YEAR_FIXTURE_DATA', TRACE_AGGREGATE_YEAR_FIXTURE_DATA],
+    ['TRACE_QUERY_FIXTURE_DATA', TRACE_QUERY_FIXTURE_DATA],
+    ['THREAD_QUERY_FIXTURE_DATA', THREAD_QUERY_FIXTURE_DATA],
+  ] as const)('%s: every superseded root version ends before the current one', (_name, data) => {
+    const versions = groupRoots(
+      data.spans.filter(root => root.parentSpanId === null && !root.isPending),
+      root => `${root.traceId}\u0000${root.spanId}`,
+    );
+    for (const copies of versions.values()) {
+      const current = copies.reduce((a, b) => (b.cursorId > a.cursorId ? b : a));
+      for (const copy of copies) {
+        if (copy === current) continue;
+        expect(Date.parse(copy.endedAt!), `${copy.traceId} cursor ${copy.cursorId}`).toBeLessThan(
+          Date.parse(current.endedAt!),
+        );
+      }
     }
   });
 });

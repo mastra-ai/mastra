@@ -36,11 +36,13 @@ function buildApp(
   sourceControls: readonly SourceControlStorageHandle[],
   { memorySettings, projects, users, audit }: Pick<RouteOptions, 'memorySettings' | 'projects' | 'users' | 'audit'>,
   controller?: RouteOptions['controller'],
-  routeUser = user,
+  workItems?: RouteOptions['workItems'],
+  viewer: { workosId: string; organizationId: string } = user,
+  moveThread?: RouteOptions['moveThread'],
 ) {
   const app = new Hono();
   app.use('*', async (context, next) => {
-    context.set('factoryAuthUser' as never, routeUser as never);
+    context.set('factoryAuthUser' as never, viewer as never);
     await next();
   });
   mountApiRoutes(
@@ -53,6 +55,8 @@ function buildApp(
       controller,
       users,
       audit,
+      ...(workItems ? { workItems } : {}),
+      ...(moveThread ? { moveThread } : {}),
     }),
   );
   return app;
@@ -139,7 +143,7 @@ describe('source-control session routes', () => {
       threadId,
     });
     onTestFinished(async () => {
-      await controller.deleteSession({ resourceId: sessionId });
+      await controller.deleteSession({ sessionId });
     });
     expect(session.identity.getId()).toBe(sessionId);
     expect(session.thread.getId()).toBe(threadId);
@@ -256,7 +260,7 @@ describe('source-control session routes', () => {
     expect(queryThreads).toHaveBeenCalledWith({ resourceId: sessionId });
     expect(generateTitle).toHaveBeenCalledWith({
       threadId,
-      resourceId: sessionId,
+      sessionId,
       requestContext: expect.any(RequestContext),
     });
     await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({
@@ -305,7 +309,7 @@ describe('source-control session routes', () => {
     });
     vi.spyOn(liveSession.stream, 'isActive').mockReturnValue(true);
     const audit = { record: vi.fn().mockResolvedValue(null) };
-    const app = buildApp([sourceControl], { ...seed, audit }, controller, {
+    const app = buildApp([sourceControl], { ...seed, audit }, controller, undefined, {
       workosId: 'user-2',
       organizationId: 'org-1',
     });
@@ -324,7 +328,7 @@ describe('source-control session routes', () => {
       createdByUserId: 'user-1',
     });
     await expect(liveSession.thread.getOwner()).resolves.toBe('user-2');
-    expect(await controller.getSessionByResource(sessionId)).toBe(liveSession);
+    expect(await controller.getSession(sessionId)).toBe(liveSession);
     expect(audit.record).toHaveBeenCalledWith(
       expect.objectContaining({
         actorId: 'user-2',
@@ -342,7 +346,7 @@ describe('source-control session routes', () => {
 
     liveSession.emit({ type: 'agent_end', reason: 'complete' });
     await vi.waitFor(async () => {
-      expect(await controller.getSessionByResource(sessionId)).toBeUndefined();
+      expect(await controller.getSession(sessionId)).toBeUndefined();
     });
   });
 
@@ -388,7 +392,7 @@ describe('source-control session routes', () => {
     const createSession = vi.spyOn(controller, 'createSession');
     const deleteSession = vi.spyOn(controller, 'deleteSession');
     const audit = { record: vi.fn().mockResolvedValue(null) };
-    const app = buildApp([sourceControl], { ...seed, audit }, controller, {
+    const app = buildApp([sourceControl], { ...seed, audit }, controller, undefined, {
       workosId: 'user-1',
       organizationId: 'org-1',
     });
@@ -414,7 +418,7 @@ describe('source-control session routes', () => {
     expect(createSession).not.toHaveBeenCalled();
     expect(deleteSession).not.toHaveBeenCalled();
     expect(audit.record).not.toHaveBeenCalled();
-    expect(await controller.getSessionByResource(session.sessionId)).toBe(liveSession);
+    expect(await controller.getSession(session.sessionId)).toBe(liveSession);
 
     await sourceControl.sessions.transferOwner({
       sessionId: session.sessionId,
@@ -468,7 +472,7 @@ describe('source-control session routes', () => {
       liveSession.emit({ type: 'agent_end', reason: 'complete' });
       return false;
     });
-    const app = buildApp([sourceControl], seed, controller, { workosId: 'user-2', organizationId: 'org-1' });
+    const app = buildApp([sourceControl], seed, controller, undefined, { workosId: 'user-2', organizationId: 'org-1' });
 
     const response = await app.request(`/web/user-sessions/${sessionId}/owner`, {
       method: 'POST',
@@ -477,7 +481,7 @@ describe('source-control session routes', () => {
     });
     expect(response.status).toBe(200);
     await vi.waitFor(async () => {
-      expect(await controller.getSessionByResource(sessionId)).toBeUndefined();
+      expect(await controller.getSession(sessionId)).toBeUndefined();
     });
     await expect(controller.queryThreadById({ threadId })).resolves.toMatchObject({
       metadata: expect.objectContaining({ ownerId: 'user-2', createdBy: 'user-1' }),
@@ -495,7 +499,7 @@ describe('source-control session routes', () => {
       baseBranch: 'main',
       visibility: 'org',
     });
-    const app = buildApp([sourceControl], seed, undefined, { workosId: 'user-2', organizationId: 'org-2' });
+    const app = buildApp([sourceControl], seed, undefined, undefined, { workosId: 'user-2', organizationId: 'org-2' });
     const response = await app.request(`/web/user-sessions/${session.sessionId}/owner`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -516,7 +520,7 @@ describe('source-control session routes', () => {
       baseBranch: 'main',
       visibility: 'private',
     });
-    const app = buildApp([sourceControl], seed, undefined, { workosId: 'user-2', organizationId: 'org-1' });
+    const app = buildApp([sourceControl], seed, undefined, undefined, { workosId: 'user-2', organizationId: 'org-1' });
     const response = await app.request(`/web/user-sessions/${session.sessionId}/owner`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
@@ -557,6 +561,91 @@ describe('source-control session routes', () => {
     });
   });
 
+  it('reports the memory resource a session runs under when it is opened', async () => {
+    const { seed, sourceControl, projectRepository, project } = await seedGitLabRepository();
+    const create = (sessionId: string) =>
+      sourceControl.sessions.create({
+        sessionId,
+        projectRepositoryId: projectRepository.id,
+        orgId: 'org-1',
+        userId: 'user-1',
+        branch: `user/session-${sessionId}`,
+        baseBranch: 'main',
+        visibility: 'org',
+      });
+    await create('session-new');
+    await create('session-run');
+    await sourceControl.sessions.create({
+      sessionId: 'session-private',
+      projectRepositoryId: projectRepository.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-session-private',
+      baseBranch: 'main',
+      visibility: 'private',
+    });
+    const threads: Record<string, { id: string; resourceId: string }> = {
+      'session-run': { id: 'session-run', resourceId: project.id },
+    };
+    const controller = {
+      queryThreadById: async ({ threadId }: { threadId: string }) => threads[threadId] ?? null,
+    } as unknown as RouteOptions['controller'];
+    // Only a run binding lets a session run under its Factory.
+    const workItems = {
+      clearSessionReferences: async () => {},
+      hasRunBindingForSession: async ({ sessionId }: { sessionId: string }) => sessionId === 'session-run',
+    };
+    const app = buildApp([sourceControl], seed, controller, workItems);
+
+    // A session with no thread yet starts where its visibility puts it: a shared one under its Factory,
+    // a private one under its owner.
+    const fresh = await app.request('/web/user-sessions/session-new');
+    await expect(fresh.json()).resolves.toMatchObject({
+      session: { sessionId: 'session-new', resourceId: project.id },
+    });
+    const personal = await app.request('/web/user-sessions/session-private');
+    await expect(personal.json()).resolves.toMatchObject({
+      session: { sessionId: 'session-private', resourceId: 'user-1' },
+    });
+    // A run's thread already names its Factory.
+    const run = await app.request('/web/user-sessions/session-run');
+    await expect(run.json()).resolves.toMatchObject({ session: { sessionId: 'session-run', resourceId: project.id } });
+  });
+
+  it("hides a shared-looking session from teammates while its conversation is on its owner's memory", async () => {
+    const { seed, sourceControl, projectRepository, project } = await seedGitLabRepository();
+    for (const sessionId of ['legacy-shared', 'moved-shared']) {
+      await sourceControl.sessions.create({
+        sessionId,
+        projectRepositoryId: projectRepository.id,
+        factoryProjectId: project.id,
+        orgId: 'org-1',
+        userId: 'user-1',
+        branch: `user/session-${sessionId}`,
+        baseBranch: 'main',
+        visibility: 'org',
+      });
+    }
+    // Created before sharing moved threads: still on its owner's resource.
+    const threads: Record<string, { id: string; resourceId: string }> = {
+      'legacy-shared': { id: 'legacy-shared', resourceId: 'user-1' },
+      'moved-shared': { id: 'moved-shared', resourceId: project.id },
+    };
+    const controller = {
+      queryThreadById: async ({ threadId }: { threadId: string }) => threads[threadId] ?? null,
+    } as unknown as RouteOptions['controller'];
+    const noRuns = { clearSessionReferences: async () => 0, hasRunBindingForSession: async () => false };
+    const owner = buildApp([sourceControl], seed, controller, noRuns);
+    const teammate = buildApp([sourceControl], seed, controller, noRuns, {
+      workosId: 'user-2',
+      organizationId: 'org-1',
+    });
+
+    expect((await teammate.request('/web/user-sessions/legacy-shared')).status).toBe(404);
+    expect((await owner.request('/web/user-sessions/legacy-shared')).status).toBe(200);
+    expect((await teammate.request('/web/user-sessions/moved-shared')).status).toBe(200);
+  });
+
   it("names the owner when a teammate opens someone else's session", async () => {
     const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
     const session = await sourceControl.sessions.create({
@@ -582,7 +671,7 @@ describe('source-control session routes', () => {
     });
   });
 
-  it('creates a session through the provider-neutral project route', async () => {
+  it('creates a private session through the provider-neutral project route when asked', async () => {
     const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
     const app = buildApp([sourceControl], seed);
     const sessionId = '11111111-1111-4111-8111-111111111111';
@@ -590,7 +679,7 @@ describe('source-control session routes', () => {
     const response = await app.request(`/web/source-control/projects/${projectRepository.id}/sessions`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ sessionId, title: 'Build GitLab issue' }),
+      body: JSON.stringify({ sessionId, title: 'Build GitLab issue', visibility: 'private' }),
     });
 
     expect(response.status).toBe(200);
@@ -601,10 +690,71 @@ describe('source-control session routes', () => {
         branch: `user/session-${sessionId}`,
         baseBranch: 'main',
         title: 'Build GitLab issue',
+        visibility: 'private',
       },
     });
     await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({
       projectRepositoryId: projectRepository.id,
+      visibility: 'private',
+    });
+    await expect(
+      sourceControl.sessions.list({ projectRepositoryId: projectRepository.id, viewerUserId: 'user-2' }),
+    ).resolves.toEqual([]);
+  });
+
+  it('creates sessions shared with the org unless asked for private, and rejects unknown visibility', async () => {
+    const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
+    const app = buildApp([sourceControl], seed);
+    const create = (body: Record<string, unknown>) =>
+      app.request(`/web/source-control/projects/${projectRepository.id}/sessions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    const shared = await create({ branch: 'factory/card-7' });
+    expect(shared.status).toBe(200);
+    const { session } = (await shared.json()) as { session: { sessionId: string; visibility: string } };
+    expect(session.visibility).toBe('org');
+    await expect(
+      sourceControl.sessions.list({ projectRepositoryId: projectRepository.id, viewerUserId: 'user-2' }),
+    ).resolves.toEqual([expect.objectContaining({ sessionId: session.sessionId })]);
+
+    expect((await create({ branch: 'factory/card-8', visibility: 'public' })).status).toBe(400);
+  });
+
+  it('starts a session created shared on its Factory resource, so teammates can reach its memory', async () => {
+    const { seed, sourceControl, projectRepository, project } = await seedGitLabRepository();
+    const controller = new AgentController<MastraCodeState>({
+      id: 'code',
+      stateSchema,
+      storage: new InMemoryStore({ id: 'factory-shared-session-start' }),
+      workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
+      modes: [
+        {
+          id: 'build',
+          name: 'Build',
+          default: true,
+          agent: new Agent({
+            id: 'test-agent',
+            name: 'Test agent',
+            instructions: 'Test.',
+            model: { id: 'openai/gpt-5.5' },
+          }),
+        },
+      ],
+    });
+    await controller.init();
+    const app = buildApp([sourceControl], seed, controller);
+    const res = await app.request(`/web/source-control/projects/${projectRepository.id}/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ branch: 'factory/card-9', visibility: 'org' }),
+    });
+    const { session } = (await res.json()) as { session: { sessionId: string } };
+
+    await expect(controller.queryThreadById({ threadId: session.sessionId })).resolves.toMatchObject({
+      resourceId: project.id,
     });
   });
 
@@ -636,21 +786,22 @@ describe('source-control session routes', () => {
       app.request(`/web/source-control/projects/${projectRepository.id}/sessions`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ sessionId, title: 'First prompt' }),
+        body: JSON.stringify({ sessionId, title: 'First prompt', visibility: 'private' }),
       });
 
     expect((await create()).status).toBe(200);
     // A retried create (the draft resubmitting the same id) must not start a second conversation.
     expect((await create()).status).toBe(200);
 
-    const live = await controller.getSessionByResource(sessionId);
+    const live = await controller.getSession(sessionId);
     expect(live?.thread.getId()).toBe(sessionId);
     expect(live?.state.get()).toMatchObject({
       factoryOrgId: 'org-1',
       factoryProjectId: project.id,
       projectRepositoryId: projectRepository.id,
     });
-    const threads = await controller.queryThreads({ resourceId: sessionId });
+    // A user session runs under its owner's resource.
+    const threads = await controller.queryThreads({ resourceId: 'user-1' });
     expect(threads.map(thread => thread.id)).toEqual([sessionId]);
   });
 
@@ -794,6 +945,253 @@ describe('source-control session routes', () => {
     expect(response.status).toBe(404);
     await expect(response.json()).resolves.toEqual({ error: 'Factory not found' });
   });
+
+  describe('PUT /web/user-sessions/:sessionId/visibility', () => {
+    const teammate = { workosId: 'user-2', organizationId: 'org-1' };
+    const noRuns: RouteOptions['workItems'] = {
+      clearSessionReferences: async () => 0,
+      hasRunBindingForSession: async () => false,
+    };
+    const putVisibility = (app: Hono, sessionId: string, body: unknown) =>
+      app.request(`/web/user-sessions/${sessionId}/visibility`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    async function seedPrivateSession(overrides: { branch?: string; visibility?: 'org' | 'private' } = {}) {
+      const seeded = await seedGitLabRepository();
+      const session = await seeded.sourceControl.sessions.create({
+        sessionId: 'visibility-session',
+        projectRepositoryId: seeded.projectRepository.id,
+        factoryProjectId: seeded.project.id,
+        orgId: 'org-1',
+        userId: 'user-1',
+        branch: overrides.branch ?? 'user/session-visibility',
+        baseBranch: 'main',
+        visibility: overrides.visibility ?? 'private',
+      });
+      return { ...seeded, session };
+    }
+
+    it('lets the owner share a private session with the org and make it private again', async () => {
+      const { seed, sourceControl, projectRepository, session } = await seedPrivateSession();
+      const owner = buildApp([sourceControl], seed, undefined, noRuns);
+      const viewer = buildApp([sourceControl], seed, undefined, noRuns, teammate);
+      expect(session.visibility).toBe('private');
+      expect((await viewer.request(`/web/user-sessions/${session.sessionId}`)).status).toBe(404);
+
+      const shared = await putVisibility(owner, session.sessionId, { visibility: 'org' });
+      expect(shared.status).toBe(200);
+      await expect(shared.json()).resolves.toMatchObject({
+        session: { sessionId: session.sessionId, visibility: 'org' },
+      });
+      expect((await viewer.request(`/web/user-sessions/${session.sessionId}`)).status).toBe(200);
+      await expect(
+        sourceControl.sessions.list({ projectRepositoryId: projectRepository.id, viewerUserId: 'user-2' }),
+      ).resolves.toEqual([expect.objectContaining({ sessionId: session.sessionId })]);
+
+      const unshared = await putVisibility(owner, session.sessionId, { visibility: 'private' });
+      expect(unshared.status).toBe(200);
+      expect((await viewer.request(`/web/user-sessions/${session.sessionId}`)).status).toBe(404);
+    });
+
+    it('404s non-owners, including teammates who can see an org session', async () => {
+      const { seed, sourceControl, session } = await seedPrivateSession();
+      await sourceControl.sessions.setVisibility({ sessionId: session.sessionId, visibility: 'org' });
+      const viewer = buildApp([sourceControl], seed, undefined, noRuns, teammate);
+
+      const res = await putVisibility(viewer, session.sessionId, { visibility: 'private' });
+      expect(res.status).toBe(404);
+      await expect(res.json()).resolves.toEqual({ error: 'Session not found' });
+      await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
+        visibility: 'org',
+      });
+    });
+
+    it("moves the session's threads onto the Factory when shared and back to the owner when made private", async () => {
+      const { seed, sourceControl, projectRepository, project } = await seedGitLabRepository();
+      const storage = new InMemoryStore({ id: 'factory-visibility-move' });
+      const controller = new AgentController<MastraCodeState>({
+        id: 'code',
+        stateSchema,
+        storage,
+        workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
+        modes: [
+          {
+            id: 'build',
+            name: 'Build',
+            default: true,
+            agent: new Agent({
+              id: 'test-agent',
+              name: 'Test agent',
+              instructions: 'Test.',
+              model: { id: 'openai/gpt-5.5' },
+            }),
+          },
+        ],
+      });
+      await controller.init();
+      const memory = (await storage.getStore('memory'))!;
+      const owner = buildApp([sourceControl], seed, controller, noRuns, user, input =>
+        memory.updateThreadResourceId(input),
+      );
+      const sessionId = '33333333-3333-4333-8333-333333333333';
+      const created = await owner.request(`/web/source-control/projects/${projectRepository.id}/sessions`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ sessionId, title: 'Shared later', visibility: 'private' }),
+      });
+      expect(created.status).toBe(200);
+      // A thread the session opened, stamped with its id, moves along with its own thread.
+      await memory.saveThread({
+        thread: {
+          id: 'opened-thread',
+          resourceId: 'user-1',
+          title: 'Opened',
+          metadata: { factorySessionId: sessionId },
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      });
+      // Another of the owner's threads stays with the owner.
+      await memory.saveThread({
+        thread: { id: 'unrelated', resourceId: 'user-1', title: 'Other', createdAt: new Date(), updatedAt: new Date() },
+      });
+      const resources = async () =>
+        Object.fromEntries(
+          await Promise.all(
+            [sessionId, 'opened-thread', 'unrelated'].map(
+              async id => [id, (await controller.queryThreadById({ threadId: id }))?.resourceId] as const,
+            ),
+          ),
+        );
+      expect(await resources()).toEqual({ [sessionId]: 'user-1', 'opened-thread': 'user-1', unrelated: 'user-1' });
+
+      expect((await putVisibility(owner, sessionId, { visibility: 'org' })).status).toBe(200);
+      expect(await resources()).toEqual({ [sessionId]: project.id, 'opened-thread': project.id, unrelated: 'user-1' });
+      // The live session started on the owner's resource; it resumes on the Factory's from its thread.
+      expect(await controller.getSession(sessionId)).toBeUndefined();
+
+      expect((await putVisibility(owner, sessionId, { visibility: 'private' })).status).toBe(200);
+      expect(await resources()).toEqual({ [sessionId]: 'user-1', 'opened-thread': 'user-1', unrelated: 'user-1' });
+
+      // Share again, then fail making it private halfway: the row must not say private while a thread
+      // is still on the Factory, and a retry finishes the move.
+      expect((await putVisibility(owner, sessionId, { visibility: 'org' })).status).toBe(200);
+      let moves = 0;
+      const failing = buildApp([sourceControl], seed, controller, noRuns, user, async input => {
+        if (++moves === 2) throw new Error('storage unavailable');
+        return memory.updateThreadResourceId(input);
+      });
+      expect((await putVisibility(failing, sessionId, { visibility: 'private' })).status).toBe(500);
+      await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({ visibility: 'org' });
+      expect(Object.values(await resources()).filter(resource => resource === project.id)).toHaveLength(1);
+
+      expect((await putVisibility(owner, sessionId, { visibility: 'private' })).status).toBe(200);
+      await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({ visibility: 'private' });
+      expect(await resources()).toEqual({ [sessionId]: 'user-1', 'opened-thread': 'user-1', unrelated: 'user-1' });
+    });
+
+    it('refuses to change visibility while the session is running', async () => {
+      const { seed, sourceControl, session } = await seedPrivateSession();
+      const controller = {
+        queryThreadById: async ({ threadId }: { threadId: string }) =>
+          threadId === session.sessionId ? { id: threadId, resourceId: 'user-1' } : null,
+        queryThreads: async () => [],
+        listActiveThreadRuns: () => [{ runId: 'run-1', resourceId: 'user-1', threadId: session.sessionId }],
+      } as unknown as RouteOptions['controller'];
+      const moveThread = vi.fn(async () => undefined);
+      const owner = buildApp([sourceControl], seed, controller, noRuns, user, moveThread);
+
+      const res = await putVisibility(owner, session.sessionId, { visibility: 'org' });
+      expect(res.status).toBe(409);
+      expect(moveThread).not.toHaveBeenCalled();
+      await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
+        visibility: 'private',
+      });
+    });
+
+    it('rejects an unknown visibility value', async () => {
+      const { seed, sourceControl, session } = await seedPrivateSession();
+      const res = await putVisibility(buildApp([sourceControl], seed, undefined, noRuns), session.sessionId, {
+        visibility: 'public',
+      });
+      expect(res.status).toBe(400);
+      await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
+        visibility: 'private',
+      });
+    });
+
+    it('refuses to change a Factory run session, which stays with the team', async () => {
+      const { seed, sourceControl, session } = await seedPrivateSession({
+        branch: 'feature/card-42',
+        visibility: 'org',
+      });
+      const runSessions = new Set([session.sessionId]);
+      const owner = buildApp([sourceControl], seed, undefined, {
+        clearSessionReferences: async () => 0,
+        hasRunBindingForSession: async ({ sessionId }) => runSessions.has(sessionId),
+      });
+
+      const res = await putVisibility(owner, session.sessionId, { visibility: 'private' });
+      expect(res.status).toBe(409);
+      await expect(res.json()).resolves.toEqual({ error: 'Only user sessions can change visibility' });
+      await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
+        visibility: 'org',
+      });
+    });
+
+    it('answers 503 and leaves the session alone while work-item storage is not ready', async () => {
+      const { seed, sourceControl, session } = await seedPrivateSession();
+
+      const res = await putVisibility(buildApp([sourceControl], seed), session.sessionId, { visibility: 'org' });
+
+      expect(res.status).toBe(503);
+      await expect(res.json()).resolves.toEqual({
+        error: "Session visibility can't be changed yet: Factory storage is still starting up. Try again in a moment.",
+      });
+      await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
+        visibility: 'private',
+      });
+    });
+
+    it("refuses to share a session that isn't linked to a Factory", async () => {
+      const { seed, sourceControl, session } = await seedPrivateSession();
+      // Only rows the project backfill couldn't resolve have no Factory; new sessions always do.
+      await seed.storage.ops.updateMany(
+        'source_control_sessions',
+        { session_id: session.sessionId },
+        { factory_project_id: null },
+      );
+
+      const res = await putVisibility(buildApp([sourceControl], seed, undefined, noRuns), session.sessionId, {
+        visibility: 'org',
+      });
+      expect(res.status).toBe(409);
+      await expect(res.json()).resolves.toEqual({
+        error: "This session isn't linked to a Factory, so it can't be shared.",
+      });
+      await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
+        visibility: 'private',
+      });
+    });
+
+    it('refuses to change a Slack thread session', async () => {
+      const { seed, sourceControl, session } = await seedPrivateSession({
+        branch: 'slack/1700000000-000100',
+        visibility: 'org',
+      });
+
+      const res = await putVisibility(buildApp([sourceControl], seed, undefined, noRuns), session.sessionId, {
+        visibility: 'private',
+      });
+      expect(res.status).toBe(409);
+      await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({
+        visibility: 'org',
+      });
+    });
+  });
 });
 
 describe('session sandbox recreate', () => {
@@ -808,7 +1206,7 @@ describe('session sandbox recreate', () => {
   function fakeLiveRun(active: () => boolean) {
     const live = { stream: { isActive: vi.fn(active) }, abort: vi.fn() };
     const controller = {
-      getSessionByResource: vi.fn(async () => live),
+      getSession: vi.fn(async () => live),
     } as unknown as NonNullable<RouteOptions['controller']>;
     return { live, controller };
   }
@@ -864,6 +1262,92 @@ describe('session sandbox recreate', () => {
 
   const recreatePath = (sessionId: string) => `/web/user-sessions/${sessionId}/sandbox/recreate`;
 
+  describe('starting a sandbox from the Files tab', () => {
+    const startPath = (sessionId: string) => `/web/user-sessions/${sessionId}/sandbox/start`;
+
+    function fakeController(live: { getWorkspace: () => unknown } | null, created = live) {
+      const setState = vi.fn();
+      return {
+        setState,
+        getSession: vi.fn(async () => live),
+        createSession: vi.fn(async () => ({ ...created, state: { get: () => ({}), set: setState } })),
+        queryThreadById: vi.fn(async () => null),
+      } as unknown as NonNullable<RouteOptions['controller']> & {
+        createSession: ReturnType<typeof vi.fn>;
+        setState: ReturnType<typeof vi.fn>;
+      };
+    }
+
+    it("starts the live session's sandbox", async () => {
+      const { seed, sourceControl, session } = await seedRecreateSession();
+      const start = vi.fn(async () => {});
+      const controller = fakeController({ getWorkspace: () => ({ sandbox: { start } }) });
+      const app = buildRecreateApp(seed, sourceControl, { controller });
+
+      const response = await app.request(startPath(session.sessionId), { method: 'POST' });
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({ started: true });
+      expect(start).toHaveBeenCalledTimes(1);
+      expect(controller.createSession).not.toHaveBeenCalled();
+    });
+
+    it('brings an offline session online as its owner first', async () => {
+      const { seed, sourceControl, session } = await seedRecreateSession('user-1');
+      const start = vi.fn(async () => {});
+      const controller = fakeController(null, { getWorkspace: () => ({ sandbox: { start } }) });
+      const app = buildRecreateApp(seed, sourceControl, { controller });
+
+      const response = await app.request(startPath(session.sessionId), { method: 'POST' });
+
+      expect(response.status).toBe(200);
+      const created = controller.createSession.mock.calls[0]![0];
+      expect(created).toMatchObject({ id: session.sessionId, threadId: session.sessionId, ownerId: 'user-1' });
+      expect(created.requestContext.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+      // The session's Factory address is seeded, same as when the page starts the conversation.
+      expect(controller.setState).toHaveBeenCalledWith(
+        expect.objectContaining({
+          factoryProjectId: session.factoryProjectId,
+          projectRepositoryId: session.projectRepositoryId,
+        }),
+      );
+      expect(start).toHaveBeenCalledTimes(1);
+    });
+
+    it('forbids a non-owner who is not an org admin', async () => {
+      const { seed, sourceControl, session } = await seedRecreateSession('someone-else');
+      const start = vi.fn(async () => {});
+      const controller = fakeController({ getWorkspace: () => ({ sandbox: { start } }) });
+      const app = buildRecreateApp(seed, sourceControl, { controller });
+
+      const response = await app.request(startPath(session.sessionId), { method: 'POST' });
+
+      expect(response.status).toBe(403);
+      expect(start).not.toHaveBeenCalled();
+    });
+
+    it('returns 500 with the message when the start fails', async () => {
+      const { seed, sourceControl, session } = await seedRecreateSession();
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {});
+      onTestFinished(() => error.mockRestore());
+      const controller = fakeController({
+        getWorkspace: () => ({
+          sandbox: {
+            start: async () => {
+              throw new Error('setup failed');
+            },
+          },
+        }),
+      });
+      const app = buildRecreateApp(seed, sourceControl, { controller });
+
+      const response = await app.request(startPath(session.sessionId), { method: 'POST' });
+
+      expect(response.status).toBe(500);
+      await expect(response.json()).resolves.toEqual({ error: 'setup failed' });
+    });
+  });
+
   it('recreates the owner session with the public session id, without an admin check', async () => {
     const { seed, sourceControl, session } = await seedRecreateSession();
     const sessionRetirement = fakeCoordinator();
@@ -901,7 +1385,7 @@ describe('session sandbox recreate', () => {
 
     expect(response.status).toBe(200);
     await expect(response.json()).resolves.toEqual({ recreated: true, aborted: true });
-    expect(controller.getSessionByResource).toHaveBeenCalledWith(session.sessionId);
+    expect(controller.getSession).toHaveBeenCalledWith(session.sessionId);
     expect(live.abort).toHaveBeenCalledTimes(1);
     expect(sessionRetirement.recreateSessionSandbox).toHaveBeenCalledTimes(1);
   });
@@ -928,7 +1412,7 @@ describe('session sandbox recreate', () => {
   it('still recreates when aborting the run throws', async () => {
     const { seed, sourceControl, session } = await seedRecreateSession();
     const controller = {
-      getSessionByResource: vi.fn(async () => {
+      getSession: vi.fn(async () => {
         throw new Error('controller unavailable');
       }),
     } as unknown as NonNullable<RouteOptions['controller']>;

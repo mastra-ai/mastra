@@ -48,6 +48,12 @@ export interface ExecutionEngineOptions {
   allowUnclaimedResumes?: boolean;
 
   /**
+   * Writes the resume claim even when `shouldPersistSnapshot` excludes `running`.
+   * See `WorkflowOptions.persistResumeClaim`.
+   */
+  persistResumeClaim?: boolean;
+
+  /**
    * Transforms the run snapshot immediately before it is persisted.
    * Must be pure and return JSON-safe data. Defaults to identity.
    */
