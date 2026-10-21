@@ -40,16 +40,17 @@ export abstract class MastraServerCache extends MastraBase {
   abstract increment(key: string): Promise<number>;
 
   /**
-   * Whether `listPushIndexed` allocates the index and appends the value as one
-   * atomic operation, so list position and `event.index` agree even when
-   * several processes publish concurrently.
+   * Whether {@link listPushIndexed} allocates the index and appends the value
+   * as one atomic operation, so list position and `index` agree even when
+   * several processes append concurrently.
    *
-   * Defaults to `false`: the composed `increment()` + `listPush()` below
-   * allocates and appends in two steps, so two processes can interleave and
-   * leave entries out of index order. Caches that perform both server-side in
-   * one operation must override this.
+   * Defaults to `false`. A cache that cannot append atomically cannot back a
+   * numbered stream: two processes would interleave allocate and append,
+   * handing two frames the same index or landing a lower index behind a higher
+   * one. `CachingPubSub` publishes live-only through such a cache rather than
+   * risk a subscriber dropping a frame as a duplicate.
    */
-  get supportsAtomicCounters(): boolean {
+  get supportsAtomicAppend(): boolean {
     return false;
   }
 
@@ -58,12 +59,22 @@ export abstract class MastraServerCache extends MastraBase {
    * (with `index` set to the 0-based allocated index) to the list at `listKey`.
    * Returns the assigned index.
    *
+   * `ttlMs` overrides the implementation's default TTL for this write. Both
+   * keys must get the same TTL: a counter that outlives its list restarts at 0
+   * while subscribers still expect the old numbering, and a counter that
+   * expires first would start reusing indices that are already in the list.
+   *
    * The default implementation composes `increment()` + `listPush()` (two
-   * round-trips). Network-backed caches should override this with a single
-   * atomic server-side operation — it sits on the per-chunk durable stream
-   * publish hot path, where every awaited round-trip directly caps throughput.
+   * round-trips) and is therefore NOT atomic, which is why
+   * {@link supportsAtomicAppend} defaults to `false`. Overrides should perform
+   * both steps in one server-side operation.
    */
-  async listPushIndexed(listKey: string, counterKey: string, value: Record<string, unknown>): Promise<number> {
+  async listPushIndexed(
+    listKey: string,
+    counterKey: string,
+    value: Record<string, unknown>,
+    _ttlMs?: number,
+  ): Promise<number> {
     const index = (await this.increment(counterKey)) - 1;
     await this.listPush(listKey, { ...value, index });
     return index;

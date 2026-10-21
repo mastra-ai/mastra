@@ -40,6 +40,14 @@ export type CacheRequest =
       key: string;
       keyPrefix: string;
       expiresAt: number | null;
+    }
+  | {
+      op: 'listPushIndexed';
+      key: string;
+      counterKey: string;
+      keyPrefix: string;
+      value: unknown;
+      expiresAt: number | null;
     };
 
 export type CacheResponse =

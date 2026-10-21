@@ -168,7 +168,9 @@ describe('DurableAgent cross-process abort', () => {
       model: createHangingModel() as unknown as LanguageModelV2,
     });
     const durableAgent = createDurableAgent({ agent, pubsub });
-    new Mastra({ agents: { 'cross-process-abort-agent': durableAgent as any }, storage, logger: false });
+    // Run frames and control events live on the Mastra-level bus, which is how a
+    // different pod reaches a run it does not own.
+    new Mastra({ agents: { 'cross-process-abort-agent': durableAgent as any }, storage, logger: false, pubsub });
 
     const { output, runId, cleanup } = await durableAgent.stream('Go');
 

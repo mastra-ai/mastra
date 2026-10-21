@@ -14,36 +14,16 @@ export type Event = {
    */
   generation?: number;
   /**
-   * Sequential index for position tracking.
-   * Enables efficient resume from a specific position.
+   * Position of this event in its topic's log.
+   *
+   * Allocated atomically with the append to the shared cache (see
+   * `MastraServerCache.listPushIndexed`), so list position and index always
+   * agree: a subscriber can resume from an index and, on seeing a higher one,
+   * read the gap back from the log. Absent when the cache cannot append
+   * atomically — such events are delivered live-only and cannot be resumed by
+   * offset.
    */
   index?: number;
-  /**
-   * Which dedupe discipline `index` follows.
-   *
-   * `'watermark'` (the default, and what every event published through this
-   * PubSub's own `publish` carries) means the index was allocated by a
-   * per-process caching tier: a lower index arriving after a higher one is a
-   * stale frame from a discarded attempt, so subscribers keep a single
-   * high-water mark and drop it.
-   *
-   * `'exact'` means the index was allocated through a shared atomic counter
-   * (e.g. an evented workflow step publishing to a run stream through a
-   * shared server cache). There, a lower index arriving late can be a live
-   * frame another process published out of order, so subscribers track exact
-   * indices instead of a watermark and deliver it.
-   */
-  indexMode?: 'watermark' | 'exact';
-  /**
-   * Transport-side sequence for {@link indexMode} `'exact'` events.
-   *
-   * The cache entry keeps the numeric {@link index}, but the copy handed to
-   * the transport carries `streamSeq` instead. A subscriber running pre-#27352
-   * code only looks at `index`, so it treats the frame as unnumbered and
-   * delivers it — exactly what it does today. New subscribers read either
-   * field and apply the discipline named by `indexMode`.
-   */
-  streamSeq?: number;
   /**
    * How many times this message has been delivered (including this attempt).
    * Starts at 1 for the first delivery. Incremented on each nack/redelivery.

@@ -49,34 +49,27 @@ export class StepExecutor extends MastraBase {
    * The evented engine runs each step on whichever worker claims the event, and
    * durable agent steps publish their `agent.stream.<runId>` frames on that
    * context pubsub. When it is `mastra.pubsub` directly, those frames bypass the
-   * agent's own `CachingPubSub` and reach the transport without an `index`, so a
-   * retaining transport replays them as unnumbered copies that `observe({ offset })`
-   * cannot reconcile — the duplicates COR-1474 reports.
+   * cache entirely and reach the transport unnumbered, so nothing can be
+   * replayed or resumed from an offset — the duplicates and hangs COR-1474
+   * reports.
    *
-   * Wrapping the bus in a `CachingPubSub` that shares `mastra.serverCache` numbers
-   * each frame before it is published. That requires an atomic allocate+append
-   * (see `MastraServerCache.supportsAtomicCounters`): a cache that allocates and
-   * appends in two steps can hand two workers the same index or land a lower
-   * index behind a higher one, which is worse than a duplicate because the
-   * receiving offset/dedupe would drop the frame.
+   * Wrapping the bus in a `CachingPubSub` that shares `mastra.serverCache` puts
+   * every frame through the one atomic append path, whichever worker produced
+   * it. The wrapper self-checks `supportsAtomicAppend` and publishes unnumbered
+   * (live-only) through a cache that cannot allocate and append in one step.
    */
   #getStepPubsub(): PubSub {
     if (this.#stepPubsub) return this.#stepPubsub;
     const inner = this.mastra!.pubsub;
     const cache = this.mastra?.serverCache;
-    this.#stepPubsub =
-      cache?.supportsAtomicCounters === true
-        ? new CachingPubSub(inner, cache, {
-            // Run-local watch events are per-process fan-out (often megabytes of
-            // cumulative step results) and must never land in a shared cache.
-            shouldCache: topic => !isRunLocalTopic(topic),
-            // The counter behind these indices is shared across processes, so a
-            // lower index can be a live frame another worker published out of
-            // order. Subscribers must dedupe exactly, not by watermark.
-            indexMode: 'exact',
-            logger: this.logger,
-          })
-        : inner;
+    this.#stepPubsub = cache
+      ? new CachingPubSub(inner, cache, {
+          // Run-local watch events are per-process fan-out (often megabytes of
+          // cumulative step results) and must never land in a shared cache.
+          shouldCache: topic => !isRunLocalTopic(topic),
+          logger: this.logger,
+        })
+      : inner;
     return this.#stepPubsub;
   }
 

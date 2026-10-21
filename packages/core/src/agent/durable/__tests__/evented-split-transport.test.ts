@@ -1,19 +1,19 @@
 /**
- * Split-transport regression tests for EventedAgent (Phase 2, Item 5).
+ * Split-transport tests for EventedAgent.
  *
- * The evented engine always publishes run events on `mastra.pubsub` (workers
- * in a fleet cannot reach a caller's in-process bus), while the agent's
- * stream adapter subscribes on the agent's own pubsub. When the two buses are
- * different instances, every suspend/finish/tool event used to land on a bus
- * the stream never listened on: the stream silently resolved with no chunks,
- * `null` finish data, and `null` suspended data.
+ * The evented engine publishes run events on `mastra.pubsub`, because a step
+ * runs on whichever worker claimed it and that worker cannot reach a caller's
+ * in-process bus. A durable run's frames therefore belong on the Mastra-level
+ * bus and its cache, never on an agent-level `pubsub`: one bus means one log
+ * per run, which is the property observe({ offset }) replays from.
  *
- * The fix is subscriber-side: the agent's CachingPubSub follows
- * `mastra.pubsub` as a source (wired in `__registerMastra`), so events the
- * engine publishes there are cached and re-delivered to local subscribers.
+ * `DurableAgent` resolves its run-stream wrapper against `mastra.pubsub`
+ * (`#runStreamBus`) for exactly that reason, and warns when a configured
+ * agent-level pubsub sits on a different transport — those runs cannot be
+ * observed from another process.
  *
- * These tests pin the split-bus arrangement explicitly: the agent gets its
- * own EventEmitterPubSub while Mastra keeps its default internal bus.
+ * These tests pin the split arrangement explicitly: the agent gets its own
+ * EventEmitterPubSub while Mastra keeps its default internal bus.
  */
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
@@ -22,6 +22,7 @@ import { createTextStreamModel } from '@internal/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { InMemoryServerCache } from '../../../cache';
+import type { CachingPubSub } from '../../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
 import { InMemoryStore } from '../../../storage';
@@ -81,20 +82,30 @@ describe('EventedAgent split transport (agent pubsub ≠ mastra.pubsub)', () => 
       model,
       tools,
     });
-    // The agent gets its own bus; Mastra keeps its default internal bus. The
-    // evented engine publishes on mastra.pubsub, so without source-following
-    // the stream below would see nothing.
+    // The agent gets its own bus; Mastra keeps its default internal bus. Run
+    // frames still resolve to the Mastra bus and its cache, so one log backs
+    // the run no matter which worker appended to it.
     const agent = createEventedAgent({ agent: baseAgent, pubsub: agentPubsub });
-    void new Mastra({
+    const mastra = new Mastra({
       agents: { 'split-transport-agent': agent as any },
       logger: false,
       storage: new InMemoryStore(),
     });
-    return agent as EventedAgent;
+    return { agent: agent as EventedAgent, mastra };
   }
 
+  it('binds a run-stream wrapper to the Mastra bus, not the agent-level pubsub', () => {
+    const { agent, mastra } = createSetup(createTextStreamModel('Hi'));
+
+    // The wrapper that serves both publish and observe for a run has to sit on
+    // the shared bus: a frame published there by another worker and a frame
+    // this process publishes must land in the same cache log.
+    expect((agent.pubsub as CachingPubSub).getInner()).toBe(mastra.pubsub);
+    expect((agent.pubsub as CachingPubSub).getInner()).not.toBe(agentPubsub);
+  });
+
   it('delivers text and finish chunks to the stream across split buses', async () => {
-    const agent = createSetup(createTextStreamModel('Hello!'));
+    const { agent } = createSetup(createTextStreamModel('Hello!'));
 
     const { output, cleanup } = await agent.stream('Hi');
     const chunks = await collectStreamChunks(output.fullStream);
@@ -108,7 +119,7 @@ describe('EventedAgent split transport (agent pubsub ≠ mastra.pubsub)', () => 
   }, 30_000);
 
   it('replays a completed evented run and closes even beyond its last frame', async () => {
-    const agent = createSetup(createTextStreamModel('Retained hello!'));
+    const { agent } = createSetup(createTextStreamModel('Retained hello!'));
     const { output, runId, cleanup } = await agent.stream('Hi');
     await collectStreamChunks(output.fullStream);
 
@@ -154,7 +165,7 @@ describe('EventedAgent split transport (agent pubsub ≠ mastra.pubsub)', () => 
 
   it('replays an evented run that ended in error and closes beyond its last frame', async () => {
     // MockLanguageModelV2 like the rest of this file: only a failed model call is needed to end the run in `error`.
-    const agent = createSetup(
+    const { agent } = createSetup(
       new MockLanguageModelV2({
         doStream: async () => {
           throw new Error('model unavailable');
@@ -183,7 +194,7 @@ describe('EventedAgent split transport (agent pubsub ≠ mastra.pubsub)', () => 
       requireApproval: true,
       execute: async () => ({ results: ['result1'] }),
     });
-    const agent = createSetup(createToolCallModel('searchTool', { query: 'test' }), { searchTool });
+    const { agent } = createSetup(createToolCallModel('searchTool', { query: 'test' }), { searchTool });
     let suspended = false;
     const { runId, cleanup } = await agent.stream('Search for test', {
       requireToolApproval: true,
@@ -251,7 +262,7 @@ describe('EventedAgent split transport (agent pubsub ≠ mastra.pubsub)', () => 
       requireApproval: true,
       execute: async () => ({ results: ['result1'] }),
     });
-    const agent = createSetup(createToolCallModel('searchTool', { query: 'test' }), { searchTool });
+    const { agent } = createSetup(createToolCallModel('searchTool', { query: 'test' }), { searchTool });
 
     let suspendedData: any = null;
     const { cleanup } = await agent.stream('Search for test', {

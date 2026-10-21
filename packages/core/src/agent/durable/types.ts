@@ -620,18 +620,11 @@ export interface AgentStreamEvent<T = unknown> {
   /** Claim generation of the execution that published the event. See {@link Event.generation}. */
   generation?: number;
   /**
-   * Cache-assigned position of this event in its run topic. Only present on
-   * events read back from the topic history; it is stripped before an event
-   * reaches an `observe()` consumer.
+   * Position of this event in its run topic's log. Only present on events read
+   * back from the topic; it is stripped before an event reaches an `observe()`
+   * consumer.
    */
   index?: number;
-  /**
-   * Transport-side sequence of an event whose index comes from a counter shared
-   * across processes. See {@link Event.streamSeq}.
-   */
-  streamSeq?: number;
-  /** Which dedupe discipline applies to this event's sequence. See {@link Event.indexMode}. */
-  indexMode?: 'watermark' | 'exact';
   /**
    * The `chunk` event's chunk already ran through the run's output processors
    * before it was published, so the stream consumer must not run them again.

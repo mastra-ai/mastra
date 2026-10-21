@@ -6,6 +6,7 @@ import { InMemoryServerCache } from '../../cache/inmemory';
 import { MastraError } from '../../error';
 import { CachingPubSub } from '../../events/caching-pubsub';
 import type { PubSub } from '../../events/pubsub';
+import type { Event } from '../../events/types';
 import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
 import { PUBSUB_SYMBOL } from '../constants';
@@ -489,13 +490,13 @@ describe('StepExecutor', () => {
 
   describe('step pubsub numbering', () => {
     /**
-     * A cache whose allocate+append pair is atomic (Redis with the
-     * `LIST_PUSH_INDEXED` Lua script). Only these caches can number events
-     * safely: two-step allocation lets concurrent processes reuse an index.
+     * A cache that cannot allocate an index and append in one step. Concurrent
+     * processes could reuse an index through such a cache, so events stay
+     * unnumbered (live-only) rather than risking a duplicate.
      */
-    class AtomicCounterCache extends InMemoryServerCache {
-      get supportsAtomicCounters(): boolean {
-        return true;
+    class NonAtomicCache extends InMemoryServerCache {
+      get supportsAtomicAppend(): boolean {
+        return false;
       }
     }
 
@@ -526,18 +527,31 @@ describe('StepExecutor', () => {
       return captured;
     }
 
-    it('leaves steps on the raw mastra pubsub when the cache cannot allocate atomically', async () => {
-      const context = await captureStepPubsub(mastra);
+    it('publishes unnumbered through a cache that cannot append atomically', async () => {
+      const cache = new NonAtomicCache();
+      const target = new Mastra({ cache });
+      const context = await captureStepPubsub(target);
+      const stepPubsub = context[PUBSUB_SYMBOL] as PubSub;
 
-      // Numbering without a shared atomic counter would hand two processes the
-      // same index, so the in-memory default must keep today's unnumbered path.
-      expect(context[PUBSUB_SYMBOL]).toBe(mastra.pubsub);
+      const live: Event[] = [];
+      const topic = AGENT_STREAM_TOPIC('run-plain');
+      await target.pubsub.subscribe(topic, (event: Event) => {
+        live.push(event);
+      });
+      await stepPubsub.publish(topic, {
+        type: 'chunk',
+        runId: 'run-plain',
+        data: { n: 0 },
+      } as any);
+
+      expect(stepPubsub).toBeInstanceOf(CachingPubSub);
+      expect(live[0]?.index).toBeUndefined();
+      expect(await cache.listLength(`pubsub:{${topic}}`)).toBe(0);
     });
 
     it('numbers agent-stream events published from a step when the cache is atomic', async () => {
-      const cache = new AtomicCounterCache();
-      const atomicMastra = new Mastra({ cache });
-      const context = await captureStepPubsub(atomicMastra);
+      const cache = new InMemoryServerCache();
+      const context = await captureStepPubsub(new Mastra({ cache }));
       const stepPubsub = context[PUBSUB_SYMBOL] as PubSub;
 
       // COR-1474: step-published frames used to bypass the agent's
@@ -554,12 +568,12 @@ describe('StepExecutor', () => {
         } as any);
       }
 
-      const cached = await cache.listFromTo(`pubsub:${topic}`, 0);
+      const cached = await cache.listFromTo(`pubsub:{${topic}}`, 0);
       expect(cached.map(event => event.index)).toEqual([0, 1]);
     });
 
     it('does not cache run-local step events even when the cache is atomic', async () => {
-      const cache = new AtomicCounterCache();
+      const cache = new InMemoryServerCache();
       const context = await captureStepPubsub(new Mastra({ cache }));
       const stepPubsub = context[PUBSUB_SYMBOL] as PubSub;
 
@@ -569,7 +583,7 @@ describe('StepExecutor', () => {
         data: {},
       } as any);
 
-      expect(await cache.listLength('pubsub:workflow.events.v2.run-numbered')).toBe(0);
+      expect(await cache.listLength('pubsub:{workflow.events.v2.run-numbered}')).toBe(0);
     });
   });
 });

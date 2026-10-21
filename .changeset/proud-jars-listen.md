@@ -2,19 +2,17 @@
 '@mastra/redis': patch
 ---
 
-Added `counterTtlSeconds` to `RedisServerCache` (default 86,400 seconds) so the index counter used by `listPushIndexed` outlives the list it indexes instead of expiring with it.
+`RedisServerCache.listPushIndexed` now writes the topic log and its index counter with one TTL, and no longer needs the separate counter expiry.
+
+`counterTtlSeconds` is removed. The list and the counter that numbers it must expire together: a counter that outlives its list restarts at zero while subscribed observers still expect the old numbering, and a counter that expires first reuses indices already in the list. Every append refreshes both keys with the list TTL (`ttlSeconds`, default 300 seconds) or with the `ttlMs` passed to that call, and `clearTopic` removes both.
 
 ```ts
 import { RedisServerCache } from '@mastra/redis';
 
-const cache = new RedisServerCache(
-  { client: redis },
-  {
-    // How long an idle run's index counter survives. Defaults to one day;
-    // prefer it longer than the longest a run can sit inside a single step.
-    counterTtlSeconds: 86_400, // 0 keeps the counter forever
-  },
-);
+const cache = new RedisServerCache({ client: redis }, { ttlSeconds: 300 });
+
+// A durable run's frames outlive a suspended run, so this topic asks for longer.
+await cache.listPushIndexed('pubsub:agent.stream.run-1', 'pubsub:agent.stream.run-1:counter', event, 86_400_000);
 ```
 
-When both keys shared one TTL, a run that stayed quiet longer than the TTL could have its counter reset to zero while subscribers had already delivered indices up to `k`. Every new frame would then be allocated an index in `0..k` and dropped as a duplicate by an observer that was still attached. The counter is now refreshed on every allocation, is removed with the list by `clearTopic`, and `counterTtlSeconds: 0` disables its expiry entirely.
+The append script also now persists both keys when the TTL is `0`, and fails fast with `listPushIndexed requires scripting support (client.eval)` instead of falling back to a non-atomic `increment` plus `listPush` on clients without `eval`. Without scripting there is no atomic append, so `CachingPubSub` publishes unnumbered frames there rather than risk an observer dropping live ones.

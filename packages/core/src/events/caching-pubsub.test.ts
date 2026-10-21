@@ -469,16 +469,16 @@ describe('CachingPubSub', () => {
       await cachingPubsub.publish(topic, { type: 'chunk', runId: 'r1', data: { c: '0' } });
       await cachingPubsub.publish(topic, { type: 'chunk', runId: 'r1', data: { c: '1' } });
 
-      // Force the race: publish "2" exactly between inner.subscribe() and
-      // getHistory(), so it lands in both the live stream and the replayed history.
-      const realGetHistory = cachingPubsub.getHistory.bind(cachingPubsub);
+      // Force the race: publish "2" while the subscriber is reading the log, so
+      // it lands in both the live stream and the replayed history.
+      const realListFromTo = cache.listFromTo.bind(cache);
       let raced = false;
-      vi.spyOn(cachingPubsub, 'getHistory').mockImplementation(async (t: string, offset?: number) => {
+      vi.spyOn(cache, 'listFromTo').mockImplementation(async (t: string, from: number) => {
         if (!raced) {
           raced = true;
           await cachingPubsub.publish(topic, { type: 'chunk', runId: 'r1', data: { c: '2' } });
         }
-        return realGetHistory(t, offset);
+        return realListFromTo(t, from);
       });
 
       await cachingPubsub.subscribeWithReplay(topic, (event: Event) => {
@@ -516,14 +516,14 @@ describe('CachingPubSub', () => {
       await cachingPubsub.publish(topic, { type: 'chunk', runId: 'r1', data: { c: '0' } });
       await cachingPubsub.publish(topic, { type: 'chunk', runId: 'r1', data: { c: '1' } });
 
-      const realGetHistory = cachingPubsub.getHistory.bind(cachingPubsub);
+      const realListFromTo = cache.listFromTo.bind(cache);
       let raced = false;
-      vi.spyOn(cachingPubsub, 'getHistory').mockImplementation(async (t: string, offset?: number) => {
+      vi.spyOn(cache, 'listFromTo').mockImplementation(async (t: string, from: number) => {
         if (!raced) {
           raced = true;
           await cachingPubsub.publish(topic, { type: 'chunk', runId: 'r1', data: { c: '2' } });
         }
-        return realGetHistory(t, offset);
+        return realListFromTo(t, from);
       });
 
       await cachingPubsub.subscribeFromOffset(topic, 0, (event: Event) => {
@@ -758,7 +758,7 @@ describe('CachingPubSub', () => {
       await new Promise(resolve => setTimeout(resolve, 10));
 
       // Events should be cached under custom prefix
-      const rawCacheValue = await cache.get('custom:test');
+      const rawCacheValue = await cache.get('custom:{test}');
       expect(Array.isArray(rawCacheValue)).toBe(true);
     });
   });
@@ -772,7 +772,7 @@ describe('CachingPubSub', () => {
       await new Promise(resolve => setTimeout(resolve, 10));
 
       // Check cache directly
-      const rawCacheValue = await cache.get('myapp:events');
+      const rawCacheValue = await cache.get('myapp:{events}');
       expect(Array.isArray(rawCacheValue)).toBe(true);
       expect(rawCacheValue).toHaveLength(1);
     });
@@ -784,8 +784,17 @@ describe('CachingPubSub', () => {
       await new Promise(resolve => setTimeout(resolve, 10));
 
       // Check cache directly with default prefix
-      const rawCacheValue = await cache.get('pubsub:events');
+      const rawCacheValue = await cache.get('pubsub:{events}');
       expect(Array.isArray(rawCacheValue)).toBe(true);
+    });
+
+    it('shares one cluster slot between a topic log and its counter', async () => {
+      await cachingPubsub.publish('events', { type: 'test', runId: 'run-1', data: {} });
+
+      // Redis Cluster routes by the first `{...}` hash tag, so the list and the
+      // counter must carry the same one.
+      const hashTag = (key: string) => key.slice(key.indexOf('{'), key.indexOf('}') + 1);
+      expect(hashTag('pubsub:{events}')).toBe(hashTag('pubsub:{events}:counter'));
     });
   });
 
@@ -812,83 +821,7 @@ describe('CachingPubSub', () => {
   });
 
   describe('publish resilience', () => {
-    it('should still deliver to live subscribers when cache.listPush fails', async () => {
-      const topic = 'cache-fail-topic';
-      const callback = vi.fn();
-
-      // Create a cache that throws on listPush
-      const failingCache = new InMemoryServerCache();
-      failingCache.listPush = async (_key: string, _value: unknown) => {
-        throw new Error('Cache write failed');
-      };
-
-      const failingCachingPubsub = new CachingPubSub(innerPubsub, failingCache);
-
-      await failingCachingPubsub.subscribe(topic, callback);
-      await failingCachingPubsub.publish(topic, { type: 'test', runId: 'run-1', data: { hello: 'world' } });
-
-      // Live subscriber should still receive the event even though cache failed
-      expect(callback).toHaveBeenCalledTimes(1);
-      expect(callback).toHaveBeenCalledWith(
-        expect.objectContaining({ type: 'test', data: { hello: 'world' } }),
-        expect.any(Function),
-        expect.any(Function),
-      );
-    });
-
-    it('should still deliver to live subscribers when cache.increment fails', async () => {
-      const topic = 'increment-fail-topic';
-      const callback = vi.fn();
-
-      const failingCache = new InMemoryServerCache();
-      failingCache.increment = async (_key: string) => {
-        throw new Error('Increment failed');
-      };
-      const listPushSpy = vi.spyOn(failingCache, 'listPush');
-
-      const failingCachingPubsub = new CachingPubSub(innerPubsub, failingCache);
-
-      await failingCachingPubsub.subscribe(topic, callback);
-      await failingCachingPubsub.publish(topic, { type: 'test', runId: 'run-1', data: {} });
-
-      // Live subscriber should still receive the event
-      expect(callback).toHaveBeenCalledTimes(1);
-
-      // listPush should NOT be called when increment failed (avoids duplicate index-0 entries)
-      expect(listPushSpy).not.toHaveBeenCalled();
-    });
-
-    it('publishes through a single listPushIndexed cache call (no separate increment/listPush)', async () => {
-      const topic = 'single-roundtrip-topic';
-      const cache = new InMemoryServerCache();
-      const indexedSpy = vi.spyOn(cache, 'listPushIndexed');
-
-      const pubsub = new CachingPubSub(innerPubsub, cache);
-      const callback = vi.fn();
-      await pubsub.subscribe(topic, callback);
-      await pubsub.publish(topic, { type: 'test', runId: 'run-1', data: { a: 1 } });
-
-      expect(indexedSpy).toHaveBeenCalledTimes(1);
-      expect(indexedSpy).toHaveBeenCalledWith(
-        `pubsub:${topic}`,
-        `pubsub:${topic}:counter`,
-        expect.objectContaining({ type: 'test', runId: 'run-1', data: { a: 1 }, id: expect.any(String) }),
-      );
-      // The value handed to the cache must not carry a pre-assigned index
-      expect(indexedSpy.mock.calls[0]![2]).not.toHaveProperty('index');
-
-      // Live event carries the index the cache assigned
-      expect(callback).toHaveBeenCalledWith(
-        expect.objectContaining({ index: 0 }),
-        expect.any(Function),
-        expect.any(Function),
-      );
-      const cached = await cache.listFromTo(`pubsub:${topic}`, 0);
-      expect(cached).toHaveLength(1);
-      expect((cached[0] as any).index).toBe(0);
-    });
-
-    it('delivers live without an index when listPushIndexed fails', async () => {
+    it('delivers live without an index when the atomic append fails', async () => {
       const topic = 'indexed-fail-topic';
       const cache = new InMemoryServerCache();
       cache.listPushIndexed = async () => {
@@ -901,12 +834,66 @@ describe('CachingPubSub', () => {
 
       expect(callback).toHaveBeenCalledTimes(1);
       expect(callback.mock.calls[0]![0]).not.toHaveProperty('index');
-      expect(await cache.listLength(`pubsub:${topic}`)).toBe(0);
+      expect(await cache.listLength(`pubsub:{${topic}}`)).toBe(0);
+    });
+
+    it('publishes unnumbered through a cache that cannot append atomically', async () => {
+      const topic = 'non-atomic-topic';
+
+      class NonAtomicCache extends InMemoryServerCache {
+        override get supportsAtomicAppend(): boolean {
+          return false;
+        }
+      }
+
+      const nonAtomic = new NonAtomicCache();
+      const pubsub = new CachingPubSub(innerPubsub, nonAtomic);
+      const callback = vi.fn();
+      await pubsub.subscribe(topic, callback);
+      await pubsub.publish(topic, { type: 'test', runId: 'run-1', data: {} });
+
+      // Without an atomic allocate+append there is no trustworthy numbering, so
+      // the frame stays unnumbered and the topic is live-only (no replay).
+      expect(callback).toHaveBeenCalledTimes(1);
+      expect(callback.mock.calls[0]![0]).not.toHaveProperty('index');
+      expect(await nonAtomic.listLength(`pubsub:{${topic}}`)).toBe(0);
+    });
+
+    it('publishes through a single listPushIndexed cache call (no separate increment/listPush)', async () => {
+      const topic = 'single-roundtrip-topic';
+      const cache = new InMemoryServerCache();
+      const indexedSpy = vi.spyOn(cache, 'listPushIndexed');
+      const listPushSpy = vi.spyOn(cache, 'listPush');
+
+      const pubsub = new CachingPubSub(innerPubsub, cache);
+      const callback = vi.fn();
+      await pubsub.subscribe(topic, callback);
+      await pubsub.publish(topic, { type: 'test', runId: 'run-1', data: { a: 1 } });
+
+      expect(indexedSpy).toHaveBeenCalledTimes(1);
+      expect(indexedSpy.mock.calls[0]!.slice(0, 3)).toEqual([
+        `pubsub:{${topic}}`,
+        `pubsub:{${topic}}:counter`,
+        expect.objectContaining({ type: 'test', runId: 'run-1', data: { a: 1 }, id: expect.any(String) }),
+      ]);
+      expect(listPushSpy).not.toHaveBeenCalled();
+      // The value handed to the cache must not carry a pre-assigned index
+      expect(indexedSpy.mock.calls[0]![2]).not.toHaveProperty('index');
+
+      // Live event carries the index the cache assigned
+      expect(callback).toHaveBeenCalledWith(
+        expect.objectContaining({ index: 0 }),
+        expect.any(Function),
+        expect.any(Function),
+      );
+      const cached = await cache.listFromTo(`pubsub:{${topic}}`, 0);
+      expect(cached).toHaveLength(1);
+      expect((cached[0] as any).index).toBe(0);
     });
   });
 
   describe('steady-state dedup after replay', () => {
-    it('uses bounded watermark instead of unbounded seen set after replay', async () => {
+    it('delivers each index once after replay', async () => {
       const topic = 'seen-set-topic';
 
       // Publish a cached event before subscribing
@@ -922,17 +909,17 @@ describe('CachingPubSub', () => {
       for (let i = 0; i < 50; i++) {
         await cachingPubsub.publish(topic, { type: `live-${i}`, runId: 'run-1', data: {} });
       }
-      expect(callback).toHaveBeenCalledTimes(51); // 1 cached + 50 live
+      await vi.waitFor(() => expect(callback).toHaveBeenCalledTimes(51)); // 1 cached + 50 live
 
       // Get the wrappedCb from the callbackMap
       const callbackMap = (cachingPubsub as any).callbackMap as Map<any, any>;
       const wrappedCb = callbackMap.get(callback);
       expect(wrappedCb).toBeDefined();
 
-      // After replay, the wrapper uses a lastDelivered watermark. A genuinely
-      // new event (index higher than anything seen) should still be delivered.
+      // An index above the cursor is delivered (the log cannot supply the gap,
+      // so the cursor adopts it), and repeating that index is dropped.
       callback.mockClear();
-      const newEvent = {
+      const newEvent: Event = {
         id: 'brand-new',
         type: 'test',
         runId: 'run-1',
@@ -940,11 +927,10 @@ describe('CachingPubSub', () => {
         createdAt: new Date(),
         index: 999,
       };
-      wrappedCb(newEvent);
+      await wrappedCb(newEvent);
       expect(callback).toHaveBeenCalledTimes(1);
 
-      // The same index again should be suppressed (watermark dedup)
-      wrappedCb(newEvent);
+      await wrappedCb(newEvent);
       expect(callback).toHaveBeenCalledTimes(1);
     });
   });
@@ -1088,7 +1074,7 @@ describe('CachingPubSub', () => {
       expect(received).toEqual([3, 4]);
     });
 
-    it('delivers events published during getHistory bootstrap without duplication', async () => {
+    it('delivers events published during the log read without duplication', async () => {
       const pullInner = new PullModePubSub();
       const pullCaching = new CachingPubSub(pullInner, cache);
       const topic = 'pull-bootstrap-race';
@@ -1097,15 +1083,15 @@ describe('CachingPubSub', () => {
       await pullCaching.publish(topic, { type: 'e0', runId: 'r', data: {} });
       await pullCaching.publish(topic, { type: 'e1', runId: 'r', data: {} });
 
-      // Publish during getHistory to simulate the race
-      const realGetHistory = pullCaching.getHistory.bind(pullCaching);
+      // Publish while the subscriber is reading the log
+      const realListFromTo = cache.listFromTo.bind(cache);
       let raced = false;
-      vi.spyOn(pullCaching, 'getHistory').mockImplementation(async (t: string, offset?: number) => {
+      vi.spyOn(cache, 'listFromTo').mockImplementation(async (t: string, from: number, to?: number) => {
         if (!raced) {
           raced = true;
           await pullCaching.publish(topic, { type: 'e2', runId: 'r', data: {} });
         }
-        return realGetHistory(t, offset);
+        return realListFromTo(t, from, to);
       });
 
       const received: number[] = [];
@@ -1134,6 +1120,7 @@ describe('CachingPubSub', () => {
       // Publish after bootstrap — should be delivered normally
       await pullCaching.publish(topic, { type: 'e1', runId: 'r', data: {} });
       await pullCaching.publish(topic, { type: 'e2', runId: 'r', data: {} });
+      await new Promise(resolve => setTimeout(resolve, 0));
 
       expect(received).toEqual([0, 1, 2]);
     });
@@ -1166,19 +1153,18 @@ describe('CachingPubSub', () => {
         index: 1,
         deliveryAttempt: 2,
       });
+      await new Promise(resolve => setTimeout(resolve, 0));
 
       expect(received).toHaveLength(3);
       expect(received[2]).toEqual({ index: 1, attempt: 2 });
     });
 
-    it('cleans up wrappedCb when replay bootstrap fails', async () => {
+    it('cleans up wrappedCb when the log read fails', async () => {
       const pullInner = new PullModePubSub();
       const pullCaching = new CachingPubSub(pullInner, cache);
       const topic = 'pull-bootstrap-fail';
 
-      await pullCaching.publish(topic, { type: 'e0', runId: 'r', data: {} });
-
-      vi.spyOn(pullCaching, 'getHistory').mockRejectedValueOnce(new Error('cache down'));
+      vi.spyOn(cache, 'listFromTo').mockRejectedValueOnce(new Error('cache down'));
 
       const cb = vi.fn();
       await expect(pullCaching.subscribeWithReplay(topic, cb)).rejects.toThrow('cache down');
@@ -1196,17 +1182,17 @@ describe('CachingPubSub', () => {
       expect(cb).not.toHaveBeenCalled();
     });
 
-    it('preserves ack and nack handles for buffered live events that are delivered after history', async () => {
+    it('preserves ack and nack handles for live events delivered after the log', async () => {
       const pullInner = new PullModePubSub();
       const pullCaching = new CachingPubSub(pullInner, cache);
       const topic = 'pull-buffer-handles';
 
       await pullCaching.publish(topic, { type: 'e0', runId: 'r', data: {} });
 
-      const realGetHistory = pullCaching.getHistory.bind(pullCaching);
+      const realListFromTo = cache.listFromTo.bind(cache);
       let raced = false;
       const ackedByConsumer: number[] = [];
-      vi.spyOn(pullCaching, 'getHistory').mockImplementation(async (t: string, offset?: number) => {
+      vi.spyOn(cache, 'listFromTo').mockImplementation(async (t: string, from: number, to?: number) => {
         if (!raced) {
           raced = true;
           pullInner.emitLiveOnly(
@@ -1225,7 +1211,7 @@ describe('CachingPubSub', () => {
             async () => {},
           );
         }
-        return realGetHistory(t, offset);
+        return realListFromTo(t, from, to);
       });
 
       const received: number[] = [];
@@ -1243,733 +1229,207 @@ describe('CachingPubSub', () => {
     });
   });
 
-  describe('source bus following', () => {
+  describe('run log and cursor', () => {
     const topic = 'agent.stream.run-1';
     const flush = () => new Promise(resolve => setTimeout(resolve, 20));
 
     /**
-     * Mimics the `mastra.pubsub` proxy: same underlying transport, different
-     * object identity, methods bound to the target. Aliasing detection must
-     * see through it via `__rawBus()`.
-     */
-    function proxyOver(raw: PubSub): PubSub {
-      return new Proxy(raw, {
-        get(target, prop) {
-          const val = Reflect.get(target, prop, target);
-          return typeof val === 'function' ? val.bind(target) : val;
-        },
-      }) as PubSub;
-    }
-
-    it('delivers and caches source-published events when source is a different transport', async () => {
-      const sourceBus = new EventEmitterPubSub();
-      const caching = new CachingPubSub(new EventEmitterPubSub(), cache, { source: sourceBus });
-
-      const received: Event[] = [];
-      await caching.subscribe(topic, event => {
-        received.push(event);
-      });
-
-      // Publish directly on the source bus — the follower must bridge it.
-      await sourceBus.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 1 } });
-      await flush();
-
-      expect(received).toHaveLength(1);
-      expect(received[0]).toMatchObject({ type: 'chunk', data: { n: 1 }, index: 0 });
-
-      const history = await caching.getHistory(topic);
-      expect(history).toHaveLength(1);
-      expect(history[0].index).toBe(0);
-    });
-
-    it('acks every source delivery, including dedup-suppressed and cache-failure paths', async () => {
-      // Pins the composition of two shipped behaviors: the source-follower
-      // wiring (transport unification) and the pubsub ack contract (#24348).
-      // On a durable source backend (Redis Streams, GCP Pub/Sub) the follower
-      // is a real consumer — every delivery it filters out or fails to cache
-      // must still be acked, or it stays pending and is redelivered forever.
-      class AckRecordingSource extends PubSub {
-        private listeners = new Map<string, Set<EventCallback>>();
-        acked: Event[] = [];
-
-        async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
-          const full: Event = { ...event, id: crypto.randomUUID(), createdAt: new Date() } as Event;
-          for (const cb of this.listeners.get(topic) ?? []) {
-            await cb(full, async () => {
-              this.acked.push(full);
-            });
-          }
-        }
-
-        async subscribe(topic: string, cb: EventCallback): Promise<void> {
-          let cbs = this.listeners.get(topic);
-          if (!cbs) {
-            cbs = new Set();
-            this.listeners.set(topic, cbs);
-          }
-          cbs.add(cb);
-        }
-
-        async unsubscribe(topic: string, cb: EventCallback): Promise<void> {
-          this.listeners.get(topic)?.delete(cb);
-        }
-
-        async flush(): Promise<void> {}
-      }
-
-      const sourceBus = new AckRecordingSource();
-      const caching = new CachingPubSub(new EventEmitterPubSub(), cache, { source: sourceBus });
-      await caching.subscribe(topic, () => {});
-
-      // 1. Normal delivery: cached, republished, and acked.
-      await sourceBus.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 1 } });
-      expect(sourceBus.acked).toHaveLength(1);
-
-      // 2. Foreign-indexed delivery on a non-aliased source (re-cached under a
-      //    fresh index and republished): still acked.
-      await sourceBus.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 2 }, index: 5 });
-      expect(sourceBus.acked).toHaveLength(2);
-
-      // 3. Cache write failure (falls back to uncached republish): still acked.
-      const failingPush = vi.spyOn(cache, 'listPushIndexed').mockRejectedValueOnce(new Error('cache down'));
-      await sourceBus.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 3 } });
-      expect(sourceBus.acked).toHaveLength(3);
-      failingPush.mockRestore();
-    });
-
-    it('replays source-published events to late subscribers', async () => {
-      const sourceBus = new EventEmitterPubSub();
-      const caching = new CachingPubSub(new EventEmitterPubSub(), cache, { source: sourceBus });
-
-      // A first subscriber keeps the follower alive while events flow.
-      await caching.subscribe(topic, () => {});
-      await sourceBus.publish(topic, { type: 'first', runId: 'run-1', data: {} });
-      await sourceBus.publish(topic, { type: 'second', runId: 'run-1', data: {} });
-      await flush();
-
-      const replayed: string[] = [];
-      await caching.subscribeWithReplay(topic, event => {
-        replayed.push(event.type);
-      });
-      await sourceBus.publish(topic, { type: 'third', runId: 'run-1', data: {} });
-      await flush();
-
-      expect(replayed).toEqual(['first', 'second', 'third']);
-    });
-
-    it('bridges foreign-indexed events when the source is another caching tier', async () => {
-      // Supported topology: an agent with its own pubsub wraps it in its own
-      // CachingPubSub and follows `mastra.pubsub` — which is itself a
-      // user-supplied CachingPubSub over a *different* cache and transport
-      // (`new Mastra({ pubsub: new CachingPubSub(...) })`). Events published
-      // through the mastra tier arrive at the follower already carrying that
-      // tier's index. They must NOT be treated as a local echo: the foreign
-      // tier's cache is not the one this tier replays from, so dropping them
-      // loses the event for local subscribers entirely (#20646's failure
-      // mode). Expected: cached here under a fresh index and republished
-      // into inner exactly once.
-      const foreignTier = new CachingPubSub(new EventEmitterPubSub(), new InMemoryServerCache());
-      const caching = new CachingPubSub(new EventEmitterPubSub(), cache, { source: foreignTier });
-
-      // Bump the foreign tier's counter before anyone follows, so the foreign
-      // index (1) is distinguishable from this tier's fresh index (0).
-      await foreignTier.publish(topic, { type: 'warmup', runId: 'run-1', data: {} });
-
-      const received: Event[] = [];
-      await caching.subscribe(topic, event => {
-        received.push(event);
-      });
-
-      await foreignTier.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 1 } });
-      await flush();
-
-      // Exactly one live delivery, carrying this tier's index — not the
-      // foreign tier's.
-      expect(received).toHaveLength(1);
-      expect(received[0]).toMatchObject({ type: 'chunk', data: { n: 1 }, index: 0 });
-
-      // Cached in this tier, so late subscribers can replay it.
-      const history = await caching.getHistory(topic);
-      expect(history).toHaveLength(1);
-      expect(history[0]).toMatchObject({ type: 'chunk', index: 0 });
-
-      const replayed: string[] = [];
-      await caching.subscribeWithReplay(topic, event => {
-        replayed.push(event.type);
-      });
-      await flush();
-      expect(replayed).toEqual(['chunk']);
-    });
-
-    it('does not double-deliver when source and inner share the transport', async () => {
-      const shared = new EventEmitterPubSub();
-      const caching = new CachingPubSub(shared, cache, { source: proxyOver(shared) });
-
-      const received: Event[] = [];
-      await caching.subscribe(topic, event => {
-        received.push(event);
-      });
-
-      await shared.publish(topic, { type: 'chunk', runId: 'run-1', data: {} });
-      await flush();
-
-      // Exactly one live delivery (the original), but the event is cached.
-      expect(received).toHaveLength(1);
-      const history = await caching.getHistory(topic);
-      expect(history).toHaveLength(1);
-      expect(history[0].index).toBe(0);
-      // Cached copy preserves the live id — subscribeFromOffset dedups the
-      // unindexed live copy against the indexed cached copy by id.
-      expect(history[0].id).toBe(received[0].id);
-    });
-
-    it('replay+live has no duplicates on an aliased bus', async () => {
-      const shared = new EventEmitterPubSub();
-      const caching = new CachingPubSub(shared, cache, { source: proxyOver(shared) });
-
-      await caching.subscribe(topic, () => {});
-      await shared.publish(topic, { type: 'first', runId: 'run-1', data: {} });
-      await shared.publish(topic, { type: 'second', runId: 'run-1', data: {} });
-      await flush();
-
-      const replayed: string[] = [];
-      await caching.subscribeWithReplay(topic, event => {
-        replayed.push(event.type);
-      });
-      await shared.publish(topic, { type: 'third', runId: 'run-1', data: {} });
-      await flush();
-
-      expect(replayed).toEqual(['first', 'second', 'third']);
-    });
-
-    it('ignores its own indexed publishes on an aliased bus (no double cache)', async () => {
-      const shared = new EventEmitterPubSub();
-      const caching = new CachingPubSub(shared, cache, { source: proxyOver(shared) });
-
-      const received: Event[] = [];
-      await caching.subscribe(topic, event => {
-        received.push(event);
-      });
-
-      await caching.publish(topic, { type: 'chunk', runId: 'run-1', data: {} });
-      await flush();
-
-      expect(received).toHaveLength(1);
-      const history = await caching.getHistory(topic);
-      expect(history).toHaveLength(1);
-    });
-
-    it('respects the shouldCache policy for followed events', async () => {
-      const sourceBus = new EventEmitterPubSub();
-      const caching = new CachingPubSub(new EventEmitterPubSub(), cache, {
-        source: sourceBus,
-        shouldCache: () => false,
-      });
-
-      const received: Event[] = [];
-      await caching.subscribe(topic, event => {
-        received.push(event);
-      });
-
-      await sourceBus.publish(topic, { type: 'chunk', runId: 'run-1', data: {} });
-      await flush();
-
-      // Still forwarded live across the split transports, but never cached.
-      expect(received).toHaveLength(1);
-      expect(received[0].index).toBeUndefined();
-      expect(await caching.getHistory(topic)).toHaveLength(0);
-    });
-
-    it('stops following when the last local subscriber unsubscribes', async () => {
-      const sourceBus = new EventEmitterPubSub();
-      const caching = new CachingPubSub(new EventEmitterPubSub(), cache, { source: sourceBus });
-
-      const cb = vi.fn();
-      await caching.subscribe(topic, cb);
-      await caching.unsubscribe(topic, cb);
-
-      await sourceBus.publish(topic, { type: 'chunk', runId: 'run-1', data: {} });
-      await flush();
-
-      expect(cb).not.toHaveBeenCalled();
-      expect(await caching.getHistory(topic)).toHaveLength(0);
-    });
-
-    it('clearTopic tears down the follower', async () => {
-      const sourceBus = new EventEmitterPubSub();
-      const caching = new CachingPubSub(new EventEmitterPubSub(), cache, { source: sourceBus });
-
-      await caching.subscribe(topic, () => {});
-      await sourceBus.publish(topic, { type: 'before', runId: 'run-1', data: {} });
-      await flush();
-      expect(await caching.getHistory(topic)).toHaveLength(1);
-
-      await caching.clearTopic(topic);
-      await sourceBus.publish(topic, { type: 'after', runId: 'run-1', data: {} });
-      await flush();
-
-      expect(await caching.getHistory(topic)).toHaveLength(0);
-    });
-
-    it('__setSource wires a source after construction', async () => {
-      const sourceBus = new EventEmitterPubSub();
-      const caching = new CachingPubSub(new EventEmitterPubSub(), cache);
-      caching.__setSource(sourceBus);
-
-      const received: Event[] = [];
-      await caching.subscribe(topic, event => {
-        received.push(event);
-      });
-
-      await sourceBus.publish(topic, { type: 'chunk', runId: 'run-1', data: {} });
-      await flush();
-
-      expect(received).toHaveLength(1);
-      expect(await caching.getHistory(topic)).toHaveLength(1);
-    });
-
-    it('releases a follower from the source it subscribed to after source replacement', async () => {
-      const firstSource = new EventEmitterPubSub();
-      const secondSource = new EventEmitterPubSub();
-      const caching = new CachingPubSub(new EventEmitterPubSub(), cache, { source: firstSource });
-      const callback = vi.fn();
-
-      await caching.subscribe(topic, callback);
-      caching.__setSource(secondSource);
-      await caching.unsubscribe(topic, callback);
-
-      await firstSource.publish(topic, { type: 'after-unsubscribe', runId: 'run-1', data: {} });
-      await flush();
-
-      expect(callback).not.toHaveBeenCalled();
-      expect(await caching.getHistory(topic)).toHaveLength(0);
-    });
-  });
-
-  describe('retaining transport', () => {
-    const topic = 'agent.stream.run-1';
-    const flush = () => new Promise(resolve => setTimeout(resolve, 20));
-
-    /**
-     * Stand-in for a retaining backend (Redis Streams, …): it keeps every event
-     * it is handed and replays that retained history in full to each new
-     * subscription unless the subscriber asks to start at the latest. The same
-     * event object (same id) is delivered live and replayed from storage, which
-     * is what makes id-based dedupe possible for an unnumbered publisher.
-     * `EventEmitterPubSub` retains nothing and mints a new id per publish, so an
-     * in-process bus never exposed this — which is why the duplication only
-     * showed up in a real deployment.
+     * Mimics a stream backend that retains published frames and replays the
+     * whole backlog on subscribe, then delivers live frames to attached
+     * listeners. Frames are retained exactly as published, so a subscriber can
+     * receive the same frame from both the transport and the log.
      */
     class RetainingPubSub extends PubSub {
-      readonly retained = new Map<string, Event[]>();
-      readonly subscribeOptions: Array<SubscribeOptions | undefined> = [];
-      private readonly listeners = new Map<string, Set<EventCallback>>();
-      /** Publishes at the exact moment a subscription goes live, before it resolves. */
-      onLiveAttach?: (topic: string) => void | Promise<void>;
+      retained = new Map<string, Event[]>();
+      listeners = new Map<string, Set<EventCallback>>();
+      acked: Event[] = [];
+      onLiveAttach?: () => void | Promise<void>;
 
-      async publish(topic: string, event: Omit<Event, 'id' | 'createdAt'>) {
-        const full: Event = { ...event, id: crypto.randomUUID(), createdAt: new Date(), deliveryAttempt: 1 };
-        const retained = this.retained.get(topic) ?? [];
-        retained.push(full);
-        this.retained.set(topic, retained);
-        for (const cb of this.listeners.get(topic) ?? []) {
-          await cb(full);
+      async publish(t: string, event: Omit<Event, 'id' | 'createdAt'>): Promise<void> {
+        const full: Event = { ...event, id: crypto.randomUUID(), createdAt: new Date() } as Event;
+        const backlog = this.retained.get(t) ?? [];
+        backlog.push(full);
+        this.retained.set(t, backlog);
+        for (const cb of this.listeners.get(t) ?? []) {
+          await cb(full, async () => {
+            this.acked.push(full);
+          });
         }
       }
 
-      async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions) {
-        this.subscribeOptions.push(options);
-        if (options?.startFrom !== 'latest') {
-          for (const event of this.retained.get(topic) ?? []) {
-            await cb(event);
-          }
-        }
-        const listeners = this.listeners.get(topic) ?? new Set<EventCallback>();
+      async subscribe(t: string, cb: EventCallback): Promise<void> {
+        const listeners = this.listeners.get(t) ?? new Set<EventCallback>();
+        this.listeners.set(t, listeners);
         listeners.add(cb);
-        this.listeners.set(topic, listeners);
-        await this.onLiveAttach?.(topic);
+        for (const event of this.retained.get(t) ?? []) {
+          await cb(event, async () => {
+            this.acked.push(event);
+          });
+        }
+        await this.onLiveAttach?.();
       }
 
-      async unsubscribe(topic: string, cb: EventCallback) {
-        this.listeners.get(topic)?.delete(cb);
+      async unsubscribe(t: string, cb: EventCallback): Promise<void> {
+        this.listeners.get(t)?.delete(cb);
       }
 
-      async flush() {}
+      async flush(): Promise<void> {}
     }
 
-    /** A run whose events reached the shared transport and the shared cache. */
-    async function runWithFourEvents() {
-      const inner = new RetainingPubSub();
-      const caching = new CachingPubSub(inner, cache, { source: inner });
-      const stream = () => {};
-
-      // A subscriber is attached while the run publishes, so the follower caches
-      // the transport's events under indices (the real "observe a live run" setup).
-      await caching.subscribe(topic, stream);
-      for (let n = 0; n < 4; n++) {
-        await inner.publish(topic, { type: 'chunk', runId: 'run-1', data: { n } });
-      }
-      await flush();
-      await caching.unsubscribe(topic, stream);
-
-      return { inner, caching };
-    }
-
-    it('drops the retained transport copies of frames before and after the offset', async () => {
-      const { caching } = await runWithFourEvents();
-      const received: Event[] = [];
-
-      await caching.subscribeFromOffset(topic, 2, event => {
-        received.push(event);
-      });
-      await flush();
-
-      // The subscriber asked for frames 2..3. The transport replays its retained
-      // copy of frames 0..3 as well; those copies are unnumbered (they never
-      // passed through this cache), so the offset filter can't see them and they
-      // are suppressed by id instead — including 0..1, which are before the
-      // offset and would otherwise have ignored it.
-      expect(received.map(event => event.data.n)).toEqual([2, 3]);
-      expect(received.map(event => event.index)).toEqual([2, 3]);
-    });
-
-    it('does not ask the transport to skip its history, so a cold cache can still rebuild from it', async () => {
-      const { inner, caching } = await runWithFourEvents();
-      const before = inner.subscribeOptions.length;
-
-      await caching.subscribeFromOffset(topic, 0, () => {});
-      await flush();
-
-      // `startFrom` is left at the transport default ('earliest') for the
-      // observer's own subscription (the follower's re-attach above it is
-      // deliberately live-only — it caches what it sees, replay is the cache's
-      // job): on a cold cache the retained events are the only copy of the run,
-      // and they carry the index they were published with once numbering is in
-      // place.
-      expect(inner.subscribeOptions.slice(before).at(-1)).toBeUndefined();
-    });
-
-    it('still delivers events published after the subscriber attaches', async () => {
-      const { inner, caching } = await runWithFourEvents();
-      const received: Event[] = [];
-
-      await caching.subscribeFromOffset(topic, 0, event => {
-        received.push(event);
-      });
-      await flush();
-      await inner.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 4 } });
-      await flush();
-
-      expect(received.map(event => event.data.n)).toEqual([0, 1, 2, 3, 4]);
-    });
-
-    it('does not drop an event published between the live attach and the cache read', async () => {
-      const inner = new RetainingPubSub();
-      const caching = new CachingPubSub(inner, cache, { source: inner });
-      const keepAlive = () => {};
-
-      // Keep the follower attached, as an ongoing live stream would, so the only
-      // subscription `subscribeFromOffset` opens below is the observer's own.
-      await caching.subscribe(topic, keepAlive);
-      for (let n = 0; n < 4; n++) {
-        await inner.publish(topic, { type: 'chunk', runId: 'run-1', data: { n } });
-      }
-      await flush();
-
-      // Publish from inside the transport's subscribe: the observer's live
-      // listener exists, but `subscribeFromOffset` has not read the cache
-      // snapshot yet. This is the window `startFrom: 'latest'` could lose an
-      // event in — it cannot, because the live subscribe is awaited before the
-      // history fetch, so the event is buffered and then deduped against history
-      // by index/id.
-      inner.onLiveAttach = async attachedTopic => {
-        await inner.publish(attachedTopic, { type: 'chunk', runId: 'run-1', data: { n: 4 } });
-      };
-
-      const received: Event[] = [];
-      await caching.subscribeFromOffset(topic, 0, event => {
-        received.push(event);
-      });
-      await flush();
-      await caching.unsubscribe(topic, keepAlive);
-
-      expect(received.map(event => event.data.n)).toEqual([0, 1, 2, 3, 4]);
-    });
-
-    it('delivers exact-sequenced frames that reach the transport out of order exactly once', async () => {
-      const inner = new RetainingPubSub();
-      const caching = new CachingPubSub(inner, cache, { source: inner });
-      const received: Event[] = [];
-
-      await caching.subscribeFromOffset(topic, 0, event => {
-        received.push(event);
-      });
-      await flush();
-
-      // Two processes allocate 5 and 6 from the shared counter; the transport
-      // can hand them over in either order. Their frames carry `streamSeq`
-      // rather than `index` so that older subscribers still see them as
-      // unnumbered, which is what the pre-change code delivered.
-      const exactFrame = (n: number, streamSeq: number): Omit<Event, 'id' | 'createdAt'> => ({
+    /** Append a frame to the shared log and return it, index included. */
+    const append = async (target: InMemoryServerCache, n: number): Promise<Event> => {
+      const frame = {
         type: 'chunk',
         runId: 'run-1',
         data: { n },
-        indexMode: 'exact',
-        streamSeq,
-      });
-      await inner.publish(topic, exactFrame(6, 6));
-      await inner.publish(topic, exactFrame(5, 5));
-      // A duplicate of a sequence that is still above the floor is dropped.
-      await inner.publish(topic, exactFrame(6, 6));
-      await flush();
+        id: `frame-${n}`,
+        createdAt: new Date(),
+      } as Event;
+      frame.index = await target.listPushIndexed(
+        `pubsub:{${topic}}`,
+        `pubsub:{${topic}}:counter`,
+        frame as Omit<Event, 'id' | 'createdAt'>,
+      );
+      return frame;
+    };
 
-      expect(received.map(event => event.streamSeq)).toEqual([6, 5]);
-    });
-
-    it('leaves watermark-kind frames on today’s high-water-mark behavior', async () => {
+    it('delivers out-of-order frames from two workers in log order, exactly once', async () => {
       const inner = new RetainingPubSub();
-      const caching = new CachingPubSub(inner, cache, { source: inner });
-      const received: Event[] = [];
+      const shared = new InMemoryServerCache();
+      const subscriber = new CachingPubSub(inner, shared);
 
-      await caching.subscribeFromOffset(topic, 0, event => {
-        received.push(event);
+      const received: number[] = [];
+      await subscriber.subscribeFromOffset(topic, 0, event => {
+        received.push(event.index!);
       });
+
+      // Two workers claimed consecutive steps, so the log holds 0 then 1. The
+      // transport can hand them over in either order; the cursor reads the gap
+      // back from the log instead of dropping the late frame as a duplicate.
+      const first = await append(shared, 0);
+      const second = await append(shared, 1);
+      await inner.publish(topic, second);
       await flush();
 
-      // A frame whose index comes from a single per-process counter is still
-      // treated as before: anything at or below the highest index seen is a
-      // stale frame from a discarded attempt, so 8 after 9 never surfaces.
-      await inner.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 9 }, index: 9 });
-      await inner.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 8 }, index: 8 });
+      expect(received).toEqual([0, 1]);
+
+      await inner.publish(topic, first);
       await flush();
 
-      expect(received.map(event => event.data.n)).toEqual([9]);
+      expect(received).toEqual([0, 1]);
     });
 
-    it('applies each dedupe discipline to its own frames on a shared topic', async () => {
-      const inner = new RetainingPubSub();
-      const caching = new CachingPubSub(inner, cache, { source: inner });
-      const received: Event[] = [];
-
-      await caching.subscribeFromOffset(topic, 0, event => {
-        received.push(event);
-      });
-      await flush();
-
-      // Exact frames from step workers and watermark frames from an agent’s own
-      // publisher share this run topic. Neither discipline may advance state the
-      // other reads: the exact floor must not swallow the late watermark frame,
-      // and the watermark must not swallow a hole the exact path still tracks.
-      await inner.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 6 }, indexMode: 'exact', streamSeq: 6 });
-      await inner.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 5 }, indexMode: 'exact', streamSeq: 5 });
-      await inner.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 9 }, index: 9 });
-      await inner.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 8 }, index: 8 });
-      await flush();
-
-      expect(received.map(event => event.data.n)).toEqual([6, 5, 9]);
-    });
-
-    it('replays one frame when a follower sees a frame another tier already cached', async () => {
-      // Two pubsub instances that share a cache but not a bus: a step publishes
-      // on one, the agent follows it from the other. The step cached its frame
-      // under an exact index; the follower recognises that entry in the shared
-      // history and only forwards the frame, instead of storing a second copy
-      // under a fresh index that replay would also deliver.
-      const stepBus = new RetainingPubSub();
-      const agentBus = new RetainingPubSub();
-      const stepPubsub = new CachingPubSub(stepBus, cache, { indexMode: 'exact' });
-      const agentPubsub = new CachingPubSub(agentBus, cache, { source: stepBus });
-
-      // Attach first: the follower listens to its source with `startFrom: 'latest'`.
-      const live: Event[] = [];
-      await agentPubsub.subscribeFromOffset(topic, 0, event => {
-        live.push(event);
-      });
-
-      await stepPubsub.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 0 } });
-      await flush();
-
-      const replayed: Event[] = [];
-      await agentPubsub.subscribeFromOffset(topic, 0, event => {
-        replayed.push(event);
-      });
-      await flush();
-
-      expect(live.map(event => event.data)).toEqual([{ n: 0 }]);
-      expect(replayed.map(event => event.data)).toEqual([{ n: 0 }]);
-    });
-
-    it('replays one frame when the list expired before another tier cached it', async () => {
-      // Same shared cache across two buses, but the list TTL elapsed first: the
-      // surviving counter hands the next frame index 4 into a list that starts at
-      // position 0. Recognising that entry must not assume index == position, or
-      // the follower stores it again and replay carries it twice.
-      const stepBus = new RetainingPubSub();
-      const agentBus = new RetainingPubSub();
-      const stepPubsub = new CachingPubSub(stepBus, cache, { indexMode: 'exact' });
-      const agentPubsub = new CachingPubSub(agentBus, cache, { source: stepBus });
-
-      const live: Event[] = [];
-      await agentPubsub.subscribeFromOffset(topic, 0, event => {
-        live.push(event);
-      });
-      for (let n = 0; n < 4; n++) {
-        await stepPubsub.publish(topic, { type: 'chunk', runId: 'run-1', data: { n } });
+    it('replays the log for a cold subscriber even when the transport replays nothing', async () => {
+      const inner = new EventEmitterPubSub();
+      const publisher = new CachingPubSub(inner, cache);
+      for (let n = 0; n < 3; n++) {
+        await publisher.publish(topic, { type: 'chunk', runId: 'run-1', data: { n } });
       }
-      await flush();
 
-      await cache.delete(`pubsub:${topic}`);
-      await stepPubsub.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 4 } });
-      await flush();
+      const subscriber = new CachingPubSub(inner, cache);
+      const received: number[] = [];
+      await subscriber.subscribeFromOffset(topic, 0, event => {
+        received.push(event.index!);
+      });
 
-      expect(live.map(event => event.data.n)).toEqual([0, 1, 2, 3, 4]);
-
-      const history = await agentPubsub.getHistory(topic, 0);
-      expect(history.map(event => event.data.n)).toEqual([4]);
-      expect(history.map(event => event.index)).toEqual([4]);
-      // One allocation for the frame: the follower forwarded it, not re-stored it.
-      expect(await cache.get(`pubsub:${topic}:counter`)).toBe(5);
+      expect(received).toEqual([0, 1, 2]);
     });
 
-    it('is seen as unnumbered by a subscriber running the pre-#27352 dedupe', async () => {
-      /**
-       * Rollout compatibility: an older API process may observe a run while a
-       * newer worker publishes exact-sequenced frames. The old subscriber reads
-       * `index` only, so a transport frame without a numeric `index` takes its
-       * unnumbered path and is delivered — it must never be dropped by a
-       * watermark it cannot even see.
-       */
-      const legacyDeliver = (events: Event[]): Event[] => {
-        let lastDelivered = -1;
-        const out: Event[] = [];
-        for (const event of events) {
-          const isRetry = typeof event.deliveryAttempt === 'number' && event.deliveryAttempt > 1;
-          if (typeof event.index === 'number') {
-            if (!isRetry && event.index <= lastDelivered) continue;
-            lastDelivered = Math.max(lastDelivered, event.index);
-          }
-          out.push(event);
-        }
-        return out;
+    it('honours the offset and acknowledges retained copies before it', async () => {
+      const inner = new RetainingPubSub();
+      const publisher = new CachingPubSub(inner, cache);
+      for (let n = 0; n < 3; n++) {
+        await publisher.publish(topic, { type: 'chunk', runId: 'run-1', data: { n } });
+      }
+
+      const subscriber = new CachingPubSub(inner, cache);
+      const received: number[] = [];
+      await subscriber.subscribeFromOffset(topic, 2, event => {
+        received.push(event.index!);
+      });
+      await flush();
+
+      // 0 and 1 arrive from the transport replay; both are before the cursor.
+      expect(received).toEqual([2]);
+      expect(inner.acked.map(event => event.index)).toEqual([0, 1]);
+    });
+
+    it('backfills a gap the transport skipped from the log', async () => {
+      const inner = new RetainingPubSub();
+      const shared = new InMemoryServerCache();
+      const subscriber = new CachingPubSub(inner, shared);
+
+      const received: number[] = [];
+      await subscriber.subscribeFromOffset(topic, 0, event => {
+        received.push(event.index!);
+      });
+
+      const frames = [await append(shared, 0), await append(shared, 1), await append(shared, 2)];
+      // Only the last frame reaches the transport.
+      await inner.publish(topic, frames[2]!);
+      await flush();
+
+      expect(received).toEqual([0, 1, 2]);
+    });
+
+    it('resumes live-only when the log cannot supply the missing range', async () => {
+      const inner = new EventEmitterPubSub();
+      const subscriber = new CachingPubSub(inner, cache);
+
+      const received: number[] = [];
+      await subscriber.subscribeFromOffset(topic, 0, event => {
+        received.push(event.index!);
+      });
+
+      // No log history at all (cold cache), and the frame in hand is index 7.
+      await inner.publish(topic, {
+        type: 'chunk',
+        runId: 'run-1',
+        data: { n: 7 },
+        index: 7,
+      });
+      await flush();
+
+      expect(received).toEqual([7]);
+    });
+
+    it('does not drop a frame published between attach and the log read', async () => {
+      const inner = new RetainingPubSub();
+      const publisher = new CachingPubSub(inner, cache);
+      inner.onLiveAttach = async () => {
+        await publisher.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 0 } });
       };
 
-      const inner = new RetainingPubSub();
-      const publisher = new CachingPubSub(inner, cache, { indexMode: 'exact' });
-      await publisher.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 5 } });
+      const received: number[] = [];
+      await publisher.subscribeWithReplay(topic, event => {
+        received.push(event.index!);
+      });
 
-      // What the transport actually hands an old subscriber: the frame the
-      // exact publisher emitted, with `streamSeq` in place of `index`.
-      const frames = inner.retained.get(topic)!;
-      expect(frames.map(event => event.index)).toEqual([undefined]);
-      expect(legacyDeliver(frames).map(event => event.data.n)).toEqual([5]);
-
-      // And when two workers' frames arrive as 6 then 5, the old subscriber
-      // delivers both — exactly what it did before this change.
-      const outOfOrder: Event[] = [
-        {
-          id: 'frame-6',
-          createdAt: new Date(),
-          type: 'chunk',
-          runId: 'run-1',
-          data: { n: 6 },
-          indexMode: 'exact',
-          streamSeq: 6,
-        },
-        {
-          id: 'frame-5',
-          createdAt: new Date(),
-          type: 'chunk',
-          runId: 'run-1',
-          data: { n: 5 },
-          indexMode: 'exact',
-          streamSeq: 5,
-        },
-      ];
-      expect(legacyDeliver(outOfOrder).map(event => event.data.n)).toEqual([6, 5]);
+      expect(received).toEqual([0]);
     });
 
-    it('rebuilds a cold cache from the numbered retained history at an offset', async () => {
+    it('reads the log at an offset', async () => {
       const inner = new RetainingPubSub();
       const publisher = new CachingPubSub(inner, cache);
       for (let n = 0; n < 4; n++) {
         await publisher.publish(topic, { type: 'chunk', runId: 'run-1', data: { n } });
       }
-      await flush();
 
-      // A process that restarted has an empty cache but the same transport: the
-      // retained copies carry their index now, so the offset applies to them and
-      // the run can be resumed without re-delivering the whole prefix.
-      const restarted = new CachingPubSub(inner, new InMemoryServerCache());
-      const received: Event[] = [];
-      await restarted.subscribeFromOffset(topic, 2, event => {
-        received.push(event);
-      });
-      await flush();
-
-      expect(received.map(event => event.index)).toEqual([2, 3]);
-      expect(received.map(event => event.data.n)).toEqual([2, 3]);
+      const history = await publisher.getHistory(topic, 2);
+      expect(history.map(event => event.index)).toEqual([2, 3]);
+      expect(history.map(event => event.data.n)).toEqual([2, 3]);
     });
 
-    it('re-reads the whole list when a positional slice is not in index order', async () => {
-      /**
-       * A cache without the atomic allocate+append pair can interleave two
-       * publishers, so the list position of an entry no longer matches its
-       * index and slicing by position returns the wrong window.
-       */
-      class InterleavedCache extends InMemoryServerCache {
-        override async listFromTo(key: string, from: number, to?: number) {
-          const full = (await super.listFromTo(key, 0)) as Event[];
-          if (from === 0) return full as never;
-          const slice = (await super.listFromTo(key, from, to)) as Event[];
-          return [...slice].reverse() as never;
-        }
-      }
+    it('one append refreshes the list and counter together', async () => {
+      const shared = new InMemoryServerCache();
+      const pubsub = new CachingPubSub(new EventEmitterPubSub(), shared);
 
-      const interleaved = new InterleavedCache();
-      const publisher = new CachingPubSub(new EventEmitterPubSub(), interleaved);
-      for (let n = 0; n < 4; n++) {
-        await publisher.publish(topic, { type: 'chunk', runId: 'run-1', data: { n } });
-      }
+      await pubsub.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 0 } });
 
-      const history = await publisher.getHistory(topic, 1);
-      expect(history.map(event => event.index)).toEqual([1, 2, 3]);
-    });
-
-    it('finds the frames after a list that expired while its counter survived', async () => {
-      /**
-       * The index counter deliberately outlives the list it indexes (see
-       * `counterTtlSeconds`): a run can sit silent inside one tool call for
-       * longer than the list TTL. When the list expires mid-run the next
-       * publish allocates a non-zero index into a fresh, short list, so slicing
-       * by position returns an empty window for an offset the new frames are
-       * still above. An empty slice proves nothing — re-read and filter.
-       */
-      const inner = new RetainingPubSub();
-      const publisher = new CachingPubSub(inner, cache, { indexMode: 'exact' });
-      for (let n = 0; n < 4; n++) {
-        await publisher.publish(topic, { type: 'chunk', runId: 'run-1', data: { n } });
-      }
-
-      // The list key expires; the counter key (a separate entry) does not.
-      await cache.delete(`pubsub:${topic}`);
-      for (let n = 4; n < 6; n++) {
-        await publisher.publish(topic, { type: 'chunk', runId: 'run-1', data: { n } });
-      }
-      expect(await cache.listFromTo(`pubsub:${topic}`, 0)).toHaveLength(2);
-      expect(await cache.get(`pubsub:${topic}:counter`)).toBe(6);
-
-      const history = await publisher.getHistory(topic, 4);
-      expect(history.map(event => event.index)).toEqual([4, 5]);
-
-      // A subscriber reconnecting at the offset sees the surviving frames once.
-      const restarted = new CachingPubSub(inner, new InMemoryServerCache(), { indexMode: 'exact' });
-      const received: Event[] = [];
-      await restarted.subscribeFromOffset(topic, 4, event => {
-        received.push(event);
-      });
-      await flush();
-
-      expect(received.map(event => event.streamSeq ?? event.index)).toEqual([4, 5]);
+      // Both keys exist and the counter tracks the next index, so a subscriber
+      // can tell the log's numbering from a restarted one.
+      expect(await shared.listFromTo(`pubsub:{${topic}}`, 0)).toHaveLength(1);
+      expect(await shared.get(`pubsub:{${topic}}:counter`)).toBe(1);
     });
   });
 });

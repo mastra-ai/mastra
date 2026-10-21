@@ -2,8 +2,14 @@
 '@mastra/core': patch
 ---
 
-Fixed `observe()` sending duplicate frames and dropping the start of a run when it reconnects over a transport that retains its history (Redis Streams, Unix sockets).
+Fixed `observe()` sending duplicate frames, and made a run's cached frames exactly what it replays.
 
-Events published by evented durable steps are now numbered through the shared cache before they reach the transport, so a replay is treated like any other frame: the requested offset is respected and each event is counted once. A process that reconnects with an empty cache can rebuild the run from the transport's retained history, and two workers can number their events in either order without one being discarded. Two caching tiers that share a cache but not a transport no longer store the same frame twice, so replaying that run carries it once. Events numbered inside a single process keep the previous ordering behaviour, so a stale frame from a discarded model attempt is still withheld. When a topic's cached history is out of order, or its list expired while its counter survived, the subscriber re-reads what is there instead of returning a partial or empty window.
+A durable run's frames are now appended to one log (`MastraServerCache.listPushIndexed`), which allocates the frame's position and stores it in a single atomic step, before the frame is published to the transport. The cached list is the run's history; the transport is only the live tail. A subscriber tracks one cursor: frames below it are dropped as already seen, the frame at it is delivered, and a gap is filled from the log before carrying on. This deletes the watermark/id deduplication and the follower machinery that re-stored frames the log already held, which is where the duplicate frames came from.
 
-Numbering is only enabled when the cache allocates the index and appends the entry in one atomic step; on other caches events stay unnumbered and are deduplicated by id. During a rolling deploy an API process that has not upgraded yet receives the new frames without a numeric index and forwards them exactly as it does today, instead of dropping them as stale. The durable agent's observe subscription removes the new sequence metadata before handing an event to the caller, so the payload `POST /agents/:id/observe` forwards is unchanged.
+Evented durable steps now publish run frames on the Mastra-level pubsub and cache rather than their own bus, so every worker that claims a step appends to the same run log. An agent constructed with its own `pubsub` keeps that bus for signals and aborts, and logs a warning that its run frames are observable only on the Mastra transport.
+
+The list and its index counter always share one TTL, and keys are hash-tagged (`pubsub:{topic}`) so the append script stays on a single Redis Cluster slot. `RedisServerCache.counterTtlSeconds` is gone; durable run topics pass a longer per-write TTL instead.
+
+A cache that cannot allocate and append in one step (`supportsAtomicAppend === false`) publishes unnumbered frames: observers see the live tail but cannot resume from an offset. When no shared cache is configured the same applies, and `observe({ offset })` is documented as live-only.
+
+Cached keys are now `pubsub:{topic}` instead of `pubsub:topic`, so history written before an upgrade is not read back after it.

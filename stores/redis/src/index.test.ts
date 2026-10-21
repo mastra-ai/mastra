@@ -139,22 +139,22 @@ describe('RedisServerCache', () => {
   });
 
   describe('increment', () => {
-    it('should increment with prefixed key and refresh the counter TTL, not the list TTL', async () => {
+    it('should increment with prefixed key and refresh the TTL', async () => {
       mockClient.incr.mockResolvedValue(3);
       mockClient.expire.mockResolvedValue(1);
 
       const result = await cache.increment('counter');
 
       expect(mockClient.incr).toHaveBeenCalledWith('mastra:cache:counter');
-      // A counter must outlive the list it indexes: if it expired with the list
-      // while a live subscriber had already delivered 0..k, the next allocation
-      // would restart at 0 and every new frame would be dropped as a duplicate.
-      expect(mockClient.expire).toHaveBeenCalledWith('mastra:cache:counter', 86_400);
+      // A topic log and its counter always share one TTL so they expire
+      // together: a counter that outlived its list would restart at 0 while a
+      // live subscriber still held the old numbering.
+      expect(mockClient.expire).toHaveBeenCalledWith('mastra:cache:counter', 300);
       expect(result).toBe(3);
     });
 
-    it('should not refresh the counter TTL when counterTtlSeconds is 0', async () => {
-      const noTtlCache = new RedisServerCache({ client: mockClient }, { counterTtlSeconds: 0 });
+    it('should not refresh the TTL when ttlSeconds is 0', async () => {
+      const noTtlCache = new RedisServerCache({ client: mockClient }, { ttlSeconds: 0 });
       mockClient.incr.mockResolvedValue(1);
 
       const result = await noTtlCache.increment('counter');
@@ -164,8 +164,8 @@ describe('RedisServerCache', () => {
       expect(result).toBe(1);
     });
 
-    it('should use an explicit counterTtlSeconds', async () => {
-      const customCache = new RedisServerCache({ client: mockClient }, { counterTtlSeconds: 900 });
+    it('should use an explicit ttlSeconds', async () => {
+      const customCache = new RedisServerCache({ client: mockClient }, { ttlSeconds: 900 });
       mockClient.incr.mockResolvedValue(1);
 
       await customCache.increment('counter');
@@ -174,9 +174,9 @@ describe('RedisServerCache', () => {
     });
   });
 
-  describe('supportsAtomicCounters', () => {
-    it('reports true when the client can run the atomic index script', () => {
-      expect(cache.supportsAtomicCounters).toBe(true);
+  describe('supportsAtomicAppend', () => {
+    it('reports true when the client can run the atomic append script', () => {
+      expect(cache.supportsAtomicAppend).toBe(true);
     });
 
     it('reports false when the client has no eval', () => {
@@ -185,18 +185,7 @@ describe('RedisServerCache', () => {
 
       // Without eval the allocate+append pair is two round-trips, so publishers
       // can interleave and hand out the same index.
-      expect(fallbackCache.supportsAtomicCounters).toBe(false);
-    });
-
-    it('reports false after a CROSSSLOT rejection (Redis Cluster)', async () => {
-      mockClient.eval.mockRejectedValue(new Error("CROSSSLOT Keys in request don't hash to the same slot"));
-      mockClient.incr.mockResolvedValue(1);
-      mockClient.rpush.mockResolvedValue(1);
-
-      expect(cache.supportsAtomicCounters).toBe(true);
-      await cache.listPushIndexed('events', 'events:counter', { type: 'x' });
-
-      expect(cache.supportsAtomicCounters).toBe(false);
+      expect(fallbackCache.supportsAtomicAppend).toBe(false);
     });
   });
 
@@ -215,7 +204,6 @@ describe('RedisServerCache', () => {
         'mastra:cache:events:counter',
         '{"type":"chunk","data":{"a":1}}',
         '300',
-        '86400',
       );
       expect(mockClient.incr).not.toHaveBeenCalled();
       expect(mockClient.rpush).not.toHaveBeenCalled();
@@ -223,56 +211,38 @@ describe('RedisServerCache', () => {
     });
 
     it('strips a pre-existing index from the value and passes ttl 0 through', async () => {
-      const noTtlCache = new RedisServerCache({ client: mockClient }, { ttlSeconds: 0, counterTtlSeconds: 0 });
+      const noTtlCache = new RedisServerCache({ client: mockClient }, { ttlSeconds: 0 });
       mockClient.eval.mockResolvedValue('0');
 
       const index = await noTtlCache.listPushIndexed('events', 'events:counter', { index: 99, type: 'x' });
 
       expect(index).toBe(0);
-      expect(mockClient.eval.mock.calls[0]!.slice(4)).toEqual(['{"type":"x"}', '0', '0']);
+      expect(mockClient.eval.mock.calls[0]!.slice(4)).toEqual(['{"type":"x"}', '0']);
     });
 
-    it('expires the list and the counter on different schedules', async () => {
-      const splitCache = new RedisServerCache({ client: mockClient }, { ttlSeconds: 300, counterTtlSeconds: 86_400 });
+    it('applies a per-write TTL to both keys', async () => {
       mockClient.eval.mockResolvedValue(1);
 
-      await splitCache.listPushIndexed('events', 'events:counter', { type: 'x' });
+      await cache.listPushIndexed('events', 'events:counter', { type: 'x' }, 86_400_000);
 
-      expect(mockClient.eval.mock.calls[0]!.slice(4)).toEqual(['{"type":"x"}', '300', '86400']);
+      // One TTL for the list and its counter, so they can never diverge.
+      expect(mockClient.eval.mock.calls[0]!.slice(4)).toEqual(['{"type":"x"}', '86400']);
     });
 
-    it('falls back to increment + listPush when the client has no eval', async () => {
+    it('throws when the client has no eval', async () => {
       const { eval: _eval, ...clientWithoutEval } = mockClient;
       const fallbackCache = new RedisServerCache({ client: clientWithoutEval as RedisClient });
-      mockClient.incr.mockResolvedValue(3);
-      mockClient.rpush.mockResolvedValue(3);
 
-      const index = await fallbackCache.listPushIndexed('events', 'events:counter', { type: 'x' });
-
-      expect(index).toBe(2);
-      expect(mockClient.incr).toHaveBeenCalledWith('mastra:cache:events:counter');
-      expect(mockClient.rpush).toHaveBeenCalledWith('mastra:cache:events', '{"type":"x","index":2}');
-      // The list follows ttlSeconds, the counter follows counterTtlSeconds.
-      expect(mockClient.expire).toHaveBeenCalledWith('mastra:cache:events', 300);
-      expect(mockClient.expire).toHaveBeenCalledWith('mastra:cache:events:counter', 86_400);
+      // `supportsAtomicAppend` is false, so publishers stay unnumbered; a
+      // caller appending anyway must not get a non-atomic index.
+      await expect(fallbackCache.listPushIndexed('events', 'events:counter', { type: 'x' })).rejects.toThrow(
+        'listPushIndexed requires scripting support',
+      );
+      expect(mockClient.incr).not.toHaveBeenCalled();
+      expect(mockClient.rpush).not.toHaveBeenCalled();
     });
 
-    it('permanently falls back after a CROSSSLOT rejection (Redis Cluster)', async () => {
-      mockClient.eval.mockRejectedValue(new Error("CROSSSLOT Keys in request don't hash to the same slot"));
-      mockClient.incr.mockResolvedValue(1);
-      mockClient.rpush.mockResolvedValue(1);
-
-      expect(await cache.listPushIndexed('events', 'events:counter', { type: 'x' })).toBe(0);
-      expect(mockClient.eval).toHaveBeenCalledTimes(1);
-      expect(mockClient.rpush).toHaveBeenCalledWith('mastra:cache:events', '{"type":"x","index":0}');
-
-      mockClient.incr.mockResolvedValue(2);
-      expect(await cache.listPushIndexed('events', 'events:counter', { type: 'y' })).toBe(1);
-      // No second eval attempt once scripting is known to be unusable
-      expect(mockClient.eval).toHaveBeenCalledTimes(1);
-    });
-
-    it('rethrows non-CROSSSLOT script errors', async () => {
+    it('rethrows script errors', async () => {
       mockClient.eval.mockRejectedValue(new Error('connection lost'));
       await expect(cache.listPushIndexed('events', 'events:counter', { type: 'x' })).rejects.toThrow('connection lost');
       expect(mockClient.incr).not.toHaveBeenCalled();
@@ -363,7 +333,7 @@ describe('RedisServerCache', () => {
       expect(mockClient.eval).toHaveBeenCalledWith(
         LIST_PUSH_INDEXED_SCRIPT,
         ['mastra:cache:events', 'mastra:cache:events:counter'],
-        ['{"type":"x"}', '300', '86400'],
+        ['{"type":"x"}', '300'],
       );
     });
   });
@@ -432,7 +402,7 @@ describe('RedisServerCache', () => {
 
       expect(mockClient.eval).toHaveBeenCalledWith(LIST_PUSH_INDEXED_SCRIPT, {
         keys: ['mastra:cache:events', 'mastra:cache:events:counter'],
-        arguments: ['{"type":"x"}', '300', '86400'],
+        arguments: ['{"type":"x"}', '300'],
       });
     });
   });

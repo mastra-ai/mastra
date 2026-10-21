@@ -4,6 +4,11 @@ import type { GlideClient } from '@valkey/valkey-glide';
 
 export interface ValkeyServerCacheOptions {
   keyPrefix?: string;
+  /**
+   * Lifetime of cached values in seconds, refreshed on every write. Defaults to
+   * 300; `0` means no expiry. A cache list and its index counter always share
+   * this TTL so they expire together (see `listPushIndexed`).
+   */
   ttlSeconds?: number;
 }
 
@@ -35,6 +40,9 @@ local ttl = tonumber(ARGV[2])
 if ttl > 0 then
   redis.call('EXPIRE', KEYS[1], ttl)
   redis.call('EXPIRE', KEYS[2], ttl)
+else
+  redis.call('PERSIST', KEYS[1])
+  redis.call('PERSIST', KEYS[2])
 end
 return i
 `.trim();
@@ -125,11 +133,26 @@ export class ValkeyServerCache extends MastraServerCache {
   }
 
   /**
-   * Single round-trip index allocation + list append + TTL refresh via Lua.
-   * This is the durable stream per-chunk hot path (issue #22477).
+   * GLIDE always runs the append through Lua, so allocation and append are one
+   * atomic operation.
    */
-  async listPushIndexed(listKey: string, counterKey: string, value: Record<string, unknown>): Promise<number> {
+  get supportsAtomicAppend(): boolean {
+    return true;
+  }
+
+  /**
+   * Single round-trip index allocation + list append + TTL refresh via Lua.
+   * The list and counter keys share one TTL; see
+   * {@link ValkeyServerCacheOptions.ttlSeconds}.
+   */
+  async listPushIndexed(
+    listKey: string,
+    counterKey: string,
+    value: Record<string, unknown>,
+    ttlMs?: number,
+  ): Promise<number> {
     const { index: _ignored, ...body } = value;
+    const ttlSeconds = ttlMs === undefined ? this.ttlSeconds : Math.max(1, Math.ceil(ttlMs / 1000));
     const result = await this.command([
       'EVAL',
       LIST_PUSH_INDEXED_SCRIPT,
@@ -137,7 +160,7 @@ export class ValkeyServerCache extends MastraServerCache {
       this.getKey(listKey),
       this.getKey(counterKey),
       JSON.stringify(body),
-      String(this.ttlSeconds),
+      String(ttlSeconds),
     ]);
     return Number(result);
   }

@@ -121,6 +121,31 @@ export class ConvexServerCache extends MastraServerCache {
       expiresAt: this.getExpiresAt(),
     }));
   }
+
+  /**
+   * Convex mutations are serializable, so allocating the index and inserting
+   * the item in one mutation makes the append atomic.
+   */
+  get supportsAtomicAppend(): boolean {
+    return true;
+  }
+
+  async listPushIndexed(
+    listKey: string,
+    counterKey: string,
+    value: Record<string, unknown>,
+    ttlMs?: number,
+  ): Promise<number> {
+    const { index: _ignored, ...body } = value;
+    return this.callUntilSettled(() => ({
+      op: 'listPushIndexed',
+      key: this.getKey(listKey),
+      counterKey: this.getKey(counterKey),
+      keyPrefix: this.keyPrefix,
+      value: body,
+      expiresAt: this.getExpiresAt(ttlMs),
+    }));
+  }
 }
 
 export { ConvexCacheClient, type ConvexCacheClientConfig };

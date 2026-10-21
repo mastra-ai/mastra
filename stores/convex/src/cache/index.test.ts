@@ -67,6 +67,27 @@ describe('ConvexServerCache', () => {
     ]);
   });
 
+  it('allocates the index and appends in one mutation', async () => {
+    expect(cache.supportsAtomicAppend).toBe(true);
+    client.rawResponses = [{ result: 7 }];
+
+    const index = await cache.listPushIndexed('events', 'events:counter', { index: 99, type: 'chunk' }, 86_400_000);
+
+    expect(index).toBe(7);
+    // A mutation is serializable, so no second round-trip can interleave and
+    // hand two frames the same index.
+    expect(client.calls).toEqual([
+      {
+        op: 'listPushIndexed',
+        key: 'mastra:cache:events',
+        counterKey: 'mastra:cache:events:counter',
+        keyPrefix: 'mastra:cache:',
+        value: { type: 'chunk' },
+        expiresAt: Date.now() + 86_400_000,
+      },
+    ]);
+  });
+
   it('uses Redis-compatible inclusive list ranges', async () => {
     await cache.listFromTo('events', 5, 10);
 

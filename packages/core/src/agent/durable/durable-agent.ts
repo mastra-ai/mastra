@@ -1681,7 +1681,6 @@ export class DurableAgent<
       // the existing instance instead of double-wrapping.
       this.#cachingPubsub = this.#innerPubsub;
       this.#resolvedCache = this.#cacheConfig ?? this.#mastra?.serverCache ?? null;
-      if (this.#mastra) this.#innerPubsub.__setSource(this.#mastra.pubsub);
       if (this.#shouldCache) {
         // The existing wrapper owns the caching policy; a per-agent filter
         // cannot be applied without double-wrapping, so it is ignored.
@@ -1699,22 +1698,34 @@ export class DurableAgent<
       // declared here instead. Without it, per-run `workflow.events.v2.*` watch
       // events (cumulative step results, often megabytes) are RPUSHed into a
       // shared store that no other instance can ever read from (issue #20646).
-      //
-      // `source: mastra.pubsub` makes the cache follow the Mastra-level bus.
-      // The evented engine publishes agent-stream events there (from whichever
-      // worker executes a step) instead of through this agent's pubsub, so
-      // without the source wiring those events are never cached and — when the
-      // agent has a custom pubsub on a different transport — never reach the
-      // stream's subscribers at all: streams would resolve with null
-      // finish/suspend data (Phase 2 Item 5). When agent and Mastra share the
-      // underlying transport, the follower only caches (fixing replay) and
-      // never double-delivers.
       const userShouldCache = this.#shouldCache;
-      this.#cachingPubsub = new CachingPubSub(this.#innerPubsub, resolvedCache, {
+      this.#cachingPubsub = new CachingPubSub(this.#runStreamBus(), resolvedCache, {
         shouldCache: topic => !isRunLocalTopic(topic) && (userShouldCache?.(topic) ?? true),
-        source: this.#mastra?.pubsub,
       });
     }
+  }
+
+  /**
+   * The bus a run's frames live on.
+   *
+   * A durable run's frames must be on the Mastra-level bus: the evented engine
+   * executes each step on whichever worker claims it and publishes there, so an
+   * observer on the agent's own bus would never see them. Using one bus also
+   * means one cache log per run — the property offset replay depends on.
+   *
+   * An agent that configured its own pubsub keeps it for its non-run traffic,
+   * but durable frames (and therefore this wrapper) move to the shared bus. A
+   * standalone agent with no Mastra stays on its own bus.
+   */
+  #runStreamBus(): PubSub {
+    const shared = this.#mastra?.pubsub;
+    if (!shared) return this.#innerPubsub;
+    if (this.#hasCustomPubsub && shared.__rawBus() !== this.#innerPubsub.__rawBus()) {
+      this.logger.warn(
+        `[DurableAgent:${this.id}] Durable run frames use the Mastra pubsub, not the agent-level 'pubsub'. An agent pubsub on a different transport cannot be observed from other processes.`,
+      );
+    }
+    return shared;
   }
 
   // ===========================================================================
@@ -5083,12 +5094,11 @@ export class DurableAgent<
     const deliver = (event: AgentStreamEvent) => {
       activityVersion++;
       if (!subscribed || event.type === AgentStreamEventTypes.OWNERSHIP_CLAIMED) return;
-      // Sequencing fields exist for subscribers of this topic, not for clients:
-      // the observe route forwards events verbatim, so keep its payload exactly
-      // what pre-#27352 clients already receive. That includes `index`, which a
-      // replayed event carries out of the topic history.
-      if (event.index !== undefined || event.indexMode !== undefined || event.streamSeq !== undefined) {
-        const { index: _index, indexMode: _mode, streamSeq: _seq, ...rest } = event;
+      // `index` is log bookkeeping, not part of the client payload: the observe
+      // route forwards events verbatim, so keep the payload exactly what
+      // pre-#27352 clients already receive.
+      if (event.index !== undefined) {
+        const { index: _index, ...rest } = event;
         onEvent(rest as AgentStreamEvent);
         return;
       }
@@ -5812,14 +5822,13 @@ export class DurableAgent<
       this.#innerPubsub = mastra.pubsub;
     }
 
-    // If the CachingPubSub was already built (lazy init ran before
-    // registration), it was constructed without a source — wire it now so the
-    // cache follows the bus the evented engine publishes on. Intentionally
-    // done for custom-pubsub agents too: the custom pubsub stays the local
-    // transport, but the cache must still observe `mastra.pubsub` or
-    // engine-published stream events never reach it.
-    if (this.#cachingPubsub instanceof CachingPubSub) {
-      this.#cachingPubsub.__setSource(mastra.pubsub);
+    // If the caching wrapper was built before registration it is bound to the
+    // pre-registration bus (the default EventEmitterPubSub). Durable run frames
+    // belong on the shared bus, so rebuild the wrapper there. Registration runs
+    // before the agent is used, so nothing is subscribed to the old instance.
+    if (this.#cachingPubsub instanceof CachingPubSub && this.#cachingPubsub.getInner() !== mastra.pubsub) {
+      this.#cachingPubsub = null;
+      this.#resolvedCache = null;
     }
   }
 }
