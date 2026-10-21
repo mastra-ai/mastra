@@ -1035,8 +1035,19 @@ describe('SessionRetirementCoordinator.resetSessionSandbox', () => {
   it('deletes a VM that a start in flight provisioned after the old one was deleted', async () => {
     const storage = new SourceControlStorageInMemory();
     const session = await seedStartedSession(storage);
+    // Rows are copies, as a database returns them, so a stale read stays stale.
+    const read = storage.sessions.getBySessionId.bind(storage.sessions);
+    vi.spyOn(storage.sessions, 'getBySessionId').mockImplementation(async id => {
+      const row = await read(id);
+      return row && { ...row };
+    });
     const reattach = deferred();
-    const sandbox = new VmSandbox({ vmId: 'vm-old' });
+    const sandbox: VmSandbox = new VmSandbox({
+      vmId: 'vm-old',
+      // Factory's start hook stores the VM it set up.
+      onStart: () =>
+        storage.sessions.setSandbox({ id: session.id, sandboxId: sandbox.vmId!, sandboxWorkdir: '/workspace' }),
+    });
     sandbox.startGate = reattach.promise;
     getSessionSandbox(session.id, 'acme/mastra', () => sandbox);
     const starting = sandbox.executeCommand();
@@ -1054,6 +1065,9 @@ describe('SessionRetirementCoordinator.resetSessionSandbox', () => {
     await expect(resetting).resolves.toBe('reset');
     expect(sandbox.deleted).toEqual(['vm-old', 'vm-new-1']);
     expect(sandbox.status).toBe('stopped');
+    const row = await storage.sessions.getBySessionId(session.sessionId);
+    expect(row?.sandboxId).toBeNull();
+    expect(row?.sandboxWorkdir).toBe('/workspace');
     expect((await sandbox.executeCommand()).stdout).toBe('vm-new-2');
   });
 

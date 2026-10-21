@@ -340,10 +340,12 @@ export class SessionRetirementCoordinator {
     sandbox.status = 'stopped';
     // The new VM runs setup from scratch, including commands that failed on the old one.
     clearFailedSetupCommands(session.id);
+    // Re-read: a start that settled while this reset waited may have stored a newer workdir.
+    const latest = await input.sourceControl.sessions.getBySessionId(input.sessionId);
     await input.sourceControl.sessions.setSandbox({
       id: session.id,
       sandboxId: null,
-      sandboxWorkdir: session.sandboxWorkdir ?? '',
+      sandboxWorkdir: latest?.sandboxWorkdir ?? session.sandboxWorkdir ?? '',
     });
     return 'reset';
   }
