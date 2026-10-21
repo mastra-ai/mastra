@@ -5,6 +5,7 @@ import {
   buildTraceAggregateWhere,
   toTraceAggregateTimeRange,
   traceAggregateInterval,
+  traceAggregateRowCost,
 } from './trace-aggregate';
 
 const HOUR = 3_600_000;
@@ -94,6 +95,28 @@ describe('bucketTraceAggregateRows', () => {
     it('puts the row in its own hour and leaves the others empty', () => {
       const filled = buckets.filter(bucket => bucket.rows.length > 0);
       expect(filled.map(bucket => bucket.ts)).toEqual([busyHour.getTime()]);
+    });
+  });
+});
+
+describe('traceAggregateRowCost', () => {
+  describe('when the row has a priced total', () => {
+    it('keeps the total, coverage and currency', () => {
+      const row = { measures: { 'cost.sum': 4.2 }, cost: { coverage: 0.5, unit: 'USD' } };
+      expect(traceAggregateRowCost(row)).toEqual({ value: 4.2, coverage: 0.5, unit: 'USD' });
+    });
+  });
+
+  describe('when the row has nothing priced', () => {
+    it('reads the nulls as absent', () => {
+      const row = { measures: { 'cost.sum': null }, cost: { coverage: null, unit: null } };
+      expect(traceAggregateRowCost(row)).toEqual({});
+    });
+  });
+
+  describe('when there is no row', () => {
+    it('has no cost', () => {
+      expect(traceAggregateRowCost(undefined)).toEqual({});
     });
   });
 });
