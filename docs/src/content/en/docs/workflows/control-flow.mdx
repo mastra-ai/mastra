@@ -237,12 +237,12 @@ Visit [Choosing the right pattern](#choosing-the-right-pattern) to understand wh
 
 ## Conditional logic with `.branch()`
 
-Use `.branch()` to run steps based on conditions. Every branch whose condition evaluates to `true` runs, so use mutually exclusive conditions when exactly one path should run. All steps in a branch need the same `inputSchema` and `outputSchema` because branching requires consistent schemas so workflows can follow different paths.
+Use `.branch()` to choose which step to run based on a condition. All steps in a branch need the same `inputSchema` and `outputSchema` because branching requires consistent schemas so workflows can follow different paths.
 
 ```mermaid
 flowchart LR
   accTitle: Choosing a workflow step with conditional branching
-  accDescr: The workflow runs step1, then runs branch A, branch B, or both depending on which conditions evaluate to true, before committing and ending.
+  accDescr: The workflow runs step1, then follows either branch A or branch B before committing and ending.
 
   start(( start )) -- ".then(step1)" --> step1([step1])
   step1 -- out --> branchCall@{ shape: text, label: ".branch([A, B])" }
@@ -336,7 +336,7 @@ When the decision model refuses a question, its answer is `{ type: 'refusal' }` 
 
 ### Output structure
 
-When using conditional branching, every branch whose condition evaluates to `true` runs. Conditions are evaluated independently and concurrently, not in definition order, so overlapping conditions can run multiple branches. The output structure is similar to `.parallel()`, where the result is keyed by each executed step's `id`.
+When using conditional branching, only one branch executes based on which condition evaluates to `true` first. The output structure is similar to `.parallel()`, where the result is keyed by the executed step's `id`.
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
 const step1 = createStep({
@@ -366,14 +366,14 @@ const lowValueStep = createStep({
 
 const finalStep = createStep({
   id: 'final-step',
-  // The inputSchema must account for every branch's output
+  // The inputSchema must account for either branch's output
   inputSchema: z.object({
     'high-value-step': z.object({ result: z.string() }).optional(),
     'low-value-step': z.object({ result: z.string() }).optional(),
   }),
   outputSchema: z.object({ message: z.string() }),
   execute: async ({ inputData }) => {
-    // These conditions are mutually exclusive, so only one output is present
+    // Only one branch will have executed
     const result = inputData['high-value-step']?.result || inputData['low-value-step']?.result
     return { message: result }
   },
@@ -407,12 +407,11 @@ export const testWorkflow = createWorkflow({
 
 **Key points:**
 
-- Every branch whose condition evaluates to `true` runs
-- Conditions are evaluated independently and concurrently, not in the order they're defined
-- The output is keyed by each executed step's `id`
+- Only one branch executes based on condition evaluation order
+- The output is keyed by the executed step's `id`
 - Subsequent steps should handle all possible branch outputs
-- Use optional fields in the `inputSchema` when a branch may not run
-- Use mutually exclusive conditions when only one branch should run
+- Use optional fields in the `inputSchema` when the next step needs to handle multiple possible branches
+- Conditions are evaluated in the order they're defined
 
 ## Input data mapping
 
