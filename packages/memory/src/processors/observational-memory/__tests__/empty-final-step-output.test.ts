@@ -129,7 +129,12 @@ describe('empty final step with observational memory (#27920)', () => {
         expect(streamedText).toBe('Saved.');
         const memoryStore = (await store.getStore('memory'))!;
         const { messages } = await memoryStore.listMessages({ threadId, perPage: false });
-        expect(JSON.stringify(messages.filter(message => message.role === 'assistant'))).toContain('Saved.');
+        const savedMessage = messages.find(
+          message =>
+            message.role === 'assistant' &&
+            message.content.parts.some(part => part.type === 'text' && part.text === 'Saved.'),
+        );
+        expect(savedMessage?.content.parts.map(part => part.type)).toEqual(['tool-invocation', 'step-start', 'text']);
       } finally {
         await mastra.stopWorkers();
       }
