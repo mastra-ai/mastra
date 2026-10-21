@@ -22,7 +22,7 @@ import { Knowledge } from '@mastra/core/knowledge';
 import { PROVIDER_REGISTRY, findGatewayForModel, getGatewayId } from '@mastra/core/llm';
 import type { MastraModelGatewayInterface, ProviderConfig } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
-import { defaultNotificationDeliveryDecision } from '@mastra/core/notifications';
+import { defaultNotificationDeliveryDecision, readNotificationRoutingRequirement } from '@mastra/core/notifications';
 import {
   AgentsMDInjector,
   createBackgroundWorkSignalProcessor,
@@ -1356,31 +1356,35 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
             decision.action === 'deliver' || decision.action === 'summarize'
               ? await resolveWakeOwner(target, notificationDispatchLeases)
               : await findWakeSession(controller, liveSessions, target, notificationDispatchLeases);
-          // A session here serves the resource but not the thread's project:
-          // another process sharing the resource runs it. Leave it pending for
-          // that process, whose own dispatch pass for the thread's scope
-          // delivers it, rather than running it with this one's workspace.
-          if (owner === FOREIGN_THREAD) return { ...decision, hold: true };
-          const streamOptions = owner
-            ? await getWakeStreamOptions({
-                resourceId: input.record.resourceId,
-                threadId: input.record.threadId,
-                owner,
-              })
-            : undefined;
+          // No session here runs the thread: a session here serves the
+          // resource but not the thread's project, or none serves the resource.
+          // Another process sharing the database runs it, with its own
+          // workspace and model. Never wake it from here, where the run would
+          // start with no session: leave it pending for that process's own
+          // dispatch pass. That holds when it is first sent too, which `hold`
+          // alone does not cover, so a wake becomes a delivery due now. A
+          // sender that asked for the thread's claimed owner is already routed
+          // to that process, so its first send goes ahead.
+          if (owner === FOREIGN_THREAD || owner === undefined) {
+            const routedToOwner = readNotificationRoutingRequirement(input.record.metadata)?.requireClaimedOwner;
+            if (routedToOwner || decision.action === 'discard') return { ...decision, hold: true };
+            return { action: 'defer', deliverAt: input.now, reason: decision.reason, hold: true };
+          }
+          const streamOptions = await getWakeStreamOptions({
+            resourceId: input.record.resourceId,
+            threadId: input.record.threadId,
+            owner,
+          });
           const withOptions = streamOptions ? { ...decision, streamOptions } : decision;
           // With a pubsub of its own the embedder runs no dispatch timer here,
-          // so this process delivers its own resources from the shared
-          // schedule. A resource no session here serves is left for the
-          // process that serves it: waking it from here would start the run
-          // with no session, and so no model.
-          if (!ownsNotificationDispatch) return owner ? withOptions : { ...withOptions, hold: true };
+          // so this process delivers its own resources from the shared schedule.
+          if (!ownsNotificationDispatch) return withOptions;
           // `hold` only applies at delivery time; it is ignored when a
           // notification is first sent.
           const hold = shouldHoldNotificationDelivery({
             resourceId: input.record.resourceId,
-            scope: owner?.scope,
-            ownedHere: owner !== undefined,
+            scope: owner.scope,
+            ownedHere: true,
             dispatcher: notificationDispatcher,
           });
           return hold ? { ...withOptions, hold: true } : withOptions;
