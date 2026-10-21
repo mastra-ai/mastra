@@ -1,0 +1,1 @@
+Session privacy UI screenshots captured from the Factory UI in Chromium using deterministic API fixtures. Before images use main commit 605864cff64eee320a24000daf9d6312c3faf5ef. Viewports: desktop 1440×1000, tablet 820×1180, mobile 390×844. This branch contains review assets only.
