@@ -355,6 +355,21 @@ describe('handlePlanApproval goal mode', () => {
     expect(ctx.sendGoalReminder).not.toHaveBeenCalled();
   });
 
+  it('approves without setting a goal in Factory mode', async () => {
+    const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
+    const { state, ctx } = createPlanApprovalCtx(projectPath);
+    state.local = undefined;
+
+    const { promise, component } = await renderPlanApproval(ctx, state, PLAN_PATH);
+    await (component as any).onApprove();
+    await promise;
+
+    expect(ctx.setGoal).not.toHaveBeenCalled();
+    expect(ctx.showError).not.toHaveBeenCalled();
+    expect(state.session.respondToToolSuspension).toHaveBeenCalledTimes(1);
+    expect(ctx.sendGoalReminder).not.toHaveBeenCalled();
+  });
+
   it('stops waiting for the approval result when the resume rejects', async () => {
     const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
     const { state, ctx, listeners } = createPlanApprovalCtx(projectPath);
@@ -370,39 +385,36 @@ describe('handlePlanApproval goal mode', () => {
 });
 
 describe('handlePlanApproval regular approval', () => {
-  it.each([['onApprove']] as const)(
-    'restores the approval prompt when %s cannot switch to the build model',
-    async method => {
-      const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
-      const { state, ctx } = createPlanApprovalCtx(projectPath);
-      const runPermissionResult = vi.fn().mockResolvedValue(undefined);
-      state.hookManager = { runPermissionResult };
-      mocks.switchModeWithPack.mockRejectedValueOnce(new Error('model persistence failed'));
+  it('restores the approval prompt when approval cannot switch to the build model', async () => {
+    const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');
+    const { state, ctx } = createPlanApprovalCtx(projectPath);
+    const runPermissionResult = vi.fn().mockResolvedValue(undefined);
+    state.hookManager = { runPermissionResult };
+    mocks.switchModeWithPack.mockRejectedValueOnce(new Error('model persistence failed'));
 
-      const { promise, component } = await renderPlanApproval(ctx, state, PLAN_PATH);
-      await (component as any)[method]();
+    const { promise, component } = await renderPlanApproval(ctx, state, PLAN_PATH);
+    await (component as any).onApprove();
 
-      expect(ctx.showError).toHaveBeenCalledWith('Failed to start plan: model persistence failed');
-      expect(state.activeInlinePlanApproval).toBe(component);
-      expect(state.ui.setFocus).toHaveBeenLastCalledWith(component);
-      expect(state.session.respondToToolSuspension).not.toHaveBeenCalled();
-      expect(state.session.state.set).not.toHaveBeenCalled();
-      expect(state.previousPlanSnapshot).toBeDefined();
-      expect(mocks.approvePlanFile).not.toHaveBeenCalled();
-      expect(runPermissionResult).not.toHaveBeenCalled();
+    expect(ctx.showError).toHaveBeenCalledWith('Failed to start plan: model persistence failed');
+    expect(state.activeInlinePlanApproval).toBe(component);
+    expect(state.ui.setFocus).toHaveBeenLastCalledWith(component);
+    expect(state.session.respondToToolSuspension).not.toHaveBeenCalled();
+    expect(state.session.state.set).not.toHaveBeenCalled();
+    expect(state.previousPlanSnapshot).toBeDefined();
+    expect(mocks.approvePlanFile).not.toHaveBeenCalled();
+    expect(runPermissionResult).not.toHaveBeenCalled();
 
-      mocks.switchModeWithPack.mockResolvedValueOnce(undefined);
-      await (component as any)[method]();
-      await promise;
+    mocks.switchModeWithPack.mockResolvedValueOnce(undefined);
+    await (component as any).onApprove();
+    await promise;
 
-      expect(state.session.respondToToolSuspension).toHaveBeenCalledTimes(1);
-      expect(state.previousPlanSnapshot).toBeUndefined();
-      expect(mocks.approvePlanFile).toHaveBeenCalledTimes(1);
-      expect(runPermissionResult).toHaveBeenCalledWith('plan_approval', 'plan-1', 'submit_plan', 'approved', {
-        path: PLAN_PATH,
-      });
-    },
-  );
+    expect(state.session.respondToToolSuspension).toHaveBeenCalledTimes(1);
+    expect(state.previousPlanSnapshot).toBeUndefined();
+    expect(mocks.approvePlanFile).toHaveBeenCalledTimes(1);
+    expect(runPermissionResult).toHaveBeenCalledWith('plan_approval', 'plan-1', 'submit_plan', 'approved', {
+      path: PLAN_PATH,
+    });
+  });
 
   it('activates an existing streamed submit_plan component in place', async () => {
     const projectPath = createTmpProjectWithPlan(PLAN_TITLE, 'Build the feature');

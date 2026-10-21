@@ -463,13 +463,16 @@ export async function handlePlanApproval(
         // one that produced this plan) would otherwise judge the implementation
         // and only hand over to the plan once the work was already done.
         // A failure to set the goal must not block approval: fall back to a
-        // plain approval so the suspended plan still resumes.
-        const goal = await ctx
-          .setGoal(formatPlanGoalObjective(resolvedTitle, plan), 'Goal cancelled.')
-          .catch((error: unknown) => {
-            ctx.showError(`Failed to set goal: ${error instanceof Error ? error.message : String(error)}`);
-            return null;
-          });
+        // plain approval so the suspended plan still resumes. Goals are
+        // local-only, so Factory mode always takes the plain approval path.
+        const goal = !state.local
+          ? null
+          : await ctx
+              .setGoal(formatPlanGoalObjective(resolvedTitle, plan), 'Goal cancelled.')
+              .catch((error: unknown) => {
+                ctx.showError(`Failed to set goal: ${error instanceof Error ? error.message : String(error)}`);
+                return null;
+              });
         const approvalRecorded = goal ? waitForToolEnd(state.session, toolCallId) : undefined;
 
         const resumed = resumeApprovedPlan(ctx, toolCallId, resolvedTitle, plan, snapshotKey);
