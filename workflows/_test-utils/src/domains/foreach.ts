@@ -653,7 +653,7 @@ export function createForeachWorkflows(ctx: WorkflowCreatorContext) {
     })
       .foreach(child, { concurrency: 3 })
       .commit();
-    workflows['foreach-occurrence-parent'] = { workflow };
+    workflows['foreach-occurrence-parent'] = { workflow, mocks: {} };
   }
 
   // Tests: a failing foreach iteration fails the run (#26390). Each workflow runs two items
