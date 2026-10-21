@@ -2,13 +2,16 @@ import type { ClickHouseClient } from '@clickhouse/client';
 import {
   parseTraceAggregateRequest,
   planSpanAggregate,
+  SPAN_AGGREGATE_DIMENSION_REGISTRY,
+  SPAN_QUERY_FIELD_REGISTRY,
   planTraceAggregate,
   TraceQueryExecutionError,
   TraceQueryResourceLimitError,
 } from '@mastra/core/storage';
-import type { TrustedTraceAggregatePlan } from '@mastra/core/storage';
+import type { TrustedTraceAggregatePlan, TrustedTraceQueryScalarPredicate } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
+import { readsTraceBranches, TRACE_BRANCHES_SPAN_FIELD_COLUMNS } from './span-query';
 import { aggregateTraces, compileClickHouseSpanAggregate, compileClickHouseTraceAggregate } from './trace-aggregate';
 import { ROOT_VERSION_ORDER } from './trace-query';
 
@@ -244,6 +247,35 @@ describe('ClickHouse span aggregate compiler', () => {
     );
     expect(compiled.query).toMatch(/AND e\.spanType IN \(\{trace_query_\d+:String\}, \{trace_query_\d+:String\}\)/);
     expect(compiled.query).toMatch(/AND e\.name IN \(\{trace_query_\d+:String\}\)/);
+  });
+
+  it('serves every span query field and dimension from trace_branches', () => {
+    // A new field must be classified in TRACE_BRANCHES_SPAN_FIELD_COLUMNS; until then it reads span_events.
+    const fields = new Set([
+      ...Object.keys(SPAN_QUERY_FIELD_REGISTRY),
+      ...Object.keys(SPAN_AGGREGATE_DIMENSION_REGISTRY),
+    ]);
+    expect([...fields].filter(field => !Object.hasOwn(TRACE_BRANCHES_SPAN_FIELD_COLUMNS, field))).toEqual([]);
+  });
+
+  it('reads span_events when trace_branches does not serve a selected field', () => {
+    const agentRuns = spanPlan({ where: spanType('agent_run') }).where;
+    const served = { ...TRACE_BRANCHES_SPAN_FIELD_COLUMNS };
+    delete served.entityName;
+    expect(readsTraceBranches(agentRuns, ['status', 'entityName'])).toBe(true);
+    expect(readsTraceBranches(agentRuns, ['status', 'entityName'], served)).toBe(false);
+    expect(readsTraceBranches(agentRuns, ['status', 'unclassifiedField'])).toBe(false);
+  });
+
+  it('does not read trace_branches for an empty span type set', () => {
+    // The planner rejects empty sets; the selection must not rely on that.
+    const where: TrustedTraceQueryScalarPredicate = {
+      type: 'membership',
+      field: 'spanType',
+      operator: 'in',
+      values: [],
+    };
+    expect(readsTraceBranches(where, ['status'])).toBe(false);
   });
 
   it('does not prefilter or switch tables on negated or alternative span type conditions', () => {

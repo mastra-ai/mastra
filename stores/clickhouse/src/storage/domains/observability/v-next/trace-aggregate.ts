@@ -97,7 +97,13 @@ interface AggregateSource {
   /**
    * Bounds the usage scan. Traces semi-join their candidates; spans read the tenant's usage rows
    * since `from` instead, because ClickHouse re-runs a CTE at every reference and a second
-   * selection pass doubled memory (X46).
+   * selection pass doubled memory (X46). A `traceId IN` semi-join would not cut that read either:
+   * `traceId` is not in the metric table's sort key, so it prunes nothing (X52).
+   *
+   * The cost of that read grows with how far back `from` is, since it covers every usage row
+   * written since then, not just the window's; installs that write no `organizationId` read all
+   * usage in the store. Bounding it above (`timestamp < to + lag`) would drop usage recorded more
+   * than `lag` after a span starts, so it is left to hosts that accept that limit.
    */
   usageBound: string;
 }
@@ -373,7 +379,8 @@ function usageMetricIndex(name: string): number {
  * row, holding per-name token sums (`t<i>`, indexed by `TRACE_AGGREGATE_USAGE_METRIC_NAMES`) and
  * its pricing state. Metric rows are matched by the source's usage bound, usage metric name,
  * tenant scope, and `timestamp >= from` only: a trace or span that starts in the window can emit
- * metrics after `to`.
+ * metrics after `to`. For spans that makes the read cost grow with the age of `from` (see
+ * `usageBound`).
  *
  * Rows are deduplicated with `LIMIT 1 BY metricId` at query time. `ReplacingMergeTree` only
  * collapses rows with equal sort keys `(name, timestamp, metricId)`, so retried copies with

@@ -162,6 +162,70 @@ export function compileClickHouseSpanQuery(plan: TrustedSpanQueryPlan) {
 
 const branchSpanTypes = new Set<string>(BRANCH_SPAN_TYPE_VALUES);
 
+const sameColumn = (field: string) => [field] as const;
+/**
+ * Span fields `trace_branches` can serve, as the `trace_branches` columns each one reads. The two
+ * tables are expected to diverge, so this list is explicit: a selection whose fields are not all
+ * listed reads `span_events`. A new span-query field has to be classified here deliberately, and a
+ * missing column then costs speed, not correctness.
+ */
+export const TRACE_BRANCHES_SPAN_FIELD_COLUMNS: Readonly<Record<string, readonly string[]>> = {
+  ...Object.fromEntries(
+    [
+      'organizationId',
+      'resourceId',
+      'traceId',
+      'spanId',
+      'parentSpanId',
+      'name',
+      'spanType',
+      'startedAt',
+      'endedAt',
+      'timeToFirstChunkMs',
+      'threadId',
+      'runId',
+      'sessionId',
+      'userId',
+      'requestId',
+      'serviceName',
+      'experimentId',
+      'environment',
+      'executionSource',
+      'entityType',
+      'entityId',
+      'entityName',
+      'entityVersionId',
+      'parentEntityType',
+      'parentEntityId',
+      'parentEntityName',
+      'parentEntityVersionId',
+      'rootEntityType',
+      'rootEntityId',
+      'rootEntityName',
+      'rootEntityVersionId',
+    ].map(field => [field, sameColumn(field)]),
+  ),
+  status: ['error'],
+  error: ['error'],
+  durationMs: ['startedAt', 'endedAt'],
+};
+
+/**
+ * Whether a span selection reads `trace_branches`: `where` must restrict `spanType` to branch
+ * types, and `trace_branches` must serve every selected field (`served`, for tests).
+ */
+export function readsTraceBranches(
+  where: TrustedTraceQueryScalarPredicate | undefined,
+  fields: Iterable<string>,
+  served: Readonly<Record<string, readonly string[]>> = TRACE_BRANCHES_SPAN_FIELD_COLUMNS,
+): boolean {
+  const branchOnly = positiveSpanConjuncts(where).some(
+    ({ field, values }) =>
+      field === 'spanType' && values.length > 0 && values.every(value => branchSpanTypes.has(String(value))),
+  );
+  return branchOnly && [...fields].every(field => Object.hasOwn(served, field));
+}
+
 /**
  * Top-level `spanType` / `name` equality or `in` conditions. Every span the predicate can match
  * satisfies them, and copies of a span never differ in either field, so they can be applied
@@ -186,8 +250,18 @@ function positiveSpanConjuncts(where: TrustedTraceQueryScalarPredicate | undefin
  * the identity, `startedAt`, `endedAt`, `status`, and `fields`.
  *
  * Copies of a span collapse to the copy with the latest `endedAt`. When `where` requires branch
- * span types (agent and workflow runs, tool calls, …) the spans are read from `trace_branches`,
- * whose sort key starts with `spanType`, instead of every span in the window.
+ * span types (agent and workflow runs, tool calls, …) and `trace_branches` serves every selected
+ * field, the spans are read from `trace_branches`, whose sort key starts with `spanType`, instead of
+ * every span in the window. That path can differ from `querySpans()` in two ways:
+ * - `trace_branches` is filled only by its materialized view, with no backfill, so an install that
+ *   upgraded from @mastra/clickhouse 1.4–1.6 has no branch rows for spans written before then.
+ * - It is a `ReplacingMergeTree` without a version column, so once a background merge collapses a
+ *   retried span's copies it keeps the last-inserted copy, not the one with the latest `endedAt`.
+ *   Counts are unaffected; `status` and duration of an out-of-order retry can differ.
+ *
+ * Like `querySpans()`, the read has no upper bound on `endedAt` (`PREWHERE endedAt >= from` only,
+ * since a span that starts in the window can end any time later), so a historical window reads
+ * every span that ended since `from`.
  */
 export function compileClickHouseSpanSelection(
   plan: Pick<TrustedSpanQueryPlan, 'timeRange' | 'scope' | 'where'>,
@@ -197,9 +271,6 @@ export function compileClickHouseSpanSelection(
   const from = parameters.add(plan.timeRange.from, "DateTime64(3, 'UTC')");
   const to = parameters.add(plan.timeRange.to, "DateTime64(3, 'UTC')");
   const conjuncts = positiveSpanConjuncts(plan.where);
-  const branches = conjuncts.some(
-    ({ field, values }) => field === 'spanType' && values.every(value => branchSpanTypes.has(String(value))),
-  );
   const prefilter = conjuncts
     .map(({ field, values }) =>
       values.length
@@ -217,6 +288,7 @@ export function compileClickHouseSpanSelection(
   const selectionFields = [
     ...new Set(['startedAt', 'endedAt', 'status', ...fields, ...predicateFields(plan.where)]),
   ].filter(field => !new Set<string>(identityFields).has(field));
+  const branches = readsTraceBranches(plan.where, selectionFields);
   const scan = `FROM ${branches ? TABLE_TRACE_BRANCHES : TABLE_SPAN_EVENTS} e
     PREWHERE e.endedAt >= ${from}
     WHERE e.startedAt >= ${from} AND e.startedAt < ${to}${tenant}${prefilter}`;

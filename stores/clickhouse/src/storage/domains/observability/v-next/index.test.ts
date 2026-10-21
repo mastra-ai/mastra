@@ -82,6 +82,7 @@ import {
 import { feedbackRecordToRow, scoreRecordToRow, spanRecordToRow } from './helpers';
 import { isReplacingMergeTreeEngine } from './migration';
 import { backfillCurrentScores } from './score-current';
+import { TRACE_BRANCHES_SPAN_FIELD_COLUMNS } from './span-query';
 import {
   compileClickHouseTraceQuery,
   compileClickHouseTraceQueryKeys,
@@ -7343,6 +7344,28 @@ describe('ObservabilityStorageClickhouseVNext aggregateSpans', () => {
       expect(traceAggregateResponseMismatch(response, testCase), JSON.stringify(response)).toBeNull();
     },
   );
+
+  it('has a trace_branches column for every field the branch path reads', async () => {
+    const client = createClient({
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+    });
+    try {
+      const result = await client.query({
+        query: 'SELECT name FROM system.columns WHERE database = currentDatabase() AND table = {table:String}',
+        query_params: { table: TABLE_TRACE_BRANCHES },
+        format: 'JSONEachRow',
+      });
+      const columns = new Set(((await result.json()) as { name: string }[]).map(row => row.name));
+      const missing = Object.values(TRACE_BRANCHES_SPAN_FIELD_COLUMNS)
+        .flat()
+        .filter(column => !columns.has(column));
+      expect(missing).toEqual([]);
+    } finally {
+      await client.close();
+    }
+  });
 
   it('counts the same spans querySpans pages through', async () => {
     const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-08-04T00:00:00Z' };
