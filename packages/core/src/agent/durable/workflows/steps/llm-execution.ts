@@ -2059,7 +2059,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       toolCallId: payload.toolCallId,
                       toolName: payload.toolName,
                       args: payload.args || {},
-                      providerMetadata: payload.providerMetadata as Record<string, unknown> | undefined,
+                      providerMetadata: payload.providerMetadata,
                       providerExecuted: payload.providerExecuted,
                       output: payload.output,
                       activeTools: currentActiveTools ?? null,

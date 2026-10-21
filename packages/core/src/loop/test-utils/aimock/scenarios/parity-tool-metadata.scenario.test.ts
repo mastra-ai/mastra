@@ -14,12 +14,8 @@
  *                      across engines, but not promised, so only the raw public
  *                      result is asserted.
  *
- * `provider-metadata` and `to-model-output` diverge from plain on the wrapped
- * engines, so each declares its difference against COR-1390: the `tool-result`
- * chunk payload keeps `providerMetadata` on plain
- * (`{ cor1252: { tag: 't34' } }` / `{ mastra: { modelOutput: ... } }`) and drops
- * the key on durable and evented. The tool-call chunk carries the same metadata
- * on all three engines.
+ * `provider-metadata` and `to-model-output` retain their metadata on public
+ * tool-result chunks across all three engines (regression coverage for COR-1390).
  *
  * Harness exclusions, not asserted here:
  *   - the agent-level transform policy (PR-only in the harness; it only records
@@ -37,7 +33,6 @@ import { MockMemory } from '../../../../memory/mock';
 import { createTool } from '../../../../tools';
 import {
   type CapturedRequest,
-  type EngineDifference,
   type EngineParityResults,
   type EngineRunResult,
   type ModelTape,
@@ -69,7 +64,7 @@ interface VariantSpec {
   toModelOutput?: (output: unknown) => unknown;
   /** Adds the tool-level transcript transform. */
   transcriptTransform?: boolean;
-  /** What plain puts on the `tool-result` chunk; durable and evented drop it (COR-1390). */
+  /** Metadata carried by the public `tool-result` chunk on every engine. */
   resultMetadata?: Record<string, unknown>;
 }
 
@@ -86,29 +81,6 @@ const VARIANT_TITLES: Record<Variant, string> = {
   transform: 'a tool-level transcript transform keeps the public result raw',
   'provider-metadata': "the model's tool-call providerMetadata reaches the tool-call chunk",
   'to-model-output': 'toModelOutput rewrites only the copy the model sees',
-};
-
-/**
- * COR-1390: durable and evented drop `providerMetadata` from the `tool-result`
- * chunk payload. The tool-call chunk carries the same metadata on all three
- * engines, so only the result chunk is declared here.
- */
-const RESULT_METADATA_DIFFERENCE: EngineDifference = {
-  reason:
-    'COR-1390: the `providerMetadata` plain puts on the `tool-result` chunk payload is dropped on durable and ' +
-    'evented; the tool-call chunk carries the same metadata on all three engines.',
-  expect: plain => ({
-    ...plain,
-    turns: plain.turns.map(turn => {
-      const index = turn.chunkTypes.indexOf('tool-result');
-      if (index === -1) return turn;
-      const chunkPayloads = [...turn.chunkPayloads];
-      const payload = { ...(chunkPayloads[index] as Record<string, unknown>) };
-      delete payload.providerMetadata;
-      chunkPayloads[index] = payload;
-      return { ...turn, chunkPayloads };
-    }),
-  }),
 };
 
 function toolResultCount(request: CapturedRequest): number {
@@ -202,8 +174,6 @@ function observationOf(results: EngineParityResults, engine: ParityEngine): Engi
 function runT34(target: ParityTarget, variant: Variant) {
   const spec = SPECS[variant];
   return expectParity(target, {
-    // The declared difference only exists for the variants that put metadata on the result.
-    ...(spec.resultMetadata ? { differences: { [target]: RESULT_METADATA_DIFFERENCE } } : {}),
     model: {
       respond: request => (toolResultCount(request) === 0 ? toolCallTape(spec) : textOnlyTape('done')),
     },
@@ -256,11 +226,8 @@ describeParity('tool-metadata parity', target => {
           expect(transcriptOutputSeenByModel(observation.requests[1])).toEqual({ n: 1, secret: 'transcript-redacted' });
         }
 
-        // COR-1390: the difference declared above, pinned per engine.
         if (spec.resultMetadata) {
-          const metadata = payloadOfType(turn, 'tool-result').providerMetadata;
-          if (engine === 'plain') expect(metadata).toEqual(spec.resultMetadata);
-          else expect(metadata).toBeUndefined();
+          expect(payloadOfType(turn, 'tool-result').providerMetadata).toEqual(spec.resultMetadata);
         }
       }
     });

@@ -2066,7 +2066,7 @@ export function createDurableToolCallStep() {
                 type: 'tool-result' as const,
                 runId,
                 from: ChunkFrom.AGENT,
-                payload: { toolCallId, toolName, args, result, providerExecuted },
+                payload: { toolCallId, toolName, args, result, providerMetadata, providerExecuted },
               },
               {
                 policy: toolPayloadTransform,
