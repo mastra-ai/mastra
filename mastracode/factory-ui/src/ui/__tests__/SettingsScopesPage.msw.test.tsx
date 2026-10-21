@@ -132,7 +132,7 @@ describe('Settings ownership', () => {
     await user.clear(input);
     await user.type(input, '3000');
     await user.tab();
-    await waitFor(() => expect(body).toEqual({ resourceId: 'fp-1', observationThreshold: 3000 }));
+    await waitFor(() => expect(body).toEqual({ sessionId: 'fp-1', observationThreshold: 3000 }));
   });
 
   it('preserves the Factory memory scope when navigating from Your memory', async () => {
