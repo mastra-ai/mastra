@@ -22,7 +22,7 @@ export const MastraVersionNavLink = ({ state }: MastraVersionNavLinkProps) => {
   const [open, setOpen] = useState(false);
   const { data } = useMastraPackages();
   const installedPackages = data?.packages ?? [];
-  const { packages, isLoading, outdatedCount, deprecatedCount } = usePackageUpdates(installedPackages);
+  const { outdatedCount, deprecatedCount } = usePackageUpdates(installedPackages);
 
   if (!data?.isDev || installedPackages.length === 0) return null;
 
@@ -64,14 +64,7 @@ export const MastraVersionNavLink = ({ state }: MastraVersionNavLinkProps) => {
         }
       />
       <PopoverContent side="right" align="end" sideOffset={6} className="w-auto p-3">
-        <MastraPackagesPanel
-          version={version}
-          installedPackages={installedPackages}
-          packages={packages}
-          isLoadingUpdates={isLoading}
-          outdatedCount={outdatedCount}
-          deprecatedCount={deprecatedCount}
-        />
+        <MastraPackagesPanel version={version} />
       </PopoverContent>
     </Popover>
   );

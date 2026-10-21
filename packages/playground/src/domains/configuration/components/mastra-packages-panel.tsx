@@ -4,9 +4,11 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { useMastraPackages } from '@mastra/react/hooks/configuration';
 import { ArrowRight, CircleCheck, ExternalLink, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
-import type { PackageInfo, PackageUpdateInfo } from '../hooks/use-package-updates';
+import { usePackageUpdates } from '../hooks/use-package-updates';
+import type { PackageUpdateInfo } from '../hooks/use-package-updates';
 
 const PACKAGE_MANAGERS = ['pnpm', 'npm', 'yarn', 'bun'] as const;
 type PackageManager = (typeof PACKAGE_MANAGERS)[number];
@@ -22,23 +24,18 @@ const RELEASES_URL = 'https://github.com/mastra-ai/mastra/releases';
 
 export interface MastraPackagesPanelProps {
   version: string;
-  /** Everything installed, available before the update checks finish. */
-  installedPackages: PackageInfo[];
-  packages: PackageUpdateInfo[];
-  isLoadingUpdates: boolean;
-  outdatedCount: number;
-  deprecatedCount: number;
 }
 
 /** What's installed, what can be updated, and the command to update it. */
-export const MastraPackagesPanel = ({
-  version,
-  installedPackages,
-  packages,
-  isLoadingUpdates,
-  outdatedCount,
-  deprecatedCount,
-}: MastraPackagesPanelProps) => {
+export const MastraPackagesPanel = ({ version }: MastraPackagesPanelProps) => {
+  const { data } = useMastraPackages();
+  const installedPackages = data?.packages ?? [];
+  const {
+    packages,
+    isLoading: isLoadingUpdates,
+    outdatedCount,
+    deprecatedCount,
+  } = usePackageUpdates(installedPackages);
   // Deprecated first, then outdated, so the packages that need attention are on top.
   const sorted = [...packages].sort(
     (a, b) => Number(b.isDeprecated) - Number(a.isDeprecated) || Number(b.isOutdated) - Number(a.isOutdated),
@@ -96,7 +93,11 @@ function UpdateStatus({
   isLoadingUpdates,
   outdatedCount,
   deprecatedCount,
-}: Pick<MastraPackagesPanelProps, 'isLoadingUpdates' | 'outdatedCount' | 'deprecatedCount'>) {
+}: {
+  isLoadingUpdates: boolean;
+  outdatedCount: number;
+  deprecatedCount: number;
+}) {
   if (isLoadingUpdates) {
     return (
       <p className="mt-0.5 flex items-center gap-1.5 text-meta text-muted-foreground">
@@ -149,18 +150,7 @@ function PackageRow({ pkg }: { pkg: PackageUpdateInfo }) {
       >
         {pkg.name}
       </a>
-      <span
-        className={cn(
-          'font-mono tabular-nums',
-          pkg.isDeprecated
-            ? 'text-destructive-foreground'
-            : pkg.isOutdated
-              ? 'text-warning-foreground'
-              : 'text-placeholder',
-        )}
-      >
-        {pkg.version}
-      </span>
+      <span className={cn('font-mono tabular-nums', versionToneClass(pkg))}>{pkg.version}</span>
       {needsUpdate && pkg.latestVersion && (
         <>
           <ArrowRight aria-label="updates to" className="size-3 text-placeholder" />
@@ -169,6 +159,12 @@ function PackageRow({ pkg }: { pkg: PackageUpdateInfo }) {
       )}
     </li>
   );
+}
+
+function versionToneClass(pkg: PackageUpdateInfo) {
+  if (pkg.isDeprecated) return 'text-destructive-foreground';
+  if (pkg.isOutdated) return 'text-warning-foreground';
+  return 'text-placeholder';
 }
 
 function UpdateCommand({ packages }: { packages: PackageUpdateInfo[] }) {
