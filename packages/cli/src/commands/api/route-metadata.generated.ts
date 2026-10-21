@@ -6397,6 +6397,83 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /saved-views": {
+    "method": "GET",
+    "path": "/saved-views",
+    "pathParams": [],
+    "queryParams": [
+      "page"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "views",
+      "paginationProperty": "pagination"
+    }
+  },
+  "GET /saved-views/:savedViewId": {
+    "method": "GET",
+    "path": "/saved-views/:savedViewId",
+    "pathParams": [
+      "savedViewId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /saved-views": {
+    "method": "POST",
+    "path": "/saved-views",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [
+      "name",
+      "page",
+      "state"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "PATCH /saved-views/:savedViewId": {
+    "method": "PATCH",
+    "path": "/saved-views/:savedViewId",
+    "pathParams": [
+      "savedViewId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "name",
+      "state"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "DELETE /saved-views/:savedViewId": {
+    "method": "DELETE",
+    "path": "/saved-views/:savedViewId",
+    "pathParams": [
+      "savedViewId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /channels/platforms": {
     "method": "GET",
     "path": "/channels/platforms",

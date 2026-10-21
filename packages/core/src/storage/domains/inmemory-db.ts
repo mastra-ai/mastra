@@ -31,6 +31,7 @@ import type { LogRecord } from './observability/logs';
 import type { MetricRecord } from './observability/metrics';
 import type { ScoreRecord } from './observability/scores';
 import type { PromptBlockVersion } from './prompt-blocks';
+import type { SavedView } from './saved-views';
 import type { Schedule, ScheduleTrigger } from './schedules/base';
 import type { ScorerDefinitionVersion } from './scorer-definitions';
 import type { SkillVersion } from './skills';
@@ -54,6 +55,7 @@ export class InMemoryDB {
   /** Memory-domain run fences, keyed by runId. */
   readonly runFences = new Map<string, { generation: number; ownerId: string }>();
   readonly workflowDefinitions = new Map<string, WorkflowDefinition>();
+  readonly savedViews = new Map<string, SavedView>();
   readonly scores = new Map<string, ScoreRowData>();
   readonly traces = new Map<string, TraceEntry>();
   readonly metricRecords: MetricRecord[] = [];
@@ -133,6 +135,7 @@ export class InMemoryDB {
     this.runOwners.clear();
     this.runFences.clear();
     this.workflowDefinitions.clear();
+    this.savedViews.clear();
     this.scores.clear();
     this.traces.clear();
     this.metricRecords.length = 0;

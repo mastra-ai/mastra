@@ -32,6 +32,7 @@ export * from './processor-providers';
 export * from './prompt-block-versions';
 export * from './responses';
 export * from './rule-group';
+export * from './saved-views';
 export * from './scorer-versions';
 export * from './scores';
 export * from './stored-agents';

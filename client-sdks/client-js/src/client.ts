@@ -253,6 +253,11 @@ import type {
   CreateScheduleInput,
   UpdateScheduleInput,
   RunScheduleResponse,
+  SavedViewResponse,
+  ListSavedViewsParams,
+  ListSavedViewsResponse,
+  CreateSavedViewParams,
+  UpdateSavedViewParams,
   AgentControllerInfo,
   SerializedRouteResponse,
 } from './types';
@@ -2783,5 +2788,52 @@ export class MastraClient extends BaseResource {
    */
   public resumeSchedule(scheduleId: string): Promise<ScheduleResponse> {
     return this.request(`/schedules/${encodeURIComponent(scheduleId)}/resume`, { method: 'POST' });
+  }
+
+  /**
+   * Lists saved views, oldest first. Pass `page` (for example `'traces'`) to
+   * only return the views for one Studio page.
+   */
+  public listSavedViews(params: ListSavedViewsParams = {}): Promise<ListSavedViewsResponse> {
+    const searchParams = new URLSearchParams();
+    if (params.page) searchParams.set('page', params.page);
+    const qs = searchParams.toString();
+    return this.request(`/saved-views${qs ? `?${qs}` : ''}`);
+  }
+
+  /**
+   * Gets a single saved view by ID.
+   */
+  public getSavedView(
+    savedViewId: PathParams<'GET /saved-views/:savedViewId'>['savedViewId'],
+  ): Promise<SavedViewResponse> {
+    return this.request(`/saved-views/${encodeURIComponent(savedViewId)}`);
+  }
+
+  /**
+   * Creates a saved view. `state` is a JSON object with an integer `version`;
+   * the server stores it as-is.
+   */
+  public createSavedView(params: CreateSavedViewParams): Promise<SavedViewResponse> {
+    return this.request('/saved-views', { method: 'POST', body: params });
+  }
+
+  /**
+   * Changes the name or state of a saved view. Omitted fields keep their value.
+   */
+  public updateSavedView(
+    savedViewId: PathParams<'PATCH /saved-views/:savedViewId'>['savedViewId'],
+    params: UpdateSavedViewParams,
+  ): Promise<SavedViewResponse> {
+    return this.request(`/saved-views/${encodeURIComponent(savedViewId)}`, { method: 'PATCH', body: params });
+  }
+
+  /**
+   * Deletes a saved view.
+   */
+  public deleteSavedView(
+    savedViewId: PathParams<'DELETE /saved-views/:savedViewId'>['savedViewId'],
+  ): Promise<RouteResponse<'DELETE /saved-views/:savedViewId'>> {
+    return this.request(`/saved-views/${encodeURIComponent(savedViewId)}`, { method: 'DELETE' });
   }
 }

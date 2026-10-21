@@ -29,6 +29,7 @@ export const RESOURCES = [
   'observability',
   'processor-providers',
   'processors',
+  'saved-views',
   'schedules',
   'scores',
   'stored-agents',
@@ -123,6 +124,8 @@ export const PERMISSION_PATTERNS = {
   'processor-providers:*': 'processor-providers:*',
   /** Full access to processors */
   'processors:*': 'processors:*',
+  /** Full access to saved-views */
+  'saved-views:*': 'saved-views:*',
   /** Full access to schedules */
   'schedules:*': 'schedules:*',
   /** Full access to evaluation scores */
@@ -231,6 +234,12 @@ export const PERMISSION_PATTERNS = {
   'processors:execute': 'processors:execute',
   /** View processors */
   'processors:read': 'processors:read',
+  /** Delete saved-views */
+  'saved-views:delete': 'saved-views:delete',
+  /** View saved-views */
+  'saved-views:read': 'saved-views:read',
+  /** Create and modify saved-views */
+  'saved-views:write': 'saved-views:write',
   /** Delete schedules */
   'schedules:delete': 'schedules:delete',
   /** Execute schedules */
@@ -395,6 +404,9 @@ export const PERMISSIONS = [
   'processor-providers:read',
   'processors:execute',
   'processors:read',
+  'saved-views:delete',
+  'saved-views:read',
+  'saved-views:write',
   'schedules:delete',
   'schedules:execute',
   'schedules:read',
@@ -534,6 +546,12 @@ export const MastraFGAPermissions = {
   PROCESSORS_EXECUTE: 'processors:execute',
   /** View processors */
   PROCESSORS_READ: 'processors:read',
+  /** Delete saved-views */
+  SAVED_VIEWS_DELETE: 'saved-views:delete',
+  /** View saved-views */
+  SAVED_VIEWS_READ: 'saved-views:read',
+  /** Create and modify saved-views */
+  SAVED_VIEWS_WRITE: 'saved-views:write',
   /** Delete schedules */
   SCHEDULES_DELETE: 'schedules:delete',
   /** Execute schedules */

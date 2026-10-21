@@ -17,6 +17,7 @@ import { MCPServersSpanner } from './domains/mcp-servers';
 import { MemorySpanner } from './domains/memory';
 import { ObservabilitySpanner } from './domains/observability';
 import { PromptBlocksSpanner } from './domains/prompt-blocks';
+import { SavedViewsSpanner } from './domains/saved-views';
 import { SchedulesSpanner } from './domains/schedules';
 import { ScorerDefinitionsSpanner } from './domains/scorer-definitions';
 import { ScoresSpanner } from './domains/scores';
@@ -39,6 +40,7 @@ export {
   MemorySpanner,
   ObservabilitySpanner,
   PromptBlocksSpanner,
+  SavedViewsSpanner,
   SchedulesSpanner,
   ScorerDefinitionsSpanner,
   ScoresSpanner,
@@ -70,6 +72,7 @@ export const SPANNER_DOMAIN_KEYS = [
   'favorites',
   'workspaces',
   'workflowDefinitions',
+  'savedViews',
 ] as const satisfies ReadonlyArray<keyof StorageDomains>;
 
 export type SpannerDomainKey = (typeof SPANNER_DOMAIN_KEYS)[number];
@@ -295,6 +298,7 @@ export class SpannerStore extends MastraCompositeStore {
         ...(wants('workflowDefinitions') && {
           workflowDefinitions: new WorkflowDefinitionsSpanner(domainConfig),
         }),
+        ...(wants('savedViews') && { savedViews: new SavedViewsSpanner(domainConfig) }),
       };
     } catch (e) {
       throw new MastraError(
@@ -365,6 +369,7 @@ export class SpannerStore extends MastraCompositeStore {
         'workspaces',
         'favorites',
         'workflowDefinitions',
+        'savedViews',
       ];
       for (const key of domainOrder) {
         const store = this.stores?.[key];

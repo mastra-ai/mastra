@@ -45,6 +45,9 @@ export const TABLE_SCHEDULE_TRIGGERS = 'mastra_schedule_triggers';
 // Static workflow definitions (chat-built / studio-saved workflows)
 export const TABLE_WORKFLOW_DEFINITIONS = 'mastra_workflow_definitions';
 
+// Saved views (named filter/table setups for Studio pages, e.g. traces)
+export const TABLE_SAVED_VIEWS = 'mastra_saved_views';
+
 // Channel tables
 export const TABLE_CHANNEL_INSTALLATIONS = 'mastra_channel_installations';
 export const TABLE_CHANNEL_CONFIG = 'mastra_channel_config';
@@ -141,6 +144,7 @@ export type TABLE_NAMES =
   | typeof TABLE_HARNESS_SESSIONS
   | typeof TABLE_THREAD_STATE
   | typeof TABLE_WORKFLOW_DEFINITIONS
+  | typeof TABLE_SAVED_VIEWS
   | typeof TABLE_KNOWLEDGE_NODES
   | typeof TABLE_KNOWLEDGE_RECORDS
   | typeof TABLE_KNOWLEDGE_MENTIONS
@@ -383,6 +387,16 @@ export const WORKFLOW_DEFINITIONS_SCHEMA: Record<string, StorageColumn> = {
   status: { type: 'text', nullable: false }, // 'active' | 'archived'
   source: { type: 'text', nullable: false }, // always 'storage' for now
   authorId: { type: 'text', nullable: true },
+  createdAt: { type: 'timestamp', nullable: false },
+  updatedAt: { type: 'timestamp', nullable: false },
+};
+
+export const SAVED_VIEWS_SCHEMA: Record<string, StorageColumn> = {
+  id: { type: 'text', nullable: false, primaryKey: true },
+  page: { type: 'text', nullable: false }, // e.g. 'traces'
+  name: { type: 'text', nullable: false },
+  authorId: { type: 'text', nullable: true },
+  state: { type: 'jsonb', nullable: false },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };
@@ -1063,6 +1077,7 @@ export const TABLE_SCHEMAS: Record<TABLE_NAMES, Record<string, StorageColumn>> =
   [TABLE_HARNESS_SESSIONS]: HARNESS_SESSIONS_SCHEMA,
   [TABLE_THREAD_STATE]: THREAD_STATE_SCHEMA,
   [TABLE_WORKFLOW_DEFINITIONS]: WORKFLOW_DEFINITIONS_SCHEMA,
+  [TABLE_SAVED_VIEWS]: SAVED_VIEWS_SCHEMA,
   [TABLE_KNOWLEDGE_NODES]: KNOWLEDGE_NODES_SCHEMA,
   [TABLE_KNOWLEDGE_RECORDS]: KNOWLEDGE_RECORDS_SCHEMA,
   [TABLE_KNOWLEDGE_MENTIONS]: KNOWLEDGE_MENTIONS_SCHEMA,

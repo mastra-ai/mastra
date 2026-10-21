@@ -707,6 +707,32 @@ Each record has the shape written by [score persistence](/docs/evals/overview#sc
 
 How a supplied `id` is treated depends on the storage adapter. Some adapters upsert by it, others always generate a new ID, so retried submissions can create duplicate rows there. The response is `{ score: ScoreRowData }` with the stored record. Saving requires storage. Without it the route responds with a 500.
 
+## Saved views
+
+| Method | Path | Description |
+| - | - | - |
+| `GET` | `/api/saved-views` | List saved views, oldest first. Pass `?page=traces` to list one Studio page's views |
+| `POST` | `/api/saved-views` | Create a saved view |
+| `GET` | `/api/saved-views/:savedViewId` | Get a saved view |
+| `PATCH` | `/api/saved-views/:savedViewId` | Change a saved view's name or state |
+| `DELETE` | `/api/saved-views/:savedViewId` | Delete a saved view |
+
+A saved view's `state` stores how a Studio page looks, such as its filters, time range, sort, and columns. Everyone who can open Studio sees every view, and `authorId` only records who created it. The list isn't paginated: its `page` query parameter is the Studio page, not a page number.
+
+Every route answers `501` when the storage has no `savedViews` domain, and get, update, and delete answer `404` for an unknown ID. On authenticated servers, the read routes require the `saved-views:read` permission, create and update require `saved-views:write`, and delete requires `saved-views:delete`.
+
+### Create saved view request body
+
+```typescript oxfmt:false
+{
+  page: string;      // Studio page, for example 'traces'
+  name: string;      // 1-80 characters
+  state: { version: number; [key: string]: unknown };  // Up to 64 KB of JSON
+}
+```
+
+The update body takes the same `name` and `state` fields, both optional. A new `state` replaces the old one as a whole. For the response shape and client methods, see the [Saved Views API reference](/reference/client-js/saved-views).
+
 ## MCP
 
 | Method | Path | Description |

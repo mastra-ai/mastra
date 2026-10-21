@@ -15,6 +15,7 @@ import { MemoryStorageMongoDB } from './domains/memory';
 import { NotificationsMongoDB } from './domains/notifications';
 import { ObservabilityMongoDB } from './domains/observability';
 import { MongoDBPromptBlocksStorage } from './domains/prompt-blocks';
+import { MongoDBSavedViewsStorage } from './domains/saved-views';
 import { SchedulesMongoDB } from './domains/schedules';
 import { MongoDBScorerDefinitionsStorage } from './domains/scorer-definitions';
 import { ScoresStorageMongoDB } from './domains/scores';
@@ -37,6 +38,7 @@ export {
   MemoryStorageMongoDB,
   NotificationsMongoDB,
   MongoDBPromptBlocksStorage,
+  MongoDBSavedViewsStorage,
   SchedulesMongoDB,
   MongoDBScorerDefinitionsStorage,
   MongoDBSkillsStorage,
@@ -120,6 +122,8 @@ export class MongoDBStore extends MastraCompositeStore {
 
     const workflowDefinitions = new MongoDBWorkflowDefinitionsStore(domainConfig);
 
+    const savedViews = new MongoDBSavedViewsStorage(domainConfig);
+
     this.stores = {
       memory,
       knowledge,
@@ -140,6 +144,7 @@ export class MongoDBStore extends MastraCompositeStore {
       experiments,
       schedules,
       workflowDefinitions,
+      savedViews,
     };
   }
 
