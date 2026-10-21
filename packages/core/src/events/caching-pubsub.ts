@@ -442,6 +442,9 @@ export class CachingPubSub extends PubSub {
    * cursor. Terminal cleanup still deletes the log (`clearTopic`), so the
    * extension only covers the parked window.
    *
+   * Only ever lengthens: a log already configured to live longer than `ttlMs`,
+   * or with no expiry at all, keeps its own deadline.
+   *
    * Best-effort: a cache that cannot expire a single key keeps its configured
    * TTL, and failures are logged rather than thrown.
    */

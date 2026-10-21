@@ -260,6 +260,28 @@ describe('InMemoryServerCache', () => {
         expect(await ttlCache.get('key')).toBe('value');
       });
 
+      it('should never shorten a key that already lives longer', async () => {
+        const ttlCache = new InMemoryServerCache({ ttlMs: 60_000 });
+        await ttlCache.set('key', 'value');
+
+        // Refreshing to a shorter window would expire the log early, which is
+        // the failure the refresh exists to prevent.
+        await ttlCache.expire('key', 10);
+        await new Promise(resolve => setTimeout(resolve, 40));
+
+        expect(await ttlCache.get('key')).toBe('value');
+      });
+
+      it('should leave a key without expiry persistent', async () => {
+        const ttlCache = new InMemoryServerCache({ ttlMs: 0 });
+        await ttlCache.set('key', 'value');
+
+        await ttlCache.expire('key', 10);
+        await new Promise(resolve => setTimeout(resolve, 40));
+
+        expect(await ttlCache.get('key')).toBe('value');
+      });
+
       it('should not create a key and should ignore a non-positive TTL', async () => {
         const ttlCache = new InMemoryServerCache({ ttlMs: 20 });
 

@@ -10,7 +10,7 @@ Evented durable steps now publish run frames on the Mastra-level pubsub and cach
 
 The list and its index counter always share one TTL, and keys are hash-tagged (`pubsub:{topic}`) so the append script stays on a single Redis Cluster slot. `RedisServerCache.counterTtlSeconds` is gone, because a counter that expires separately from its list either restarts at zero or reuses indices.
 
-A run that parks on a tool approval extends the retention of its log and counter to 24 hours (`MastraServerCache.expire`, implemented for the in-memory, Redis and Valkey caches), so an approval wait that outlives the cache's default TTL no longer loses the frames a resumed observer still expects. Terminal cleanup deletes the log as before, so the extension only covers the parked window.
+A run that parks on a tool approval extends the retention of its log and counter to 24 hours (`MastraServerCache.expire`, implemented for the in-memory, Redis and Valkey caches), so an approval wait that outlives the cache's default TTL no longer loses the frames a resumed observer still expects. The extension only ever lengthens: a cache configured to keep keys longer, or with no expiry, keeps its own deadline. Terminal cleanup deletes the log as before, so the extension only covers the parked window.
 
 A cache that cannot allocate and append in one step (`supportsAtomicAppend === false`) publishes unnumbered frames: observers see the live tail but cannot resume from an offset. When no shared cache is configured the same applies, and `observe({ offset })` is documented as live-only.
 

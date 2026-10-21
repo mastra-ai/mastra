@@ -73,9 +73,9 @@ export function setScenarioEngineHost(host: ScenarioEngineHost | undefined): voi
   engineHost = host;
 }
 
-function wrapForEngine(agent: any, engine: EngineVariant, pubsub?: any): any {
-  if (engine === 'durable') return createDurableAgent({ agent });
-  if (engine === 'evented') return createEventedAgent({ agent, pubsub });
+function wrapForEngine(agent: any, engine: EngineVariant, pubsub?: any, durableOptions?: Record<string, any>): any {
+  if (engine === 'durable') return createDurableAgent({ agent, ...durableOptions });
+  if (engine === 'evented') return createEventedAgent({ agent, pubsub, ...durableOptions });
   if (engineHost && engine === engineHost.engine) return engineHost.wrapAgent(agent);
   return agent;
 }
@@ -111,6 +111,7 @@ export async function createSharedAgent(
     | 'defaultOptions'
     | 'pubsub'
     | 'cache'
+    | 'durableOptions'
     | 'engine'
     | 'inputProcessors'
   > = {},
@@ -146,6 +147,7 @@ async function buildScenarioAgent({
   defaultOptions,
   pubsub,
   cache,
+  durableOptions,
   engine,
   inputProcessors,
   fsRouted,
@@ -170,6 +172,7 @@ async function buildScenarioAgent({
   | 'defaultOptions'
   | 'pubsub'
   | 'cache'
+  | 'durableOptions'
   | 'engine'
   | 'inputProcessors'
   | 'fsRouted'
@@ -254,7 +257,7 @@ async function buildScenarioAgent({
   const eventedPubsub = engine === 'evented' ? (pubsub ?? new EventEmitterPubSub()) : undefined;
 
   // Wrap with the durable/evented wrapper for those engine variants
-  const registrableAgent = wrapForEngine(agent, engine ?? 'normal', eventedPubsub);
+  const registrableAgent = wrapForEngine(agent, engine ?? 'normal', eventedPubsub, durableOptions);
 
   // An external engine's worker resolves agents from the host's Mastra, so register there.
   if (engineHost && engine === engineHost.engine) {

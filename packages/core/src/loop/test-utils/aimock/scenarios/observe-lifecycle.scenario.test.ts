@@ -279,7 +279,8 @@ describeForAllEngines(
       }
     }, 30_000);
 
-    it('extends the run log retention while the run waits for approval', async () => {
+    /** Drives a run to a tool-approval suspension and returns it. */
+    async function suspendOnApproval(cache: RecordingCache, durableOptions?: Record<string, any>) {
       const llm = getMock();
       llm.on(
         { endpoint: 'chat', hasToolResult: false },
@@ -291,32 +292,60 @@ describeForAllEngines(
         inputSchema: z.object({ query: z.string() }),
         execute: async ({ query }) => ({ status: `OK:${query}` }),
       });
-      const cache = new RecordingCache();
-      const { agent } = await createSharedAgent(llm, { engine, cache, tools: { lookup_status: lookup } });
+      const { agent } = await createSharedAgent(llm, {
+        engine,
+        cache,
+        tools: { lookup_status: lookup },
+        durableOptions,
+      });
 
       const run = await agent.stream('Look up alpha', { requireToolApproval: true, maxSteps: 5 });
-      try {
-        let toolCallId: string | undefined;
-        for await (const chunk of run.fullStream) {
-          if (chunk.type === 'tool-call-approval') {
-            toolCallId = chunk.payload.toolCallId;
-            break;
-          }
+      let toolCallId: string | undefined;
+      for await (const chunk of run.fullStream) {
+        if (chunk.type === 'tool-call-approval') {
+          toolCallId = chunk.payload.toolCallId;
+          break;
         }
-        expect(toolCallId).toBe('call_retain');
+      }
+      expect(toolCallId).toBe('call_retain');
+      return run;
+    }
 
-        // The retention bump lands once the leg has settled as suspended, which is
-        // after the approval chunk reached the stream.
-        await vi.waitFor(
-          () => {
-            const extended = cache.expirations.filter(([, ttl]) => ttl === SUSPENDED_RUN_LOG_RETENTION_MS);
-            const keys = extended.map(([key]) => key);
-            expect(keys.some(key => key.includes(run.runId) && !key.endsWith(':counter'))).toBe(true);
-            // The counter has to outlive the list, so both carry the new deadline.
-            expect(keys.some(key => key.includes(run.runId) && key.endsWith(':counter'))).toBe(true);
-          },
-          { timeout: 5_000 },
-        );
+    /**
+     * Asserts the run's log and its counter both carry `ttlMs`. The retention bump
+     * lands once the leg has settled as suspended, which is after the approval
+     * chunk reached the stream.
+     */
+    async function expectRetention(run: { runId: string }, cache: RecordingCache, ttlMs: number) {
+      await vi.waitFor(
+        () => {
+          const keys = cache.expirations.filter(([, ttl]) => ttl === ttlMs).map(([key]) => key);
+          expect(keys.some(key => key.includes(run.runId) && !key.endsWith(':counter'))).toBe(true);
+          // The counter has to outlive the list, so both carry the new deadline.
+          expect(keys.some(key => key.includes(run.runId) && key.endsWith(':counter'))).toBe(true);
+        },
+        { timeout: 5_000 },
+      );
+    }
+
+    it('extends the run log retention while the run waits for approval', async () => {
+      const cache = new RecordingCache();
+      const run = await suspendOnApproval(cache);
+      try {
+        await expectRetention(run, cache, SUSPENDED_RUN_LOG_RETENTION_MS);
+      } finally {
+        run.cleanup?.();
+      }
+    }, 30_000);
+
+    it('honours a configured suspended run log retention', async () => {
+      const retentionMs = 90_000;
+      const cache = new RecordingCache();
+      const run = await suspendOnApproval(cache, { suspendedRunLogRetentionMs: retentionMs });
+      try {
+        await expectRetention(run, cache, retentionMs);
+        // The configured value replaces the default rather than adding to it.
+        expect(cache.expirations.some(([, ttl]) => ttl === SUSPENDED_RUN_LOG_RETENTION_MS)).toBe(false);
       } finally {
         run.cleanup?.();
       }

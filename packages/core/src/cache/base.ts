@@ -30,7 +30,8 @@ export abstract class MastraServerCache extends MastraBase {
   abstract clear(): Promise<void>;
 
   /**
-   * Extend, or set, the expiry of `key` without changing its value.
+   * Ensure `key` lives for at least `ttlMs` from now, without changing its
+   * value.
    *
    * A retained stream log has to outlive the run that writes it: a durable run
    * parked on a tool approval can sit far longer than a cache's default
@@ -38,11 +39,16 @@ export abstract class MastraServerCache extends MastraBase {
    * attached subscriber still holds the old cursor. Callers refresh both the
    * list and its counter together, for the same reason they share one TTL.
    *
+   * This only ever lengthens. A key whose remaining lifetime is already longer
+   * is left alone, and so is a key with no expiry at all: shortening a log the
+   * operator configured for a week (or forever) would lose the same frames this
+   * call exists to protect.
+   *
    * Best-effort. The default is a no-op, so a cache that cannot expire a
    * single key keeps its configured TTL instead of failing the call.
    *
-   * @param ttlMs - Milliseconds from now. Non-positive values are ignored;
-   *   use the implementation's TTL configuration for "never expires".
+   * @param ttlMs - Minimum milliseconds from now. Non-positive values are
+   *   ignored; use the implementation's TTL configuration for "never expires".
    */
   async expire(_key: string, _ttlMs: number): Promise<void> {}
 

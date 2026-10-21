@@ -131,7 +131,12 @@ export class ValkeyServerCache extends MastraServerCache {
 
   async expire(key: string, ttlMs: number): Promise<void> {
     if (ttlMs <= 0) return;
-    await this.command(['EXPIRE', this.getKey(key), String(Math.max(1, Math.ceil(ttlMs / 1000)))]);
+    const fullKey = this.getKey(key);
+    const remainingSeconds = Number(await this.command(['TTL', fullKey]));
+    // `-1` is a key without expiry and `-2` one that is already gone: neither
+    // should be given a (possibly shorter) deadline.
+    if (remainingSeconds < 0 || remainingSeconds * 1000 >= ttlMs) return;
+    await this.command(['EXPIRE', fullKey, String(Math.max(1, Math.ceil(ttlMs / 1000)))]);
   }
 
   /**

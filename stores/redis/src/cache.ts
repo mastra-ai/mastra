@@ -8,6 +8,13 @@ export interface RedisClient {
   lrange(key: string, start: number, stop: number): Promise<unknown[]>;
   del(...keys: string[]): Promise<number>;
   expire(key: string, seconds: number): Promise<number | boolean>;
+  /**
+   * Remaining lifetime of `key` in seconds: `-1` when it has no expiry, `-2`
+   * when it does not exist. Used by {@link RedisServerCache.expire} so a
+   * retention refresh never shortens a longer configured TTL. A client that
+   * omits it keeps the older unconditional `EXPIRE` behaviour.
+   */
+  ttl?(key: string): Promise<number>;
   scan(cursor: string | number, ...args: unknown[]): Promise<[string | number, string[]]>;
   incr(key: string): Promise<number>;
   /**
@@ -247,7 +254,14 @@ export class RedisServerCache extends MastraServerCache {
 
   async expire(key: string, ttlMs: number): Promise<void> {
     if (ttlMs <= 0) return;
-    await this.client.expire(this.getKey(key), Math.max(1, Math.ceil(ttlMs / 1000)));
+    const fullKey = this.getKey(key);
+    if (this.client.ttl) {
+      const remainingSeconds = await this.client.ttl(fullKey);
+      // `-1` is a key without expiry and `-2` one that is already gone: neither
+      // should be given a (possibly shorter) deadline.
+      if (remainingSeconds < 0 || remainingSeconds * 1000 >= ttlMs) return;
+    }
+    await this.client.expire(fullKey, Math.max(1, Math.ceil(ttlMs / 1000)));
   }
 
   /**

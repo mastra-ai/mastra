@@ -391,6 +391,12 @@ export interface RunLoopScenarioOptions {
   /** Shared cache for durable/evented pubsub scenarios. */
   cache?: MastraServerCache;
   /**
+   * Extra config forwarded to the durable/evented wrapper (`createDurableAgent`
+   * / `createEventedAgent`), e.g. `{ suspendedRunLogRetentionMs: 90_000 }`.
+   * Ignored by engine variants that do not wrap the agent.
+   */
+  durableOptions?: Record<string, any>;
+  /**
    * When set, {@link runLoopScenario} iterates `output.fullStream` itself
    * (instead of the default `consumeStream` drain) and returns every emitted
    * chunk in {@link LoopScenarioResult.chunks}. Use for delta-level / streaming

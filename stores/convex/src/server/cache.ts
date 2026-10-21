@@ -294,14 +294,9 @@ export async function handleCacheOperation(ctx: MutationCtx<any>, request: Cache
         return { ok: false, error: `${request.counterKey} exists but is not a number` };
       }
 
-      const index = counterDoc?.counter ?? 0;
-      await writeCacheDoc(ctx, request.counterKey, counterDoc, {
-        kind: 'counter',
-        keyPrefix: request.keyPrefix,
-        counter: index + 1,
-        expiresAt: request.expiresAt,
-      });
-
+      // Resolve and validate the list document before touching the counter: a
+      // cleanup batch or a type error returns without an insert, so committing
+      // the counter first would burn an index and leave a gap.
       let listDoc = await findCacheDoc(ctx, request.key);
       if (listDoc && (isExpired(listDoc, now) || listDoc.kind === 'deleted')) {
         const cleanup = await deleteCacheKey(ctx, request.key);
@@ -313,6 +308,14 @@ export async function handleCacheOperation(ctx: MutationCtx<any>, request: Cache
       if (listDoc && listDoc.kind !== 'list') {
         return { ok: false, error: `${request.key} exists but is not an array` };
       }
+
+      const index = counterDoc?.counter ?? 0;
+      await writeCacheDoc(ctx, request.counterKey, counterDoc, {
+        kind: 'counter',
+        keyPrefix: request.keyPrefix,
+        counter: index + 1,
+        expiresAt: request.expiresAt,
+      });
 
       await writeCacheDoc(ctx, request.key, listDoc, {
         kind: 'list',

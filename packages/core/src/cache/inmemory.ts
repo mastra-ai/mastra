@@ -54,6 +54,10 @@ export class InMemoryServerCache extends MastraServerCache {
     if (ttlMs <= 0) return;
     const value = this.cache.get(key);
     if (value === undefined) return;
+    // `Infinity` means the key never expires; a log configured to live forever
+    // must not be given a deadline here, and one already living longer than the
+    // requested window must not be shortened.
+    if (this.cache.getRemainingTTL(key) >= ttlMs) return;
     // Re-setting is how TTLCache applies a new deadline; it keeps the value.
     this.cache.set(key, value, { ttl: ttlMs });
   }

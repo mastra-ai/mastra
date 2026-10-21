@@ -12,6 +12,7 @@ function createMockClient(): RedisClient & { [key: string]: ReturnType<typeof vi
     lrange: vi.fn(),
     del: vi.fn(),
     expire: vi.fn(),
+    ttl: vi.fn(),
     scan: vi.fn(),
     incr: vi.fn(),
     eval: vi.fn(),
@@ -252,12 +253,16 @@ describe('RedisServerCache', () => {
 
   describe('expire', () => {
     it('sets a prefixed key TTL in seconds', async () => {
+      mockClient.ttl.mockResolvedValue(60);
+
       await cache.expire('events', 90_000);
 
       expect(mockClient.expire).toHaveBeenCalledWith('mastra:cache:events', 90);
     });
 
     it('rounds up sub-second TTLs so the key is not removed', async () => {
+      mockClient.ttl.mockResolvedValue(0);
+
       await cache.expire('events', 1);
 
       // Redis treats EXPIRE with a non-positive TTL as a delete.
@@ -266,6 +271,25 @@ describe('RedisServerCache', () => {
 
     it('does nothing for a non-positive TTL', async () => {
       await cache.expire('events', 0);
+
+      expect(mockClient.ttl).not.toHaveBeenCalled();
+      expect(mockClient.expire).not.toHaveBeenCalled();
+    });
+
+    it('never shortens a key that already lives longer', async () => {
+      // A cache configured for a week must keep its week: shortening it to the
+      // parked-run window would expire the log early and restart numbering.
+      mockClient.ttl.mockResolvedValue(7 * 24 * 60 * 60);
+
+      await cache.expire('events', 24 * 60 * 60 * 1000);
+
+      expect(mockClient.expire).not.toHaveBeenCalled();
+    });
+
+    it('leaves a key without expiry persistent', async () => {
+      mockClient.ttl.mockResolvedValue(-1);
+
+      await cache.expire('events', 24 * 60 * 60 * 1000);
 
       expect(mockClient.expire).not.toHaveBeenCalled();
     });
