@@ -354,7 +354,6 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "clientTools",
       "format",
-      "memory",
       "model",
       "modelSettings",
       "providerOptions",
@@ -378,7 +377,6 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "clientTools",
       "format",
-      "memory",
       "model",
       "modelSettings",
       "providerOptions",

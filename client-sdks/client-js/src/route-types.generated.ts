@@ -24,7 +24,7 @@ type InputShared_Auxiliary_115 = {
   parentWorkflow?: InputShared_Auxiliary_115 | undefined;
 };
 
-type InputShared_Auxiliary_207 =
+type InputShared_Auxiliary_208 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -73,41 +73,41 @@ type InputShared_Auxiliary_207 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_207[];
+      args: InputShared_Auxiliary_208[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_207;
+      arg: InputShared_Auxiliary_208;
     }
   | {
       spans:
         | {
-            some: InputShared_Auxiliary_230;
+            some: InputShared_Auxiliary_231;
           }
         | {
-            none: InputShared_Auxiliary_230;
+            none: InputShared_Auxiliary_231;
           };
     }
   | {
       scores:
         | {
-            some: InputShared_Auxiliary_230;
+            some: InputShared_Auxiliary_231;
           }
         | {
-            none: InputShared_Auxiliary_230;
+            none: InputShared_Auxiliary_231;
           };
     }
   | {
       feedback:
         | {
-            some: InputShared_Auxiliary_230;
+            some: InputShared_Auxiliary_231;
           }
         | {
-            none: InputShared_Auxiliary_230;
+            none: InputShared_Auxiliary_231;
           };
     };
 
-type InputShared_Auxiliary_230 =
+type InputShared_Auxiliary_231 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -156,33 +156,33 @@ type InputShared_Auxiliary_230 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_230[];
+      args: InputShared_Auxiliary_231[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_230;
+      arg: InputShared_Auxiliary_231;
     };
 
-type InputShared_Auxiliary_271 =
+type InputShared_Auxiliary_272 =
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_271[];
+      args: InputShared_Auxiliary_272[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_271;
+      arg: InputShared_Auxiliary_272;
     }
   | {
       traces:
         | {
-            some: InputShared_Auxiliary_207;
+            some: InputShared_Auxiliary_208;
           }
         | {
-            none: InputShared_Auxiliary_207;
+            none: InputShared_Auxiliary_208;
           };
     };
 
-type InputShared_Auxiliary_703 =
+type InputShared_Auxiliary_704 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -227,27 +227,27 @@ type InputShared_Auxiliary_703 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_703[];
+      args: InputShared_Auxiliary_704[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_703;
+      arg: InputShared_Auxiliary_704;
     };
 
-type InputShared_Auxiliary_777 = {
+type InputShared_Auxiliary_778 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: InputShared_Auxiliary_777[] | undefined;
+  children?: InputShared_Auxiliary_778[] | undefined;
 };
 
-type Shared_Auxiliary_777 = {
+type Shared_Auxiliary_778 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_777[] | undefined;
+  children?: Shared_Auxiliary_778[] | undefined;
 };
 
 type InputShared_Type_0 = {
@@ -1809,7 +1809,7 @@ type InputShared_Type_88 = {
       }
     | undefined;
   steps: InputShared_Type_83[];
-  predicates: InputShared_Auxiliary_703[];
+  predicates: InputShared_Auxiliary_704[];
 };
 
 type InputShared_Type_89 = {
@@ -1823,7 +1823,7 @@ type InputShared_Type_89 = {
     | undefined;
   step: InputShared_Type_83;
   loopType: 'dowhile' | 'dountil';
-  predicate: InputShared_Auxiliary_703;
+  predicate: InputShared_Auxiliary_704;
 };
 
 type InputShared_Type_90 =
@@ -4273,7 +4273,7 @@ type Shared_Type_84 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_777[] | undefined;
+  files?: Shared_Auxiliary_778[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -9006,6 +9006,46 @@ export interface GetMemoryThreadsThreadIdMessages_RouteContract {
 }
 
 // ============================================================================
+// Route: GET /memory/threads/:threadId/actions
+// ============================================================================
+export type GetMemoryThreadsThreadIdActions_PathParams = GetMemoryThreadsThreadId_PathParams;
+
+export type GetMemoryThreadsThreadIdActions_QueryParams = {
+  agentId?: string | undefined;
+  resourceId?: string | undefined;
+  runId?: string | undefined;
+  after?: string | undefined;
+  limit?: number | undefined;
+};
+
+export type GetMemoryThreadsThreadIdActions_Response = {
+  actions: {
+    [key: string]: unknown;
+  }[];
+};
+
+export type GetMemoryThreadsThreadIdActions_Request = Simplify<
+  (GetMemoryThreadsThreadIdActions_PathParams extends never
+    ? {}
+    : { params: GetMemoryThreadsThreadIdActions_PathParams }) &
+    (GetMemoryThreadsThreadIdActions_QueryParams extends never
+      ? {}
+      : {} extends GetMemoryThreadsThreadIdActions_QueryParams
+        ? { query?: GetMemoryThreadsThreadIdActions_QueryParams }
+        : { query: GetMemoryThreadsThreadIdActions_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetMemoryThreadsThreadIdActions_RouteContract {
+  pathParams: GetMemoryThreadsThreadIdActions_PathParams;
+  queryParams: GetMemoryThreadsThreadIdActions_QueryParams;
+  body: never;
+  request: GetMemoryThreadsThreadIdActions_Request;
+  response: GetMemoryThreadsThreadIdActions_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
 // Route: GET /memory/threads/:threadId/working-memory
 // ============================================================================
 export type GetMemoryThreadsThreadIdWorkingMemory_PathParams = GetMemoryThreadsThreadId_PathParams;
@@ -10523,7 +10563,7 @@ export type PostObservabilityTracesQuery_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_207 | undefined;
+  where?: InputShared_Auxiliary_208 | undefined;
   group?:
     | {
         by: ['threadId'];
@@ -10613,7 +10653,7 @@ export type PostObservabilityTracesAggregate_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_207 | undefined;
+  where?: InputShared_Auxiliary_208 | undefined;
   groupBy?: string[];
   interval?: ('1m' | '5m' | '15m' | '1h' | '1d') | undefined;
   measures: (
@@ -10643,7 +10683,7 @@ export type PostObservabilityTracesAggregate_Body = {
       )
     | `countDistinct.${string}`
   )[];
-  having?: InputShared_Auxiliary_230 | undefined;
+  having?: InputShared_Auxiliary_231 | undefined;
   orderBy?: {
     field: string;
     direction: 'asc' | 'desc';
@@ -10735,7 +10775,7 @@ export type PostObservabilityThreadsQuery_Body =
               field: 'startedAt' | 'endedAt';
             };
           };
-      where?: InputShared_Auxiliary_230 | undefined;
+      where?: InputShared_Auxiliary_231 | undefined;
       orderBy?: {
         field: 'startedAt' | 'endedAt';
         direction: 'asc' | 'desc';
@@ -10751,9 +10791,9 @@ export type PostObservabilityThreadsQuery_Body =
           from: string;
           to: string;
         };
-        where?: InputShared_Auxiliary_207 | undefined;
+        where?: InputShared_Auxiliary_208 | undefined;
       };
-      where?: InputShared_Auxiliary_271 | undefined;
+      where?: InputShared_Auxiliary_272 | undefined;
       page?: {
         limit?: number;
         after?: (string | null) | undefined;
@@ -10831,7 +10871,7 @@ export type PostObservabilitySpansQuery_Body = {
     from: string;
     to: string;
   };
-  where?: InputShared_Auxiliary_230 | undefined;
+  where?: InputShared_Auxiliary_231 | undefined;
   orderBy?: {
     field: 'startedAt' | 'endedAt' | 'timeToFirstChunkMs';
     direction: 'asc' | 'desc';
@@ -18941,7 +18981,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: InputShared_Auxiliary_777[] | undefined;
+  files?: InputShared_Auxiliary_778[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -18999,7 +19039,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (InputShared_Auxiliary_777[] | undefined) | undefined;
+  files?: (InputShared_Auxiliary_778[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -24615,6 +24655,7 @@ export interface RouteTypes {
   'GET /memory/threads': GetMemoryThreads_RouteContract;
   'GET /memory/threads/:threadId': GetMemoryThreadsThreadId_RouteContract;
   'GET /memory/threads/:threadId/messages': GetMemoryThreadsThreadIdMessages_RouteContract;
+  'GET /memory/threads/:threadId/actions': GetMemoryThreadsThreadIdActions_RouteContract;
   'GET /memory/threads/:threadId/working-memory': GetMemoryThreadsThreadIdWorkingMemory_RouteContract;
   'POST /memory/save-messages': PostMemorySaveMessages_RouteContract;
   'POST /memory/threads': PostMemoryThreads_RouteContract;
@@ -25519,6 +25560,9 @@ export interface Client {
     DELETE: DeleteMemoryThreadsThreadId_RouteContract;
     GET: GetMemoryThreadsThreadId_RouteContract;
     PATCH: PatchMemoryThreadsThreadId_RouteContract;
+  };
+  '/memory/threads/:threadId/actions': {
+    GET: GetMemoryThreadsThreadIdActions_RouteContract;
   };
   '/memory/threads/:threadId/clone': {
     POST: PostMemoryThreadsThreadIdClone_RouteContract;
