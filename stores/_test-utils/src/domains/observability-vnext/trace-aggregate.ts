@@ -501,6 +501,7 @@ interface AggregateRootSpec {
   lookup?: boolean;
   environment?: string;
   organizationId?: string;
+  executionSource?: string;
 }
 
 function aggregateRoot(spec: AggregateRootSpec): RawTraceQuerySpan[] {
@@ -511,6 +512,7 @@ function aggregateRoot(spec: AggregateRootSpec): RawTraceQuerySpan[] {
     entityName: spec.entityName,
     entityId: spec.entityId ?? null,
     environment: spec.environment ?? 'production',
+    executionSource: spec.executionSource ?? null,
     organizationId,
     threadId: spec.threadId,
     startedAt: spec.startedAt,
@@ -562,6 +564,9 @@ function aggregateRoot(spec: AggregateRootSpec): RawTraceQuerySpan[] {
  * `billing-2` also has a child `scorer_run` span with `entityId: nightly-scorer`, which only span-scope
  * `entityId` predicates match.
  *
+ * Root `executionSource` (spans write it as `source`): `cloud` on triage-1..3 and every billing root,
+ * `local` on triage-4, triage-5, and research-1 (staging); null everywhere else.
+ *
  * Whole-window groups by `entityName`: triage 6 (2 errors, p95 8000), billing 5 (1 error,
  * p95 2500), support 4 (1 error, p95 6000), research 2 (1 error, p95 12000), scheduler 2
  * (p95 2900), null 1. Total 20 traces, 5 errors.
@@ -579,6 +584,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
     ...aggregateRoot({
       cursorId: 100,
       traceId: 'triage-1',
+      executionSource: 'cloud',
       entityName: 'triage',
       name: 'triage run',
       startedAt: '2026-08-01T10:00:00.000Z',
@@ -590,6 +596,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
     ...aggregateRoot({
       cursorId: 110,
       traceId: 'triage-2',
+      executionSource: 'cloud',
       entityName: 'triage',
       name: 'triage run',
       startedAt: '2026-08-01T11:00:00.000Z',
@@ -602,6 +609,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
     ...aggregateRoot({
       cursorId: 120,
       traceId: 'triage-3',
+      executionSource: 'cloud',
       entityName: 'triage',
       name: 'triage run',
       startedAt: '2026-08-02T10:00:00.000Z',
@@ -613,6 +621,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
     ...aggregateRoot({
       cursorId: 130,
       traceId: 'triage-4',
+      executionSource: 'local',
       entityName: 'triage',
       name: 'triage run',
       startedAt: '2026-08-03T10:00:00.000Z',
@@ -624,6 +633,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
     ...aggregateRoot({
       cursorId: 140,
       traceId: 'triage-5',
+      executionSource: 'local',
       entityName: 'triage',
       name: 'triage run',
       startedAt: '2026-08-05T10:00:00.000Z',
@@ -656,6 +666,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
     ...aggregateRoot({
       cursorId: 200,
       traceId: 'billing-1',
+      executionSource: 'cloud',
       entityName: 'billing',
       startedAt: '2026-08-01T10:00:00.000Z',
       durationMs: 500,
@@ -666,6 +677,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
     ...aggregateRoot({
       cursorId: 210,
       traceId: 'billing-2',
+      executionSource: 'cloud',
       entityName: 'billing',
       startedAt: '2026-08-02T10:00:00.000Z',
       durationMs: 1500,
@@ -688,6 +700,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
     ...aggregateRoot({
       cursorId: 220,
       traceId: 'billing-3',
+      executionSource: 'cloud',
       entityName: 'billing',
       startedAt: '2026-08-03T10:00:00.000Z',
       durationMs: 2500,
@@ -698,6 +711,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
     ...aggregateRoot({
       cursorId: 230,
       traceId: 'billing-4',
+      executionSource: 'cloud',
       entityName: 'billing',
       startedAt: '2026-08-06T10:00:00.000Z',
       durationMs: 2500,
@@ -708,6 +722,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
     ...aggregateRoot({
       cursorId: 240,
       traceId: 'billing-5',
+      executionSource: 'cloud',
       entityName: 'billing',
       startedAt: '2026-08-06T11:00:00.000Z',
       durationMs: 2500,
@@ -752,6 +767,7 @@ export const TRACE_AGGREGATE_FIXTURE_DATA: TraceQueryFixtureData = {
     ...aggregateRoot({
       cursorId: 400,
       traceId: 'research-1',
+      executionSource: 'local',
       entityName: 'research',
       startedAt: '2026-08-03T10:00:00.000Z',
       durationMs: 12_000,
@@ -1313,6 +1329,42 @@ export const TRACE_AGGREGATE_CONFORMANCE_CASES: TraceAggregateConformanceCase[] 
           dimensions: { environment: 'staging' },
           measures: { count: 2, 'countDistinct.entityName': 1, 'countDistinct.metadata.tenant': 1 },
         },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'groups by root executionSource under a where filter with a null group',
+    request: {
+      timeRange: aggregateRange,
+      where: { op: 'eq', left: { path: 'environment' }, right: { literal: 'production' } },
+      groupBy: ['executionSource'],
+      measures: ['count', 'errorCount'],
+    },
+    expected: {
+      rows: [
+        { dimensions: { executionSource: 'cloud' }, measures: { count: 8, errorCount: 2 } },
+        { dimensions: { executionSource: null }, measures: { count: 8, errorCount: 1 } },
+        { dimensions: { executionSource: 'local' }, measures: { count: 2, errorCount: 1 } },
+      ],
+      truncated: false,
+    },
+  },
+  {
+    name: 'countDistinct over root executionSource skips null values',
+    request: {
+      timeRange: aggregateRange,
+      groupBy: ['entityName'],
+      measures: ['count', 'countDistinct.executionSource'],
+    },
+    expected: {
+      rows: [
+        { dimensions: triage, measures: { count: 6, 'countDistinct.executionSource': 2 } },
+        { dimensions: billing, measures: { count: 5, 'countDistinct.executionSource': 1 } },
+        { dimensions: support, measures: { count: 4, 'countDistinct.executionSource': 0 } },
+        { dimensions: research, measures: { count: 2, 'countDistinct.executionSource': 1 } },
+        { dimensions: scheduler, measures: { count: 2, 'countDistinct.executionSource': 0 } },
+        { dimensions: unnamed, measures: { count: 1, 'countDistinct.executionSource': 0 } },
       ],
       truncated: false,
     },
