@@ -43,7 +43,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@azure/storage-blob": "^12.31.0"
+    "@azure/storage-blob": "^12.34.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
