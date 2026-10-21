@@ -36,16 +36,16 @@
         "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "muse-wonder-1.0": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
     "muse-spark-1.2": [
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "muse-wonder-1.0": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "muse-spark-1.2-contributor": [
