@@ -316,7 +316,14 @@ The execution result includes the following fields. Status-specific fields are o
       error?: unknown;                 // Present when the step failed
       startedAt: number;
       endedAt?: number;
-    };
+    } | {
+      payload?: unknown;
+      status: string;
+      output?: unknown;
+      error?: unknown;
+      startedAt: number;
+      endedAt?: number;
+    }[];                              // forEach iteration results
   };
   activeStepsPath?: Record<string, number[]>;
   serializedStepGraph?: unknown[];
@@ -332,7 +339,11 @@ For persisted runs, use the `fields` query parameter to trim the response. It ac
 curl 'http://localhost:4111/api/workflows/my-workflow/runs/1faf6f91-b9ac-4db0-9fb3-326687ba1972?fields=result'
 ```
 
-Pass `withNestedWorkflows=false` to skip expanding nested workflow executions inside `steps`. This doesn't remove the workflow's own step entries. The in-memory fallback doesn't apply field filtering or nested-workflow expansion.
+A `steps` entry can be a single step result or an array of iteration results for a `forEach` step. Check whether the entry is an array before reading its `status` or `output`.
+
+Pass `withNestedWorkflows=false` to skip expanding nested workflow executions inside `steps`. This doesn't remove the workflow's own step entries.
+
+The in-memory fallback is identified by `isFromInMemory: true`. It returns run metadata, `status`, and empty `steps`, but omits `result`, `payload`, and `error`. Its `createdAt` and `updatedAt` timestamps use the current time, not the run's actual timestamps. It doesn't apply field filtering or nested-workflow expansion.
 
 ### Stream workflow request body
 
