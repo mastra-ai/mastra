@@ -66,6 +66,7 @@ export const MastraVersionNavLink = ({ state }: MastraVersionNavLinkProps) => {
       <PopoverContent side="right" align="end" sideOffset={6} className="w-auto p-3">
         <MastraPackagesPanel
           version={version}
+          installedPackages={installedPackages}
           packages={packages}
           isLoadingUpdates={isLoading}
           outdatedCount={outdatedCount}

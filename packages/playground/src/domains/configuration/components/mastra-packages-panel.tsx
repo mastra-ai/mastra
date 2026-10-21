@@ -6,7 +6,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowRight, CircleCheck, ExternalLink, TriangleAlert } from 'lucide-react';
 import { useState } from 'react';
-import type { PackageUpdateInfo } from '../hooks/use-package-updates';
+import type { PackageInfo, PackageUpdateInfo } from '../hooks/use-package-updates';
 
 const PACKAGE_MANAGERS = ['pnpm', 'npm', 'yarn', 'bun'] as const;
 type PackageManager = (typeof PACKAGE_MANAGERS)[number];
@@ -22,6 +22,8 @@ const RELEASES_URL = 'https://github.com/mastra-ai/mastra/releases';
 
 export interface MastraPackagesPanelProps {
   version: string;
+  /** Everything installed, available before the update checks finish. */
+  installedPackages: PackageInfo[];
   packages: PackageUpdateInfo[];
   isLoadingUpdates: boolean;
   outdatedCount: number;
@@ -31,6 +33,7 @@ export interface MastraPackagesPanelProps {
 /** What's installed, what can be updated, and the command to update it. */
 export const MastraPackagesPanel = ({
   version,
+  installedPackages,
   packages,
   isLoadingUpdates,
   outdatedCount,
@@ -56,7 +59,7 @@ export const MastraPackagesPanel = ({
         </div>
         <div className="flex items-center gap-0.5">
           <CopyButton
-            content={packages.map(pkg => `${pkg.name}@${pkg.version}`).join('\n')}
+            content={installedPackages.map(pkg => `${pkg.name}@${pkg.version}`).join('\n')}
             tooltip="Copy versions"
             variant="ghost"
             size="icon-sm"
@@ -83,7 +86,8 @@ export const MastraPackagesPanel = ({
         </ul>
       </ScrollArea>
 
-      <UpdateCommand packages={packages.filter(pkg => pkg.isOutdated || pkg.isDeprecated)} />
+      {/* Only packages with a newer version: a deprecated package already on latest has nothing to install. */}
+      <UpdateCommand packages={packages.filter(pkg => pkg.isOutdated)} />
     </div>
   );
 };
@@ -171,9 +175,8 @@ function UpdateCommand({ packages }: { packages: PackageUpdateInfo[] }) {
   const [packageManager, setPackageManager] = useState<PackageManager>('pnpm');
   if (packages.length === 0) return null;
 
-  const command = `${installCommands[packageManager]} ${packages
-    .map(pkg => `${pkg.name}@${pkg.targetPrereleaseTag ?? 'latest'}`)
-    .join(' ')}`;
+  // `latestVersion` is the registry's `latest` dist-tag, so `@latest` installs exactly what the list shows.
+  const command = `${installCommands[packageManager]} ${packages.map(pkg => `${pkg.name}@latest`).join(' ')}`;
 
   return (
     <div className="space-y-1.5">
