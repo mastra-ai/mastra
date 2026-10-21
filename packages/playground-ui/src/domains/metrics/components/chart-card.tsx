@@ -69,7 +69,7 @@ export function ChartCard({
   );
 }
 
-/** The title: a view menu, a lone compact title, or the default title and description. */
+/** The title: a view menu, a lone compact title, or the default title, each with the description on default cards. */
 function ChartCardHeading({
   title,
   description,
@@ -80,6 +80,7 @@ function ChartCardHeading({
     return (
       <div className="flex flex-col">
         <MetricsCard.TitleMenu title={title} {...titleMenu} />
+        {!compact && description && <MetricsCard.Description>{description}</MetricsCard.Description>}
       </div>
     );
   }

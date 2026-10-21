@@ -51,4 +51,20 @@ describe('ChartCard', () => {
       expect(onValueChange).toHaveBeenCalledWith('provider');
     });
   });
+
+  describe('default with a title menu', () => {
+    it('keeps the description under the menu', () => {
+      render(
+        <ChartCard
+          title="Spend by model"
+          description="Each line is a model."
+          titleMenu={{ value: 'model', onValueChange: vi.fn(), options: views }}
+        >
+          <div />
+        </ChartCard>,
+      );
+      expect(screen.getByRole('button', { name: 'Spend by model' })).toBeTruthy();
+      expect(screen.getByText('Each line is a model.')).toBeTruthy();
+    });
+  });
 });
