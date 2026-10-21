@@ -1,3 +1,4 @@
+import { readCredentialPolicyFailure } from '@mastra/code-sdk/auth/credential-policy-error';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController, AgentControllerEventListener, Session } from '@mastra/core/agent-controller';
 import { classifyProviderError } from '@mastra/core/error';
@@ -93,15 +94,10 @@ class FactoryDecisionSuperseded extends Error {}
 /** A run that ran and ended in error; the session's own listener reports it to followers. */
 class RunEndedInError extends FactoryDispatchError {}
 
-// The Mastra Code credential resolver's own failure; free text that merely mentions credentials does not count.
-const CREDENTIAL_RESOLUTION_FAILURE = 'tenant model credential policy could not be resolved';
-// The resolver's reason when the request context has no user; it recurs on every retry of the same start.
-const NO_AUTHENTICATED_USER = 'the request has no authenticated user';
-
 function runErrorCode(error: unknown, message: string): FactoryDispatchFailureCode {
-  const lower = message.toLowerCase();
-  if (lower.includes(CREDENTIAL_RESOLUTION_FAILURE)) {
-    return lower.includes(NO_AUTHENTICATED_USER) ? 'run_user_unauthenticated' : 'run_credentials_unavailable';
+  const credentialFailure = readCredentialPolicyFailure(message);
+  if (credentialFailure) {
+    return credentialFailure === 'missing-user-context' ? 'run_user_unauthenticated' : 'run_credentials_unavailable';
   }
   return classifyProviderError(error) === 'auth' ? 'run_credentials_unavailable' : 'run_failed';
 }

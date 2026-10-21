@@ -44,9 +44,6 @@ export interface NoticeEntry {
   error?: MastraErrorPart['error'];
 }
 
-/** Wire-stable `Error.name` the SDK uses for missing provider credentials. */
-export const PROVIDER_AUTH_REQUIRED_ERROR = 'ProviderAuthRequiredError';
-
 export interface ApprovalPrompt {
   kind: 'approval';
   id: string;

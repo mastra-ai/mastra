@@ -1,7 +1,7 @@
+import { readCredentialPolicyFailure } from '@mastra/code-sdk/auth/credential-policy-error';
+import { PROVIDER_AUTH_REQUIRED_ERROR } from '@mastra/code-sdk/auth/provider-auth-error';
 import type { MastraErrorPart } from '@mastra/core/agent/message-list';
 import { classifyProviderError, providerErrorReason } from '@mastra/core/error';
-
-import { PROVIDER_AUTH_REQUIRED_ERROR } from './transcript';
 
 interface RunErrorDescription {
   title: string;
@@ -14,7 +14,7 @@ const NO_REASON_AVAILABLE =
   'The provider rejected the request. A specific reason isn’t available here. Copy the error details and check the server logs.';
 
 export function describeRunError(error: MastraErrorPart['error']): RunErrorDescription {
-  if (error.message.toLowerCase().includes('the request has no authenticated user')) {
+  if (readCredentialPolicyFailure(error.message) === 'missing-user-context') {
     return {
       title: 'Run started without an authenticated user',
       message:
