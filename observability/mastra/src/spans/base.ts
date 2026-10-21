@@ -551,6 +551,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     const nestedUnderParent = this.traceState?.nestedUnderParent ?? false;
     // Checked again here because links can be set on the span after it starts
     const links = validLinks(this.links);
+    const correlation = this.getCorrelationContext();
 
     return {
       id: this.id,
@@ -571,6 +572,14 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       isEvent: this.isEvent,
       isRootSpan: this.isRootSpan,
       ...(this.isInternal ? { isInternal: true } : {}),
+      parentEntityType: correlation.parentEntityType,
+      parentEntityId: correlation.parentEntityId,
+      parentEntityName: correlation.parentEntityName,
+      parentEntityVersionId: correlation.parentEntityVersionId,
+      rootEntityType: correlation.rootEntityType,
+      rootEntityId: correlation.rootEntityId,
+      rootEntityName: correlation.rootEntityName,
+      rootEntityVersionId: correlation.rootEntityVersionId,
       parentSpanId: this.getParentSpanId(includeInternalSpans),
       externalParentSpanId: this.getExportedExternalParentSpanId(includeInternalSpans),
       ...(nestedUnderParent ? { nestedUnderParent: true } : {}),
