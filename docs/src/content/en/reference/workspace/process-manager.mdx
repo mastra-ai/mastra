@@ -146,14 +146,14 @@ Get a handle to a process by PID. Returns `undefined` if the process isn't found
 Reading a process that has exited dismisses it: later calls return `undefined` and it leaves `list()`. Pass `{ release: false }` to read it and leave it available, for example when a UI shows a process's output that an agent will also read.
 
 ```typescript
-const handle = await sandbox.processes.get(1234)
+const handle = await sandbox.processes.get('1234')
 if (handle) {
   console.log(handle.stdout)
   await handle.kill()
 }
 
 // Read without dismissing an exited process
-const peek = await sandbox.processes.get(1234, { release: false })
+const peek = await sandbox.processes.get('1234', { release: false })
 ```
 
 <PropertiesTable

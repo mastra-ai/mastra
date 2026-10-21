@@ -329,7 +329,9 @@ const running = await sandbox.processes.list()
 await handle.kill()
 ```
 
-A process has no time limit unless you pass `timeout` to `spawn()` or the constructor. Call `get(pid)` to attach to a process this manager didn't start, for example after your app restarts; output written before attaching isn't available.
+A process has no time limit unless you pass `timeout` to `spawn()` or the constructor. Call `get(pid)` to attach to a process this manager didn't start, for example after your app restarts. Output written before attaching isn't available.
+
+When the lease a process started with expires, the manager reattaches and the process keeps running, but output written before the reattach is lost. If the process exits in that window, `wait()` reports a failure without its real exit code.
 
 ## Constructor parameters
 
@@ -476,7 +478,7 @@ A process has no time limit unless you pass `timeout` to `spawn()` or the constr
     name: 'processes',
     type: 'SandboxProcessManager',
     description:
-      "Background process manager. On an E2B-backed sandbox, `spawn()` streams output while the process runs, `kill()` stops it, `list()` shows what is running in the VM, and `get(pid)` attaches to a process this manager didn't start. Output keeps flowing when the lease a process started with expires. On other providers, output arrives when the command exits and `kill()` isn't supported. See [Background processes](#background-processes) and the [SandboxProcessManager reference](/reference/workspace/process-manager).",
+      "Background process manager. On an E2B-backed sandbox, `spawn()` streams output while the process runs, `kill()` stops it, `list()` shows what is running in the VM, and `get(pid)` attaches to a process this manager didn't start. A process keeps running when its lease expires, but output written while the manager reattaches is lost. On other providers, output arrives when the command exits and `kill()` isn't supported. See [Background processes](#background-processes) and the [SandboxProcessManager reference](/reference/workspace/process-manager).",
   },
   {
     name: 'filesystem',
