@@ -111,10 +111,18 @@ function reachedTerminalPhase(item: WorkItem, boards: readonly InstalledBoardInf
   );
 }
 
-function factorySessionName(session: FactoryUserSession, item: WorkItem | undefined): string {
-  if (session.title !== undefined) return session.title;
-  if (session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX) && item?.title !== undefined) return item.title;
-  return session.branch;
+function factorySessionName(session: FactoryUserSession): string {
+  return session.title ?? session.branch;
+}
+
+/** A Slack thread's session is named after the card it runs until its own title is generated. */
+function userSessionName(session: FactoryUserSession, item: WorkItem | undefined): string {
+  if (session.title === undefined && item?.title !== undefined) return item.title;
+  return getUserSessionLabel(session);
+}
+
+function userSessionSource(session: FactoryUserSession): SessionSource {
+  return session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX) ? 'slack-thread' : 'user';
 }
 
 function isSettled(
@@ -172,7 +180,7 @@ export function buildFactorySessionRow({
     board: sessionBoard(session, item),
     kind: getFactorySessionKind(session, item) === 'review' ? 'Review session' : 'Work session',
     source: getFactorySessionSource(session, item),
-    name: factorySessionName(session, item),
+    name: factorySessionName(session),
     url,
     openPath: `${url}/threads/${session.sessionId}`,
     active: session.sessionId === routeSessionId,
@@ -197,6 +205,7 @@ export function buildFactorySessionRow({
 
 export interface UserSessionRowInput {
   session: FactoryUserSession;
+  item: WorkItem | undefined;
   factoryId: string;
   pathname: string;
   running: boolean;
@@ -206,6 +215,7 @@ export interface UserSessionRowInput {
 
 export function buildUserSessionRow({
   session,
+  item,
   factoryId,
   pathname,
   running,
@@ -219,8 +229,8 @@ export function buildUserSessionRow({
     origin: 'user',
     board: undefined,
     kind: 'User session',
-    source: 'user',
-    name: getUserSessionLabel(session),
+    source: userSessionSource(session),
+    name: userSessionName(session, item),
     url,
     openPath: url,
     active: pathname === url,

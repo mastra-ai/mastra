@@ -75,6 +75,7 @@ export function userRow(
   input: { running?: boolean; pinned?: boolean } = {},
 ): SessionListRow {
   return buildUserSessionRow({
+    item: undefined,
     session: testSession(sessionId, { branch: `user/${sessionId}`, ...overrides }),
     factoryId: 'fp-1',
     pathname: '/factories/fp-1',
