@@ -1298,7 +1298,7 @@ describe('agent-controller routes', () => {
       const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
         mastra,
         controllerId: 'code',
-        resourceId: 'user-err-facts',
+        sessionId: 'user-err-facts',
         abortSignal: new AbortController().signal,
       } as any)) as ReadableStream<unknown>;
 
