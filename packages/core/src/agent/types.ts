@@ -611,6 +611,8 @@ export type AgentDurableOption =
       maxSteps?: number;
       /** Auto-cleanup timer for durable stream state (ms). */
       cleanupTimeoutMs?: number;
+      /** How long a parked run's cached stream log is kept (ms), measured from the suspension. */
+      suspendedRunLogRetentionMs?: number;
       /** See createDurableAgent options: per-topic opt-out of the replay cache. */
       shouldCache?: (topic: string) => boolean;
       /**
