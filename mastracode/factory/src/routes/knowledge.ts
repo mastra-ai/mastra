@@ -662,7 +662,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
       ];
       if (preflight.scopeId) {
         if (!UUID_RE.test(preflight.scopeId)) return { response: c.json({ error: 'scope_not_found' }, 404) };
-        // Identity scopes are vouched by address; any other scope must sit inside the viewer's org.
+        // Structural navigation must not acquire a sibling project's content authority.
         if (!visibleScopeIds.includes(preflight.scopeId)) {
           let summary: KnowledgeScopeNodeSummary | undefined;
           try {
@@ -677,6 +677,31 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             if (!(error instanceof KnowledgeUnsupportedError)) throw error;
           }
           if (!summary) return { response: c.json({ error: 'scope_not_found' }, 404) };
+          // Org-shared structural scopes remain navigable, but neither a foreign project nor
+          // any custom scope nested beneath it can become a content lens for this project.
+          const visited = new Set<string>();
+          let ancestors = [summary];
+          while (ancestors.length > 0) {
+            if (
+              ancestors.some(scope => scope.address.startsWith('project:') && scope.id !== existingResource.scopeNodeId)
+            ) {
+              return { response: c.json({ error: 'scope_not_found' }, 404) };
+            }
+            const parentIds = [...new Set(ancestors.flatMap(scope => scope.parentIds))].filter(
+              id => id !== existingOrg.scopeNodeId && !visited.has(id),
+            );
+            for (const scope of ancestors) visited.add(scope.id);
+            if (parentIds.length === 0) break;
+            if (visited.size + parentIds.length > 1000) return { response: c.json({ error: 'scope_not_found' }, 404) };
+            const parents = await store.listScopeNodes({
+              withinAddress: orgAddress,
+              ids: parentIds,
+              limit: parentIds.length,
+            });
+            if (parents.scopes.length !== parentIds.length)
+              return { response: c.json({ error: 'scope_not_found' }, 404) };
+            ancestors = parents.scopes;
+          }
           // Session scopes resolve only under the viewed project, and only when a
           // visible record was captured in that session — other projects' sessions
           // stay as unreachable through drill-downs as they are absent from listings.

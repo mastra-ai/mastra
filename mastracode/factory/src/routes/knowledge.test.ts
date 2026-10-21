@@ -218,6 +218,37 @@ async function nodeDetail(
 }
 
 describe('KnowledgeRoutes', () => {
+  it.each(['project', 'custom'])('rejects a sibling project %s selector across content routes', async kind => {
+    const h = await createHarness();
+    await node(h.knowledge, 'Own project exists', h.projectScope);
+    const foreignScope = [`org:${ORG}`, 'project:foreign-project'];
+    if (kind === 'custom') foreignScope.push('teamspace:foreign', 'collection:foreign');
+    const foreign = await node(h.knowledge, 'Foreign private node', foreignScope);
+    await record(h.knowledge, foreign, 'Foreign private text', foreignScope);
+    const scopeId = (await h.knowledge.getScopeAddress(foreignScope.at(-1)!))!.scopeNodeId;
+    const query = `?scopeNodeId=${scopeId}`;
+    for (const response of [await graph(h, query), await activity(h, query), await nodeDetail(h, foreign.id, query)]) {
+      expect(response.status).toBe(404);
+      expect(JSON.stringify(response.body)).not.toContain('Foreign private');
+    }
+  });
+
+  it('allows node detail and mentions within a nested custom scope of the current project', async () => {
+    const h = await createHarness();
+    const ownScope = [...h.projectScope, 'teamspace:own', 'collection:own'];
+    const own = await node(h.knowledge, 'Own node', ownScope);
+    await record(h.knowledge, own, 'Own record', ownScope);
+    const mentioning = await node(h.knowledge, 'Mentioning node', ownScope);
+    await record(h.knowledge, mentioning, 'Reference to [[Own node]]', ownScope);
+    const scopeId = (await h.knowledge.getScopeAddress('collection:own'))!.scopeNodeId;
+    const response = await nodeDetail(h, own.id, `?scopeNodeId=${scopeId}`);
+    expect(response.status).toBe(200);
+    expect(JSON.stringify(response.body)).toContain('Own record');
+    expect(JSON.stringify(response.body)).toContain('Reference to [[Own node]]');
+    expect((await activity(h, `?scopeNodeId=${scopeId}`)).status).toBe(200);
+    expect((await graph(h, `?scopeNodeId=${scopeId}`)).status).toBe(200);
+  });
+
   it('ignores request-supplied knowledge keys and reads only the host-selected runtime', async () => {
     const first = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
     const second = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
@@ -430,6 +461,7 @@ describe('KnowledgeRoutes', () => {
 
   it("refuses a thread drill-down into another project's session", async () => {
     const h = await createHarness();
+    await node(h.knowledge, 'Own project exists', h.projectScope);
     const foreignScope = [`org:${ORG}`, 'project:foreign-project', 'thread:thread-foreign'];
     const foreignAnchor = await node(h.knowledge, 'Foreign anchor', foreignScope);
     await record(h.knowledge, foreignAnchor, 'Foreign evidence', foreignScope, 'thread-foreign');
@@ -451,7 +483,6 @@ describe('KnowledgeRoutes', () => {
     const foreignAnchor = await node(h.knowledge, 'Foreign anchor', foreignScope);
     await record(h.knowledge, foreignAnchor, 'Foreign evidence', foreignScope, 'thread-x');
     const emptySessionId = (await h.knowledge.getScopeAddress(`thread:thread-empty`))!.scopeNodeId;
-    const foreignSessionId = (await h.knowledge.getScopeAddress('thread:thread-x'))!.scopeNodeId;
     const foreignProjectId = (await h.knowledge.getScopeAddress('project:foreign-project'))!.scopeNodeId;
     const resourceScopeId = (await h.knowledge.getScopeAddress(`project:${h.projectId}`))!.scopeNodeId;
 
@@ -459,10 +490,9 @@ describe('KnowledgeRoutes', () => {
     const own = await graph(h, `?scopeNodeId=${resourceScopeId}`);
     expect(own.status).toBe(200);
     expect(own.body.nodes.map(graphNode => graphNode.id)).not.toContain(emptySessionId);
-    // Drilling into a sibling project omits that project's sessions entirely.
+    // Structural listings do not grant content drill-down authority over sibling projects.
     const sibling = await graph(h, `?scopeNodeId=${foreignProjectId}`);
-    expect(sibling.status).toBe(200);
-    expect(sibling.body.nodes.map(graphNode => graphNode.id)).not.toContain(foreignSessionId);
+    expect(sibling.status).toBe(404);
   });
 
   it('drops activity rows whose context scope is not the selected scope, even from a lax adapter', async () => {

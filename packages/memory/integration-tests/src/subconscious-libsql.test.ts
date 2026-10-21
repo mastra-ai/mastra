@@ -11,7 +11,11 @@ import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory, Subconscious } from '@mastra/memory';
 import type { EmbeddingModel } from 'ai';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { resolveKnowledgeScopeIds } from '../../src/processors/observational-memory/subconscious/knowledge-tools';
+import {
+  createKnowledgeTools,
+  getKnowledgeStore,
+  resolveKnowledgeScopeIds,
+} from '../../src/processors/observational-memory/subconscious/knowledge-tools';
 
 import { RemindContinuationProcessor } from '../../src/processors/observational-memory/subconscious/remind-continuation';
 import {
@@ -60,6 +64,30 @@ describe('Subconscious LibSQL integration', () => {
 
   afterEach(async () => {
     await Promise.all(directories.splice(0).map(directory => rm(directory, { recursive: true, force: true })));
+  });
+
+  it('refuses bare-storage cross-org resource reuse before a Knowledge read', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'subconscious-scope-parent-'));
+    directories.push(directory);
+    const storage = new LibSQLStore({ id: randomUUID(), url: `file:${join(directory, 'knowledge.db')}` });
+    await storage.init();
+    const memory = new Memory({ storage });
+    const context = (org: string) => {
+      const requestContext = new RequestContext();
+      setRunAgentScopes(requestContext, [`org:${org}`]);
+      return { requestContext, agent: { resourceId: 'shared', threadId: `thread-${org}` } };
+    };
+    const scopeIds = await resolveKnowledgeScopeIds(memory, context('a'));
+    const store = await getKnowledgeStore(memory);
+    const privateNode = await store.createNode({ name: 'Private node', scopeIds: [scopeIds[1]!] });
+    await store.createRecord({ node: privateNode, text: 'Private text', source: 'test', scopeIds: [scopeIds[1]!] });
+    const tools = createKnowledgeTools(memory);
+    await expect(tools.knowledge_read.execute!({ id: privateNode.id }, context('b'))).rejects.toThrow(
+      'parent other than org:b',
+    );
+    expect(await store.getScopeAddress('thread:thread-b')).toBeNull();
+    const own = await tools.knowledge_read.execute!({ id: privateNode.id }, context('a'));
+    expect(JSON.stringify(own)).toContain('Private text');
   });
 
   it('curates durable scoped knowledge after observation and reconciles semantic vectors', async () => {

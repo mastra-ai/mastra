@@ -91,7 +91,16 @@ export async function resolveRunKnowledgeScopes(
     for (const plan of planKnowledgeRunScopes(memoryScopeTypes, scopes)) {
       const { pattern: _pattern, parentAddress: _parentAddress, ...input } = plan;
       const result = await store.reconcileStructure(materializeKnowledgeScopePlan(memoryScopeTypes, input));
-      held.push({ ...plan, scopeId: result.scopes[plan.address]! });
+      const scopeId = result.scopes[plan.address]!;
+      if (plan.parentAddress) {
+        const parentId = held.find(scope => scope.address === plan.parentAddress)!.scopeId;
+        if (!(await store.getNodeScopeIds(scopeId)).includes(parentId)) {
+          throw new Error(
+            `Knowledge scope ${plan.address} already exists under a parent other than ${plan.parentAddress}`,
+          );
+        }
+      }
+      held.push({ ...plan, scopeId });
     }
   }
   if (held.length === 0) {
