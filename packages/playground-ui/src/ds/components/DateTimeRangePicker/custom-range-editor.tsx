@@ -1,4 +1,4 @@
-import { isValid, parse } from 'date-fns';
+import { format, isValid, parse, startOfDay } from 'date-fns';
 import { Check } from 'lucide-react';
 import { useId, useState } from 'react';
 import { Button } from '@/ds/components/Button/Button';
@@ -6,6 +6,11 @@ import { DatePicker, TimePicker } from '@/ds/components/DateTimePicker';
 import { Field, FieldError } from '@/ds/components/Field';
 import { Txt } from '@/ds/components/Txt';
 import { cn } from '@/lib/utils';
+
+function formatDays(ms: number): string {
+  const days = Math.round(ms / (24 * 60 * 60 * 1000));
+  return `${days} day${days === 1 ? '' : 's'}`;
+}
 
 /** The draft day at the draft time, or the bare day when the time doesn't parse. */
 function combineDateAndTime(date: Date | undefined, timeStr: string): Date | undefined {
@@ -19,6 +24,10 @@ export interface CustomRangeEditorProps {
   dateFrom?: Date;
   dateTo?: Date;
   disabled?: boolean;
+  /** Widest range that can be applied, in milliseconds. */
+  maxRangeMs?: number;
+  /** Earliest day a range can start on. Days before it are disabled. */
+  minDate?: Date;
   onApply: (from: Date | undefined, to: Date | undefined) => void;
   onShowPresets: () => void;
 }
@@ -27,7 +36,15 @@ export interface CustomRangeEditorProps {
  * The custom range popover body. It mounts each time the popover opens, so its drafts
  * start from the current range without the picker resetting them.
  */
-export function CustomRangeEditor({ dateFrom, dateTo, disabled, onApply, onShowPresets }: CustomRangeEditorProps) {
+export function CustomRangeEditor({
+  dateFrom,
+  dateTo,
+  disabled,
+  maxRangeMs,
+  minDate,
+  onApply,
+  onShowPresets,
+}: CustomRangeEditorProps) {
   const [draftDateFrom, setDraftDateFrom] = useState<Date | undefined>(dateFrom);
   const [draftDateTo, setDraftDateTo] = useState<Date | undefined>(dateTo);
   const [draftTimeFrom, setDraftTimeFrom] = useState('12:00 AM');
@@ -37,9 +54,19 @@ export function CustomRangeEditor({ dateFrom, dateTo, disabled, onApply, onShowP
 
   const fromDate = combineDateAndTime(draftDateFrom, draftTimeFrom);
   const toDate = combineDateAndTime(draftDateTo, draftTimeTo);
-  const rangeInvalid = fromDate !== undefined && toDate !== undefined && fromDate.getTime() > toDate.getTime();
+  const rangeReversed = fromDate !== undefined && toDate !== undefined && fromDate.getTime() > toDate.getTime();
+  const rangeTooWide =
+    fromDate !== undefined && toDate !== undefined && toDate.getTime() - fromDate.getTime() > (maxRangeMs ?? Infinity);
+  const firstDay = minDate ? startOfDay(minDate) : undefined;
+  const endFirstDay = draftDateFrom && (!firstDay || draftDateFrom > firstDay) ? draftDateFrom : firstDay;
+  const rangeTooEarly = fromDate !== undefined && firstDay !== undefined && fromDate < firstDay;
+  const rangeInvalid = rangeReversed || rangeTooWide || rangeTooEarly;
   // Shown after a failed Apply, and gone as soon as the drafts form a valid range again.
-  const error = applyAttempted && rangeInvalid ? 'Start date/time must be before end date/time' : undefined;
+  let error: string | undefined;
+  if (applyAttempted && rangeReversed) error = 'Start date/time must be before end date/time';
+  else if (applyAttempted && rangeTooWide) error = `Range cannot be longer than ${formatDays(maxRangeMs ?? 0)}`;
+  else if (applyAttempted && firstDay && rangeTooEarly)
+    error = `Range cannot start before ${format(firstDay, 'MMM d, yyyy')}`;
 
   const apply = () => {
     if (rangeInvalid) {
@@ -68,6 +95,7 @@ export function CustomRangeEditor({ dateFrom, dateTo, disabled, onApply, onShowP
             month={draftDateFrom}
             onSelect={setDraftDateFrom}
             disabled={disabled}
+            fromDate={firstDay}
             toDate={draftDateTo}
           />
           <TimePicker
@@ -89,7 +117,7 @@ export function CustomRangeEditor({ dateFrom, dateTo, disabled, onApply, onShowP
             month={draftDateTo}
             onSelect={setDraftDateTo}
             disabled={disabled}
-            fromDate={draftDateFrom}
+            fromDate={endFirstDay}
           />
           <TimePicker
             label="End time"

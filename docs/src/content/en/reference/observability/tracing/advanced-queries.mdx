@@ -1,0 +1,951 @@
+---
+title: 'Reference: Advanced trace queries | Observability'
+description: 'Find, count, and measure completed traces with structured predicates. List matching traces, aggregate them into grouped measures, paginate, poll, and discover query fields.'
+packages:
+  - '@mastra/client-js'
+  - '@mastra/server'
+---
+
+# Advanced trace queries
+
+Advanced trace queries select completed traces with a structured time range and predicate, then either list or aggregate the matching traces:
+
+| API | Use it to | Client SDK | HTTP endpoint |
+| - | - | - | - |
+| Query traces | List matching traces, paginate through them, and poll for new ones. | `queryTraces()` | `POST /api/observability/traces/query` |
+| Aggregate traces | Count matching traces and compute measures, such as error rate, latency percentiles, tokens, and cost, optionally grouped by dimensions and time buckets. | `aggregateTraces()` | `POST /api/observability/traces/aggregate` |
+
+Both APIs accept the same [trace selection](#select-traces). The filters, operators, and limits on this page apply to each. Use the aggregate API to find the group that needs attention, such as an agent with a high error rate, then send the same predicate plus the group's dimensions to the query API to list the traces behind it. Each query result represents a trace. Use its `traceId` to [retrieve the full trace](/reference/client-js/observability#getting-a-specific-trace).
+
+The endpoints use the same authentication as other observability routes and require the `observability:read` permission. Every request requires a time range.
+
+For hosted traces, see [Query observability data on Mastra Platform](/docs/mastra-platform/observability#query-observability-data) for project credentials and regional endpoints.
+
+## Check capabilities
+
+The configured observability store must support each API. Call `getObservabilityCapabilities()` or `GET /api/observability/capabilities` and check these flags before showing a feature:
+
+| Capability | Store feature | Enables |
+| - | - | - |
+| `traceQuery` | `trace-query` | `queryTraces()` |
+| `traceAggregate` | `trace-aggregate` | `aggregateTraces()` |
+| `traceQueryRootDuration` | `trace-query-root-duration` | Trace-scope `durationMs` predicates |
+| `traceQueryTimeToFirstChunk` | `trace-query-time-to-first-chunk` | `timeToFirstChunkMs` predicates and results |
+| `traceQueryTimeToFirstChunkSort` | `trace-query-time-to-first-chunk-sort` | `orderBy` on `timeToFirstChunkMs` |
+| `traceQueryContextIds` | `trace-query-context-ids` | `runId`, `sessionId`, `userId`, and `organizationId` predicates |
+| `traceQueryRootSpanFields` | `trace-query-root-span-fields` | Trace-scope `name` and `spanType` predicates, dimensions, and `countDistinct` measures |
+| `traceQueryRootEntityId` | `trace-query-root-entity-id` | Trace-scope `entityId` predicates, dimensions, and `countDistinct` measures |
+| `traceQueryDiscovery` | `trace-query-discovery` | [Field and value discovery](#discover-fields-and-values) |
+| `traceQueryTenantScope` | `trace-query-tenant-scope` | [Trusted tenant scope](#trusted-tenant-scope) |
+
+A missing `traceAggregate` value means the server doesn't support aggregation. Servers without the aggregate route return `404`, and stores without the feature return `501 TRACE_AGGREGATE_UNSUPPORTED`. Against a store without a sub-feature, a request that uses a gated field returns `501` before storage runs. Root span `name`, `spanType`, and `entityId` are the exception and return `422` with a `field_not_allowed` issue.
+
+## Select traces
+
+Every request selects traces with two fields:
+
+| Field | Required | Description |
+| - | - | - |
+| `timeRange` | Yes | Trace start-time boundary. `from` is inclusive and `to` is exclusive. Both values must be ISO timestamps, and `from` must be earlier than `to`. |
+| `where` | No | Recursive trace predicate. Supports scalar conditions and `spans.some` or `spans.none` clauses. |
+
+This selection matches traces from the first week of August that contain a tool call with an error:
+
+```typescript
+const selection = {
+  timeRange: {
+    from: '2026-08-01T00:00:00.000Z',
+    to: '2026-08-08T00:00:00.000Z',
+  },
+  where: {
+    spans: {
+      some: {
+        op: 'and',
+        args: [
+          { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } },
+          { op: 'exists', path: 'error' },
+        ],
+      },
+    },
+  },
+}
+```
+
+The same selection returns the same traces from either API. Aggregation counts exactly the traces that a query would list.
+
+A `spans.some` clause matches when one span satisfies all its conditions. In this example, the same span must be a tool call and have an error. Use `spans.none` to find traces with no spans matching the conditions.
+
+Span clauses examine the current root span and current child spans. The root `timeRange` applies only to the selected current root's `startedAt`. Related spans can participate even when their own timestamps are outside that range. Related records correlate only through a matching non-null `traceId`.
+
+### Fields and operators
+
+| Predicate context | Fields | Operators |
+| - | - | - |
+| Trace | `traceId`, `threadId`, `resourceId`, `runId`, `sessionId`, `userId`, `organizationId`, `entityId`, `entityName`, `entityType`, `name`, `spanType`, `environment`, `status` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| Trace metadata | `metadata.<key>` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| Trace | `startedAt`, `endedAt`, `durationMs`, `timeToFirstChunkMs` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
+| Trace | `tags` | `includes`, `notIncludes`, `exists`, `notExists` |
+| Span | `name` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists`, `matches`, `notMatches` |
+| Span | `spanType`, `model`, `provider`, `status`, `entityType`, `entityId`, `entityName`, `entityVersionId`, `parentEntityVersionId`, `rootEntityVersionId`, `runId`, `sessionId`, `userId`, `organizationId` | `eq`, `ne`, `in`, `notIn`, `exists`, `notExists` |
+| Span | `startedAt`, `endedAt`, `durationMs`, `timeToFirstChunkMs` | `eq`, `ne`, `in`, `notIn`, `lt`, `lte`, `gt`, `gte`, `exists`, `notExists` |
+| Span | `error` | `exists`, `notExists` |
+
+Trace-scope `name`, `spanType`, and `entityId` read the current root span, so `{ op: 'eq', left: { path: 'spanType' }, right: { literal: 'workflow_run' } }` selects traces started by a workflow run. Inside `spans.some` or `spans.none`, the same fields match any span in the trace.
+
+Compose predicates with `{ op: 'and', args: [...] }`, `{ op: 'or', args: [...] }`, and `{ op: 'not', arg: ... }`. Comparison predicates place a field reference on the left and a literal on the right. Membership predicates use a field reference in `value` and a homogeneous literal array in `set`. Tag predicates name the stored tag collection in `path`. `includes` and `notIncludes` also take one tag in `value`, while `exists` and `notExists` take only `op` and `path`. See [Filter by tags](#filter-by-tags). Text predicates use the comparison shape with a string literal. See [Filter by text](#filter-by-text).
+
+String comparisons are case-sensitive, and literals are never coerced. `matches` and `notMatches` are the exception: they compare words case-insensitively. Canonical string fields compare exact stored values. Metadata string values are trimmed before comparison, as described below. Duration and time-to-first-chunk predicates require numbers, while timestamp predicates require ISO timestamp strings. A missing value satisfies neither positive nor ordered predicates, although it does satisfy the negative operators `ne` and `notIn`. Combine a negative predicate with `exists` when the field must also be present.
+
+#### Filter by root duration
+
+At trace scope, `durationMs` is the current completed root span's elapsed time in milliseconds. The value is derived from `endedAt - startedAt` when the query runs:
+
+```typescript
+const slowRootTraces = {
+  op: 'gt',
+  left: { path: 'durationMs' },
+  right: { literal: 5000 },
+}
+```
+
+This top-level predicate doesn't inspect child spans. In contrast, `spans.some` with a `durationMs` predicate examines the current root span and current child spans, so a long child can satisfy that clause even when its root is shorter.
+
+Trace queries exclude incomplete roots before evaluating predicates. As a result, `{ op: 'notExists', path: 'durationMs' }` doesn't find running traces or malformed roots without a usable `endedAt`.
+
+#### Filter by time to first chunk
+
+`timeToFirstChunkMs` is the time in milliseconds from a span's start to the first chunk of its model response. Agent run and model spans record it when the model streams a response. At trace scope, the field reads the current root span's value. Inside `spans.some` or `spans.none`, it reads each related span.
+
+This predicate finds traces with a model call that took more than 2 seconds to stream its first chunk:
+
+```typescript
+const slowFirstChunk = {
+  spans: {
+    some: {
+      op: 'and',
+      args: [
+        { op: 'eq', left: { path: 'spanType' }, right: { literal: 'model_generation' } },
+        { op: 'gt', left: { path: 'timeToFirstChunkMs' }, right: { literal: 2000 } },
+      ],
+    },
+  },
+}
+```
+
+The value is `null` when the span didn't stream a chunk, for example a tool call or a workflow run. A `null` value counts as missing, so it matches `notExists` and never matches ordered predicates. A value of `0` isn't missing. It means the first chunk arrived in the same millisecond the span started.
+
+Trace query results include the root span's `timeToFirstChunkMs`, and `querySpans()` results include each span's value. Stores advertise support through the `trace-query-time-to-first-chunk` feature, and the server reports it as the `traceQueryTimeToFirstChunk` capability. Against an older store, results omit the field, a predicate on it returns `501` before storage runs, and field discovery omits it.
+
+#### Sort by time to first chunk
+
+Pass `orderBy: [{ field: 'timeToFirstChunkMs', direction: 'desc' }]` to list the slowest first chunks first. Traces sort by the root span's value. Missing values sort last in both directions, and `0` sorts as a value. Ties break by `traceId` for traces and by span identity for `querySpans()`.
+
+Stores advertise the sort through the `trace-query-time-to-first-chunk-sort` feature, and the server reports it as the `traceQueryTimeToFirstChunkSort` capability. Against an older store, the sort returns `501` before storage runs.
+
+#### Filter by context identifiers
+
+`runId`, `sessionId`, `userId`, and `organizationId` are available at trace scope and inside `spans.some` / `spans.none`. Trace-scope predicates read the current root span. Span-scope predicates bind to one related current span, so a run recorded only on a child span is found through `spans.some`:
+
+```typescript
+const sessionTracesWithRun = {
+  op: 'and',
+  args: [
+    { op: 'eq', left: { path: 'organizationId' }, right: { literal: 'org-123' } },
+    { op: 'eq', left: { path: 'sessionId' }, right: { literal: 'session-123' } },
+    {
+      spans: {
+        some: { op: 'eq', left: { path: 'runId' }, right: { literal: 'run-42' } },
+      },
+    },
+  ],
+}
+```
+
+These identifiers support `eq`, `ne`, `in`, `notIn`, `exists`, and `notExists`. Field discovery lists them, but value discovery doesn't return their recorded values. Stores advertise support through the `trace-query-context-ids` feature. A predicate on one of these fields against an older store returns `501` before storage runs, and field discovery omits them for that store.
+
+#### Filter by span properties
+
+Every condition inside one `spans.some` or `spans.none` clause applies to the same current span. For example, this predicate finds a failed tool span whose name is `medication_lookup`; a matching name on one span and an error on another don't satisfy it:
+
+```typescript
+const failedMedicationLookup = {
+  spans: {
+    some: {
+      op: 'and',
+      args: [
+        { op: 'eq', left: { path: 'name' }, right: { literal: 'medication_lookup' } },
+        { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } },
+        { op: 'exists', path: 'error' },
+      ],
+    },
+  },
+}
+```
+
+Use `status` for the derived `success` or `error` outcome. Use `error` when you only need to test whether error details are present.
+
+`durationMs` is the span's elapsed time in milliseconds. Span `startedAt` and `endedAt` conditions filter related spans independently of the top-level root `timeRange`:
+
+```typescript
+const slowModelCalls = {
+  spans: {
+    some: {
+      op: 'and',
+      args: [
+        { op: 'eq', left: { path: 'spanType' }, right: { literal: 'model_generation' } },
+        { op: 'gt', left: { path: 'durationMs' }, right: { literal: 5000 } },
+        {
+          op: 'gte',
+          left: { path: 'startedAt' },
+          right: { literal: '2026-07-15T00:00:00.000Z' },
+        },
+      ],
+    },
+  },
+}
+```
+
+`model` and `provider` read the canonical `attributes.model` and `attributes.provider` span attributes. Only stored string values are queryable; missing, null, and non-string values count as missing.
+
+```typescript
+const selectedModel = {
+  spans: {
+    some: {
+      op: 'and',
+      args: [
+        {
+          op: 'eq',
+          left: { path: 'model' },
+          right: { literal: '__AI_SDK_ANTHROPIC_MODEL_SONNET__' },
+        },
+        { op: 'eq', left: { path: 'provider' }, right: { literal: 'anthropic' } },
+      ],
+    },
+  },
+}
+```
+
+Use generic entity fields for tool and retrieval identity. The version fields let one clause qualify the same span by its entity lineage:
+
+```typescript
+const versionedRetrieval = {
+  spans: {
+    some: {
+      op: 'and',
+      args: [
+        { op: 'eq', left: { path: 'entityType' }, right: { literal: 'rag_ingestion' } },
+        { op: 'eq', left: { path: 'entityId' }, right: { literal: 'medication-index' } },
+        { op: 'eq', left: { path: 'entityVersionId' }, right: { literal: 'index-v3' } },
+        { op: 'eq', left: { path: 'rootEntityVersionId' }, right: { literal: 'agent-v2' } },
+      ],
+    },
+  },
+}
+```
+
+#### Filter by metadata
+
+Use `metadata.<key>` paths for custom dimensions stored on the current root span. Metadata predicates compare trimmed, non-empty string values exactly and case-sensitively. Leading and trailing whitespace in a stored string value is ignored. Values empty after trimming count as missing. Null, numeric, boolean, object, and array values also count as missing.
+
+```typescript
+const messageTrace = {
+  op: 'and',
+  args: [
+    { op: 'eq', left: { path: 'metadata.messageId' }, right: { literal: 'message-123' } },
+    { op: 'in', value: { path: 'metadata.actorRole' }, set: ['assistant', 'tool'] },
+    { op: 'exists', path: 'metadata.protocolVersion' },
+    {
+      op: 'or',
+      args: [
+        { op: 'eq', left: { path: 'metadata.temporalRunId' }, right: { literal: 'run-456' } },
+        { op: 'eq', left: { path: 'metadata.externalTraceId' }, right: { literal: 'trace-789' } },
+      ],
+    },
+    { op: 'not', arg: { op: 'exists', path: 'metadata.parentMessageId' } },
+  ],
+}
+```
+
+The key must name one top-level property. Empty keys and nested paths are rejected. Metadata keys aren't trimmed, so leading and trailing whitespace remains part of the exact key identity. When metadata duplicates a canonical trace field, such as `resourceId`, `threadId`, or `environment`, prefer the canonical field because it uses the dedicated storage column. The `metadata.<key>` form remains available when you specifically need the value from the metadata object. Metadata and canonical values may differ.
+
+Trace-query discovery returns executable top-level string metadata fields observed in the selected time range.
+
+#### Filter by tags
+
+Tags are a list of strings stored on the current root span, so they use collection operators instead of the scalar `in` and `notIn` operators. This query finds production traces tagged for manual review that don't carry the `archived` tag:
+
+```typescript
+const manualReview = {
+  op: 'and',
+  args: [
+    { op: 'eq', left: { path: 'environment' }, right: { literal: 'production' } },
+    { op: 'includes', path: 'tags', value: 'manual-review' },
+    { op: 'notIncludes', path: 'tags', value: 'archived' },
+  ],
+}
+```
+
+| Operator | Matches when |
+| - | - |
+| `includes` | The trace has the requested tag |
+| `notIncludes` | The trace has at least one tag, but not the requested tag |
+| `exists` | The trace has at least one tag |
+| `notExists` | The trace has no tags |
+
+Tags compare exactly and case-sensitively as whole strings. `value` must be one string with at least one non-whitespace character. Combine several `includes` predicates with `and` or `or` to require or allow multiple tags. A trace with no recorded tags and a trace with an empty tag list behave the same: both satisfy `notExists`, neither satisfies `includes`, `notIncludes`, or `exists`. Use `{ op: 'not', arg: { op: 'includes', ... } }` when untagged traces should also match.
+
+`tags` is available in trace predicates only. `in`, `notIn`, and the comparison operators are rejected for `tags`. Value discovery for `tags` returns each observed tag with the number of qualifying traces that carry it.
+
+#### Filter by text
+
+Span names support word matching in addition to exact comparison. `matches` succeeds when the literal's words appear in the field, in order, as whole words. `notMatches` succeeds when the field exists but doesn't contain those words. This query finds traces with a span whose name contains the words "document search":
+
+```typescript
+const documentSearch = {
+  spans: {
+    some: {
+      op: 'matches',
+      left: { path: 'name' },
+      right: { literal: 'document search' },
+    },
+  },
+}
+```
+
+Both the literal and the stored value are lowercased and split into words. A word is a run of letters, digits, and combining marks, so any other character, such as punctuation, spaces, or `_`, separates words. `incorrect` matches `This answer is incorrect.` but not `This was incorrectly formatted.`, and `gpt 5` matches `llm: 'gpt-5'`. A literal with several words must appear as a contiguous phrase in that order. Letters keep their accents: `café` doesn't match `cafe`. Text is composed to Unicode NFC first, so `café` matches whether the accent is stored as part of the letter or as a separate mark, and marks stay inside their word, so `नमस` doesn't match `नमस्ते`. The Turkish `İ` folds to `i`, and a Greek final `ς` equals `σ`. PostgreSQL lowercases letters according to the database locale, so a database created with the `C` locale doesn't fold the case of letters outside ASCII. Use a UTF-8 locale such as `en_US.UTF-8` for consistent results.
+
+| Operator | Matches when |
+| - | - |
+| `matches` | The field contains the literal's words as a contiguous whole-word phrase |
+| `notMatches` | The field is present and doesn't contain that phrase |
+
+The literal must contain at least one letter or digit; otherwise the request fails with `422 TRACE_QUERY_INVALID`. A missing field satisfies neither operator. Use `{ op: 'not', arg: { op: 'matches', ... } }` when records without the field should also match. Text operators are available on span `name`. Other string fields, numbers, timestamps, tags, and metadata reject them. Substring, wildcard, regular-expression, and fuzzy matching aren't supported, and there is no search across several fields.
+
+### Query limits
+
+The planner rejects a query before storage execution when it exceeds any of these limits:
+
+| Input | Maximum |
+| - | - |
+| Predicate nesting depth | 12 levels |
+| Predicate nodes | 100 |
+| Related `spans` clauses | 8 total |
+| Values in one `in` or `notIn` set | 100 |
+| Comparison literals and membership values | 1,000 total |
+| String literal | 4,096 UTF-8 bytes |
+| Raw predicate path | 128 UTF-8 bytes |
+| `page.limit` | 1,000 |
+| HTTP request body | 256 KiB |
+
+Each comparison literal counts as one literal. Each member of an `in` or `notIn` set also counts as one literal, even when the set is within its per-set limit.
+
+Hono and Fastify enforce the request-body limit before JSON parsing. Express and Elysia reject an oversized body before the route handler or storage runs, but the host framework may already have parsed a request without a reliable `Content-Length` header. Configure the host application's JSON parser or body limit when you need a hard pre-parse memory ceiling.
+
+## Query traces
+
+Use `queryTraces()`, `mastra api trace query`, or `POST /api/observability/traces/query` to list the selected traces. All three accept the same request, which adds ordering and pagination to the [trace selection](#select-traces).
+
+### Query traces with the client SDK
+
+This query finds traces containing a tool call with an error:
+
+```typescript
+import { MastraClient } from '@mastra/client-js'
+
+const mastraClient = new MastraClient({ baseUrl: 'http://localhost:4111' })
+
+const result = await mastraClient.queryTraces({
+  timeRange: {
+    from: '2026-08-01T00:00:00.000Z',
+    to: '2026-08-08T00:00:00.000Z',
+  },
+  where: {
+    spans: {
+      some: {
+        op: 'and',
+        args: [
+          { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } },
+          { op: 'exists', path: 'error' },
+        ],
+      },
+    },
+  },
+  orderBy: [{ field: 'startedAt', direction: 'desc' }],
+  page: { limit: 25 },
+})
+```
+
+### Query traces with the CLI
+
+Pass the query as one JSON argument to `mastra api trace query`. Filters and pagination options belong in the JSON input. This command runs the same failed-tool query as the SDK example:
+
+```bash
+mastra api --url http://localhost:4111 trace query '{
+  "timeRange": {
+    "from": "2026-08-01T00:00:00.000Z",
+    "to": "2026-08-08T00:00:00.000Z"
+  },
+  "where": {
+    "spans": {
+      "some": {
+        "op": "and",
+        "args": [
+          { "op": "eq", "left": { "path": "spanType" }, "right": { "literal": "tool_call" } },
+          { "op": "exists", "path": "error" }
+        ]
+      }
+    }
+  },
+  "orderBy": [{ "field": "startedAt", "direction": "desc" }],
+  "page": { "limit": 25 }
+}'
+```
+
+The explicit `--url` targets a local Mastra server. Without it, observability commands default to `https://observability.mastra.ai`, even when a local server is running. See [CLI target resolution](/reference/cli/mastra#target-resolution) for authentication and regional endpoints. The target server and configured store must support the requested query capabilities.
+
+Inspect the command with:
+
+```bash
+mastra api trace query --help
+```
+
+For a local Mastra server, inspect its request and response schemas with:
+
+```bash
+mastra api --url http://localhost:4111 trace query --schema
+```
+
+Mastra Platform doesn't currently expose the schema endpoint used by `--schema`. Use [Request fields](#request-fields) and [Fields and operators](#fields-and-operators) to construct queries for either target. To find fields and values recorded in your project, use [field and value discovery](#discover-fields-and-values).
+
+### Send an HTTP request
+
+Send the same query as a JSON request body:
+
+```bash
+curl --request POST \
+  --url http://localhost:4111/api/observability/traces/query \
+  --header 'Authorization: Bearer <token>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "timeRange": {
+      "from": "2026-08-01T00:00:00.000Z",
+      "to": "2026-08-08T00:00:00.000Z"
+    },
+    "where": {
+      "spans": {
+        "some": {
+          "op": "and",
+          "args": [
+            { "op": "eq", "left": { "path": "spanType" }, "right": { "literal": "tool_call" } },
+            { "op": "exists", "path": "error" }
+          ]
+        }
+      }
+    },
+    "orderBy": [{ "field": "startedAt", "direction": "desc" }],
+    "page": { "limit": 25 }
+  }'
+```
+
+### Request fields
+
+| Field | Required | Description |
+| - | - | - |
+| `timeRange` | Yes | Trace start-time boundary. `from` is inclusive and `to` is exclusive. Both values must be ISO timestamps, and `from` must be earlier than `to`. |
+| `where` | No | Recursive trace predicate. Supports scalar conditions and `spans.some` or `spans.none` clauses. |
+| `orderBy` | No | One item ordering results by `startedAt`, `endedAt`, or `timeToFirstChunkMs`, in `asc` or `desc` order. Defaults to `startedAt desc`. Not accepted in delta mode. |
+| `page` | No | `{ limit, after }`. `limit` defaults to 100 and has a maximum of 1000. Pass the opaque `page.next` value as `after`. |
+| `pagination` | No | Numbered pages: `{ page, perPage }`. Defaults to page 0 and 10 results. `perPage` has a maximum of 100. |
+| `mode` | No | Set to `'delta'` to poll using a delta cursor instead of `page` or `pagination`. |
+| `after` | No | Delta mode only. Opaque `deltaCursor` from a numbered page or previous poll. Omit to establish the current watermark. |
+| `limit` | No | Delta mode only. Maximum results per batch. Defaults to 10 and has a maximum of 100. |
+
+Unknown fields are rejected. Requests can't select a projection, declare joins, request counts or measures, or control authorization. Use [`aggregateTraces()`](#aggregate-traces) for counts and measures. Request bodies are limited to 256 KiB.
+
+### Responses
+
+A query using keyset pagination returns lightweight completed traces and a cursor for the next page:
+
+```json
+{
+  "traces": [
+    {
+      "traceId": "trace-123",
+      "rootSpanId": "span-123",
+      "threadId": "thread-123",
+      "resourceId": "resource-123",
+      "startedAt": "2026-08-03T10:00:00.000Z",
+      "endedAt": "2026-08-03T10:00:01.000Z",
+      "entityName": "support-agent",
+      "entityType": "agent",
+      "environment": "production",
+      "status": "success",
+      "timeToFirstChunkMs": 412
+    }
+  ],
+  "page": { "next": null }
+}
+```
+
+`timeToFirstChunkMs` is present only when the configured store supports it. See [Filter by time to first chunk](#filter-by-time-to-first-chunk).
+
+The response doesn't include the related spans that matched the predicate. Use [`getTrace()`](/reference/client-js/observability#getting-a-specific-trace) to load the full trace after selecting a result.
+
+#### CLI responses
+
+The CLI wraps the API response in `data`:
+
+```json
+{
+  "data": {
+    "traces": [],
+    "page": { "next": null }
+  }
+}
+```
+
+Read results from `data.traces`. Pagination metadata is available at `data.page.next` for keyset queries, `data.pagination` for numbered pages, and `data.deltaCursor` and `data.delta.hasMore` for delta polling.
+
+Each CLI invocation makes one query. To fetch another keyset page, pass `data.page.next` as `page.after` in the next request. For delta polling, repeat the command with `data.deltaCursor` as the top-level `after` value. Keep the same time range and predicate. See [Pagination and errors](#pagination-and-errors) for mode-specific behavior and polling limitations.
+
+To inspect a selected trace, use `mastra api --url http://localhost:4111 trace get <traceId> --verbose`. Use the same target and authentication as the query.
+
+### Pagination and errors
+
+#### Choose a pagination mode
+
+Trace queries support three mutually exclusive modes:
+
+| Mode | Request fields | Response metadata |
+| - | - | - |
+| Keyset, the default | `page: { limit, after }` | `page: { next }` |
+| Numbered pages | `pagination: { page, perPage }` | `pagination: { total, page, perPage, hasMore }` and, when delta polling is supported, `deltaCursor` |
+| Delta polling | `mode: 'delta'`, optional top-level `after` and `limit` | `delta: { limit, hasMore }` and `deltaCursor` |
+
+Numbered pages are zero-based. Their total and rows are read consistently within each request. Don't combine `page`, `pagination`, or delta mode. Top-level `after` and `limit` are accepted only in delta mode.
+
+#### Poll after loading a numbered page
+
+Use the numbered response's `deltaCursor` to replace the numbered-page-to-delta-polling workflow of `listTracesLight()`. Results use `traces` instead of `spans` and contain completed traces only. The configured store must support delta polling.
+
+```typescript
+const timeRange = {
+  from: '2026-08-01T00:00:00.000Z',
+  to: '2026-08-08T00:00:00.000Z',
+}
+const initial = await mastraClient.queryTraces({
+  timeRange,
+  pagination: { page: 0, perPage: 100 },
+})
+if (!initial.deltaCursor) throw new Error('Delta polling is unavailable')
+
+const traces = new Map(initial.traces.map(trace => [trace.traceId, trace]))
+let after = initial.deltaCursor
+
+async function poll() {
+  let hasMore: boolean
+  do {
+    const result = await mastraClient.queryTraces({
+      timeRange,
+      mode: 'delta',
+      after,
+      limit: 100,
+    })
+    for (const trace of result.traces) traces.set(trace.traceId, trace)
+    after = result.deltaCursor
+    hasMore = result.delta.hasMore
+  } while (hasMore)
+}
+
+await poll()
+```
+
+Retain `after` and call `poll()` again at your application's polling interval. A trace can appear in the initial page and a later batch, or in multiple batches, so merge results by `traceId`. To load historical traces omitted from the initial page, request the remaining numbered pages.
+
+A delta request without `after` returns an empty array and establishes the current cursor. It doesn't return historical matches. Always retain the returned cursor, including for empty batches. `hasMore` means another matching trace exists beyond the batch limit. Continue immediately while it's `true`.
+
+Delta ordering uses the storage ingestion watermark and adapter-specific tie-breakers, so matching timestamps don't make the cursor ambiguous. Don't pass `orderBy` in delta mode. Keyset and delta cursors aren't interchangeable, and delta cursors can't move between storage adapters.
+
+Keep the same normalized `where` predicate and exact `timeRange` bounds for every poll. The range continues to select root `startedAt`, even when a trace completes later. Changing `timeRange.to` to the current time invalidates the cursor. Reload a numbered page and use its cursor whenever the selection or authorization scope changes. You can change the batch limit without restarting.
+
+New completed roots and roots completing after the cursor can be returned. Related spans are evaluated when a root is selected, but later related-record writes don't guarantee that the trace is emitted again. Deleted traces and traces that stop matching aren't returned as removals or tombstones. Refresh numbered pages when you need to reconcile those changes.
+
+ClickHouse polling is best effort. Its delta index and trace records use separate materialized-view tables. Concurrent queries can observe an insert in one table before another, as described in [ClickHouse's materialized-view visibility rules](https://github.com/ClickHouse/clickhouse-docs/blob/main/knowledgebase/are_materialized_views_inserted_asynchronously.mdx). A poll can advance past an index entry before the matching trace becomes visible and miss that trace in later polls. Reload numbered pages periodically to reconcile these gaps.
+
+ClickHouse's delta index retains two days of events and doesn't backfill historical rows. Reload numbered pages after a polling interruption longer than this retention window. Delta polling isn't a durable change feed and doesn't guarantee delivery of every matching trace.
+
+#### Keyset ordering and errors
+
+Ordering is deterministic. Trace ordering appends `traceId` ascending as a tie-breaker.
+
+Keyset cursors are bound to the operation, accepted normalized query, and ordering. Reusing a keyset cursor after changing the trace selection, predicates, or ordering returns `409`.
+
+Numbered-page handoff cursors and delta cursors also bind the authorization state. Changes to the caller's roles or permissions invalidate these cursors and return `409`. If a delta poll returns `409`, reload the numbered pages and resume polling with the new `deltaCursor`. A malformed cursor returns `400`.
+
+Cursor pagination is deterministic, but it isn't a database snapshot. Traces or replacement signals written between page requests can change later pages.
+
+PostgreSQL and ClickHouse stop trace queries after 15 seconds by default and return `504` when the database timeout is exceeded. Set `traceQueryTimeoutMs` in the store's vNext observability configuration to an integer from 1 through 300,000 milliseconds to change the timeout. DuckDB doesn't currently provide query-scoped timeout or cancellation through its driver wrapper, so this `504` guarantee doesn't apply to DuckDB.
+
+| Status | Meaning |
+| - | - |
+| `400` | Malformed JSON or malformed cursor. |
+| `409` | The cursor doesn't match the query. |
+| `413` | The request body exceeds 256 KiB. |
+| `422` | The JSON is well formed, but the request is structurally or semantically invalid. The response includes stable issue codes and paths. Discovery validation uses `TRACE_QUERY_INVALID`. |
+| `501` | The installed Core or configured observability store doesn't support the requested operation. Discovery returns `TRACE_QUERY_DISCOVERY_UNSUPPORTED` unless Core provides the discovery contract and the store implements both field and value discovery. |
+| `503` | Discovery exceeded a backend memory or resource budget and returned `TRACE_QUERY_RESOURCE_LIMIT`. |
+| `504` | A PostgreSQL or ClickHouse query exceeded its configured database execution timeout. Discovery returns `TRACE_QUERY_EXECUTION_TIMEOUT`. |
+
+## Aggregate traces
+
+Use `aggregateTraces()` or `POST /api/observability/traces/aggregate` to count the selected traces and compute measures over them. Add `groupBy` to split the result by up to two dimensions, and `interval` to split each group into time buckets. The response contains one row per group, or one row per group and bucket.
+
+### Aggregate traces with the client SDK
+
+This request compares agents by volume, error rate, and latency over one week:
+
+```typescript
+import { MastraClient } from '@mastra/client-js'
+
+const mastraClient = new MastraClient({ baseUrl: 'http://localhost:4111' })
+
+const { capabilities } = await mastraClient.getObservabilityCapabilities()
+
+if (capabilities.traceAggregate) {
+  const { rows, truncated } = await mastraClient.aggregateTraces({
+    timeRange: {
+      from: '2026-08-01T00:00:00.000Z',
+      to: '2026-08-08T00:00:00.000Z',
+    },
+    where: { op: 'eq', left: { path: 'entityType' }, right: { literal: 'agent' } },
+    groupBy: ['entityName'],
+    measures: ['count', 'errorRate', 'duration.p95'],
+    orderBy: { field: 'errorRate', direction: 'desc' },
+    limit: 10,
+  })
+}
+```
+
+The client retries server errors like `queryTraces()`, but doesn't retry `422` validation errors.
+
+### Send an aggregate HTTP request
+
+Send the same request as a JSON body:
+
+```bash
+curl --request POST \
+  --url http://localhost:4111/api/observability/traces/aggregate \
+  --header 'Authorization: Bearer <token>' \
+  --header 'Content-Type: application/json' \
+  --data '{
+    "timeRange": {
+      "from": "2026-08-01T00:00:00.000Z",
+      "to": "2026-08-08T00:00:00.000Z"
+    },
+    "where": { "op": "eq", "left": { "path": "entityType" }, "right": { "literal": "agent" } },
+    "groupBy": ["entityName"],
+    "measures": ["count", "errorRate", "duration.p95"],
+    "orderBy": { "field": "errorRate", "direction": "desc" },
+    "limit": 10
+  }'
+```
+
+### Aggregate request fields
+
+| Field | Required | Description |
+| - | - | - |
+| `timeRange` | Yes | Trace start-time boundary, as in [Select traces](#select-traces). The range can span up to 365 days. |
+| `where` | No | Trace predicate, as in [Select traces](#select-traces). |
+| `measures` | Yes | One or more distinct [measure names](#measures). |
+| `groupBy` | No | Up to two distinct [dimensions](#dimensions). Defaults to `[]`, which returns one row for all selected traces. |
+| `interval` | No | Bucket width: `'1m'`, `'5m'`, `'15m'`, `'1h'`, or `'1d'`. See [Time buckets](#time-buckets). |
+| `having` | No | Scalar predicate over measures that removes groups after grouping. See [Filter and order groups](#filter-and-order-groups). |
+| `orderBy` | No | `{ field, direction }`. `field` is a requested measure, `count`, or a `groupBy` dimension, and `direction` is `asc` or `desc`. Defaults to `count desc`. |
+| `limit` | No | Maximum number of groups. Defaults to 100 and has a maximum of 1,000. |
+
+Unknown fields are rejected. Aggregation isn't paginated. Narrow the selection, or rank by a different measure, when `truncated` is `true`.
+
+### Dimensions
+
+Dimensions read the current root span of each selected trace:
+
+| Dimension | Notes |
+| - | - |
+| `entityType`, `entityName`, `environment`, `status`, `serviceName`, `executionSource` | Root span attributes. |
+| `threadId`, `resourceId`, `userId`, `sessionId`, `organizationId`, `experimentId` | Context identifiers recorded on the root span. |
+| `name`, `spanType` | Root span name and type. Requires the `traceQueryRootSpanFields` capability. |
+| `entityId` | Root span entity ID. Groups traces that have no `entityName`, such as scorer runs. Requires the `traceQueryRootEntityId` capability. |
+| `metadata.<key>` | One non-empty top-level metadata key. Values are trimmed. Missing, empty, and non-string values group as `null`. |
+
+Every dimension except `serviceName`, `executionSource`, and `experimentId` is also a trace-scope `where` field, so you can drill into a group by adding its values to the predicate. `traceId`, `spanId`, `runId`, and `requestId` aren't groupable. Traces with no value for a dimension form their own group with a `null` value.
+
+### Measures
+
+| Measure | Value |
+| - | - |
+| `count` | Number of selected traces. |
+| `countDistinct.<field>` | Number of distinct non-null values of a dimension or `traceId`, such as `countDistinct.userId`. |
+| `duration.avg`, `duration.min`, `duration.max` | Root span duration in milliseconds. |
+| `duration.p50`, `duration.p90`, `duration.p95`, `duration.p99` | Root span duration percentile in milliseconds. Percentiles can be approximate, depending on the store. |
+| `errorCount` | Number of traces whose root span recorded an error. |
+| `errorRate` | `errorCount` divided by `count`, from 0 to 1. |
+| `tokens.input.sum`, `tokens.input.avg` | Input tokens. |
+| `tokens.output.sum`, `tokens.output.avg` | Output tokens. |
+| `tokens.total.sum`, `tokens.total.avg` | Input plus output tokens. |
+| `tokens.reasoning.sum`, `tokens.reasoning.avg` | Reasoning output tokens. |
+| `tokens.cached.sum`, `tokens.cached.avg` | Input tokens read from the provider's cache. |
+| `cost.sum`, `cost.avg` | Estimated model cost. |
+
+Numeric measures over metadata aren't supported.
+
+#### Token and cost measures
+
+Token and cost measures read the model usage metrics recorded for each trace, so they're only available when the store retains metrics for the selected time range. A metric belongs to a trace when it shares the trace's `traceId` and was recorded at or after `timeRange.from`. Every such metric counts, including usage recorded after `timeRange.to` and usage recorded before a suspend and resume. Retried metric exports are counted once.
+
+A trace that recorded at least one usage metric is usage-bearing. `tokens.<kind>.sum` adds the tokens of a group's usage-bearing traces, and `tokens.<kind>.avg` divides that sum by the number of usage-bearing traces, not by `count`. Both are `null` when the group has no usage-bearing traces.
+
+Cost comes from estimated cost recorded on total input and total output token metrics. `cost.sum` adds the cost of traces with at least one priced metric, and `cost.avg` divides by the number of those traces. A metric whose pricing failed, including a partial cost, isn't priced.
+
+When you request any `cost.*` measure, every row also includes a `cost` object:
+
+| Field | Description |
+| - | - |
+| `coverage` | Fraction of usage-bearing traces whose usage was fully priced, from 0 to 1. `null` when the group has no usage-bearing traces. |
+| `unit` | Cost unit of the priced metrics, such as `USD`. `'mixed'` when they use more than one unit, and `null` when none are priced. |
+
+`cost.sum` and `cost.avg` are `null` when the group has no priced traces or `unit` is `'mixed'`. A coverage below 1 means the cost understates the group's spend. The `cost` object isn't a measure, so `having` and `orderBy` can't reference it.
+
+### Filter and order groups
+
+A group is one distinct combination of `groupBy` values. `having`, `orderBy`, and `limit` operate on groups and use each group's measures over the whole time range, even when `interval` is set. The server applies `having` first, then orders the remaining groups and keeps the first `limit`. `truncated` is `true` when more groups remained than `limit`.
+
+`having` uses the scalar predicate shape with a measure name as the path, such as `{ op: 'gt', left: { path: 'duration.p95' }, right: { literal: 5000 } }`. It can reference requested measures and `count`, even when `count` isn't requested. It supports comparison operators, `in`, and `notIn` with number literals, combined with `and`, `or`, and `not`. Presence, tag, and text operators aren't supported. A `null` measure never satisfies a `having` comparison, so the group is removed.
+
+This request keeps workflows with a 95th-percentile duration above five seconds:
+
+```typescript
+const slowWorkflows = await mastraClient.aggregateTraces({
+  timeRange: {
+    from: '2026-08-01T00:00:00.000Z',
+    to: '2026-08-08T00:00:00.000Z',
+  },
+  where: { op: 'eq', left: { path: 'entityType' }, right: { literal: 'workflow_run' } },
+  groupBy: ['entityName'],
+  measures: ['count', 'duration.p95', 'duration.p99'],
+  having: { op: 'gt', left: { path: 'duration.p95' }, right: { literal: 5000 } },
+  orderBy: { field: 'duration.p95', direction: 'desc' },
+})
+```
+
+Ordering is deterministic. Ties are broken by dimension values in ascending order. `null` measure and dimension values sort last in both directions.
+
+### Time buckets
+
+With `interval`, each group that survives `having` and `limit` expands into one row per non-empty bucket. Buckets are aligned to UTC, so `1d` buckets start at midnight UTC, and each row's `bucket` is the ISO start time of its bucket. A trace belongs to the bucket containing its root `startedAt`. Rows are ordered by group, then by `bucket` ascending.
+
+Buckets without traces are omitted rather than returned as zero rows. Fill gaps on the client when you draw a chart. Because groups are ranked over the whole time range first, every returned group includes its full series of non-empty buckets.
+
+This request returns daily token usage and cost for each agent:
+
+```typescript
+const dailyCost = await mastraClient.aggregateTraces({
+  timeRange: {
+    from: '2026-08-01T00:00:00.000Z',
+    to: '2026-08-08T00:00:00.000Z',
+  },
+  where: { op: 'eq', left: { path: 'entityType' }, right: { literal: 'agent' } },
+  groupBy: ['entityName'],
+  interval: '1d',
+  measures: ['count', 'tokens.total.sum', 'cost.sum', 'cost.avg'],
+  orderBy: { field: 'cost.sum', direction: 'desc' },
+  limit: 5,
+})
+```
+
+### Aggregate responses
+
+```json
+{
+  "rows": [
+    {
+      "dimensions": { "entityName": "supportAgent" },
+      "bucket": "2026-08-01T00:00:00.000Z",
+      "measures": {
+        "count": 412,
+        "tokens.total.sum": 1830442,
+        "cost.sum": 4.21,
+        "cost.avg": 0.0103
+      },
+      "cost": { "coverage": 0.99, "unit": "USD" }
+    }
+  ],
+  "truncated": false
+}
+```
+
+`dimensions` is keyed by `groupBy` field and is present when `groupBy` isn't empty. `bucket` is present when `interval` is set. `measures` is keyed by the requested measure names. When no traces match, or `having` removes every group, `rows` is empty.
+
+### Aggregate limits and errors
+
+| Limit | Maximum |
+| - | - |
+| Time range | 365 days |
+| `groupBy` dimensions | 2 |
+| `limit` | 1,000 groups |
+| Buckets in the time range | 1,000 |
+| `limit` × buckets | 10,000 rows |
+
+Predicate limits from [Query limits](#query-limits) apply to both `where` and `having`, and the request body is limited to 256 KiB. A time range that doesn't start on a bucket boundary touches one more bucket than its length divided by the interval. If the range has too many buckets, choose a wider `interval`. If `limit` × buckets exceeds 10,000, reduce `limit` or widen the interval.
+
+PostgreSQL and ClickHouse stop aggregations after the same `traceQueryTimeoutMs` timeout as trace queries, which defaults to 15 seconds. The timeout doesn't apply to DuckDB.
+
+| Status | Meaning |
+| - | - |
+| `400` | Malformed JSON. |
+| `413` | The request body exceeds 256 KiB. |
+| `422` | The request is invalid and returns `TRACE_QUERY_INVALID` with issues. Issue codes include `time_range_too_large`, `too_many_buckets`, `too_many_rows`, `field_not_allowed`, `invalid_metadata_key`, and `operator_not_allowed`. |
+| `501` | The installed Core or configured observability store doesn't support aggregation or a requested field. Returns `TRACE_AGGREGATE_UNSUPPORTED`. |
+| `504` | A PostgreSQL or ClickHouse aggregation exceeded its execution timeout. Returns `TRACE_QUERY_EXECUTION_TIMEOUT` without partial results. |
+
+## Trusted tenant scope
+
+Hosts that serve more than one tenant supply a trusted scope outside the query document. The server reads the reserved `organizationId` request-context key, which only server-side authentication can set, and passes `{ organizationId }` to the planner. The scope is carried on the trusted plan and ANDed into every scan: current roots, related spans, the usage metrics read by token and cost measures, and both discovery routes. A related record from another tenant that shares a `traceId` never qualifies a trace.
+
+Hosts that call storage directly can pass a fuller scope to `planTraceQuery()`, `planTraceAggregate()`, `planTraceQueryObservedFields()`, and `planTraceQueryValues()`:
+
+```typescript
+const plan = planTraceQuery(parseTraceQueryRequest(request), {
+  scope: { organizationId: 'org_123', resourceId: 'project_456' },
+})
+```
+
+`resourceId` is optional and narrows within the organization. Keyset and delta cursors are bound to the scope. A cursor created under one scope and reused under another returns `409` before storage runs. A scoped request against an observability store or `@mastra/core` that predates tenant scope returns `501` instead of running unscoped. Stores advertise support through the `trace-query-tenant-scope` feature. Callers can't name `projectId` in predicates. An `organizationId` predicate compares recorded data and is ANDed with the scope, so it can only narrow the tenant's own traces and never widens it. Without a scope the routes behave as before, so self-hosted installations keep their own tenant model.
+
+## Discover fields and values
+
+Use trace-query discovery to build field and value autocomplete without scanning trace payloads or copying the query grammar into your client. The configured observability store must support `trace-query-discovery`.
+
+The CLI doesn't expose dedicated discovery commands, so use the SDK methods below or the HTTP endpoints `POST /api/observability/traces/query/fields` and `POST /api/observability/traces/query/values`.
+
+Call `getTraceQueryFields()` for one predicate scope:
+
+```typescript
+const timeRange = {
+  from: '2026-08-01T00:00:00.000Z',
+  to: '2026-08-08T00:00:00.000Z',
+}
+
+const fields = await mastraClient.getTraceQueryFields({
+  timeRange,
+  predicateScope: 'trace',
+  search: 'region',
+  limit: 25,
+})
+```
+
+The response separates canonical fields from observed metadata fields:
+
+```json
+{
+  "canonicalFields": [],
+  "observedFields": [
+    {
+      "path": "metadata.region",
+      "valueKind": "string",
+      "operators": ["eq", "ne", "in", "notIn", "exists", "notExists"],
+      "valueSuggestions": true,
+      "occurrences": 125
+    }
+  ],
+  "observedFieldsTruncated": false
+}
+```
+
+Canonical fields come from the same registry used to validate trace queries. They don't consume `limit`. The canonical order follows that registry. `observedFields` contains top-level string `metadata.<key>` paths found on qualifying current root spans. These fields are ordered by `occurrences` descending, then by path. Nested metadata, keys containing `.`, empty keys, non-string values, and oversized paths are omitted.
+
+`predicateScope` selects the local predicate grammar. It isn't an authorization scope:
+
+| `predicateScope` | Example returned path | Query usage |
+| - | - | - |
+| `trace` | `environment` or `metadata.region` | Root `where` predicate |
+| `spans` | `model` | Inside `spans.some` or `spans.none` |
+
+A field picker can request the `trace` and `spans` scopes in parallel and label each field with its scope. Every returned path is directly accepted by `queryTraces()` in its matching scope. `metadata` by itself isn't a field. A user interface can offer manual metadata-key entry separately.
+
+For the `trace` scope, when the server and store support aggregation, the fields response also includes an `aggregate` object that describes what `aggregateTraces()` accepts:
+
+```json
+{
+  "aggregate": {
+    "dimensions": [{ "path": "entityName", "valueKind": "string" }],
+    "measures": [
+      {
+        "name": "duration.p95",
+        "kind": "duration",
+        "statistic": "p95",
+        "unit": "milliseconds",
+        "approximate": true
+      }
+    ]
+  }
+}
+```
+
+`dimensions` lists the canonical dimensions that the store supports. Every observed `metadata.<key>` field is also a dimension, and `countDistinct.<field>` accepts any dimension or `traceId`. `measures` lists each fixed measure with its `kind`, `unit`, and whether it's `approximate`.
+
+After a user selects one field with `valueSuggestions: true`, call `getTraceQueryValues()`:
+
+```typescript
+const abortController = new AbortController()
+const suggestions = await mastraClient.getTraceQueryValues(
+  {
+    timeRange,
+    predicateScope: 'trace',
+    path: 'metadata.region',
+    search: 'west',
+    limit: 25,
+  },
+  { signal: abortController.signal },
+)
+```
+
+```json
+{
+  "values": [
+    { "value": "eu-west-1", "count": 82 },
+    { "value": "us-west-2", "count": 43 }
+  ],
+  "valuesTruncated": false
+}
+```
+
+Discovery returns string values only. Missing values, empty strings, and strings larger than 4,096 UTF-8 bytes are omitted. Values are ordered by `count` descending, then by value. Suggestions are advisory: `queryTraces()` continues to accept valid manual literals that discovery doesn't return.
+
+Value suggestions are available for these canonical fields:
+
+| Scope | Fields |
+| - | - |
+| Trace | `entityName`, `entityType`, `name`, `spanType`, `environment`, `status`, `tags` |
+| Spans | `name`, `spanType`, `model`, `provider`, `status`, `entityType`, `entityName` |
+
+Each executable top-level string `metadata.<key>` field also supports value suggestions in the `trace` scope. Identifiers, timestamps, durations, time to first chunk, errors, and version IDs don't. The fields response still includes canonical fields with `valueSuggestions: false`. The values endpoint rejects those paths with `422 TRACE_QUERY_INVALID`.
+
+Both discovery requests require a half-open time range. They use the same current-record semantics as `queryTraces()`: qualifying completed roots satisfy `from <= startedAt < to`, and related values come only from current records joined to those roots by `traceId`. Discovery doesn't accept or apply a draft `where` predicate.
+
+`search` defaults to the empty string, is trimmed, and matches case-insensitive literal substrings. Characters such as `%` and `_` have no wildcard meaning. An empty search returns the most frequent results. `limit` defaults to 25 and has a maximum of 100. Both endpoints fetch one extra result to set their truncation flag, but don't provide a cursor. When a flag is `true`, refine `search`. It doesn't imply that a next page is available. No matches return an empty array and `false` truncation.
+
+If discovery exceeds its execution timeout, the route returns `504 TRACE_QUERY_EXECUTION_TIMEOUT`. If the backend exceeds a memory or resource budget, it returns `503 TRACE_QUERY_RESOURCE_LIMIT`. Neither failure returns partial suggestions or sets a truncation flag. Truncation only means a complete ranking was cut to the requested response limit.
+
+ClickHouse discovery requests default to a 5-second timeout and a 256 MiB per-query memory limit. Configure these with `observability.traceQuery.discovery.timeoutMs` and `observability.traceQuery.discovery.memoryLimitBytes` on `ClickhouseStoreVNext`. Discovery falls back to `observability.traceQuery.timeoutMs` when its timeout isn't configured, without changing ordinary `queryTraces()` execution limits.
+
+Both routes require `observability:read` and use the configured observability storage boundary. Don't send organization or project authorization fields in the request. Treat discovered paths, values, and counts as observability data.
+
+## Limitations
+
+Both APIs consider completed traces only and don't include running traces. Trace queries can't return custom projections, embedded evidence, or summaries, and numbered trace pages include a total count. Aggregation can't group by span fields, `traceId`, or `attributes.*`, compute numeric measures over metadata, paginate groups, or zero-fill empty buckets. The CLI doesn't expose a trace aggregation command, so use the SDK or the HTTP endpoint.
+
+## Related
+
+- [Client SDK observability reference](/reference/client-js/observability)
+- [Tracing overview](/docs/observability/tracing/overview)
+- [Span interfaces](/reference/observability/tracing/spans)

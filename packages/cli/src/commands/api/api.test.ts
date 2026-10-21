@@ -76,6 +76,31 @@ describe('api command registration', () => {
     });
   });
 
+  it('exposes the trace aggregate command with schema discovery and examples', () => {
+    const program = new Command();
+    registerApiCommand(program);
+
+    const api = program.commands.find(command => command.name() === 'api');
+    const trace = api?.commands.find(command => command.name() === 'trace');
+    const traceAggregate = trace?.commands.find(command => command.name() === 'aggregate');
+    let help = '';
+    traceAggregate?.configureOutput({ writeOut: chunk => (help += chunk) });
+    traceAggregate?.outputHelp();
+
+    expect(traceAggregate?.description()).toBe('Aggregate observability traces into grouped measures');
+    expect(help).toContain('--schema');
+    expect(help).toContain('"groupBy":["entityName"],"measures":["count","errorRate"]');
+    expect(help).toContain('"orderBy":{"field":"cost.sum","direction":"desc"},"limit":10');
+    expect(help).toContain('"interval":"1d","measures":["count","duration.p95"]');
+    expect(API_COMMANDS.traceAggregate).toMatchObject({
+      method: 'POST',
+      path: '/observability/traces/aggregate',
+      acceptsInput: true,
+      inputRequired: true,
+      list: false,
+    });
+  });
+
   it('exposes score and feedback deletion commands', () => {
     const program = new Command();
     registerApiCommand(program);
@@ -342,30 +367,17 @@ describe('api command executor', () => {
     );
   });
 
-  it('executes Factory decision and supervisor actions at the resolved origin', async () => {
-    fetchMock
-      .mockResolvedValueOnce(jsonResponse({ ok: true }))
-      .mockResolvedValueOnce(jsonResponse({ sessionId: 'factory-supervisor:project-1' }));
+  it('executes Factory decision actions at the resolved origin', async () => {
+    fetchMock.mockResolvedValueOnce(jsonResponse({ ok: true }));
 
     await executeDescriptor(API_COMMANDS.factoryDecisionApprove, ['project-1', 'decision-1'], undefined, {
       url: 'https://example.com',
       header: [],
       pretty: false,
     });
-    await executeDescriptor(API_COMMANDS.factorySupervisorSession, ['project-1'], undefined, {
-      url: 'https://example.com',
-      header: [],
-      pretty: false,
-    });
 
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      1,
+    expect(fetchMock).toHaveBeenCalledWith(
       'https://example.com/web/factory/projects/project-1/decisions/decision-1/approve',
-      expect.objectContaining({ method: 'POST' }),
-    );
-    expect(fetchMock).toHaveBeenNthCalledWith(
-      2,
-      'https://example.com/web/factory/projects/project-1/supervisor/session',
       expect.objectContaining({ method: 'POST' }),
     );
   });
@@ -726,6 +738,74 @@ describe('api command executor', () => {
       }),
     );
     expect(JSON.parse(stdout)).toEqual({ data: response });
+  });
+
+  it('posts trace aggregate requests and preserves rows and truncation', async () => {
+    const input = {
+      timeRange: { from: '2026-08-01T00:00:00.000Z', to: '2026-08-08T00:00:00.000Z' },
+      groupBy: ['entityName'],
+      interval: '1d',
+      measures: ['count', 'errorRate', 'cost.sum'],
+      orderBy: { field: 'count', direction: 'desc' },
+      limit: 1,
+    };
+    const response = {
+      rows: [
+        {
+          dimensions: { entityName: 'weather-agent' },
+          bucket: '2026-08-01T00:00:00.000Z',
+          measures: { count: 42, errorRate: 0.05, 'cost.sum': 1.25 },
+          cost: { coverage: 1, unit: 'usd' },
+        },
+      ],
+      truncated: true,
+    };
+    fetchMock.mockResolvedValueOnce(jsonResponse(response));
+
+    await executeDescriptor(API_COMMANDS.traceAggregate, [], JSON.stringify(input), {
+      url: 'https://observability.mastra.ai',
+      header: ['Authorization: Bearer token', 'X-Mastra-Project-Id: project-1'],
+      pretty: false,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('https://observability.mastra.ai/api/observability/traces/aggregate', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Mastra-Project-Id': 'project-1',
+        'content-type': 'application/json',
+      },
+      signal: expect.any(AbortSignal),
+      body: JSON.stringify(input),
+    });
+    expect(JSON.parse(stdout)).toEqual({ data: response });
+    expect(stderr).toBe('');
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it('prints trace aggregate capability errors as HTTP errors with the server body', async () => {
+    const body = {
+      code: 'TRACE_AGGREGATE_UNSUPPORTED',
+      message: 'Trace aggregation is not supported by the configured observability store',
+    };
+    fetchMock.mockResolvedValueOnce(jsonResponse(body, { status: 501 }));
+
+    await executeDescriptor(
+      API_COMMANDS.traceAggregate,
+      [],
+      '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"measures":["count"]}',
+      {
+        url: 'https://observability.mastra.ai',
+        header: ['Authorization: Bearer token', 'X-Mastra-Project-Id: project-1'],
+        pretty: false,
+      },
+    );
+
+    expect(stdout).toBe('');
+    expect(JSON.parse(stderr)).toEqual({
+      error: { code: 'HTTP_ERROR', message: 'Request failed with status 501', details: { status: 501, body } },
+    });
+    expect(process.exitCode).toBe(1);
   });
 
   it('gets lightweight trace details by default, full trace details with --verbose, and a specific trace span', async () => {

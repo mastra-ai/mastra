@@ -279,7 +279,7 @@
       }
     },
     {
-      "hash": "0b8b979c8044a1b5",
+      "hash": "8e7e2b31453b49a0",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -306,7 +306,7 @@
             {
               "type": "function_call_output",
               "call_id": "call_1G1yLD8nQ9VqNIRhBwYLYCtV",
-              "output": "{\"result\":{\"name\":\"Dero Israel\",\"email\":\"test@test.com\"},\"runId\":\"00000000-0000-4000-8000-000000000057\"}"
+              "output": "{\"result\":{\"email\":\"test@test.com\",\"name\":\"Dero Israel\"},\"runId\":\"00000000-0000-4000-8000-000000000057\"}"
             }
           ],
           "tools": [

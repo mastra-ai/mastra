@@ -45,7 +45,7 @@ The checks happen in that order. The claim in step 4 is atomic with the check, s
 9. **Register the stream** and, for a run on a memory thread, the thread run.
 10. **Restart** the workflow from the snapshot under the claim. On a non-suspended terminal, while still owned, delete the run's snapshots, as `stream()` and `resume()` do.
 
-If setup fails before the workflow restarts, any claim taken is settled and released, and `recover()` throws. A failure after the restart is published as an error event on the run stream (and passed to `onError`), unless another execution took the run over, in which case the thread lease and run topic are left to that execution.
+If setup fails after ownership is acquired but before the workflow restarts, the claim is settled and released and `recover()` throws. While that attempt still owns the run, a genuine setup failure also publishes a generation-fenced error event on the run stream. A snapshot disappearing or the run becoming suspended or otherwise inactive during the claim is a refusal, not a terminal failure, so those outcomes stay silent. Failures after the restart are likewise published as error events (and passed to `onError`). If another execution took the run over, the superseded attempt stays silent and leaves the thread lease and run topic to the new owner.
 
 ## What the redo does
 
@@ -71,21 +71,27 @@ The server maps the first five to 409 so clients can tell a run-state conflict f
 
 `recoverActiveRuns()` leaves out runs that finished or suspended between discovery and their turn. With an explicit `runId`, it applies the same rules: a run that is not `running` is not attempted.
 
+If `recover()` throws a transient infrastructure error before returning, `recoverActiveRuns()` reports `skipped`, reason `transient-error`, with `retryAt` 30 seconds after the failure. It recognizes the error codes `ECONNRESET`, `ECONNREFUSED`, `ETIMEDOUT`, `ESOCKETTIMEDOUT`, and `LOADING`, or a message beginning with `LOADING` followed by whitespace or the end of the message. Wrapped `cause` errors are checked too. Permanent errors, aborts, and errors after `recover()` returns remain `failed`; generic timeout text or a message that only contains `LOADING` is not enough to retry.
+
+A transient skip does not change the per-attempt observer behavior: a setup failure after claiming ownership can still publish a terminal error event before the next recovery attempt. Retrying restores run execution, not continuity for an observer whose stream already ended. A direct `recover()` still throws; a direct `recoverActiveRuns()` returns retry advice but does not schedule a timer.
+
+This retry advice applies only to errors propagated by `recover()` for an identified run before the 30-second recovery wait expires. If the wait expires first, the result is `skipped` with reason `recovery-timeout` and no `retryAt`. The attempt continues in the background; even a later transient failure does not schedule a retry. Shutdown and abandoned-execution skips also carry no retry advice, even when their cause is transient. Failures during initial run discovery are logged by `recoverAllDurableAgents()` without scheduling a retry. Existing fallbacks inside `recover()`, such as using the current agent definition when pinned-version resolution fails, are unchanged.
+
 ## Timing
 
-**After a hard crash** the crashed execution's claim stays live until it expires: 30s after its last renewal, on the store's clock. Renewals happen every 10s, so a run becomes recoverable 20–30s after the crash. Until then a plain `recover()` gets `DURABLE_AGENT_RUN_ACTIVE`; `force` takes it at once. For a run without an ownership record, the wait is the thread lease's TTL (15s by default).
+**After a hard crash** the crashed execution's claim stays live until it expires: one lease TTL after its last renewal, on the store's clock. The TTL follows `MASTRA_AGENT_THREAD_LEASE_TTL_MS` (15s by default) and renewals happen every third of it, so with defaults a run becomes recoverable 10–15s after the crash. Until then a plain `recover()` gets `DURABLE_AGENT_RUN_ACTIVE`; `force` takes it at once. For a run without an ownership record, the wait is the thread lease's TTL (15s by default).
 
 **After a graceful shutdown** `Mastra.shutdown()` abandons executions still running when its drain deadline passes and releases their claims, so the next process recovers them immediately.
 
-**`retryAt`** is when the evidence that the run is live lapses unless renewed: the claim's remaining time, or a full TTL when the backend doesn't report an expiry, clamped to between 1s and one TTL from now. It is computed on the local clock, so clock skew against the store can make it early; an early retry is refused again with a new `retryAt`.
+**`retryAt`** depends on the skip reason. For `run-active`, it is when the evidence that the run is live lapses unless renewed: the claim's remaining time, or a full TTL when the backend doesn't report an expiry, clamped to between 1s and one TTL from now. It is computed on the local clock, so clock skew against the store can make it early; an early retry is refused again with a new `retryAt`. For `transient-error`, it is 30s after the failed attempt, independent of the ownership lease.
 
-**Boot re-checks.** `recoverAllDurableAgents()` schedules each skipped run with a `retryAt` for another attempt at `retryAt` plus up to 5s of random jitter, which spreads instances that booted together. A re-check that is skipped again is rescheduled. Re-checks stop once the run is recovered, fails, finishes, or suspends. Runs skipped without a `retryAt` (this process is executing or recovering them) are not re-checked. `shutdown()` cancels pending re-checks.
+**Boot re-checks.** `recoverAllDurableAgents()` schedules each skipped run with a `retryAt` for another attempt at `retryAt` plus up to 5s of random jitter, which spreads instances that booted together. A re-check that is skipped again is rescheduled. Repeated transient skips continue at 30s plus jitter until the run recovers, has a permanent failure, finishes, suspends, or the instance shuts down. This is separate from the bounded exponential retries for a re-check call that throws instead of returning per-run results. Runs skipped without a `retryAt` (this process is executing or recovering them) are not re-checked. `shutdown()` cancels pending re-checks.
 
 ## `force`
 
 `recover(runId, { force: true })` takes the run from a live execution. Use it when the owner is known to be gone (a killed container whose claim hasn't expired yet) or stuck.
 
-With storage fencing, the old execution's writes are rejected from the moment the takeover's claim lands. It notices on its next step check or heartbeat (within 10s), aborts its model call and tools, and writes nothing terminal. Its caller's stream receives the new owner's events, because the run topic is shared and older generations are dropped. Without storage fencing, `force` transfers the pubsub lease; the old execution still stops at its next check, but writes it makes before then are not rejected.
+With storage fencing, the old execution's writes are rejected from the moment the takeover's claim lands. It notices on its next step check or heartbeat (within 5s by default), aborts its model call and tools, and writes nothing terminal. Its caller's stream receives the new owner's events, because the run topic is shared and older generations are dropped. Without storage fencing, `force` transfers the pubsub lease; the old execution still stops at its next check, but writes it makes before then are not rejected.
 
 `force` never takes a run this process is executing, and a forced takeover still loses to a concurrent claimer.
 

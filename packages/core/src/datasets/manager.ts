@@ -186,7 +186,8 @@ export class DatasetsManager {
    */
   async list(args?: {
     page?: number;
-    perPage?: number;
+    /** Datasets per page, or `false` to return every match on one page. */
+    perPage?: number | false;
     filters?: {
       organizationId?: string;
       projectId?: string;
@@ -198,6 +199,11 @@ export class DatasetsManager {
        * Filter to datasets whose `targetIds` intersect this list (any overlap matches).
        */
       targetIds?: string[];
+      /**
+       * Only return datasets with these IDs. An empty array matches no datasets.
+       * Pass `perPage: false` to get every match; otherwise the page size still applies.
+       */
+      datasetIds?: string[];
       /** Substring match on dataset `name`, case-insensitive. */
       name?: string;
     };
@@ -349,16 +355,19 @@ export class DatasetsManager {
     });
 
     const items = [...itemIds].map(itemId => {
-      const results: Record<string, { output: unknown; scores: Record<string, number | null> } | null> = {};
       let source: { input: unknown; groundTruth: unknown } | undefined;
-
-      for (const experimentId of experimentIds) {
-        const result = resultsByExperiment.get(experimentId)!.get(itemId);
-        source ??= result;
-        results[experimentId] = result
-          ? { output: result.output, scores: scores.get(experimentId)!.get(itemId) ?? {} }
-          : null;
-      }
+      // Object.fromEntries keeps caller-chosen experiment IDs like "__proto__" as own keys.
+      const results: Record<string, { output: unknown; scores: Record<string, number | null> } | null> =
+        Object.fromEntries(
+          experimentIds.map(experimentId => {
+            const result = resultsByExperiment.get(experimentId)!.get(itemId);
+            source ??= result;
+            return [
+              experimentId,
+              result ? { output: result.output, scores: scores.get(experimentId)!.get(itemId) ?? {} } : null,
+            ];
+          }),
+        );
 
       return {
         itemId,

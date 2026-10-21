@@ -89,7 +89,7 @@ const toolSearch = new ToolSearchProcessor({
             name: 'storage',
             type: "'in-memory' | 'context'",
             description:
-              "Where loaded-tool state lives. 'in-memory' (default) tracks loaded tools in an in-memory map per thread with TTL cleanup (see ttl); state is lost on restart and anonymous requests share a 'default' entry. 'context' derives loaded state from the conversation messages — a tool is loaded while a search_tools/load_tool result naming it remains in the messages; it is restart-safe, requires no memory, and de-loads automatically once that result is no longer present in the messages. The 'context' store is opt-in.",
+              "Where loaded-tool state lives. 'in-memory' (default) tracks loaded tools in an in-memory map per thread with TTL cleanup (see ttl); state is lost on restart and anonymous requests share a 'default' entry. 'context' derives loaded state from the conversation messages — a tool is loaded while a search_tools/load_tool result naming it remains in the messages; it works without memory (same-process only, and only for requests with a real thread ID), survives a restart whenever the messages are available again (memory with message history, or the caller resending the conversation), and de-loads automatically once that result is no longer present in the messages. The 'context' store is opt-in.",
             isOptional: true,
             default: "'in-memory'",
           },
@@ -324,8 +324,8 @@ Use `clearState`, `clearAllState`, `getStateStats`, and `cleanupNow` to inspect 
 
 Loaded state is derived from the conversation messages: a tool is loaded while a `search_tools` or `load_tool` result naming it remains in the messages. This mode:
 
-- Requires no memory configuration.
-- Is restart-safe: the durable record is the persisted message history.
+- Works without memory configuration. Without memory, loaded tools are kept for the current process only, and only for requests with a real thread ID; anonymous requests retain nothing between calls unless the caller resends the relevant messages.
+- Survives a restart whenever the messages are available again: from memory with message history, or because the caller resends the conversation. Without memory, a restart restores only what's in the messages the caller sends.
 - De-loads a tool automatically once that result is no longer present in the messages.
 
 ```typescript

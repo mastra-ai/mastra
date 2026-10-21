@@ -1,6 +1,6 @@
 {
   "name": "@mastra/livekit",
-  "version": "0.5.0",
+  "version": "0.5.1-alpha.0",
   "description": "LiveKit voice integration for Mastra agents — realtime voice with semantic turn detection and barge-in",
   "type": "module",
   "main": "./dist/index.js",
@@ -54,8 +54,8 @@
   "scripts": {
     "build:lib": "tsdown --silent --config tsdown.config.ts",
     "build:watch": "pnpm build:lib --watch",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix .",
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix .",
     "test": "vitest run"
   },
   "keywords": [
@@ -112,7 +112,6 @@
     "@mastra/client-js": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/node": "22.20.1",
-    "eslint": "^10.7.0",
     "tsdown": "0.22.9",
     "typescript": "catalog:",
     "vitest": "catalog:",

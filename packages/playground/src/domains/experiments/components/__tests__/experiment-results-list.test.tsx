@@ -1,6 +1,7 @@
 import type { DatasetExperimentResult } from '@mastra/client-js';
-import { cleanup, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { cleanup, fireEvent, screen } from '@testing-library/react';
+import type { ComponentProps } from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ExperimentResultsList } from '../experiment-results-list';
 import { agentFailedResult, agentMarkdownResult } from './fixtures/experiment-results';
@@ -55,7 +56,7 @@ describe('ExperimentResultsList', () => {
 
   describe('for a result with an error', () => {
     it('tints the row with the error tone instead of rendering an icon', () => {
-      const { container } = renderList([makeResult('r-1', { message: 'boom' } as DatasetExperimentResult['error'])]);
+      const { container } = renderList([makeResult('r-1', { message: 'boom' })]);
 
       expect(container.querySelector('[data-variant="error"]')).not.toBeNull();
       expect(screen.queryByRole('img', { name: 'Error' })).toBeNull();
@@ -182,6 +183,72 @@ describe('ExperimentResultsList', () => {
       const link = screen.getByText('Answer relevancy').closest('a');
       expect(link?.getAttribute('href')).toBe('/scorers/answer-relevancy');
       expect(link?.hasAttribute('target')).toBe(false);
+    });
+  });
+
+  describe('scorer cell reason', () => {
+    const renderWithScores = (scoresByItemId: ComponentProps<typeof ExperimentResultsList>['scoresByItemId']) =>
+      renderWithProviders(
+        <TestLinkProvider>
+          <ExperimentResultsList
+            results={[makeResult('r-1')]}
+            isLoading={false}
+            featuredResultId={null}
+            onResultClick={() => {}}
+            columns={[...columns, { name: 'answer-relevancy', label: 'Answer relevancy', size: '1fr' }]}
+            scorerIds={['answer-relevancy']}
+            scoresByItemId={scoresByItemId}
+          />
+        </TestLinkProvider>,
+      );
+
+    describe('when the score has a reason', () => {
+      const scoresByItemId = {
+        'item-r-1': [{ scorerId: 'answer-relevancy', score: 0.5, reason: 'Because **bold**' }],
+      };
+
+      it('renders the reason as markdown when the info icon is hovered', async () => {
+        renderWithScores(scoresByItemId);
+
+        fireEvent.mouseEnter(screen.getByTestId('score-reason-answer-relevancy'));
+
+        expect((await screen.findByText('bold')).tagName).toBe('STRONG');
+      });
+
+      it('does not open the result when the reason card is clicked', async () => {
+        const onResultClick = vi.fn();
+        renderWithProviders(
+          <ExperimentResultsList
+            results={[makeResult('r-1')]}
+            isLoading={false}
+            featuredResultId={null}
+            onResultClick={onResultClick}
+            columns={[...columns, { name: 'answer-relevancy', label: 'Answer relevancy', size: '1fr' }]}
+            scorerIds={['answer-relevancy']}
+            scoresByItemId={scoresByItemId}
+          />,
+        );
+
+        fireEvent.mouseEnter(screen.getByTestId('score-reason-answer-relevancy'));
+        fireEvent.click(await screen.findByText('bold'));
+
+        expect(onResultClick).not.toHaveBeenCalled();
+      });
+
+      it('does not nest a button inside the row button', () => {
+        const { container } = renderWithScores(scoresByItemId);
+
+        expect(container.querySelector('button button')).toBeNull();
+      });
+    });
+
+    describe('when the score has no reason', () => {
+      it('renders only the score value', () => {
+        renderWithScores({ 'item-r-1': [{ scorerId: 'answer-relevancy', score: 0.5, reason: null }] });
+
+        expect(screen.getByText('0.500')).toBeDefined();
+        expect(screen.queryByTestId('score-reason-answer-relevancy')).toBeNull();
+      });
     });
   });
 });

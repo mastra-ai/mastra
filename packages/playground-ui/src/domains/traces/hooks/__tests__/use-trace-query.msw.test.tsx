@@ -344,6 +344,8 @@ describe('useTraceQuery', () => {
           createdAt: '2026-09-01T10:00:00.000Z',
           metadata: { region: 'eu-west' },
           inputPreview: 'Hello',
+          outputPreview: null,
+          errorPreview: null,
           threadId: 'thread-legacy-a',
           resourceId: 'user-legacy-a',
           startedAt: '2026-09-01T10:00:00.000Z',

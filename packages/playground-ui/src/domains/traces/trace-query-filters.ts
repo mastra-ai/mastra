@@ -308,23 +308,19 @@ export function buildTraceQueryRequest({
   }
 
   return {
-    timeRange: {
-      from: (dateFrom ?? new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)).toISOString(),
-      to: (dateTo ?? now).toISOString(),
-    },
+    timeRange: resolveTraceQueryTimeRange(dateFrom, dateTo, now),
     ...(args.length ? { where: { op: 'and' as const, args } } : {}),
   };
 }
 
-export const TRACE_QUERY_DISCOVERY_MAX_RANGE_MS = 31 * 24 * 60 * 60 * 1000;
-
-/** Discovery endpoints reject ranges wider than 31 days (and `from >= to`); clamp
- *  the page's selected range so wide custom ranges still get field suggestions
- *  for the most recent window. */
-export function clampTraceDiscoveryTimeRange(timeRange: { from: string; to: string }): { from: string; to: string } {
-  const to = new Date(timeRange.to).getTime();
-  const from = new Date(timeRange.from).getTime();
-  const minFrom = to - TRACE_QUERY_DISCOVERY_MAX_RANGE_MS;
-  if (from >= minFrom && from < to) return timeRange;
-  return { from: new Date(minFrom).toISOString(), to: timeRange.to };
+/** The query window for a date range: open ends fall back to the last seven days up to `now`. */
+export function resolveTraceQueryTimeRange(
+  dateFrom: Date | undefined,
+  dateTo: Date | undefined,
+  now: Date,
+): QueryTracesInput['timeRange'] {
+  return {
+    from: (dateFrom ?? new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)).toISOString(),
+    to: (dateTo ?? now).toISOString(),
+  };
 }

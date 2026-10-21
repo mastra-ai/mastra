@@ -1,6 +1,6 @@
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { ensureDir, remove, pathExists, writeFile } from 'fs-extra';
+import { ensureDir, remove, pathExists, symlink, writeFile } from 'fs-extra';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { WorkspacePackageInfo } from '../../bundler/workspaceDependencies';
 import type { DependencyMetadata } from '../types';
@@ -1069,6 +1069,59 @@ describe('bundleExternals', () => {
       const dependencyValues = Array.from(result.fileNameToDependencyMap.values());
       expect(dependencyValues).toContain('lodash');
       expect(dependencyValues).toContain('react');
+    });
+    it('should not fail when a shared chunk spans multiple workspace packages', async () => {
+      const coreDir = join(testDir, 'packages', 'core');
+      const leafDir = join(testDir, 'packages', 'leaf');
+      for (const [dir, name] of [
+        [coreDir, '@workspace/core'],
+        [leafDir, '@workspace/leaf'],
+      ] as const) {
+        await ensureDir(dir);
+        await writeFile(
+          join(dir, 'package.json'),
+          JSON.stringify({ name, version: '1.0.0', main: 'index.js', type: 'module' }),
+        );
+        await ensureDir(join(testDir, 'node_modules', '@workspace'));
+        await symlink(dir, join(testDir, 'node_modules', name), 'dir');
+      }
+      await writeFile(join(coreDir, 'shared.js'), 'export const coreShared = () => "core";');
+      await writeFile(join(leafDir, 'util.js'), 'export const leafUtil = () => "leaf";');
+      await writeFile(
+        join(coreDir, 'index.js'),
+        'import { coreShared } from "./shared.js"; import { leafUtil } from "../leaf/util.js"; export const coreFn = () => coreShared() + leafUtil();',
+      );
+      await writeFile(
+        join(leafDir, 'index.js'),
+        'import { coreShared } from "../core/shared.js"; import { leafUtil } from "./util.js"; export const leafFn = () => coreShared() + leafUtil();',
+      );
+
+      const workspaceMap = new Map<string, WorkspacePackageInfo>([
+        ['@workspace/core', { location: coreDir, dependencies: {}, version: '1.0.0' }],
+        ['@workspace/leaf', { location: leafDir, dependencies: {}, version: '1.0.0' }],
+      ]);
+      const depsToOptimize = new Map<string, DependencyMetadata>([
+        ['@workspace/core', { exports: ['coreFn'], rootPath: coreDir, isWorkspace: true }],
+        ['@workspace/leaf', { exports: ['leafFn'], rootPath: leafDir, isWorkspace: true }],
+      ]);
+
+      const result = await bundleExternals(depsToOptimize, testDir, {
+        workspaceRoot: testDir,
+        projectRoot: join(testDir, 'app'),
+        workspaceMap,
+        bundlerOptions: { ...normalizeExternals(true), isDev: true },
+      });
+
+      const chunks = result.output.filter(o => o.type === 'chunk');
+      const sharedChunk = chunks.find(
+        c =>
+          !c.isEntry &&
+          c.moduleIds.some(id => id.startsWith(coreDir)) &&
+          c.moduleIds.some(id => id.startsWith(leafDir)),
+      );
+      expect(sharedChunk).toBeDefined();
+      expect(sharedChunk!.fileName).not.toContain('node_modules/.cache');
+      expect(await pathExists(join(testDir, sharedChunk!.fileName))).toBe(true);
     });
   });
 });

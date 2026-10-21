@@ -15,11 +15,20 @@ import type { TUI } from '@earendil-works/pi-tui';
 import { MC_TOOLS } from '@mastra/code-sdk/tool-names';
 import type { TaskItemInput } from '@mastra/core/signals';
 import chalk from 'chalk';
-import { highlight } from 'cli-highlight';
-import type { Theme as HighlightTheme } from 'cli-highlight';
 import { sanitizeAnsiForRendering } from '../sanitize-ansi.js';
 import { formatStatusDuration } from '../status-duration.js';
-import { BOX_INDENT, theme, mastra, tintHex, ensureTerminalGlyphContrast, getThemeMode } from '../theme.js';
+import { highlightCode } from '../syntax-highlight.js';
+import {
+  BOX_INDENT,
+  theme,
+  mastra,
+  tintHex,
+  ensureTerminalGlyphContrast,
+  getThemeMode,
+  displayModeColor,
+  surfaceShade,
+  getContrastText,
+} from '../theme.js';
 import { truncateAnsi } from './ansi.js';
 import { PENDING_SHELL_GROUP_KEY } from './chat-spacing.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
@@ -41,8 +50,6 @@ const TERMINAL_SEQUENCE_RE =
   /\x1b\[[\x20-\x3f]*[\x40-\x7e]?|\x1b[\]PX^_][^\x07\x1b]*(?:\x07|\x1b\\)?|\x9b[\x20-\x3f]*[\x40-\x7e]?|\x1b[\x20-\x7e]?/g;
 
 const COMPACT_TOOL_COLOR = mastra.orange;
-const COMPACT_TOOL_ARGS_BG = '#141414';
-const TOOL_RAIL = tintHex(COMPACT_TOOL_COLOR, 0.35);
 const CODE_PREVIEW_MAX_CHARS = 2_000;
 const SHELL_COMMAND_HIGHLIGHT_MAX_CHARS = 2_000;
 
@@ -50,50 +57,6 @@ function normalizeHexColor(color: string | undefined): string | undefined {
   if (!color || !/^#[0-9a-f]{6}$/i.test(color)) return undefined;
   return color;
 }
-
-const CODE_HIGHLIGHT_THEME: HighlightTheme = {
-  default: chalk.hex('#b4b4bd'),
-  keyword: chalk.hex('#c4b5fd'),
-  built_in: chalk.hex('#93c5fd'),
-  type: chalk.hex('#93c5fd'),
-  literal: chalk.hex('#fca5a5'),
-  number: chalk.hex('#fbbf24'),
-  string: chalk.hex('#9ecfa9'),
-  regexp: chalk.hex('#fca5a5'),
-  title: chalk.hex('#93c5fd'),
-  function: chalk.hex('#7dd3fc'),
-  params: chalk.hex('#b4b4bd'),
-  comment: chalk.hex('#71717a'),
-  meta: chalk.hex('#71717a'),
-  attr: chalk.hex('#fbbf24'),
-  variable: chalk.hex('#d4d4d8'),
-  tag: chalk.hex('#c4b5fd'),
-  name: chalk.hex('#c4b5fd'),
-};
-
-/** The same roles in darker tones that read on light backgrounds. */
-const LIGHT_CODE_HIGHLIGHT_THEME: HighlightTheme = {
-  default: text => theme.fg('toolArgs', text),
-  keyword: chalk.hex('#7e22ce'),
-  built_in: chalk.hex('#1d4ed8'),
-  type: chalk.hex('#1d4ed8'),
-  literal: chalk.hex('#b91c1c'),
-  number: chalk.hex('#b45309'),
-  string: chalk.hex('#15803d'),
-  regexp: chalk.hex('#b91c1c'),
-  title: chalk.hex('#1d4ed8'),
-  function: chalk.hex('#1d4ed8'),
-  params: chalk.hex('#3f3f46'),
-  comment: chalk.hex('#71717a'),
-  meta: chalk.hex('#52525b'),
-  attr: chalk.hex('#b45309'),
-  variable: chalk.hex('#3f3f46'),
-  tag: chalk.hex('#7e22ce'),
-  name: chalk.hex('#7e22ce'),
-};
-
-const codeHighlightTheme = (): HighlightTheme =>
-  getThemeMode() === 'light' ? LIGHT_CODE_HIGHLIGHT_THEME : CODE_HIGHLIGHT_THEME;
 
 const SHELL_CONTROL_WORDS = new Set([
   'if',
@@ -675,11 +638,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   private highlightCodePreview(preview: string): string {
     const path = this.getFirstStringArg('path');
     try {
-      return highlight(preview, {
-        language: getLanguageFromPath(path),
-        ignoreIllegals: true,
-        theme: codeHighlightTheme(),
-      });
+      return highlightCode(preview, getLanguageFromPath(path));
     } catch {
       return theme.fg('toolArgs', preview);
     }
@@ -851,7 +810,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     const argsColor = this.getCompactToolArgsColor(toolLabelColor);
     const leftHalf = chalk.hex(color)('▐');
     const rightHalf = summary ? chalk.hex(color).bgHex(argsBg)('▌') : chalk.hex(color)('▌');
-    const label = `${leftHalf}${chalk.bgHex(color).hex('#000000').bold(toolLabel)}${rightHalf}`;
+    const label = `${leftHalf}${chalk.bgHex(color).hex(getContrastText(color)).bold(toolLabel)}${rightHalf}`;
     const args = summary ? this.formatCompactSummaryBadge(summary, argsBg, argsColor) : '';
     const trail = summary ? chalk.hex(argsBg)('▌') : '';
     return `${label}${args}${trail}`;
@@ -859,25 +818,27 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
 
   private getCompactToolAccentColor(toolLabelColor: CompactToolLabelColor): string {
     if (this.isErrorResult() || toolLabelColor === 'error') return mastra.red;
-    return this.compactToolModeColor ?? COMPACT_TOOL_COLOR;
+    // displayModeColor resolves against the active theme at render time, so custom
+    // themes recolor the pill (brand green maps to the theme accent).
+    return displayModeColor(this.compactToolModeColor ?? COMPACT_TOOL_COLOR);
   }
 
   private getCompactToolArgsBg(toolLabelColor: CompactToolLabelColor): string {
     if (this.isErrorResult() || toolLabelColor === 'error') return tintHex(mastra.red, 0.15);
-    return COMPACT_TOOL_ARGS_BG;
+    // Derived from the terminal background so custom theme backgrounds carry
+    // through to the args chip (≈ the old fixed #141414 on the default dark bg).
+    return surfaceShade(1);
   }
 
   private getCompactToolArgsColor(toolLabelColor: CompactToolLabelColor): string | undefined {
     if (this.isErrorResult() || toolLabelColor === 'error') return undefined;
-    return this.compactToolModeColor ?? COMPACT_TOOL_COLOR;
+    return displayModeColor(this.compactToolModeColor ?? COMPACT_TOOL_COLOR);
   }
 
   private getToolRailColor(): string {
     const color = this.isErrorResult()
       ? tintHex(mastra.red, 0.35)
-      : this.compactToolModeColor
-        ? tintHex(this.compactToolModeColor, 0.35)
-        : TOOL_RAIL;
+      : tintHex(displayModeColor(this.compactToolModeColor ?? COMPACT_TOOL_COLOR), 0.35);
     return ensureTerminalGlyphContrast(color);
   }
 

@@ -1,7 +1,15 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
 import { it, expect } from 'vitest';
+import { z } from 'zod/v4';
+import { ChunkFrom } from '../../../../stream/types';
 import type { ChunkType } from '../../../../stream/types';
-import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
+import { createTool } from '../../../../tools';
+import {
+  describeForAllEngines,
+  isDurableEngineVariant,
+  runLoopScenario,
+  useLoopScenarioAimock,
+} from '../aimock-scenario';
 
 /**
  * Regression class: text-streaming fidelity.
@@ -20,6 +28,7 @@ import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '.
  *  - start/finish bracket the entire run
  */
 describeForAllEngines('AIMock loop scenario: text-streaming fidelity', engine => {
+  const itFailsOnInngest = engine === 'inngest' ? it.fails : it;
   const getMock = useLoopScenarioAimock();
 
   it('reassembles multi-delta text in order and matches output.text', async () => {
@@ -62,7 +71,91 @@ describeForAllEngines('AIMock loop scenario: text-streaming fidelity', engine =>
     expect(finalText).toBe(scriptedText);
   });
 
-  it('emits text-start/text-end bracketing and step/finish lifecycle chunks in order', async () => {
+  // runLoopScenario does not forward `onChunk` to durable/evented engines (harness gap, #27408).
+  // Durable `onChunk` delivery stays covered by durable-agent-stream.test.ts until then.
+  const itOnChunk = isDurableEngineVariant(engine) ? it.skip : it;
+
+  itOnChunk('onChunk receives every text-delta in order and matches output.text', async () => {
+    const scriptedText = 'Hello, world! Streaming through onChunk.';
+    const seen: ChunkType[] = [];
+
+    const { output, chunks } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Say hello.',
+      stopWhen: stepCountIs(2),
+      collectChunks: true,
+      onChunk: (chunk: ChunkType) => {
+        seen.push(chunk);
+      },
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat' }, { content: scriptedText });
+      },
+    });
+
+    if (!chunks) {
+      throw new Error('collectChunks should have populated chunks');
+    }
+
+    const textOf = (list: ChunkType[]) =>
+      list
+        .filter((c): c is Extract<ChunkType, { type: 'text-delta' }> => c.type === 'text-delta')
+        .map(d => d.payload.text);
+    const streamedDeltas = textOf(chunks);
+    const callbackDeltas = textOf(seen);
+
+    const finalText = await (output as unknown as { text: Promise<string> }).text;
+    expect(streamedDeltas.length).toBeGreaterThan(1);
+    expect(callbackDeltas).toEqual(streamedDeltas);
+    expect(callbackDeltas.join('')).toBe(finalText);
+    expect(finalText).toBe(scriptedText);
+  });
+
+  it('final finish chunk after a tool step comes from the agent with reason "stop" and the final text', async () => {
+    const finalText = 'tool returned hello';
+    const echoTool = createTool({
+      id: 'echo',
+      description: 'Echo the input',
+      inputSchema: z.object({ text: z.string() }),
+      outputSchema: z.object({ echoed: z.string() }),
+      execute: async ({ text }) => ({ echoed: text }),
+    });
+
+    const { output, chunks, requests } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Run echo with hello.',
+      tools: { echo: echoTool },
+      maxSteps: 4,
+      collectChunks: true,
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          { toolCalls: [{ id: 'call_echo', name: 'echo', arguments: { text: 'hello' } }] },
+        );
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: finalText });
+      },
+    });
+
+    if (!chunks) {
+      throw new Error('collectChunks should have populated chunks');
+    }
+
+    expect(requests).toHaveLength(2);
+    const types = chunks.map(c => c.type);
+    expect(types).toContain('tool-call');
+    expect(types).toContain('tool-result');
+    expect(types).not.toContain('response-metadata');
+
+    const finish = chunks.findLast(c => c.type === 'finish') as Extract<ChunkType, { type: 'finish' }> | undefined;
+    expect(finish?.runId).toBe(output.runId);
+    expect(finish?.from).toBe(ChunkFrom.AGENT);
+    expect(finish?.payload.stepResult.reason).toBe('stop');
+    expect((finish?.payload as { output?: { text?: string } } | undefined)?.output?.text).toBe(finalText);
+  });
+
+  // Inngest never emits the opening `start` chunk.
+  itFailsOnInngest('emits text-start/text-end bracketing and step/finish lifecycle chunks in order', async () => {
     const scriptedText = 'Hello world, this is a streaming fidelity test.';
 
     const { output, chunks } = await runLoopScenario({

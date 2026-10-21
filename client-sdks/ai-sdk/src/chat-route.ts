@@ -167,7 +167,11 @@ function streamV6ApprovalResumes(args: {
           successfulLegs++;
         } catch (error) {
           const id = (error as { id?: string } | undefined)?.id;
-          if (id !== 'AGENT_RESUME_TOOL_CALL_NOT_SUSPENDED' && id !== 'AGENT_RESUME_NO_SNAPSHOT_FOUND') {
+          if (
+            id !== 'AGENT_RESUME_TOOL_CALL_NOT_SUSPENDED' &&
+            id !== 'AGENT_RESUME_NO_SNAPSHOT_FOUND' &&
+            id !== 'AGENT_RESUME_ALREADY_CLAIMED'
+          ) {
             throw error;
           }
           firstResolvedTargetError ??= error;
@@ -175,7 +179,8 @@ function streamV6ApprovalResumes(args: {
       }
 
       // Re-sent history may contain already-resolved responses alongside a new
-      // one. Skip only core's exact "not suspended" errors; if none of the
+      // one, or a response another request is resuming right now. Skip only
+      // core's exact "not suspended" and "already claimed" errors; if none of the
       // targets resumed, surface the typed error instead of silently dropping
       // a potentially valid approval.
       if (successfulLegs === 0 && firstResolvedTargetError) throw firstResolvedTargetError;

@@ -109,6 +109,26 @@ agent.queueMessage('Also check whether the tests need updates.', {
 
 When the thread is idle, `queueMessage()` starts a run immediately. When the thread is active, it preserves turn order by starting a new run after the active run completes.
 
+### Queue a typed signal for the next turn
+
+Use `queueSignal()` when system-generated input needs the same turn ordering as `queueMessage()` but should keep its own signal type, tag, and attributes. For example, a skill invocation can render as a `<skill>` element instead of a plain user message:
+
+```typescript title="src/mastra/signals.ts"
+agent.queueSignal(
+  {
+    type: 'reactive',
+    tagName: 'skill',
+    attributes: { name: 'triage' },
+    contents: 'Triage the new issue.',
+  },
+  { resourceId: 'user_123', threadId: 'thread_456' },
+)
+```
+
+The model receives `<skill name="triage">Triage the new issue.</skill>`. Queued signals share the `queueMessage()` queue, so they count toward queue-count events and you can cancel them with `cancelQueuedMessages()`.
+
+When a signal starts a run, the run's `AGENT_RUN` span records the signal's `id`, `type`, `tagName`, and `attributes` under `attributes.signal`.
+
 ### Cancel pending input
 
 Use [`cancelQueuedMessages()`](/reference/agents/agent#cancelqueuedmessagesoptions) to remove selected pending input without stopping the active run. Cancellation is scoped to the memory thread, including input submitted by other Agents sharing the same runtime and PubSub instance.
@@ -405,7 +425,9 @@ Use the connection tools for distinct operations:
 
 Saved connections remain in the sender thread until explicitly disconnected. Every send independently refreshes discovery and verifies the exact endpoint before routing begins. A saved connection therefore records collaboration intent. It doesn't indicate current presence.
 
-After a send attempt reaches Core routing, the routing result is authoritative. The result can be `wake`, `deliver`, `persist`, `blocked`, or `discard`, depending on the target thread and notification policy. A send that isn't acknowledged by the advertised thread owner returns an error and doesn't consume its `messageId`, so the sender can retry it.
+After a send attempt reaches Core routing, the routing result is authoritative. The result can be `wake`, `deliver`, `persist`, `blocked`, or `discard`, depending on the target thread and notification policy. A send that fails a direct delivery because no thread owner acknowledged it isn't lost: the signal stays pending in the target's notification inbox and the send reports `persist` instead of claiming delivery. The notification dispatcher retries that delivery on its own, so the sender doesn't need to resend it. The `messageId` isn't recorded in sent history and isn't rejected as a duplicate, although the pending notification still matches on it. A resend with the same `messageId` merges into that notification while it's pending, and delivers a second copy once the retry has succeeded. A send made with `expectsReply: true` returns an error there, because the reply obligation isn't established until the signal is delivered.
+
+When the delivery policy routes a signal to a notification summary rather than delivering it directly, the send records the `messageId`, so retrying with the same id reports a duplicate instead of routing again. A low-priority send always takes this route and reports `persist`. A high- or medium-priority send to an active thread takes it too, but there the summary signal is emitted immediately, so the send reports that signal's routing result (`wake`, `deliver`, or `persist`) and records the `messageId` the same way, including when `expectsReply: true`. Only when the policy schedules a summary without emitting a signal at send time does an `expectsReply: true` send fail to establish its reply obligation: it returns an error and doesn't record the send in sent history, so establishing the reply obligation takes a new signal at a priority that routes directly.
 
 ### Discover agents in other projects
 
@@ -517,12 +539,14 @@ Use heartbeats together with client-side reconnect logic. Heartbeats reduce idle
 
 - [`Agent.sendMessage()`](/reference/agents/agent#sendmessagemessage-options)
 - [`Agent.queueMessage()`](/reference/agents/agent#queuemessagemessage-options)
+- [`Agent.queueSignal()`](/reference/agents/agent#queuesignalsignal-options)
 - [`Agent.sendSignal()`](/reference/agents/agent#sendsignalsignal-options)
 - [`Agent.sendStateSignal()`](/reference/agents/agent#sendstatesignalstate-options)
 - [`Agent.subscribeToThread()`](/reference/agents/agent#subscribetothreadoptions)
 - [`createNotificationInboxTool()`](/reference/signals/create-notification-inbox-tool)
 - [`client.getAgent().sendMessage()`](/reference/client-js/agents#sendmessage)
 - [`client.getAgent().queueMessage()`](/reference/client-js/agents#queuemessage)
+- [`client.getAgent().queueSignal()`](/reference/client-js/agents#queuesignal)
 - [`client.getAgent().sendSignal()`](/reference/client-js/agents#sendsignal)
 - [Server agent routes](/reference/server/routes#agent-message-routes)
 - [`client.getAgent().subscribeToThread()`](/reference/client-js/agents#subscribetothread)

@@ -68,6 +68,21 @@ export const AgentStreamEventTypes = {
   OWNERSHIP_CLAIMED: 'ownership-claimed',
 } as const;
 
+export const DURABLE_STOP_WHEN_ERROR_ID = 'DURABLE_AGENT_STOP_WHEN_FAILED';
+
+const REJECT_STREAM_ERROR = Symbol('mastra.durable.rejectStreamError');
+
+type RejectStreamError = Error & { [REJECT_STREAM_ERROR]?: true };
+
+export function markErrorForStreamRejection(error: Error): Error {
+  (error as RejectStreamError)[REJECT_STREAM_ERROR] = true;
+  return error;
+}
+
+export function shouldRejectStream(error: Error): boolean {
+  return (error as RejectStreamError)[REJECT_STREAM_ERROR] === true;
+}
+
 /**
  * Default values for durable agent execution
  */

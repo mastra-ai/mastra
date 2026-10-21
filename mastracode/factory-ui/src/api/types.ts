@@ -21,8 +21,6 @@ import type {
   OMConfigInfo,
   ProviderInfo,
   ProviderOMDefaultsResponse,
-  ThinkingConfigInfo,
-  UpdateThinkingConfigResponse,
 } from '@mastra/factory/routes/config';
 import type {
   ArtifactEntry,
@@ -31,22 +29,17 @@ import type {
   DirectoryListing,
   WorkspaceChange,
   WorkspaceChanges,
+  WorkspaceChangesRepository,
   WorkspaceChangeStatus,
   WorkspaceDiff,
   WorkspaceFile,
-  WorkspaceFilesListing,
+  WorkspaceTreeEntry,
+  WorkspaceTreeListing,
   WorkspaceRenderedEntry,
   WorkspaceRenderedListing,
 } from '@mastra/factory/routes/fs';
 
-export type {
-  ProviderInfo,
-  CustomProviderInfo,
-  OMConfigInfo,
-  ProviderOMDefaultsResponse,
-  ThinkingConfigInfo,
-  UpdateThinkingConfigResponse,
-};
+export type { ProviderInfo, CustomProviderInfo, OMConfigInfo, ProviderOMDefaultsResponse };
 export type {
   ArtifactEntry,
   ArtifactListing,
@@ -54,10 +47,12 @@ export type {
   DirectoryListing,
   WorkspaceChange,
   WorkspaceChanges,
+  WorkspaceChangesRepository,
   WorkspaceChangeStatus,
   WorkspaceDiff,
   WorkspaceFile,
-  WorkspaceFilesListing,
+  WorkspaceTreeEntry,
+  WorkspaceTreeListing,
   WorkspaceRenderedEntry,
   WorkspaceRenderedListing,
 };

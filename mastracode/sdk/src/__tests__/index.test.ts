@@ -81,7 +81,9 @@ function resolveInputProcessors(): Array<{ id?: string }> {
 function resolveOutputProcessors(): Array<{ id?: string }> {
   const config = agentConstructorMock.mock.calls[0]?.[0] as { outputProcessors?: unknown } | undefined;
   expect(typeof config?.outputProcessors).toBe('function');
-  return (config!.outputProcessors as () => Array<{ id?: string }>)();
+  return (config!.outputProcessors as (args: { requestContext: RequestContext }) => Array<{ id?: string }>)({
+    requestContext: new RequestContext(),
+  });
 }
 
 const controllerConstructorMock = vi.fn();
@@ -107,7 +109,7 @@ const controllerSetStateMock = vi.fn();
 const controllerSetThreadSettingMock = vi.fn();
 const controllerSetThreadSettingOnMock = vi.fn();
 const controllerEmitMock = vi.fn();
-const controllerGetSessionByResourceMock = vi.fn();
+const controllerGetSessionMock = vi.fn();
 let createdSessionMock: any;
 const createMcpManagerMock = vi.fn();
 const hookManagerConstructorMock = vi.fn();
@@ -243,6 +245,7 @@ vi.mock('@mastra/core/agent-controller', async importOriginal => ({
         model: { get: () => controllerModelMock },
         subagents: { model: { get: () => undefined } },
         getWorkspace: () => undefined,
+        getThreadScope: () => ({}),
         emit: (event: unknown) => controllerEmitMock(event),
         state: {
           get: () => controllerStateMock,
@@ -256,8 +259,8 @@ vi.mock('@mastra/core/agent-controller', async importOriginal => ({
       };
       return createdSessionMock;
     }
-    async getSessionByResource(resourceId: string) {
-      return controllerGetSessionByResourceMock(resourceId);
+    async getSession(sessionId: string) {
+      return controllerGetSessionMock(sessionId);
     }
     getState() {
       return controllerStateMock;
@@ -533,8 +536,8 @@ describe('createMastraCode', () => {
     controllerSetThreadSettingOnMock.mockReset();
     controllerSetThreadSettingOnMock.mockResolvedValue(undefined);
     controllerEmitMock.mockReset();
-    controllerGetSessionByResourceMock.mockReset();
-    controllerGetSessionByResourceMock.mockImplementation(async () => createdSessionMock);
+    controllerGetSessionMock.mockReset();
+    controllerGetSessionMock.mockImplementation(async () => createdSessionMock);
     createdSessionMock = undefined;
     createMcpManagerMock.mockReset();
     hookManagerConstructorMock.mockReset();
@@ -591,6 +594,61 @@ describe('createMastraCode', () => {
     expect(controllerConstructorMock.mock.calls[0]![0].agent).toBe(result.codeAgent);
     expect(result).not.toHaveProperty('validateExperimentalAgent');
   }, 15_000);
+
+  it('prepares trusted policy in the production main-model, goal-judge, and memory callbacks', async () => {
+    const { setCredentialStoreProvider, resolveTenantFromRequestContext } =
+      await import('../agents/credential-resolver.js');
+    const { getDynamicModel, getGoalJudgeModel } = await import('../agents/model.js');
+    const { createMastraCodeAgentController } = await import('../index.js');
+    const tenant = { orgId: 'org-1', userId: 'owner', credentialScope: 'user' as const };
+    const lookup = vi.fn(async () => tenant);
+    const memoryResolve = vi.fn(() => undefined);
+    getDynamicMemoryMock.mockReturnValue(memoryResolve);
+    vi.mocked(getDynamicModel).mockClear();
+    vi.mocked(getGoalJudgeModel).mockClear();
+    setCredentialStoreProvider(() => undefined, lookup);
+    try {
+      await createMastraCodeAgentController();
+      const agentConfig = agentConstructorMock.mock.calls[0]![0];
+      const memory = controllerConstructorMock.mock.calls[0]![0].memory;
+      for (const [callback, resolve] of [
+        [agentConfig.model, getDynamicModel],
+        [agentConfig.goal.judge, getGoalJudgeModel],
+        [memory, memoryResolve],
+      ]) {
+        const requestContext = new RequestContext();
+        await callback({ requestContext });
+        expect(resolveTenantFromRequestContext(requestContext)).toEqual(tenant);
+        expect(resolve).toHaveBeenCalledOnce();
+        lookup.mockRejectedValueOnce(new Error('policy unavailable'));
+        await expect(callback({ requestContext })).rejects.toThrow('policy unavailable');
+        expect(resolveTenantFromRequestContext(requestContext)).toBeUndefined();
+        expect(resolve).toHaveBeenCalledOnce();
+      }
+      expect(lookup).toHaveBeenCalledTimes(6);
+    } finally {
+      setCredentialStoreProvider(undefined);
+    }
+  });
+
+  it('skips the host thinking default when the session picked its own level', async () => {
+    const { getDynamicModel } = await import('../agents/model.js');
+    const { createMastraCodeAgentController } = await import('../index.js');
+    const resolveDefaultThinkingLevel = vi.fn(async () => 'high' as const);
+    vi.mocked(getDynamicModel).mockClear();
+    await createMastraCodeAgentController({ resolveDefaultThinkingLevel });
+    const agentConfig = agentConstructorMock.mock.calls.at(-1)![0];
+
+    const withSessionLevel = new RequestContext();
+    withSessionLevel.set('controller', { state: { thinkingLevel: 'low' } });
+    await agentConfig.model({ requestContext: withSessionLevel });
+    expect(resolveDefaultThinkingLevel).not.toHaveBeenCalled();
+    expect(vi.mocked(getDynamicModel).mock.calls.at(-1)![2]).toMatchObject({ defaultThinkingLevel: undefined });
+
+    await agentConfig.model({ requestContext: new RequestContext() });
+    expect(resolveDefaultThinkingLevel).toHaveBeenCalledOnce();
+    expect(vi.mocked(getDynamicModel).mock.calls.at(-1)![2]).toMatchObject({ defaultThinkingLevel: 'high' });
+  });
 
   it.each([
     ['durable', createDurableAgentMock, durableAgentMock],
@@ -692,7 +750,8 @@ describe('createMastraCode', () => {
         }
       | undefined;
     expect(agentControllerConfig?.gateways?.[0]?.id).toBe('amazon-bedrock');
-    expect(agentControllerConfig?.gateways?.[1]).toBe(mastraCodeGatewayMock);
+    expect(agentControllerConfig?.gateways?.[1]?.id).toBe('github-copilot');
+    expect(agentControllerConfig?.gateways?.[2]).toBe(mastraCodeGatewayMock);
     expect(agentControllerConfig?.subagents).toEqual([subagent]);
   }, 30_000);
 
@@ -770,6 +829,38 @@ describe('createMastraCode', () => {
       { ...definition, allowedControllerTools: ['task_check'] },
     ]);
     expect(definition.allowedControllerTools).toEqual(['task_write', 'task_check']);
+  });
+
+  it('forwards disableBuiltinTools to the agent controller', async () => {
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode({ disableBuiltinTools: ['submit_plan'] });
+    expect(controllerConstructorMock.mock.calls[0]![0].disableBuiltinTools).toEqual(['submit_plan']);
+  });
+
+  it('removes disabled task tools from the task signal provider', async () => {
+    const { TaskSignalProvider } = await import('@mastra/core/signals');
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode({ disableBuiltinTools: ['task_write', 'task_check'] });
+    const codeAgentConfig = agentConstructorMock.mock.calls
+      .map(call => call?.[0] as { id?: string; signals?: unknown[] } | undefined)
+      .find(config => config?.id === 'code-agent');
+    const taskProvider = codeAgentConfig?.signals?.find(provider => provider instanceof TaskSignalProvider) as
+      | { getTools: () => Record<string, unknown> }
+      | undefined;
+    expect(Object.keys(taskProvider!.getTools()).sort()).toEqual(['task_complete', 'task_update']);
+  });
+
+  it('registers a plan mode that does not ask for submit_plan when it is disabled', async () => {
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode({ disableBuiltinTools: ['submit_plan'] });
+    const modes = controllerConstructorMock.mock.calls[0]![0].modes as { id: string; instructions?: string }[];
+    expect(modes.find(mode => mode.id === 'plan')?.instructions).not.toContain('submit_plan');
+  });
+
+  it('does not set disableBuiltinTools on the agent controller by default', async () => {
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode();
+    expect(controllerConstructorMock.mock.calls[0]![0]).not.toHaveProperty('disableBuiltinTools');
   });
 
   it('filters disabled workspace tools from native subagent allowlists', async () => {
@@ -1730,6 +1821,17 @@ describe('createMastraCode', () => {
     expect(resolveOutputProcessors().map(processor => processor.id)).toEqual(['cyber-refusal-handler']);
   });
 
+  it('appends embedding output processors after the built-in output processors', async () => {
+    const { createMastraCode } = await import('../index.js');
+    const customProcessor = { id: 'embedding-stamper', processOutputStep: vi.fn() };
+
+    await createMastraCode({ outputProcessors: () => [customProcessor], disablePlugins: true });
+
+    const processors = resolveOutputProcessors();
+    expect(processors.map(processor => processor.id)).toEqual(['cyber-refusal-handler', 'embedding-stamper']);
+    expect(processors[1]).toBe(customProcessor);
+  });
+
   it('resolves request-scoped input processors before mandatory built-ins', async () => {
     const { createMastraCode } = await import('../index.js');
     const customProcessor = { id: 'request-scoped-reconciler', processInputStep: vi.fn() };
@@ -2104,7 +2206,7 @@ describe('createMastraCode', () => {
     const prepareWakeRequestContext = vi.fn();
     const { createMastraCode } = await import('../index.js');
     await createMastraCode({ prepareWakeRequestContext });
-    controllerGetSessionByResourceMock.mockResolvedValue(undefined);
+    controllerGetSessionMock.mockResolvedValue(undefined);
     const decide = agentConstructorMock.mock.calls
       .map(call => call[0] as Record<string, any>)
       .find(config => config.notifications)?.notifications?.deliveryPolicy?.decide;
@@ -2121,12 +2223,12 @@ describe('createMastraCode', () => {
   async function decideDelivery(options: Record<string, unknown>, { ownedHere }: { ownedHere: boolean }) {
     const { createMastraCode } = await import('../index.js');
     const mastraCode = await createMastraCode(options);
-    if (!ownedHere) controllerGetSessionByResourceMock.mockResolvedValue(undefined);
+    if (!ownedHere) controllerGetSessionMock.mockResolvedValue(undefined);
     const decide = agentConstructorMock.mock.calls
       .map(call => call[0] as Record<string, any>)
       .find(config => config.notifications)?.notifications?.deliveryPolicy?.decide;
     const decision = await decide({
-      record: { priority: 'high', source: 'sentinel', resourceId: 'some-resource', threadId: 'some-thread' },
+      record: { priority: 'high', source: 'sentinel', resourceId: 'project-resource', threadId: 'some-thread' },
       threadState: 'idle',
       now: new Date('2026-10-01T00:00:00.000Z'),
     });
@@ -2156,6 +2258,42 @@ describe('createMastraCode', () => {
         'hold',
       );
     }
+  });
+
+  it("holds another project's thread on a shared resource, and runs it as that project's session once one is live here", async () => {
+    const prepareWakeRequestContext = vi.fn();
+    const { createMastraCode } = await import('../index.js');
+    const mastraCode = await createMastraCode({ prepareWakeRequestContext, unixSocketPubSub: false });
+    const main = createdSessionMock;
+    main.getThreadScope = () => ({ projectPath: '/repo/main' });
+    controllerThreadMetadataMock = { projectPath: '/repo/feature' };
+    const decide = agentConstructorMock.mock.calls
+      .map(call => call[0] as Record<string, any>)
+      .find(config => config.notifications)?.notifications?.deliveryPolicy?.decide;
+    const input = {
+      record: { priority: 'high', source: 'sentinel', resourceId: 'project-resource', threadId: 'feature-thread' },
+      threadState: 'idle',
+      now: new Date('2026-10-01T00:00:00.000Z'),
+    };
+
+    const foreign = await decide(input);
+    expect(foreign).toMatchObject({ action: 'deliver', hold: true });
+    expect(foreign.streamOptions).toBeUndefined();
+    expect(prepareWakeRequestContext).not.toHaveBeenCalled();
+
+    // A second live session in this process, for the feature project on the same resource.
+    const feature = {
+      ...main,
+      identity: { ...main.identity, getId: () => 'session-2' },
+      getThreadScope: () => ({ projectPath: '/repo/feature' }),
+    };
+    const trackLiveSession = controllerOnSessionCreatedMock.mock.calls.find(call => call[1] === undefined)?.[0];
+    trackLiveSession(feature);
+
+    const owned = await decide(input);
+    expect(owned.streamOptions.requestContext.get('controller').session.id).toBe('session-2');
+    expect(prepareWakeRequestContext).toHaveBeenCalledTimes(1);
+    await mastraCode.stopNotificationDispatch();
   });
 
   it('configures GitHubSignals as a signal provider for local PR subscriptions', async () => {

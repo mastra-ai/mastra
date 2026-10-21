@@ -42,6 +42,7 @@ export {
   MASTRA_CLIENT_TYPE_HEADER,
   MASTRA_IS_STUDIO_KEY,
   MASTRA_STUDIO_CLIENT_TYPE,
+  RESERVED_REQUEST_CONTEXT_KEYS,
   isReservedRequestContextKey,
   isStudioClientTypeHeader,
 } from '../constants';
@@ -399,6 +400,9 @@ export function normalizeQueryParams(rawQuery: Record<string, unknown>): Record<
  * @template TResponse - The type of the response object
  */
 export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServerBase<TApp> {
+  /** Request bodies cannot set agent scopes: handlers strip `scopes`, and `mastra__scopes` is a reserved key. */
+  readonly reservesAgentScopes = true;
+
   protected mastra: Mastra;
   protected bodyLimitOptions?: BodyLimitOptions;
   protected tools?: ToolsInput;
@@ -1286,7 +1290,11 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     // Custom routes are served at root (/), not under the API prefix — add per-path servers override.
     const allCustomRoutes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes;
     if (allCustomRoutes && allCustomRoutes.length > 0) {
-      const customPaths = convertCustomRoutesToOpenAPIPaths(allCustomRoutes);
+      const componentSchemas = openApiSpec.components?.schemas ?? Object.create(null);
+      const customPaths = convertCustomRoutesToOpenAPIPaths(allCustomRoutes, componentSchemas);
+      if (Object.keys(componentSchemas).length > 0) {
+        openApiSpec.components = { ...openApiSpec.components, schemas: componentSchemas };
+      }
       if (prefix) {
         for (const pathKey of Object.keys(customPaths)) {
           if (!customPaths[pathKey].servers) {

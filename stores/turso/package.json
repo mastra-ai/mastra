@@ -1,6 +1,6 @@
 {
   "name": "@mastra/turso",
-  "version": "0.1.15-alpha.0",
+  "version": "0.1.17-alpha.4",
   "description": "Turso Database storage provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -23,7 +23,7 @@
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "tsdown --watch --logLevel silent --config tsdown.config.ts",
     "test": "vitest run",
-    "lint": "eslint .",
+    "lint": "oxlint --type-aware .",
     "typecheck": "tsc --noEmit"
   },
   "license": "Apache-2.0",
@@ -40,7 +40,6 @@
     "@types/node": "22.20.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.7.0",
     "tsdown": "0.22.9",
     "tsx": "catalog:",
     "typescript": "catalog:",

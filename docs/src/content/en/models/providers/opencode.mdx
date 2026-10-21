@@ -7,7 +7,7 @@ description: "Browse OpenCode model IDs, capabilities, context windows, and pric
 
 # <img src="https://models.dev/logos/opencode.svg" alt="OpenCode logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenCode
 
-Access 120 OpenCode models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
+Access 129 OpenCode models through Mastra's model router. Authentication is handled automatically using the `OPENCODE_API_KEY` environment variable.
 
 Learn more in the [OpenCode documentation](https://opencode.ai/v2/docs/console/models/).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "opencode/big-pickle"
+  model: "opencode/beam-free"
 });
 
 // Generate a response
@@ -45,6 +45,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 <ProviderModelsTable
   models={[
+  {
+    "model": "opencode/beam-free",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
+  },
   {
     "model": "opencode/big-pickle",
     "imageInput": false,
@@ -286,14 +298,14 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.2
   },
   {
-    "model": "opencode/exo-free",
+    "model": "opencode/deepseek-v4.1-flash-free",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 131072,
+    "contextWindow": 200000,
+    "maxOutput": 32000,
     "inputCost": null,
     "outputCost": null
   },
@@ -382,6 +394,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 7.5
   },
   {
+    "model": "opencode/gemini-4-argon",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 2,
+    "outputCost": 10
+  },
+  {
     "model": "opencode/glm-5",
     "imageInput": false,
     "audioInput": false,
@@ -440,6 +464,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 0.15,
     "outputCost": 0.5
+  },
+  {
+    "model": "opencode/glm-5.3-flash-free",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 200000,
+    "maxOutput": 32000,
+    "inputCost": null,
+    "outputCost": null
   },
   {
     "model": "opencode/gpt-5",
@@ -826,30 +862,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 15
   },
   {
-    "model": "opencode/ling-3.0-flash-fin-free",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 32768,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "opencode/ling-3.1-flash-free",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 32768,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
     "model": "opencode/longcat-2.5-preview-free",
     "imageInput": true,
     "audioInput": false,
@@ -910,6 +922,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.2
   },
   {
+    "model": "opencode/minimax-m3.1-flash-free",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 512000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
     "model": "opencode/mistral-large-4",
     "imageInput": true,
     "audioInput": false,
@@ -946,7 +970,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 4.25
   },
   {
-    "model": "opencode/muse-spark-1.3-contributor-free",
+    "model": "opencode/muse-wonder-1.0",
     "imageInput": true,
     "audioInput": true,
     "videoInput": true,
@@ -954,8 +978,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 131072,
-    "inputCost": null,
-    "outputCost": null
+    "inputCost": 4,
+    "outputCost": 20
   },
   {
     "model": "opencode/nemotron-3-ultra-free",
@@ -978,6 +1002,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 262144,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "opencode/nemotron-3.5-super-vl-free",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
     "inputCost": null,
     "outputCost": null
   },
@@ -1028,30 +1064,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 2,
     "outputCost": 6
-  },
-  {
-    "model": "opencode/space-bunny-free",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 524288,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "opencode/step-5-preview-free",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 65536,
-    "inputCost": null,
-    "outputCost": null
   }
 ]}
 />
@@ -1067,8 +1079,8 @@ const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
   model: {
-    url: "https://opencode.ai/inference/v1",
-    id: "opencode/big-pickle",
+    url: "https://opencode.ai/inference/openai/v1",
+    id: "opencode/beam-free",
     apiKey: process.env.OPENCODE_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -1087,7 +1099,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "opencode/x-preview-f-free"
-      : "opencode/big-pickle";
+      : "opencode/beam-free";
   }
 });
 ```

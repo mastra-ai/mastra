@@ -312,6 +312,8 @@ export interface StepStartPayload {
   messageId?: string;
   /** Epoch milliseconds sampled immediately before the model provider call. Absent when no provider call occurred. */
   startedAt?: number;
+  modelId?: string;
+  provider?: string;
   request: {
     body?: string;
     [key: string]: unknown;
@@ -829,6 +831,8 @@ interface ToolCallApprovalPayload {
   resumeSchema: string;
   /** Epoch ms when approval was requested; matches the tool part's `updatedAt`. */
   updatedAt?: number;
+  /** Token usage of the model step that produced this tool call. */
+  usage?: LanguageModelUsage;
 }
 
 interface ToolCallSuspendedPayload {
@@ -837,6 +841,8 @@ interface ToolCallSuspendedPayload {
   suspendPayload: any;
   args: Record<string, any>;
   resumeSchema: string;
+  /** Token usage of the model step that produced this tool call. */
+  usage?: LanguageModelUsage;
 }
 
 interface ToolCallResumedPayload {
@@ -1186,6 +1192,11 @@ export type MastraOnFinishCallbackArgs<OUTPUT = undefined> = LLMStepResult<OUTPU
   runId?: string;
   /** Model messages the run added to the conversation (the response messages). */
   messages?: ModelMessage[];
+  /**
+   * @internal Cumulative usage already recorded by earlier suspended legs of this run, so the
+   * MODEL_GENERATION span of a resumed leg records only its own share.
+   */
+  generationReportedUsage?: LanguageModelUsage;
 };
 
 /**

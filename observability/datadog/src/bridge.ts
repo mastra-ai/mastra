@@ -153,6 +153,16 @@ export interface DatadogBridgeConfig extends BaseExporterConfig {
    * LLM Observability tags instead of being nested in annotations.metadata.
    */
   requestContextKeys?: string[];
+
+  /**
+   * How long `flush()` waits, in milliseconds, after handing data to dd-trace.
+   * dd-trace sends LLM Observability spans and evaluations from a background
+   * writer and offers no way to await that request, so the wait keeps a process
+   * that exits right after `flush()` from cutting the send off. The wait only
+   * happens when something was sent since the last flush. Set to 0 to disable.
+   * Defaults to 2000.
+   */
+  flushGraceMs?: number;
 }
 
 /**
@@ -171,9 +181,15 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
   private startLinkKeys = new WeakMap<object, Set<string>>();
   private traceContext = new Map<string, TraceContext>();
   private openSpanCounts = new Map<string, number>();
+  private flushGraceMs: number;
+  /** True when spans or evaluations were handed to dd-trace since the last flush() */
+  private pendingSend = false;
+  /** Grace wait in progress, shared by flush() calls that overlap it */
+  private graceWait: Promise<void> | null = null;
 
   constructor(config: DatadogBridgeConfig = {}) {
     super(config);
+    this.flushGraceMs = config.flushGraceMs ?? 2000;
 
     const mlApp = config.mlApp ?? process.env.DD_LLMOBS_ML_APP;
     const apiKey = config.apiKey ?? process.env.DD_API_KEY;
@@ -183,7 +199,7 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
     // Default to false for the bridge — assume a local Datadog Agent is
     // present (required for the APM auto-instrumentation the bridge enables)
     const envAgentless = process.env.DD_LLMOBS_AGENTLESS_ENABLED?.toLowerCase();
-    const agentless = config.agentless ?? (envAgentless === 'true' || envAgentless === '1' ? true : false);
+    const agentless = config.agentless ?? (envAgentless === 'true' || envAgentless === '1');
     if (!mlApp) {
       this.setDisabled(`Missing required mlApp. Set DD_LLMOBS_ML_APP environment variable or pass mlApp in config.`);
       this.config = config as any;
@@ -329,6 +345,7 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
     }
 
     try {
+      this.pendingSend = true;
       tracer.llmobs.submitEvaluation(
         { traceId: score.traceId, spanId: toDatadogSpanId(score.spanId) },
         {
@@ -513,6 +530,7 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
 
     try {
       if (typeof ddSpan.finish === 'function') {
+        this.pendingSend = true;
         ddSpan.finish(endTime.getTime());
       }
     } catch (error) {
@@ -689,6 +707,8 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
       }
     }
 
+    await this.waitForBackgroundSend();
+
     try {
       await flushApmExporter();
       this.logger.debug('Datadog APM exporter flushed');
@@ -697,11 +717,31 @@ export class DatadogBridge extends BaseExporter implements ObservabilityBridge {
     }
   }
 
+  /**
+   * `llmobs.flush()` returns before the background writer's HTTP request
+   * completes and dd-trace gives nothing to await, so wait a bounded time
+   * instead. Starts one wait per batch of new data, so the repeated flushes
+   * during shutdown don't stack. A flush that overlaps a running wait joins
+   * it, so no caller resolves before the data it produced had its wait.
+   */
+  private async waitForBackgroundSend(): Promise<void> {
+    if (!(this.flushGraceMs > 0) || !Number.isFinite(this.flushGraceMs)) return;
+    if (this.pendingSend) {
+      this.pendingSend = false;
+      const wait: Promise<void> = new Promise<void>(resolve => setTimeout(resolve, this.flushGraceMs)).finally(() => {
+        if (this.graceWait === wait) this.graceWait = null;
+      });
+      this.graceWait = wait;
+    }
+    await this.graceWait;
+  }
+
   async shutdown(): Promise<void> {
     for (const [spanId, ddSpan] of this.ddSpanMap) {
       this.logger.warn(`[DatadogBridge] Force-finishing APM span that was not properly closed [id=${spanId}]`);
       try {
         if (typeof ddSpan.finish === 'function') {
+          this.pendingSend = true;
           ddSpan.finish();
         }
       } catch {

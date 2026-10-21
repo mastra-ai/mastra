@@ -14,6 +14,8 @@ export interface ComparisonMetric {
   /** Difference against the baseline. Null on the baseline, on descriptive lines, or when either side is unknown. */
   delta: number | null;
   formatDelta?: (absDelta: number) => string;
+  /** Numeric value of this line. With a delta, it yields the baseline so the trend reads as a percentage. */
+  rawValue?: number | null;
   higherIsBetter?: boolean;
   /** Renders the value larger and bolder, for the figures users compare first. */
   emphasis?: boolean;
@@ -45,11 +47,11 @@ export function ComparisonMetricList({ metrics }: { metrics: ComparisonMetric[] 
   return (
     <dl
       className={cn(
-        'grid auto-rows-6 items-center gap-x-4 gap-y-1',
+        'grid auto-rows-[minmax(1.5rem,auto)] items-center gap-x-4 gap-y-1',
         hasTrend ? 'grid-cols-[minmax(0,1fr)_auto_auto]' : 'grid-cols-[minmax(0,1fr)_auto]',
       )}
     >
-      {metrics.map(({ id, icon, label, value, delta, formatDelta, higherIsBetter, emphasis }) => (
+      {metrics.map(({ id, icon, label, value, delta, formatDelta, rawValue, higherIsBetter, emphasis }) => (
         <Fragment key={id}>
           <dt className="flex min-w-0 items-center gap-1.5 text-body-sm text-muted-foreground [&>svg]:size-3.5 [&>svg]:shrink-0">
             {icon}
@@ -65,7 +67,14 @@ export function ComparisonMetricList({ metrics }: { metrics: ComparisonMetric[] 
           </dd>
           {hasTrend && (
             <dd className="flex justify-end text-body-sm">
-              {delta != null && <ScoreDelta delta={delta} format={formatDelta} higherIsBetter={higherIsBetter} />}
+              {delta != null && (
+                <ScoreDelta
+                  delta={delta}
+                  format={formatDelta}
+                  higherIsBetter={higherIsBetter}
+                  baseline={rawValue != null ? rawValue - delta : undefined}
+                />
+              )}
             </dd>
           )}
         </Fragment>

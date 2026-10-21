@@ -9,10 +9,10 @@ import { queryKeys } from '../../../../../api/keys';
 import type { AvailableModelOption } from '../../../../../hooks/useAvailableModels';
 import { Composer } from '../Composer';
 import { Transcript } from '../Transcript';
-import { OverlayTestProviders, useOverlayControllerHandlers } from './overlay-test-utils';
+import { OVERLAY_FACTORY_ID, OverlayTestProviders, useOverlayControllerHandlers } from './overlay-test-utils';
 
-const SESSION_API = `${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId`;
-const THINKING_CONFIG_API = `${TEST_BASE_URL}/web/config/thinking`;
+const SESSION_API = `${TEST_BASE_URL}/api/agent-controller/code/sessions/:sessionId`;
+const FACTORY_API = `${TEST_BASE_URL}/web/factory/projects/${OVERLAY_FACTORY_ID}`;
 
 function useThinkingHandlers({
   initialThinkingLevel = 'medium',
@@ -29,22 +29,17 @@ function useThinkingHandlers({
     http.get(SESSION_API, ({ params }) =>
       HttpResponse.json({
         controllerId: 'code',
-        resourceId: params.resourceId,
+        sessionId: params.sessionId,
         modeId: 'build',
         modelId,
         threadId: 'thread-test',
         settings: { yolo: false, thinkingLevel, notifications: 'bell', smartEditing: true },
       }),
     ),
-    http.get(THINKING_CONFIG_API, () =>
+    http.get(FACTORY_API, () =>
       failThinkingConfig
         ? new HttpResponse(null, { status: 503 })
-        : HttpResponse.json({
-            levels: ['off', 'low', 'medium', 'high', 'xhigh', 'max'],
-            globalDefault: 'low',
-            modeDefaults: { build: 'medium' },
-            modes: ['build'],
-          }),
+        : HttpResponse.json({ project: { id: OVERLAY_FACTORY_ID, name: 'Overlay', defaultThinkingLevel: 'low' } }),
     ),
     http.put(`${SESSION_API}/state`, async ({ request }) => {
       const body: unknown = await request.json();
@@ -71,7 +66,7 @@ function useThinkingHandlers({
 beforeEach(useOverlayControllerHandlers);
 
 describe('the /think command', () => {
-  it('sets, reports, and clears the session thinking override', async () => {
+  it('given a session override, when /think reports and clears it, then the fallback is the Factory default', async () => {
     const stateUpdates = useThinkingHandlers();
     const user = userEvent.setup();
     const { client } = renderWithProviders(
@@ -88,6 +83,7 @@ describe('the /think command', () => {
 
     expect(await screen.findByRole('region', { name: '/think options' })).toBeInTheDocument();
     expect(await screen.findByRole('option', { name: /^Medium/ })).toHaveAttribute('aria-current', 'true');
+    expect(screen.getByRole('option', { name: /^Default/ })).toHaveTextContent('Factory default');
     await user.click(screen.getByRole('option', { name: 'High' }));
 
     await waitForMutationsIdle(client);
@@ -99,7 +95,7 @@ describe('the /think command', () => {
     await user.keyboard('{Enter}');
 
     expect(
-      await screen.findByText('Thinking level: high (session override). Default: medium (build mode default).'),
+      await screen.findByText('Thinking level: high (session override). Default: low (Factory default).'),
     ).toBeInTheDocument();
 
     await user.type(input, '/think');
@@ -109,7 +105,7 @@ describe('the /think command', () => {
 
     await waitForMutationsIdle(client);
     expect(stateUpdates).toContainEqual({ state: { thinkingLevel: null } });
-    expect(await screen.findByText('Thinking level set to default: medium (build mode default).')).toBeInTheDocument();
+    expect(await screen.findByText('Thinking level set to default: low (Factory default).')).toBeInTheDocument();
     expect(input).toHaveValue('');
   });
 
@@ -156,7 +152,18 @@ describe('the /think command', () => {
       );
       const input = await screen.findByRole<HTMLTextAreaElement>('textbox', { name: 'Message' });
       await waitFor(() => expect(input).toBeEnabled());
-      await waitFor(() => expect(client.getQueryData(queryKeys.availableModels())).toEqual([proModel]));
+      await waitFor(() =>
+        expect(
+          client.getQueryData(
+            queryKeys.availableModels({
+              factoryProjectId: OVERLAY_FACTORY_ID,
+              sessionId: 'session-overlay',
+              resourceId: 'user-overlay',
+              threadId: 'thread-test',
+            }),
+          ),
+        ).toEqual({ models: [proModel] }),
+      );
       return input;
     }
 

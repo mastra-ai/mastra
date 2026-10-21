@@ -61,6 +61,13 @@ export type JiraApiClientConfig = JiraApiClientBaseConfig &
     | {
         /** Bearer token used when the base URL is a Mastra Platform connection proxy. */
         accessToken: string;
+        /**
+         * Mastra project id sent as `x-mastra-project-id` so the platform can
+         * attribute proxied Jira activity to the project. Falls back to the
+         * `MASTRA_PROJECT_ID` environment variable. The platform strips the
+         * header before forwarding the request to Atlassian.
+         */
+        projectId?: string;
         email?: never;
         apiToken?: never;
       }
@@ -164,6 +171,7 @@ export interface JiraTransition {
 export class JiraApiClient {
   readonly #baseUrl: string;
   readonly #authHeader: string;
+  readonly #projectId: string | null;
   readonly #fetch: typeof fetch;
 
   constructor(config: JiraApiClientConfig) {
@@ -186,6 +194,7 @@ export class JiraApiClient {
         throw new Error('JiraApiClient is missing required config: accessToken.');
       }
       this.#authHeader = `Bearer ${config.accessToken}`;
+      this.#projectId = (config.projectId ?? process.env.MASTRA_PROJECT_ID)?.trim() || null;
     } else {
       const missing = (['email', 'apiToken'] as const).filter(key => !config[key]);
       if (missing.length > 0) {
@@ -197,6 +206,8 @@ export class JiraApiClient {
         throw new Error('JiraApiClient baseUrl must use https when Basic credentials are configured.');
       }
       this.#authHeader = `Basic ${Buffer.from(`${config.email}:${config.apiToken}`).toString('base64')}`;
+      // Direct Atlassian mode: never send Mastra platform headers to Jira itself.
+      this.#projectId = null;
     }
     this.#baseUrl = config.baseUrl.replace(/\/+$/, '');
     this.#fetch = config.fetchImpl ?? globalThis.fetch;
@@ -223,6 +234,9 @@ export class JiraApiClient {
       headers: {
         authorization: this.#authHeader,
         accept: 'application/json',
+        // Project attribution for the Mastra platform proxy; stripped by the
+        // platform before the request reaches Atlassian.
+        ...(this.#projectId ? { 'x-mastra-project-id': this.#projectId } : {}),
         ...(hasBody ? { 'content-type': 'application/json' } : {}),
       },
       ...(hasBody ? { body: JSON.stringify(options.body) } : {}),

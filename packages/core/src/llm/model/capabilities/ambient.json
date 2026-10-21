@@ -8,8 +8,10 @@
   ],
   "temperature": [
     "ambient/large",
+    "ambient/small",
     "deepseek/deepseek-v4-flash",
     "deepseek/deepseek-v4-flash-0731",
+    "minimax/minimax-m3",
     "moonshotai/kimi-k2.6",
     "moonshotai/kimi-k2.7-code",
     "qwen/qwen3-30b-a3b-instruct-2507",
@@ -17,6 +19,7 @@
     "qwen/qwen3.6-35b-a3b",
     "qwen/qwen3.8-27b",
     "stepfun/step-3.7-flash",
+    "unsloth/qwen3.8-27b-gguf",
     "xiaomi/mimo-v2.5",
     "z-ai/glm-5.2",
     "zai-org/GLM-5.1-FP8",
@@ -26,6 +29,7 @@
     "ambient/large",
     "deepseek/deepseek-v4-flash",
     "deepseek/deepseek-v4-flash-0731",
+    "minimax/minimax-m3",
     "moonshotai/kimi-k2.6",
     "moonshotai/kimi-k2.7-code",
     "qwen/qwen3-30b-a3b-instruct-2507",
@@ -39,6 +43,37 @@
     "zai-org/GLM-5.2-FP8"
   ],
   "reasoning": {
+    "minimax/minimax-m3": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "ambient/large": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "zai-org/GLM-5.2-FP8": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "qwen/qwen3.8-27b": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "qwen/qwen3.6-27b": [
+      {
+        "type": "toggle"
+      }
+    ],
     "deepseek/deepseek-v4-flash-0731": [
       {
         "type": "toggle"
@@ -57,22 +92,10 @@
         "values": ["high", "max"]
       }
     ],
-    "z-ai/glm-5.2": [
+    "stepfun/step-3.7-flash": [
       {
         "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "ambient/large": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "zai-org/GLM-5.2-FP8": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "xiaomi/mimo-v2.5": [
@@ -80,24 +103,10 @@
         "type": "toggle"
       }
     ],
-    "stepfun/step-3.7-flash": [
+    "z-ai/glm-5.2": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "qwen/qwen3.8-27b": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      }
-    ],
-    "qwen/qwen3.6-27b": [
-      {
-        "type": "toggle"
+        "values": ["high", "max"]
       }
     ]
   }

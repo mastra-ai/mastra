@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   BookOpen,
   Bot,
+  Box,
   Brain,
   Building2,
   Cable,
@@ -19,7 +20,8 @@ import { useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
 import { useCloseSettings } from '../hooks/useCloseSettings';
 import { useSettingsSection } from '../hooks/useSettingsSection';
-import { SETTINGS_SECTION_LABELS, settingsSectionPath, type SettingsSection } from '../settingsSections';
+import { SETTINGS_SECTION_LABELS, settingsSectionPath } from '../settingsSections';
+import type { SettingsSection } from '../settingsSections';
 
 type SettingsNavItem = {
   id: SettingsSection;
@@ -35,44 +37,46 @@ type SettingsNavGroup = {
   items: SettingsNavItem[];
 };
 
+export const PERSONAL_SETTINGS_GROUP = {
+  id: 'personal',
+  label: 'Your settings',
+  items: [
+    {
+      id: 'account',
+      label: SETTINGS_SECTION_LABELS.account,
+      icon: CircleUserRound,
+      searchText: 'my account profile identity email authentication session log out sign out user',
+    },
+    {
+      id: 'preferences',
+      label: SETTINGS_SECTION_LABELS.preferences,
+      icon: Palette,
+      searchText: 'preferences general theme appearance color scheme completion sound',
+    },
+    {
+      id: 'personal-models',
+      label: SETTINGS_SECTION_LABELS['personal-models'],
+      icon: Bot,
+      searchText: 'your personal models default model api keys providers credentials sign in oauth',
+    },
+    {
+      id: 'memory',
+      label: SETTINGS_SECTION_LABELS.memory,
+      icon: Brain,
+      searchText:
+        'your personal memory observational recall observer reflector thresholds attachments summarize context',
+    },
+    {
+      id: 'connections',
+      label: SETTINGS_SECTION_LABELS.connections,
+      icon: Cable,
+      searchText: 'your personal connections connected accounts slack communication integrations',
+    },
+  ],
+} satisfies SettingsNavGroup;
+
 const SETTINGS_GROUPS: SettingsNavGroup[] = [
-  {
-    id: 'personal',
-    label: 'Your settings',
-    items: [
-      {
-        id: 'account',
-        label: SETTINGS_SECTION_LABELS.account,
-        icon: CircleUserRound,
-        searchText: 'my account profile identity email authentication session log out sign out user',
-      },
-      {
-        id: 'preferences',
-        label: SETTINGS_SECTION_LABELS.preferences,
-        icon: Palette,
-        searchText: 'preferences general theme appearance color scheme completion sound',
-      },
-      {
-        id: 'personal-models',
-        label: SETTINGS_SECTION_LABELS['personal-models'],
-        icon: Bot,
-        searchText: 'your personal models default model api keys providers credentials sign in oauth',
-      },
-      {
-        id: 'memory',
-        label: SETTINGS_SECTION_LABELS.memory,
-        icon: Brain,
-        searchText:
-          'your personal memory observational recall observer reflector thresholds attachments summarize context',
-      },
-      {
-        id: 'connections',
-        label: SETTINGS_SECTION_LABELS.connections,
-        icon: Cable,
-        searchText: 'your personal connections connected accounts slack communication integrations',
-      },
-    ],
-  },
+  PERSONAL_SETTINGS_GROUP,
   {
     id: 'factory',
     label: 'Factory settings',
@@ -108,6 +112,12 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         label: SETTINGS_SECTION_LABELS.repositories,
         icon: GitBranch,
         searchText: 'repositories source control git branches remotes code worktrees sandbox setup github',
+      },
+      {
+        id: 'environment',
+        label: SETTINGS_SECTION_LABELS.environment,
+        icon: Box,
+        searchText: 'environment sandbox resources cpu memory workdir repositories order setup teardown build triggers',
       },
       {
         id: 'intake',

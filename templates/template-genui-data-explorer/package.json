@@ -27,12 +27,12 @@
     "start:ui": "node --env-file-if-exists=.env scripts/next.ts start"
   },
   "dependencies": {
-    "@ag-ui/client": "1.0.1",
-    "@ag-ui/core": "1.0.1",
+    "@ag-ui/client": "1.0.2",
+    "@ag-ui/core": "1.0.2",
     "@ag-ui/mastra": "1.1.6",
-    "@copilotkit/react-core": "1.77.0",
-    "@copilotkit/react-ui": "1.77.0",
-    "@copilotkit/runtime": "1.77.0",
+    "@copilotkit/react-core": "1.79.1",
+    "@copilotkit/react-ui": "1.79.1",
+    "@copilotkit/runtime": "1.79.1",
     "@mastra/client-js": "latest",
     "@mastra/core": "latest",
     "@mastra/libsql": "latest",
@@ -43,7 +43,7 @@
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "rxjs": "7.8.1",
-    "zod": "4.6.5"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@mastra/evals": "latest",
@@ -61,7 +61,7 @@
     "@whatwg-node/fetch@<0.12.1": "0.12.1",
     "katex@<0.18.2": "0.18.2",
     "tinypool@<2.1.2": "2.1.2",
-    "undici@<6.29.0": "6.29.0"
+    "undici@<6.29.1": "6.29.1"
   },
   "engines": {
     "node": ">=24.15.0"

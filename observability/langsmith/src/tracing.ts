@@ -85,6 +85,8 @@ export class LangSmithExporter extends TrackingExporter<
    * size exceeds `#runIdCacheMaxEntries` so the cache cannot grow without bound.
    */
   #langsmithRunIdBySpanId = new Map<string, string>();
+  /** Manual-mode client flushes, chained so an overlapping flush waits for the earlier upload */
+  #manualFlushChain: Promise<void> = Promise.resolve();
   #runIdCacheMaxEntries: number;
 
   constructor(config: LangSmithExporterConfig = {}) {
@@ -130,19 +132,44 @@ export class LangSmithExporter extends TrackingExporter<
   }
 
   /**
+   * Send everything the LangSmith Client has queued. In manual flush mode only
+   * `flush()` drains the queue (`awaitPendingTraceBatches()` just warns there);
+   * otherwise `awaitPendingTraceBatches()` waits for queued and in-flight batches.
+   */
+  async #flushClient(): Promise<void> {
+    if (!this.#client) return;
+    // `manualFlushMode` is a private field in the SDK typings; fall back to our config
+    const manualFlushMode =
+      (this.#client as unknown as { manualFlushMode?: boolean }).manualFlushMode ?? this.config.manualFlushMode;
+    if (manualFlushMode) {
+      // The SDK's flush() empties its queue before uploading, so an overlapping call
+      // would find nothing to wait for. Run each flush after the previous one settles.
+      const client = this.#client;
+      const flush = this.#manualFlushChain.then(() => client.flush());
+      this.#manualFlushChain = flush.catch(() => {});
+      await flush;
+    } else {
+      await this.#client.awaitPendingTraceBatches();
+    }
+  }
+
+  /**
    * Flush pending trace batches to LangSmith.
    * The LangSmith Client internally batches API calls; this ensures
    * all queued runs are sent before the process exits or the flush
    * caller continues.
    */
   protected override async _flush(): Promise<void> {
-    if (this.#client) {
-      await this.#client.awaitPendingTraceBatches();
-    }
+    await this.#flushClient();
   }
 
+  /** Spans aborted by shutdown() were only queued on the client; send them before releasing state. */
   protected override async _postShutdown(): Promise<void> {
-    this.#langsmithRunIdBySpanId.clear();
+    try {
+      await this.#flushClient();
+    } finally {
+      this.#langsmithRunIdBySpanId.clear();
+    }
   }
 
   async onScoreEvent(event: ScoreEvent): Promise<void> {

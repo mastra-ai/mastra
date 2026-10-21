@@ -21,7 +21,7 @@
     "zai/GLM-5.2"
   ],
   "reasoning": {
-    "zai/GLM-5.2": [
+    "moonshotai/Kimi-K2.6": [
       {
         "type": "toggle"
       }
@@ -31,12 +31,13 @@
         "type": "toggle"
       }
     ],
-    "moonshotai/Kimi-K2.6": [
+    "openai/gpt-oss-120b": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
-    "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B": [
+    "zai/GLM-5.2": [
       {
         "type": "toggle"
       }
@@ -51,10 +52,9 @@
         "type": "toggle"
       }
     ],
-    "openai/gpt-oss-120b": [
+    "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B": [
       {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "type": "toggle"
       }
     ]
   }

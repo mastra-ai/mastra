@@ -78,6 +78,11 @@ export interface ChannelSessionResolveContext {
  * `thread.resourceId` — a session can only bind threads it owns. Hosts that
  * want a different session identity choose it on both ends, by pairing this
  * with the channels `resolveResourceId` option.
+ *
+ * Create the session with `threadId: thread.id` so it binds the mapped thread
+ * directly. Without it, a session scoped by tags or `projectPath` auto-selects
+ * or creates a different thread and is only switched onto the mapped one
+ * afterwards, leaving an extra empty thread behind.
  */
 export type ChannelSessionResolve = (ctx: ChannelSessionResolveContext) => Session<any> | Promise<Session<any>>;
 
@@ -243,6 +248,7 @@ export class AgentControllerChannels extends AgentChannels {
     chatThread: Thread;
     message: Message;
     defaultResourceId: string;
+    requestContext: RequestContext;
   }): string | (() => string | Promise<string>) {
     const base = super.resolveChannelResourceId(args);
     // The base returns a thunk only when a custom resolveResourceId was
@@ -472,6 +478,9 @@ export class AgentControllerChannels extends AgentChannels {
           resourceId: channelResourceId,
           id: channelResourceId,
           ownerId: controller.id,
+          // The mapped thread is authoritative: bind it at creation so a scoped
+          // session never auto-selects or creates a different thread.
+          threadId: thread.id,
           requestContext,
         });
     // A session may only bind threads it owns, and the mapped thread's owner is
@@ -485,9 +494,11 @@ export class AgentControllerChannels extends AgentChannels {
       );
     }
     // Bind the mapped thread. Guard is mandatory: `switch` aborts any active
-    // run, so never re-switch when the session is already on this thread.
+    // run, so never re-switch when the session is already on this thread. The
+    // inbound context flows in so the bind's history load resolves memory as
+    // the stamped tenant.
     if (session.thread.getId() !== thread.id) {
-      await session.thread.switch({ threadId: thread.id });
+      await session.thread.switch({ threadId: thread.id, requestContext });
     }
     await this.runSessionStartHook(session, thread, requestContext);
     return session;
@@ -497,8 +508,8 @@ export class AgentControllerChannels extends AgentChannels {
    * Only render Approve/Deny controls when the session actually arms a human
    * gate. `allow` tools auto-approve and `deny` tools auto-decline inside the
    * session run, so a card for them would offer a decision nobody is waiting
-   * on. The session is looked up in the controller's live registry and must
-   * match the run's session id; otherwise controls are rendered as a fallback.
+   * on. The session is looked up in the controller's live registry by the
+   * run's session id; when it isn't live, controls are rendered as a fallback.
    *
    * @internal
    */
@@ -507,9 +518,9 @@ export class AgentControllerChannels extends AgentChannels {
     toolName: string,
   ): Promise<boolean> {
     const ctx = requestContext?.get('controller') as AgentControllerRequestContext | undefined;
-    if (!this.controller || !ctx?.resourceId || !ctx.session?.id) return true;
-    const session = await this.controller.getSessionByResource(ctx.resourceId, ctx.scope, requestContext);
-    if (!session || session.identity.getId() !== ctx.session.id) return true;
+    if (!this.controller || !ctx?.sessionId) return true;
+    const session = await this.controller.getSession(ctx.sessionId, requestContext);
+    if (!session) return true;
     return session.resolveToolApproval(toolName) === 'ask';
   }
 

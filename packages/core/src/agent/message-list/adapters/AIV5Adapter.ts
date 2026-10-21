@@ -493,7 +493,15 @@ export class AIV5Adapter {
 
           parts.push(v5UIPart);
         } else if (part.type === 'source-document') {
-          continue;
+          const v5UIPart: AIV5Type.SourceDocumentUIPart = {
+            type: 'source-document' as const,
+            sourceId: part.sourceId,
+            mediaType: part.mediaType,
+            title: part.title,
+            ...(part.filename ? { filename: part.filename } : {}),
+          };
+          v5UIPart.providerMetadata = mergeMastraCreatedAt(part.providerMetadata, part.createdAt);
+          parts.push(v5UIPart);
         } else if (part.type === 'text') {
           const v5UIPart: AIV5Type.TextUIPart = {
             type: 'text' as const,
@@ -773,9 +781,22 @@ export class AIV5Adapter {
             source: {
               url: p.url,
               sourceType: 'url',
-              id: p.url,
+              id: p.sourceId ?? p.url,
+              ...(p.title ? { title: p.title } : {}),
               providerMetadata: p.providerMetadata,
             },
+            providerMetadata: p.providerMetadata,
+            createdAt: getMastraCreatedAt(p.providerMetadata),
+          };
+        }
+
+        if (p.type === 'source-document') {
+          return {
+            type: 'source-document' as const,
+            sourceId: p.sourceId,
+            mediaType: p.mediaType,
+            title: p.title,
+            ...(p.filename ? { filename: p.filename } : {}),
             providerMetadata: p.providerMetadata,
             createdAt: getMastraCreatedAt(p.providerMetadata),
           };

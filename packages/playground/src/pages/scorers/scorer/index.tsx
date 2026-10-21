@@ -12,7 +12,7 @@ import { toast } from '@mastra/playground-ui/utils/toast';
 import { useAgents } from '@mastra/react/hooks/agents';
 import { useScorer, useScoresByScorerId } from '@mastra/react/hooks/scores';
 import { useWorkflows } from '@mastra/react/hooks/workflows';
-import { MoreVertical, Pencil, Play } from 'lucide-react';
+import { MoreVertical, Pencil, Plus } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -30,7 +30,7 @@ const crumbs = [navCrumb('/scorers'), scorerCrumb];
 const SCORES_SORT_KEYS: readonly ScoresSortKey[] = ['date', 'score'];
 
 export default function Scorer() {
-  const { scorerId } = useParams()! as { scorerId: string };
+  const { scorerId } = useParams() as { scorerId: string };
   const [searchParams, setSearchParams] = useSearchParams();
   const scoreIdFromUrl = searchParams.get('scoreId') ?? undefined;
   const [selectedScoreId, setSelectedScoreId] = useState<string | undefined>(scoreIdFromUrl);
@@ -42,7 +42,7 @@ export default function Scorer() {
     type: 'ALL' as const,
   });
 
-  const { scorer, error: scorerError } = useScorer(scorerId!);
+  const { scorer, error: scorerError } = useScorer(scorerId);
   const columnsState = useScoresColumns();
 
   const { data: agents = {}, isLoading: isLoadingAgents, error: agentsError } = useAgents();
@@ -267,8 +267,8 @@ export default function Scorer() {
           </ActionRow.Start>
           <ActionRow.End>
             <ScoresColumnsMenu visibleColumns={columnsState.visibleColumns} toggleColumn={columnsState.toggleColumn} />
-            <Button variant="primary" onClick={() => setRunDialogOpen(true)} icon={<Play />}>
-              Run Experiment
+            <Button variant="primary" onClick={() => setRunDialogOpen(true)} icon={<Plus />}>
+              New experiment
             </Button>
             {scorerActionsMenu}
           </ActionRow.End>

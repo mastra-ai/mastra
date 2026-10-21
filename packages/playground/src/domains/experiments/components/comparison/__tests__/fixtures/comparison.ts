@@ -1,4 +1,12 @@
-import type { CompareExperimentsResponse, DatasetExperimentResult, MastraClient } from '@mastra/client-js';
+import type {
+  CompareExperimentsResponse,
+  DatasetExperimentResult,
+  DatasetItem,
+  MastraClient,
+  RouteResponse,
+} from '@mastra/client-js';
+import { SpanType } from '@mastra/core/observability';
+import { TraceStatus } from '@mastra/core/storage';
 import type { ExperimentUsage } from '@mastra/react/hooks/experiments';
 import type { ScoresByItemId } from '../../build-comparison-rows';
 
@@ -217,6 +225,23 @@ export const threeWayComparisonResponse: CompareExperimentsResponse = {
   })),
 };
 
+/** Dataset items behind the compared rows, as served by `GET /datasets/:datasetId/items/:itemId`. */
+export const datasetItemsById: Record<string, DatasetItem> = Object.fromEntries(
+  comparisonResponse.items.map(item => [
+    item.itemId,
+    {
+      id: item.itemId,
+      datasetId: DATASET_ID,
+      datasetVersion: 2,
+      input: item.input,
+      groundTruth: item.groundTruth,
+      metadata: { source: 'trivia-set' },
+      createdAt: '2026-07-01T10:00:00.000Z',
+      updatedAt: '2026-07-01T10:00:00.000Z',
+    },
+  ]),
+);
+
 export const challengerResults: DatasetExperimentResult[] = [
   makeResult({
     id: 'res-challenger-a',
@@ -245,4 +270,33 @@ export const challengerScores: ScoresByItemId = {
     { scorerId: 'relevancy', reason: null },
   ],
   'item-b': [{ scorerId: 'accuracy', reason: 'Exact match' }],
+};
+
+type GetTraceResponse = Awaited<ReturnType<MastraClient['getTrace']>>;
+
+/** Trace of the contender's run of `item-a`, opened from its comparison cell. */
+export const CONTENDER_TRACE_ID = 'trace-res-contender-a';
+export const contenderTraceSpans: GetTraceResponse = {
+  traceId: CONTENDER_TRACE_ID,
+  spans: [
+    {
+      traceId: CONTENDER_TRACE_ID,
+      spanId: 'span-contender-root',
+      name: 'Contender agent run',
+      parentSpanId: null,
+      spanType: SpanType.AGENT_RUN,
+      isEvent: false,
+      startedAt: new Date('2026-08-01T10:00:00.000Z'),
+      endedAt: new Date('2026-08-01T10:00:05.000Z'),
+      createdAt: new Date('2026-08-01T10:00:00.000Z'),
+      updatedAt: null,
+      status: TraceStatus.SUCCESS,
+    },
+  ],
+};
+
+/** The contender's trace has no feedback yet. */
+export const contenderTraceFeedback: RouteResponse<'GET /observability/feedback'> = {
+  feedback: [],
+  pagination: { total: 0, page: 0, perPage: 10, hasMore: false },
 };

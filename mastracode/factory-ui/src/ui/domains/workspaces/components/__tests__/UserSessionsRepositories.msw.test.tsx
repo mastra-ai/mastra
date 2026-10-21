@@ -1,5 +1,5 @@
 /**
- * The sessions sidebar lists sessions from every repository linked to the Factory, not just the first.
+ * The sessions sidebar lists the Factory's sessions in one request, whichever linked repository each one is on.
  */
 import { screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -9,7 +9,9 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
 import type { FactoryUserSession } from '../../services/user-sessions';
-import { UserSessionsSection } from '../UserSessionsSection';
+import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
+import { SessionsSection } from '../SessionsSection';
+import { testChatSession } from './fixtures/sessionsSection';
 
 function userSession(projectRepositoryId: string, sessionId: string, title: string): FactoryUserSession {
   return {
@@ -30,7 +32,8 @@ function userSession(projectRepositoryId: string, sessionId: string, title: stri
   };
 }
 
-function stubRepositories(sessionsByRepository: Record<string, FactoryUserSession[] | 'error'>) {
+function stubRepositories(repositoryIds: string[], sessions: FactoryUserSession[] | 'error') {
+  const requestedFactoryIds: string[] = [];
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({ authEnabled: true, authenticated: true, user: { userId: 'user-1' } }),
@@ -44,7 +47,7 @@ function stubRepositories(sessionsByRepository: Record<string, FactoryUserSessio
           {
             id: 'conn-1',
             installationId: 'inst-7',
-            repositories: Object.keys(sessionsByRepository).map(id => ({
+            repositories: repositoryIds.map(id => ({
               id,
               branch: 'main',
               sandboxWorkdir: `/workspace/${id}`,
@@ -54,44 +57,56 @@ function stubRepositories(sessionsByRepository: Record<string, FactoryUserSessio
         ],
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/:id/sessions`, ({ params }) => {
-      const sessions = sessionsByRepository[String(params.id)];
-      if (sessions === 'error' || !sessions) return HttpResponse.json({ error: 'boom' }, { status: 500 });
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, ({ params }) => {
+      requestedFactoryIds.push(String(params.factoryId));
+      if (sessions === 'error') return HttpResponse.json({ error: 'boom' }, { status: 500 });
       return HttpResponse.json({ sessions });
     }),
   );
+  return requestedFactoryIds;
 }
 
 function renderSection() {
   return renderWithProviders(
     <MemoryRouter initialEntries={['/factories/fp-1']}>
-      <Routes>
-        <Route path="/factories/:factoryId" element={<UserSessionsSection />} />
-      </Routes>
+      <ChatSessionContext.Provider value={testChatSession('fp-1', 'ghp-1')}>
+        <Routes>
+          <Route path="/factories/:factoryId" element={<SessionsSection />} />
+        </Routes>
+      </ChatSessionContext.Provider>
     </MemoryRouter>,
   );
 }
 
-describe('UserSessionsSection across linked repositories', () => {
-  it('lists sessions from every linked repository', async () => {
-    stubRepositories({
-      'ghp-1': [userSession('ghp-1', 'sess-1', 'Fix the app')],
-      'ghp-2': [userSession('ghp-2', 'sess-2', 'Tune the api')],
-    });
+describe('User sessions across linked repositories', () => {
+  it('lists sessions from every linked repository with one Factory request', async () => {
+    const requested = stubRepositories(
+      ['ghp-1', 'ghp-2'],
+      [userSession('ghp-1', 'sess-1', 'Fix the app'), userSession('ghp-2', 'sess-2', 'Tune the api')],
+    );
 
     renderSection();
 
-    expect(await screen.findByText('Fix the app')).toBeTruthy();
-    expect(await screen.findByText('Tune the api')).toBeTruthy();
+    expect(await screen.findByText('Fix the app')).toBeInTheDocument();
+    expect(await screen.findByText('Tune the api')).toBeInTheDocument();
+    expect(requested).toEqual(['fp-1']);
   });
 
-  it('keeps the other repositories listed and offers a retry when one repository fails', async () => {
-    stubRepositories({ 'ghp-1': 'error', 'ghp-2': [userSession('ghp-2', 'sess-2', 'Tune the api')] });
+  it('offers a retry when the Factory sessions fail to load', async () => {
+    stubRepositories(['ghp-1', 'ghp-2'], 'error');
 
     renderSection();
 
-    expect(await screen.findByText('Tune the api')).toBeTruthy();
-    expect(await screen.findByText('Couldn’t load sessions')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Retry' })).toBeTruthy();
+    expect(await screen.findByText('Couldn’t load sessions')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
+  });
+
+  it('offers a retry when the sessions fail to load and no repository is linked', async () => {
+    stubRepositories([], 'error');
+
+    renderSection();
+
+    expect(await screen.findByText('Couldn’t load sessions')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument();
   });
 });

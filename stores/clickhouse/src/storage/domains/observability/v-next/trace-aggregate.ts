@@ -27,6 +27,9 @@ import {
 const DIMENSION_SQL: Record<string, string> = {
   entityType: 'r.entityType',
   entityName: 'r.entityName',
+  name: 'r.name',
+  spanType: 'r.spanType',
+  entityId: 'r.entityId',
   environment: 'r.environment',
   status: TRACE_STATUS_SQL,
   serviceName: 'r.serviceName',
@@ -60,7 +63,8 @@ const COMPARISON_SQL = { eq: '=', ne: '!=', lt: '<', lte: '<=', gt: '>', gte: '>
  */
 export function compileClickHouseTraceAggregate(plan: TrustedTraceAggregatePlan): CompiledClickHouseTraceQuery {
   const parameters = new ParameterBuilder();
-  const ctes = compileClickHouseTraceCandidates(plan, '*', parameters);
+  // Candidates hold each trace's current root once (ROOT_VERSION_ORDER), already filtered.
+  const ctes = compileClickHouseTraceCandidates(plan, '*', parameters, { oneRootPerTrace: true });
 
   const dimensionSql = (field: TraceAggregateDimension): string => {
     if (field.startsWith('metadata.')) {

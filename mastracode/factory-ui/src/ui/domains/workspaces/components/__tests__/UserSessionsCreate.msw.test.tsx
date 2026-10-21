@@ -9,7 +9,9 @@ import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { queryKeys } from '../../../../../api/keys';
 import type { FactoryUserSession } from '../../services/user-sessions';
-import { UserSessionsSection } from '../UserSessionsSection';
+import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
+import { SessionsSection } from '../SessionsSection';
+import { testChatSession } from './fixtures/sessionsSection';
 
 const projectRepositoryId = 'ghp-1';
 const sessionId = '00000000-0000-4000-8000-000000000001';
@@ -56,9 +58,7 @@ function stubFactoryWithRepository(sessions: FactoryUserSession[] = []) {
         ],
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${projectRepositoryId}/sessions`, () =>
-      HttpResponse.json({ sessions }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () => HttpResponse.json({ sessions })),
     http.get(`${TEST_BASE_URL}/web/user-sessions/:sessionId`, ({ params }) => {
       const session = sessions.find(candidate => candidate.sessionId === params.sessionId);
       return session
@@ -90,12 +90,14 @@ function LocationProbe() {
 function renderSection() {
   return renderWithProviders(
     <MemoryRouter initialEntries={['/factories/fp-1']}>
-      <Routes>
-        <Route path="/factories/:factoryId" element={<UserSessionsSection />} />
-        <Route path="/factories/:factoryId/user/new/:draftSessionId" element={<UserSessionsSection />} />
-        <Route path="/factories/:factoryId/user/threads/:threadId" element={<UserSessionsSection />} />
-        <Route path="*" element={<UserSessionsSection />} />
-      </Routes>
+      <ChatSessionContext.Provider value={testChatSession('fp-1', projectRepositoryId)}>
+        <Routes>
+          <Route path="/factories/:factoryId" element={<SessionsSection />} />
+          <Route path="/factories/:factoryId/user/new/:draftSessionId" element={<SessionsSection />} />
+          <Route path="/factories/:factoryId/user/threads/:threadId" element={<SessionsSection />} />
+          <Route path="*" element={<SessionsSection />} />
+        </Routes>
+      </ChatSessionContext.Provider>
       <LocationProbe />
       <Toaster position="bottom-right" />
     </MemoryRouter>,
@@ -134,7 +136,7 @@ describe('User sessions creation', () => {
     expect(sessionPosts).toBe(0);
     expect(controller).toEqual({ createSession: 0, renameThread: 0 });
     expect(sessions).toEqual([]);
-    expect(client.getQueryData(queryKeys.sessions(projectRepositoryId))).toEqual({
+    expect(client.getQueryData(queryKeys.sessions('fp-1'))).toEqual({
       workspaces: [],
       userSessions: [],
     });
@@ -167,7 +169,7 @@ describe('User sessions creation', () => {
   it('says the session list failed instead of claiming there are none', async () => {
     stubFactoryWithRepository();
     server.use(
-      http.get(`${TEST_BASE_URL}/web/source-control/projects/${projectRepositoryId}/sessions`, () =>
+      http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () =>
         HttpResponse.json({ message: 'Nope' }, { status: 500 }),
       ),
     );

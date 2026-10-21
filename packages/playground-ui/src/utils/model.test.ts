@@ -44,6 +44,13 @@ describe('formatModelName', () => {
     ['llama-3.1-70b-instruct', 'Llama 3.1 70B Instruct'],
     ['deepseek-chat', 'DeepSeek Chat'],
     ['grok-4-fast', 'Grok 4 Fast'],
+    ['amazon-bedrock/anthropic.claude-sonnet-4-5', 'Claude Sonnet 4.5'],
+    ['us.anthropic.claude-sonnet-4-5-20250929-v1:0', 'Claude Sonnet 4.5'],
+    ['amazon-bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0', 'Claude 3.5 Sonnet'],
+    ['amazon.nova-pro-v1:0', 'Nova Pro'],
+    ['meta.llama3-1-70b-instruct-v1:0', 'Llama 3.1 70B Instruct'],
+    ['meta.llama3-3-70b-instruct-v1:0', 'Llama 3.3 70B Instruct'],
+    ['meta.llama4-scout-17b-instruct-v1:0', 'Llama4 Scout 17B Instruct'],
   ])('%s reads as %s', (model, name) => {
     expect(formatModelName(model)).toBe(name);
   });

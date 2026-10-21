@@ -469,7 +469,7 @@ describe('ThreadViewByTrace', () => {
       if (!toolBadge) throw new Error('expected a tool badge for the tool part');
       await screen.findByLabelText('View details for span Recipe lookup');
 
-      fireEvent.click(within(toolBadge).getAllByRole('button')[0] as HTMLElement);
+      fireEvent.click(within(toolBadge).getAllByRole('button')[0]);
 
       expect(spanLabel('Recipe lookup').getAttribute('aria-selected')).toBe('false');
       expect(screen.queryByRole('heading', { name: /^Span/ })).toBeNull();
@@ -896,15 +896,14 @@ describe('ThreadViewByTrace', () => {
       expect(requests[1]?.size).toBe(4);
     });
 
-    it('searches the last 31 days (the trace query maximum) and the whole thread with the legacy list', async () => {
+    it('searches the whole thread', async () => {
       const requests = installPagedHandlers();
       renderView({ withQueryTrace });
       await screen.findByText('Chef agent follow-up');
 
       if (withQueryTrace) {
-        const { from, to } = (requests[0]?.params as { timeRange: { from: string; to: string } }).timeRange;
-        const days = (Date.parse(to) - Date.parse(from)) / (24 * 60 * 60 * 1000);
-        expect(days).toBe(31);
+        const { from } = (requests[0]?.params as { timeRange: { from: string; to: string } }).timeRange;
+        expect(from).toBe(new Date(0).toISOString());
       } else {
         expect(requests[0]?.params.threadId).toBe(THREAD_ID);
         expect(requests[0]?.params).not.toHaveProperty('startedAt');

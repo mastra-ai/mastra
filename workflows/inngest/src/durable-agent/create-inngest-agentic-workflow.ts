@@ -4,6 +4,7 @@ import {
   createDurableLLMExecutionStep,
   createDurableLLMMappingStep,
   createDurableToolCallStep,
+  DURABLE_STOP_WHEN_ERROR_ID,
   DurableAgentDefaults,
   DurableStepIds,
   emitChunkEvent,
@@ -18,6 +19,7 @@ import {
   executeDurableAgentScorers,
   getRunRegistryEntry,
   loadRunStoredMessages,
+  takeRunScorerInstances,
   pruneAgentLoopSnapshot,
 } from '@mastra/core/agent/durable';
 import type {
@@ -28,9 +30,10 @@ import type {
   DurableToolCallInput,
 } from '@mastra/core/agent/durable';
 import { MessageList } from '@mastra/core/agent/message-list';
+import { ErrorCategory, ErrorDomain, getErrorFromUnknown, MastraError } from '@mastra/core/error';
 import type { PubSub } from '@mastra/core/events';
-import { SpanType, InternalSpans } from '@mastra/core/observability';
-import type { AIModelGenerationSpan, ExportedSpan } from '@mastra/core/observability';
+import { InternalSpans } from '@mastra/core/observability';
+import type { AIModelGenerationSpan, ExportedSpan, SpanType } from '@mastra/core/observability';
 import { ChunkFrom } from '@mastra/core/stream';
 import { PUBSUB_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { BaseContext, Inngest } from 'inngest';
@@ -71,6 +74,7 @@ const durableAgenticInputSchema = z.object({
   // steps on a separate worker process, so this snapshot is the only way the
   // rebuild path can recover request-scoped configuration.
   requestContextEntries: z.record(z.string(), z.any()).optional(),
+  inputTripwire: baseIterationStateSchema.shape.inputTripwire,
   // Observability fields (Inngest-specific)
   agentSpanData: z.any().optional(),
   modelSpanData: z.any().optional(),
@@ -191,10 +195,13 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           // Pass the request context snapshot so dynamic model/tool resolvers
           // see the caller's context on every iteration, not just the first.
           requestContextEntries: state.requestContextEntries,
+          inputTripwire: state.inputTripwire,
           // Pass agent span data so model spans can use it as parent
           agentSpanData: state.agentSpanData,
           // Pass model span data (ONE span for entire agent run)
           modelSpanData: state.modelSpanData,
+          // First-chunk clock carried from earlier iterations (first write wins)
+          completionStartTime: state.completionStartTime,
           // Pass step index for continuation (step: 0, 1, 2, ...)
           stepIndex: state.stepIndex,
           accumulatedSteps: state.accumulatedSteps,
@@ -211,6 +218,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         return (llmOutput.toolCalls ?? []).map(toolCall => ({
           ...toolCall,
           stepSpanData: llmOutput.stepSpanData,
+          completionStartTime: llmOutput.completionStartTime,
         })) as DurableToolCallInput[];
       },
       { id: 'extract-tool-calls' },
@@ -386,24 +394,37 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         // cross-worker resume the entry is absent and we fall back to maxSteps.
         // The lookup happens inside a memoized step so Inngest replays reuse the
         // recorded decision (even on a worker without the registry entry) instead
-        // of re-invoking (possibly stateful) user predicates.
-        let stopped: boolean;
-        try {
-          stopped = await step.run(`stop-when-${state.runId}-${state.iterationCount}`, async () => {
-            const stopWhen = getRunRegistryEntry(state.runId, mastra)?.stopWhen;
-            if (!stopWhen || state.accumulatedSteps.length === 0) {
-              return false;
-            }
-            const steps = state.accumulatedSteps as any;
-            const conditions = await Promise.all(
-              (Array.isArray(stopWhen) ? stopWhen : [stopWhen]).map(condition => condition({ steps })),
-            );
-            return conditions.some(Boolean);
-          });
-        } catch (error) {
-          await emitStepFinish(shouldContinue);
-          throw error;
-        }
+        // of re-invoking (possibly stateful) user predicates. The `stop-when-`
+        // prefix is also the serve transport's failure classifier because Inngest
+        // StepError serialization drops the MastraError id/details; keep it in sync
+        // with durableAgentWorkflowError in workflow.ts.
+        const stopped = await step.run(`stop-when-${state.runId}-${state.iterationCount}`, async () => {
+          const stopWhen = getRunRegistryEntry(state.runId, mastra)?.stopWhen;
+          if (!stopWhen || state.accumulatedSteps.length === 0) {
+            return false;
+          }
+          const steps = state.accumulatedSteps as any;
+          const conditions = await Promise.all(
+            (Array.isArray(stopWhen) ? stopWhen : [stopWhen]).map(async condition => {
+              try {
+                return await condition({ steps });
+              } catch (error) {
+                const originalError = getErrorFromUnknown(error);
+                throw new MastraError(
+                  {
+                    id: DURABLE_STOP_WHEN_ERROR_ID,
+                    domain: ErrorDomain.AGENT,
+                    category: ErrorCategory.USER,
+                    text: originalError.message,
+                    details: { name: originalError.name, message: originalError.message },
+                  },
+                  originalError,
+                );
+              }
+            }),
+          );
+          return conditions.some(Boolean);
+        });
 
         await emitStepFinish(!stopped);
         return !stopped;
@@ -487,6 +508,9 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           // usage goes to the attributes through the tracker so consumers find it where every
           // other model span puts it.
           const observability = mastra?.observability?.getSelectedInstance({});
+          // Rebuilt spans end from snapshots taken at run start, so the clock the
+          // steps carried through the loop state is applied here.
+          const completionStartTime = state.completionStartTime ? new Date(state.completionStartTime) : undefined;
           if (state.modelSpanData) {
             const modelSpan = observability?.rebuildSpan(
               state.modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>,
@@ -500,7 +524,10 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
             );
             modelSpan?.createTracker()?.endGeneration({
               output: { text: finalText, ...(toolCalls.length ? { toolCalls } : {}) },
-              attributes: { finishReason: state.lastStepResult?.reason || 'stop' },
+              attributes: {
+                finishReason: state.lastStepResult?.reason || 'stop',
+                ...(completionStartTime ? { completionStartTime } : {}),
+              },
               usage: state.accumulatedUsage,
             });
           }
@@ -508,7 +535,10 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           // End AGENT_RUN span with final output
           if (state.agentSpanData) {
             const agentSpan = observability?.rebuildSpan(state.agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
-            agentSpan?.end({ output: { text: finalText } });
+            agentSpan?.end({
+              output: { text: finalText },
+              ...(completionStartTime ? { attributes: { completionStartTime } } : {}),
+            });
           }
 
           // Emit finish event via pubsub
@@ -527,13 +557,17 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
       .map(
         async params => {
           const { inputData, getInitData, mastra, requestContext, tracingContext } = params;
+          const initData = getInitData() as DurableAgenticWorkflowInput;
           void executeDurableAgentScorers({
-            initData: getInitData() as DurableAgenticWorkflowInput,
+            initData,
             finalOutput: inputData,
             mastra,
             requestContext,
             tracingContext,
             loadStoredMessages: loadRunStoredMessages(params),
+            // Call-time and defaultOptions scorers are parked in-process by instance; name
+            // resolution alone misses any scorer Mastra never registered (#27579).
+            scorerInstances: takeRunScorerInstances(initData.runId, mastra),
           }).catch(error => mastra?.getLogger?.()?.warn?.(`[DurableAgent] Skipped scorers: ${error}`));
 
           return inputData;

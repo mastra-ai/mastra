@@ -90,6 +90,11 @@ export abstract class WorkflowsStorage extends StorageDomain {
     throw runFencingNotSupportedError('workflows', this.constructor.name);
   }
 
+  /**
+   * In-memory, LibSQL, and PostgreSQL storage return an empty object without writing when the workflow run does not
+   * exist. Remaining adapters are being aligned under COR-1448; callers must not rely on this method to create the
+   * initial run snapshot.
+   */
   abstract updateWorkflowResults({
     workflowName,
     runId,

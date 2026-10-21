@@ -206,6 +206,7 @@ const sidebars = {
         { type: 'doc', id: 'connect/credential', label: 'credential()' },
         { type: 'doc', id: 'connect/providers', label: 'Provider toolsets' },
         { type: 'doc', id: 'connect/tools', label: 'tools()' },
+        { type: 'doc', id: 'connect/user-connect-routes', label: 'userConnectRoutes()' },
       ],
     },
     {
@@ -502,7 +503,7 @@ const sidebars = {
             { type: 'doc', id: 'observability/tracing/configuration', label: 'Configuration' },
             {
               type: 'doc',
-              id: 'observability/tracing/trace-query',
+              id: 'observability/tracing/advanced-queries',
               label: 'Advanced trace queries',
             },
             { type: 'doc', id: 'observability/tracing/instances', label: 'Instances' },
@@ -895,6 +896,7 @@ const sidebars = {
       label: 'Workspaces',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'workspace/factory-sandbox', label: 'FactorySandbox' },
         { type: 'doc', id: 'workspace/local-filesystem', label: 'LocalFilesystem' },
         { type: 'doc', id: 'workspace/local-sandbox', label: 'LocalSandbox' },
         { type: 'doc', id: 'workspace/platform-filesystem', label: 'PlatformFilesystem' },

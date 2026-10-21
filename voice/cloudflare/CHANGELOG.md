@@ -1,5 +1,11 @@
 # @mastra/voice-cloudflare
 
+## 0.13.3-alpha.0
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
 ## 0.13.2
 
 ### Patch Changes

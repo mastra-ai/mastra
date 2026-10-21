@@ -52,7 +52,7 @@ const IMAGE_FILE_EXTENSIONS = new Set([
   'avif',
 ]);
 
-const TOKEN_ESTIMATE_CACHE_VERSION = 7;
+const TOKEN_ESTIMATE_CACHE_VERSION = 8;
 
 /**
  * Cache `source` marker for token estimates supplied by the caller via

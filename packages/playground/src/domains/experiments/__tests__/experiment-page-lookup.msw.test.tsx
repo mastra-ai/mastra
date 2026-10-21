@@ -19,6 +19,7 @@ import {
 } from './fixtures/experiment-item-route';
 import { newerExperimentsPage } from './fixtures/experiment-lookup';
 import { renamedPostgresWithMetrics } from '@/domains/configuration/hooks/__tests__/fixtures/observability-storage-capabilities';
+import { emptyUsageBreakdown } from '@/domains/experiments/components/__tests__/fixtures/experiment-usage';
 import ExperimentPage from '@/pages/experiments/experiment';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL } from '@/test/render';
@@ -42,6 +43,7 @@ beforeEach(() => {
   server.use(
     http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(renamedPostgresWithMetrics)),
     http.post(`${TEST_BASE_URL}/api/observability/metrics/aggregate`, () => HttpResponse.json({ value: null })),
+    http.post(`${TEST_BASE_URL}/api/observability/metrics/breakdown`, () => HttpResponse.json(emptyUsageBreakdown)),
     http.get(`${TEST_BASE_URL}/api/agents`, () => HttpResponse.json(noAgents)),
     http.get(`${TEST_BASE_URL}/api/processors`, () => HttpResponse.json(noProcessors)),
     http.get(`${TEST_BASE_URL}/api/workflows`, () => HttpResponse.json(noWorkflows)),

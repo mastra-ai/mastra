@@ -38,7 +38,12 @@ import {
   ProcessorStepSchema,
   createProcessorSendSignal,
 } from '../../processors';
-import { OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX } from '../../processors/runner';
+import {
+  OUTPUT_STREAM_HOOK_DURATION_KEY_PREFIX,
+  endOutputStreamSpanAtStepEnd,
+  endOutputStreamSpanOutsideStep,
+  findOwnModelStepSpan,
+} from '../../processors/runner';
 import {
   resolveProcessorSpanAttributes,
   resolveProcessorSpanName,
@@ -80,8 +85,10 @@ import type {
   StepMetadata,
   CreateWorkflowParams,
   InferSchemaOutput,
+  InferWorkflowRequestContext,
 } from '../../workflows/types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import { resolveLegacyAgent, resolveRegisteredAgent } from '../entry-executors';
 import type { ClassifierStepOutput } from '../entry-executors';
 import { createStepFromClassifier } from '../step-factories';
 import type { ClassifierStepOptions } from '../step-factories';
@@ -304,7 +311,15 @@ export function createStep<const QUESTIONS extends ClassifierQuestions, TStepInp
  * Creates a step from a Processor - wraps a Processor as a workflow step
  * Note: We require at least one processor method to distinguish from StepParams
  */
-export function createStep<TProcessorId extends string>(
+export function createStep<
+  TProcessorId extends string,
+  // Inferred from the previous step when chained, so a processor step accepts another processor step's output.
+  TInput extends
+    | InferStandardSchemaOutput<typeof ProcessorStepSchema>
+    | InferStandardSchemaOutput<typeof ProcessorStepOutputSchema> = InferStandardSchemaOutput<
+    typeof ProcessorStepSchema
+  >,
+>(
   processor:
     | (Processor<TProcessorId> & { processInput: Function })
     | (Processor<TProcessorId> & { processInputStream: Function })
@@ -317,7 +332,7 @@ export function createStep<TProcessorId extends string>(
 ): Step<
   `processor:${TProcessorId}`,
   unknown,
-  InferStandardSchemaOutput<typeof ProcessorStepSchema>,
+  TInput,
   InferStandardSchemaOutput<typeof ProcessorStepOutputSchema>,
   unknown,
   unknown,
@@ -412,7 +427,7 @@ function createStepFromParams<
   TResumeSchema extends PublicSchema<any> ? InferPublicSchema<TResumeSchema> : unknown,
   TSuspendSchema extends PublicSchema<any> ? InferPublicSchema<TSuspendSchema> : unknown,
   DefaultEngineType,
-  TRequestContextSchema extends PublicSchema<any> ? InferPublicSchema<TRequestContextSchema> : unknown
+  InferWorkflowRequestContext<TRequestContextSchema>
 > {
   // Type assertion needed because toStandardSchema returns StandardSchemaWithJSON<unknown>
   // but we need it to match the inferred generic types. The public overloads ensure
@@ -437,7 +452,7 @@ function createStepFromParams<
       TResumeSchema extends PublicSchema<any> ? InferPublicSchema<TResumeSchema> : unknown,
       TSuspendSchema extends PublicSchema<any> ? InferPublicSchema<TSuspendSchema> : unknown,
       DefaultEngineType,
-      TRequestContextSchema extends PublicSchema<any> ? InferPublicSchema<TRequestContextSchema> : unknown
+      InferWorkflowRequestContext<TRequestContextSchema>
     >['execute'],
   };
 }
@@ -575,13 +590,14 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
     }) => {
       const observabilityContext = resolveObservabilityContext(obsFields);
       const logger = mastra?.getLogger();
+      const agent = resolveRegisteredAgent(params, mastra);
       const toolData = {
         name: params.name ?? params.id,
         args: inputData,
       } as const;
 
       // Detect model version to choose streaming method
-      const isV2Model = isSupportedLanguageModel(await params.getModel({ requestContext }));
+      const isV2Model = isSupportedLanguageModel(await agent.getModel({ requestContext }));
 
       // Track structured output result
       let structuredResult: any = null;
@@ -597,75 +613,90 @@ function createStepFromAgent<TStepId extends string, TStepOutput>(
       // Get the appropriate stream based on model version
       let fullStream: AsyncIterable<unknown>;
       let textPromise: Promise<string>;
+      let cleanup: (() => void) | undefined;
 
-      if (isV2Model) {
-        // V2+ model path: use .stream() which returns MastraModelOutput
-        const modelOutput = await params.stream((inputData as { prompt: string }).prompt, {
-          ...(agentOptions ?? {}),
-          ...observabilityContext,
-          requestContext,
-          onFinish: (result: any) => {
-            handleFinish(result);
-            void safeOnFinish((agentOptions as any)?.onFinish, result, logger);
-          },
-          abortSignal,
-        });
-        fullStream = modelOutput.fullStream;
-        textPromise = modelOutput.text;
-      } else {
-        // V1 model path: use .streamLegacy() for backwards compatibility
-        let resolveText: (value: string) => void;
-        textPromise = new Promise(resolve => {
-          resolveText = resolve;
-        });
+      try {
+        if (isV2Model) {
+          const streamResult = await agent.stream((inputData as { prompt: string }).prompt, {
+            ...(agentOptions ?? {}),
+            ...observabilityContext,
+            requestContext,
+            onFinish: (result: any) => {
+              handleFinish(result);
+              void safeOnFinish((agentOptions as any)?.onFinish, result, logger);
+            },
+            abortSignal,
+          });
+          const durableStreamResult = streamResult as typeof streamResult & {
+            output?: typeof streamResult;
+            cleanup?: () => void;
+          };
+          const isDurableStreamResult =
+            typeof durableStreamResult.cleanup === 'function' &&
+            durableStreamResult.output &&
+            typeof durableStreamResult.output === 'object';
+          const modelOutput = isDurableStreamResult ? durableStreamResult.output! : streamResult;
+          cleanup = isDurableStreamResult ? durableStreamResult.cleanup : undefined;
+          fullStream = modelOutput.fullStream;
+          textPromise = modelOutput.text;
+        } else {
+          // V1 model path: use .streamLegacy() for backwards compatibility
+          let resolveText: (value: string) => void;
+          textPromise = new Promise(resolve => {
+            resolveText = resolve;
+          });
 
-        if (typeof params.streamLegacy !== 'function') {
-          throw new Error(`Agent step "${params.id}" uses a legacy v1 model but does not implement streamLegacy().`);
+          const legacyAgent = resolveLegacyAgent(agent, mastra);
+          if (typeof legacyAgent.streamLegacy !== 'function') {
+            throw new Error(`Agent step "${params.id}" uses a legacy v1 model but does not implement streamLegacy().`);
+          }
+
+          const legacyResult = await legacyAgent.streamLegacy((inputData as { prompt: string }).prompt, {
+            ...(agentOptions ?? {}),
+            ...observabilityContext,
+            requestContext,
+            onFinish: (result: any) => {
+              handleFinish(result);
+              resolveText!(result.text);
+              void safeOnFinish((agentOptions as any)?.onFinish, result, logger);
+            },
+            abortSignal,
+          });
+          fullStream = legacyResult.fullStream;
         }
 
-        const legacyResult = await params.streamLegacy((inputData as { prompt: string }).prompt, {
-          ...(agentOptions ?? {}),
-          ...observabilityContext,
-          requestContext,
-          onFinish: (result: any) => {
-            handleFinish(result);
-            resolveText!(result.text);
-            void safeOnFinish((agentOptions as any)?.onFinish, result, logger);
-          },
-          abortSignal,
+        if (abortSignal.aborted) {
+          return abort() as TStepOutput;
+        }
+
+        // Process the stream (unified for V1/V2)
+        const { tripwireChunk } = await processAgentStream({
+          fullStream,
+          isV2Model,
+          pubsub,
+          runId,
+          toolData,
+          logger,
+          writer,
+          streamFormat,
         });
-        fullStream = legacyResult.fullStream;
+
+        // Handle tripwire if detected
+        if (tripwireChunk) {
+          throw createTripWireFromChunk(tripwireChunk);
+        }
+
+        // Return structured output if available, otherwise return text
+        if (structuredResult !== null) {
+          return structuredResult as TStepOutput;
+        }
+
+        return {
+          text: await textPromise,
+        } as TStepOutput;
+      } finally {
+        cleanup?.();
       }
-
-      if (abortSignal.aborted) {
-        return abort() as TStepOutput;
-      }
-
-      // Process the stream (unified for V1/V2)
-      const { tripwireChunk } = await processAgentStream({
-        fullStream,
-        isV2Model,
-        pubsub,
-        runId,
-        toolData,
-        logger,
-        writer,
-        streamFormat,
-      });
-
-      // Handle tripwire if detected
-      if (tripwireChunk) {
-        throw createTripWireFromChunk(tripwireChunk);
-      }
-
-      // Return structured output if available, otherwise return text
-      if (structuredResult !== null) {
-        return structuredResult as TStepOutput;
-      }
-
-      return {
-        text: await textPromise,
-      } as TStepOutput;
     },
     component: 'AGENT',
   };
@@ -1045,6 +1076,9 @@ function createStepFromProcessor<TProcessorId extends string>(
       // Find appropriate parent span:
       // - For input/outputResult: find AGENT_RUN (processor runs once at start/end)
       // - For inputStep/outputStep/toolResult: find MODEL_STEP (processor runs per LLM call / tool round-trip)
+      // - For outputStream: the MODEL_STEP whose stream is processed, else AGENT_RUN. Durable agents stay
+      //   on AGENT_RUN because their stream runs with the agent run's context; their tool-result chunks
+      //   do carry a step, but they reuse the span that is already open
       // When workflow is executed, currentSpan is WORKFLOW_STEP, so we walk up the parent chain
       // Fall back to currentSpan only when its tree can reach exporters — otherwise
       // the public processor span would export as an orphan trace root.
@@ -1052,7 +1086,9 @@ function createStepFromProcessor<TProcessorId extends string>(
       const parentSpan =
         phase === 'inputStep' || phase === 'outputStep' || phase === 'toolResult'
           ? currentSpan?.findParent(SpanType.MODEL_STEP) || fallbackSpan
-          : currentSpan?.findParent(SpanType.AGENT_RUN) || fallbackSpan;
+          : (phase === 'outputStream' && findOwnModelStepSpan(currentSpan)) ||
+            currentSpan?.findParent(SpanType.AGENT_RUN) ||
+            fallbackSpan;
 
       const processorSpan =
         phase !== 'outputStream'
@@ -1364,6 +1400,13 @@ function createStepFromProcessor<TProcessorId extends string>(
               // Use processorState (from the shared processorStates Map) so state persists
               // across processOutputStream and processOutputResult calls
               const mutableState = processorState;
+              endOutputStreamSpanOutsideStep(
+                mutableState,
+                processor.id,
+                part as ChunkType,
+                parentSpan,
+                (streamParts ?? []).length,
+              );
               let processorSpan = mutableState[spanKey] as
                 | ReturnType<NonNullable<typeof parentSpan>['createChildSpan']>
                 | undefined;
@@ -1420,6 +1463,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                   delete mutableState[spanKey];
                   delete mutableState[hookDurationKey];
                 }
+                endOutputStreamSpanAtStepEnd(mutableState, processor.id, part as ChunkType, (streamParts ?? []).length);
               } catch (error) {
                 // End span with error and clean up state
                 if (error instanceof TripWire) {
@@ -2446,7 +2490,13 @@ export class EventedRun<
 
     // Check if workflow is suspended before proceeding
     if (snapshot.status !== 'suspended') {
-      throw new Error('This workflow run was not suspended');
+      throw new MastraError({
+        id: 'WORKFLOW_RUN_NOT_SUSPENDED',
+        domain: ErrorDomain.MASTRA_WORKFLOW,
+        category: ErrorCategory.USER,
+        text: 'This workflow run was not suspended',
+        details: { workflowId: this.workflowId, runId: this.runId, status: snapshot.status },
+      });
     }
 
     // Resolve label to step path if provided

@@ -10,7 +10,7 @@ import type { FactoryProjectsStorage } from '../projects/base.js';
 import { auditActionsInNamespaces, isAuditNamespace } from './actions.js';
 import type { AuditAction } from './actions.js';
 import { isHumanActorId } from './actors.js';
-import { ACTOR_PROFILE_METADATA_KEY, auditActorProfile, auditAgentName } from './base.js';
+import { ACTOR_PROFILE_METADATA_KEY, auditActorProfile } from './base.js';
 import type {
   AuditActorProfileInput,
   AuditContext,
@@ -46,7 +46,7 @@ export interface AuditAgentEmitter {
   emitAgent(args: { requestContext: RequestContext; input: EmitAgentAuditInput }): Promise<void>;
 }
 
-/** Records with an explicit actor, for the paths that have no request: rule transitions, run starts, run ends, supervisor tools. */
+/** Records with an explicit actor, for the paths that have no request: rule transitions, run starts, run ends. */
 export type AuditRecorder = Pick<AuditDomain, 'record'>;
 
 /** Best-effort destination for locally persisted audit events (e.g. an integration's audit log). */
@@ -239,7 +239,6 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
       const state = context?.getState();
       if (!orgId || !userId || !threadId || !state?.factoryProjectId) return;
 
-      const modeId = context.session.modeId?.trim();
       const modelId = context.session.modelId?.trim();
       await this.record({
         orgId,
@@ -250,7 +249,6 @@ export class AuditDomain implements AuditEmitter, AuditAgentEmitter {
         metadata: {
           ...input.metadata,
           startedBy: userId,
-          ...(modeId ? { agentName: auditAgentName(modeId) } : {}),
           ...(modelId ? { modelId } : {}),
         },
         factoryProjectId: state.factoryProjectId,

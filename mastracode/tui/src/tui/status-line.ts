@@ -196,7 +196,9 @@ export function updateStatusLine(state: TUIState): void {
     if (state.omStatusLineModel?.status !== status) {
       state.omStatusLineModel = {
         status,
-        modelId: getEffectiveOMRoleModelId(state.session, isObserving ? 'observer' : 'reflector'),
+        modelId: state.local
+          ? getEffectiveOMRoleModelId(state.local.session, isObserving ? 'observer' : 'reflector')
+          : undefined,
       };
     }
   } else {
@@ -298,7 +300,7 @@ export function updateStatusLine(state: TUIState): void {
     : null;
 
   // --- Location: thread title, else path (branch); GitHub PR label in front ---
-  const branch = state.projectInfo.gitBranch;
+  const branch = state.factory?.branch ?? state.projectInfo.gitBranch;
   const threadTitle =
     state.currentThreadTitle && !isGenericTitle(state.currentThreadTitle) ? state.currentThreadTitle : null;
   const activeGithubPrSubscriptions = state.activeGithubPrSubscriptions ?? [];
@@ -323,7 +325,9 @@ export function updateStatusLine(state: TUIState): void {
         plain: branch ? `${path} (${branch})` : path,
         styled: theme.fg('muted', path) + (branch ? theme.fg('dim', ` (${branch})`) : ''),
       });
-      const path = shortPath(state.projectInfo.rootPath ?? process.cwd());
+      const path = state.factory
+        ? `${state.factory.projectName} / ${state.factory.repositorySlug}`
+        : shortPath(state.projectInfo.rootPath ?? process.cwd());
       const candidates = fit === 'full' ? [withBranch(path)] : compactPaths(path).map(withBranch);
       text = candidates.find(candidate => fits(candidate.plain)) ?? null;
       if (!text && fit === 'any' && room >= 10) {

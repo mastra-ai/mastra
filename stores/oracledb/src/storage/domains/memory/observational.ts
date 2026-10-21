@@ -1,8 +1,5 @@
-import {
-  maxObservationCursor,
-  planReflectionGenerationText,
-  type UpdateActiveObservationsResult,
-} from '@internal/core/memory';
+import { maxObservationCursor, planReflectionGenerationText } from '@internal/core/memory';
+import type { UpdateActiveObservationsResult } from '@internal/core/memory';
 import { ErrorCategory, MastraError } from '@mastra/core/error';
 import { TABLE_OBSERVATIONAL_MEMORY } from '@mastra/core/storage';
 import type {
@@ -10,6 +7,7 @@ import type {
   CreateReflectionGenerationInput,
   ObservationalMemoryHistoryOptions,
   ObservationalMemoryRecord,
+  RunFence,
   UpdateActiveObservationsInput,
   UpdateObservationalMemoryConfigInput,
 } from '@mastra/core/storage';
@@ -60,6 +58,7 @@ import {
   OM_UPDATED_AT,
 } from './schema';
 import {
+  assertMemoryFence,
   assertRowsAffected,
   boolToNumber,
   emptyToUndefined,
@@ -305,9 +304,11 @@ export async function insertObservationalMemoryRecord(
 export async function updateActiveObservations(
   ctx: MemoryContext,
   input: UpdateActiveObservationsInput,
+  fence?: RunFence,
 ): Promise<UpdateActiveObservationsResult> {
   try {
-    return await ctx.db.tx(async (_client, connection) => {
+    return await ctx.db.tx(async (client, connection) => {
+      await assertMemoryFence(ctx, client, fence, 'commitActiveObservations');
       const row = await lockOMRow(ctx, connection, input.id, 'UPDATE_ACTIVE_OBSERVATIONS');
       if (row.supersededBy) return { applied: false, reason: 'retired' as const };
       if (
@@ -354,10 +355,12 @@ export async function updateActiveObservations(
 export async function createReflectionGeneration(
   ctx: MemoryContext,
   input: CreateReflectionGenerationInput,
+  fence?: RunFence,
 ): Promise<ObservationalMemoryRecord> {
   const { currentRecord } = input;
   try {
-    return await ctx.db.tx(async (_client, connection) => {
+    return await ctx.db.tx(async (client, connection) => {
+      await assertMemoryFence(ctx, client, fence, 'createReflectionGeneration');
       const row = await findOMRowForUpdate(ctx, connection, currentRecord.id);
       // Missing target: create nothing.
       if (!row) return currentRecord;

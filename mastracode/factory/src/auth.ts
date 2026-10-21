@@ -319,6 +319,41 @@ async function ensureUserOrg(provider: IMastraAuthProvider, user: FactoryAuthUse
   }
 }
 
+/**
+ * The `org_id` claim of a JWT bearer token. Read only after the provider has
+ * verified the token, and only adopted when the user is a verified member of
+ * that org — so it picks among orgs the user already has, never grants one.
+ */
+export function bearerTokenOrgClaim(token: string | undefined): string | undefined {
+  const payload = token?.split('.')[1];
+  if (!payload) return undefined;
+  try {
+    const claims = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8')) as { org_id?: unknown };
+    return typeof claims.org_id === 'string' && claims.org_id ? claims.org_id : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Picks the request's org: an explicit `X-Mastra-Organization-Id` header, else
+ * a bearer token's `org_id` claim (MCP clients such as ChatGPT can't send the
+ * header, and the verify endpoint otherwise reports the user's default org).
+ * Either must name an org the user belongs to, else `false` — never fall back
+ * to another org than the one asked for. With neither, bootstraps the user's org.
+ */
+async function applyRequestedOrganization(
+  provider: IMastraAuthProvider,
+  c: Context,
+  token: string | undefined,
+  user: FactoryAuthUser,
+): Promise<boolean> {
+  const requested = (token ? c.req.header(ORGANIZATION_ID_HEADER)?.trim() : undefined) || bearerTokenOrgClaim(token);
+  if (requested) return selectRequestedOrganization(user, requested);
+  await ensureUserOrg(provider, user);
+  return true;
+}
+
 function selectRequestedOrganization(user: FactoryAuthUser, requestedOrganizationId: string): boolean {
   if (user.organizationId === requestedOrganizationId) return true;
   if (!user.organizationMembershipIds?.includes(requestedOrganizationId)) return false;
@@ -433,13 +468,8 @@ export async function ensureFactoryAuthUser(
   forwardPendingResponseHeaders(provider, c);
   if (!user) return undefined;
 
-  const requestedOrganizationId = token ? c.req.header(ORGANIZATION_ID_HEADER)?.trim() : undefined;
-  if (requestedOrganizationId) {
-    if (!selectRequestedOrganization(user, requestedOrganizationId)) {
-      throw new HTTPException(403, { message: 'organization_forbidden' });
-    }
-  } else {
-    await ensureUserOrg(provider, user);
+  if (!(await applyRequestedOrganization(provider, c, token, user))) {
+    throw new HTTPException(403, { message: 'organization_forbidden' });
   }
 
   c.set(FACTORY_AUTH_USER_KEY, user);
@@ -842,6 +872,21 @@ const SESSION_FAVICON_PATHS = new Set([
 ]);
 
 /**
+ * Request-context key marking an authenticated interactive turn. HTTP requests
+ * and linked Slack senders verified against their session owner can carry it;
+ * wakes, webhooks, and dispatcher turns cannot.
+ */
+export const FACTORY_INTERACTIVE_KEY = 'factoryInteractive';
+
+/** With auth disabled there is no gate; this marks every HTTP request as interactive instead. */
+export function createFactoryInteractiveMarker() {
+  return async (c: Context, next: () => Promise<void>): Promise<void> => {
+    c.get('requestContext')?.set(FACTORY_INTERACTIVE_KEY, true);
+    await next();
+  };
+}
+
+/**
  * Build the auth gate as a plain Hono middleware handler `(c, next)`. Protects
  * everything that is not a public `/auth/*` route: authenticated requests stash
  * the user on the context and continue; unauthenticated navigations redirect to
@@ -908,20 +953,16 @@ export function createFactoryAuthGate(provider: IMastraAuthProvider) {
     forwardPendingResponseHeaders(provider, c);
 
     if (user) {
-      const requestedOrganizationId = token ? c.req.header(ORGANIZATION_ID_HEADER)?.trim() : undefined;
-      if (requestedOrganizationId) {
-        if (!selectRequestedOrganization(user, requestedOrganizationId)) {
-          return c.json({ error: 'organization_forbidden' }, 403);
-        }
-      } else {
-        // Bootstrap a personal org for no-org accounts so the org id resolves on
-        // this request (see ensureFactoryAuthUser for the rationale).
-        await ensureUserOrg(provider, user);
+      // Without a requested org, no-org accounts get a bootstrapped personal org
+      // so the org id resolves on this request (see ensureFactoryAuthUser).
+      if (!(await applyRequestedOrganization(provider, c, token, user))) {
+        return c.json({ error: 'organization_forbidden' }, 403);
       }
       c.set(FACTORY_AUTH_USER_KEY, user);
       const requestContext = c.get('requestContext');
       requestContext?.set('user', user);
       requestContext?.set(MASTRA_MESSAGE_AUTHOR_KEY, messageAuthor(user));
+      requestContext?.set(FACTORY_INTERACTIVE_KEY, true);
       return next();
     }
 

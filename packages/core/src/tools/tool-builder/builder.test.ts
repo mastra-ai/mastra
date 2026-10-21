@@ -3,6 +3,7 @@ import { openai } from '@ai-sdk/openai-v6';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { noopLogger } from '../../logger';
+import { runBeforeApprovalChecks } from '../../loop/workflows/agentic-execution/tool-approval-verdict';
 import { SpanType } from '../../observability';
 import type { AnySpan } from '../../observability';
 import { RequestContext } from '../../request-context';
@@ -109,6 +110,70 @@ describe('CoreToolBuilder FGA', () => {
       }),
     });
     expect(execute).toHaveBeenCalled();
+  });
+
+  it('checks tool execution FGA before running beforeApproval (#26772)', async () => {
+    const execute = vi.fn().mockResolvedValue({ result: 'ok' });
+    const beforeApproval = vi.fn().mockReturnValue({ proceed: false, output: 'order x balance 999' });
+    const testTool = createTool({
+      id: 'search',
+      description: 'Search',
+      inputSchema: z.object({ query: z.string() }),
+      requireApproval: true,
+      beforeApproval,
+      execute,
+    });
+    const user = { id: 'user-1' };
+    const requestContext = new RequestContext();
+    requestContext.set('user', user);
+    const denied = Object.assign(new Error('denied'), { name: 'FGADeniedError' });
+    const fgaProvider = {
+      require: vi.fn().mockRejectedValue(denied),
+    };
+
+    const builder = new CoreToolBuilder({
+      originalTool: testTool,
+      options: {
+        name: 'search',
+        agentId: 'agent-1',
+        logger: {
+          debug: vi.fn(),
+          warn: vi.fn(),
+          error: vi.fn(),
+          trackException: vi.fn(),
+        } as any,
+        requestContext,
+        mastra: {
+          getServer: () => ({ fga: fgaProvider }),
+        } as any,
+      },
+    });
+
+    const builtTool = builder.build();
+    await expect(
+      runBeforeApprovalChecks({
+        tool: builtTool,
+        input: { query: 'docs' },
+        context: { toolCallId: 'call-1', toolName: 'search', requestContext },
+      }),
+    ).rejects.toBe(denied);
+    expect(fgaProvider.require).toHaveBeenCalledWith(user, {
+      resource: { type: 'tool', id: 'agent-1:search' },
+      permission: 'tools:execute',
+      context: expect.objectContaining({ requestContext }),
+    });
+    expect(beforeApproval).not.toHaveBeenCalled();
+    expect(execute).not.toHaveBeenCalled();
+
+    fgaProvider.require.mockResolvedValue(undefined);
+    await expect(
+      runBeforeApprovalChecks({
+        tool: builtTool,
+        input: { query: 'docs' },
+        context: { toolCallId: 'call-2', toolName: 'search', requestContext },
+      }),
+    ).resolves.toEqual({ proceed: false, output: 'order x balance 999' });
+    expect(beforeApproval).toHaveBeenCalledTimes(1);
   });
 
   it('fails closed when FGA is configured and a tool executes without a user', async () => {

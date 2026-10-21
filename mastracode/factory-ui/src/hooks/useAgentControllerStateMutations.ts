@@ -10,43 +10,28 @@ import {
 
 export function useSetAgentControllerStateMutation({
   agentControllerId,
-  resourceId,
-  scope,
+  sessionId,
   baseUrl = '',
   enabled = true,
 }: AgentControllerMutationArgs) {
   const queryClient = useQueryClient();
-  const { session } = createAgentControllerClient({ agentControllerId, resourceId, scope, baseUrl, enabled });
+  const { session } = createAgentControllerClient({ agentControllerId, sessionId, baseUrl, enabled });
 
   return useMutation({
     mutationFn: (updates: Record<string, unknown>) => requireAgentControllerSession(session).setState(updates),
     onSuccess: async (_data, updates) => {
       await Promise.all([
         queryClient.invalidateQueries({
-          queryKey: queryKeys.agentControllerConnectionState(agentControllerId, resourceId, scope),
+          queryKey: queryKeys.agentControllerConnectionState(agentControllerId, sessionId),
         }),
         'settings' in updates
           ? queryClient.invalidateQueries({
-              queryKey: queryKeys.agentControllerSettings(agentControllerId, resourceId, scope),
+              queryKey: queryKeys.agentControllerSettings(agentControllerId, sessionId),
               exact: true,
             })
           : Promise.resolve(),
       ]);
     },
-  });
-}
-
-export function useSwitchAgentControllerModeMutation(args: AgentControllerMutationArgs) {
-  const queryClient = useQueryClient();
-  const { session } = createAgentControllerClient(args);
-
-  return useMutation({
-    mutationFn: (modeId: string) => requireAgentControllerSession(session).switchMode(modeId),
-    // returning the invalidation keeps isPending true until the refetched state carries the new mode
-    onSuccess: () =>
-      queryClient.invalidateQueries({
-        queryKey: queryKeys.agentControllerConnectionState(args.agentControllerId, args.resourceId, args.scope),
-      }),
   });
 }
 
@@ -65,10 +50,10 @@ export function useSwitchAgentControllerModelMutation(args: AgentControllerMutat
     onSuccess: () =>
       Promise.all([
         queryClient.invalidateQueries({
-          queryKey: queryKeys.agentControllerConnectionState(args.agentControllerId, args.resourceId, args.scope),
+          queryKey: queryKeys.agentControllerConnectionState(args.agentControllerId, args.sessionId),
         }),
         queryClient.invalidateQueries({
-          queryKey: queryKeys.agentControllerSettings(args.agentControllerId, args.resourceId, args.scope),
+          queryKey: queryKeys.agentControllerSettings(args.agentControllerId, args.sessionId),
           exact: true,
         }),
       ]),

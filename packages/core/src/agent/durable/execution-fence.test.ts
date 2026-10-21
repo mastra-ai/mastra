@@ -672,7 +672,7 @@ describe('storage-backed ExecutionFence', () => {
     const args = { runId: 'run-1', agentId, requestContext, mastra };
 
     expect(await fence.settle(async () => {})).toBe('owned');
-    await expect(assertExecutionOwned(args)).rejects.toMatchObject({ id: EXECUTION_SUPERSEDED_ERROR_ID });
+    await expect(assertExecutionOwned(args)).rejects.toMatchObject({ id: EXECUTION_UNVERIFIED_ERROR_ID });
     await expect(assertExecutionNotSuperseded(args)).resolves.toBeUndefined();
 
     await storageClaim(workflowsStore, 'run-1');

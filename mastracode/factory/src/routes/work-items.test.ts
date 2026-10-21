@@ -12,9 +12,8 @@ import type { AuditEmitter, AuditRecorder } from '../storage/domains/audit/domai
 import {
   FACTORY_PULL_REQUEST_RECONCILIATION_KEY,
   FACTORY_RULE_MATERIALIZATION_KEY,
-  WorkItemUpdateConflictError,
 } from '../storage/domains/work-items/base.js';
-import type { FactoryDeferredDecisionRecord } from '../storage/domains/work-items/base.js';
+import type { FactoryDeferredDecisionRecord, WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
 
 let auditRecorded: Array<Record<string, any>> = [];
 let auditFailure: Error | undefined;
@@ -874,6 +873,7 @@ describe('POST /web/factory/projects/:id/runs/start', () => {
         orgId: 'org1',
         userId: 'u1',
         factoryProjectId: PROJECT_ID,
+        modelScope: 'factory',
         defaultModelId: 'anthropic/claude-fable-5',
         requestContext,
       }),

@@ -19,8 +19,15 @@ export const traceQueryCapabilities: GetObservabilityCapabilitiesResponse = {
     traceQueryDiscovery: true,
     traceQueryTenantScope: true,
     traceQueryContextIds: true,
+    traceQueryTimeToFirstChunk: true,
+    traceQueryRootSpanFields: true,
+    traceQueryRootEntityId: true,
+    traceQueryTimeToFirstChunkSort: true,
+    traceAggregate: true,
     threadQuery: true,
+    threadQueryRows: true,
     spanQuery: true,
+    spanQueryContextFields: true,
     feedback: true,
   },
 };
@@ -42,9 +49,31 @@ export const legacyTraceCapabilities: GetObservabilityCapabilitiesResponse = {
     traceQueryDiscovery: false,
     traceQueryTenantScope: false,
     traceQueryContextIds: false,
+    traceQueryTimeToFirstChunk: false,
+    traceQueryRootSpanFields: false,
+    traceQueryRootEntityId: false,
+    traceQueryTimeToFirstChunkSort: false,
+    traceAggregate: false,
     threadQuery: false,
     spanQuery: false,
   },
+};
+
+/** Store runs trace queries but does not declare `trace-aggregate`. */
+export const noTraceAggregateCapabilities: GetObservabilityCapabilitiesResponse = {
+  observabilityStorageType: 'ObservabilityStorageDuckDB',
+  capabilities: {
+    ...traceQueryCapabilities.capabilities,
+    traceAggregate: false,
+  },
+};
+
+/** Response from a server released before the `traceAggregate` key existed. */
+export const preAggregateCapabilities = {
+  observabilityStorageType: 'ObservabilityStorageClickhouseVNext',
+  capabilities: Object.fromEntries(
+    Object.entries(traceQueryCapabilities.capabilities).filter(([key]) => key !== 'traceAggregate'),
+  ),
 };
 
 /** Store declares `trace-query` but not `trace-query-root-duration`. */
@@ -53,6 +82,15 @@ export const noRootDurationCapabilities: GetObservabilityCapabilitiesResponse = 
   capabilities: {
     ...traceQueryCapabilities.capabilities,
     traceQueryRootDuration: false,
+  },
+};
+
+/** Store runs trace queries but does not declare `delta-polling` (or the feature flag is off). */
+export const noDeltaPollingCapabilities: GetObservabilityCapabilitiesResponse = {
+  observabilityStorageType: 'ObservabilityStorageDuckDB',
+  capabilities: {
+    ...traceQueryCapabilities.capabilities,
+    deltaPolling: false,
   },
 };
 

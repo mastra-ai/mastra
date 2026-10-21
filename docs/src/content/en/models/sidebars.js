@@ -146,6 +146,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/aimlapi',
+          label: 'AI/ML API',
+        },
+        {
+          type: 'doc',
           id: 'providers/aiand',
           label: 'ai&',
         },
@@ -276,6 +281,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/boundless',
+          label: 'Boundless',
+        },
+        {
+          type: 'doc',
           id: 'providers/cerebras',
           label: 'Cerebras',
         },
@@ -326,6 +336,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/commandcode',
+          label: 'CommandCode',
+        },
+        {
+          type: 'doc',
           id: 'providers/coralbricks',
           label: 'CoralBricks',
         },
@@ -338,11 +353,6 @@ const sidebars = {
           type: 'doc',
           id: 'providers/cortecs',
           label: 'Cortecs',
-        },
-        {
-          type: 'doc',
-          id: 'providers/crof',
-          label: 'CrofAI',
         },
         {
           type: 'doc',
@@ -583,6 +593,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/lilac',
           label: 'Lilac',
+        },
+        {
+          type: 'doc',
+          id: 'providers/liquid',
+          label: 'Liquid Inference',
         },
         {
           type: 'doc',
@@ -866,6 +881,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/reflection',
+          label: 'Reflection',
+        },
+        {
+          type: 'doc',
           id: 'providers/regolo-ai',
           label: 'Regolo AI',
         },
@@ -888,6 +908,11 @@ const sidebars = {
           type: 'doc',
           id: 'providers/sakana',
           label: 'Sakana AI',
+        },
+        {
+          type: 'doc',
+          id: 'providers/sambanova',
+          label: 'SambaNova',
         },
         {
           type: 'doc',

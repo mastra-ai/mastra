@@ -170,6 +170,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SPAN_EVENTS} (
   isEvent            Bool DEFAULT false,
   startedAt          DateTime64(3, 'UTC'),
   endedAt            DateTime64(3, 'UTC'),
+  timeToFirstChunkMs Nullable(Float64),
 
   -- Query-relevant flexible fields
   tags               Array(LowCardinality(String)) DEFAULT [],
@@ -183,7 +184,14 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SPAN_EVENTS} (
   output             Nullable(String),
   error              Nullable(String),
   metadataRaw        Nullable(String),
-  requestContext     Nullable(String)
+  requestContext     Nullable(String),
+
+  -- Previews of \`input\` / \`output\` / \`error\` in core's \`buildPreview\` format, written
+  -- on every span ('' when there is nothing to preview). NULL on rows written before
+  -- the columns existed; readers build those from the payload columns.
+  inputPreview       Nullable(String),
+  outputPreview      Nullable(String),
+  errorPreview       Nullable(String)
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toDate(endedAt)
@@ -241,6 +249,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_ROOTS} (
   isEvent            Bool DEFAULT false,
   startedAt          DateTime64(3, 'UTC'),
   endedAt            DateTime64(3, 'UTC'),
+  timeToFirstChunkMs Nullable(Float64),
 
   -- Query-relevant flexible fields
   tags               Array(LowCardinality(String)) DEFAULT [],
@@ -255,6 +264,12 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_ROOTS} (
   error              Nullable(String),
   metadataRaw        Nullable(String),
   requestContext     Nullable(String),
+
+  -- Previews of \`input\` / \`output\` / \`error\` ('' when there is nothing to preview).
+  -- NULL on rows written before the columns existed.
+  inputPreview       Nullable(String),
+  outputPreview      Nullable(String),
+  errorPreview       Nullable(String),
 
   -- traceId is second in the sort key, behind startedAt, so point lookups by
   -- traceId (getRootSpan, trace deletes, trace-query root dedupe) need a skip
@@ -338,6 +353,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_BRANCHES} (
   isEvent            Bool DEFAULT false,
   startedAt          DateTime64(3, 'UTC'),
   endedAt            DateTime64(3, 'UTC'),
+  timeToFirstChunkMs Nullable(Float64),
 
   -- Query-relevant flexible fields
   tags               Array(LowCardinality(String)) DEFAULT [],
@@ -352,6 +368,9 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_BRANCHES} (
   error              Nullable(String),
   metadataRaw        Nullable(String),
   requestContext     Nullable(String),
+  inputPreview       Nullable(String),
+  outputPreview      Nullable(String),
+  errorPreview       Nullable(String),
 
   INDEX idx_traceId traceId TYPE bloom_filter(0.01) GRANULARITY 1
 )
@@ -1257,6 +1276,15 @@ const LOG_SKIP_INDEX_COLUMNS = [
 ] as const;
 
 export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
+  // Stored previews. The view targets first, so the `SELECT *` views have somewhere to put the
+  // values once span_events carries them.
+  ...(['inputPreview', 'outputPreview', 'errorPreview'] as const).flatMap(column => [
+    addColumn(TABLE_TRACE_ROOTS, column, 'Nullable(String)'),
+    addColumn(TABLE_TRACE_BRANCHES, column, 'Nullable(String)'),
+  ]),
+  addColumn(TABLE_SPAN_EVENTS, 'inputPreview', 'Nullable(String)'),
+  addColumn(TABLE_SPAN_EVENTS, 'outputPreview', 'Nullable(String)'),
+  addColumn(TABLE_SPAN_EVENTS, 'errorPreview', 'Nullable(String)'),
   // Span events
   addColumn(TABLE_SPAN_EVENTS, 'entityVersionId', 'Nullable(String)'),
   addColumn(TABLE_SPAN_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),
@@ -1309,6 +1337,12 @@ export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
   // Deletion requests: `predicateValues` is outside the sort key, so guard
   // lookups via `has()` need a skip index to avoid a per-scope full scan.
   addBloomIndex(TABLE_DELETION_REQUESTS, 'idx_predicateValues', 'predicateValues'),
+  // Time to first chunk. The trace_roots / trace_branches views copy span_events
+  // with SELECT *, so both targets need the column too. They get it first so no
+  // write lands while the source has a column its targets lack.
+  addColumn(TABLE_TRACE_ROOTS, 'timeToFirstChunkMs', 'Nullable(Float64)'),
+  addColumn(TABLE_TRACE_BRANCHES, 'timeToFirstChunkMs', 'Nullable(Float64)'),
+  addColumn(TABLE_SPAN_EVENTS, 'timeToFirstChunkMs', 'Nullable(Float64)'),
 ];
 
 /**

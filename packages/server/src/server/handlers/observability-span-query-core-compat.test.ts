@@ -32,9 +32,9 @@ describe('span query Core compatibility', () => {
     expect(supportsSpanQueryCore()).toBe(false);
     expect(
       getObservabilityStorageCapabilities({
-        getFeatures: () => ['span-query'],
-      } as unknown as Parameters<typeof getObservabilityStorageCapabilities>[0]).spanQuery,
-    ).toBe(false);
+        getFeatures: () => ['span-query', 'span-query-context-fields'],
+      } as unknown as Parameters<typeof getObservabilityStorageCapabilities>[0]),
+    ).toMatchObject({ spanQuery: false, spanQueryContextFields: false });
   });
 
   it('returns a structured 501 instead of a 500 when the installed Core lacks span-query symbols', async () => {

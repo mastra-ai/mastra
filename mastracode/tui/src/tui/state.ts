@@ -51,6 +51,7 @@ import type { OnboardingInlineComponent } from './onboarding-inline.js';
 import { pruneChatContainer } from './prune-chat.js';
 import { installRenderScheduler } from './render-scheduler.js';
 import type { RenderScheduler } from './render-scheduler.js';
+import type { FactoryRuntimeInfo, LocalRuntime, TuiController, TuiSession } from './runtime.js';
 import { getEditorTheme, getTermWidth, mastra } from './theme.js';
 import { VoiceController } from './voice/voice-controller.js';
 
@@ -104,13 +105,26 @@ export function getGithubPrSubscriptionsFromMetadata(
 // MastraTUIOptions
 // =============================================================================
 
-export interface MastraTUIOptions {
+/** In-process Mastra Code: agent, tools, and storage run in this process. */
+export interface LocalRuntimeOptions {
+  runtime?: 'local';
   /** The controller instance */
   controller: AgentController<any>;
-
   /** The session created from the controller that all work runs through */
   session: Session<any>;
+}
 
+/** Factory client: the agent runs in a Factory; the TUI only renders and forwards input. */
+export interface FactoryRuntimeOptions {
+  runtime: 'factory';
+  controller: TuiController;
+  session: TuiSession;
+  factory: FactoryRuntimeInfo;
+}
+
+export type MastraTUIOptions = MastraTUIBaseOptions & (LocalRuntimeOptions | FactoryRuntimeOptions);
+
+export interface MastraTUIBaseOptions {
   /** Hook manager for session lifecycle hooks */
   hookManager?: HookManager;
 
@@ -195,6 +209,9 @@ export interface MastraTUIOptions {
 
   /** Process adapter exit hook. Defaults to process.exit. */
   exit?: (exitCode: number) => void;
+
+  /** Restart Mastra Code in place so a Factory/local mode switch takes effect. */
+  relaunch?: () => Promise<void>;
 }
 
 // =============================================================================
@@ -203,8 +220,12 @@ export interface MastraTUIOptions {
 
 export interface TUIState {
   // ── Core dependencies (set once) ──────────────────────────────────────
-  controller: AgentController<any>;
-  session: Session<any>;
+  controller: TuiController;
+  session: TuiSession;
+  /** The in-process runtime; undefined when connected to a Factory. */
+  local?: LocalRuntime;
+  /** Factory connection; set only when connected to a Factory. */
+  factory?: FactoryRuntimeInfo;
   options: MastraTUIOptions;
   hookManager?: HookManager;
   analytics?: MastraCodeAnalytics;
@@ -390,6 +411,17 @@ export interface TUIState {
   waitForAgentControllerEvents?: () => Promise<void>;
 }
 
+/**
+ * Forget the in-flight tool calls, stopping their live updates first: a
+ * running shell row keeps redrawing the whole TUI on a timer until stopped,
+ * even after it has left the chat.
+ */
+export function clearPendingTools(state: TUIState): void {
+  for (const tool of state.pendingTools.values()) tool.stopLiveUpdates?.();
+  state.pendingTools.clear();
+  state.pendingTaskToolIds?.clear();
+}
+
 // =============================================================================
 // Factory
 // =============================================================================
@@ -426,6 +458,8 @@ export function createTUIState(options: MastraTUIOptions): TUIState {
     // Core dependencies
     controller: options.controller,
     session: options.session,
+    local: options.runtime === 'factory' ? undefined : { controller: options.controller, session: options.session },
+    factory: options.runtime === 'factory' ? options.factory : undefined,
     options,
     hookManager: options.hookManager,
     analytics: options.analytics,

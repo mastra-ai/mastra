@@ -15,11 +15,18 @@ overrides:
   nanoid@>=3.0.0 <3.3.19: 3.3.19
   jose@>=4.14.0 <6.2.12: 6.2.12
   hono@<4.13.11: 4.13.11
-  better-auth: ^1.6.26
+  better-auth: ^1.7.7
+  '@better-auth/drizzle-adapter@<1.7.7': 1.7.7
+  '@modelcontextprotocol/sdk@>=1.0.0 <1.32.0': 1.32.1
   '@ai-sdk/provider-utils@>=3.0.0 <3.0.38': 3.0.38
   es-toolkit@<1.52.0: 1.52.0
   fast-copy@<4.1.1: 4.1.1
   ioredis@>=5.0.0 <6.0.0: 6.0.0
-  zod@>=4.0.0 <4.6.5: 4.6.5
+  zod@>=4.0.0 <4.6.7: 4.6.7
   # Vanta 2026-10-02: force fixed majors for findings whose parents have no release on them yet.
   'yargs@<18.1.0': 18.2.0
+  # Vanta 2026-10-15: AIKIDO-2026-526145 (@ai-sdk/provider-utils) fixed 4.0.52 / 5.0.37; mirror root floors
+  '@ai-sdk/provider-utils@>=4.0.0 <4.0.56': 4.0.56
+  '@ai-sdk/provider-utils@>=5.0.0 <5.0.52': 5.0.52
+  # provider-utils 4.0.56 pulls undici ^6; mirror root undici floor
+  'undici@<8.12.2': 8.12.2

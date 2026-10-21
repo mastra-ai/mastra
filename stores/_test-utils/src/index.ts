@@ -14,3 +14,6 @@ export * from './domain-tests';
 export * from './index-config';
 export * from './composite-tests';
 export { createSpanQueryTests } from './domains/observability-vnext/span-query';
+export { createThreadQueryTests } from './domains/observability-vnext/thread-query';
+export { createPreviewTests } from './domains/observability-vnext/previews';
+export type { PreviewTestsOptions } from './domains/observability-vnext/previews';

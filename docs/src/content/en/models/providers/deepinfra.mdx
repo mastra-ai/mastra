@@ -7,7 +7,7 @@ description: "Browse Deep Infra model IDs, capabilities, context windows, and pr
 
 # <img src="https://models.dev/logos/deepinfra.svg" alt="Deep Infra logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Deep Infra
 
-Access 72 Deep Infra models through Mastra's model router. Authentication is handled automatically using the `DEEPINFRA_API_KEY` environment variable.
+Access 76 Deep Infra models through Mastra's model router. Authentication is handled automatically using the `DEEPINFRA_API_KEY` environment variable.
 
 Learn more in the [Deep Infra documentation](https://deepinfra.com/models).
 
@@ -39,6 +39,18 @@ for await (const chunk of stream) {
 
 <ProviderModelsTable
   models={[
+  {
+    "model": "deepinfra/anthropic/claude-fable-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 10,
+    "outputCost": 50
+  },
   {
     "model": "deepinfra/ByteDance/Seed-2.0-code",
     "imageInput": true,
@@ -196,6 +208,18 @@ for await (const chunk of stream) {
     "outputCost": 0.6
   },
   {
+    "model": "deepinfra/deepseek-ai/DeepSeek-V4.1-Flash-1017",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 384000,
+    "inputCost": 0.2,
+    "outputCost": 0.6
+  },
+  {
     "model": "deepinfra/google/gemma-3-12b-it",
     "imageInput": true,
     "audioInput": false,
@@ -290,6 +314,18 @@ for await (const chunk of stream) {
     "maxOutput": 512000,
     "inputCost": 0.28,
     "outputCost": 1.1
+  },
+  {
+    "model": "deepinfra/mistralai/Mistral-Small-24B-Instruct-2501",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 32768,
+    "maxOutput": 16384,
+    "inputCost": 0.05,
+    "outputCost": 0.08
   },
   {
     "model": "deepinfra/moonshotai/Kimi-K2.6",
@@ -426,7 +462,7 @@ for await (const chunk of stream) {
   {
     "model": "deepinfra/Qwen/Qwen3.5-27B",
     "imageInput": true,
-    "audioInput": true,
+    "audioInput": false,
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
@@ -474,7 +510,7 @@ for await (const chunk of stream) {
   {
     "model": "deepinfra/Qwen/Qwen3.6-27B",
     "imageInput": true,
-    "audioInput": true,
+    "audioInput": false,
     "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
@@ -503,21 +539,9 @@ for await (const chunk of stream) {
     "toolUsage": true,
     "reasoning": false,
     "contextWindow": 256000,
-    "maxOutput": 65536,
+    "maxOutput": 131072,
     "inputCost": 2.5,
     "outputCost": 7.5
-  },
-  {
-    "model": "deepinfra/Qwen/Qwen3.8-2.4T-A95B",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 131072,
-    "inputCost": 2,
-    "outputCost": 6
   },
   {
     "model": "deepinfra/Qwen/Qwen3.8-27B",
@@ -554,6 +578,18 @@ for await (const chunk of stream) {
     "maxOutput": 131072,
     "inputCost": 1.65,
     "outputCost": 4.951
+  },
+  {
+    "model": "deepinfra/stepfun-ai/Step-5-Preview",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1000000,
+    "inputCost": 1,
+    "outputCost": 2.7
   },
   {
     "model": "deepinfra/tencent/Hy4-preview",

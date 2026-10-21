@@ -71,6 +71,7 @@ CREATE TABLE IF NOT EXISTS span_events (
   spanType VARCHAR,
   isEvent BOOLEAN,
   endedAt TIMESTAMP,
+  timeToFirstChunkMs DOUBLE,
 
   -- JSON fields
   attributes JSON,
@@ -80,7 +81,22 @@ CREATE TABLE IF NOT EXISTS span_events (
   links JSON,
   input JSON,
   output JSON,
-  error JSON
+  error JSON,
+
+  -- Previews of input/output/error in the shared core format, set on the
+  -- event rows that carry the matching payload ('' = nothing to preview).
+  -- NULL marks a row written before previews were stored, or a row that does
+  -- not carry that payload.
+  inputPreview VARCHAR,
+  outputPreview VARCHAR,
+  errorPreview VARCHAR,
+
+  -- Whether this row carries a non-null input/output/error payload. Lets the
+  -- light trace list pick each preview's row without reading the payloads.
+  -- NULL on rows written before these columns existed.
+  hasInputPayload BOOLEAN,
+  hasOutputPayload BOOLEAN,
+  hasErrorPayload BOOLEAN
 )`;
 
 /** DDL for the metric_events append-only table. */
@@ -334,6 +350,15 @@ export const ALL_MIGRATIONS = [
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS entityVersionId VARCHAR`,
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS parentEntityVersionId VARCHAR`,
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS rootEntityVersionId VARCHAR`,
+  // Stored previews. Existing rows keep NULL; readers build their previews
+  // from the payload instead (no backfill).
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS inputPreview VARCHAR`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS outputPreview VARCHAR`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS errorPreview VARCHAR`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS hasInputPayload BOOLEAN`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS hasOutputPayload BOOLEAN`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS hasErrorPayload BOOLEAN`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS timeToFirstChunkMs DOUBLE`,
 
   // Metrics. Legacy rows remain page-visible but are not part of delta polling.
   `ALTER TABLE metric_events ADD COLUMN IF NOT EXISTS cursorId BIGINT`,

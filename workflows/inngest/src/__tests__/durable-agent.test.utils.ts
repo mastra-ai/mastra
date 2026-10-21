@@ -20,8 +20,18 @@ import { Inngest } from 'inngest';
 import { serve as inngestServe } from '../index';
 import { ensureInngestCliBinary } from './inngest-cli';
 
-export const INNGEST_PORT = 4100;
-export const HANDLER_PORT = 4101;
+// Set INNGEST_TEST_PORT_OFFSET to run several dev servers side by side (one per test worker).
+const PORT_OFFSET = Number(process.env.INNGEST_TEST_PORT_OFFSET ?? 0);
+export const INNGEST_PORT = 4100 + PORT_OFFSET;
+export const HANDLER_PORT = 4101 + PORT_OFFSET;
+// The dev server's connect gateway ports clash between instances, so move them with the offset.
+const CONNECT_PORT_ARGS = PORT_OFFSET
+  ? [
+      `--connect-gateway-port=${18289 + PORT_OFFSET}`,
+      `--connect-gateway-grpc-port=${50052 + PORT_OFFSET * 3}`,
+      `--connect-executor-grpc-port=${50053 + PORT_OFFSET * 3}`,
+    ]
+  : [];
 
 // =============================================================================
 // Shared Test Infrastructure
@@ -95,12 +105,15 @@ async function startInngestDevServer({
       ...(sdkUrl ? ['-u', sdkUrl] : []),
       '--poll-interval=1',
       '--no-discovery',
+      ...CONNECT_PORT_ARGS,
     ];
 
     const proc = spawn(inngestBinary, args, {
       stdio: ['ignore', 'pipe', 'pipe'],
       detached: false,
     });
+    // Don't leave the dev server behind if the test worker exits without tearing down.
+    process.once('exit', () => proc.kill('SIGKILL'));
 
     let started = false;
     const timeout = setTimeout(() => {

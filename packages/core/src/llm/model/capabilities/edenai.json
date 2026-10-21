@@ -10,6 +10,8 @@
     "amazon/google.gemma-3-27b-it@us",
     "amazon/google.gemma-3-4b-it",
     "amazon/google.gemma-3-4b-it@us",
+    "amazon/mistral.pixtral-large-2502-v1:0",
+    "amazon/mistral.pixtral-large-2502-v1:0@us",
     "amazon/mistral.voxtral-mini-3b-2507",
     "amazon/mistral.voxtral-mini-3b-2507@us",
     "amazon/mistral.voxtral-small-24b-2507",
@@ -19,6 +21,7 @@
     "anthropic/claude-fable-5-1",
     "anthropic/claude-fable-latest",
     "anthropic/claude-haiku-5-5",
+    "anthropic/claude-haiku-latest",
     "anthropic/claude-opus-4-5",
     "anthropic/claude-opus-4-5-20251101",
     "anthropic/claude-opus-4-6",
@@ -35,12 +38,15 @@
     "azure/gpt-5.1-codex-max",
     "azure/gpt-5.1-codex-mini",
     "azure/gpt-5.2-codex",
+    "cloudflare/@cf/deepseek-ai/deepseek-v4.1-flash-1017",
+    "cloudflare/@cf/mistralai/mistral-small-3.1-24b-instruct",
     "databricks/databricks-inkling",
     "deepinfra/ByteDance/Seed-2.0-code",
     "deepinfra/ByteDance/Seed-2.0-mini",
     "deepinfra/Qwen/Qwen3-VL-235B-A22B-Instruct",
     "deepinfra/Qwen/Qwen3-VL-30B-A3B-Instruct",
     "deepinfra/deepseek-ai/DeepSeek-V4.1-Flash",
+    "deepinfra/deepseek-ai/DeepSeek-V4.1-Flash-1017",
     "deepinfra/google/gemma-3-12b-it",
     "deepinfra/google/gemma-3-27b-it",
     "deepinfra/google/gemma-3-4b-it",
@@ -48,11 +54,15 @@
     "deepinfra/meta-models/Muse-Glimmer-30B",
     "deepinfra/moonshotai/Kimi-K2.5",
     "deepinfra/stepfun-ai/Step-3.7-Flash",
+    "deepinfra/stepfun-ai/Step-5-Preview",
     "deepinfra/thinkingmachines/Inkling",
     "deepinfra/thinkingmachines/Inkling-Small",
+    "deepseek-v4-flash-vision-exp",
     "deepseek/deepseek-v4-flash",
     "deepseek/deepseek-v4-flash-vision-exp",
+    "fireworks_ai/accounts/fireworks/models/ember-1",
     "fireworks_ai/accounts/fireworks/models/inkling",
+    "fireworks_ai/accounts/fireworks/models/muse-spark-open",
     "flexai/DeepSeek-V4.1-Flash",
     "flexai/Muse-Glimmer-30B",
     "flexai/Step-3.7-Flash",
@@ -74,27 +84,41 @@
     "google/gemini-3.6-flash",
     "google/gemini-3.7-flash",
     "google/gemini-3.8-flash",
+    "google/gemini-4-argon",
     "google/gemini-flash-latest",
     "google/gemini-nano-banana-2.1",
     "google/gemini-pro-latest",
+    "google/gemini-robotics-er-2-preview",
     "greenpt/deepseek-v4.1-flash",
+    "infomaniak/mistralai/Ministral-3-14B-Instruct-2512",
+    "meta/muse-spark-1.1",
+    "meta/muse-spark-1.2",
+    "meta/muse-spark-1.3",
+    "meta/muse-wonder-1.0",
     "minimax/MiniMax-M3",
     "mistral/codestral-2508",
     "mistral/devstral-2512",
     "mistral/magistral-medium-latest",
+    "mistral/ministral-14b-2512",
+    "mistral/ministral-3b-2512",
+    "mistral/ministral-8b-2512",
+    "mistral/mistral-large-2407",
     "mistral/mistral-large-2512",
     "mistral/mistral-large-latest",
     "mistral/mistral-medium-2505",
     "mistral/mistral-medium-2604",
+    "mistral/mistral-medium-3",
+    "mistral/mistral-medium-3-5",
     "mistral/mistral-medium-latest",
     "mistral/mistral-small-2603",
     "mistral/mistral-small-latest",
     "mistral/voxtral-small-latest",
     "moonshot/kimi-k2.6",
     "moonshot/kimi-k2.7-code",
+    "moonshot/kimi-k2.7-code-highspeed",
     "moonshot/kimi-k3",
     "nebius/deepseek-ai/DeepSeek-V4.1-Flash",
-    "nebius/google/gemma-3-27b-it",
+    "nebius/meta-models/muse-spark-open",
     "openai/gpt-4-turbo",
     "openai/gpt-4.1",
     "openai/gpt-4.1-mini",
@@ -107,6 +131,7 @@
     "openai/gpt-5-mini",
     "openai/gpt-5-nano",
     "openai/gpt-5-pro",
+    "openai/gpt-5-search-api",
     "openai/gpt-5.1",
     "openai/gpt-5.2",
     "openai/gpt-5.2-pro",
@@ -137,15 +162,21 @@
     "perplexityai/sonar-pro",
     "perplexityai/sonar-reasoning-pro",
     "qwen/deepseek-v4.1-flash",
+    "qwen/deepseek-v4.1-flash-1017",
     "qwen/qwen3.8-27b",
     "qwen/qwen3.8-flash",
     "qwen/qwen3.8-max",
     "qwen/qwen3.8-max-0902",
     "qwen/qwen3.8-omni-flash",
+    "scaleway/deepseek-v4.1-flash",
     "scaleway/gemma-3-27b-it",
+    "tencent/deepseek-v4.1-flash",
+    "tencent/step-5-preview",
     "tensorx/deepseek/deepseek-v4.1-flash",
+    "tensorx/deepseek/deepseek-v4.1-flash-1017",
     "tensorx/moonshotai/kimi-k2.5",
     "together_ai/deepseek-ai/DeepSeek-V4.1-Flash",
+    "together_ai/deepseek-ai/DeepSeek-V4.1-Flash-1017",
     "together_ai/meta-models/Muse-Glimmer-30B",
     "together_ai/thinkingmachines/Inkling",
     "vertex/gemini-2.5-flash-image",
@@ -172,6 +203,9 @@
     "vertex/gemini-3.8-flash",
     "vertex/gemini-3.8-flash@eu",
     "vertex/gemini-3.8-flash@us",
+    "vertex/gemini-4-argon",
+    "vertex/gemini-4-argon@eu",
+    "vertex/gemini-4-argon@us",
     "vertex/gemini-flash-latest",
     "vertex/gemini-pro-latest",
     "xai/grok-4.20-0309-non-reasoning",
@@ -219,8 +253,10 @@
     "cloudflare/@cf/aisingapore/gemma-sea-lion-v4-27b-it",
     "cloudflare/@cf/deepseek-ai/deepseek-v4-flash-0731",
     "cloudflare/@cf/deepseek-ai/deepseek-v4-pro-0813",
+    "cloudflare/@cf/deepseek-ai/deepseek-v4.1-flash-1017",
     "cloudflare/@cf/meta/llama-3.2-1b-instruct",
     "cloudflare/@cf/meta/llama-guard-3-8b",
+    "cloudflare/@cf/mistralai/mistral-small-3.1-24b-instruct",
     "cloudflare/@cf/openai/gpt-oss-120b",
     "cloudflare/@cf/openai/gpt-oss-20b",
     "cloudflare/@cf/qwen/qwen2.5-coder-32b-instruct",
@@ -242,7 +278,10 @@
     "deepinfra/ByteDance/Seed-2.0-code",
     "deepinfra/ByteDance/Seed-2.0-mini",
     "deepinfra/Gryphe/MythoMax-L2-13b",
+    "deepinfra/NousResearch/Hermes-3-Llama-3.1-405B",
+    "deepinfra/NousResearch/Hermes-3-Llama-3.1-70B",
     "deepinfra/Qwen/Qwen3-235B-A22B-Instruct-2507",
+    "deepinfra/Qwen/Qwen3-235B-A22B-Thinking-2507",
     "deepinfra/Qwen/Qwen3-Coder-480B-A35B-Instruct",
     "deepinfra/Qwen/Qwen3-Max",
     "deepinfra/Qwen/Qwen3-Next-80B-A3B-Instruct",
@@ -255,15 +294,19 @@
     "deepinfra/deepseek-ai/DeepSeek-V4-Flash-0731",
     "deepinfra/deepseek-ai/DeepSeek-V4-Pro-0813",
     "deepinfra/deepseek-ai/DeepSeek-V4.1-Flash",
+    "deepinfra/deepseek-ai/DeepSeek-V4.1-Flash-1017",
     "deepinfra/google/gemma-3-12b-it",
     "deepinfra/google/gemma-3-27b-it",
     "deepinfra/google/gemma-3-4b-it",
+    "deepinfra/ibm-granite/granite-4.2-8b",
     "deepinfra/meta-llama/Llama-3.2-11B-Vision-Instruct",
     "deepinfra/meta-llama/Llama-3.3-70B-Instruct",
     "deepinfra/meta-llama/Llama-Guard-3-8B",
     "deepinfra/meta-models/Muse-Glimmer-30B",
     "deepinfra/microsoft/WizardLM-2-8x22B",
+    "deepinfra/mistralai/Mistral-Small-24B-Instruct-2501",
     "deepinfra/moonshotai/Kimi-K2-Instruct",
+    "deepinfra/nemotron-3-super-120b-a12b",
     "deepinfra/nemotron-3-ultra-550b-a55b",
     "deepinfra/nvidia/Llama-3.1-Nemotron-70B-Instruct",
     "deepinfra/nvidia/Nemotron-3-Nano-30B-A3B",
@@ -271,19 +314,24 @@
     "deepinfra/openai/gpt-oss-20b",
     "deepinfra/stepfun-ai/Step-3.5-Flash",
     "deepinfra/stepfun-ai/Step-3.7-Flash",
+    "deepinfra/stepfun-ai/Step-5-Preview",
     "deepinfra/tencent/Hy3",
     "deepinfra/tencent/Hy4-preview",
     "deepinfra/thinkingmachines/Inkling",
     "deepinfra/thinkingmachines/Inkling-Small",
     "deepinfra/zai-org/GLM-4.7-Flash",
+    "deepseek-v4-flash-vision-exp",
     "deepseek/deepseek-chat",
     "deepseek/deepseek-v4-flash",
     "deepseek/deepseek-v4-flash-vision-exp",
     "deepseek/deepseek-v4-pro",
+    "fireworks_ai/accounts/fireworks/models/ember-1",
     "fireworks_ai/accounts/fireworks/models/gpt-oss-120b",
     "fireworks_ai/accounts/fireworks/models/inkling",
+    "fireworks_ai/accounts/fireworks/models/muse-spark-open",
     "fireworks_ai/gpt-oss-120b",
     "flexai/DeepSeek-V4-Flash-0731",
+    "flexai/DeepSeek-V4-Flash-0731@eu",
     "flexai/DeepSeek-V4.1-Flash",
     "flexai/Muse-Glimmer-30B",
     "flexai/Step-3.7-Flash",
@@ -306,7 +354,7 @@
     "google/gemini-3.7-flash",
     "google/gemini-3.8-flash",
     "google/gemini-flash-latest",
-    "google/gemini-pro-latest",
+    "google/gemini-robotics-er-2-preview",
     "greenference/deepseek-v4.1-flash",
     "greenference/gpt-oss-20b",
     "greenpt/deepseek-v4-flash-0731",
@@ -321,20 +369,31 @@
     "ionos/Qwen/Qwen3-Coder-Next",
     "ionos/meta-llama/Llama-3.3-70B-Instruct",
     "ionos/openai/gpt-oss-120b",
+    "meta/muse-spark-1.1",
+    "meta/muse-spark-1.2",
+    "meta/muse-spark-1.3",
+    "meta/muse-wonder-1.0",
     "minimax/MiniMax-M2",
     "minimax/MiniMax-M2.1",
     "minimax/MiniMax-M2.5",
     "minimax/MiniMax-M2.7",
     "minimax/MiniMax-M3",
+    "minimax/MiniMax-M3.1-Flash",
     "mistral/codestral-2508",
     "mistral/codestral-latest",
     "mistral/devstral-2512",
     "mistral/devstral-medium-latest",
     "mistral/magistral-medium-latest",
+    "mistral/ministral-14b-2512",
+    "mistral/ministral-3b-2512",
+    "mistral/ministral-8b-2512",
+    "mistral/mistral-large-2407",
     "mistral/mistral-large-2512",
     "mistral/mistral-large-latest",
     "mistral/mistral-medium-2505",
     "mistral/mistral-medium-2604",
+    "mistral/mistral-medium-3",
+    "mistral/mistral-medium-3-5",
     "mistral/mistral-medium-latest",
     "mistral/mistral-small-2603",
     "mistral/mistral-small-latest",
@@ -345,6 +404,7 @@
     "nebius/deepseek-ai/DeepSeek-V4-Pro-0813",
     "nebius/deepseek-ai/DeepSeek-V4.1-Flash",
     "nebius/google/gemma-3-27b-it",
+    "nebius/meta-models/muse-spark-open",
     "nebius/nvidia/Nemotron-3-Ultra-550b-a55b",
     "nebius/nvidia/nemotron-3-super-120b-a12b",
     "nebius/openai/gpt-oss-120b",
@@ -364,7 +424,6 @@
     "openai/gpt-5.4",
     "openai/gpt-5.4-mini",
     "openai/gpt-5.4-nano",
-    "openai/gpt-mini-latest",
     "ovhcloud/gpt-oss-120b",
     "ovhcloud/gpt-oss-20b",
     "perplexityai/sonar",
@@ -373,13 +432,16 @@
     "qwen/deepseek-v4-flash-0731",
     "qwen/deepseek-v4-pro-0813",
     "qwen/deepseek-v4.1-flash",
+    "qwen/deepseek-v4.1-flash-1017",
     "qwen/qwen-max",
     "qwen/qwen-mt-plus",
     "qwen/qwen3-coder-flash",
     "qwen/qwen3.8-2.4t-a95b",
     "qwen/qwen3.8-27b",
+    "qwen/qwen3.8-flash",
     "qwen/qwen3.8-max",
     "qwen/qwen3.8-max-0902",
+    "qwen/qwen3.8-omni-flash",
     "scaleway/deepseek-v4-flash-0731",
     "scaleway/deepseek-v4.1-flash",
     "scaleway/gemma-3-27b-it",
@@ -388,17 +450,22 @@
     "scaleway/qwen3-235b-a22b-instruct-2507",
     "scaleway/qwen3-coder-30b-a3b-instruct",
     "tencent/deepseek-v4-pro-0813",
+    "tencent/deepseek-v4.1-flash",
     "tencent/hy3",
     "tencent/hy4-preview",
+    "tencent/step-5-preview",
     "tensorx/deepseek/deepseek-r1-0528",
     "tensorx/deepseek/deepseek-v4-flash-0731",
     "tensorx/deepseek/deepseek-v4-pro-0813",
     "tensorx/deepseek/deepseek-v4.1-flash",
+    "tensorx/deepseek/deepseek-v4.1-flash-1017",
     "together_ai/deepseek-ai/DeepSeek-V4-Flash-0731",
     "together_ai/deepseek-ai/DeepSeek-V4-Pro-0813",
     "together_ai/deepseek-ai/DeepSeek-V4.1-Flash",
+    "together_ai/deepseek-ai/DeepSeek-V4.1-Flash-1017",
     "together_ai/meta-models/Muse-Glimmer-30B",
     "together_ai/openai/gpt-oss-120b",
+    "together_ai/reflection/Beam-1.0-501B-A23B",
     "together_ai/thinkingmachines/Inkling",
     "vertex/gemini-2.5-flash-image",
     "vertex/gemini-3-flash-preview",
@@ -425,7 +492,7 @@
     "vertex/gemini-3.8-flash@eu",
     "vertex/gemini-3.8-flash@us",
     "vertex/gemini-flash-latest",
-    "vertex/gemini-pro-latest",
+    "xai/grok-4-fast-non-reasoning",
     "xai/grok-4.20-0309-non-reasoning",
     "xai/grok-4.20-0309-reasoning",
     "xai/grok-4.3",
@@ -467,6 +534,7 @@
     "anthropic/claude-fable-5-1",
     "anthropic/claude-fable-latest",
     "anthropic/claude-haiku-5-5",
+    "anthropic/claude-haiku-latest",
     "anthropic/claude-opus-4-5",
     "anthropic/claude-opus-4-5-20251101",
     "anthropic/claude-opus-4-6",
@@ -486,6 +554,8 @@
     "cerebras/gpt-oss-120b",
     "cloudflare/@cf/deepseek-ai/deepseek-v4-flash-0731",
     "cloudflare/@cf/deepseek-ai/deepseek-v4-pro-0813",
+    "cloudflare/@cf/deepseek-ai/deepseek-v4.1-flash-1017",
+    "cloudflare/@cf/mistralai/mistral-small-3.1-24b-instruct",
     "cloudflare/@cf/qwen/qwen2.5-coder-32b-instruct",
     "cloudflare/@cf/zai-org/glm-4.7-flash",
     "cohere/command-a-03-2025",
@@ -495,6 +565,9 @@
     "deepinfra/ByteDance/Seed-2.0-code",
     "deepinfra/ByteDance/Seed-2.0-mini",
     "deepinfra/Gryphe/MythoMax-L2-13b",
+    "deepinfra/NousResearch/Hermes-3-Llama-3.1-405B",
+    "deepinfra/NousResearch/Hermes-3-Llama-3.1-70B",
+    "deepinfra/Qwen/Qwen3-235B-A22B-Thinking-2507",
     "deepinfra/Qwen/Qwen3-Max",
     "deepinfra/Qwen/Qwen3-Next-80B-A3B-Instruct",
     "deepinfra/Qwen/Qwen3-VL-235B-A22B-Instruct",
@@ -503,31 +576,40 @@
     "deepinfra/deepseek-ai/DeepSeek-V4-Flash-0731",
     "deepinfra/deepseek-ai/DeepSeek-V4-Pro-0813",
     "deepinfra/deepseek-ai/DeepSeek-V4.1-Flash",
+    "deepinfra/deepseek-ai/DeepSeek-V4.1-Flash-1017",
     "deepinfra/google/gemma-3-12b-it",
     "deepinfra/google/gemma-3-27b-it",
     "deepinfra/google/gemma-3-4b-it",
+    "deepinfra/ibm-granite/granite-4.2-8b",
     "deepinfra/meta-llama/Llama-3.2-11B-Vision-Instruct",
     "deepinfra/meta-llama/Llama-3.3-70B-Instruct",
     "deepinfra/meta-models/Muse-Glimmer-30B",
+    "deepinfra/mistralai/Mistral-Small-24B-Instruct-2501",
     "deepinfra/moonshotai/Kimi-K2.5",
+    "deepinfra/nemotron-3-super-120b-a12b",
     "deepinfra/nemotron-3-ultra-550b-a55b",
     "deepinfra/nvidia/Nemotron-3-Nano-30B-A3B",
     "deepinfra/openai/gpt-oss-120b",
     "deepinfra/openai/gpt-oss-20b",
     "deepinfra/stepfun-ai/Step-3.5-Flash",
     "deepinfra/stepfun-ai/Step-3.7-Flash",
+    "deepinfra/stepfun-ai/Step-5-Preview",
     "deepinfra/tencent/Hy3",
     "deepinfra/tencent/Hy4-preview",
     "deepinfra/thinkingmachines/Inkling",
     "deepinfra/thinkingmachines/Inkling-Small",
     "deepinfra/zai-org/GLM-4.7-Flash",
+    "deepseek-v4-flash-vision-exp",
     "deepseek/deepseek-chat",
     "deepseek/deepseek-v4-flash",
     "deepseek/deepseek-v4-flash-vision-exp",
     "deepseek/deepseek-v4-pro",
+    "fireworks_ai/accounts/fireworks/models/ember-1",
     "fireworks_ai/accounts/fireworks/models/gpt-oss-120b",
     "fireworks_ai/accounts/fireworks/models/inkling",
+    "fireworks_ai/accounts/fireworks/models/muse-spark-open",
     "flexai/DeepSeek-V4-Flash-0731",
+    "flexai/DeepSeek-V4-Flash-0731@eu",
     "flexai/DeepSeek-V4.1-Flash",
     "flexai/Step-3.7-Flash",
     "flexai/gpt-oss-120b",
@@ -548,18 +630,29 @@
     "google/gemini-3.6-flash",
     "google/gemini-3.7-flash",
     "google/gemini-3.8-flash",
+    "google/gemini-4-argon",
     "google/gemini-flash-latest",
     "google/gemini-nano-banana-2.1",
     "google/gemini-pro-latest",
+    "google/gemini-robotics-er-2-preview",
     "greenference/deepseek-v4.1-flash",
     "greenference/gpt-oss-20b",
     "greenpt/deepseek-v4-flash-0731",
     "greenpt/gpt-oss-120b",
     "greenpt/llama-3.3-70b-instruct",
     "greenpt/qwen3-235b-a22b-instruct-2507",
+    "groq/meta-llama/llama-prompt-guard-2-86m",
     "groq/openai/gpt-oss-120b",
     "groq/openai/gpt-oss-20b",
     "groq/openai/gpt-oss-safeguard-20b",
+    "infomaniak/mistralai/Ministral-3-14B-Instruct-2512",
+    "ionos/Qwen/Qwen3-Coder-Next",
+    "ionos/meta-llama/Llama-3.3-70B-Instruct",
+    "ionos/openai/gpt-oss-120b",
+    "meta/muse-spark-1.1",
+    "meta/muse-spark-1.2",
+    "meta/muse-spark-1.3",
+    "meta/muse-wonder-1.0",
     "minimax/MiniMax-M2.1",
     "minimax/MiniMax-M2.5",
     "minimax/MiniMax-M2.7",
@@ -569,10 +662,16 @@
     "mistral/devstral-2512",
     "mistral/devstral-medium-latest",
     "mistral/magistral-medium-latest",
+    "mistral/ministral-14b-2512",
+    "mistral/ministral-3b-2512",
+    "mistral/ministral-8b-2512",
+    "mistral/mistral-large-2407",
     "mistral/mistral-large-2512",
     "mistral/mistral-large-latest",
     "mistral/mistral-medium-2505",
     "mistral/mistral-medium-2604",
+    "mistral/mistral-medium-3",
+    "mistral/mistral-medium-3-5",
     "mistral/mistral-medium-latest",
     "mistral/mistral-small-2603",
     "mistral/mistral-small-latest",
@@ -583,7 +682,9 @@
     "nebius/Qwen/Qwen3-235B-A22B-Instruct-2507",
     "nebius/deepseek-ai/DeepSeek-V4-Flash-0731",
     "nebius/deepseek-ai/DeepSeek-V4-Pro-0813",
+    "nebius/deepseek-ai/DeepSeek-V4.1-Flash",
     "nebius/google/gemma-3-27b-it",
+    "nebius/meta-models/muse-spark-open",
     "nebius/nvidia/Nemotron-3-Ultra-550b-a55b",
     "nebius/nvidia/nemotron-3-super-120b-a12b",
     "nebius/openai/gpt-oss-120b",
@@ -601,6 +702,7 @@
     "openai/gpt-5-mini",
     "openai/gpt-5-nano",
     "openai/gpt-5-pro",
+    "openai/gpt-5-search-api",
     "openai/gpt-5.1",
     "openai/gpt-5.2",
     "openai/gpt-5.2-pro",
@@ -632,6 +734,7 @@
     "qwen/deepseek-v4-flash-0731",
     "qwen/deepseek-v4-pro-0813",
     "qwen/deepseek-v4.1-flash",
+    "qwen/deepseek-v4.1-flash-1017",
     "qwen/qwen-max",
     "qwen/qwen3-coder-flash",
     "qwen/qwen3.8-2.4t-a95b",
@@ -640,13 +743,20 @@
     "qwen/qwen3.8-max",
     "qwen/qwen3.8-max-0902",
     "qwen/qwen3.8-omni-flash",
+    "tencent/deepseek-v4-pro-0813",
+    "tencent/deepseek-v4.1-flash",
+    "tencent/hy3",
+    "tencent/hy4-preview",
+    "tencent/step-5-preview",
     "tensorx/deepseek/deepseek-r1-0528",
     "tensorx/moonshotai/kimi-k2.5",
     "together_ai/deepseek-ai/DeepSeek-V4-Flash-0731",
     "together_ai/deepseek-ai/DeepSeek-V4-Pro-0813",
     "together_ai/deepseek-ai/DeepSeek-V4.1-Flash",
+    "together_ai/deepseek-ai/DeepSeek-V4.1-Flash-1017",
     "together_ai/meta-models/Muse-Glimmer-30B",
     "together_ai/openai/gpt-oss-120b",
+    "together_ai/reflection/Beam-1.0-501B-A23B",
     "together_ai/thinkingmachines/Inkling",
     "vertex/gemini-2.5-flash-image",
     "vertex/gemini-3-flash-preview",
@@ -672,6 +782,9 @@
     "vertex/gemini-3.8-flash",
     "vertex/gemini-3.8-flash@eu",
     "vertex/gemini-3.8-flash@us",
+    "vertex/gemini-4-argon",
+    "vertex/gemini-4-argon@eu",
+    "vertex/gemini-4-argon@us",
     "vertex/gemini-flash-latest",
     "vertex/gemini-pro-latest",
     "xai/grok-4.20-0309-non-reasoning",
@@ -691,373 +804,109 @@
     "zai/glm-5v-turbo"
   ],
   "reasoning": {
-    "deepinfra/nemotron-3-ultra-550b-a55b": [
+    "deepseek-v4-flash-vision-exp": [
       {
         "type": "effort",
-        "values": ["none", "medium", "high"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
-    "deepinfra/meta-models/Muse-Glimmer-30B": [
+    "greenference/gpt-oss-20b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "greenference/deepseek-v4.1-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "meta/muse-spark-1.1": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "meta/muse-spark-1.3": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "meta/muse-wonder-1.0": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "meta/muse-spark-1.2": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "minimax/MiniMax-M3.1-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "scaleway/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "scaleway/deepseek-v4-flash-0731": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "scaleway/deepseek-v4.1-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "xai/grok-4.7": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
-    "deepinfra/tencent/Hy3": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high"]
-      }
-    ],
-    "deepinfra/tencent/Hy4-preview": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high"]
-      }
-    ],
-    "deepinfra/thinkingmachines/Inkling-Small": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "max"]
-      }
-    ],
-    "deepinfra/thinkingmachines/Inkling": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "max"]
-      }
-    ],
-    "deepinfra/deepseek-ai/DeepSeek-V4-Flash-0731": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "deepinfra/deepseek-ai/DeepSeek-V4-Pro-0813": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "deepinfra/deepseek-ai/DeepSeek-V4.1-Flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "deepinfra/stepfun-ai/Step-3.7-Flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "deepinfra/stepfun-ai/Step-3.5-Flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high"]
-      }
-    ],
-    "deepinfra/ByteDance/Seed-2.0-code": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
-    "deepinfra/ByteDance/Seed-2.0-mini": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
-      }
-    ],
-    "deepinfra/openai/gpt-oss-20b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "deepinfra/openai/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "cerebras/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "groq/openai/gpt-oss-20b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "groq/openai/gpt-oss-safeguard-20b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "groq/openai/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "zai/glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "zai/glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "zai/glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "anthropic/claude-opus-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "anthropic/claude-opus-4-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "anthropic/claude-opus-5-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "anthropic/claude-fable-5-1": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "anthropic/claude-sonnet-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "anthropic/claude-opus-4-5-20251101": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "anthropic/claude-opus-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "anthropic/claude-fable-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "anthropic/claude-fable-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "anthropic/claude-opus-4-8": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "anthropic/claude-sonnet-5": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "anthropic/claude-opus-4-6": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "max"]
-      }
-    ],
-    "anthropic/claude-haiku-5-5": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "anthropic/claude-sonnet-4-6": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "max"]
-      }
-    ],
-    "anthropic/claude-sonnet-5-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "anthropic/claude-opus-4-7": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "deepseek/deepseek-v4-flash-vision-exp": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "deepseek/deepseek-v4-pro": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "deepseek/deepseek-v4-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "databricks/databricks-inkling": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "max"]
-      }
-    ],
-    "databricks/databricks-gpt-oss-20b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "databricks/databricks-deepseek-v4-flash-0731": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "databricks/databricks-gpt-oss-120b@eu": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "databricks/databricks-gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "databricks/databricks-deepseek-v4-pro-0813": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "databricks/databricks-gpt-oss-20b@eu": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "tencent/deepseek-v4-pro-0813": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "tencent/hy3": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high"]
-      }
-    ],
-    "tencent/hy4-preview": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high"]
-      }
-    ],
-    "together_ai/meta-models/Muse-Glimmer-30B": [
+    "xai/grok-4.5": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
-    "together_ai/thinkingmachines/Inkling": [
+    "xai/grok-4.3": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "max"]
+        "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
-    "together_ai/deepseek-ai/DeepSeek-V4-Flash-0731": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "together_ai/deepseek-ai/DeepSeek-V4-Pro-0813": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "together_ai/deepseek-ai/DeepSeek-V4.1-Flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "together_ai/openai/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "azure/gpt-5.2-codex": [
+    "xai/grok-latest": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
-    "azure/gpt-5.1-codex": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "azure/gpt-5.1-codex-max": [
+    "xai/grok-4.6": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
-    "azure/gpt-5.1-codex-mini": [
+    "flexai/DeepSeek-V4-Flash-0731@eu": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
-    "flexai/Step-3.7-Flash": [
+    "flexai/gpt-oss-120b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -1069,10 +918,10 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "flexai/Muse-Glimmer-30B": [
+    "flexai/Step-3.7-Flash": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "flexai/DeepSeek-V4.1-Flash": [
@@ -1087,151 +936,553 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "flexai/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "google/gemini-flash-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "google/gemini-3.1-flash-image-preview": [
-      {
-        "type": "effort",
-        "values": ["minimal", "high"]
-      }
-    ],
-    "google/gemini-3.6-flash": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "google/gemini-3.5-flash-lite": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "google/gemini-3.1-flash-image": [
-      {
-        "type": "effort",
-        "values": ["minimal", "high"]
-      }
-    ],
-    "google/gemini-3.1-pro-preview": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "google/gemini-3.5-flash": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "google/gemini-3-pro-image": [
-      {
-        "type": "effort",
-        "values": ["low", "high"]
-      }
-    ],
-    "google/gemini-3.1-flash-lite-image": [
-      {
-        "type": "effort",
-        "values": ["minimal", "high"]
-      }
-    ],
-    "google/gemini-3.7-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "google/gemini-3.1-pro-preview-customtools": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "google/gemini-3-flash-preview": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "google/gemini-pro-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "google/gemini-3.8-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "google/gemini-3.1-flash-lite-preview": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "google/gemini-nano-banana-2.1": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "high"]
-      }
-    ],
-    "google/gemini-3.1-flash-lite": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "xai/grok-latest": [
+    "flexai/Muse-Glimmer-30B": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh"]
       }
     ],
-    "xai/grok-4.7": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "xai/grok-4.3": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
-    "xai/grok-4.5": [
+    "databricks/databricks-gpt-oss-20b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "xai/grok-4.6": [
+    "databricks/databricks-gpt-oss-120b@eu": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
+        "values": ["low", "medium", "high"]
       }
     ],
-    "nebius/deepseek-ai/DeepSeek-V4-Flash-0731": [
+    "databricks/databricks-inkling": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "max"]
+      }
+    ],
+    "databricks/databricks-gpt-oss-20b@eu": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "databricks/databricks-deepseek-v4-pro-0813": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
       }
     ],
+    "databricks/databricks-gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "databricks/databricks-deepseek-v4-flash-0731": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "tencent/hy4-preview": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high"]
+      }
+    ],
+    "tencent/deepseek-v4-pro-0813": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "tencent/deepseek-v4.1-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "tencent/step-5-preview": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "tencent/hy3": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high"]
+      }
+    ],
+    "fireworks_ai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "fireworks_ai/accounts/fireworks/models/inkling": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "max"]
+      }
+    ],
+    "fireworks_ai/accounts/fireworks/models/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "fireworks_ai/accounts/fireworks/models/ember-1": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "fireworks_ai/accounts/fireworks/models/muse-spark-open": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "ovhcloud/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "ovhcloud/gpt-oss-20b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "vertex/gemini-4-argon@eu": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "vertex/gemini-3.1-flash-lite@eu": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "vertex/gemini-3.7-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "vertex/gemini-3-flash-preview": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "vertex/gemini-3.8-flash@us": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "vertex/gemini-3.5-flash@eu": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "vertex/gemini-4-argon": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "vertex/gemini-3.1-flash-image": [
+      {
+        "type": "effort",
+        "values": ["minimal", "high"]
+      }
+    ],
+    "vertex/gemini-3.7-flash@eu": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "vertex/gemini-3.1-flash-lite": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "vertex/gemini-3.8-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "vertex/gemini-3.7-flash@us": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "vertex/gemini-3.1-flash-lite-image": [
+      {
+        "type": "effort",
+        "values": ["minimal", "high"]
+      }
+    ],
+    "vertex/gemini-3.6-flash@us": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "vertex/gemini-3.1-flash-lite@us": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "vertex/gemini-3.8-flash@eu": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "vertex/gemini-3.5-flash@us": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "vertex/gemini-3.5-flash-lite": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "vertex/gemini-3.6-flash@eu": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "vertex/gemini-3-pro-image": [
+      {
+        "type": "effort",
+        "values": ["low", "high"]
+      }
+    ],
+    "vertex/gemini-flash-latest": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "vertex/gemini-4-argon@us": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "vertex/gemini-3.5-flash-lite@us": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "vertex/gemini-pro-latest": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "vertex/gemini-nano-banana-2.1": [
+      {
+        "type": "effort",
+        "values": ["minimal", "medium", "high"]
+      }
+    ],
+    "vertex/gemini-3.5-flash": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "vertex/gemini-3.1-pro-preview": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "vertex/gemini-3.5-flash-lite@eu": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "vertex/gemini-3.6-flash": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "groq/openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "groq/openai/gpt-oss-safeguard-20b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "groq/openai/gpt-oss-20b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "cerebras/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "anthropic/claude-opus-4-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "anthropic/claude-opus-4-8": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "anthropic/claude-sonnet-latest": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "anthropic/claude-fable-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "anthropic/claude-fable-latest": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "anthropic/claude-sonnet-4-6": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "max"]
+      }
+    ],
+    "anthropic/claude-opus-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "anthropic/claude-opus-4-6": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "max"]
+      }
+    ],
+    "anthropic/claude-fable-5-1": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "anthropic/claude-sonnet-5-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "anthropic/claude-sonnet-5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "anthropic/claude-opus-5-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "anthropic/claude-haiku-5-5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "anthropic/claude-opus-4-5-20251101": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "anthropic/claude-haiku-latest": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "anthropic/claude-opus-latest": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "anthropic/claude-opus-4-7": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "deepinfra/nemotron-3-ultra-550b-a55b": [
+      {
+        "type": "effort",
+        "values": ["none", "medium", "high"]
+      }
+    ],
+    "deepinfra/nemotron-3-super-120b-a12b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium"]
+      }
+    ],
+    "deepinfra/tencent/Hy4-preview": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high"]
+      }
+    ],
+    "deepinfra/tencent/Hy3": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high"]
+      }
+    ],
+    "deepinfra/ByteDance/Seed-2.0-mini": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high"]
+      }
+    ],
+    "deepinfra/ByteDance/Seed-2.0-code": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "deepinfra/openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "deepinfra/openai/gpt-oss-20b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "deepinfra/deepseek-ai/DeepSeek-V4-Pro-0813": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "deepinfra/deepseek-ai/DeepSeek-V4-Flash-0731": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "deepinfra/deepseek-ai/DeepSeek-V4.1-Flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "deepinfra/deepseek-ai/DeepSeek-V4.1-Flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "deepinfra/ibm-granite/granite-4.2-8b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high"]
+      }
+    ],
+    "deepinfra/stepfun-ai/Step-5-Preview": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "deepinfra/stepfun-ai/Step-3.5-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high"]
+      }
+    ],
+    "deepinfra/stepfun-ai/Step-3.7-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "deepinfra/meta-models/Muse-Glimmer-30B": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "deepinfra/thinkingmachines/Inkling-Small": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "max"]
+      }
+    ],
+    "deepinfra/thinkingmachines/Inkling": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "max"]
+      }
+    ],
+    "nebius/openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
     "nebius/deepseek-ai/DeepSeek-V4-Pro-0813": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "nebius/deepseek-ai/DeepSeek-V4-Flash-0731": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
@@ -1255,28 +1506,130 @@
         "values": ["none", "medium", "high"]
       }
     ],
-    "nebius/openai/gpt-oss-120b": [
+    "nebius/meta-models/muse-spark-open": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "google/gemini-3.7-flash": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "scaleway/deepseek-v4-flash-0731": [
+    "google/gemini-3-flash-preview": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["minimal", "low", "medium", "high"]
       }
     ],
-    "scaleway/deepseek-v4.1-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "scaleway/gpt-oss-120b": [
+    "google/gemini-4-argon": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "google/gemini-3.1-flash-image": [
+      {
+        "type": "effort",
+        "values": ["minimal", "high"]
+      }
+    ],
+    "google/gemini-3.1-flash-lite-preview": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "google/gemini-3.1-flash-lite": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "google/gemini-3.8-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "google/gemini-3.1-flash-lite-image": [
+      {
+        "type": "effort",
+        "values": ["minimal", "high"]
+      }
+    ],
+    "google/gemini-robotics-er-2-preview": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "google/gemini-3.1-flash-image-preview": [
+      {
+        "type": "effort",
+        "values": ["minimal", "high"]
+      }
+    ],
+    "google/gemini-3.5-flash-lite": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "google/gemini-3-pro-image": [
+      {
+        "type": "effort",
+        "values": ["low", "high"]
+      }
+    ],
+    "google/gemini-flash-latest": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "google/gemini-pro-latest": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "google/gemini-nano-banana-2.1": [
+      {
+        "type": "effort",
+        "values": ["minimal", "medium", "high"]
+      }
+    ],
+    "google/gemini-3.5-flash": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "google/gemini-3.1-pro-preview": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "google/gemini-3.1-pro-preview-customtools": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "google/gemini-3.6-flash": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "moonshot/kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "ionos/openai/gpt-oss-120b": [
@@ -1285,235 +1638,13 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "vertex/gemini-flash-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "vertex/gemini-3.1-flash-lite@eu": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "vertex/gemini-3.5-flash-lite@eu": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "vertex/gemini-3.6-flash@eu": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "vertex/gemini-3.6-flash": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "vertex/gemini-3.5-flash-lite": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "vertex/gemini-3.1-flash-image": [
-      {
-        "type": "effort",
-        "values": ["minimal", "high"]
-      }
-    ],
-    "vertex/gemini-3.1-pro-preview": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "vertex/gemini-3.5-flash": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "vertex/gemini-3-pro-image": [
-      {
-        "type": "effort",
-        "values": ["low", "high"]
-      }
-    ],
-    "vertex/gemini-3.7-flash@us": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "vertex/gemini-3.7-flash@eu": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "vertex/gemini-3.1-flash-lite-image": [
-      {
-        "type": "effort",
-        "values": ["minimal", "high"]
-      }
-    ],
-    "vertex/gemini-3.8-flash@eu": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "vertex/gemini-3.7-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "vertex/gemini-3.6-flash@us": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "vertex/gemini-3.5-flash-lite@us": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "vertex/gemini-3-flash-preview": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "vertex/gemini-3.1-flash-lite@us": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "vertex/gemini-pro-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "vertex/gemini-3.8-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "vertex/gemini-3.5-flash@eu": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "vertex/gemini-3.8-flash@us": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "vertex/gemini-3.5-flash@us": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "vertex/gemini-nano-banana-2.1": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "high"]
-      }
-    ],
-    "vertex/gemini-3.1-flash-lite": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "greenpt/deepseek-v4-flash-0731": [
+    "tensorx/deepseek/deepseek-v4.1-flash-1017": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "greenpt/deepseek-v4.1-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "greenpt/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "greenference/deepseek-v4.1-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "greenference/gpt-oss-20b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "perplexityai/sonar-deep-research": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "perplexityai/sonar-reasoning-pro": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "cloudflare/@cf/deepseek-ai/deepseek-v4-flash-0731": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "cloudflare/@cf/deepseek-ai/deepseek-v4-pro-0813": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "cloudflare/@cf/openai/gpt-oss-20b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "cloudflare/@cf/openai/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
       }
     ],
     "tensorx/deepseek/deepseek-v4-flash-0731": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "tensorx/deepseek/deepseek-v4.1-flash": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
@@ -1525,172 +1656,22 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "amazon/openai.gpt-oss-safeguard-20b@us": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "amazon/openai.gpt-oss-safeguard-20b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "ovhcloud/gpt-oss-20b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "ovhcloud/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "fireworks_ai/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "fireworks_ai/accounts/fireworks/models/inkling": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "max"]
-      }
-    ],
-    "fireworks_ai/accounts/fireworks/models/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "mistral/mistral-small-latest": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "mistral/magistral-medium-latest": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "mistral/mistral-small-2603": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "mistral/mistral-medium-2604": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "mistral/mistral-medium-latest": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "qwen/qwen3.8-27b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
-    "qwen/qwen3.8-2.4t-a95b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      }
-    ],
-    "qwen/deepseek-v4-flash-0731": [
+    "tensorx/deepseek/deepseek-v4.1-flash": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "qwen/qwen3.8-max": [
+    "openai/gpt-6.1-sol": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "qwen/deepseek-v4.1-flash": [
+    "openai/gpt-5.6-sol": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "qwen/qwen3.8-omni-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
-    "qwen/deepseek-v4-pro-0813": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "qwen/qwen3.8-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
-    "qwen/qwen3.8-max-0902": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "openai/gpt-5.4": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "openai/gpt-5.4-pro": [
-      {
-        "type": "effort",
-        "values": ["medium", "high", "xhigh"]
-      }
-    ],
-    "openai/gpt-5.5-pro": [
-      {
-        "type": "effort",
-        "values": ["medium", "high", "xhigh"]
-      }
-    ],
-    "openai/gpt-5.4-nano": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "openai/gpt-5-mini": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "openai/gpt-5.2-pro": [
-      {
-        "type": "effort",
-        "values": ["medium", "high", "xhigh"]
-      }
-    ],
-    "openai/o4-mini": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "openai/o3-mini": [
@@ -1699,7 +1680,127 @@
         "values": ["low", "medium", "high"]
       }
     ],
+    "openai/gpt-6-astra": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "openai/gpt-5.3-codex": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "openai/gpt-6-sol": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "openai/gpt-5.5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "openai/gpt-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "openai/gpt-5-pro": [
+      {
+        "type": "effort",
+        "values": ["high"]
+      }
+    ],
+    "openai/gpt-5.2-pro": [
+      {
+        "type": "effort",
+        "values": ["medium", "high", "xhigh"]
+      }
+    ],
+    "openai/o3-pro": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "openai/o3": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "openai/gpt-latest": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "openai/gpt-5.6-terra": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "openai/gpt-5.4-pro": [
+      {
+        "type": "effort",
+        "values": ["medium", "high", "xhigh"]
+      }
+    ],
+    "openai/gpt-mini-latest": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "openai/gpt-5.6-luna": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "openai/gpt-5.4-nano": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "openai/o4-mini": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "openai/gpt-5-mini": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "openai/gpt-6-luna": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "openai/o1-pro": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "openai/gpt-5.1": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "openai/gpt-5.4": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh"]
@@ -1717,88 +1818,10 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "openai/gpt-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "openai/gpt-5-pro": [
-      {
-        "type": "effort",
-        "values": ["high"]
-      }
-    ],
-    "openai/gpt-6.1-sol": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "openai/gpt-6-astra": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "openai/gpt-5.1": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
-    "openai/o3-pro": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "openai/gpt-5.4-mini": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "openai/gpt-5.6-luna": [
+    "openai/gpt-pro-latest": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "openai/gpt-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "openai/gpt-5.5": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "openai/gpt-mini-latest": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "openai/gpt-6-luna": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "openai/gpt-5.6-terra": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "openai/o3": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
       }
     ],
     "openai/gpt-5": [
@@ -1807,34 +1830,292 @@
         "values": ["minimal", "low", "medium", "high"]
       }
     ],
-    "openai/gpt-5.6-sol": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "openai/gpt-6-sol": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "openai/o1-pro": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "openai/gpt-pro-latest": [
+    "openai/gpt-5.5-pro": [
       {
         "type": "effort",
         "values": ["medium", "high", "xhigh"]
       }
     ],
-    "moonshot/kimi-k3": [
+    "openai/gpt-5.4-mini": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "amazon/openai.gpt-oss-safeguard-20b@us": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "amazon/openai.gpt-oss-safeguard-20b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "together_ai/openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "together_ai/deepseek-ai/DeepSeek-V4-Pro-0813": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "together_ai/deepseek-ai/DeepSeek-V4-Flash-0731": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "together_ai/deepseek-ai/DeepSeek-V4.1-Flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "together_ai/deepseek-ai/DeepSeek-V4.1-Flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "together_ai/reflection/Beam-1.0-501B-A23B": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "together_ai/meta-models/Muse-Glimmer-30B": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "together_ai/thinkingmachines/Inkling": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "max"]
+      }
+    ],
+    "zai/glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "zai/glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "zai/glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "cloudflare/@cf/openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "cloudflare/@cf/openai/gpt-oss-20b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "cloudflare/@cf/deepseek-ai/deepseek-v4.1-flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "cloudflare/@cf/deepseek-ai/deepseek-v4-flash-0731": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "cloudflare/@cf/deepseek-ai/deepseek-v4-pro-0813": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "mistral/mistral-medium-2604": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "mistral/mistral-small-2603": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "mistral/mistral-medium-latest": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "mistral/magistral-medium-latest": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "mistral/mistral-medium-3-5": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "mistral/mistral-small-latest": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "qwen/deepseek-v4.1-flash-1017": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "qwen/deepseek-v4-flash-0731": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "qwen/qwen3.8-omni-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "qwen/qwen3.8-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "qwen/qwen3.8-27b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "qwen/deepseek-v4-pro-0813": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "qwen/qwen3.8-max": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "qwen/qwen3.8-max-0902": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "qwen/qwen3.8-2.4t-a95b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "qwen/deepseek-v4.1-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "deepseek/deepseek-v4-flash-vision-exp": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "deepseek/deepseek-v4-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "deepseek/deepseek-v4-pro": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "greenpt/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "greenpt/deepseek-v4-flash-0731": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "greenpt/deepseek-v4.1-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "azure/gpt-5.2-codex": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "azure/gpt-5.1-codex-mini": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "azure/gpt-5.1-codex": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "azure/gpt-5.1-codex-max": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "perplexityai/sonar-reasoning-pro": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "perplexityai/sonar-deep-research": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
       }
     ]
   }

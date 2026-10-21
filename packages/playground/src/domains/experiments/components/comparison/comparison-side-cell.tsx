@@ -1,26 +1,19 @@
+import { Button } from '@mastra/playground-ui/components/Button';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
+import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { textStyle } from '@mastra/playground-ui/primitives/text';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { formatDuration } from '@mastra/playground-ui/utils/duration';
-import { ClockIcon, CoinsIcon, HashIcon } from 'lucide-react';
 import { getResultErrorMessage, getResultOutputText } from '../../utils/result-output';
-import { sideDurationMs } from './build-comparison-rows';
+import { sideAverageScore, sideDurationMs } from './build-comparison-rows';
 import type { ComparisonColumn } from './build-comparison-rows';
-import {
-  costDeltaFormatter,
-  formatCostValue,
-  formatDurationDelta,
-  formatScore,
-  formatTokenCount,
-  totalTokens,
-} from './comparison-metric-format';
-import { ComparisonMetricList, ScorerLabel } from './comparison-metric-list';
+import { ComparisonMetricList } from './comparison-metric-list';
 import type { ComparisonMetric } from './comparison-metric-list';
 import { ComparisonPayload } from './comparison-payload';
 import { ComparisonSection, sectionStackClass } from './comparison-section';
+import { itemMetrics } from './item-metrics';
+import { useCompareMetricPreferences } from './use-compare-metric-preferences';
 
 export interface ComparisonSideCellProps {
   /** One experiment's side of the row. Contenders carry their deltas against the baseline. */
@@ -28,6 +21,11 @@ export interface ComparisonSideCellProps {
   isLoading?: boolean;
   /** Shows the cost and tokens lines. False when the observability storage cannot serve metrics. */
   showUsage?: boolean;
+  /** Shared by every output of the row, so expanding one expands them all. */
+  outputExpanded?: boolean;
+  onOutputExpandedChange?: (expanded: boolean) => void;
+  /** Opens the trace of this side's run. The button only shows when the run has a trace. */
+  onShowTrace?: (traceId: string) => void;
 }
 
 function formatValue(value: unknown): string {
@@ -37,70 +35,37 @@ function formatValue(value: unknown): string {
 }
 
 function sideMetrics(side: ComparisonColumn, showUsage: boolean): ComparisonMetric[] {
-  const costUnit = side.usage?.costUnit;
-  const cost: ComparisonMetric[] = showUsage
-    ? [
-        {
-          id: 'cost',
-          icon: <CoinsIcon />,
-          label: 'Cost',
-          value: formatCostValue(side.usage?.estimatedCost, costUnit),
-          delta: side.costDelta ?? null,
-          formatDelta: costDeltaFormatter(costUnit),
-          higherIsBetter: false,
-        },
-      ]
-    : [];
-
-  const tokens: ComparisonMetric[] = showUsage
-    ? [
-        {
-          id: 'tokens',
-          icon: <HashIcon />,
-          label: 'Tokens',
-          value: formatTokenCount(totalTokens(side.usage)),
-          delta: side.tokenDelta ?? null,
-          formatDelta: formatTokenCount,
-          higherIsBetter: false,
-        },
-      ]
-    : [];
-
-  const durationMs = sideDurationMs(side);
-  const duration: ComparisonMetric[] =
-    durationMs == null
-      ? []
-      : [
-          {
-            id: 'duration',
-            icon: <ClockIcon />,
-            label: 'Duration',
-            value: formatDuration(durationMs) ?? '-',
-            delta: side.durationDeltaMs,
-            formatDelta: formatDurationDelta,
-            higherIsBetter: false,
-          },
-        ];
-
-  return [
-    ...cost,
-    ...duration,
-    ...tokens,
-    ...side.scores.map(score => ({
-      id: `scorer:${score.scorerId}`,
-      icon: <ScorersIcon />,
-      label: <ScorerLabel scorerId={score.scorerId} />,
-      value: formatScore(score.value),
+  return itemMetrics({
+    usage: side.usage,
+    showUsage,
+    durationMs: sideDurationMs(side),
+    costDelta: side.costDelta,
+    tokenDelta: side.tokenDelta,
+    durationDeltaMs: side.durationDeltaMs,
+    averageScore: side.scores.length > 0 ? { value: sideAverageScore(side), delta: side.averageScoreDelta } : undefined,
+    scores: side.scores.map(score => ({
+      scorerId: score.scorerId,
+      value: score.value,
+      reason: score.reason,
       delta: side.deltas?.[score.scorerId] ?? null,
     })),
-  ];
+  });
 }
 
 /**
  * One experiment's side of a single item row. Every column renders the exact same
  * sections in the same order so the row can be read as a visual diff.
  */
-export function ComparisonSideCell({ column: data, isLoading, showUsage = false }: ComparisonSideCellProps) {
+export function ComparisonSideCell({
+  column: data,
+  isLoading,
+  showUsage = false,
+  outputExpanded,
+  onOutputExpandedChange,
+  onShowTrace,
+}: ComparisonSideCellProps) {
+  const { isMetricVisible } = useCompareMetricPreferences();
+
   if (isLoading) {
     return (
       <div className="flex h-32 items-center justify-center">
@@ -120,30 +85,57 @@ export function ComparisonSideCell({ column: data, isLoading, showUsage = false 
   const outputStr = formatValue(data.output);
   const outputText = getResultOutputText(data);
   const errorMessage = getResultErrorMessage(data);
-  const metrics = sideMetrics(data, showUsage);
+  const metrics = sideMetrics(data, showUsage).filter(metric => isMetricVisible(metric.id));
+  const { traceId } = data;
+  const traceAction =
+    traceId && onShowTrace ? (
+      <Button
+        size="sm"
+        variant="ghost"
+        tooltip="View trace"
+        aria-label="View trace"
+        onClick={() => onShowTrace(traceId)}
+      >
+        <TraceIcon />
+      </Button>
+    ) : undefined;
+  const hasMetrics = metrics.length > 0;
+  // With every metric hidden the Metrics section goes away, so the trace action joins Copy.
+  const resultActions = (content: string) => (
+    <>
+      {!hasMetrics && traceAction}
+      <CopyButton content={content} size="sm" variant="ghost" />
+    </>
+  );
 
   return (
     <div className={sectionStackClass}>
-      {metrics.length > 0 && (
-        <ComparisonSection title="Metrics" collapsible={false}>
+      {hasMetrics && (
+        <ComparisonSection title="Metrics" collapsible={false} actions={traceAction}>
           <ComparisonMetricList metrics={metrics} />
         </ComparisonSection>
       )}
 
       {errorMessage ? (
-        <ComparisonSection title="Error" tone="negative" actions={<CopyButton content={errorMessage} />}>
-          <Txt tone="muted" className="rounded-lg border border-destructive-edge bg-destructive-subtle p-3 break-words">
+        <ComparisonSection title="Error" tone="negative" framed actions={resultActions(errorMessage)}>
+          <Txt tone="muted" className="p-3 break-words">
             {errorMessage}
           </Txt>
         </ComparisonSection>
       ) : (
-        <ComparisonSection title="Output" actions={<CopyButton content={outputStr} />}>
+        <ComparisonSection
+          title="Output"
+          framed
+          actions={resultActions(outputStr)}
+          expanded={outputExpanded}
+          onExpandedChange={onOutputExpandedChange}
+        >
           <ComparisonPayload value={outputText ?? data.output} />
         </ComparisonSection>
       )}
 
       {data.comment && (
-        <ComparisonSection title="Comment">
+        <ComparisonSection title="Comment" framed>
           <ComparisonPayload value={data.comment} />
         </ComparisonSection>
       )}

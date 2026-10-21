@@ -3,7 +3,9 @@ import type { ExperimentMetrics } from '@mastra/react/hooks/experiments';
 import { cleanup, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { ExperimentKpis, type ExperimentKpisProps } from '../experiment-kpis';
+import { ExperimentKpis } from '../experiment-kpis';
+import type { ExperimentKpisProps } from '../experiment-kpis';
+import { experimentTotalsBreakdown } from './fixtures/experiment-usage';
 import { experiments } from './fixtures/experiments';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '@/test/render';
@@ -11,19 +13,11 @@ import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '@/test
 // Completed run: 10:00 → 10:05, 10 items.
 const completedExperiment: DatasetExperiment = experiments[0];
 
-const runningExperiment: DatasetExperiment = {
-  ...experiments[0],
-  id: 'running-experiment',
-  status: 'running',
-  succeededCount: 3,
-  failedCount: 1,
-  completedAt: null,
-};
-
+// Cost and tokens come from the per-item usage breakdown; the KPIs only read the average duration here.
 const fullMetrics: ExperimentMetrics = {
-  totalTokens: 12400,
-  estimatedCost: 0.0123,
-  costUnit: 'USD',
+  totalTokens: null,
+  estimatedCost: null,
+  costUnit: null,
   avgAgentDurationMs: 1850,
   agentRuns: 42,
 };
@@ -50,13 +44,12 @@ describe('ExperimentKpis', () => {
     );
   });
 
-  it('shows the overall average, item count and duration of a completed run', async () => {
+  it('shows the overall average and wall-clock duration of a completed run', async () => {
     const { queryClient } = renderKpis(completedExperiment);
 
     expect(await screen.findByText('0.833')).toBeDefined();
     expect(screen.getByText('across all scorers')).toBeDefined();
-    expect(screen.getByText('10')).toBeDefined();
-    expect(screen.getByText('all processed')).toBeDefined();
+    expect(screen.getByText('Run duration')).toBeDefined();
     expect(screen.getByText('5m')).toBeDefined();
 
     await waitForMutationsIdle(queryClient);
@@ -72,46 +65,122 @@ describe('ExperimentKpis', () => {
     await waitForMutationsIdle(queryClient);
   });
 
-  it('reports errored items on a completed run', async () => {
-    const { queryClient } = renderKpis({ ...completedExperiment, failedCount: 2 });
+  it('leaves the item count to the breadcrumb', async () => {
+    const { queryClient } = renderKpis(completedExperiment);
 
-    expect(await screen.findByText('2 errored')).toBeDefined();
-
-    await waitForMutationsIdle(queryClient);
-  });
-
-  it('shows progress so far while the run is active', async () => {
-    const { queryClient } = renderKpis(runningExperiment);
-
-    expect(await screen.findByText('4/10')).toBeDefined();
-    expect(screen.getByText('processed so far')).toBeDefined();
-    expect(screen.getByText('Running…')).toBeDefined();
-    expect(await screen.findByText('across all scorers so far')).toBeDefined();
+    expect(await screen.findByText('0.833')).toBeDefined();
+    expect(screen.queryByText('Items')).toBeNull();
 
     await waitForMutationsIdle(queryClient);
   });
 
-  it('shows Tokens and Latency only when metrics are enabled', async () => {
-    const { queryClient, unmount } = renderKpis(completedExperiment, {
-      data: fullMetrics,
-      isLoading: false,
-      isEnabled: true,
+  describe('when metrics are enabled', () => {
+    beforeEach(() => {
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/metrics/breakdown`, () =>
+          HttpResponse.json(experimentTotalsBreakdown),
+        ),
+      );
     });
 
-    expect(await screen.findByText('Tokens')).toBeDefined();
-    expect(screen.getByText('12.4K')).toBeDefined();
-    expect(screen.getByText('$0.01')).toBeDefined();
-    expect(screen.getByText('Latency (avg)')).toBeDefined();
-    expect(screen.getByText('1.85s')).toBeDefined();
+    const renderWithMetrics = (experiment = completedExperiment) =>
+      renderKpis(experiment, { data: fullMetrics, isLoading: false, isEnabled: true });
 
-    await waitForMutationsIdle(queryClient);
-    unmount();
+    it('shows the total cost in fractional cents', async () => {
+      const { queryClient } = renderWithMetrics();
 
-    const disabled = renderKpis(completedExperiment, { data: fullMetrics, isLoading: false, isEnabled: false });
-    expect(await screen.findByText('Avg score')).toBeDefined();
-    expect(screen.queryByText('Tokens')).toBeNull();
-    expect(screen.queryByText('Latency (avg)')).toBeNull();
+      expect(await screen.findByText('$0.012')).toBeDefined();
 
-    await waitForMutationsIdle(disabled.queryClient);
+      await waitForMutationsIdle(queryClient);
+    });
+
+    it('shows the average duration per item under the run duration', async () => {
+      const { queryClient } = renderWithMetrics();
+
+      expect(await screen.findByText('1.85s avg per item')).toBeDefined();
+      expect(screen.queryByText('Avg duration')).toBeNull();
+
+      await waitForMutationsIdle(queryClient);
+    });
+
+    it('shows the total token count', async () => {
+      const { queryClient } = renderWithMetrics();
+
+      expect(await screen.findByText('12,400')).toBeDefined();
+
+      await waitForMutationsIdle(queryClient);
+    });
+
+    it('splits the total tokens into input and output', async () => {
+      const { queryClient } = renderWithMetrics();
+
+      expect(await screen.findByText('9,900 in · 2,500 out')).toBeDefined();
+
+      await waitForMutationsIdle(queryClient);
+    });
+
+    it('leads with cost, duration and tokens', async () => {
+      const { queryClient } = renderWithMetrics();
+
+      await screen.findByText('Total cost');
+      const labels = ['Total cost', 'Run duration', 'Total tokens', 'Avg score'].map(label => screen.getByText(label));
+      for (let i = 1; i < labels.length; i++) {
+        expect(labels[i - 1].compareDocumentPosition(labels[i]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      }
+
+      await waitForMutationsIdle(queryClient);
+    });
+  });
+
+  describe('when metrics are enabled and the run is still in progress', () => {
+    const breakdownRequests: Request[] = [];
+
+    beforeEach(() => {
+      breakdownRequests.length = 0;
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/metrics/breakdown`, ({ request }) => {
+          breakdownRequests.push(request);
+          return HttpResponse.json(experimentTotalsBreakdown);
+        }),
+      );
+    });
+
+    const runningExperiment: DatasetExperiment = { ...completedExperiment, status: 'running', completedAt: null };
+
+    it('keeps the cost and token cards loading without fetching usage', async () => {
+      const { queryClient } = renderKpis(runningExperiment, { data: fullMetrics, isLoading: false, isEnabled: true });
+
+      expect(await screen.findByText('Total cost')).toBeDefined();
+      expect(screen.getByText('Total tokens')).toBeDefined();
+      expect(screen.queryByText('estimated')).toBeNull();
+      expect(screen.queryByText('input + output')).toBeNull();
+      expect(breakdownRequests).toHaveLength(0);
+
+      await waitForMutationsIdle(queryClient);
+    });
+  });
+
+  describe('when metrics are disabled', () => {
+    const renderWithoutMetrics = () =>
+      renderKpis(completedExperiment, { data: fullMetrics, isLoading: false, isEnabled: false });
+
+    it('hides the cost and token cards', async () => {
+      const { queryClient } = renderWithoutMetrics();
+
+      expect(await screen.findByText('Avg score')).toBeDefined();
+      expect(screen.queryByText('Total cost')).toBeNull();
+      expect(screen.queryByText('Total tokens')).toBeNull();
+
+      await waitForMutationsIdle(queryClient);
+    });
+
+    it('shows when the run started under the run duration', async () => {
+      const { queryClient } = renderWithoutMetrics();
+
+      expect(await screen.findByText(/^started /)).toBeDefined();
+      expect(screen.queryByText(/avg per item/)).toBeNull();
+
+      await waitForMutationsIdle(queryClient);
+    });
   });
 });

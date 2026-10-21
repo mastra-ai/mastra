@@ -1,6 +1,6 @@
 # Contributing to Mastra
 
-Welcome to Mastra! We welcome contributions of any size and skill level. You can _best_ help by creating high-quality issues with good reproductions and descriptions. Thanks for taking the time to contribute!
+Welcome to Mastra! You can _best_ help by creating high-quality issues with good reproductions and descriptions. Thanks for taking the time to contribute!
 
 > [!Tip]
 >
@@ -26,18 +26,11 @@ Be sure to include a title and clear description, as much relevant information a
 
 ### Do you want to open a Pull Request?
 
-Follow the [Development Guide](./DEVELOPMENT.md) to learn how to set up this repository and run its tests. After successfully testing things locally, open a pull request with your changes.
-
-**Required:** Your PR description must include a link to the issue(s) it addresses (e.g. with `Fixes #1234`, `Closes #1234`). PRs without linked issues will be closed.
-
-Also ensure that the PR description clearly describes the problem and solution.
-
-**Important:** Coderabbit and Mastra Platform will automatically comment on your pull request with feedback and suggestions. Please address all comments to ensure a smooth review process. If you disagree with a suggestion, respond with your reasoning so maintainers can review. Afterward, a maintainer will review your PR and either provide feedback or merge it.
+This repository [disabled pull requests](https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/enabling-features-for-your-repository/disabling-pull-requests) for outside contributors. You won't be able to open a pull request and instead Mastra asks you to open a detailed issue with a minimal reproduction.
 
 ### Do you intend to add a new feature or change an existing one?
 
-- Open a [feature request](https://github.com/mastra-ai/mastra/issues/new?template=feature_request.yml) and wait for feedback from the Mastra maintainers
-- A Pull Request can only be opened for feature requests when there is no "status: needs triage" or "status: needs approval" label. If an issue still has those labels, the PR will automatically be closed.
+Open a [feature request](https://github.com/mastra-ai/mastra/issues/new?template=feature_request.yml) and wait for feedback from the Mastra maintainers.
 
 ### Want to improve documentation?
 

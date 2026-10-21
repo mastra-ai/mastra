@@ -14,6 +14,7 @@ import {
 } from '../../../../hooks/useUpdateAgentControllerSettingsMutation';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
 import { ConnectedAccountsSection } from './ConnectedAccountsSection';
+import { EnvironmentSection } from './EnvironmentSection';
 import { AccountSettingsSection } from './AccountSettingsSection';
 import { FactoryManagementSection } from './FactoryManagementSection';
 import { FactorySkillsSection } from './FactorySkillsSection';
@@ -40,23 +41,24 @@ export function SettingsPanel() {
     if (!hash) return;
     document.getElementById(hash.slice(1))?.scrollIntoView?.({ block: 'start' });
   }, [hash, section]);
-  const { resourceId, resourceEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { sessionId: chatSessionId, resourceEnabled, baseUrl } = useChatSessionContext();
   const { permissions, setPermissionForCategory } = useChatPermissions();
-  const sessionScope = resourceEnabled && projectPath ? projectPath : undefined;
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: sessionScope,
+    sessionId: chatSessionId,
     baseUrl,
     enabled: resourceEnabled,
   };
 
-  const modelsQuery = useAvailableModelsQuery();
+  // Factory-level pickers only offer what the Factory's model scope can run;
+  // personal pickers keep the caller's full catalog.
+  const factoryScoped = section === 'models' || section === 'factory-memory';
+  const modelsQuery = useAvailableModelsQuery(factoryScoped ? { factoryProjectId: factoryId } : undefined);
   const settingsQuery = useAgentControllerSettings(hookArgs);
   const updateSettingsMutation = useUpdateAgentControllerSettingsMutation(hookArgs);
   const models = modelsQuery.data ?? [];
   const settings = settingsQuery.data ?? null;
-  const sessionResourceId = resourceEnabled ? resourceId : undefined;
+  const sessionId = resourceEnabled ? chatSessionId : undefined;
 
   const onBehaviorChange = (updates: Partial<AgentControllerSessionSettings>) => {
     if (!settings) return Promise.resolve();
@@ -81,19 +83,17 @@ export function SettingsPanel() {
         </SettingsSubsection>
       )}
       {section === 'repositories' && <RepositoriesSection />}
+      {section === 'environment' && <EnvironmentSection />}
       {section === 'intake' && <IntakeSection />}
-      {section === 'models' && (
-        <FactoryModelsSettings models={models} settings={settings} onBehaviorChange={onBehaviorChange} />
-      )}
-      {section === 'personal-models' && <PersonalModelsSettings models={models} />}
+      {section === 'models' && <FactoryModelsSettings models={models} />}
+      {section === 'personal-models' && <PersonalModelsSettings />}
       {(section === 'memory' || section === 'factory-memory') && (
         <MemorySettings
           key={section}
           scope={section === 'factory-memory' ? 'factory' : 'personal'}
           factoryId={factoryId}
           models={models}
-          sessionResourceId={sessionResourceId}
-          sessionScope={sessionScope}
+          sessionId={sessionId}
         />
       )}
       {section === 'skills' && <FactorySkillsSection factoryId={factoryId} />}

@@ -1,7 +1,5 @@
-import {
-  SourceControlConnectionNotFoundError,
-  type SourceControlStorageHandle,
-} from '../storage/domains/source-control/base.js';
+import { SourceControlConnectionNotFoundError } from '../storage/domains/source-control/base.js';
+import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemRow } from '../storage/domains/work-items/base.js';
 
 export type WorkItemRepositoryResolution =
@@ -13,6 +11,7 @@ interface LinkedRepository {
   projectRepositoryId: string;
   externalId: string;
   slug: string;
+  inEnvironment: boolean;
 }
 
 async function listLinkedRepositories(args: {
@@ -39,6 +38,7 @@ async function listLinkedRepositories(args: {
             projectRepositoryId: projectRepository.id,
             externalId: repository.externalId,
             slug: repository.slug,
+            inEnvironment: projectRepository.inEnvironment,
           });
         }
       }
@@ -66,10 +66,21 @@ function getExternalRepositoryId(integrationId: string, metadata: Record<string,
   return id == null ? undefined : String(id);
 }
 
-function findUniqueRepositoryByExternalId(repositories: LinkedRepository[], externalId: string) {
-  const matches = repositories.filter(repository => repository.externalId === externalId);
-  const [match] = matches;
-  return matches.length === 1 ? match : undefined;
+/**
+ * The one link among `matches` a run can use. A repository can be linked more
+ * than once (a provider-app reinstall adds a second link for the same slug),
+ * but only one of those links is in the environment, and only an environment
+ * link can start a session, so it wins over its out-of-environment duplicates.
+ */
+function pickLink(matches: LinkedRepository[]): LinkedRepository | undefined {
+  if (matches.length === 1) return matches[0];
+  const inEnvironment = matches.filter(repository => repository.inEnvironment);
+  return inEnvironment.length === 1 ? inEnvironment[0] : undefined;
+}
+
+function findRepositoryBySlug(repositories: LinkedRepository[], slug: string) {
+  const matches = repositories.filter(repository => repository.slug === slug);
+  return pickLink(matches) ?? matches[0];
 }
 
 function resolvedRepository(repository: LinkedRepository): WorkItemRepositoryResolution {
@@ -93,12 +104,12 @@ export async function resolveWorkItemRepository(args: {
 
   // The provider id survives repository renames, so it outranks a possibly stale slug.
   if (externalRepositorySignal !== undefined) {
-    const match = findUniqueRepositoryByExternalId(linked, externalRepositorySignal);
+    const match = pickLink(linked.filter(repository => repository.externalId === externalRepositorySignal));
     if (match) return resolvedRepository(match);
   }
 
   if (repositorySignal) {
-    const match = linked.find(repository => repository.slug === repositorySignal);
+    const match = findRepositoryBySlug(linked, repositorySignal);
     return match
       ? resolvedRepository(match)
       : { status: 'unlinked', hint: `Repository ${repositorySignal} is not linked to this Factory.` };
@@ -112,7 +123,7 @@ export async function resolveWorkItemRepository(args: {
   }
 
   if (mappedRepository) {
-    const match = linked.find(repository => repository.slug === mappedRepository);
+    const match = findRepositoryBySlug(linked, mappedRepository);
     return match
       ? resolvedRepository(match)
       : { status: 'unlinked', hint: `Mapped repository ${mappedRepository} is not linked to this Factory.` };
@@ -122,7 +133,8 @@ export async function resolveWorkItemRepository(args: {
   if (candidates.length === 0) {
     return { status: 'unlinked', hint: 'This Factory has no linked source-control repositories.' };
   }
-  const [firstRepository] = linked;
-  if (candidates.length === 1 && firstRepository) return resolvedRepository(firstRepository);
+  // Every link shares the one slug here, so prefer the environment link among them.
+  const onlyRepository = candidates.length === 1 ? (pickLink(linked) ?? linked[0]) : undefined;
+  if (onlyRepository) return resolvedRepository(onlyRepository);
   return { status: 'ambiguous', candidates };
 }

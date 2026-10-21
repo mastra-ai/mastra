@@ -1,5 +1,14 @@
 # @mastra/auth-cloud
 
+## 1.2.7-alpha.0
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+- Updated dependencies [[`fae54c5`](https://github.com/mastra-ai/mastra/commit/fae54c57917cd1f527937ca42b5ab7dfe1d55a2a)]:
+  - @mastra/auth@1.1.4-alpha.0
+
 ## 1.2.6
 
 ### Patch Changes

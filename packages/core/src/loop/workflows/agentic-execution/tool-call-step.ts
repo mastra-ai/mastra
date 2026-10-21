@@ -8,7 +8,7 @@ import type { MastraDBMessage } from '../../../memory';
 import { BACKGROUND_WORK_CONTEXT, notifyBackgroundWorkTerminal } from '../../../processors/background-work-signals';
 import { safeEnqueue } from '../../../stream/base';
 import { ChunkFrom } from '../../../stream/types';
-import type { ChunkType, ProviderMetadata } from '../../../stream/types';
+import type { ChunkType, LanguageModelUsage, ProviderMetadata } from '../../../stream/types';
 import {
   getTransformedToolPayload,
   hasTransformedToolPayload,
@@ -38,6 +38,7 @@ import {
   STEP_ACTIVE_TOOLS_KEY,
   STEP_MODEL_MESSAGES_KEY,
   STEP_TOOLS_KEY,
+  STEP_USAGE_KEY,
   STEP_WORKSPACE_KEY,
   THREAD_EXISTS_KEY,
   THREAD_ID_KEY,
@@ -65,7 +66,7 @@ import {
   eagerToolCallSuspensionIntent,
 } from './eager-tool-execution';
 import type { EagerSuspensionIntent, EagerToolBailout } from './eager-tool-execution';
-import { buildToolApprovalContext, resolveToolApprovalVerdict } from './tool-approval-verdict';
+import { buildToolApprovalContext, resolveToolApprovalVerdict, runBeforeApprovalChecks } from './tool-approval-verdict';
 
 type AddToolMetadataOptions = {
   toolCallId: string;
@@ -100,6 +101,8 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
   logger,
   agentId,
   agentVersionId,
+  resolvedScopes,
+  returnScorerData,
   mastra,
   requireToolApproval: requireToolApprovalFromFactory,
   actor,
@@ -334,6 +337,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
         if (changedMessages.length === 0 || !saveQueueManager || !threadId) return matchedEntry;
         messageList.add(changedMessages, 'response');
+        if (memoryConfig?.readOnly) return matchedEntry;
         try {
           await saveQueueManager.flushMessages(messageList, threadId, memoryConfig);
         } catch (error) {
@@ -401,9 +405,9 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
 
       // Recalled messages become refs only when memory is a fixed instance: a resume may not
       // repeat the request context that function or inherited memory resolved against.
-      const serializeStreamStateForSuspend = () =>
+      const serializeStreamStateForSuspend = (pendingSuspension: { usage?: LanguageModelUsage }) =>
         dehydrateStreamState(
-          streamState.serialize(),
+          streamState.serialize(pendingSuspension),
           memoryMessageRefs,
           readScoped(scopeCtx, FIXED_MEMORY_KEY, 'fixedMemory')
             ? readScoped(scopeCtx, MEMORY_KEY, 'memory')
@@ -489,6 +493,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         const approvalVerdicts = readScoped(scopeCtx, TOOL_APPROVAL_VERDICTS_KEY, 'toolApprovalVerdicts');
         const cachedApprovalVerdict = approvalVerdicts?.get(inputData.toolCallId);
         approvalVerdicts?.delete(inputData.toolCallId);
+        const approvalWorkspace = readScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace');
         const toolRequiresApproval =
           cachedApprovalVerdict ??
           (await resolveToolApprovalVerdict({
@@ -498,7 +503,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               toolName: inputData.toolName,
               args,
               requestContext,
-              workspace: readScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace'),
+              workspace: approvalWorkspace,
             }),
             logger,
           }));
@@ -534,8 +539,17 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // suspends during execution for its own resume data, do not require approval again.
         // Approval decisions must come from the workflow resume boundary; model-authored
         // resumeData is untrusted and cannot grant or decline consent.
-        const approvalGated =
-          !isDelegatedApproval && (suspendedForApproval || (toolRequiresApproval && suspendData === undefined));
+        const isFreshCall = suspendData === undefined;
+        const approvalGated = !isDelegatedApproval && (suspendedForApproval || (toolRequiresApproval && isFreshCall));
+
+        // A suspended step never reaches `step-finish`, so its model usage rides on the first
+        // suspension chunk of the step. Consume it so parallel suspended calls and later
+        // re-suspensions of the same step do not report it again.
+        const takeSuspendedStepUsage = () => {
+          const usage = readScoped(scopeCtx, STEP_USAGE_KEY, 'stepUsage');
+          if (usage) writeScoped(scopeCtx, STEP_USAGE_KEY, 'stepUsage', undefined);
+          return usage;
+        };
 
         // The real suspension sequence, extracted so it has exactly one implementation with
         // two entry points: the tool's own `suspend()` closure below, and the hand-back of an
@@ -559,6 +573,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               runId,
               now: readScoped(scopeCtx, NOW_KEY, 'now'),
             });
+            const suspendedStepUsage = takeSuspendedStepUsage();
             const approvalChunk = await transformChunk({
               type: 'tool-call-approval',
               runId,
@@ -569,6 +584,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 args: approvalArgs,
                 resumeSchema: approvalResumeSchema,
                 updatedAt: Date.now(),
+                usage: suspendedStepUsage,
               },
             });
             if (outputWriter) {
@@ -602,9 +618,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   toolName: approvalToolName,
                   args: approvalArgs,
                 },
-                __streamState: await serializeStreamStateForSuspend(),
+                __streamState: await serializeStreamStateForSuspend({ usage: suspendedStepUsage }),
                 __agentId: agentId,
                 ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
+                // Persisted unconditionally — [] included — so absence marks a pre-upgrade snapshot,
+                // whose resume adopts the supplied scopes instead of rejecting them.
+                __resolvedScopes: resolvedScopes ?? [],
+                ...(returnScorerData !== undefined ? { __returnScorerData: returnScorerData } : {}),
                 // Persist the inner suspended run id in the workflow snapshot, partitioned per
                 // tool call (resumeLabel = toolCallId). Persisted message metadata exposes the
                 // same id as delegatedRunId for cold reloads, while the snapshot remains the
@@ -616,6 +636,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               },
             );
           } else {
+            const suspendedStepUsage = takeSuspendedStepUsage();
             const suspensionChunk = await transformChunk({
               type: 'tool-call-suspended',
               runId,
@@ -626,6 +647,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 suspendPayload,
                 args: inputData.args,
                 resumeSchema: options?.resumeSchema,
+                usage: suspendedStepUsage,
               },
             });
             safeEnqueue(controller, suspensionChunk);
@@ -648,9 +670,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             return await suspend(
               {
                 toolCallSuspended: suspendPayload,
-                __streamState: await serializeStreamStateForSuspend(),
+                __streamState: await serializeStreamStateForSuspend({ usage: suspendedStepUsage }),
                 __agentId: agentId,
                 ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
+                // Persisted unconditionally — [] included — so absence marks a pre-upgrade snapshot,
+                // whose resume adopts the supplied scopes instead of rejecting them.
+                __resolvedScopes: resolvedScopes ?? [],
+                ...(returnScorerData !== undefined ? { __returnScorerData: returnScorerData } : {}),
                 toolCallId: inputData.toolCallId,
                 toolName: inputData.toolName,
                 resumeLabel: options?.resumeLabel,
@@ -676,12 +702,30 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         }
 
         if (approvalGated) {
+          if (!approvalDecision && isFreshCall) {
+            const rejection = await runBeforeApprovalChecks({
+              tool,
+              input: args,
+              context: {
+                toolCallId: inputData.toolCallId,
+                toolName: inputData.toolName,
+                requestContext,
+                workspace: approvalWorkspace,
+                actor,
+              },
+              logger,
+            });
+            if (rejection) {
+              return { result: rejection.output, ...inputData };
+            }
+          }
           if (!approvalDecision) {
             await stopGoalActivity({
               agentId,
               runId,
               now: readScoped(scopeCtx, NOW_KEY, 'now'),
             });
+            const suspendedStepUsage = takeSuspendedStepUsage();
             const approvalChunk = await transformChunk({
               type: 'tool-call-approval',
               runId,
@@ -692,6 +736,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 args: inputData.args,
                 resumeSchema: approvalResumeSchema,
                 updatedAt: Date.now(),
+                usage: suspendedStepUsage,
               },
             });
             if (outputWriter) {
@@ -720,9 +765,13 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                   toolName: inputData.toolName,
                   args: inputData.args,
                 },
-                __streamState: await serializeStreamStateForSuspend(),
+                __streamState: await serializeStreamStateForSuspend({ usage: suspendedStepUsage }),
                 __agentId: agentId,
                 ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
+                // Persisted unconditionally — [] included — so absence marks a pre-upgrade snapshot,
+                // whose resume adopts the supplied scopes instead of rejecting them.
+                __resolvedScopes: resolvedScopes ?? [],
+                ...(returnScorerData !== undefined ? { __returnScorerData: returnScorerData } : {}),
               },
               {
                 resumeLabel: inputData.toolCallId,
@@ -800,7 +849,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
             const sqm = readScoped(scopeCtx, SAVE_QUEUE_MANAGER_KEY, 'saveQueueManager');
             const tid = readScoped(scopeCtx, THREAD_ID_KEY, 'threadId');
             const mcfg = readScoped(scopeCtx, MEMORY_CONFIG_KEY, 'memoryConfig');
-            return sqm && tid ? () => sqm.flushMessages(messageList, tid, mcfg) : undefined;
+            return sqm && tid && !mcfg?.readOnly ? () => sqm.flushMessages(messageList, tid, mcfg) : undefined;
           })(),
           suspend: async (suspendPayload: any, options?: SuspendOptions) => {
             // A tool can suspend at runtime without declaring a suspend schema, so the
@@ -895,9 +944,24 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // top of it, and `removeToolMetadata`'s toolCallId -> toolName fallback could then drop a
         // concurrently suspended sibling that shares this tool name.
         if (!approvalGated && resumeData != null) {
+          // Auto-resume re-calls a plain tool under a new toolCallId and names the original via
+          // `suspendedToolCallId`. Resolve it against persisted state so the original entry is
+          // cleared; the resolved run id is not injected, since only delegations consume it.
+          const plainResumeIdentity =
+            !needsRunIdLookup && isResumeToolCall
+              ? resolveFrameworkSuspendedToolIdentity({
+                  toolCallId: inputData.toolCallId,
+                  toolName: inputData.toolName,
+                  resumeSource: 'model',
+                  modelSuppliedSuspendedToolCallId,
+                  modelSuppliedSuspendedToolRunId,
+                  suspendData,
+                  messages: messageList.get.all.db(),
+                })
+              : undefined;
           const cleanupTarget = needsRunIdLookup
             ? resolvedSuspensionIdentity
-            : { toolCallId: inputData.toolCallId, toolName: inputData.toolName };
+            : (plainResumeIdentity ?? { toolCallId: inputData.toolCallId, toolName: inputData.toolName });
           const clearedEntry = cleanupTarget
             ? await removeToolMetadata(cleanupTarget, resolvedSuspensionIdentity?.type ?? 'suspension')
             : undefined;
@@ -1330,8 +1394,11 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
               );
             }
 
+            // Normalize a void result to null like executeToolCall does, so the loop continues
+            // instead of treating the call as pending client work.
+            const serializedResult = ensureSerializable(completedTask.result);
             return {
-              result: ensureSerializable(completedTask.result),
+              result: serializedResult === undefined ? null : serializedResult,
               ...inputData,
               providerMetadata: backgroundResultMetadata(bgOutcome.taskId, 'completed'),
               ...(approvalGrant ?? {}),

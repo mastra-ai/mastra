@@ -394,6 +394,71 @@ export function createFilterOperatorsTest(config: VectorTestConfig) {
       }
     });
 
+    // Scope-prefilter contract: Knowledge stores a `scope_ids` string array on
+    // every embedded row and prefilters queries with { scope_ids: { $in: [...] } }.
+    // The contract is ANY-element intersection: a row matches when at least one
+    // element of its scope_ids array is in the $in set. Every adapter used as a
+    // Knowledge vector backend must implement these exact semantics.
+    if (supportsArrayMetadata) {
+      describe('Scope Prefilter Contract ($in on scope_ids arrays)', () => {
+        const scopeIndexName = `scope_prefilter_test_${Date.now()}`;
+
+        const rows = [
+          { id: 'row-both', scope_ids: ['org-1', 'res-1'] },
+          { id: 'row-thread', scope_ids: ['org-1', 'res-2', 'thread-9'] },
+          { id: 'row-foreign', scope_ids: ['org-2'] },
+          { id: 'row-res2', scope_ids: ['res-2'] },
+        ];
+
+        const queryScopes = async (scopeIds: string[]): Promise<string[]> => {
+          const results = await config.vector.query({
+            indexName: scopeIndexName,
+            queryVector: createUnitVector(0),
+            topK: 10,
+            filter: { scope_ids: { $in: scopeIds } },
+          });
+          return results.map(r => r.metadata?.id as string).sort();
+        };
+
+        beforeAll(async () => {
+          await createIndex(scopeIndexName);
+          await config.vector.upsert({
+            indexName: scopeIndexName,
+            vectors: rows.map((_, index) => createVector(index + 1)),
+            metadata: rows.map(row => ({ id: row.id, scope_ids: row.scope_ids })),
+          });
+          await waitForIndexing(scopeIndexName);
+        });
+
+        afterAll(async () => {
+          await deleteIndex(scopeIndexName);
+        });
+
+        it('matches a row when ANY array element intersects the $in set', async () => {
+          // 'res-1' hits row-both; 'thread-9' hits row-thread. Partial
+          // intersection suffices — neither row's array is a subset of the set.
+          expect(await queryScopes(['res-1', 'thread-9'])).toEqual(['row-both', 'row-thread']);
+        });
+
+        it('matches every row holding a shared element, and only those', async () => {
+          expect(await queryScopes(['org-1'])).toEqual(['row-both', 'row-thread']);
+          expect(await queryScopes(['res-2'])).toEqual(['row-res2', 'row-thread']);
+        });
+
+        it('does not match rows without an intersecting scope', async () => {
+          // A value absent from every array matches nothing — scalar-equality
+          // or whole-array comparison semantics would also return nothing here,
+          // so the positive cases above are what discriminate implementations.
+          expect(await queryScopes(['nope'])).toEqual([]);
+          expect(await queryScopes(['org-3', 'thread-1'])).toEqual([]);
+        });
+
+        it('returns nothing for an empty $in set', async () => {
+          expect(await queryScopes([])).toEqual([]);
+        });
+      });
+    }
+
     // $exists operator tests - only run if store supports it
     if (supportsExistsOperator) {
       describe('Existence Operator', () => {

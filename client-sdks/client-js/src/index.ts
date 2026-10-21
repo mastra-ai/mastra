@@ -48,6 +48,9 @@ export type {
 export type { UIMessageWithMetadata } from '@mastra/core/agent';
 export type { GetMetricTimeSeriesResponse } from './types';
 export type {
+  AggregateTracesArgs,
+  AggregateTracesResponse,
+  TraceAggregateDiscovery,
   GetTraceQueryFieldsArgs,
   GetTraceQueryFieldsResponse,
   GetTraceQueryValuesArgs,

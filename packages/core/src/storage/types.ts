@@ -2341,6 +2341,10 @@ export interface UpdateWorkflowStateOptions {
     spanId?: string;
     parentSpanId?: string;
   };
+  /** When an agent resume claimed this suspended run. See `WorkflowRunState.resumeClaimedAt`. */
+  resumeClaimedAt?: number;
+  /** The claim an agent resume started under a run-ownership lease. See `WorkflowRunState.resumeLeasedClaimAt`. */
+  resumeLeasedClaimAt?: number;
   /**
    * Optional compare-and-set guard. When provided, the update is applied only if the
    * persisted snapshot's status matches one of these values. Otherwise the update is a
@@ -2860,6 +2864,11 @@ export interface ListDatasetsFilters extends DatasetTenancyFilters {
    * treated as "no filter" (matches all datasets), not "match none".
    */
   targetIds?: string[];
+  /**
+   * Only return datasets with these IDs. Unlike `targetIds`, an empty array
+   * matches no datasets.
+   */
+  datasetIds?: string[];
   /**
    * Substring match on dataset `name`, case-insensitive.
    */

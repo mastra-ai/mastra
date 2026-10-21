@@ -78,7 +78,6 @@ test('explores scoped knowledge and activity', async ({ context, page }) => {
           items: [],
           kinds: {
             'automation-failed': empty,
-            'supervisor-finding': empty,
             'agent-waiting': empty,
             mention: empty,
             'automation-proposed': empty,
