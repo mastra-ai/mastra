@@ -7,6 +7,7 @@ import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import {
   AgentRunsCard,
+  DistinctIdsCard,
   FailureRateCard,
   LatencyCard,
   MetricsGrid,
@@ -279,6 +280,7 @@ function MetricsCards() {
           />
         </MetricsGrid.Item>
       </MetricsGrid>
+      <DistinctIdsCard onTimeRangeClick={openTraces} />
       <ScoresCard />
     </div>
   );
