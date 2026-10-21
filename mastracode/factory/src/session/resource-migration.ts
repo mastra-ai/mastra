@@ -15,6 +15,8 @@ const SLACK_SESSION_BRANCH_PREFIX = 'slack/';
  * session id, so the next start finds it by this flag and its session stamp and finishes the move.
  */
 const MOVE_PENDING_KEY = 'factoryResourceMovePending';
+/** How often a long resource migration reports how far it got. */
+const PROGRESS_LOG_INTERVAL_MS = 10_000;
 
 export interface SessionResourceMigrationDeps {
   sessions: {
@@ -122,6 +124,14 @@ export async function migrateSessionResources(
     resourceObservationsLeft: [],
   };
   const sessions = await deps.sessions.listSessionsAwaitingResourceMigration();
+  // Startup waits for this pass, which can take a long time against a remote database,
+  // so say what it's doing instead of leaving the server silently not listening.
+  if (sessions.length > 0) {
+    console.info(
+      `[factory] session resource migration: moving ${sessions.length} sessions; the server starts once it finishes`,
+    );
+  }
+  let lastProgressAt = Date.now();
 
   for (const session of sessions) {
     report.sessions += 1;
@@ -191,6 +201,14 @@ export async function migrateSessionResources(
       console.warn(
         `[factory] session resource migration: session ${sessionId} not moved: ${error instanceof Error ? error.message : error}`,
       );
+    } finally {
+      if (report.sessions < sessions.length && Date.now() - lastProgressAt >= PROGRESS_LOG_INTERVAL_MS) {
+        lastProgressAt = Date.now();
+        console.info(
+          `[factory] session resource migration: ${report.sessions}/${sessions.length} sessions checked, ` +
+            `${report.threads} threads moved`,
+        );
+      }
     }
   }
 

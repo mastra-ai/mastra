@@ -378,6 +378,37 @@ describe('migrateSessionResources', () => {
     });
   });
 
+  it('says how many sessions it moves and reports progress while a long migration holds up startup', async () => {
+    const { seed, migrate } = await seedLegacyFactory();
+    const info = vi.spyOn(console, 'info').mockImplementation(() => {});
+    info.mockClear();
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    // Each session takes 6s, as against a slow remote database.
+    let clock = 1_000_000;
+    const now = vi.spyOn(Date, 'now').mockImplementation(() => clock);
+    const listRunBoundItems = seed.workItems.listRunBoundItems.bind(seed.workItems);
+    vi.spyOn(seed.workItems, 'listRunBoundItems').mockImplementation(sessionId => {
+      clock += 6_000;
+      return listRunBoundItems(sessionId);
+    });
+
+    try {
+      await migrate();
+    } finally {
+      now.mockRestore();
+    }
+
+    const lines = info.mock.calls.map(([line]) => String(line));
+    // Progress at most every 10s, never once the last session is done.
+    expect(lines).toEqual([
+      '[factory] session resource migration: moving 7 sessions; the server starts once it finishes',
+      expect.stringMatching(/^\[factory\] session resource migration: 2\/7 sessions checked, \d+ threads moved$/),
+      expect.stringMatching(/^\[factory\] session resource migration: 4\/7 sessions checked, \d+ threads moved$/),
+      expect.stringMatching(/^\[factory\] session resource migration: 6\/7 sessions checked, \d+ threads moved$/),
+      expect.stringContaining('[factory] session resource migration: 6 threads'),
+    ]);
+  });
+
   it('reads only sessions it has not finished on later starts', async () => {
     const { seed, memory, migrate } = await seedLegacyFactory();
     vi.spyOn(console, 'info').mockImplementation(() => {});
