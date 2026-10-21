@@ -83,13 +83,9 @@ export async function addNewScorer(scorerId?: string, customDir?: string) {
 }
 
 async function initializeScorer(scorer: ScorerTemplate, customPath?: string) {
-  try {
-    const templateContent = scorer.content;
-    const res = writeScorer(scorer.filename, templateContent!, customPath);
-    return res;
-  } catch (error) {
-    throw error;
-  }
+  const templateContent = scorer.content;
+  const res = writeScorer(scorer.filename, templateContent!, customPath);
+  return res;
 }
 
 function showSuccessNote() {
