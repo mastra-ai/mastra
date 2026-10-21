@@ -953,7 +953,7 @@ Use this section as a reference for selecting the appropriate control flow metho
 | `.then(step)` | Sequential processing | `T` | `U` | N/A (one at a time) |
 | `.parallel([a, b])` | Different operations on same input | `T` | `{ a: U, b: V }` | All run simultaneously |
 | `.foreach(step)` | Same operation on each array item | `T[]` | `U[]` | Configurable (default: 1) |
-| `.branch([...])` | Conditional path selection | `T` | `{ stepId: U }` | All branches whose condition is true run simultaneously |
+| `.branch([...])` | Conditional path selection | `T` | `{ stepId: U }` | All branches whose condition is true run simultaneously by default; `perStep: true` schedules only the first matching branch |
 
 ### `.parallel()` vs `.foreach()`
 
