@@ -114,6 +114,8 @@ export function createFakeEventsClient() {
         subscriptions.push(subscription);
         return subscription;
       },
+      // The provider never receives webhooks itself; the app mounts the client's handler.
+      handleWebhook: async () => new Response(null, { status: 404 }),
     },
   };
   return {

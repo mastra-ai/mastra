@@ -5,6 +5,8 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { MCPServerBase } from '@mastra/core/mcp';
 import type {
   MCPServerConfig as CoreMCPServerConfig,
+  MCPServerEventInfo,
+  MCPServerEventsInspector,
   MCPServerFGAConfig,
   MCPToolExecutionResultV2,
   ServerDetailInfo,
@@ -63,6 +65,7 @@ import type { CallerTraceContext } from '../shared/trace-context';
 import { ServerPromptActions, ServerResourceActions, ServerToolActions } from './actions';
 import { ServerEventActions } from './events/actions';
 import { registerEventHandlers } from './events/handlers';
+import { createEventsInspector, listEventsInfo } from './events/inspector';
 import { ServerEventRegistry, toDescriptor } from './events/registry';
 import type { MCPServerEventDefinition, MCPServerEventsOptions } from './events/types';
 import { WebhookDispatcher } from './events/webhook-dispatcher';
@@ -199,6 +202,7 @@ export class MCPServer extends MCPServerBase {
   private readonly requestStateCodec: RequestStateCodec<ContinuationEnvelope>;
   private readonly eventRegistry: ServerEventRegistry;
   private readonly eventsOptions: MCPServerEventsOptions;
+  private eventsInspector: MCPServerEventsInspector | undefined;
   private readonly webhooks?: WebhookDispatcher;
 
   private httpHandler?: McpHttpHandler;
@@ -1400,6 +1404,36 @@ export class MCPServer extends MCPServerBase {
   /** Lists `ui://` app resources; application resources require a protocol request. */
   async listResources(): Promise<{ resources: Resource[] }> {
     return { resources: [...this.appResourceList] };
+  }
+
+  /**
+   * The declared event types as Studio shows them, or `undefined` when the server has none.
+   * @experimental
+   */
+  getEventsInfo(): { events: MCPServerEventInfo[] } | undefined {
+    if (this.eventRegistry.size === 0) return undefined;
+    return { events: listEventsInfo(this.eventsDeps()) };
+  }
+
+  /**
+   * Polls, streams and test-emits events in-process through the `events/poll` and
+   * `events/stream` code paths, or `undefined` when the server has none. Used by Studio.
+   * @experimental
+   */
+  getEventsInspector(): MCPServerEventsInspector | undefined {
+    if (this.eventRegistry.size === 0) return undefined;
+    this.eventsInspector ??= createEventsInspector(this.eventsDeps());
+    return this.eventsInspector;
+  }
+
+  private eventsDeps() {
+    return {
+      registry: this.eventRegistry,
+      heartbeatIntervalMs: this.eventsOptions.heartbeatIntervalMs ?? DEFAULT_EVENTS_HEARTBEAT_INTERVAL_MS,
+      maxStreams: this.eventsOptions.maxStreams,
+      getLogger: () => this.logger,
+      jsonSchema: (schema: unknown, options: { io: 'input' | 'output' }) => this.jsonSchema(schema, options),
+    };
   }
 }
 
