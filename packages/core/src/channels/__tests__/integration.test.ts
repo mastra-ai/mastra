@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { Agent } from '../../agent';
-import { createDurableAgent, createEventedAgent } from '../../agent/durable';
+import { createDurableAgent, createEventedAgent, EventedAgent } from '../../agent/durable';
 import { DurableStepIds } from '../../agent/durable/constants';
 import { ConsoleLogger } from '../../logger';
 import { useLoopScenarioAimock } from '../../loop/test-utils/aimock/aimock-scenario';
@@ -244,6 +244,11 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s inbound channel exec
           { attachment: 'fork', decision: undefined },
           { attachment: 'fork', decision: 'approve' },
           { attachment: 'fork', decision: 'deny' },
+          { attachment: 'id-config', decision: undefined },
+          { attachment: 'id-fork', decision: undefined },
+          { attachment: 'id-late', decision: undefined },
+          { attachment: 'id-late', decision: 'approve' },
+          { attachment: 'id-late', decision: 'deny' },
         ] as const)),
   ] as const)(
     'keeps the execution owner with $attachment channels ($decision)',
@@ -287,6 +292,8 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s inbound channel exec
       adapter.postMessage = vi.fn(async () => ({ id: 'reply', text: '' }));
       adapter.editMessage = vi.fn(async () => {});
       const testId = `${engine}-${attachment}-${decision ?? 'message'}-${randomUUID()}`;
+      const overriddenId = attachment === 'id-config' || attachment === 'id-late' || attachment === 'id-fork';
+      const forked = attachment === 'fork' || attachment === 'id-fork';
       const threadId = `thread-${testId}`;
       const resourceId = 'channel-user';
       const config = {
@@ -313,21 +320,31 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s inbound channel exec
               }),
             }
           : undefined,
-        ...(attachment === 'config'
+        ...(attachment === 'config' || attachment === 'id-config'
           ? { channels: config }
-          : attachment === 'instance' || attachment === 'fork'
+          : attachment === 'instance' || forked
             ? { channels }
             : {}),
       });
+      const wrapperOptions = { agent: inner, ...(overriddenId ? { id: `durable-${testId}` } : {}) };
       const agent =
         engine === 'plain'
           ? inner
           : engine === 'durable'
-            ? createDurableAgent({ agent: inner })
-            : createEventedAgent({ agent: inner });
-      if (attachment === 'late' || attachment === 'replacement') agent.setChannels(channels);
+            ? createDurableAgent(wrapperOptions)
+            : overriddenId
+              ? new EventedAgent(wrapperOptions)
+              : createEventedAgent({ agent: inner });
+      if (attachment === 'late' || attachment === 'replacement' || attachment === 'id-late')
+        agent.setChannels(channels);
       else channels = agent.getChannels()!;
-      const mastra = new Mastra({ logger: false, storage, agents: { agent } });
+      // The global UUID fixture resets per test, but resume claims are process-wide.
+      const mastra = new Mastra({
+        logger: false,
+        storage,
+        agents: { agent },
+        generateId: () => `${testId}-${randomUUID()}`,
+      });
       const workflowEvents: string[] = [];
       let detach: (() => void) | undefined;
       let delivery: Promise<void> | undefined;
@@ -345,6 +362,25 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s inbound channel exec
         if (engine === 'evented' && 'getWorkflow' in agent) {
           expect(agent.getWorkflow().engineType).toBe('evented');
         }
+        if (overriddenId) {
+          const memoryStore = await storage.getStore('memory');
+          await memoryStore!.saveThread({
+            thread: {
+              id: threadId,
+              resourceId,
+              title: 'Existing channel conversation',
+              createdAt: new Date(),
+              updatedAt: new Date(),
+              metadata: {
+                channel_platform: 'slack',
+                channel_externalThreadId: 'C1:thread',
+                channel_externalChannelId: 'C1:thread',
+                channel_ownerId: inner.id,
+                channel_subscribed: 'true',
+              },
+            },
+          });
+        }
         await channels.initialize(mastra);
         if (attachment === 'replacement') {
           await channels.close();
@@ -355,13 +391,18 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s inbound channel exec
         }
         expect(agent.getChannels()).toBe(channels);
         expect(inner.getChannels()).toBe(channels);
-        if (attachment === 'fork' && !decision) {
+        if (forked && !decision) {
           agent.__fork().__updateInstructions('Transient fork instructions must not handle channel messages.');
+        }
+        if (overriddenId) {
+          expect(channels.getWebhookRoutes().map(route => route.path)).toContain(
+            `/api/agents/${inner.id}/channels/slack/webhook`,
+          );
         }
         const message: Message = {
           id: 'inbound-1',
           threadId: 'C1:thread',
-          text: '@TestBot hello',
+          text: overriddenId ? 'Continue our existing conversation' : '@TestBot hello',
           formatted: { type: 'root', children: [] },
           raw: {},
           attachments: [],
@@ -410,6 +451,19 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s inbound channel exec
             },
             { timeout: 5000 },
           );
+          if (engine !== 'plain') {
+            const workflows = await storage.getStore('workflows');
+            await vi.waitFor(
+              async () => {
+                const snapshot = await workflows!.getWorkflowRunById({
+                  runId,
+                  workflowName: DurableStepIds.AGENTIC_LOOP,
+                });
+                expect(snapshot?.snapshot.status).toBe('suspended');
+              },
+              { timeout: 5000 },
+            );
+          }
           expect(execute).not.toHaveBeenCalled();
           if (attachment === 'fork') {
             agent.__fork().__updateInstructions('Transient fork instructions must not handle channel messages.');
@@ -440,6 +494,12 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s inbound channel exec
           'Transient fork instructions',
         );
         expect(runIds.size).toBe(1);
+        if (overriddenId) {
+          const memoryStore = await storage.getStore('memory');
+          const { threads } = await memoryStore!.listThreads({ filter: { resourceId } });
+          expect(threads).toHaveLength(1);
+          expect(threads[0]).toMatchObject({ id: threadId, metadata: { channel_ownerId: inner.id } });
+        }
         if (engine === 'evented') {
           expect(workflowEvents).toContain('workflow.start');
           expect(workflowEvents.some(type => type.startsWith('workflow.step'))).toBe(true);
