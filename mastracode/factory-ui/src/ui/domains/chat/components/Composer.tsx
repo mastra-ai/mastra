@@ -5,6 +5,7 @@ import {
   Composer as ComposerRoot,
   ComposerActions,
   ComposerBox,
+  ComposerHeader,
   ComposerInput,
   ComposerRing,
   ComposerSuggestions,
@@ -18,25 +19,26 @@ import type { KeyboardEvent } from 'react';
 import { useMatch, useNavigate, useParams } from 'react-router';
 
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../api/keys';
-import { useChatCommands } from '../context/ChatCommandsProvider';
-import { useChatConnection } from '../context/useChatConnection';
-import { useChatModels } from '../context/useChatModels';
-import { useChatSessionContext } from '../context/useChatSessionContext';
-import { useChatTranscript } from '../context/useChatTranscript';
-import type { PendingImage } from '../context/ComposerImagesContext';
 import {
   useAbortAgentControllerMutation,
   useSendAgentControllerMessageMutation,
 } from '../../../../hooks/useAgentControllerRunMutations';
 import { useCreateAgentControllerThreadMutation } from '../../../../hooks/useAgentControllerThreadMutations';
-import { usePreparingThreadId } from '../hooks/usePreparingThreadId';
+import { useChatCommands } from '../context/ChatCommandsProvider';
+import type { PendingImage } from '../context/ComposerImagesContext';
+import { useChatConnection } from '../context/useChatConnection';
+import { useChatModels } from '../context/useChatModels';
+import { useChatSessionContext } from '../context/useChatSessionContext';
+import { useChatTranscript } from '../context/useChatTranscript';
 import { useCreateUserSessionFromDraft } from '../hooks/useCreateUserSessionFromDraft';
 import { clearPendingHandoff } from '../hooks/useHandoffPrompt';
 import { usePendingPlanFeedback } from '../hooks/usePendingPlanFeedback';
+import { usePreparingThreadId } from '../hooks/usePreparingThreadId';
 import { commandRequiresReadySession } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { StatusLine } from './StatusLine';
+import { ComposerConnectionNotice } from './ComposerConnectionNotice';
 import { ComposerImageAttachments } from './ComposerImageAttachments';
+import { StatusLine } from './StatusLine';
 import { useComposerImages } from './useComposerImages';
 import { useInitializingPlaceholder } from './useInitializingPlaceholder';
 
@@ -50,6 +52,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { status } = useChatConnection();
+  const connectionLost = status === 'reconnecting' || status === 'error';
   const { busy, phase, localUser, failLocalUser, reset, clearPending, pushNotice } = useChatTranscript();
   const chatPreparing = phase === 'initializing';
   const scroller = useOptionalMessageScroller();
@@ -239,7 +242,10 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   return (
     <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()}>
-      <ComposerRing busy={busy || chatPreparing}>
+      <ComposerHeader>
+        <ComposerConnectionNotice />
+      </ComposerHeader>
+      <ComposerRing busy={(busy || chatPreparing) && !connectionLost}>
         <ComposerBox>
           <ComposerSuggestions {...commandMenu.suggestionsProps} />
           <ComposerImageAttachments images={images} onRemove={removeImage} />

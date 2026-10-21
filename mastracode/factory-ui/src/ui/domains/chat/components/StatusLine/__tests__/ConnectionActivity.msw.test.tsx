@@ -1,3 +1,4 @@
+import { ComposerHeader } from '@mastra/playground-ui/components/Composer';
 import { screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
@@ -10,6 +11,7 @@ import type { ChatSessionContextApi } from '../../../context/ChatSessionContext'
 import { ChatTranscriptContext } from '../../../context/ChatTranscriptContext';
 import type { ChatTranscriptApi } from '../../../context/ChatTranscriptContext';
 import { initialTranscript } from '../../../services/transcript';
+import { ComposerConnectionNotice } from '../../ComposerConnectionNotice';
 import { ConnectionActivity } from '../ConnectionActivity';
 
 const session: ChatSessionContextApi = {
@@ -24,7 +26,7 @@ const session: ChatSessionContextApi = {
   kind: 'factory',
 };
 
-function renderActivity(status: ChatConnectionApi['status'], busy: boolean) {
+function ActivityFixture({ status, busy }: { status: ChatConnectionApi['status']; busy: boolean }) {
   const transcript: ChatTranscriptApi = {
     transcript: initialTranscript,
     busy,
@@ -40,27 +42,36 @@ function renderActivity(status: ChatConnectionApi['status'], busy: boolean) {
     pushNotice: vi.fn(),
     loadMore: { hasMore: false, isLoading: false },
   };
-  return renderWithProviders(
+  return (
     <MemoryRouter>
       <ChatSessionContext.Provider value={session}>
         <ChatConnectionContext.Provider value={{ status }}>
           <ChatTranscriptContext.Provider value={transcript}>
+            <ComposerHeader>
+              <ComposerConnectionNotice />
+            </ComposerHeader>
             <ConnectionActivity />
           </ChatTranscriptContext.Provider>
         </ChatConnectionContext.Provider>
       </ChatSessionContext.Provider>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
 }
 
 describe('ConnectionActivity', () => {
   it.each([
     ['reconnecting', 'Reconnecting…'],
-    ['error', 'Disconnected'],
+    ['error', 'Connection lost. Check the server and reload to reconnect.'],
   ] as const)('given the %s stream while the agent runs, then it outranks the working state', (status, label) => {
-    renderActivity(status, true);
+    const view = renderWithProviders(<ActivityFixture status={status} busy />);
 
     expect(screen.getByText(label)).toBeVisible();
     expect(screen.queryByText('Working…')).toBeNull();
+    expect(screen.getAllByRole('status')).toHaveLength(1);
+
+    view.rerender(<ActivityFixture status="ready" busy />);
+
+    expect(screen.queryByText(label)).not.toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Working…');
   });
 });

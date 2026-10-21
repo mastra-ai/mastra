@@ -1,0 +1,12 @@
+@keyframes composer-header-enter {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Moving the surface would expose its lower edge during the join. */
+@media (prefers-reduced-motion: no-preference) {
+  .composer-header {
+    animation: composer-header-enter var(--duration-normal) var(--ease-out-custom) backwards;
+  }
+}
