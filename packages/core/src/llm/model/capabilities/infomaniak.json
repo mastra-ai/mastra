@@ -25,7 +25,7 @@
     "moonshotai/Kimi-K2.6"
   ],
   "reasoning": {
-    "moonshotai/Kimi-K2.6": [
+    "Qwen/Qwen3.5-122B-A10B-FP8": [
       {
         "type": "toggle"
       }
@@ -35,7 +35,7 @@
         "type": "toggle"
       }
     ],
-    "Qwen/Qwen3.5-122B-A10B-FP8": [
+    "moonshotai/Kimi-K2.6": [
       {
         "type": "toggle"
       }
