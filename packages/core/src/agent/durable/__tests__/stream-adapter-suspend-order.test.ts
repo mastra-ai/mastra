@@ -128,4 +128,76 @@ describe('durable stream adapter suspension ordering', () => {
     expect((await fullOutput).text).toBe('A B C');
     await pubsub.close();
   });
+
+  it('waits for sibling tool results before settling a close-on-suspend reader', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const runId = 'sibling-result-run';
+    const { output, ready } = createDurableAgentStream({
+      pubsub,
+      runId,
+      messageId: `msg-${runId}`,
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+      closeOnSuspend: true,
+    });
+    let settled = false;
+    const toolResultCount = output.toolResults.then(results => {
+      settled = true;
+      return results.length;
+    });
+    await ready;
+    await emitChunkEvent(pubsub, runId, {
+      type: 'tool-call-suspended',
+      runId,
+      from: 'AGENT',
+      payload: suspendedData,
+    } as any);
+    await Promise.resolve();
+    expect(settled).toBe(false);
+    await emitChunkEvent(pubsub, runId, {
+      type: 'tool-result',
+      runId,
+      from: 'AGENT',
+      payload: { toolCallId: 'sibling', toolName: 'lookup', result: { found: true } },
+    } as any);
+    await emitSuspendedEvent(pubsub, runId, suspendedData);
+    expect(await toolResultCount).toBe(1);
+    await pubsub.close();
+  });
+
+  it('retains prior text when the resumed step independently repeats its prefix', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const runId = 'repeated-prefix-run';
+    const { output, ready } = createDurableAgentStream({
+      pubsub,
+      runId,
+      messageId: `msg-${runId}`,
+      model: { modelId: 'test', provider: 'test', version: 'v3' },
+      resumedText: { priorText: 'Found ', stepText: '' },
+    });
+    const fullOutput = output.getFullOutput();
+    await ready;
+    await emitChunkEvent(pubsub, runId, {
+      type: 'text-delta',
+      runId,
+      from: 'AGENT',
+      payload: { text: 'Found again' },
+    } as any);
+    await emitChunkEvent(pubsub, runId, {
+      type: 'step-finish',
+      runId,
+      from: 'AGENT',
+      payload: {
+        output: { usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 }, steps: [] },
+        stepResult: { reason: 'stop' },
+        metadata: {},
+      },
+    } as any);
+    await emitFinishEvent(pubsub, runId, {
+      output: { text: 'Found Found again' },
+      stepResult: { reason: 'stop' },
+    } as any);
+    expect(await output.text).toBe('Found Found again');
+    expect((await fullOutput).text).toBe('Found Found again');
+    await pubsub.close();
+  });
 });

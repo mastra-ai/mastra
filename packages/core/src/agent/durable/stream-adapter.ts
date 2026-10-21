@@ -887,7 +887,6 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     messageId,
     initialToolCalls,
     resumedText,
-    closeOnSuspend,
     finishUsageIsTotal: true,
     options: {
       runId,

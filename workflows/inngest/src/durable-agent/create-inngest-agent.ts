@@ -1271,28 +1271,32 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // The resumed segment only receives new pubsub chunks. Restore text from the
       // suspended iteration so output.text includes what streamed before approval.
       const outerSnapshot = (await resumableSnapshot).snapshot;
-      const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
-      const nestedRunId =
-        outerSnapshot?.context?.[InngestDurableStepIds.AGENTIC_EXECUTION]?.metadata?.nestedRunId ?? runId;
-      const nestedRun = await workflowsStore?.getWorkflowRunById?.({
-        runId: nestedRunId,
-        workflowName: InngestDurableStepIds.AGENTIC_EXECUTION,
-      });
-      const nestedSnapshot =
-        typeof nestedRun?.snapshot === 'string' ? JSON.parse(nestedRun.snapshot) : nestedRun?.snapshot;
-      const llmStep = nestedSnapshot?.context?.[DurableStepIds.LLM_EXECUTION];
-      const accumulatedSteps: Array<{ text?: string; finishReason?: string }> =
-        nestedSnapshot?.context?.input?.accumulatedSteps ?? [];
-      const resumedText =
-        llmStep?.status === 'success'
-          ? {
-              priorText: accumulatedSteps
-                .filter(step => step.finishReason !== 'retry')
-                .map(step => step.text ?? '')
-                .join(''),
-              stepText: llmStep.output.text ?? '',
-            }
-          : undefined;
+      let resumedText: { priorText: string; stepText: string } | undefined;
+      try {
+        const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
+        const nestedRunId =
+          outerSnapshot?.context?.[InngestDurableStepIds.AGENTIC_EXECUTION]?.metadata?.nestedRunId ?? runId;
+        const nestedRun = await workflowsStore?.getWorkflowRunById?.({
+          runId: nestedRunId,
+          workflowName: InngestDurableStepIds.AGENTIC_EXECUTION,
+        });
+        const nestedSnapshot =
+          typeof nestedRun?.snapshot === 'string' ? JSON.parse(nestedRun.snapshot) : nestedRun?.snapshot;
+        const llmStep = nestedSnapshot?.context?.[DurableStepIds.LLM_EXECUTION];
+        const accumulatedSteps: Array<{ text?: string; finishReason?: string }> =
+          nestedSnapshot?.context?.input?.accumulatedSteps ?? [];
+        if (llmStep?.status === 'success') {
+          resumedText = {
+            priorText: accumulatedSteps
+              .filter(step => step.finishReason !== 'retry')
+              .map(step => step.text ?? '')
+              .join(''),
+            stepText: llmStep.output.text ?? '',
+          };
+        }
+      } catch {
+        // Snapshot text is best-effort; a failed metadata read must not block tool approval.
+      }
       const resumeOffset = await getPubsubOffset(runId);
 
       // Install a fresh abort controller scoped to the resumed segment and

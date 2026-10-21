@@ -738,7 +738,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     initialState,
     initialToolCalls,
     resumedText,
-    closeOnSuspend = false,
     finishUsageIsTotal,
   }: {
     model: {
@@ -757,7 +756,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
      * and the suspended step's part of it. Used when no serialized `initialState` is available.
      */
     resumedText?: { priorText: string; stepText: string };
-    closeOnSuspend?: boolean;
     finishUsageIsTotal?: boolean;
   }) {
     super({ component: 'LLM', name: 'MastraModelOutput' });
@@ -1093,11 +1091,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 self.#finishCallbackSent = true;
                 await options?.onFinish?.(self.#createSuspendedOnFinishPayload(chunk));
               }
-              // Only settle partial results when this reader closes on suspension; an open
-              // reader must include text from the resumed segment when it finishes (#27504).
-              // Usage is left to the step that reports it (#27440).
-              if (self.#options.resolveFinalPromises && closeOnSuspend)
-                self.#resolveSuspendedPromises({ includeUsage: false });
               break;
             case 'abort':
               self.#status = 'canceled';
@@ -2405,12 +2398,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     const fullOutput: FullOutput<OUTPUT> = {
       // After a tripwire, `text` already holds the resolved output (and a processOutputStream
       // tripwire can end the run before any step completes), so reuse it to stay in sync.
-      text:
-        this.tripwire || steps.length === 0
-          ? await this.text
-          : this.#resumedPriorText && !textFromSteps.startsWith(this.#resumedPriorText)
-            ? this.#resumedPriorText + textFromSteps
-            : textFromSteps,
+      text: this.tripwire || steps.length === 0 ? await this.text : this.#resumedPriorText + textFromSteps,
       usage: await this.usage,
       steps,
       finishReason: await this.finishReason,
@@ -2829,6 +2817,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#bufferedChunks.length = 0;
     this.#bufferedSteps.length = 0;
     this.#bufferedText.length = 0;
+    this.#resumedPriorText = '';
     this.#bufferedTextAtStepStart = 0;
     this.#bufferedTextChunks = {};
     this.#bufferedSources.length = 0;
