@@ -727,7 +727,7 @@ Spawned sessions get a one-line signal instead: a side session sees which sessio
 
 The tools take their scope as an argument rather than reading the request, so the same tool set can later be mounted elsewhere, such as an MCP server.
 
-### MCP server (ChatGPT and other MCP clients)
+### MCP server (Claude, ChatGPT and other MCP clients)
 
 A Factory with an auth provider and an OAuth authorization server serves an MCP endpoint over Streamable HTTP:
 
@@ -735,11 +735,20 @@ A Factory with an auth provider and an OAuth authorization server serves an MCP 
 https://<your-factory>/web/factory/projects/<projectId>/mcp
 ```
 
+Copy it from **Settings → Connections → MCP clients** in the Factory UI. The card only appears when the endpoint is served (`/web/config/features` reports `mcp: true`).
+
 It exposes the Factory tools a signed-in web session has (list, inspect, create, update and transition work items, start and signal sessions, decisions, approvals), plus `search` and `fetch` over work items for ChatGPT. Each tool carries MCP annotations (read-only, destructive, idempotent) so clients can ask before changes.
 
 Callers must sign in. Requests without a valid bearer token get `401` with a `WWW-Authenticate` header pointing to the RFC 9728 metadata at `/.well-known/oauth-protected-resource/web/factory/projects/<projectId>/mcp`. Tokens go through the same auth provider and org checks as the web UI. Each user gets one private connector session per Factory that the session tools act from.
 
-To connect ChatGPT, open **Settings → Connectors → Create**, paste the endpoint URL, and choose OAuth. Factories on Mastra Platform auth advertise Platform's AuthKit (`https://auth-kit.mastra.ai`) automatically. With other auth providers, set the authorization server the metadata advertises, or the endpoint isn't served:
+To connect a client:
+
+- **Claude** (claude.ai and Claude Desktop): open **Settings → Connectors → Add custom connector**, paste the endpoint URL, then sign in when asked. Claude connects from Anthropic's servers, so the Factory must be reachable over public HTTPS.
+- **ChatGPT**: open **Settings → Connectors → Create**, paste the endpoint URL, and choose OAuth.
+
+The endpoint speaks MCP `2026-07-28` (clients open with `server/discover`). Older clients that open with a 2025-era `initialize` request get an unsupported-protocol-version error naming `2026-07-28`. CORS allows the `Mcp-Protocol-Version`, `Mcp-Method` and `Mcp-Name` request headers and exposes `WWW-Authenticate`, so browser-based clients on an allowed origin can connect too.
+
+Factories on Mastra Platform auth advertise Platform's AuthKit (`https://auth-kit.mastra.ai`) automatically. With other auth providers, set the authorization server the metadata advertises, or the endpoint isn't served:
 
 ```ts
 new MastraFactory({
@@ -749,6 +758,22 @@ new MastraFactory({
 ```
 
 or set `MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER`. Pass `mcp: false` to turn the endpoint off.
+
+#### Activity events (experimental)
+
+The endpoint serves one MCP event type (SEP-3415, experimental in `@mastra/mcp`), `factory.activity`, so clients can notice changes without re-reading work items. It is poll-only: call `events/poll`; `events/stream` and webhooks aren't offered.
+
+```json
+{
+  "method": "events/poll",
+  "params": { "name": "factory.activity", "arguments": { "workItemId": "<id>" }, "cursor": null }
+}
+```
+
+- `arguments` are optional: `workItemId` narrows to one work item, `actions` to specific audit actions (for example `factory.work_item.updated`).
+- A `null` cursor starts from now and returns no events. Pass back the returned `cursor` on each poll. An unreadable cursor restarts from now and marks the result `truncated`.
+- Each event's `eventId` is its audit row id, and the payload has `action`, `occurredAt`, `actor`, `workItemId`, `sessionId` and a one-line `summary`.
+- Only activity on work items is served, the same history any Factory member sees on a work item. Activity that only touches a session (signals, pushes from private sessions) is left out.
 
 ### Development
 
