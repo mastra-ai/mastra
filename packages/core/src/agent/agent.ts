@@ -983,6 +983,19 @@ export class Agent<
         this.logger.trackException(mastraError);
         throw mastraError;
       }
+      if (config.editor !== false && config.editor?.model === true && config.model.some(model => !model.id)) {
+        const mastraError = new MastraError({
+          id: 'AGENT_CONSTRUCTOR_EDITOR_MODEL_ID_REQUIRED',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          details: {
+            agentName: config.name,
+          },
+          text: `Every model entry must have an explicit id when Editor owns the model list.`,
+        });
+        this.logger.trackException(mastraError);
+        throw mastraError;
+      }
       this.model = config.model.map(mdl =>
         Agent.toFallbackEntry(mdl, config.maxRetries ?? 0, this.#maxRetriesConfigured),
       ) as ModelFallbacks;

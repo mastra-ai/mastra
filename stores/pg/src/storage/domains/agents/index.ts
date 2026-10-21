@@ -114,6 +114,7 @@ export class AgentsPG extends AgentsStorage {
         'durable',
         'browser',
         'toolProviders',
+        'modelList',
       ],
     });
 
@@ -192,10 +193,10 @@ export class AgentsPG extends AgentsStorage {
 
       await this.#db.client.none(
         `INSERT INTO ${fullVersionsTableName}
-         (id, "agentId", "versionNumber", name, description, instructions, model, tools,
+         (id, "agentId", "versionNumber", name, description, instructions, model, "modelList", tools,
           "defaultOptions", workflows, agents, "integrationTools", "toolProviders", "inputProcessors",
           "outputProcessors", memory, scorers, "changedFields", "changeMessage", "createdAt")
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)
          ON CONFLICT (id) DO NOTHING`,
         [
           versionId,
@@ -205,6 +206,7 @@ export class AgentsPG extends AgentsStorage {
           row.description ?? null,
           this.serializeInstructions(row.instructions ?? ''),
           row.model ? toPgJson(row.model) : '{}',
+          row.modelList ? toPgJson(row.modelList) : null,
           row.tools ? toPgJson(row.tools) : null,
           row.defaultOptions ? toPgJson(row.defaultOptions) : null,
           row.workflows ? toPgJson(row.workflows) : null,
@@ -784,14 +786,14 @@ export class AgentsPG extends AgentsStorage {
       const row = await this.#db.client.one(
         `INSERT INTO ${tableName} (
           id, "agentId", "versionNumber",
-          name, description, instructions, model, tools,
+          name, description, instructions, model, "modelList", tools,
           "defaultOptions", workflows, agents, "integrationTools", "toolProviders",
           "inputProcessors", "outputProcessors", memory, scorers,
           "mcpClients", "requestContextSchema", workspace, skills, "skillsFormat",
           durable, browser,
           "changedFields", "changeMessage",
           "createdAt", "createdAtZ"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28) RETURNING *`,
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28, $29) RETURNING *`,
         [
           input.id,
           input.agentId,
@@ -800,6 +802,7 @@ export class AgentsPG extends AgentsStorage {
           input.description ?? null,
           this.serializeInstructions(input.instructions),
           toPgJson(input.model),
+          input.modelList ? toPgJson(input.modelList) : null,
           input.tools ? toPgJson(input.tools) : null,
           input.defaultOptions ? toPgJson(input.defaultOptions) : null,
           input.workflows ? toPgJson(input.workflows) : null,
@@ -1105,6 +1108,7 @@ export class AgentsPG extends AgentsStorage {
       description: row.description as string | undefined,
       instructions: this.deserializeInstructions(row.instructions as string),
       model: parseJsonResilient(row.model, 'model'),
+      modelList: parseJsonResilient(row.modelList, 'modelList'),
       tools: parseJsonResilient(row.tools, 'tools'),
       defaultOptions: parseJsonResilient(row.defaultOptions, 'defaultOptions'),
       workflows: parseJsonResilient(row.workflows, 'workflows'),

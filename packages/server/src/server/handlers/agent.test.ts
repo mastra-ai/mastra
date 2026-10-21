@@ -1077,6 +1077,38 @@ describe('Agent Handlers', () => {
   });
 
   describe('model list edits', () => {
+    it('should mutate published sub-agent model lists when Editor does not own them', async () => {
+      const subAgent = makeMockAgent({
+        id: 'sub-agent',
+        model: [
+          { id: 'primary', model: 'openai/gpt-4o' },
+          { id: 'fallback', model: 'openai/gpt-4o-mini' },
+        ],
+      });
+      const parentAgent = makeMockAgent({ id: 'parent-agent' });
+      vi.spyOn(parentAgent, 'listAgents').mockResolvedValue({ 'sub-agent': subAgent });
+      const mastra = makeMastraMock({ agents: { 'parent-agent': parentAgent } });
+
+      await REORDER_AGENT_MODEL_LIST_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'sub-agent',
+        reorderedModelIds: ['fallback', 'primary'],
+        requestContext,
+      });
+      await UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'sub-agent',
+        modelConfigId: 'fallback',
+        enabled: false,
+        requestContext,
+      });
+
+      expect(await subAgent.getModelList()).toMatchObject([
+        { id: 'fallback', enabled: false },
+        { id: 'primary', enabled: true },
+      ]);
+    });
+
     it('should resolve stored-only agents before reordering or updating their model lists', async () => {
       const agent = makeMockAgent({
         id: 'stored-only-agent',
@@ -1114,9 +1146,11 @@ describe('Agent Handlers', () => {
         requestContext,
       });
 
-      expect(getById).toHaveBeenCalledTimes(2);
-      expect(getById).toHaveBeenNthCalledWith(1, 'stored-only-agent', { status: 'draft' });
+      expect(getById).toHaveBeenCalledTimes(4);
+      expect(getById).toHaveBeenNthCalledWith(1, 'stored-only-agent', { status: 'published' });
       expect(getById).toHaveBeenNthCalledWith(2, 'stored-only-agent', { status: 'draft' });
+      expect(getById).toHaveBeenNthCalledWith(3, 'stored-only-agent', { status: 'published' });
+      expect(getById).toHaveBeenNthCalledWith(4, 'stored-only-agent', { status: 'draft' });
       expect(update).toHaveBeenCalledTimes(2);
       expect(update).toHaveBeenNthCalledWith(
         1,

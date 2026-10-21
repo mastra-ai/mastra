@@ -1,7 +1,7 @@
-import type { MastraStorage, AgentsStorage } from '@mastra/core/storage';
-import { createSampleAgent, createFullSampleAgent, createSampleAgents } from './data';
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { randomUUID } from 'node:crypto';
+import type { MastraStorage, AgentsStorage } from '@mastra/core/storage';
+import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { createSampleAgent, createFullSampleAgent, createSampleAgents } from './data';
 
 export function createAgentsTests({ storage }: { storage: MastraStorage }) {
   // Skip tests if storage doesn't have agents domain
@@ -179,6 +179,43 @@ export function createAgentsTests({ storage }: { storage: MastraStorage }) {
         expect(resolved?.id).toBe(agent.id);
         expect(resolved?.name).toBe('Active Version'); // From active version
         expect(resolved?.instructions).toBe('Active instructions');
+      });
+
+      it('should persist model lists through agent versions', async () => {
+        const agent = createSampleAgent();
+        await agentsStorage.create({ agent });
+
+        const versionId = randomUUID();
+        const modelList = [
+          {
+            id: 'primary',
+            provider: 'openai',
+            modelId: 'gpt-4o',
+            enabled: true,
+            maxRetries: 1,
+          },
+          {
+            id: 'fallback',
+            provider: 'anthropic',
+            modelId: 'claude-3-5-sonnet-latest',
+            enabled: false,
+            maxRetries: 2,
+          },
+        ];
+
+        await agentsStorage.createVersion({
+          id: versionId,
+          agentId: agent.id,
+          versionNumber: 2,
+          name: agent.name,
+          instructions: agent.instructions,
+          model: agent.model,
+          modelList,
+          changedFields: ['modelList'],
+        });
+
+        const version = await agentsStorage.getVersion(versionId);
+        expect(version?.modelList).toEqual(modelList);
       });
 
       it('should fall back to latest version when no active version is set', async () => {

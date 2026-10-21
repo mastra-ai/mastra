@@ -1115,6 +1115,36 @@ export async function getAgentFromSystem({
   return agent;
 }
 
+async function getAgentForModelListMutation({
+  mastra,
+  agentId,
+  requestContext,
+}: {
+  mastra: Context['mastra'];
+  agentId: string;
+  requestContext: RequestContext;
+}): Promise<Agent> {
+  const publishedAgent = await getAgentFromSystem({
+    mastra,
+    agentId,
+    requestContext,
+    versionOptions: { status: 'published' },
+  });
+
+  const editorConfig = publishedAgent.__getEditorConfig?.();
+  if (editorConfig === false || editorConfig?.model !== true) {
+    return publishedAgent;
+  }
+
+  const draftAgent = await getAgentFromSystem({
+    mastra,
+    agentId,
+    requestContext,
+    versionOptions: { status: 'draft' },
+  });
+  return draftAgent.__fork();
+}
+
 async function formatAgent({
   mastra,
   agent,
@@ -3739,18 +3769,7 @@ export const REORDER_AGENT_MODEL_LIST_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, agentId, reorderedModelIds, requestContext }) => {
     try {
-      let versionStatus: 'draft' | 'published' = 'draft';
-      try {
-        const editorConfig = mastra.getAgentById(agentId).__getEditorConfig?.();
-        versionStatus = editorConfig !== false && editorConfig?.model === true ? 'draft' : 'published';
-      } catch {}
-      const agent = await getAgentFromSystem({
-        mastra,
-        agentId,
-        requestContext,
-        versionOptions: { status: versionStatus },
-      });
-      const mutableAgent = versionStatus === 'draft' ? agent.__fork() : agent;
+      const mutableAgent = await getAgentForModelListMutation({ mastra, agentId, requestContext });
 
       if (typeof mutableAgent.model === 'function') {
         throw new HTTPException(409, {
@@ -3798,18 +3817,7 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, agentId, modelConfigId, model: bodyModel, maxRetries, enabled, requestContext }) => {
     try {
-      let versionStatus: 'draft' | 'published' = 'draft';
-      try {
-        const editorConfig = mastra.getAgentById(agentId).__getEditorConfig?.();
-        versionStatus = editorConfig !== false && editorConfig?.model === true ? 'draft' : 'published';
-      } catch {}
-      const agent = await getAgentFromSystem({
-        mastra,
-        agentId,
-        requestContext,
-        versionOptions: { status: versionStatus },
-      });
-      const mutableAgent = versionStatus === 'draft' ? agent.__fork() : agent;
+      const mutableAgent = await getAgentForModelListMutation({ mastra, agentId, requestContext });
 
       if (typeof mutableAgent.model === 'function') {
         throw new HTTPException(409, {
