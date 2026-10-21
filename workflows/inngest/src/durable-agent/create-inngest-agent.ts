@@ -1063,6 +1063,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       const {
         output,
         cleanup: streamCleanup,
+        fail: failStream,
         ready,
       } = createDurableAgentStream<TOutput>({
         pubsub: getPubsub(),
@@ -1131,8 +1132,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           });
           return triggerWorkflow(runId, workflowInput, tracingOptions, streamOptions?.actor);
         })
-        .catch(error => {
-          void emitError(runId, error);
+        .catch(async error => {
+          await emitError(runId, error);
+          await failStream(error);
         });
       const trackedEntry = getRunRegistryEntry(runId, mastra);
       if (trackedEntry) {
