@@ -1,3 +1,4 @@
+import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import type { DataListSort } from '@mastra/playground-ui/components/DataList';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { SpansFilterBar } from '@mastra/playground-ui/domains/spans/components/spans-filter-bar';
@@ -12,12 +13,11 @@ import type { TraceDatePreset } from '@mastra/playground-ui/domains/traces/types
 import { useObservabilityCapabilities } from '@mastra/react/hooks/capabilities';
 import { useQuerySpans } from '@mastra/react/hooks/traces';
 import type { SpanQueryArgs, SpanRow } from '@mastra/react/hooks/traces';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router';
-import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
-import { navCrumb } from '@/domains/navigation/crumbs';
-
-const crumbs = [navCrumb('/spans')];
+import { SpanDetailSidePanel } from './span-detail-side-panel';
+import type { SpanSelection } from './span-detail-side-panel';
+import { TracesSpansSwitch } from '@/domains/traces/components/traces-spans-switch';
 
 const DEFAULT_DATE_PRESET: TraceDatePreset = 'last-24h';
 
@@ -48,6 +48,7 @@ type DateState = { datePreset: TraceDatePreset; dateFrom?: Date; dateTo?: Date }
 
 export function SpansPageContent() {
   const navigate = useNavigate();
+  const [selection, setSelection] = useState<SpanSelection>();
   const [dates, setDates] = useState<DateState>({ datePreset: DEFAULT_DATE_PRESET });
   const [tokens, setTokens] = useState<TraceFilterToken[]>([]);
   const [groups, setGroups] = useState<TraceFilterGroup[]>([]);
@@ -95,31 +96,45 @@ export function SpansPageContent() {
     setGroups(nextGroups);
   };
 
+  const rows = useMemo(() => (spans ?? []).map(toListRow), [spans]);
+  const panelSpans = useMemo(
+    () => rows.flatMap(row => (row.spanId ? [{ traceId: row.traceId, spanId: row.spanId }] : [])),
+    [rows],
+  );
+
+  // Clicking the open row again closes the panel.
   const handleSpanClick = (row: TracesListViewTrace) => {
-    const params = new URLSearchParams({ traceId: row.traceId });
-    if (row.spanId) params.set('spanId', row.spanId);
-    void navigate(`/traces?${params.toString()}`);
+    if (!row.spanId) return;
+    const isOpen = selection?.traceId === row.traceId && selection.spanId === row.spanId;
+    setSelection(isOpen ? undefined : { traceId: row.traceId, spanId: row.spanId });
   };
+  const closePanel = useCallback(() => setSelection(undefined), []);
+  const showTrace = ({ traceId, spanId }: SpanSelection) =>
+    navigate(`/traces?${new URLSearchParams({ traceId, spanId })}`);
 
   const filtersApplied = tokens.length > 0 || groups.length > 0 || datePreset !== DEFAULT_DATE_PRESET;
 
   return (
     <PageLayout
-      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
       actionRow={
-        <SpansFilterBar
-          datePreset={datePreset}
-          dateFrom={dateFrom}
-          dateTo={dateTo}
-          timeRange={timeRange}
-          tokens={tokens}
-          groups={groups}
-          onDatePresetChange={handleDatePresetChange}
-          onDateChange={handleDateChange}
-          onDateRangeChange={handleDateRangeChange}
-          onFiltersChange={handleFiltersChange}
-          disabled={isLoading}
-        />
+        <ActionRow>
+          <ActionRow.Start>
+            <TracesSpansSwitch current="spans" />
+            <SpansFilterBar
+              datePreset={datePreset}
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              timeRange={timeRange}
+              tokens={tokens}
+              groups={groups}
+              onDatePresetChange={handleDatePresetChange}
+              onDateChange={handleDateChange}
+              onDateRangeChange={handleDateRangeChange}
+              onFiltersChange={handleFiltersChange}
+              disabled={isLoading}
+            />
+          </ActionRow.Start>
+        </ActionRow>
       }
     >
       <h1 className="sr-only">Spans</h1>
@@ -130,7 +145,7 @@ export function SpansPageContent() {
       ) : (
         <TracesListView
           listId="all-spans"
-          traces={(spans ?? []).map(toListRow)}
+          traces={rows}
           isLoading={isLoading}
           isFetchingNextPage={isFetchingNextPage}
           hasNextPage={hasNextPage}
@@ -139,9 +154,18 @@ export function SpansPageContent() {
           isBranchesMode
           createdSort={sort}
           onSortChange={setSort}
+          featuredTraceId={selection?.traceId}
+          featuredSpanId={selection?.spanId}
           onTraceClick={handleSpanClick}
         />
       )}
+      <SpanDetailSidePanel
+        selection={selection}
+        spans={panelSpans}
+        onSelect={setSelection}
+        onClose={closePanel}
+        onShowTrace={showTrace}
+      />
     </PageLayout>
   );
 }

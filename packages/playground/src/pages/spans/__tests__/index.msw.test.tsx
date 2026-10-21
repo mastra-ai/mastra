@@ -1,6 +1,8 @@
 import type { GetObservabilityCapabilitiesResponse, QuerySpansInput, QuerySpansResult } from '@mastra/client-js';
-import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
+import { useEffect, useImperativeHandle } from 'react';
 import { useLocation } from 'react-router';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SpansPage from '..';
@@ -9,12 +11,14 @@ import {
   emptyEnvironments,
   emptySpans,
   noSpanQueryCapabilities,
+  spanDetailById,
   spanQueryCapabilities,
   spanQueryCoreOnlyCapabilities,
   spansFirstPage,
   spansLastPage,
   SPANS_PAGE_TWO_CURSOR,
 } from './fixtures/spans';
+import { RouteSidePanelProvider, RouteSidePanelSlot, useRouteSidePanel } from '@/lib/route-side-panel';
 import { useMockIntersectionObserver } from '@/test/intersection-observer';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
@@ -22,6 +26,7 @@ import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 const CAPABILITIES_URL = `${TEST_BASE_URL}/api/observability/capabilities`;
 const SPANS_QUERY_URL = `${TEST_BASE_URL}/api/observability/spans/query`;
+const SPAN_DETAIL_URL = `${TEST_BASE_URL}/api/observability/traces/:traceId/spans/:spanId`;
 const ENTITY_NAMES_URL = `${TEST_BASE_URL}/api/observability/discovery/entity-names`;
 const ENVIRONMENTS_URL = `${TEST_BASE_URL}/api/observability/discovery/environments`;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -31,14 +36,30 @@ const LocationProbe = () => {
   return <div data-testid="location">{`${location.pathname}${location.search}`}</div>;
 };
 
+const panelHandle: CollapsiblePanelHandle = { collapse: vi.fn(), expand: vi.fn(), toggle: vi.fn() };
+
+/** Stands in for the layout's resizable side panel: binds the shared handle and reports it open. */
+function FakeLayoutPanel() {
+  const { panelHandle: ref, onPanelResize } = useRouteSidePanel();
+  useImperativeHandle(ref, () => panelHandle);
+  useEffect(() => onPanelResize(380), [onPanelResize]);
+  return null;
+}
+
 const renderPage = () =>
   renderWithProviders(
     <TestLinkProvider>
-      <SpansPage />
-      <LocationProbe />
+      <RouteSidePanelProvider>
+        <FakeLayoutPanel />
+        <SpansPage />
+        <RouteSidePanelSlot data-testid="side-panel" />
+        <LocationProbe />
+      </RouteSidePanelProvider>
     </TestLinkProvider>,
     { router: { initialEntries: ['/spans'] } },
   );
+
+const getSidePanel = () => screen.getByTestId('side-panel');
 
 const getFilterInput = () => screen.getByRole('combobox', { name: 'Add filter' }) as HTMLInputElement;
 const typeFilter = (text: string) => fireEvent.change(getFilterInput(), { target: { value: text } });
@@ -67,6 +88,10 @@ function setSpansHandlers(
     http.get(CAPABILITIES_URL, () => HttpResponse.json(capabilities)),
     http.get(ENTITY_NAMES_URL, () => HttpResponse.json(emptyEntityNames)),
     http.get(ENVIRONMENTS_URL, () => HttpResponse.json(emptyEnvironments)),
+    http.get(SPAN_DETAIL_URL, ({ params }) => {
+      const detail = spanDetailById[String(params.spanId)];
+      return detail ? HttpResponse.json(detail) : HttpResponse.json({ error: 'not found' }, { status: 404 });
+    }),
     http.post(SPANS_QUERY_URL, async ({ request }) => {
       const body = (await request.json()) as QuerySpansInput;
       requests.push(body);
@@ -127,9 +152,38 @@ describe('Spans page', () => {
       expect(await screen.findByText('Query spans capability not activated')).toBeTruthy();
       expect(requests).toHaveLength(0);
     });
+
+    it('keeps the breadcrumb header without the Traces/Spans switch', async () => {
+      setSpansHandlers(noSpanQueryCapabilities, { first: spansFirstPage });
+
+      renderPage();
+
+      await screen.findByText('Query spans capability not activated');
+      expect(screen.getByRole('navigation', { name: 'Breadcrumb' })).toBeTruthy();
+      expect(screen.queryByRole('navigation', { name: 'Observability views' })).toBeNull();
+    });
   });
 
   describe('when the observability store supports span queries', () => {
+    it('replaces the breadcrumb header with the Traces/Spans switch', async () => {
+      setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
+
+      renderPage();
+
+      expect(await screen.findByRole('navigation', { name: 'Observability views' })).toBeTruthy();
+      expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull();
+    });
+
+    it('marks Spans as the current view', async () => {
+      setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
+
+      renderPage();
+
+      const views = within(await screen.findByRole('navigation', { name: 'Observability views' }));
+      expect(views.getByRole('link', { name: 'Spans' }).getAttribute('aria-current')).toBe('page');
+      expect(views.getByRole('link', { name: 'Traces' }).getAttribute('aria-current')).toBeNull();
+    });
+
     it('lists the spans of the first page', async () => {
       const requests = setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
 
@@ -140,16 +194,96 @@ describe('Spans page', () => {
       expect(requests[0]?.page).toEqual({ limit: 25 });
       expect(requests[0]?.orderBy).toEqual([{ field: 'startedAt', direction: 'desc' }]);
     });
+  });
 
-    it('opens the clicked span in the traces page', async () => {
+  describe('when Traces is clicked in the view switch', () => {
+    it('navigates to the traces page', async () => {
+      setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
+
+      renderPage();
+      const views = within(await screen.findByRole('navigation', { name: 'Observability views' }));
+      fireEvent.click(views.getByRole('link', { name: 'Traces' }));
+
+      await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/traces'));
+    });
+  });
+
+  describe('when a span row is clicked', () => {
+    it('shows the span details in the side panel', async () => {
+      setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
+
+      renderPage();
+      fireEvent.click(await screen.findByText('agent run: weather'));
+
+      const panel = within(getSidePanel());
+      expect(await panel.findByRole('region', { name: 'Span details' })).toBeTruthy();
+      expect(await panel.findByText('session-weather-42')).toBeTruthy();
+    });
+
+    it('stays on the spans page', async () => {
+      setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
+
+      renderPage();
+      fireEvent.click(await screen.findByText('agent run: weather'));
+
+      await within(getSidePanel()).findByText('session-weather-42');
+      expect(screen.getByTestId('location').textContent).toBe('/spans');
+    });
+  });
+
+  describe('when "Go to trace" is clicked in the span panel', () => {
+    it('opens the span in its trace on the traces page', async () => {
       setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
 
       renderPage();
       fireEvent.click(await screen.findByText('tool: get-weather'));
+      const panel = within(getSidePanel());
+      await panel.findByText('Weather API timed out');
+      fireEvent.click(panel.getByRole('button', { name: 'Go to trace' }));
 
-      await waitFor(() =>
-        expect(screen.getByTestId('location').textContent).toBe('/traces?traceId=trace-1&spanId=span-2'),
-      );
+      expect(screen.getByTestId('location').textContent).toBe('/traces?traceId=trace-1&spanId=span-2');
+    });
+  });
+
+  describe('when the open span row is clicked again', () => {
+    it('closes the side panel', async () => {
+      setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
+
+      renderPage();
+      fireEvent.click(await screen.findByText('agent run: weather'));
+      await within(getSidePanel()).findByText('session-weather-42');
+      fireEvent.click(screen.getAllByText('agent run: weather')[0]);
+
+      await waitFor(() => expect(within(getSidePanel()).queryByRole('region', { name: 'Span details' })).toBeNull());
+    });
+  });
+
+  describe('when the span panel close button is clicked', () => {
+    it('closes the side panel', async () => {
+      setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
+
+      renderPage();
+      fireEvent.click(await screen.findByText('agent run: weather'));
+      const panel = within(getSidePanel());
+      await panel.findByText('session-weather-42');
+      fireEvent.click(panel.getByRole('button', { name: 'Close span' }));
+
+      await waitFor(() => expect(panel.queryByRole('region', { name: 'Span details' })).toBeNull());
+    });
+  });
+
+  describe('when the next span button is clicked', () => {
+    it('shows the next loaded span', async () => {
+      setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
+
+      renderPage();
+      fireEvent.click(await screen.findByText('agent run: weather'));
+      const panel = within(getSidePanel());
+      await panel.findByText('session-weather-42');
+      fireEvent.click(panel.getByRole('button', { name: 'Go to next span' }));
+
+      await waitFor(() => expect(panel.queryByText('session-weather-42')).toBeNull());
+      expect(await panel.findByText('Weather API timed out')).toBeTruthy();
     });
   });
 

@@ -127,3 +127,24 @@ describe('SpanDataPanelView — close', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('SpanDataPanelView — go to trace', () => {
+  describe('when no onShowTrace callback is provided', () => {
+    it('does not offer to go to the trace', () => {
+      render(<SpanDataPanelView {...baseProps} />);
+
+      expect(screen.queryByRole('button', { name: 'Go to trace' })).toBeNull();
+    });
+  });
+
+  describe('when an onShowTrace callback is provided', () => {
+    it('calls it with the trace and span ids', () => {
+      const onShowTrace = vi.fn();
+      render(<SpanDataPanelView {...baseProps} onShowTrace={onShowTrace} />);
+
+      fireEvent.click(screen.getByRole('button', { name: 'Go to trace' }));
+
+      expect(onShowTrace).toHaveBeenCalledWith({ traceId: 'trace-1', spanId: 'span-1' });
+    });
+  });
+});

@@ -95,7 +95,12 @@ const setTracePageHandlers = (capabilities: GetObservabilityCapabilitiesResponse
 
 const LocationProbe = () => {
   const location = useLocation();
-  return <div data-testid="location">{location.search}</div>;
+  return (
+    <>
+      <div data-testid="location">{location.search}</div>
+      <div data-testid="pathname">{location.pathname}</div>
+    </>
+  );
 };
 
 const renderPage = (initialEntry = '/traces', props: React.ComponentProps<typeof TracesPage> = {}) =>
@@ -392,6 +397,16 @@ describe('Traces page list source', () => {
       expect(onTraceQuery).not.toHaveBeenCalled();
     });
 
+    it('keeps the breadcrumb header without the Traces/Spans switch', async () => {
+      setTracePageHandlers(legacyTraceCapabilities);
+
+      const { queryClient } = renderPage();
+
+      expect(await screen.findByRole('navigation', { name: 'Breadcrumb' })).toBeTruthy();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(screen.queryByRole('navigation', { name: 'Observability views' })).toBeNull();
+    });
+
     it('shows no Feedback tab on the trace or span panel and never requests feedback', async () => {
       const onFeedback = vi.fn<() => void>();
       setTracePageHandlers(metricsCapableCapabilities);
@@ -446,6 +461,41 @@ describe('Traces page list source', () => {
       expect(screen.getAllByRole('tab', { name: /^scores/i }).length).toBeGreaterThan(0);
       expect(screen.queryByRole('tab', { name: /feedback/i })).toBeNull();
       expect(onFeedback).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe('Traces page view switch', () => {
+  describe('when the store supports span queries', () => {
+    it('replaces the breadcrumb header with the Traces/Spans switch', async () => {
+      setTracePageHandlers(traceQueryCapabilities);
+
+      renderPage();
+
+      expect(await screen.findByRole('navigation', { name: 'Observability views' })).toBeTruthy();
+      expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull();
+    });
+
+    it('marks Traces as the current view', async () => {
+      setTracePageHandlers(traceQueryCapabilities);
+
+      renderPage();
+
+      const views = within(await screen.findByRole('navigation', { name: 'Observability views' }));
+      expect(views.getByRole('link', { name: 'Traces' }).getAttribute('aria-current')).toBe('page');
+      expect(views.getByRole('link', { name: 'Spans' }).getAttribute('aria-current')).toBeNull();
+    });
+  });
+
+  describe('when Spans is clicked in the view switch', () => {
+    it('navigates to the spans page', async () => {
+      setTracePageHandlers(traceQueryCapabilities);
+
+      renderPage();
+      const views = within(await screen.findByRole('navigation', { name: 'Observability views' }));
+      fireEvent.click(views.getByRole('link', { name: 'Spans' }));
+
+      await waitFor(() => expect(screen.getByTestId('pathname').textContent).toBe('/spans'));
     });
   });
 });
@@ -1410,6 +1460,12 @@ describe('Traces page filter bar', () => {
       expect(screen.queryByRole('option', { name: 'Primitive name' })).toBeNull();
       expect(screen.queryByRole('option', { name: 'Primitive type' })).toBeNull();
       expect(screen.queryByRole('option', { name: 'Primitive ID' })).toBeNull();
+    });
+
+    it('does not render the Traces/Spans switch', async () => {
+      await renderScoped();
+
+      expect(screen.queryByRole('navigation', { name: 'Observability views' })).toBeNull();
     });
   });
 });
