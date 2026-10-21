@@ -314,6 +314,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     outputProcessors,
     maxProcessorRetries,
     requireToolApproval,
+    closeOnSuspend,
     inputProcessors,
     prepareStep,
     transform,
@@ -450,6 +451,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     ...(outputProcessors ? { outputProcessors } : {}),
     ...(maxProcessorRetries !== undefined ? { maxProcessorRetries } : {}),
     ...(requireToolApproval !== undefined ? { requireToolApproval } : {}),
+    ...(closeOnSuspend !== undefined && isDurable ? { closeOnSuspend } : {}),
     ...(inputProcessors && !isDurable ? { inputProcessors } : {}),
     // Pass the scenario's error processors at call time so they form the complete list. Without
     // this, the agent's constructor list is the base and the shared stability defaults are added

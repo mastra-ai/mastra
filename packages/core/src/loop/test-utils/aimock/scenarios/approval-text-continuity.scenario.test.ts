@@ -32,6 +32,7 @@ describeForAllEngines('AIMock loop scenario: text across a tool approval', engin
       sharedAgent: shared,
       prompt: 'Find the user Dero Israel',
       requireToolApproval: true,
+      closeOnSuspend: true,
       collectChunks: true,
       fixtures: llm => {
         llm.on(
@@ -72,6 +73,7 @@ describeForAllEngines('AIMock loop scenario: text across a tool approval', engin
 
     expect(resumedDeltas.join('')).toBe('Found Dero Israel.');
     expect(await resumed.text).toBe('Let me look that up. Found Dero Israel.');
+    expect((await resumed.getFullOutput()).text).toBe('Let me look that up. Found Dero Israel.');
     expect(lookups).toEqual(['Dero Israel']);
   });
 });

@@ -667,6 +667,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #finishUsageIsTotal = false;
   #tripwire: StepTripwireData | undefined = undefined;
   #wasSuspended = false;
+  #resumedPriorText = '';
   #transportRef: MastraModelOutputOptions<OUTPUT>['transportRef'] | undefined;
   #transportClosed = false;
 
@@ -737,6 +738,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     initialState,
     initialToolCalls,
     resumedText,
+    closeOnSuspend = false,
     finishUsageIsTotal,
   }: {
     model: {
@@ -755,6 +757,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
      * and the suspended step's part of it. Used when no serialized `initialState` is available.
      */
     resumedText?: { priorText: string; stepText: string };
+    closeOnSuspend?: boolean;
     finishUsageIsTotal?: boolean;
   }) {
     super({ component: 'LLM', name: 'MastraModelOutput' });
@@ -1090,10 +1093,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 self.#finishCallbackSent = true;
                 await options?.onFinish?.(self.#createSuspendedOnFinishPayload(chunk));
               }
-              // A durable stream stays open across the suspension, so it never reaches flush,
-              // where the plain Agent settles these. Settle them here, as at flush (#27504).
+              // Only settle partial results when this reader closes on suspension; an open
+              // reader must include text from the resumed segment when it finishes (#27504).
               // Usage is left to the step that reports it (#27440).
-              if (self.#options.resolveFinalPromises) self.#resolveSuspendedPromises({ includeUsage: false });
+              if (self.#options.resolveFinalPromises && closeOnSuspend)
+                self.#resolveSuspendedPromises({ includeUsage: false });
               break;
             case 'abort':
               self.#status = 'canceled';
@@ -2098,6 +2102,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       if (initialToolCalls) this.#toolCalls = initialToolCalls;
       if (resumedText) {
         const { priorText, stepText } = resumedText;
+        this.#resumedPriorText = priorText;
         this.#bufferedText = [priorText, stepText].filter(Boolean);
         this.#bufferedTextAtStepStart = priorText ? 1 : 0;
         this.#bufferedByStep.text = stepText;
@@ -2400,7 +2405,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     const fullOutput: FullOutput<OUTPUT> = {
       // After a tripwire, `text` already holds the resolved output (and a processOutputStream
       // tripwire can end the run before any step completes), so reuse it to stay in sync.
-      text: this.tripwire || steps.length === 0 ? await this.text : textFromSteps,
+      text:
+        this.tripwire || steps.length === 0
+          ? await this.text
+          : this.#resumedPriorText && !textFromSteps.startsWith(this.#resumedPriorText)
+            ? this.#resumedPriorText + textFromSteps
+            : textFromSteps,
       usage: await this.usage,
       steps,
       finishReason: await this.finishReason,
