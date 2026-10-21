@@ -16,7 +16,7 @@ export type ProviderFailureKind =
 export interface ProviderErrorFacts {
   statusCode?: number;
   code?: string;
-  /** The body's sentence when the message is only an HTTP phrase or an envelope around it. */
+  /** The innermost sentence behind HTTP phrases, envelopes, stringified layers and causes, when it differs from the message. */
   reason?: string;
 }
 
@@ -178,7 +178,7 @@ export function providerErrorFacts(error: unknown): ProviderErrorFacts {
   return result;
 }
 
-/** The innermost sentence a provider wrote for a person, unwrapped from envelopes and stringified layers. */
+/** The innermost sentence a provider wrote for a person, unwrapped from envelopes, stringified layers and causes. */
 export function providerErrorReason(error: unknown): string | undefined {
   return innermostReason(error, 0);
 }
@@ -192,7 +192,7 @@ function innermostReason(error: unknown, depth: number): string | undefined {
     return !trimmed || HTTP_REASON_PHRASE.test(trimmed) ? undefined : trimmed;
   }
   if (typeof error !== 'object') return undefined;
-  for (const key of ['reason', 'error', 'response', 'data']) {
+  for (const key of ['reason', 'error', 'response', 'data', 'cause']) {
     const reason = innermostReason(readField(error, key), depth + 1);
     if (reason) return reason;
   }
