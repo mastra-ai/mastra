@@ -29,13 +29,12 @@ import { isTimeGap } from './TranscriptSignals';
 import type { MessageEntry, NoticeEntry, SuspensionPrompt, TimelineEntry } from '../services/transcript';
 
 export function Transcript({ tail }: { tail?: ReactNode }) {
-  const { resourceId, sessionEnabled, projectPath, baseUrl, owner } = useChatSessionContext();
+  const { sessionId, sessionEnabled, baseUrl, owner } = useChatSessionContext();
   const { transcript, resolvePrompt, busy, viewerId } = useChatTranscript();
   const { entries } = transcript;
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: projectPath,
+    sessionId,
     baseUrl,
     enabled: sessionEnabled,
   };

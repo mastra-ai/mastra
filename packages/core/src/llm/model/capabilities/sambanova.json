@@ -10,7 +10,7 @@
   ],
   "structuredOutput": ["DeepSeek-V3.2", "gemma-4-31B-it", "gpt-oss-120b"],
   "reasoning": {
-    "DeepSeek-V3.2": [
+    "DeepSeek-V3.1": [
       {
         "type": "toggle"
       }
@@ -20,7 +20,7 @@
         "type": "toggle"
       }
     ],
-    "gemma-4-31B-it": [
+    "DeepSeek-V3.2": [
       {
         "type": "toggle"
       }
@@ -31,7 +31,7 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "DeepSeek-V3.1": [
+    "gemma-4-31B-it": [
       {
         "type": "toggle"
       }

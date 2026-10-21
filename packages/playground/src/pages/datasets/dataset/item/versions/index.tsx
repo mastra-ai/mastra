@@ -16,7 +16,8 @@ import { HistoryIcon, ColumnsIcon, GitCompareArrowsIcon } from 'lucide-react';
 import { useParams, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { DatasetItemDetails } from '@/domains/datasets';
-import { datasetCrumb, navCrumb, truncateItemIdCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
+import { datasetCrumb, navCrumb, truncateItemIdCrumb } from '@/domains/navigation/crumbs';
+import type { CrumbDef } from '@/domains/navigation/crumbs';
 
 function toDatasetItem(version: DatasetItemVersion, datasetId: string): DatasetItem {
   return {

@@ -2,6 +2,7 @@ import type { DatasetExperiment } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { DataList } from '@mastra/playground-ui/components/DataList';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
+import type { sideVariant } from './comparison/constants';
 import { STATUS_LABEL, STATUS_VARIANT } from './experiment-columns';
 import { ExperimentDescriptionLabel, ExperimentNameLabel } from './experiment-name-label';
 import { useTargetRegistries } from '@/domains/experiments/hooks/use-target-registries';
@@ -17,9 +18,16 @@ export interface ExperimentRowCellsProps {
   experiment: DatasetExperiment;
   datasetName?: string;
   review?: ExperimentReviewSummary;
+  /** Comparison role badge shown before the name (e.g. "Baseline", "Contender 1"). */
+  selectionRole?: ExperimentSelectionRole;
 }
 
-export function ExperimentRowCells({ experiment: exp, datasetName, review }: ExperimentRowCellsProps) {
+export interface ExperimentSelectionRole {
+  label: string;
+  variant: (typeof sideVariant)[keyof typeof sideVariant];
+}
+
+export function ExperimentRowCells({ experiment: exp, datasetName, review, selectionRole }: ExperimentRowCellsProps) {
   const status = exp.status ?? 'pending';
   const succeeded = exp.succeededCount ?? 0;
   const failed = exp.failedCount ?? 0;
@@ -28,7 +36,16 @@ export function ExperimentRowCells({ experiment: exp, datasetName, review }: Exp
   return (
     <>
       <DataList.Cell>
-        <ExperimentNameLabel experiment={exp} />
+        {selectionRole ? (
+          <span className="flex min-w-0 items-center gap-2">
+            <Badge variant={selectionRole.variant} className="shrink-0">
+              {selectionRole.label}
+            </Badge>
+            <ExperimentNameLabel experiment={exp} />
+          </span>
+        ) : (
+          <ExperimentNameLabel experiment={exp} />
+        )}
       </DataList.Cell>
       <DataList.Cell>
         <ExperimentDescriptionLabel experiment={exp} />

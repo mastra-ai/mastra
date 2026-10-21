@@ -1,7 +1,8 @@
 import { useState } from 'react';
 
-import { useWorkspaceChanges, useWorkspaceFile, useWorkspaceFiles } from '../../../../hooks/use-fs';
+import { useWorkspaceChanges, useWorkspaceFile } from '../../../../hooks/use-fs';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
+import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 import type { WorkspacePanelSize } from '../layout';
 import { WorkItemFeedPanel } from '../../factory/components/feed/WorkItemFeedPanel';
 import type { WorkItem } from '../../factory/services/workItems';
@@ -14,11 +15,12 @@ import { selectWorkspaceFilePreview } from './workspace-file-preview';
 
 interface WorkspaceViewerPanelProps {
   workspacePath: string;
-  threadId: string;
   onSizeChange?: (size: WorkspacePanelSize) => void;
   visible?: boolean;
   workItem?: WorkItem;
   factoryProjectId?: string;
+  /** The Factory session this workspace belongs to; enables session actions such as recreating the sandbox. */
+  sessionId?: string;
 }
 
 type WorkspacePanelView =
@@ -30,22 +32,24 @@ type WorkspacePanelView =
 
 export function WorkspaceViewerPanel({
   workspacePath,
-  threadId,
   onSizeChange,
   visible = true,
   workItem,
   factoryProjectId,
+  sessionId,
 }: WorkspaceViewerPanelProps) {
+  const session = useUserSessionQuery(sessionId);
+  const canRecreateSandbox = session.data?.capabilities?.recreateSandbox === true;
   const [view, setView] = useState<WorkspacePanelView>({ type: 'overview' });
   const [openFolders, setOpenFolders] = useState<Record<string, boolean>>({});
+  const [showHidden, setShowHidden] = useState(false);
   const selectedFilePath = view.type === 'file' ? view.path : undefined;
-  const listing = useWorkspaceFiles(workspacePath, threadId, { enabled: visible });
   const changes = useWorkspaceChanges(workspacePath, { enabled: visible });
   const factory = useFactoryQuery(factoryProjectId);
   const repositoryProviders: RepositoryProviders | undefined = factory.data
     ? Object.fromEntries(factory.data.repositories.map(repo => [repo.slug.toLowerCase(), repo.provider]))
     : undefined;
-  const file = useWorkspaceFile(workspacePath, selectedFilePath, threadId, {
+  const file = useWorkspaceFile(workspacePath, selectedFilePath, {
     enabled: visible && view.type === 'file',
     select: selectWorkspaceFilePreview,
   });
@@ -103,15 +107,13 @@ export function WorkspaceViewerPanel({
   if (view.type === 'files') {
     return (
       <WorkspaceFileBrowser
-        files={listing.data?.files}
-        repositories={listing.data?.repositories}
+        workspacePath={workspacePath}
+        visible={visible}
         selectedFilePath={view.selectedPath}
-        isLoading={listing.isLoading}
-        isRefreshing={listing.isFetching}
-        error={listing.error ?? undefined}
-        onRefresh={() => listing.refetch()}
         onFileSelect={path => setView({ type: 'file', path })}
         openFolders={openFolders}
+        showHidden={showHidden}
+        onShowHiddenChange={setShowHidden}
         onFolderOpenChange={(path, open) => setOpenFolders(previous => ({ ...previous, [path]: open }))}
         onBack={showOverview}
       />
@@ -120,16 +122,16 @@ export function WorkspaceViewerPanel({
 
   return (
     <WorkspaceOverview
-      listing={listing.data}
       changes={changes.data}
-      filesLoading={listing.isLoading}
       changesLoading={changes.isLoading}
-      filesError={listing.error ?? undefined}
       changesError={changes.error ?? undefined}
       onShowFiles={() => showView('files')}
       onShowChanges={() => showView('changes')}
       commentCount={workItem?.commentCount}
       onShowComments={workItem ? showFeed : undefined}
+      recreateSandbox={
+        canRecreateSandbox && sessionId ? { sessionId, factoryId: factoryProjectId, workspacePath } : undefined
+      }
     />
   );
 }

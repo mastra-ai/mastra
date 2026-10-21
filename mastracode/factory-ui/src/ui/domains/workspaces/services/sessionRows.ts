@@ -245,7 +245,6 @@ function pullRequestMergeTarget({ session, threadId, pullRequest }: SessionListR
     {
       sessionId: session.sessionId,
       threadId,
-      projectPath: session.sessionId,
       pullRequestNumber: pullRequest.number,
       provider: pullRequest.provider,
       knownMerged: pullRequest.knownMerged,

@@ -7,7 +7,7 @@ description: "Browse Ollama Cloud model IDs, capabilities, context windows, and 
 
 # <img src="https://models.dev/logos/ollama-cloud.svg" alt="Ollama Cloud logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Ollama Cloud
 
-Access 27 Ollama Cloud models through Mastra's model router. Authentication is handled automatically using the `OLLAMA_API_KEY` environment variable.
+Access 29 Ollama Cloud models through Mastra's model router. Authentication is handled automatically using the `OLLAMA_API_KEY` environment variable.
 
 Learn more in the [Ollama Cloud documentation](https://docs.ollama.com/cloud).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "ollama-cloud/deepseek-v4-flash"
+  model: "ollama-cloud/beam"
 });
 
 // Generate a response
@@ -45,6 +45,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 <ProviderModelsTable
   models={[
+  {
+    "model": "ollama-cloud/beam",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": null,
+    "outputCost": null
+  },
   {
     "model": "ollama-cloud/deepseek-v4-flash",
     "imageInput": false,
@@ -286,6 +298,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2.4
   },
   {
+    "model": "ollama-cloud/minimax-m3.1-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 512000,
+    "inputCost": 0.15,
+    "outputCost": 0.6
+  },
+  {
     "model": "ollama-cloud/mistral-large-3:675b",
     "imageInput": true,
     "audioInput": false,
@@ -384,7 +408,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://ollama.com/v1",
-    id: "ollama-cloud/deepseek-v4-flash",
+    id: "ollama-cloud/beam",
     apiKey: process.env.OLLAMA_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -403,7 +427,7 @@ const agent = new Agent({
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
       ? "ollama-cloud/qwen3.5:397b"
-      : "ollama-cloud/deepseek-v4-flash";
+      : "ollama-cloud/beam";
   }
 });
 ```

@@ -1,5 +1,68 @@
 # create-factory
 
+## 0.3.0-alpha.11
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.35.0-alpha.11
+
+## 0.3.0-alpha.10
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.35.0-alpha.10
+
+## 0.3.0-alpha.9
+
+### Patch Changes
+
+- Updated dependencies [[`4f5b3c6`](https://github.com/mastra-ai/mastra/commit/4f5b3c62474c832d6d4dbc33e3a99ced928b57a9), [`8101369`](https://github.com/mastra-ai/mastra/commit/8101369e4736f99cc6065972913e644d0795c2eb), [`c236d64`](https://github.com/mastra-ai/mastra/commit/c236d64974c68e6c0f9bf6e3d6442e0184c5f49e), [`693b1fb`](https://github.com/mastra-ai/mastra/commit/693b1fb16ed7918beea308f708b85c4d3647276a)]:
+  - mastra@1.35.0-alpha.9
+
+## 0.3.0-alpha.8
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.35.0-alpha.8
+
+## 0.3.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`04ded0b`](https://github.com/mastra-ai/mastra/commit/04ded0b7409b39008a1e4611c412ee80ee20993d), [`0b1aba9`](https://github.com/mastra-ai/mastra/commit/0b1aba9a5beb1b325386119a67f029377c608b31)]:
+  - mastra@1.35.0-alpha.7
+
+## 0.3.0-alpha.6
+
+### Patch Changes
+
+- Updated dependencies:
+  - mastra@1.35.0-alpha.6
+
+## 0.3.0-alpha.5
+
+### Patch Changes
+
+- Updated dependencies [[`af29d55`](https://github.com/mastra-ai/mastra/commit/af29d554f66ea294e5df3a7b9e98f7cee6afca58), [`ca2bd5e`](https://github.com/mastra-ai/mastra/commit/ca2bd5e1c1cd6cade3beef865d342c87fc424950)]:
+  - mastra@1.35.0-alpha.5
+
+## 0.3.0-alpha.4
+
+### Minor Changes
+
+- Production Factory servers no longer start with unsafe fallbacks when security configuration is missing. Outside development and tests, the server now refuses to boot when: ([#27499](https://github.com/mastra-ai/mastra/pull/27499))
+
+  - `FACTORY_CREDENTIAL_ENCRYPTION_KEY` is unset. Model-provider keys, custom-provider API keys, and integration secrets would otherwise be stored in plaintext. Set `FACTORY_CREDENTIAL_ENCRYPTION=plaintext` to opt into unencrypted storage.
+  - No Mastra platform or E2B sandbox credentials are configured. Agent commands would otherwise run directly on the host with no isolation. Set `FACTORY_SANDBOX_PROVIDER=local` to opt into host execution.
+
+### Patch Changes
+
+- Updated dependencies [[`f5af51c`](https://github.com/mastra-ai/mastra/commit/f5af51c52d5bffac6717643e7367ce99a9fe967d), [`0b2ae29`](https://github.com/mastra-ai/mastra/commit/0b2ae29603be62314f99ea3d807a120291cc42b5), [`9620613`](https://github.com/mastra-ai/mastra/commit/96206136bcc184e6238bd6dd5627fe28254eec0b)]:
+  - mastra@1.34.3-alpha.4
+
 ## 0.2.11-alpha.3
 
 ### Patch Changes

@@ -43,14 +43,10 @@ import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js
 import {
   SessionOwnershipMismatchError,
   SourceControlConnectionNotFoundError,
-  type SourceControlStorage,
-  type SourceControlStorageHandle,
 } from '../storage/domains/source-control/base.js';
-import {
-  isAgentActor,
-  type FactoryDispatchFailureCode,
-  type WorkItemsStorage,
-} from '../storage/domains/work-items/base.js';
+import type { SourceControlStorage, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
+import { isAgentActor } from '../storage/domains/work-items/base.js';
+import type { FactoryDispatchFailureCode, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { workItemBranch, workItemBranchSource, workItemThreadTitle } from '../work-item-branch.js';
 import { buildAutomationRunRoutes } from './automation-runs.js';
 import { ConfigRoutes } from './config.js';
@@ -133,6 +129,8 @@ export interface FactoryApiRoutesDeps {
   feed: CommentsDomain;
   factoryTransitionService?: FactoryTransitionService;
   sessionRetirement?: import('../sandbox/session-retirement.js').SessionRetirementCoordinator;
+  /** Moves a thread with its observation vectors onto another memory resource. */
+  moveThread?: (input: { threadId: string; resourceId: string }) => Promise<unknown>;
   onFactoryRuntime?: (runtime: {
     transitionService: FactoryTransitionService;
     startCoordinator: FactoryStartCoordinator;
@@ -655,7 +653,12 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           controller: deps.controller,
           memorySettings: deps.domains.memorySettings,
           sessionRetirement: deps.sessionRetirement,
+          // A local sandbox's destroy keeps the session directory, so recreate
+          // couldn't deliver the fresh checkout it promises there.
+          sandboxRecreateSupported: deps.sandbox !== undefined && deps.sandbox.provider !== 'local',
+          filesystem: deps.domains.filesystem,
           ...(deps.factoryReady ? { workItems: deps.domains.workItems } : {}),
+          ...(deps.moveThread ? { moveThread: deps.moveThread } : {}),
           ...(githubStorage ? { githubRepositories: githubStorage.repositories } : {}),
         });
   // Absent known integrations still get their disabled-status stub.
@@ -731,7 +734,6 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       sessionFs: {
         auth: deps.auth,
         sessions: sourceControlSessions,
-        filesystem: deps.domains.filesystem,
       },
     }),
     ...new ConfigRoutes({
@@ -741,6 +743,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       modelCredentials: deps.domains.modelCredentials,
       modelDefaults: deps.domains.modelDefaults,
       sourceControlSessions,
+      sourceControls,
       workItems: deps.domains.workItems,
       memorySettings: deps.domains.memorySettings,
       factoryProjects: deps.domains.projects,

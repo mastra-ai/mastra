@@ -59,6 +59,7 @@ import {
 import type { AssistantRenderPart } from './db-message-parts.js';
 import { formatToolResult, isTaskMutationTool } from './handlers/tool.js';
 import { pruneChatContainer } from './prune-chat.js';
+import { clearPendingTools } from './state.js';
 import type { TUIState } from './state.js';
 import { BOX_INDENT, getMarkdownTheme, theme } from './theme.js';
 
@@ -948,8 +949,7 @@ export async function renderExistingMessages(state: TUIState, isCurrent: () => b
 
   disposeAssistantRenderState(state);
   state.chatContainer.clear();
-  state.pendingTools.clear();
-  state.pendingTaskToolIds?.clear();
+  clearPendingTools(state);
   state.pendingSubagents.clear();
   state.followUpComponents = [];
   state.allToolComponents = [];

@@ -22,7 +22,7 @@ import {
   traceQueryRequestSchema,
 } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { z } from 'zod/v4';
+import type { z } from 'zod/v4';
 
 import { MASTRA_USER_KEY } from '../constants';
 import { HTTPException } from '../http-exception';
@@ -316,6 +316,8 @@ describe('QUERY_TRACES', () => {
       'trace-query-tenant-scope',
       'trace-query-context-ids',
       'trace-query-time-to-first-chunk',
+      'trace-query-root-span-fields',
+      'trace-query-root-entity-id',
     ]);
     observabilityStore.queryTraces.mockImplementation(plan => evaluateTraceQuery(TRACE_QUERY_FIXTURE_DATA, plan));
 
@@ -787,6 +789,93 @@ describe('QUERY_TRACES', () => {
     );
   });
 
+  it('returns 422 before calling an older store for root span name and type predicates', async () => {
+    const wheres = [
+      { op: 'eq', left: { path: 'name' }, right: { literal: 'root-a' } },
+      { op: 'not', arg: { op: 'in', value: { path: 'spanType' }, set: ['workflow_run'] } },
+    ];
+    for (const where of wheres) {
+      const { mastra, observabilityStore } = createHarness(['trace-query']);
+      const error = await captureHttpException(QUERY_TRACES.handler(params(mastra, { timeRange: TIME_RANGE, where })));
+
+      expect(error.status).toBe(422);
+      expect(getDeclaredErrorSchema(422).parse(await error.getResponse().json())).toMatchObject({
+        code: 'TRACE_QUERY_INVALID',
+        issues: [{ code: 'field_not_allowed', path: ['where'] }],
+      });
+      expect(observabilityStore.queryTraces).not.toHaveBeenCalled();
+    }
+  });
+
+  it('passes root span predicates to stores that advertise support and span-scope ones to any store', async () => {
+    const where = { op: 'eq', left: { path: 'spanType' }, right: { literal: 'workflow_run' } };
+    const supported = createHarness(['trace-query', 'trace-query-root-span-fields']);
+    await QUERY_TRACES.handler(params(supported.mastra, { timeRange: TIME_RANGE, where }));
+    expect(supported.observabilityStore.queryTraces).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { type: 'comparison', field: 'spanType', operator: 'eq', value: 'workflow_run' },
+      }),
+    );
+
+    const legacy = createHarness(['trace-query']);
+    await QUERY_TRACES.handler(params(legacy.mastra, { timeRange: TIME_RANGE, where: { spans: { some: where } } }));
+    expect(legacy.observabilityStore.queryTraces).toHaveBeenCalledOnce();
+  });
+
+  it('gates root span entityId predicates separately from root span name and type', async () => {
+    const where = { op: 'eq', left: { path: 'entityId' }, right: { literal: 'nightly-scorer' } };
+    const older = createHarness(['trace-query', 'trace-query-root-span-fields']);
+    const error = await captureHttpException(
+      QUERY_TRACES.handler(params(older.mastra, { timeRange: TIME_RANGE, where })),
+    );
+    expect(error.status).toBe(422);
+    expect(getDeclaredErrorSchema(422).parse(await error.getResponse().json())).toMatchObject({
+      code: 'TRACE_QUERY_INVALID',
+      issues: [{ code: 'field_not_allowed', path: ['where'] }],
+    });
+    expect(older.observabilityStore.queryTraces).not.toHaveBeenCalled();
+
+    const supported = createHarness(['trace-query', 'trace-query-root-entity-id']);
+    await QUERY_TRACES.handler(params(supported.mastra, { timeRange: TIME_RANGE, where }));
+    expect(supported.observabilityStore.queryTraces).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { type: 'comparison', field: 'entityId', operator: 'eq', value: 'nightly-scorer' },
+      }),
+    );
+
+    const legacy = createHarness(['trace-query']);
+    await QUERY_TRACES.handler(params(legacy.mastra, { timeRange: TIME_RANGE, where: { spans: { some: where } } }));
+    expect(legacy.observabilityStore.queryTraces).toHaveBeenCalledOnce();
+  });
+
+  it('returns 501 before calling an older store for a time to first chunk sort', async () => {
+    const { mastra, observabilityStore } = createHarness(['trace-query', 'trace-query-time-to-first-chunk']);
+    const error = await captureHttpException(
+      QUERY_TRACES.handler(
+        params(mastra, { timeRange: TIME_RANGE, orderBy: [{ field: 'timeToFirstChunkMs', direction: 'asc' }] }),
+      ),
+    );
+
+    expect(error.status).toBe(501);
+    expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
+      code: 'TRACE_QUERY_UNSUPPORTED',
+      message: 'Sorting by time to first chunk is not supported by the configured observability store',
+    });
+    expect(observabilityStore.queryTraces).not.toHaveBeenCalled();
+  });
+
+  it('passes a time to first chunk sort to stores that advertise support', async () => {
+    const { mastra, observabilityStore } = createHarness(['trace-query', 'trace-query-time-to-first-chunk-sort']);
+
+    await QUERY_TRACES.handler(
+      params(mastra, { timeRange: TIME_RANGE, orderBy: [{ field: 'timeToFirstChunkMs', direction: 'desc' }] }),
+    );
+
+    expect(observabilityStore.queryTraces).toHaveBeenCalledWith(
+      expect.objectContaining({ orderBy: { field: 'timeToFirstChunkMs', direction: 'desc' } }),
+    );
+  });
+
   it('returns 501 when the request-available store lacks trace-query support', async () => {
     const { mastra, observabilityStore } = createHarness([]);
     const error = await captureHttpException(QUERY_TRACES.handler(params(mastra, { timeRange: TIME_RANGE })));
@@ -901,7 +990,13 @@ describe('trace-query discovery routes', () => {
   });
 
   it('describes aggregation for trace-scope discovery on stores that support it', async () => {
-    const { mastra } = createHarness(['trace-query', 'trace-query-discovery', 'trace-aggregate']);
+    const { mastra } = createHarness([
+      'trace-query',
+      'trace-query-discovery',
+      'trace-aggregate',
+      'trace-query-root-span-fields',
+      'trace-query-root-entity-id',
+    ]);
     const request = getTraceQueryFieldsArgsSchema.parse({ timeRange: TIME_RANGE, predicateScope: 'trace' });
 
     const response = await GET_TRACE_QUERY_FIELDS.handler({ ...createTestServerContext({ mastra }), ...request });
@@ -927,6 +1022,103 @@ describe('trace-query discovery routes', () => {
 
       expect(response).not.toHaveProperty('aggregate');
     }
+  });
+
+  it('hides root span name and type from trace-scope discovery on stores without the capability', async () => {
+    const { mastra, observabilityStore } = createHarness(['trace-query', 'trace-query-discovery', 'trace-aggregate']);
+    const response = await GET_TRACE_QUERY_FIELDS.handler({
+      ...createTestServerContext({ mastra }),
+      ...getTraceQueryFieldsArgsSchema.parse({ timeRange: TIME_RANGE, predicateScope: 'trace' }),
+    });
+
+    for (const path of ['name', 'spanType']) {
+      expect(response.canonicalFields).not.toContainEqual(expect.objectContaining({ path }));
+      expect(response.aggregate?.dimensions).not.toContainEqual(expect.objectContaining({ path }));
+    }
+    expect(response.aggregate?.dimensions).toContainEqual({ path: 'entityName', valueKind: 'string' });
+
+    const spans = await GET_TRACE_QUERY_FIELDS.handler({
+      ...createTestServerContext({ mastra }),
+      ...getTraceQueryFieldsArgsSchema.parse({ timeRange: TIME_RANGE, predicateScope: 'spans' }),
+    });
+    expect(spans.canonicalFields).toContainEqual(expect.objectContaining({ path: 'spanType' }));
+
+    const error = await captureHttpException(
+      GET_TRACE_QUERY_VALUES.handler({
+        ...createTestServerContext({ mastra }),
+        ...getTraceQueryValuesArgsSchema.parse({ timeRange: TIME_RANGE, predicateScope: 'trace', path: 'spanType' }),
+      }),
+    );
+    expect(error.status).toBe(422);
+    expect(await error.getResponse().json()).toMatchObject({
+      code: 'TRACE_QUERY_INVALID',
+      issues: [{ code: 'field_not_allowed', path: ['path'] }],
+    });
+    expect(observabilityStore.getTraceQueryValues).not.toHaveBeenCalled();
+  });
+
+  it('discovers root span name and type for stores that advertise the capability', async () => {
+    const { mastra, observabilityStore } = createHarness([
+      'trace-query',
+      'trace-query-discovery',
+      'trace-aggregate',
+      'trace-query-root-span-fields',
+    ]);
+    const response = await GET_TRACE_QUERY_FIELDS.handler({
+      ...createTestServerContext({ mastra }),
+      ...getTraceQueryFieldsArgsSchema.parse({ timeRange: TIME_RANGE, predicateScope: 'trace' }),
+    });
+
+    for (const path of ['name', 'spanType']) {
+      expect(response.canonicalFields).toContainEqual(expect.objectContaining({ path, valueSuggestions: true }));
+      expect(response.aggregate?.dimensions).toContainEqual({ path, valueKind: 'string' });
+    }
+
+    await GET_TRACE_QUERY_VALUES.handler({
+      ...createTestServerContext({ mastra }),
+      ...getTraceQueryValuesArgsSchema.parse({ timeRange: TIME_RANGE, predicateScope: 'trace', path: 'name' }),
+    });
+    expect(observabilityStore.getTraceQueryValues).toHaveBeenCalledWith(
+      expect.objectContaining({ predicateScope: 'trace', path: 'name' }),
+    );
+  });
+
+  it('lists root span entityId in trace-scope discovery only for stores that advertise it', async () => {
+    const request = getTraceQueryFieldsArgsSchema.parse({ timeRange: TIME_RANGE, predicateScope: 'trace' });
+    const older = createHarness([
+      'trace-query',
+      'trace-query-discovery',
+      'trace-aggregate',
+      'trace-query-root-span-fields',
+    ]);
+    const olderResponse = await GET_TRACE_QUERY_FIELDS.handler({
+      ...createTestServerContext({ mastra: older.mastra }),
+      ...request,
+    });
+    expect(olderResponse.canonicalFields).not.toContainEqual(expect.objectContaining({ path: 'entityId' }));
+    expect(olderResponse.aggregate?.dimensions).not.toContainEqual(expect.objectContaining({ path: 'entityId' }));
+    expect(olderResponse.aggregate?.dimensions).toContainEqual({ path: 'name', valueKind: 'string' });
+
+    const olderSpans = await GET_TRACE_QUERY_FIELDS.handler({
+      ...createTestServerContext({ mastra: older.mastra }),
+      ...getTraceQueryFieldsArgsSchema.parse({ timeRange: TIME_RANGE, predicateScope: 'spans' }),
+    });
+    expect(olderSpans.canonicalFields).toContainEqual(expect.objectContaining({ path: 'entityId' }));
+
+    const supported = createHarness([
+      'trace-query',
+      'trace-query-discovery',
+      'trace-aggregate',
+      'trace-query-root-entity-id',
+    ]);
+    const response = await GET_TRACE_QUERY_FIELDS.handler({
+      ...createTestServerContext({ mastra: supported.mastra }),
+      ...request,
+    });
+    expect(response.canonicalFields).toContainEqual(
+      expect.objectContaining({ path: 'entityId', valueSuggestions: false }),
+    );
+    expect(response.aggregate?.dimensions).toContainEqual({ path: 'entityId', valueKind: 'string' });
   });
 
   it('hides root duration discovery from stores without the capability', async () => {

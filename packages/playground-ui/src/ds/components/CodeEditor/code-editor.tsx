@@ -1,122 +1,39 @@
 import { jsonLanguage } from '@codemirror/lang-json';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
-import { HighlightStyle, syntaxHighlighting } from '@codemirror/language';
+import { syntaxHighlighting } from '@codemirror/language';
 import { EditorState, Prec } from '@codemirror/state';
 import type { Extension } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { tags as t } from '@lezer/highlight';
-import { draculaInit } from '@uiw/codemirror-theme-dracula';
 import CodeMirror from '@uiw/react-codemirror';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
+import { Braces } from 'lucide-react';
 import { forwardRef, useMemo } from 'react';
 import type { HTMLAttributes } from 'react';
 import { codeLanguages } from './code-languages';
+import { syntaxHighlighter } from './highlight';
 import { createVariableAutocomplete } from './variable-autocomplete-extension';
 import { variableHighlight } from './variable-highlight-extension';
+import { Button } from '@/ds/components/Button';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { useFieldControlAria } from '@/ds/components/Field/field-control-aria';
-import { useTheme } from '@/ds/components/ThemeProvider';
 import { fieldErrorRimWithin, inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
+import { formatJSON } from '@/lib/formatting';
 import type { JsonSchema } from '@/lib/json-schema';
+import { toast } from '@/lib/toast';
 import { cn } from '@/lib/utils';
 
 export type CodeEditorLanguage = 'json' | 'markdown';
 type CodeEditorFont = 'body' | 'mono';
 
-/** Original dark theme — draculaInit + custom overrides. Unchanged from before light mode work. */
-function buildDarkTheme(font: CodeEditorFont): Extension {
-  const baseTheme = draculaInit({
-    settings: {
-      fontFamily: `var(--font-${font})`,
-      fontSize: 'var(--text-body-sm)',
-      lineHighlight: 'transparent',
-      gutterBackground: 'transparent',
-      gutterForeground: 'var(--placeholder)',
-      background: 'transparent',
-      foreground: 'var(--foreground)',
-      caret: 'var(--foreground)',
-    },
-    styles: [
-      { tag: [t.className, t.propertyName], color: 'var(--foreground)' },
-      { tag: t.heading, color: 'var(--info-indicator)', fontWeight: 'bold' },
-      {
-        tag: [t.heading1, t.heading2, t.heading3, t.heading4, t.heading5, t.heading6],
-        color: 'var(--info-indicator)',
-        fontWeight: 'bold',
-      },
-      { tag: t.emphasis, fontStyle: 'italic', color: 'var(--foreground)' },
-      { tag: t.strong, fontWeight: 'bold', color: 'var(--foreground)' },
-      { tag: t.link, color: 'var(--info-indicator)', textDecoration: 'underline' },
-      { tag: t.url, color: 'var(--info-indicator)' },
-      { tag: t.monospace, color: 'var(--foreground)' },
-      { tag: t.strikethrough, textDecoration: 'line-through' },
-      { tag: t.quote, fontStyle: 'italic', color: 'var(--placeholder)' },
-    ],
-  });
-
-  const customLineNumberTheme = EditorView.theme({
-    '.cm-editor': {
-      backgroundColor: 'transparent',
-    },
-    '.cm-content': {
-      color: 'var(--foreground)',
-      caretColor: 'var(--foreground)',
-    },
-    '.cm-lineNumbers .cm-gutterElement': {
-      color: 'var(--placeholder)',
-    },
-    '.cm-activeLineGutter': {
-      color: 'var(--muted-foreground)',
-    },
-    '.cm-cursor': {
-      borderLeftColor: 'var(--foreground)',
-    },
-    '.cm-selectionBackground, .cm-content ::selection': {
-      backgroundColor: 'var(--info-subtle)',
-    },
-    '.cm-tooltip-autocomplete': {
-      backgroundColor: 'var(--background)',
-      border: '1px solid var(--border)',
-      borderRadius: '6px',
-      boxShadow: 'var(--elevation-overlay)',
-    },
-    '.cm-tooltip-autocomplete > ul': {
-      fontFamily: 'var(--font-mono)',
-    },
-    '.cm-completionLabel': {
-      color: 'var(--foreground)',
-    },
-    '.cm-completionDetail': {
-      color: 'var(--muted-foreground)',
-      fontSize: 'var(--text-caption)',
-      marginLeft: 'auto',
-      paddingLeft: '12px',
-    },
-    '.cm-completionInfo': {
-      backgroundColor: 'var(--background)',
-      border: '1px solid var(--border)',
-      color: 'var(--muted-foreground)',
-      padding: '8px 12px',
-    },
-    '.cm-completionIcon': {
-      display: 'none',
-    },
-    'ul.cm-completionList li[aria-selected]': {
-      backgroundColor: 'var(--fill-hover)',
-      color: 'var(--foreground)',
-    },
-    '.cm-line .cm-variable-highlight': {
-      color: 'var(--warning-foreground) !important',
-      fontWeight: '500',
-    },
-  });
-
-  return [baseTheme, customLineNumberTheme];
-}
-
-function buildLightTheme(font: CodeEditorFont): Extension {
+/**
+ * The single CodeMirror theme for every editor. Chrome and syntax colors come
+ * from CSS variables that flip under `.dark`, and syntax roles use the same
+ * `syntaxHighlighter` as the read-only `<Code>` viewer, so editors and viewers
+ * look identical in both modes.
+ */
+function buildCodemirrorTheme(font: CodeEditorFont): Extension {
   const editorTheme = EditorView.theme({
     '&': {
       backgroundColor: 'transparent',
@@ -189,42 +106,12 @@ function buildLightTheme(font: CodeEditorFont): Extension {
     },
   });
 
-  const highlightStyle = HighlightStyle.define([
-    { tag: [t.comment, t.bracket], color: 'var(--placeholder)' },
-    { tag: [t.string, t.meta, t.regexp], color: 'var(--syntax-string)' },
-    { tag: [t.atom, t.bool, t.special(t.variableName)], color: 'var(--syntax-literal)' },
-    { tag: [t.keyword, t.operator, t.tagName], color: 'var(--syntax-keyword)' },
-    { tag: [t.function(t.propertyName), t.propertyName], color: 'var(--syntax-name)' },
-    {
-      tag: [t.definition(t.variableName), t.function(t.variableName), t.className, t.attributeName],
-      color: 'var(--syntax-link)',
-    },
-    { tag: [t.variableName, t.number], color: 'var(--syntax-name)' },
-    { tag: [t.name, t.quote], color: 'var(--syntax-string)' },
-    { tag: t.heading, color: 'var(--syntax-link)', fontWeight: 'bold' },
-    {
-      tag: [t.heading1, t.heading2, t.heading3, t.heading4, t.heading5, t.heading6],
-      color: 'var(--syntax-link)',
-      fontWeight: 'bold',
-    },
-    { tag: [t.emphasis], fontStyle: 'italic', color: 'var(--foreground)' },
-    { tag: [t.strong], fontWeight: 'bold', color: 'var(--foreground)' },
-    { tag: t.link, color: 'var(--syntax-link)', textDecoration: 'underline' },
-    { tag: t.url, color: 'var(--syntax-link)' },
-    { tag: t.monospace, color: 'var(--foreground)' },
-    { tag: t.strikethrough, textDecoration: 'line-through' },
-    { tag: [t.deleted], color: 'var(--syntax-keyword)' },
-    { tag: t.invalid, color: 'var(--destructive-foreground)' },
-    { tag: [t.standard(t.tagName)], color: 'var(--syntax-string)' },
-  ]);
-
-  return [editorTheme, syntaxHighlighting(highlightStyle)];
+  return [editorTheme, syntaxHighlighting(syntaxHighlighter)];
 }
 
 // eslint-disable-next-line react-refresh/only-export-components -- shared hook intentionally co-located with the editor it themes
 export const useCodemirrorTheme = (font: CodeEditorFont = 'mono'): Extension => {
-  const isDark = useTheme().resolvedTheme === 'dark';
-  return useMemo(() => (isDark ? buildDarkTheme(font) : buildLightTheme(font)), [isDark, font]);
+  return useMemo(() => buildCodemirrorTheme(font), [font]);
 };
 
 const codeEditorVariants = cva(
@@ -288,6 +175,8 @@ export type CodeEditorProps = {
   value?: string;
   onChange?: (value: string) => void;
   showCopyButton?: boolean;
+  /** Offers a button that rewrites the JSON with Prettier. Needs `onChange`; ignored for markdown or read-only editors. */
+  showFormatButton?: boolean;
   className?: string;
   highlightVariables?: boolean;
   language?: CodeEditorLanguage;
@@ -311,6 +200,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       value,
       onChange,
       showCopyButton = true,
+      showFormatButton = false,
       className,
       language = 'json',
       font = 'mono',
@@ -339,6 +229,15 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
     const ariaInvalid = ariaInvalidProp ?? fieldAria['aria-invalid'];
     const theme = useCodemirrorTheme(font);
     const formattedCode = data ? JSON.stringify(data, null, 2) : (value ?? '');
+    const canFormat = showFormatButton && language === 'json' && editable !== false && Boolean(onChange);
+
+    const handleFormat = async () => {
+      try {
+        onChange?.((await formatJSON(formattedCode)).trimEnd());
+      } catch {
+        toast.error('Can’t format: the JSON is invalid');
+      }
+    };
 
     const extensions = useMemo(() => {
       const contentAttributes: CodeEditorContentAttributes = { 'aria-label': ariaLabel };
@@ -387,7 +286,16 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
 
     return (
       <div className={cn(codeEditorVariants({ variant }), className)} {...props}>
-        {showCopyButton && <CopyButton content={formattedCode} className="absolute top-2 right-2 z-20" />}
+        {(showCopyButton || canFormat) && (
+          <div className="absolute top-2 right-2 z-20 flex gap-1">
+            {canFormat && (
+              <Button type="button" size="sm" tooltip="Format JSON" aria-label="Format JSON" onClick={handleFormat}>
+                <Braces />
+              </Button>
+            )}
+            {showCopyButton && <CopyButton content={formattedCode} />}
+          </div>
+        )}
         <CodeMirror
           ref={ref}
           value={formattedCode}

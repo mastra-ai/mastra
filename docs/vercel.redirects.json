@@ -2224,6 +2224,11 @@
       "source": "/reference/agents/getTools",
       "destination": "/reference/agents/listTools",
       "permanent": true
+    },
+    {
+      "source": "/reference/observability/tracing/trace-query",
+      "destination": "/reference/observability/tracing/advanced-queries",
+      "permanent": true
     }
   ]
 }

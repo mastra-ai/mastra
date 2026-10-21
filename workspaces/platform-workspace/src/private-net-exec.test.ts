@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { execViaPrivateNetwork, PrivateNetExecHttpError, type PrivateNetFetch } from './private-net-exec.js';
+import { execViaPrivateNetwork, PrivateNetExecHttpError } from './private-net-exec.js';
+import type { PrivateNetFetch } from './private-net-exec.js';
 
 /**
  * Build a fake fetch that returns a streaming Response driven by the frames

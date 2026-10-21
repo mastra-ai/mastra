@@ -153,11 +153,18 @@ export const SOURCE_CONTROL_SCHEMAS: CollectionSchema[] = [
       // The user session that started this one as a side session, if any.
       origin_session_id: { type: 'text', nullable: true },
       origin_thread_id: { type: 'text', nullable: true },
+      // When the origin muted this side session's reports; null while it gets them.
+      origin_muted_at: { type: 'timestamp', nullable: true },
       sandbox_id: { type: 'text', nullable: true },
       sandbox_workdir: { type: 'text', nullable: true },
       materialized_at: { type: 'timestamp', nullable: true },
       first_message_at: { type: 'timestamp', nullable: true },
       first_meaningful_exec_at: { type: 'timestamp', nullable: true },
+      // When the session's threads reached their Factory or owner memory resource.
+      // Null only on sessions from before shared resources, until the startup migration moves them.
+      resources_migrated_at: { type: 'timestamp', nullable: true },
+      // When startup checked that the session's visibility matches its memory resource. New sessions start checked.
+      visibility_checked_at: { type: 'timestamp', nullable: true },
       created_at: { type: 'timestamp' },
       updated_at: { type: 'timestamp' },
     },
@@ -353,6 +360,8 @@ export interface SourceControlSession {
   originSessionId: string | null;
   /** The thread of `originSessionId` that started it. */
   originThreadId: string | null;
+  /** When the origin muted this side session's reports; null while they are delivered. */
+  originMutedAt: Date | null;
   baseBranch: string;
   sandboxId: string | null;
   sandboxWorkdir: string | null;
@@ -502,6 +511,13 @@ export interface SourceControlStorageHandle {
     listByOrigin(args: { orgId: string; originSessionId: string }): Promise<SourceControlSession[]>;
     /** Overwrite the session's display title. Keyed by the controller-facing `sessionId`. */
     rename(args: { sessionId: string; title: string }): Promise<void>;
+    /** Mute or unmute the side session's reports to its origin. Keyed by the controller-facing `sessionId`. */
+    setOriginMuted(args: { sessionId: string; muted: boolean }): Promise<void>;
+    /** Change who can see the session. Returns the updated row, or null when it does not exist. */
+    setVisibility(args: {
+      sessionId: string;
+      visibility: SourceControlSessionVisibility;
+    }): Promise<SourceControlSession | null>;
     /** Keyed by the link (today's callers) or by the factory. */
     getForBranch(args: SessionBranchKey): Promise<SourceControlSession | null>;
     create(input: CreateSourceControlSessionInput): Promise<SourceControlSession>;
@@ -608,12 +624,15 @@ interface SessionDbRow extends Record<string, unknown> {
   visibility: string | null;
   origin_session_id?: string | null;
   origin_thread_id?: string | null;
+  origin_muted_at?: Date | null;
   base_branch: string;
   sandbox_id: string | null;
   sandbox_workdir: string | null;
   materialized_at: Date | null;
   first_message_at: Date | null;
   first_meaningful_exec_at: Date | null;
+  resources_migrated_at?: Date | null;
+  visibility_checked_at?: Date | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -725,6 +744,7 @@ function toSession(row: SessionDbRow): SourceControlSession {
     visibility: row.visibility === 'private' ? 'private' : 'org',
     originSessionId: row.origin_session_id ?? null,
     originThreadId: row.origin_thread_id ?? null,
+    originMutedAt: row.origin_muted_at ?? null,
     baseBranch: row.base_branch,
     sandboxId: row.sandbox_id,
     sandboxWorkdir: row.sandbox_workdir,
@@ -751,6 +771,38 @@ function projectRepositoryPatch(input: UpdateProjectRepositoryInput): Record<str
 export class SourceControlStorage extends FactoryStorageDomain {
   constructor() {
     super('source-control');
+  }
+
+  /** Sessions, across providers and organizations, the memory-resource migration has not finished. */
+  async listSessionsAwaitingResourceMigration(): Promise<SourceControlSession[]> {
+    return (await this.ops.findMany<SessionDbRow>(SESSIONS, { resources_migrated_at: null })).map(toSession);
+  }
+
+  /**
+   * Sessions, across providers and organizations, whose visibility startup has not yet checked against
+   * their memory resource. Only sessions already on their resource are returned; the rest wait for the
+   * resource migration.
+   */
+  async listSessionsAwaitingVisibilityCheck(): Promise<SourceControlSession[]> {
+    const rows = await this.ops.findMany<SessionDbRow>(SESSIONS, { visibility_checked_at: null });
+    return rows.filter(row => row.resources_migrated_at).map(toSession);
+  }
+
+  /** Record that a session's visibility was checked, making it private when `makePrivate`. */
+  async markVisibilityChecked(sessionId: string, { makePrivate }: { makePrivate: boolean }): Promise<void> {
+    const now = new Date();
+    await this.ops.updateMany(
+      SESSIONS,
+      { session_id: sessionId },
+      makePrivate
+        ? { visibility: 'private', visibility_checked_at: now, updated_at: now }
+        : { visibility_checked_at: now },
+    );
+  }
+
+  /** Record that a session's threads are on their memory resource, so later starts skip it. */
+  async markResourcesMigrated(sessionId: string): Promise<void> {
+    await this.ops.updateMany(SESSIONS, { session_id: sessionId }, { resources_migrated_at: new Date() });
   }
 
   async init(): Promise<void> {
@@ -1433,6 +1485,19 @@ export class SourceControlStorage extends FactoryStorageDomain {
             updated_at: new Date(),
           }));
         },
+        setOriginMuted: async ({ sessionId, muted }) => {
+          await db().updateAtomic<SessionDbRow>(SESSIONS, { session_id: sessionId }, () => ({
+            origin_muted_at: muted ? new Date() : null,
+            updated_at: new Date(),
+          }));
+        },
+        setVisibility: async ({ sessionId, visibility }) => {
+          const row = await db().updateAtomic<SessionDbRow>(SESSIONS, { session_id: sessionId }, () => ({
+            visibility,
+            updated_at: new Date(),
+          }));
+          return row ? toSession(row) : null;
+        },
         getForBranch: async args => {
           if ('factoryProjectId' in args) {
             const row = await db().findOne<SessionDbRow>(SESSIONS, {
@@ -1487,11 +1552,15 @@ export class SourceControlStorage extends FactoryStorageDomain {
               visibility: input.visibility ?? 'org',
               origin_session_id: input.origin?.sessionId ?? null,
               origin_thread_id: input.origin?.threadId ?? null,
+              origin_muted_at: null,
               base_branch: input.baseBranch,
               sandbox_id: null,
               sandbox_workdir: null,
               materialized_at: null,
               first_message_at: null,
+              // New sessions start on their memory resource.
+              resources_migrated_at: now,
+              visibility_checked_at: now,
               created_at: now,
               updated_at: now,
             });

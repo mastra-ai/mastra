@@ -13,6 +13,7 @@ import type {
   SourceControlInstallation,
   SourceControlRepository,
   SourceControlSession,
+  SourceControlSessionVisibility,
   SourceControlSessionRepository,
   SourceControlStorageHandle,
   UpdateProjectRepositoryInput,
@@ -438,6 +439,26 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         row.updatedAt = new Date();
       }
     },
+    setOriginMuted: async ({ sessionId, muted }: { sessionId: string; muted: boolean }): Promise<void> => {
+      const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
+      if (row) {
+        row.originMutedAt = muted ? new Date() : null;
+        row.updatedAt = new Date();
+      }
+    },
+    setVisibility: async ({
+      sessionId,
+      visibility,
+    }: {
+      sessionId: string;
+      visibility: SourceControlSessionVisibility;
+    }): Promise<SourceControlSession | null> => {
+      const row = this.sessionsRows.find(candidate => candidate.sessionId === sessionId);
+      if (!row) return null;
+      row.visibility = visibility;
+      row.updatedAt = new Date();
+      return row;
+    },
     getForBranch: async (args: SessionBranchKey): Promise<SourceControlSession | null> =>
       this.sessionsRows.find(
         row =>
@@ -486,6 +507,7 @@ export class SourceControlStorageInMemory implements SourceControlStorageHandle 
         visibility: input.visibility ?? 'org',
         originSessionId: origin?.sessionId ?? null,
         originThreadId: origin?.threadId ?? null,
+        originMutedAt: null,
         sandboxId: null,
         sandboxWorkdir: null,
         materializedAt: null,
