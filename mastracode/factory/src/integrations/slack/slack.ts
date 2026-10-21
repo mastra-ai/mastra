@@ -1052,7 +1052,7 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
       // thread without the bot replying. Word boundary so messages that
       // merely start with "aside..." (e.g. "asides can wait") still route.
       if (/^aside\b/i.test(message.text)) return ingestAside(thread, message, deps);
-      const command = message.isMention ? muteCommand(message.text) : undefined;
+      const command = message.isMention ? muteCommand(message) : undefined;
       if (command) return setThreadMuted(thread, message, ctx, command === 'mute');
       // A muted thread ignores everything that doesn't tag the bot, and the
       // skipped messages never reach the session.
@@ -1074,7 +1074,7 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
     onMention: async (thread, message, defaultHandler, ctx) => {
       // `@bot mute` in a thread the bot never joined has nothing to mute, and
       // must not start a session about the word "mute".
-      if (muteCommand(message.text)) return;
+      if (muteCommand(message)) return;
       await newSessionChatHandler(thread, message, defaultHandler, ctx);
     },
     onDirectMessage: newSessionChatHandler,
@@ -1084,8 +1084,15 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
 /** Thread metadata key; one Factory runs one Slack app, so this is per bot. */
 const MUTED_KEY = 'factory_muted';
 
-/** `mute` or `unmute` when that word, with the mentions taken out, is the whole message. */
-function muteCommand(text: string): 'mute' | 'unmute' | undefined {
+/**
+ * `mute` or `unmute` when that word, with the mentions taken out, is the whole
+ * message. Reads Slack's raw text, where a mention is still `<@U…>`: the
+ * normalized `message.text` spells it as the bot's display name, which can
+ * hold spaces and punctuation (`@Mastra Factory(Caleb)`).
+ */
+function muteCommand(message: HandlerMessage): 'mute' | 'unmute' | undefined {
+  const raw = message.raw as { text?: unknown } | undefined;
+  const text = typeof raw?.text === 'string' ? raw.text : message.text;
   const rest = text
     .replace(/<@[^>]+>/g, ' ')
     .replace(/(?<!\w)@[\w.-]+/g, ' ')

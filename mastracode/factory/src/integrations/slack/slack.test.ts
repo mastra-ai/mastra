@@ -2383,8 +2383,17 @@ describe('@bot mute / unmute', () => {
     const handlers = createHandlers({ accountLinks: accountLinks as any, projects: makeProjects([]) });
     const ctx = handlerCtx({ getStorage: () => storage, getLogger: () => ({ error: vi.fn() }) });
     let n = 0;
-    const send = (text: string, { isMention = false, slot = 'onSubscribedMessage' as 'onSubscribedMessage' | 'onMention' } = {}) => {
-      const message = { ...makeMessage('T-1'), id: `1700.${++n}`, text, isMention };
+    const send = (
+      text: string,
+      {
+        isMention = false,
+        slot = 'onSubscribedMessage' as 'onSubscribedMessage' | 'onMention',
+        rawText = undefined as string | undefined,
+      } = {},
+    ) => {
+      const base = makeMessage('T-1');
+      const raw = rawText === undefined ? base.raw : { ...(base.raw as object), text: rawText };
+      const message = { ...base, id: `1700.${++n}`, text, isMention, raw };
       return handlers[slot]!(thread, message, defaultHandler, ctx).then(() => message);
     };
     const muted = async () => (await memory.getThreadById({ threadId: 'thread-1' }))?.metadata?.factory_muted;
@@ -2411,6 +2420,15 @@ describe('@bot mute / unmute', () => {
 
     await f.send('@shipyard can you check the build?', { isMention: true });
     expect(f.accountLinks.getAccountLink).toHaveBeenCalledTimes(1);
+  });
+
+  it('recognizes `mute` after a bot display name with spaces and punctuation', async () => {
+    // What Slack actually delivers: the raw event keeps `<@U…>`, while the
+    // normalized text spells the mention as the bot's display name.
+    const f = await fixture();
+    await f.send('@Mastra Factory(Caleb) mute', { isMention: true, rawText: '<@U-BOT> mute' });
+    expect(await f.muted()).toBe('true');
+    expect(f.defaultHandler).not.toHaveBeenCalled();
   });
 
   it('listens again after a tagged `unmute`', async () => {
