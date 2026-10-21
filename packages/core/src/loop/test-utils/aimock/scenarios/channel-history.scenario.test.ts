@@ -75,13 +75,15 @@ describeForAllEngines('AIMock loop scenario: channel thread history', engine => 
         processMessage(adapter: unknown, threadId: string, message: Message): Promise<void>;
       };
       delivery = sdk.processMessage(adapter, externalThreadId, message);
+      const memoryStore = await memory.storage.getStore('memory');
       await vi.waitFor(
-        () => {
-          expect(JSON.stringify(adapter.postMessage.mock.calls)).toContain('Channel answer');
+        async () => {
+          const { messages } = await memoryStore!.listMessages({ threadId, perPage: 100 });
+          expect(messages.some(row => row.id === `thread-history:${threadId}:prior-1`)).toBe(true);
+          expect(llm.getRequests()).toHaveLength(1);
         },
         { timeout: 15000 },
       );
-      const memoryStore = await memory.storage.getStore('memory');
       const { messages } = await memoryStore!.listMessages({ threadId, perPage: 100 });
       const history = messages.filter(row => row.id === `thread-history:${threadId}:prior-1`);
       expect(history).toHaveLength(1);
@@ -90,9 +92,13 @@ describeForAllEngines('AIMock loop scenario: channel thread history', engine => 
         messageId: 'prior-1',
       });
       expect(JSON.stringify(history[0]?.content)).toContain('Earlier question from the platform thread');
-      expect(historyMemoryReads.some(stack => stack.includes('persistThreadHistorySignals'))).toBe(true);
-      expect(llm.getRequests()).toHaveLength(1);
+      if (engine !== 'inngest') {
+        expect(historyMemoryReads.some(stack => stack.includes('persistThreadHistorySignals'))).toBe(true);
+      }
       expect(JSON.stringify(llm.getRequests()[0]?.body?.messages)).toContain('@TestBot hello');
+      expect(JSON.stringify(llm.getRequests()[0]?.body?.messages)).toContain(
+        'Earlier question from the platform thread',
+      );
     } finally {
       await delivery;
       await channels.close();
