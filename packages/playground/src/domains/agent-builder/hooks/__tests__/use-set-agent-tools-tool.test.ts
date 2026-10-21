@@ -59,7 +59,7 @@ describe('useSetAgentToolsTool', () => {
         { id: 'agent-helper', name: 'Helper' },
         { id: 'wf-build', name: 'Build' },
       ],
-    } as any);
+    });
 
     expect(form().getValues('tools')).toEqual({ 'web-search': true });
     expect(form().getValues('agents')).toEqual({ 'agent-helper': true });
@@ -72,7 +72,7 @@ describe('useSetAgentToolsTool', () => {
     form().setValue('agents', { 'agent-helper': true });
     form().setValue('workflows', { 'wf-build': true });
 
-    await tool.execute!({ tools: [] } as any);
+    await tool.execute!({ tools: [] });
 
     expect(form().getValues('tools')).toEqual({});
     expect(form().getValues('agents')).toEqual({});
@@ -86,7 +86,7 @@ describe('useSetAgentToolsTool', () => {
         { id: 'web-search', name: 'Web Search' },
         { id: 'unknown', name: 'Unknown' },
       ],
-    } as any);
+    });
 
     expect(form().getValues('tools')).toEqual({ 'web-search': true });
     expect(form().getValues('agents')).toEqual({});
@@ -106,7 +106,7 @@ describe('useSetAgentToolsTool', () => {
       toolProviders: { composio: { tools: {}, connections: { gmail: gmailConnections } } },
     });
 
-    await tool.execute!({ tools: [{ id: 'composio:GMAIL_SEND_EMAIL', name: 'Send Email' }] } as any);
+    await tool.execute!({ tools: [{ id: 'composio:GMAIL_SEND_EMAIL', name: 'Send Email' }] });
 
     expect(form().getValues('toolProviders')).toEqual({
       composio: {
@@ -127,7 +127,7 @@ describe('useSetAgentToolsTool', () => {
       },
     });
 
-    await tool.execute!({ tools: [{ id: 'web-search', name: 'Web Search' }] } as any);
+    await tool.execute!({ tools: [{ id: 'web-search', name: 'Web Search' }] });
 
     expect(form().getValues('tools')).toEqual({ 'web-search': true });
     expect(form().getValues('toolProviders')).toEqual({

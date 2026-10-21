@@ -1,6 +1,6 @@
 {
   "name": "@mastra/fastify",
-  "version": "1.5.23-alpha.3",
+  "version": "1.5.23-alpha.12",
   "description": "Mastra Fastify adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -31,7 +31,7 @@
     "@mastra/server": "workspace:*"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^2.0.115",
+    "@ai-sdk/openai": "^2.0.135",
     "@fastify/swagger": "^9.7.0",
     "@fastify/swagger-ui": "^6.1.1",
     "@internal/lint": "workspace:*",

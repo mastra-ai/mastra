@@ -30,7 +30,7 @@ const crumbs = [navCrumb('/scorers'), scorerCrumb];
 const SCORES_SORT_KEYS: readonly ScoresSortKey[] = ['date', 'score'];
 
 export default function Scorer() {
-  const { scorerId } = useParams()! as { scorerId: string };
+  const { scorerId } = useParams() as { scorerId: string };
   const [searchParams, setSearchParams] = useSearchParams();
   const scoreIdFromUrl = searchParams.get('scoreId') ?? undefined;
   const [selectedScoreId, setSelectedScoreId] = useState<string | undefined>(scoreIdFromUrl);
@@ -42,7 +42,7 @@ export default function Scorer() {
     type: 'ALL' as const,
   });
 
-  const { scorer, error: scorerError } = useScorer(scorerId!);
+  const { scorer, error: scorerError } = useScorer(scorerId);
   const columnsState = useScoresColumns();
 
   const { data: agents = {}, isLoading: isLoadingAgents, error: agentsError } = useAgents();

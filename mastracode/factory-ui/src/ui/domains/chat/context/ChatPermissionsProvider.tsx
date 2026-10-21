@@ -14,12 +14,11 @@ interface ChatPermissionsProviderProps {
 }
 
 export function ChatPermissionsProvider({ children }: ChatPermissionsProviderProps) {
-  const { resourceId, projectPath, baseUrl, sessionEnabled, resourceReady, resourceEnabled, sandboxPreparing } =
+  const { sessionId, baseUrl, sessionEnabled, resourceReady, resourceEnabled, sandboxPreparing } =
     useChatSessionContext();
   const commonArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: projectPath,
+    sessionId,
     baseUrl,
   };
   // Read permissions as soon as the resource is addressable — the read is
@@ -27,14 +26,14 @@ export function ChatPermissionsProvider({ children }: ChatPermissionsProviderPro
   // surfaces (routed Settings pages) still address the factory-level session.
   const permissionsQuery = useAgentControllerPermissions({
     ...commonArgs,
-    enabled: resourceReady || (resourceEnabled && Boolean(resourceId)),
+    enabled: resourceReady || (resourceEnabled && Boolean(sessionId)),
   });
   // In-session writes wait for sandboxReady (= sessionEnabled). Sessionless
   // Settings pages keep the factory-level resource path, which has no sandbox
   // preparation window to wait for.
   const setPermissionForCategoryMutation = useSetPermissionForCategoryMutation({
     ...commonArgs,
-    enabled: sessionEnabled || (resourceEnabled && Boolean(resourceId) && !sandboxPreparing),
+    enabled: sessionEnabled || (resourceEnabled && Boolean(sessionId) && !sandboxPreparing),
   });
 
   const setPermissionForCategory = async (category: ToolCategory, policy: PermissionPolicy) => {

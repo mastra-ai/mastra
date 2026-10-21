@@ -9,7 +9,12 @@ import type {
 import type { DbClient } from '../../../client';
 import { qualifiedTable, TABLE_METRIC_EVENTS, TABLE_SPAN_EVENTS } from './ddl';
 import { buildSpanQueryResponse, missingPreviewSql, readPreview } from './preview-compat';
-import { compileSpanQueryPredicate, runWithPostgresTraceQueryTimeout } from './trace-query';
+import {
+  compileSpanQueryPredicate,
+  keysetSortBounds,
+  timeToFirstChunkSupported,
+  runWithPostgresTraceQueryTimeout,
+} from './trace-query';
 
 const identityFields = ['organizationId', 'resourceId', 'traceId', 'spanId'] as const;
 const fields = [
@@ -38,6 +43,7 @@ const fields = [
   'experimentId',
   'environment',
   'executionSource',
+  'timeToFirstChunkMs',
 ];
 const identities = identityFields.map(field => `"${field}"`).join(', ');
 const identityOrder = identityFields.map(field => `"${field}" COLLATE "C" ASC NULLS LAST`).join(', ');
@@ -60,11 +66,13 @@ function selectedKeys(rows: SpanQueryIdentity[], values: unknown[]): string {
 function afterCursor(plan: TrustedSpanQueryPlan, values: unknown[]): string {
   if (!plan.cursor) return 'TRUE';
   const cursor = plan.cursor;
-  values.push(cursor.sortValue);
-  const timestamp = `$${values.length}::timestamptz`;
-  const field = `s."${plan.orderBy.field}"`;
-  const terms = [`${field} ${plan.orderBy.direction === 'asc' ? '>' : '<'} ${timestamp}`];
-  const equal = [`${field} = ${timestamp}`];
+  const { past: terms, level } = keysetSortBounds(
+    `s."${plan.orderBy.field}"`,
+    plan.orderBy.direction,
+    cursor.sortValue,
+    values,
+  );
+  const equal = [level];
   for (const key of identityFields) {
     const ref = `s."${key}" COLLATE "C"`;
     const value = cursor[key];
@@ -128,7 +136,7 @@ export function compilePostgresSpanQuery(schema: string, plan: TrustedSpanQueryP
   )
   SELECT ${[...fields, 'startedAt', 'endedAt', 'durationMs', 'status', 'version'].map(field => `s."${field}"`).join(', ')}
   FROM candidates s WHERE s."startedAt" >= $1 AND s."startedAt" < $2 AND (${predicate.sql}) AND ${after}
-  ORDER BY s."${plan.orderBy.field}" ${plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC'}, ${identityOrder}
+  ORDER BY s."${plan.orderBy.field}" ${plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC'} NULLS LAST, ${identityOrder}
   LIMIT $${values.length}`;
   return { text, values };
 }
@@ -174,8 +182,9 @@ export async function querySpans(client: DbClient, schema: string, plan: Trusted
     async tx => {
       const query = compilePostgresSpanQuery(schema, plan);
       const rows = await tx.any<Selected>(query.text, query.values);
-      const selected = rows.map(({ version: _version, startedAt, endedAt, ...row }) => ({
+      const selected = rows.map(({ version: _version, startedAt, endedAt, timeToFirstChunkMs, ...row }) => ({
         ...row,
+        ...(timeToFirstChunkSupported && { timeToFirstChunkMs }),
         startedAt: startedAt.toISOString(),
         endedAt: endedAt.toISOString(),
       }));

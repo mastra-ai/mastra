@@ -26,19 +26,7 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "grok-4.3": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "claude-sonnet-4-6": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "gemini-3.1-pro-preview": [
+    "grok-4.5": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -50,7 +38,13 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "grok-4.5": [
+    "claude-sonnet-4-6": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "grok-4.3": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -62,13 +56,19 @@
         "values": ["low", "medium", "high"]
       }
     ],
+    "kimi-k2.5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
     "gpt-5.4": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "kimi-k2.5": [
+    "gemini-3.1-pro-preview": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]

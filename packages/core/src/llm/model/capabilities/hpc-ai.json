@@ -22,10 +22,9 @@
     "zai-org/glm-5.2"
   ],
   "reasoning": {
-    "openai/gpt-5.5": [
+    "moonshotai/kimi-k2.5": [
       {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "type": "toggle"
       }
     ],
     "anthropic/claude-opus-4.7": [
@@ -45,6 +44,12 @@
         "type": "toggle"
       }
     ],
+    "openai/gpt-5.5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
     "deepseek/deepseek-v4-flash": [
       {
         "type": "effort",
@@ -55,11 +60,6 @@
       {
         "type": "effort",
         "values": ["high", "max"]
-      }
-    ],
-    "moonshotai/kimi-k2.5": [
-      {
-        "type": "toggle"
       }
     ]
   }

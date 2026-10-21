@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { EditorState } from '@codemirror/state';
 import { EditorView } from '@codemirror/view';
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { CodeEditor } from '../code-editor';
+import { Toaster } from '@/lib/toast';
 
 const codeMirrorProps = vi.hoisted(() => [] as Array<{ extensions: unknown[] }>);
 
@@ -104,6 +105,56 @@ describe('CodeEditor — the copy button', () => {
     render(<CodeEditor value="x" showCopyButton={false} />);
 
     expect(screen.queryByRole('button', { name: /copy/i })).toBeNull();
+  });
+});
+
+describe('CodeEditor — the format button', () => {
+  it('is left out unless the caller asks for it', () => {
+    render(<CodeEditor value="{}" onChange={vi.fn()} />);
+
+    expect(screen.queryByRole('button', { name: 'Format JSON' })).toBeNull();
+  });
+
+  it('is left out when there is nothing to write the formatted JSON back to', () => {
+    render(<CodeEditor value="{}" showFormatButton />);
+    render(<CodeEditor value="{}" onChange={vi.fn()} editable={false} showFormatButton />);
+    render(<CodeEditor value="# hi" onChange={vi.fn()} language="markdown" showFormatButton />);
+
+    expect(screen.queryByRole('button', { name: 'Format JSON' })).toBeNull();
+  });
+
+  it('rewrites the JSON formatted, without a trailing newline', async () => {
+    const onChange = vi.fn();
+    render(
+      <CodeEditor
+        value='[{"toolName":"getWeather","args":{"city":"Paris"},"output":{"temp":18,"conditions":"Sunny"}}]'
+        onChange={onChange}
+        showFormatButton
+      />,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Format JSON' }));
+
+    await waitFor(() =>
+      expect(onChange).toHaveBeenCalledWith(
+        '[\n  {\n    "toolName": "getWeather",\n    "args": { "city": "Paris" },\n    "output": { "temp": 18, "conditions": "Sunny" }\n  }\n]',
+      ),
+    );
+  });
+
+  it('leaves invalid JSON untouched and says why', async () => {
+    const onChange = vi.fn();
+    render(
+      <>
+        <Toaster />
+        <CodeEditor value='{"city": ' onChange={onChange} showFormatButton />
+      </>,
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Format JSON' }));
+
+    expect(await screen.findByText('Can’t format: the JSON is invalid')).toBeTruthy();
+    expect(onChange).not.toHaveBeenCalled();
   });
 });
 

@@ -1,6 +1,6 @@
 # Contributing to Mastra's documentation
 
-We welcome contributions of any size and contributors of any skill level.
+You can _best_ help by creating high-quality issues with good reproductions and descriptions. Thanks for taking the time to contribute!
 
 > **Tip for new contributors:**
 > Take a look at [GitHub's Docs](https://docs.github.com/en/get-started/quickstart/hello-world) and [https://github.com/firstcontributions/first-contributions](https://github.com/firstcontributions/first-contributions) for helpful information on working with GitHub.
@@ -23,18 +23,6 @@ pnpm run dev
 ```
 
 This will start a local development server at `http://localhost:3000` where you can preview your changes.
-
-If you're copying these instructions, remember to [configure this project as a fork](https://docs.github.com/en/pull-requests/collaborating-with-pull-requests/working-with-forks/configuring-a-remote-repository-for-a-fork).
-
-```shell
-git remote add upstream git@github.com:mastra-ai/mastra.git
-```
-
-At any point, create a branch for your contribution. We are not strict about branch names.
-
-```shell
-git checkout -b docs/fix-agent-example-typo
-```
 
 ### Testing your changes
 

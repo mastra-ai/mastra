@@ -1,6 +1,6 @@
 import { expectTypeOf, test } from 'vitest';
-import { encodeTraceQueryDeltaCursor } from './trace-query';
 import type {
+  encodeTraceQueryDeltaCursor,
   TrustedThreadQueryPlan,
   TrustedTraceQueryDeltaTracesPlan,
   TrustedTraceQueryGroupsPlan,

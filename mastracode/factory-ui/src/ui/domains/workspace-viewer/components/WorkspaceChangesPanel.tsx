@@ -18,6 +18,7 @@ import type {
 import { useWorkspaceDiff } from '../../../../hooks/use-fs';
 import { GitLabIcon } from '../../../ui/icons';
 import { treeRowContainmentClass } from '../layout';
+import { WakeSandbox } from './WakeSandbox';
 
 const CodeDiff = lazy(() =>
   import('@mastra/playground-ui/components/CodeDiff').then(({ CodeDiff }) => ({ default: CodeDiff })),
@@ -70,12 +71,16 @@ function ChangeCounts({ additions, deletions, binary }: Pick<WorkspaceChange, 'a
   );
 }
 
-function ChangesEmptyState({ available }: { available: boolean }) {
+function ChangesEmptyState({ workspacePath }: { workspacePath?: string }) {
   return (
     <div className="flex min-h-0 flex-1 items-center justify-center px-6 text-center">
-      <Txt tone="muted" variant="caption">
-        {available ? 'No changes' : 'No sandbox running. Changes appear once the session sandbox starts.'}
-      </Txt>
+      {workspacePath ? (
+        <WakeSandbox workspacePath={workspacePath} />
+      ) : (
+        <Txt tone="muted" variant="caption">
+          No changes
+        </Txt>
+      )}
     </div>
   );
 }
@@ -123,7 +128,7 @@ function addChange(nodes: ChangeTreeNode[], change: WorkspaceChange, prefix: str
 function compactChangeTree(node: ChangeTreeNode): ChangeTreeNode {
   let compacted = { ...node, children: sortChangeTree(node.children) };
   while (!compacted.change && compacted.children.length === 1 && !compacted.children[0]?.change) {
-    const child = compacted.children[0]!;
+    const child = compacted.children[0];
     compacted = {
       path: child.path,
       name: `${compacted.name}/${child.name}`,
@@ -333,7 +338,7 @@ function DiffViewer({
           ) : null}
         </div>
       ) : null}
-      {!isLoading && !error && !patch ? <ChangesEmptyState available /> : null}
+      {!isLoading && !error && !patch ? <ChangesEmptyState /> : null}
     </section>
   );
 }
@@ -442,7 +447,7 @@ export function WorkspaceChangesPanel({
         </div>
       ) : null}
       {!isLoading && !error && !repositories && changeTree.length === 0 ? (
-        <ChangesEmptyState available={changes?.available ?? false} />
+        <ChangesEmptyState workspacePath={changes?.available ? undefined : workspacePath} />
       ) : null}
       {!isLoading && !error && !repositories && changeTree.length > 0 ? (
         <ScrollArea className="min-h-0 flex-1">

@@ -10,11 +10,11 @@ describe('board views', () => {
     saveBoardView(
       'fp-1',
       'work',
-      new URLSearchParams('q=auth&label=bug&label=ui&sort=created-newest&layout=board&item=card-1'),
+      new URLSearchParams('label=bug&label=ui&sort=created-newest&layout=board&item=card-1'),
     );
 
     expect(rememberedBoardPath('fp-1', 'work')).toBe(
-      '/factories/fp-1/work?q=auth&label=bug&label=ui&sort=created-newest&layout=board',
+      '/factories/fp-1/work?label=bug&label=ui&sort=created-newest&layout=board',
     );
     expect(rememberedBoardPath('fp-1', 'review')).toBe('/factories/fp-1/review');
     expect(rememberedBoardPath('fp-2', 'work')).toBe('/factories/fp-2/work');
@@ -29,18 +29,18 @@ describe('board views', () => {
   });
 
   it('forgets a board saved without any filters or sort', () => {
-    saveBoardView('fp-1', 'work', new URLSearchParams('q=auth'));
+    saveBoardView('fp-1', 'work', new URLSearchParams('label=bug'));
     saveBoardView('fp-1', 'work', new URLSearchParams('item=card-1'));
 
     expect(rememberedBoardPath('fp-1', 'work')).toBe('/factories/fp-1/work');
   });
 
   it('keeps every board under one key, capped to the most recently used', () => {
-    for (let index = 0; index < 55; index += 1) saveBoardView('fp-1', `board-${index}`, new URLSearchParams('q=x'));
+    for (let index = 0; index < 55; index += 1) saveBoardView('fp-1', `board-${index}`, new URLSearchParams('label=x'));
 
     expect(Object.keys(JSON.parse(localStorage.getItem('mastracode.boardViews') ?? '{}'))).toHaveLength(50);
     expect(rememberedBoardPath('fp-1', 'board-4')).toBe('/factories/fp-1/boards/board-4');
-    expect(rememberedBoardPath('fp-1', 'board-54')).toBe('/factories/fp-1/boards/board-54?q=x');
+    expect(rememberedBoardPath('fp-1', 'board-54')).toBe('/factories/fp-1/boards/board-54?label=x');
   });
 
   it('ignores malformed stored values', () => {
@@ -49,7 +49,7 @@ describe('board views', () => {
 
     localStorage.setItem('mastracode.boardViews', 'not json');
     expect(rememberedBoardPath('fp-1', 'work')).toBe('/factories/fp-1/work');
-    expect(() => saveBoardView('fp-1', 'work', new URLSearchParams('q=x'))).not.toThrow();
-    expect(rememberedBoardPath('fp-1', 'work')).toBe('/factories/fp-1/work?q=x');
+    expect(() => saveBoardView('fp-1', 'work', new URLSearchParams('label=x'))).not.toThrow();
+    expect(rememberedBoardPath('fp-1', 'work')).toBe('/factories/fp-1/work?label=x');
   });
 });

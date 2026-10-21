@@ -93,6 +93,12 @@ This behavior is only configurable by using [server adapters](/docs/server/serve
 
 Mastra requires `module` and `moduleResolution` settings compatible with modern Node.js. Legacy options like `CommonJS` or `node` aren't supported.
 
+The `types` option below requires `@types/node`, which is included in projects created with [`create-mastra`](/reference/cli/create-mastra). Add it if your project doesn't have it already:
+
+```bash npm2yarn
+npm install -D @types/node
+```
+
 ```json {4-5} title="tsconfig.json"
 {
   "compilerOptions": {
@@ -103,6 +109,7 @@ Mastra requires `module` and `moduleResolution` settings compatible with modern 
     "forceConsistentCasingInFileNames": true,
     "strict": true,
     "skipLibCheck": true,
+    "types": ["node"],
     "noEmit": true,
     "outDir": "dist"
   },

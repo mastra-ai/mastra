@@ -18,14 +18,13 @@ async function resolveFactoryProjectId(
   controller: AgentControllerRequestContext,
   deps: FactoryThinkingDefaultDependencies,
 ): Promise<string | undefined> {
-  const resourceId = controller.resourceId;
-  if (!resourceId) return undefined;
-  const sourceSession = await deps.sourceControl.getBySessionId(resourceId);
+  const { sessionId, resourceId } = controller;
+  const sourceSession = sessionId ? await deps.sourceControl.getBySessionId(sessionId) : null;
   if (sourceSession?.factoryProjectId) return sourceSession.factoryProjectId;
   const stateProjectId = (controller.getState?.() as { factoryProjectId?: unknown } | undefined)?.factoryProjectId;
   if (typeof stateProjectId === 'string' && stateProjectId) return stateProjectId;
   // Session-less Factory pages address the Factory itself: the resourceId is the project id.
-  return FACTORY_PROJECT_ID.test(resourceId) ? resourceId : undefined;
+  return resourceId && FACTORY_PROJECT_ID.test(resourceId) ? resourceId : undefined;
 }
 
 /**

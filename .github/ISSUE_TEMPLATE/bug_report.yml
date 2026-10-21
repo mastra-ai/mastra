@@ -6,7 +6,7 @@ body:
   - type: markdown
     attributes:
       value: |
-        Thanks for taking the time to fill out this bug report! Please provide as much detail as possible to help us address the issue quickly. Creating a high-quality issue will greatly decrease the time it takes to fix it. A maintainer needs to approve your bug report before you or other community members can open PRs for it.
+        Thanks for taking the time to fill out this bug report! Please provide as much detail as possible to help us address the issue quickly. Creating a high-quality issue will greatly decrease the time it takes to fix it. Once approved Mastra will prioritize its implementation.
 
   - type: textarea
     attributes:

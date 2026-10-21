@@ -1,10 +1,10 @@
-import { execFileSync } from 'node:child_process';
-import { mkdtempSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { VersionControl } from '../capabilities/version-control.js';
 import type { AuditAgentEmitter } from '../storage/domains/audit/domain.js';
@@ -15,9 +15,10 @@ function requestContext({ orgId = 'org-1', userId = 'user-1' } = {}) {
   const requestContext = new RequestContext();
   requestContext.set('user', { workosId: userId, organizationId: orgId });
   requestContext.set('controller', {
-    resourceId: 'session-1',
+    // The session runs under its Factory, so only its session id names the source-control session.
+    sessionId: 'session-1',
+    resourceId: 'project-1',
     threadId: 'thread-1',
-    scope: 'scope-1',
     session: { id: 'session-1', ownerId: userId },
     getState: () => ({ factoryProjectId: 'project-1', projectRepositoryId: 'repo-link-1' }),
   } as unknown as AgentControllerRequestContext);
@@ -590,77 +591,6 @@ describe('createSourceControlTools', () => {
       ]);
     });
 
-    it('pushes a commit made after the first push in a sibling that never had the session branch', async () => {
-      const root = mkdtempSync(path.join(os.tmpdir(), 'factory-push-'));
-      const git = (cwd: string, ...args: string[]) =>
-        execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'init.defaultBranch=main', ...args], {
-          cwd,
-          encoding: 'utf8',
-        }).trim();
-      const remote = path.join(root, 'remote.git');
-      const checkout = path.join(root, 'other');
-      git(root, 'init', '--bare', remote);
-      git(root, 'clone', remote, checkout);
-      git(checkout, 'commit', '--allow-empty', '-m', 'base');
-      git(checkout, 'push', 'origin', 'main');
-
-      const setup = await fixture();
-      const built = await tools(setup);
-      // Real git against a local bare remote; only `origin` is redirected, since
-      // the fixture's clone URL is not reachable.
-      const sandbox = {
-        id: 'sandbox-1',
-        provider: 'custom',
-        workingDirectory: root,
-        executeCommand: vi.fn(async (command: string, args: string[]) => {
-          if (args.includes('get-url'))
-            return { exitCode: 0, stdout: 'https://gitlab.com/acme/other.git\n', stderr: '' };
-          const real = args.map(arg => (args.includes('push') && arg === 'origin' ? remote : arg));
-          try {
-            return {
-              exitCode: 0,
-              stdout: execFileSync(command, real, { encoding: 'utf8', stdio: 'pipe' }),
-              stderr: '',
-            };
-          } catch (error: any) {
-            return {
-              exitCode: error.status ?? 1,
-              stdout: String(error.stdout ?? ''),
-              stderr: String(error.stderr ?? ''),
-            };
-          }
-        }),
-      };
-      const push = () =>
-        (built.source_control_push_branch!.execute as any)({ repository: 'acme/other' }, { workspace: { sandbox } });
-
-      await push();
-      git(checkout, 'commit', '--allow-empty', '-m', 'second');
-      await push();
-
-      expect(git(checkout, 'rev-parse', '--abbrev-ref', 'HEAD')).toBe('factory/issue-1');
-      expect(git(remote, 'rev-parse', 'refs/heads/factory/issue-1')).toBe(git(checkout, 'rev-parse', 'HEAD'));
-    });
-
-    it('pushes the local session branch whatever is checked out, in its own or another repository', async () => {
-      const setup = await fixture();
-      const built = await tools(setup);
-      // The agent sits on a scratch branch (own) or switched back to main
-      // (sibling); the session branch exists locally in both checkouts.
-      const { sandbox, pushes } = fakeSandbox();
-
-      await (built.source_control_push_branch!.execute as any)({}, { workspace: { sandbox } });
-      await (built.source_control_push_branch!.execute as any)(
-        { repository: 'acme/other' },
-        { workspace: { sandbox } },
-      );
-
-      expect(pushes().map(push => push.args)).toEqual([
-        ['-C', '/home/user/repo', 'push', '-u', 'origin', 'factory/issue-1'],
-        ['-C', '/home/user/other', 'push', '-u', 'origin', 'factory/issue-1'],
-      ]);
-    });
-
     it('refuses to push another repository whose directory holds a different checkout', async () => {
       const setup = await fixture();
       const built = await tools(setup);
@@ -1056,6 +986,189 @@ describe('createSourceControlTools', () => {
     it('reports providers that cannot publish commit checks', async () => {
       const { run } = await publish({}, { publishCommitCheck: undefined });
       await expect(run()).rejects.toThrow('gitlab does not support publishing commit checks; nothing was published.');
+    });
+  });
+});
+
+describe.each(['github', 'gitlab'])('source_control_push_branch with real Git (%s)', provider => {
+  const roots: string[] = [];
+  const branch = 'factory/issue-1';
+
+  afterEach(() => {
+    for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
+  });
+
+  async function checkoutFixture(repository: string) {
+    const setup = await fixture(provider);
+    const root = mkdtempSync(path.join(os.tmpdir(), 'factory-push-'));
+    roots.push(root);
+    const origin = path.join(root, 'origin.git');
+    const checkout = path.join(root, repository.split('/')[1]!);
+    const cloneUrl = `https://${provider}.com/${repository}.git`;
+    const env = { ...process.env, GIT_CONFIG_GLOBAL: '/dev/null', GIT_CONFIG_NOSYSTEM: '1' };
+    const git = (...args: string[]) =>
+      execFileSync('git', ['-C', checkout, ...args], {
+        encoding: 'utf8',
+        env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      }).trim();
+    execFileSync('git', ['init', '--bare', '--initial-branch=main', origin], { env, stdio: 'pipe' });
+    execFileSync('git', ['init', '--initial-branch=main', checkout], { env, stdio: 'pipe' });
+    git('config', 'user.name', 'Test');
+    git('config', 'user.email', 'test@example.com');
+    git('remote', 'add', 'origin', cloneUrl);
+    // Keep provider checkout validation real, but push to a hermetic local remote.
+    git('remote', 'set-url', '--push', 'origin', origin);
+    const commit = (text: string) => {
+      writeFileSync(path.join(checkout, 'tracked.txt'), text);
+      git('add', 'tracked.txt');
+      git('commit', '-m', text);
+      return git('rev-parse', 'HEAD');
+    };
+    const base = commit('base');
+    git('push', 'origin', 'main');
+    setup.getRepositoryAccess.mockResolvedValue({
+      cloneUrl,
+      authorization: { scheme: 'bearer', token: 'test-token', username: 'test' },
+    });
+    const built = await createSourceControlTools({
+      requestContext: requestContext(),
+      providers: [{ id: provider, storage: setup.storage, versionControl: setup.versionControl }],
+      audit: setup.audit,
+    });
+    const hooks: { afterCommand?: (args: string[]) => void } = {};
+    const sandbox = {
+      id: 'real-git',
+      provider: 'custom',
+      workingDirectory: root,
+      async executeCommand(command: string, args: string[] = [], options?: { env?: Record<string, string> }) {
+        const result = spawnSync(command, args, {
+          encoding: 'utf8',
+          env: { ...env, ...options?.env },
+          timeout: 10_000,
+        });
+        if (result.error) throw result.error;
+        hooks.afterCommand?.(args);
+        return { exitCode: result.status ?? 1, stdout: result.stdout, stderr: result.stderr };
+      },
+    };
+    const push = () =>
+      (built.source_control_push_branch!.execute as any)(repository === 'acme/repo' ? {} : { repository }, {
+        workspace: { sandbox },
+      });
+    const remote = (...args: string[]) => git('--git-dir', origin, ...args);
+    return { ...setup, root, checkout, git, commit, base, push, remote, hooks };
+  }
+
+  describe.each(['acme/repo', 'acme/other'])('%s', repository => {
+    // A session ref left at the base used to push no agent commits. (#27667)
+    it('pushes the active commit from an existing stale session branch without losing dirty work', async () => {
+      const { checkout, git, commit, base, push, remote } = await checkoutFixture(repository);
+      git('branch', branch);
+      git('switch', '-c', 'agent-work');
+      const head = commit('agent change');
+      writeFileSync(path.join(checkout, 'staged.txt'), 'staged work');
+      git('add', 'staged.txt');
+      writeFileSync(path.join(checkout, 'tracked.txt'), 'unstaged work');
+      writeFileSync(path.join(checkout, 'untracked.txt'), 'untracked work');
+      const status = git('status', '--porcelain');
+      const diff = git('diff');
+      const staged = git('diff', '--cached');
+
+      await push();
+
+      expect(remote('rev-parse', `refs/heads/${branch}`)).toBe(head);
+      expect(remote('show', `${branch}:tracked.txt`)).toBe('agent change');
+      expect(git('symbolic-ref', '--short', 'HEAD')).toBe(branch);
+      expect(git('rev-parse', 'main')).toBe(base);
+      expect(git('rev-parse', 'agent-work')).toBe(head);
+      expect(git('status', '--porcelain')).toBe(status);
+      expect(git('diff')).toBe(diff);
+      expect(git('diff', '--cached')).toBe(staged);
+    });
+
+    it.each(['missing', 'same-tip', 'detached'])('keeps subsequent commits on the session branch (%s)', async state => {
+      const { git, commit, push, remote } = await checkoutFixture(repository);
+      if (state !== 'missing') git('branch', branch);
+      if (state === 'detached') git('switch', '--detach');
+      await push();
+      expect(git('symbolic-ref', '--short', 'HEAD')).toBe(branch);
+      const next = commit('next change');
+      await push();
+      expect(remote('rev-parse', `refs/heads/${branch}`)).toBe(next);
+    });
+
+    it('pushes an ahead session branch without moving the active checkout', async () => {
+      const { checkout, git, commit, base, push, remote, storage } = await checkoutFixture(repository);
+      git('switch', '-c', branch);
+      const sessionHead = commit('session work');
+      git('switch', 'main');
+      writeFileSync(path.join(checkout, 'tracked.txt'), 'uncommitted main work');
+      const dirty = git('status', '--porcelain');
+
+      await expect(push()).resolves.toEqual({ pushed: true, branch, repository });
+
+      expect(remote('rev-parse', `refs/heads/${branch}`)).toBe(sessionHead);
+      expect(remote('show', `${branch}:tracked.txt`)).toBe('session work');
+      expect(git('rev-parse', branch)).toBe(sessionHead);
+      expect(git('rev-parse', 'HEAD')).toBe(base);
+      expect(git('symbolic-ref', '--short', 'HEAD')).toBe('main');
+      expect(git('status', '--porcelain')).toBe(dirty);
+      expect(git('diff')).toContain('+uncommitted main work');
+      expect(await storage.sessionRepositories.listBySession({ sessionId: 'session-1' })).toMatchObject([{ branch }]);
+    });
+
+    it('refuses to discard divergent session commits or publish a stale ref', async () => {
+      const { git, commit, push, remote, storage } = await checkoutFixture(repository);
+      git('switch', '-c', branch);
+      const sessionHead = commit('session work');
+      git('switch', 'main');
+      const activeHead = commit('other work');
+
+      await expect(push()).rejects.toMatchObject({ code: 'push-failed' });
+
+      expect(git('rev-parse', branch)).toBe(sessionHead);
+      expect(git('rev-parse', 'HEAD')).toBe(activeHead);
+      expect(git('symbolic-ref', '--short', 'HEAD')).toBe('main');
+      expect(remote('for-each-ref', '--format=%(refname)', `refs/heads/${branch}`)).toBe('');
+      expect(await storage.sessionRepositories.listBySession({ sessionId: 'session-1' })).toEqual([]);
+    });
+
+    it.each(['--is-ancestor', '--porcelain'])(
+      'preserves concurrent session commits and refuses to publish after %s',
+      async checkpoint => {
+        const { git, commit, base, push, remote, storage, hooks } = await checkoutFixture(repository);
+        git('branch', branch);
+        const activeHead = commit('active work');
+        const concurrentHead = git('commit-tree', 'HEAD^{tree}', '-p', base, '-m', 'concurrent session work');
+        // Schedule a real ref update between validation and materialization. (#27667)
+        hooks.afterCommand = args => {
+          if (args.includes(checkpoint)) {
+            git('update-ref', `refs/heads/${branch}`, concurrentHead, base);
+            hooks.afterCommand = undefined;
+          }
+        };
+
+        const outcome = await push().catch((error: unknown) => error);
+
+        expect(git('rev-parse', branch)).toBe(concurrentHead);
+        expect(outcome).toMatchObject({ code: 'push-failed' });
+        expect(git('rev-parse', 'HEAD')).toBe(activeHead);
+        expect(git('symbolic-ref', '--short', 'HEAD')).toBe('main');
+        expect(remote('for-each-ref', '--format=%(refname)', `refs/heads/${branch}`)).toBe('');
+        expect(await storage.sessionRepositories.listBySession({ sessionId: 'session-1' })).toEqual([]);
+      },
+    );
+
+    it('refuses to reset a session branch checked out in another worktree', async () => {
+      const { root, git, commit, base, push, remote } = await checkoutFixture(repository);
+      git('branch', branch);
+      git('worktree', 'add', path.join(root, 'other-worktree'), branch);
+      const head = commit('active work');
+      await expect(push()).rejects.toMatchObject({ code: 'push-failed' });
+      expect(git('rev-parse', branch)).toBe(base);
+      expect(git('rev-parse', 'HEAD')).toBe(head);
+      expect(remote('for-each-ref', '--format=%(refname)', `refs/heads/${branch}`)).toBe('');
     });
   });
 });

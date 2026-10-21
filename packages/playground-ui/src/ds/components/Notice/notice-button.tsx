@@ -1,6 +1,7 @@
 import { mergeProps } from '@base-ui/react/merge-props';
 import { useRender } from '@base-ui/react/use-render';
-import { isValidElement, type ReactNode } from 'react';
+import { isValidElement } from 'react';
+import type { ReactNode } from 'react';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 

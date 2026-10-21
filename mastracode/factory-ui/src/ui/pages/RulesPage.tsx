@@ -1,4 +1,5 @@
-import { Badge, type BadgeVariant } from '@mastra/playground-ui/components/Badge';
+import { Badge } from '@mastra/playground-ui/components/Badge';
+import type { BadgeVariant } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
@@ -7,16 +8,8 @@ import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import {
-  CircleCheck,
-  CircleDashed,
-  CirclePause,
-  CircleSlash,
-  CircleX,
-  ListFilter,
-  Repeat,
-  type LucideIcon,
-} from 'lucide-react';
+import { CircleCheck, CircleDashed, CirclePause, CircleSlash, CircleX, ListFilter, Repeat } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useSearchParams } from 'react-router';
 
 import { useFactoryDecisionAction, useFactoryDecisionHistory } from '../../hooks/useFactoryDecisions';

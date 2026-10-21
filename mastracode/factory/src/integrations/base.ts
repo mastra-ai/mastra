@@ -109,7 +109,7 @@ export interface IntegrationContext {
   /** Shared source-control session retirement lifecycle used by integration routes. */
   sessionRetirement?: SessionRetirementCoordinator;
   /** Work-items domain slice — deleting a session strips the refs work items hold on it. */
-  workItems?: Pick<WorkItemsStorage, 'clearSessionReferences'>;
+  workItems?: Pick<WorkItemsStorage, 'clearSessionReferences' | 'hasRunBindingForSession'>;
   /** Feed slice for ingesting platform messages; present once work items are ready. */
   feed?: Pick<CommentsDomain, 'createComment'>;
   /** Persistence handles pre-scoped to this integration's stable id. */
