@@ -15,6 +15,7 @@ export function TeammateSessionLine() {
   if (!session || !viewerUserId || session.userId === viewerUserId) return null;
 
   const owner = session.owner;
+  const canTakeOwnership = session.capabilities?.takeOwnership === true;
   return (
     <div className="flex min-w-0 items-center gap-2 px-3">
       {owner && (
@@ -25,16 +26,18 @@ export function TeammateSessionLine() {
       <Txt as="p" variant="caption" tone="muted" className="truncate">
         You’re steering {owner ? `${owner.name}’s` : 'a teammate’s'} session
       </Txt>
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        className="ml-auto shrink-0"
-        disabled={takeOwnership.isPending}
-        onClick={() => takeOwnership.mutate({ sessionId: session.sessionId, expectedOwnerId: session.userId })}
-      >
-        Take ownership
-      </Button>
+      {canTakeOwnership && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="ml-auto shrink-0"
+          disabled={takeOwnership.isPending}
+          onClick={() => takeOwnership.mutate({ sessionId: session.sessionId, expectedOwnerId: session.userId })}
+        >
+          Take ownership
+        </Button>
+      )}
     </div>
   );
 }

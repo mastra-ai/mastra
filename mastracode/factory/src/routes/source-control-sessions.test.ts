@@ -136,6 +136,11 @@ function takeOwnership(app: Hono, sessionId: string, expectedOwnerId: string, he
   });
 }
 
+const noRuns: RouteOptions['workItems'] = {
+  clearSessionReferences: async () => 0,
+  hasRunBindingForSession: async () => false,
+};
+
 describe('source-control session routes', () => {
   it('resolves binding, run audit, and title flows when the hosted thread differs from the Factory session', async () => {
     const { seed, sourceControl, projectRepository, project } = await seedGitLabRepository();
@@ -322,7 +327,7 @@ describe('source-control session routes', () => {
     const threadId = liveSession.thread.getId()!;
     vi.spyOn(controller, 'listActiveThreadRuns').mockReturnValue([{ runId: 'run-1', resourceId: sessionId, threadId }]);
     const audit = { record: vi.fn().mockResolvedValue(null) };
-    const app = buildApp([sourceControl], { ...seed, audit }, controller, undefined, {
+    const app = buildApp([sourceControl], { ...seed, audit }, controller, noRuns, {
       workosId: 'user-2',
       organizationId: 'org-1',
     });
@@ -358,7 +363,7 @@ describe('source-control session routes', () => {
       return transferOwner(input);
     });
     const audit = { record: vi.fn().mockResolvedValue(null) };
-    const app = buildApp([sourceControl], { ...seed, audit }, controller, undefined, {
+    const app = buildApp([sourceControl], { ...seed, audit }, controller, noRuns, {
       workosId: 'user-2',
       organizationId: 'org-1',
     });
@@ -390,7 +395,7 @@ describe('source-control session routes', () => {
     const liveSession = await controller.createSession({ id: sessionId, resourceId: sessionId, ownerId: 'user-1' });
     const threadId = liveSession.thread.getId()!;
     const audit = { record: vi.fn().mockResolvedValue(null) };
-    const app = buildApp([sourceControl], { ...seed, audit }, controller, undefined, {
+    const app = buildApp([sourceControl], { ...seed, audit }, controller, noRuns, {
       workosId: 'user-2',
       organizationId: 'org-1',
     });
@@ -445,7 +450,7 @@ describe('source-control session routes', () => {
       await new Promise(resolve => setTimeout(resolve, 50));
       return getSession(input);
     });
-    const app = buildApp([sourceControl], seed, controller, undefined, headers => ({
+    const app = buildApp([sourceControl], seed, controller, noRuns, headers => ({
       workosId: headers.get('x-viewer')!,
       organizationId: 'org-1',
     }));
@@ -542,7 +547,7 @@ describe('source-control session routes', () => {
     const createSession = vi.spyOn(controller, 'createSession');
     const deleteSession = vi.spyOn(controller, 'deleteSession');
     const audit = { record: vi.fn().mockResolvedValue(null) };
-    const app = buildApp([sourceControl], { ...seed, audit }, controller, undefined, {
+    const app = buildApp([sourceControl], { ...seed, audit }, controller, noRuns, {
       workosId: 'user-1',
       organizationId: 'org-1',
     });
@@ -589,7 +594,7 @@ describe('source-control session routes', () => {
       visibility: 'org',
     });
     const controller = await startOwnershipController('factory-cold-transfer');
-    const app = buildApp([sourceControl], seed, controller, undefined, { workosId: 'user-2', organizationId: 'org-1' });
+    const app = buildApp([sourceControl], seed, controller, noRuns, { workosId: 'user-2', organizationId: 'org-1' });
 
     const response = await takeOwnership(app, sessionId, 'user-1');
     expect(response.status).toBe(200);
@@ -635,6 +640,49 @@ describe('source-control session routes', () => {
       userId: 'user-1',
       createdByUserId: 'user-1',
     });
+  });
+
+  it('keeps Slack thread and Factory run sessions with their owner, and says so before the click', async () => {
+    const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
+    const create = (sessionId: string, branch: string) =>
+      sourceControl.sessions.create({
+        sessionId,
+        projectRepositoryId: projectRepository.id,
+        orgId: 'org-1',
+        userId: 'user-1',
+        branch,
+        baseBranch: 'main',
+        visibility: 'org',
+      });
+    await create('user-session', 'user/session-user-session');
+    await create('slack-thread', 'slack/C123-1700000000.000100');
+    await create('factory-run', 'factory/run-1');
+    const controller = { queryThreadById: async () => null } as unknown as RouteOptions['controller'];
+    const workItems: RouteOptions['workItems'] = {
+      clearSessionReferences: async () => 0,
+      hasRunBindingForSession: async ({ sessionId }) => sessionId === 'factory-run',
+    };
+    const owner = buildApp([sourceControl], seed, controller, workItems);
+    const teammate = buildApp([sourceControl], seed, controller, workItems, {
+      workosId: 'user-2',
+      organizationId: 'org-1',
+    });
+    const offersTakeover = async (app: Hono, sessionId: string) => {
+      const body = (await (await app.request(`/web/user-sessions/${sessionId}`)).json()) as {
+        session: { capabilities: { takeOwnership: boolean } };
+      };
+      return body.session.capabilities.takeOwnership;
+    };
+
+    expect(await offersTakeover(teammate, 'user-session')).toBe(true);
+    expect(await offersTakeover(owner, 'user-session')).toBe(false);
+    for (const sessionId of ['slack-thread', 'factory-run']) {
+      expect(await offersTakeover(teammate, sessionId)).toBe(false);
+      const refused = await takeOwnership(teammate, sessionId, 'user-1');
+      expect(refused.status).toBe(409);
+      await expect(refused.json()).resolves.toEqual({ error: 'Only user sessions can change owner' });
+      await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({ userId: 'user-1' });
+    }
   });
 
   it('lists and opens a session stored in the GitLab partition', async () => {
@@ -738,7 +786,6 @@ describe('source-control session routes', () => {
     const controller = {
       queryThreadById: async ({ threadId }: { threadId: string }) => threads[threadId] ?? null,
     } as unknown as RouteOptions['controller'];
-    const noRuns = { clearSessionReferences: async () => 0, hasRunBindingForSession: async () => false };
     const owner = buildApp([sourceControl], seed, controller, noRuns);
     const teammate = buildApp([sourceControl], seed, controller, noRuns, {
       workosId: 'user-2',
@@ -1052,10 +1099,6 @@ describe('source-control session routes', () => {
 
   describe('PUT /web/user-sessions/:sessionId/visibility', () => {
     const teammate = { workosId: 'user-2', organizationId: 'org-1' };
-    const noRuns: RouteOptions['workItems'] = {
-      clearSessionReferences: async () => 0,
-      hasRunBindingForSession: async () => false,
-    };
     const putVisibility = (app: Hono, sessionId: string, body: unknown) =>
       app.request(`/web/user-sessions/${sessionId}/visibility`, {
         method: 'PUT',
@@ -1617,7 +1660,7 @@ describe('session sandbox recreate', () => {
 
     const opened = await app.request(`/web/user-sessions/${session.sessionId}`);
     const body = (await opened.json()) as { session: { capabilities: { recreateSandbox: boolean } } };
-    expect(body.session.capabilities).toEqual({ recreateSandbox: false });
+    expect(body.session.capabilities).toEqual({ recreateSandbox: false, takeOwnership: false });
   });
 
   it('returns 503 when the server has no retirement coordinator', async () => {
@@ -1720,7 +1763,7 @@ describe('session sandbox recreate', () => {
       };
       expect(body).not.toHaveProperty('capabilities');
       expect(body.session.sessionId).toBe(session.sessionId);
-      expect(body.session.capabilities).toEqual({ recreateSandbox: expected });
+      expect(body.session.capabilities).toEqual({ recreateSandbox: expected, takeOwnership: false });
     },
   );
 

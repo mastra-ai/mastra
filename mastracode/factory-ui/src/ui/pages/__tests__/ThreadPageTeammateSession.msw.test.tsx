@@ -29,6 +29,7 @@ const wardSession = {
   materializedAt: '2026-10-01T00:00:00.000Z',
   createdAt: '2026-10-01T00:00:00.000Z',
   updatedAt: '2026-10-01T00:00:00.000Z',
+  capabilities: { recreateSandbox: false, takeOwnership: true },
 };
 
 const wardSessionWithoutProfile = { ...wardSession, owner: undefined };
@@ -126,6 +127,19 @@ describe("a teammate's Factory session", () => {
 
       expect(await screen.findByText('You’re steering a teammate’s session')).toBeInTheDocument();
       expect(screen.queryByText(/user-ward/)).not.toBeInTheDocument();
+    });
+
+    it('offers no takeover of a Slack thread, which the server keeps with its owner', async () => {
+      openWardSessionAs('user-damien', {
+        session: {
+          ...wardSession,
+          branch: 'slack/C123-1700000000.000100',
+          capabilities: { recreateSandbox: false, takeOwnership: false },
+        },
+      });
+
+      expect(await screen.findByText('You’re steering Ward Peeters’s session')).toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Take ownership' })).not.toBeInTheDocument();
     });
   });
 

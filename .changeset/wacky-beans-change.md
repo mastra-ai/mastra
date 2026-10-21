@@ -9,4 +9,4 @@ POST /web/user-sessions/:sessionId/owner
 { "expectedOwnerId": "user-ward" }
 ```
 
-`expectedOwnerId` is the owner the caller last saw. The response is `{ session }` with the new owner. The request returns `409` when someone else took the session first, when the caller already has a session on that branch, or while the session is still running, and `404` for a private session of someone else. Each transfer is recorded in the Factory audit log as `factory.session.owner_transferred`.
+`expectedOwnerId` is the owner the caller last saw. The response is `{ session }` with the new owner. The request returns `409` when someone else took the session first, when the caller already has a session on that branch, while the session is still running, or for a Slack thread or Factory run session, which keep their owner, and `404` for a private session of someone else. Each transfer is recorded in the Factory audit log as `factory.session.owner_transferred`.

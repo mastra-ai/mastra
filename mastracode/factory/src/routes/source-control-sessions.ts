@@ -100,8 +100,38 @@ function canRecreateSandbox(options: SourceControlSessionRoutesOptions): boolean
   return Boolean(options.sessionRetirement) && options.sandboxRecreateSupported === true;
 }
 
-function withCapabilities<T extends object>(session: T, recreateSandbox: boolean) {
-  return { ...session, capabilities: { recreateSandbox } };
+type SessionCapabilities = { recreateSandbox: boolean; takeOwnership: boolean };
+
+function withCapabilities<T extends object>(session: T, capabilities: SessionCapabilities) {
+  return { ...session, capabilities };
+}
+
+/**
+ * Factory runs and Slack threads keep the owner and visibility they were created with:
+ * Slack finds a thread's session by its sender and branch, a run bills its owner, and
+ * channel threads stay with the team while Slack DMs stay private.
+ */
+async function isUserStartedSession(
+  session: SourceControlSession,
+  workItems: NonNullable<SourceControlSessionRoutesOptions['workItems']>,
+): Promise<boolean> {
+  if (session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX)) return false;
+  if (session.factoryProjectId === null) return true;
+  return !(await workItems.hasRunBindingForSession({
+    orgId: session.orgId,
+    factoryProjectId: session.factoryProjectId,
+    sessionId: session.sessionId,
+  }));
+}
+
+/** A teammate's shared, user-started session on a Factory is the one the viewer may take over. */
+async function canTakeOwnership(
+  session: SourceControlSession,
+  viewerUserId: string,
+  options: SourceControlSessionRoutesOptions,
+): Promise<boolean> {
+  if (session.userId === viewerUserId || session.factoryProjectId === null || !options.workItems) return false;
+  return isUserStartedSession(session, options.workItems);
 }
 
 /** Abort the session's active run and wait (bounded) for it to stop. Returns whether a run was aborted. */
@@ -435,7 +465,12 @@ function projectSessionRoutes(
               return c.json({ error: 'Session ID conflict' }, 409);
             }
             await startUserSessionConversation(options.controller, existing);
-            return c.json({ session: withCapabilities(existing, canRecreateSandbox(options)) });
+            return c.json({
+              session: withCapabilities(existing, {
+                recreateSandbox: canRecreateSandbox(options),
+                takeOwnership: false,
+              }),
+            });
           }
         }
 
@@ -469,7 +504,9 @@ function projectSessionRoutes(
         }
         await startUserSessionConversation(options.controller, session);
         // The creator owns the session, so no admin check is needed.
-        return c.json({ session: withCapabilities(session, canRecreateSandbox(options)) });
+        return c.json({
+          session: withCapabilities(session, { recreateSandbox: canRecreateSandbox(options), takeOwnership: false }),
+        });
       },
     }),
   ];
@@ -525,8 +562,12 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         const recreateSandbox =
           canRecreateSandbox(options) &&
           (await sessionManagePermission(loose(c), options.auth, resolved.tenant, session)) === 'allowed';
+        const takeOwnership = await canTakeOwnership(session, resolved.tenant.userId, options);
         return c.json({
-          session: { ...withCapabilities(withOwnerProfile(session, owners), recreateSandbox), resourceId },
+          session: {
+            ...withCapabilities(withOwnerProfile(session, owners), { recreateSandbox, takeOwnership }),
+            resourceId,
+          },
         });
       },
     }),
@@ -652,6 +693,17 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         // Shared sessions live on their Factory's memory, which an owner change keeps; without one the threads sit on the owner's.
         if (!session.factoryProjectId) {
           return c.json({ error: "This session isn't linked to a Factory, so it can't change owner." }, 409);
+        }
+        if (!options.workItems) {
+          return c.json(
+            {
+              error: "Session ownership can't change yet: Factory storage is still starting up. Try again in a moment.",
+            },
+            503,
+          );
+        }
+        if (!(await isUserStartedSession(session, options.workItems))) {
+          return c.json({ error: 'Only user sessions can change owner' }, 409);
         }
         const controller = options.controller;
 
@@ -842,18 +894,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
               503,
             );
           }
-          // Only sessions a person started in the UI can change. Factory runs and
-          // Slack threads keep the visibility they were created with: runs and
-          // channel threads stay with the team, Slack DMs stay private.
-          if (
-            row.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX) ||
-            (row.factoryProjectId !== null &&
-              (await options.workItems.hasRunBindingForSession({
-                orgId: row.orgId,
-                factoryProjectId: row.factoryProjectId,
-                sessionId,
-              })))
-          ) {
+          if (!(await isUserStartedSession(row, options.workItems))) {
             return c.json({ error: 'Only user sessions can change visibility' }, 409);
           }
           // Sharing puts the session on its Factory's memory; without a Factory there is nowhere to share it to.
