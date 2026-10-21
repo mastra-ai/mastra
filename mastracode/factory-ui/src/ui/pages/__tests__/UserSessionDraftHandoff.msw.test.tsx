@@ -210,7 +210,9 @@ describe('a user session draft on the real thread route', () => {
     await user.keyboard('{Enter}');
 
     await waitFor(() =>
-      expect(route.createBodies).toEqual([{ sessionId: DRAFT_SESSION_ID, title: 'fix the login bug' }]),
+      expect(route.createBodies).toEqual([
+        { sessionId: DRAFT_SESSION_ID, title: 'fix the login bug', visibility: 'private' },
+      ]),
     );
     await waitFor(() =>
       expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/user/threads/${DRAFT_SESSION_ID}`),

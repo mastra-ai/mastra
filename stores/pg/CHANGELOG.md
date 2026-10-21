@@ -1,5 +1,16 @@
 # @mastra/pg
 
+## 1.32.0-alpha.6
+
+### Patch Changes
+
+- Stop querying `information_schema.columns` on every `listWorkflowRuns({ resourceId })` call. Column existence checks outside `init()` are now cached per store instance and cleared when schema changes are made through the store, the same way column types already were. ([#27903](https://github.com/mastra-ai/mastra/pull/27903))
+
+- Fix column existence and type checks throwing "Multiple rows returned" when a table has two columns whose names differ only by case (for example `"resourceId"` and `resourceid`). The exact-case column is now preferred, with the lowercase name as a fallback. ([#27915](https://github.com/mastra-ai/mastra/pull/27915))
+
+- Updated dependencies [[`a92384b`](https://github.com/mastra-ai/mastra/commit/a92384bf9093beb9071953292a936ca722370ce5), [`a8f9157`](https://github.com/mastra-ai/mastra/commit/a8f9157fafe38f5acf68e37c8874ebd192ef8e10), [`4471372`](https://github.com/mastra-ai/mastra/commit/4471372b0338523a2f57407a90b1d913e68f17cc), [`0e9a577`](https://github.com/mastra-ai/mastra/commit/0e9a5774151385c93524883e2b1bea40e2a644de), [`b8fe2ae`](https://github.com/mastra-ai/mastra/commit/b8fe2aec651efeaad6d607d816565453a341cdef), [`f54f8b2`](https://github.com/mastra-ai/mastra/commit/f54f8b2df2aa24e1ef4d171c733576e7c62bb1b0), [`03868f8`](https://github.com/mastra-ai/mastra/commit/03868f840401865af433040ba7ff90f585dea2e1), [`e35e335`](https://github.com/mastra-ai/mastra/commit/e35e335f19ee0c7c1e03bf247aebd24c3e041459), [`cc977b4`](https://github.com/mastra-ai/mastra/commit/cc977b4ce7def6727cdd63af3478d2b8b83daf07), [`16d8f44`](https://github.com/mastra-ai/mastra/commit/16d8f44e3a1486d7319c1baeca6115d37f6c4cea)]:
+  - @mastra/core@1.79.0-alpha.12
+
 ## 1.32.0-alpha.5
 
 ### Minor Changes

@@ -1,5 +1,62 @@
 # @mastra/factory
 
+## 0.24.0-alpha.13
+
+### Minor Changes
+
+- Sessions opened with **New session** are now private. Only the person who started one can open it or see it in session lists; teammates in the same organization don't see it. Every other session, including Factory runs started from a work item, stays visible to the organization. ([#27069](https://github.com/mastra-ai/mastra/pull/27069))
+
+  The session create route takes an optional `visibility` (`'org'` by default, or `'private'`):
+
+  ```ts
+  await fetch(`/web/source-control/projects/${projectRepositoryId}/sessions`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ sessionId, title: 'Fix the login bug', visibility: 'private' }),
+  });
+  ```
+
+- Added an endpoint for session owners to share a private session with their organization or make it private again. Sharing moves the session's conversation onto its Factory's memory, and making it private moves it back to the owner's. Only the owner can change visibility; other users get "not found", and a session that is running must finish first. Factory run sessions and Slack thread sessions keep the visibility they were created with. ([#27072](https://github.com/mastra-ai/mastra/pull/27072))
+
+  ```ts
+  await fetch(`/web/user-sessions/${sessionId}/visibility`, {
+    method: 'PUT',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ visibility: 'org' }), // or 'private'
+  });
+  ```
+
+### Patch Changes
+
+- You can now share a Factory session with your organization from its sidebar menu ("Share with organization") and make it private again ("Make private"). Shared sessions show a people icon next to their name. Only the session's owner sees these options. ([#27072](https://github.com/mastra-ai/mastra/pull/27072))
+
+- Fixed private sessions being reachable by teammates through the agent session and memory routes. A session's memory now says who can read it: a private session lives on its owner's memory, a shared one on its Factory's. Streaming, sending messages, reading threads, changing state, memory settings, and memory reads now return "not found" unless the memory belongs to you or to a Factory in your organization. The list of active runs no longer shows runs on other people's memory. ([#27072](https://github.com/mastra-ai/mastra/pull/27072))
+
+  Existing user sessions were already moved onto their owner's memory, so they are now private: on startup they are marked private, and teammates no longer see them in session lists or can open them. Their owner can share one again from its menu.
+
+- The Files tab now shows the session's live working directory, not just the files the agent touched. ([#27870](https://github.com/mastra-ai/mastra/pull/27870))
+
+  **Browsing**
+  - Each folder loads from the sandbox when you open it.
+  - A refresh button reloads every open folder.
+  - Folders and the open file refresh by themselves after the agent writes, edits, deletes, or runs a command.
+  - Symlinks show where they point (`CLAUDE.md → AGENTS.md`). A symlinked folder opens its target instead of expanding in place.
+
+  **Privacy**
+  - Dotfiles stay hidden until you turn them on with the eye button.
+  - `.git`, the sandbox's setup markers, and gitignored files inside a checkout (such as `.env` and `node_modules`) are never listed or opened, even through a symlink.
+
+  **Sandbox**
+  - Opening the panel never starts a sandbox.
+  - When no sandbox is running, the Files and Changes tabs show a **Wake sandbox** button that starts it without using a model turn.
+
+- Side sessions started from a user session can now load the Factory review skills (`factory-review`, `factory-rereview`, `factory-self-review` and the GitLab variants). A user session can start a side session and tell it to review a pull request without the side session being a bound review session. Review skills stay hidden from unbound user sessions and from side sessions bound to another role. ([#27918](https://github.com/mastra-ai/mastra/pull/27918))
+
+- Updated dependencies [[`a92384b`](https://github.com/mastra-ai/mastra/commit/a92384bf9093beb9071953292a936ca722370ce5), [`a8f9157`](https://github.com/mastra-ai/mastra/commit/a8f9157fafe38f5acf68e37c8874ebd192ef8e10), [`4471372`](https://github.com/mastra-ai/mastra/commit/4471372b0338523a2f57407a90b1d913e68f17cc), [`0e9a577`](https://github.com/mastra-ai/mastra/commit/0e9a5774151385c93524883e2b1bea40e2a644de), [`fa5a031`](https://github.com/mastra-ai/mastra/commit/fa5a0316dbd5f68316b48c426fd904d2d80d9045), [`b8fe2ae`](https://github.com/mastra-ai/mastra/commit/b8fe2aec651efeaad6d607d816565453a341cdef), [`f54f8b2`](https://github.com/mastra-ai/mastra/commit/f54f8b2df2aa24e1ef4d171c733576e7c62bb1b0), [`f54f8b2`](https://github.com/mastra-ai/mastra/commit/f54f8b2df2aa24e1ef4d171c733576e7c62bb1b0), [`f54f8b2`](https://github.com/mastra-ai/mastra/commit/f54f8b2df2aa24e1ef4d171c733576e7c62bb1b0), [`a0c031c`](https://github.com/mastra-ai/mastra/commit/a0c031ceb671721b6f8557726e216ee81d23612e), [`03868f8`](https://github.com/mastra-ai/mastra/commit/03868f840401865af433040ba7ff90f585dea2e1), [`e35e335`](https://github.com/mastra-ai/mastra/commit/e35e335f19ee0c7c1e03bf247aebd24c3e041459), [`f122808`](https://github.com/mastra-ai/mastra/commit/f1228088b6f60f6c7ef9db8b9aca70bc5cf9f00c), [`0e9a577`](https://github.com/mastra-ai/mastra/commit/0e9a5774151385c93524883e2b1bea40e2a644de), [`cc977b4`](https://github.com/mastra-ai/mastra/commit/cc977b4ce7def6727cdd63af3478d2b8b83daf07), [`d0251e3`](https://github.com/mastra-ai/mastra/commit/d0251e34973492c60e4dc7614116fcf912739875), [`16d8f44`](https://github.com/mastra-ai/mastra/commit/16d8f44e3a1486d7319c1baeca6115d37f6c4cea)]:
+  - @mastra/core@1.79.0-alpha.12
+  - @mastra/mcp@2.5.0-alpha.3
+  - @mastra/code-sdk@1.15.0-alpha.13
+
 ## 0.24.0-alpha.12
 
 ### Patch Changes
