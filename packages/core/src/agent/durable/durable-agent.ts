@@ -3304,38 +3304,38 @@ export class DurableAgent<
         typeof persisted.snapshot === 'string'
           ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
           : persisted.snapshot;
-      if (snapshot?.status === 'running' && workflowsStore) {
-        snapshot = await this.#takeOverResumeClaim(runId, workflowsStore);
-      }
-      coldSnapshot = snapshot;
-      if (snapshot?.status !== 'suspended') {
-        throw new MastraError({
-          id: 'AGENT_RESUME_RUN_NOT_SUSPENDED',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          text: `DurableAgent "${this.name}" resume(${runId}) cannot resume the run because it is not waiting to be resumed (status: ${snapshot?.status}).`,
-          details: { agentName: this.name, runId, status: snapshot?.status },
-        });
-      }
-      const workflowInput = snapshot?.context?.input as DurableAgenticWorkflowInput | undefined;
-      if (!workflowInput || workflowInput.__workflowKind !== 'durable-agent') {
-        throw new MastraError({
-          id: 'DURABLE_AGENT_RESUME_INVALID_SNAPSHOT',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.SYSTEM,
-          text: `DurableAgent "${this.name}" resume(${runId}): persisted snapshot does not contain a durable-agent workflow input.`,
-          details: { agentName: this.name, runId },
-        });
-      }
-      if (workflowInput.agentId !== this.id) {
-        throw new MastraError({
-          id: 'DURABLE_AGENT_RESUME_AGENT_MISMATCH',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          text: `DurableAgent "${this.name}" resume(${runId}): persisted run belongs to agent "${workflowInput.agentId}", not "${this.id}".`,
-          details: { agentName: this.name, runId, ownerAgentId: workflowInput.agentId },
-        });
-      }
+      const readWorkflowInput = (snapshot: WorkflowRunState, allowRunning = false) => {
+        if (snapshot?.status !== 'suspended' && !(allowRunning && snapshot?.status === 'running')) {
+          throw new MastraError({
+            id: 'AGENT_RESUME_RUN_NOT_SUSPENDED',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            text: `DurableAgent "${this.name}" resume(${runId}) cannot resume the run because it is not waiting to be resumed (status: ${snapshot?.status}).`,
+            details: { agentName: this.name, runId, status: snapshot?.status },
+          });
+        }
+        const input = snapshot?.context?.input as DurableAgenticWorkflowInput | undefined;
+        if (!input || input.__workflowKind !== 'durable-agent') {
+          throw new MastraError({
+            id: 'DURABLE_AGENT_RESUME_INVALID_SNAPSHOT',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.SYSTEM,
+            text: `DurableAgent "${this.name}" resume(${runId}): persisted snapshot does not contain a durable-agent workflow input.`,
+            details: { agentName: this.name, runId },
+          });
+        }
+        if (input.agentId !== this.id) {
+          throw new MastraError({
+            id: 'DURABLE_AGENT_RESUME_AGENT_MISMATCH',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            text: `DurableAgent "${this.name}" resume(${runId}): persisted run belongs to agent "${input.agentId}", not "${this.id}".`,
+            details: { agentName: this.name, runId, ownerAgentId: input.agentId },
+          });
+        }
+        return input;
+      };
+      let workflowInput = readWorkflowInput(snapshot, true);
 
       // A run that suspended while executing a stored version must resume on
       // *that* version. Cold rehydration rebuilds tools/model/instructions
@@ -3375,6 +3375,15 @@ export class DurableAgent<
           }
         }
       }
+
+      if (snapshot?.status === 'running' && workflowsStore) {
+        // Recovery can execute the run. Dynamic defaults still require the rehydrated context below.
+        this.#wrappedAgent.__validateStaticModelTimeoutSettings(options?.modelSettings);
+        validateModelTimeoutSettings((options?.modelSettings ?? workflowInput.options?.modelSettings)?.timeout);
+        snapshot = await this.#takeOverResumeClaim(runId, workflowsStore);
+        workflowInput = readWorkflowInput(snapshot);
+      }
+      coldSnapshot = snapshot;
 
       const messageListMemoryInfo = (
         workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
