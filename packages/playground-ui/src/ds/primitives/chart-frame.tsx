@@ -1,5 +1,5 @@
 import { XAxis, YAxis } from 'recharts';
-import { chartYTickCount, pickTimeTicks } from './chart-axes';
+import { chartYTickCount, niceYTicks, pickTimeTicks } from './chart-axes';
 import type { ChartSize, ChartXLabels } from './chart-axes';
 import { CHART_AXIS_FONT_SIZE, X_AXIS_HEIGHT } from './chart-layout';
 import { ChartTimeTick } from './chart-time-tick';
@@ -61,15 +61,22 @@ export function valueYAxis({
   size,
   formatter,
   domain,
+  max,
   right = false,
 }: {
   id?: string | number;
   show: boolean;
   size: ChartSize;
   formatter: (value: number) => string;
+  /** Fixed range; Recharts spaces the ticks in it. */
   domain?: [number, number];
+  /** Largest value plotted on this axis (a stack's total for stacked bars); the ticks round up from it. */
+  max?: number;
   right?: boolean;
 }) {
+  const tickCount = chartYTickCount(size.height);
+  // Recharts rounds its step up to fit the tick count, so a $4.40 peak got an $8 axis.
+  const ticks = domain || max === undefined ? undefined : niceYTicks(max, tickCount);
   return (
     <YAxis
       yAxisId={id}
@@ -81,8 +88,25 @@ export function valueYAxis({
       width="auto"
       tickMargin={4}
       tickFormatter={formatter}
-      domain={domain}
-      tickCount={chartYTickCount(size.height)}
+      domain={ticks ? [0, ticks.at(-1) ?? 0] : domain}
+      ticks={ticks}
+      tickCount={tickCount}
     />
   );
+}
+
+/** The largest number under `keys` in any row; with `stacked`, the largest row total. */
+export function dataMax(data: Record<string, unknown>[], keys: string[], stacked = false) {
+  let max = 0;
+  for (const row of data) {
+    let total = 0;
+    for (const key of keys) {
+      const v = row[key];
+      if (typeof v !== 'number' || !Number.isFinite(v)) continue;
+      if (stacked) total += v;
+      else max = Math.max(max, v);
+    }
+    if (stacked) max = Math.max(max, total);
+  }
+  return max;
 }

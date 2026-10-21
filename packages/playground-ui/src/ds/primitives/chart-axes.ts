@@ -38,11 +38,40 @@ export function useChartSize() {
   return { size, onResize, ref };
 }
 
-/** About one gridline per 48px of plot, 3 to 5 ticks, on Recharts' round values. */
+/** About one gridline per 48px of plot: 3 to 5 ticks. */
 export function chartYTickCount(height: number) {
   if (!height) return 3;
   const plot = height - X_AXIS_HEIGHT - CHART_MARGIN.top;
   return Math.min(5, Math.max(3, Math.round(plot / 48) + 1));
+}
+
+/** Round tick steps per power of ten. */
+const NICE_STEPS = [1, 2, 2.5, 5];
+/** Fewest ticks an axis shows (0, a middle line, the top). */
+const MIN_Y_TICKS = 3;
+
+/**
+ * Round y ticks from 0 to just above `max`, at most `maxCount` of them. Of the round steps whose
+ * tick count fits, the one with the lowest top wins (a $4.40 peak gets a $5 axis, not $8); a tie
+ * takes the finer step. Undefined when there's nothing to scale (no data, zeros, negatives).
+ */
+export function niceYTicks(max: number, maxCount: number): number[] | undefined {
+  if (!Number.isFinite(max) || max <= 0) return undefined;
+  const magnitude = 10 ** Math.floor(Math.log10(max));
+  let best: { top: number; step: number; count: number } | undefined;
+  for (const scale of [magnitude / 10, magnitude, magnitude * 10]) {
+    for (const nice of NICE_STEPS) {
+      const step = nice * scale;
+      const count = Math.ceil(max / step - 1e-9) + 1;
+      if (count < MIN_Y_TICKS || count > maxCount) continue;
+      const top = (count - 1) * step;
+      if (!best || top < best.top || (top === best.top && count > best.count)) best = { top, step, count };
+    }
+  }
+  if (!best) return undefined;
+  const { step, count } = best;
+  // toPrecision drops float noise (0.30000000000000004).
+  return Array.from({ length: count }, (_, i) => Number((i * step).toPrecision(12)));
 }
 
 const MINUTE = 60_000;

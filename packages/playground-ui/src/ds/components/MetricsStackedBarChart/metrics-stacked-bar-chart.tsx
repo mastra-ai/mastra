@@ -8,7 +8,7 @@ import { CHART_GRID_PROPS, useChartSize } from '@/ds/primitives/chart-axes';
 import type { ChartXLabels } from '@/ds/primitives/chart-axes';
 import { singleBarBox, stackedSegmentBox } from '@/ds/primitives/chart-column-layout';
 import type { SegmentBox } from '@/ds/primitives/chart-column-layout';
-import { CHART_TICK, Y_AXIS_WIDTH, compactNumber, timeXAxis, valueYAxis } from '@/ds/primitives/chart-frame';
+import { CHART_TICK, Y_AXIS_WIDTH, compactNumber, dataMax, timeXAxis, valueYAxis } from '@/ds/primitives/chart-frame';
 import type { ChartHeight } from '@/ds/primitives/chart-frame';
 import { CHART_AXIS_FONT_SIZE, CHART_MARGIN } from '@/ds/primitives/chart-layout';
 import { ChartPlot } from '@/ds/primitives/chart-plot';
@@ -232,13 +232,28 @@ function BarPlot({
           </defs>
           <CartesianGrid {...CHART_GRID_PROPS} />
           {timeXAxis({ data, xKey, timestampKey, xLabels, plotWidth })}
-          {valueYAxis({ show: showYAxis, size, formatter: axisFormatter ?? format, domain: yDomain })}
+          {valueYAxis({
+            show: showYAxis,
+            size,
+            formatter: axisFormatter ?? format,
+            domain: yDomain,
+            // A reference line above the bars stays on the axis.
+            max: Math.max(
+              dataMax(
+                data,
+                series.map(s => s.dataKey),
+                true,
+              ),
+              referenceLine?.value ?? 0,
+            ),
+          })}
           {overlay &&
             valueYAxis({
               id: 'overlay',
               show: false,
               size,
               formatter: overlay.valueFormatter ?? compactNumber.format,
+              max: dataMax(data, [overlay.dataKey]),
               right: true,
             })}
           <Tooltip
