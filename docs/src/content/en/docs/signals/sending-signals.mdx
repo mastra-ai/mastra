@@ -8,7 +8,7 @@ packages:
 
 # Sending signals
 
-Start with `sendMessage()`. It covers most user input, and the rest of this page adds the cases where it isn't enough. The examples call methods on an `Agent`; if your app talks to a running Mastra server, use the same methods through the [client SDK](/reference/client-js/agents) or the [server routes](/reference/server/routes#agent-message-routes). The [Agent reference](/reference/agents/agent#thread-signals) is canonical for signatures.
+Signals are how input reaches a thread outside the original `agent.stream()` call. This page starts with `sendMessage()`, the method most applications need, then covers queued follow-ups, input from your system, and the durable notification and state paths. The examples call methods on an `Agent`; if your app talks to a running Mastra server, use the same methods through the [client SDK](/reference/client-js/agents) or the [server routes](/reference/server/routes#agent-message-routes). The [Agent reference](/reference/agents/agent#thread-signals) is canonical for signatures.
 
 ## Send a message
 
