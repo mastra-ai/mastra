@@ -62,7 +62,7 @@ class HostCommands implements CommandsApi {
       child.on('close', (code, signal) => resolve(code ?? (signal ? 137 : 1))),
     );
     this.children.set(child.pid!, { child, cmd: command, listeners, done });
-    if (this.outputBeforeStart) await this.firstOutput(child);
+    if (this.outputBeforeStart) await this.firstOutput(child, true);
     return this.handle(child.pid!, done, () => ({ stdout, stderr }));
   }
 
@@ -93,11 +93,15 @@ class HostCommands implements CommandsApi {
     this.children.get(pid)!.child.stdin!.write(data);
   }
 
-  private firstOutput(child: ChildProcess): Promise<void> {
+  private firstOutput(child: ChildProcess, both = false): Promise<void> {
     return new Promise(resolve => {
       // Registered after the streaming listeners, so they have run by now.
-      child.stdout!.once('data', () => resolve());
-      child.stderr!.once('data', () => resolve());
+      let remaining = both ? 2 : 1;
+      const onData = () => {
+        if (--remaining === 0) resolve();
+      };
+      child.stdout!.once('data', onData);
+      child.stderr!.once('data', onData);
     });
   }
 
