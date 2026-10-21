@@ -29,6 +29,16 @@ With a Tailwind build of your own, compile one sheet instead of `style.css`: imp
 @import '@mastra/playground-ui/sources.css';
 ```
 
+### Subtle buttons
+
+Use `variant="subtle"` for a persistent neutral fill, such as a selected view. It keeps the same dimensions as `default`, so switching between the two does not move surrounding controls. Set `aria-pressed` on toggle buttons to expose selection to assistive technology.
+
+```tsx
+<Button variant={selected ? 'subtle' : 'default'} aria-pressed={selected}>
+  My PRs
+</Button>
+```
+
 ### Tool approvals
 
 `ToolApproval` renders a standalone approval request in the shared activity layout: the tool name
@@ -347,6 +357,8 @@ Shared components own their typography. Use their existing size and semantic var
 
 `hero` and `lead` share the responsive typography of welcome pages. `eyebrow` supplies the size, weight, tracking, and uppercase treatment of section labels. Use `font="display"` when the display family is needed independently of the role.
 
+`display-lg` is the 28px role for plan prices and credit balances. `display` remains 22px. Use `<Txt variant="display-lg">$250</Txt>` without size or weight overrides.
+
 `Txt` defaults to the `body` role. With `as="strong"` or `as="b"`, omitting `variant` keeps the text bold; an explicit variant uses that role's weight.
 
 `Txt` renders text elements: headings, paragraphs, inline text, labels, and timestamps. Use `Code` for preformatted code. `Txt` cannot render a button, input, link, table, list, or layout container, and has no `render` prop. Keep controls and layout on their own components and put `Txt` at the text leaf:
@@ -441,6 +453,30 @@ import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 
 <CodeBlock lang="ts" code={snippet} />
 ```
+
+### Billing usage meters
+
+`Meter` keeps its red overage treatment by default. Set `variant="over-allowance"` for a warning segment and pass the amount charged in dollars through `paidFromCredits`:
+
+```tsx
+import { Meter } from '@mastra/playground-ui/components/Meter';
+
+<Meter
+  variant="over-allowance"
+  value={112}
+  max={100}
+  paidFromCredits={4.37}
+  label="vCPU"
+  aria-label="vCPU"
+  aria-valuetext="112 of 100 vCPU-hours, 12 over"
+/>;
+```
+
+The optional `label` slot accepts text or React content above the bar. Long labels truncate with an ellipsis to keep the label and caption on one line. The paid-from-credits caption sits on the right of that row, or above the bar on its own when no label is supplied. Keep supplying an accessible name through `aria-label` or `aria-labelledby`.
+
+The caption reads “$4.37 paid from credits” only when usage exceeds the allowance and the charged amount is positive. It is linked to the meter’s accessible description, alongside any caller description and `Meter.Source` key. The meter does not calculate charges from usage. `Meter.Source` children still reveal the source breakdown on hover or keyboard focus.
+
+See DataDisplay/Meter in Storybook for the billing states. Feedback/Dialog’s Resize while open story covers a full-size dialog and a form dialog crossing the 640px drawer breakpoint in either direction. Keep form drafts in caller-owned state when they must survive the popup remount.
 
 ## Documentation
 

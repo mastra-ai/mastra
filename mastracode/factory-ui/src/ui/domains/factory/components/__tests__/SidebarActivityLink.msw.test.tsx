@@ -66,7 +66,7 @@ class AudioContextStub {
 
   createBuffer(numberOfChannels: number, length: number) {
     const channels = Array.from({ length: numberOfChannels }, () => new Float32Array(length));
-    return { numberOfChannels, getChannelData: (channel: number) => channels[channel]! };
+    return { numberOfChannels, getChannelData: (channel: number) => channels[channel] };
   }
 }
 

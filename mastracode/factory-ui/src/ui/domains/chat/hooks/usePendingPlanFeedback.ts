@@ -18,7 +18,7 @@ function pendingSubmitPlan(entries: TimelineEntry[]) {
 }
 
 export function usePendingPlanFeedback() {
-  const { resourceId, sessionEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { sessionId, sessionEnabled, baseUrl } = useChatSessionContext();
   const { transcript, resolvePrompt } = useChatTranscript();
   const prompt = pendingSubmitPlan(transcript.entries);
   const inline = resolveInlinePlan(prompt?.suspendPayload, undefined);
@@ -36,8 +36,7 @@ export function usePendingPlanFeedback() {
     (workspace.isPending || (Boolean(workspace.workspacePath) && file.isPending));
   const respondMutation = useRespondAgentControllerSuspensionMutation({
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: projectPath,
+    sessionId,
     baseUrl,
     enabled: sessionEnabled,
   });

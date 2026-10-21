@@ -1235,7 +1235,23 @@ export function createDurableToolCallStep() {
       }
 
       if (isResumingFromSuspension) {
-        const cleanupTarget = isResumableTool ? resolvedSuspensionIdentity : { toolCallId, toolName };
+        // Auto-resume re-calls a plain tool under a new toolCallId and names the original via
+        // `suspendedToolCallId`; resolve it so the original entry is cleared (mirrors tool-call-step.ts).
+        const plainResumeIdentity =
+          !isResumableTool && hasModelResumeData
+            ? resolveFrameworkSuspendedToolIdentity({
+                toolCallId,
+                toolName,
+                resumeSource: 'model',
+                modelSuppliedSuspendedToolCallId: args?.suspendedToolCallId,
+                modelSuppliedSuspendedToolRunId: args?.suspendedToolRunId,
+                suspendData,
+                messages: messageList?.get.all.db() ?? [],
+              })
+            : undefined;
+        const cleanupTarget = isResumableTool
+          ? resolvedSuspensionIdentity
+          : (plainResumeIdentity ?? { toolCallId, toolName });
         if (cleanupTarget) {
           await removeToolMetadata(cleanupTarget, resolvedSuspensionIdentity?.type ?? 'suspension');
         }
@@ -2050,9 +2066,10 @@ export function createDurableToolCallStep() {
                 type: 'tool-result' as const,
                 runId,
                 from: ChunkFrom.AGENT,
-                payload: { toolCallId, toolName, args, result, providerExecuted },
+                payload: { toolCallId, toolName, args, result, providerMetadata, providerExecuted },
               },
               {
+                transformInput: { args, providerMetadata: typedInput.providerMetadata },
                 policy: toolPayloadTransform,
                 toolTransform: (tool as { transform?: any })?.transform,
                 tools: toolsForTransform,

@@ -221,6 +221,7 @@ export type ToolDisplayEvent =
    * Fired once after the user approves an approval card. Only `post` results
    * are honored: the returned message replaces the approval card in place.
    * Returning nothing (or a blank message) keeps the default "Approved" card.
+   * `byUser` is the approving user's name, or undefined in DMs.
    */
   | {
       kind: 'approved';
@@ -229,6 +230,7 @@ export type ToolDisplayEvent =
       displayName: string;
       argsSummary: string;
       args: unknown;
+      byUser?: string;
     }
   /**
    * Fired once after the user denies an approval card. Only `post` results

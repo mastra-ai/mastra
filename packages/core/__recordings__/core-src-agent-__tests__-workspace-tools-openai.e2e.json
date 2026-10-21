@@ -1489,7 +1489,7 @@
       }
     },
     {
-      "hash": "6da5313c62ca928c",
+      "hash": "43d0afb9d8008da8",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -1514,8 +1514,10 @@
               ]
             },
             {
-              "type": "item_reference",
-              "id": "fc_0eb2e79b19998d7d006acfc7311a5c87d09fd29bd9a46531cf"
+              "type": "function_call",
+              "call_id": "call_zeI85p5VLdYZnn44CfkfFSJX",
+              "name": "mastra_workspace_list_files",
+              "arguments": "{}"
             },
             {
               "type": "function_call_output",
@@ -6213,7 +6215,7 @@
       }
     },
     {
-      "hash": "acc99fb2dc3fea45",
+      "hash": "33ff5773b862ba1b",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -6238,8 +6240,10 @@
               ]
             },
             {
-              "type": "item_reference",
-              "id": "fc_04fcd59d9fa2852f006acfc73ae13887d0850c4fd5398f85e5"
+              "type": "function_call",
+              "call_id": "call_gowQV6kzI9v6MmrGwt765acP",
+              "name": "mastra_workspace_list_files",
+              "arguments": "{\"dirsOnly\":false,\"exclude\":null,\"extension\":null,\"maxDepth\":4,\"path\":\".\",\"pattern\":null,\"respectGitignore\":true,\"showHidden\":false}"
             },
             {
               "type": "function_call_output",
@@ -9304,7 +9308,7 @@
       }
     },
     {
-      "hash": "c1780b8cb8e2460d",
+      "hash": "9473c22d245676be",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -9329,8 +9333,10 @@
               ]
             },
             {
-              "type": "item_reference",
-              "id": "fc_015f00bd16da42bb006acfc73eeb3c87d0a2ab5a8ba9efa740"
+              "type": "function_call",
+              "call_id": "call_STjNp40Rn5T7LLnVlG2nlEsO",
+              "name": "mastra_workspace_grep",
+              "arguments": "{\"caseSensitive\":true,\"contextLines\":0,\"includeHidden\":false,\"maxCount\":null,\"path\":\".\",\"pattern\":\"Hello\"}"
             },
             {
               "type": "function_call_output",
@@ -13939,7 +13945,7 @@
       }
     },
     {
-      "hash": "54c874bd99cf5891",
+      "hash": "52968449c10fe43e",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -13964,8 +13970,10 @@
               ]
             },
             {
-              "type": "item_reference",
-              "id": "fc_067016c6576e72ed006acfc74669a087d08daaa2f0cd324e6a"
+              "type": "function_call",
+              "call_id": "call_LwapN8ui3jrKiL6pBhjH2aAX",
+              "name": "mastra_workspace_file_stat",
+              "arguments": "{\"path\":\"hello.txt\"}"
             },
             {
               "type": "function_call_output",
@@ -16994,7 +17002,7 @@
       }
     },
     {
-      "hash": "b84537c1ad1adbb8",
+      "hash": "3b12f61adc6ffb13",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -17019,8 +17027,10 @@
               ]
             },
             {
-              "type": "item_reference",
-              "id": "fc_06093b4057d292b9006acfc74a4b3887d0aff077fb3d02fc1f"
+              "type": "function_call",
+              "call_id": "call_rPWz4Vbe4HvNaaLxqr3Aae39",
+              "name": "mastra_workspace_list_files",
+              "arguments": "{\"dirsOnly\":false,\"maxDepth\":4,\"path\":\".\",\"pattern\":null,\"respectGitignore\":true,\"showHidden\":false}"
             },
             {
               "type": "function_call_output",
@@ -20070,7 +20080,7 @@
       }
     },
     {
-      "hash": "288d9ac6bef396a1",
+      "hash": "20762db2bc0ed0bc",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -20095,8 +20105,10 @@
               ]
             },
             {
-              "type": "item_reference",
-              "id": "fc_019b0eb73dc8af9f006acfc74da9c887d0b8d2e328e1aa7cc3"
+              "type": "function_call",
+              "call_id": "call_Ap6ICCxrzrJLAFwkfVH4xEQr",
+              "name": "mastra_workspace_list_files",
+              "arguments": "{\"dirsOnly\":false,\"exclude\":null,\"extension\":null,\"maxDepth\":4,\"path\":\".\",\"pattern\":null,\"respectGitignore\":true,\"showHidden\":false}"
             },
             {
               "type": "function_call_output",

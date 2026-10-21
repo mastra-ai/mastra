@@ -11,6 +11,7 @@ import {
 } from '../trace-list-columns';
 import type { TraceColumnPreferences, TraceCustomColumn, TraceUsageSummary } from '../trace-list-columns';
 import { getInputPreview, getSpanDurationMs } from '../utils/span-utils';
+import { TraceErrorCell } from './trace-error-cell';
 import { DataList, DataListSkeletonRows, TracesDataList, useDataListKeyboard } from '@/ds/components/DataList';
 import type { DataListSort } from '@/ds/components/DataList';
 import { splitColumns } from '@/ds/components/DataList/shared';
@@ -70,6 +71,13 @@ function distinctCustomColumnValues(traces: TracesListViewTrace[], field: TraceC
 function sumTokens(usage: TraceUsageSummary | undefined): number | undefined {
   if (usage?.inputTokens === undefined && usage?.outputTokens === undefined) return undefined;
   return (usage?.inputTokens ?? 0) + (usage?.outputTokens ?? 0);
+}
+
+type FailedTrace = TracesListViewTrace & { spanId: string; errorPreview: string };
+
+/** A failed row whose error preview can open the full error from its span. */
+function isFailedTrace(trace: TracesListViewTrace): trace is FailedTrace {
+  return trace.status === 'error' && !!trace.errorPreview && !!trace.spanId;
 }
 
 export type TracesListViewProps = {
@@ -278,13 +286,16 @@ export function TracesListView({
                 {hasTraceColumn(columnPreferences, 'input') && (
                   <TracesDataList.InputCell input={trace.inputPreview ?? getInputPreview(trace.input)} />
                 )}
-                {hasTraceColumn(columnPreferences, 'output') && (
-                  <TracesDataList.OutputCell
-                    output={trace.outputPreview}
-                    error={trace.errorPreview}
-                    status={trace.status}
-                  />
-                )}
+                {hasTraceColumn(columnPreferences, 'output') &&
+                  (isFailedTrace(trace) ? (
+                    <TraceErrorCell traceId={trace.traceId} spanId={trace.spanId} errorPreview={trace.errorPreview} />
+                  ) : (
+                    <TracesDataList.OutputCell
+                      output={trace.outputPreview}
+                      error={trace.errorPreview}
+                      status={trace.status}
+                    />
+                  ))}
                 <TracesDataList.StatusCell status={trace.status} />
                 {hasTraceColumn(columnPreferences, 'duration') && (
                   <DataList.NumberCell font="mono">

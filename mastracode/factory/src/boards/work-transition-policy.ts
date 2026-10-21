@@ -20,8 +20,11 @@ export const workTransitionPolicy: BoardTransitionPolicy = context => {
   }
   // Planning is the approval boundary. When project auto-approval is off, only a
   // person or a successfully approved `submit_plan` result may move the card into Building.
+  // An agent cannot skip Planning from Intake or Triage either; maintainer-configured
+  // system rules may still route cards there.
+  const skipsPlanning = (fromStage === 'intake' || fromStage === 'triage') && actor.type === 'agent';
   if (
-    fromStage === 'planning' &&
+    (fromStage === 'planning' || skipsPlanning) &&
     toStage === 'execute' &&
     actor.type !== 'human' &&
     !plansAutoApproved &&

@@ -42,11 +42,7 @@ describeForAllEngines('AIMock loop scenario: memory save rules', engine => {
     expect(messages).toEqual([]);
   });
 
-  // Plain Agent (normal/fs) saves nothing when an input processor throws; durable/evented save
-  // the user message and the error. Deterministic; tracked in #27491.
-  const itFailsOnPlain = engine === 'normal' || engine === 'fs' ? it.fails : it;
-
-  itFailsOnPlain('saves the user message and the error when an input processor throws', async () => {
+  it('saves the user message and the error when an input processor throws', async () => {
     for (const rotate of [false, true]) {
       const memory = new MockMemory();
       const threadId = `processor-error-thread-${rotate}`;

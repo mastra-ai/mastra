@@ -442,7 +442,14 @@ async function sessionAudience(
       binding: NonNullable<Awaited<ReturnType<WorkItemsStorage['findActiveRunBindingForSession']>>>;
       sender: FactoryReportSender;
     }
-  | { kind: 'origin'; sender: FactoryReportSender; recipient: FactoryDeliveryTarget; subject: string }
+  | {
+      kind: 'origin';
+      sender: FactoryReportSender;
+      recipient: FactoryDeliveryTarget;
+      subject: string;
+      /** Set while the origin has muted this side session's reports (approval notices still go through). */
+      mutedAt: Date | null;
+    }
   | null
 > {
   const row = await sessions.getBySessionId(sessionId);
@@ -453,13 +460,21 @@ async function sessionAudience(
     sessionId: row.sessionId,
   });
   if (!binding && since && threadId) {
-    const latest = await workItems.findRunBindingBySession({
-      factoryProjectId: row.factoryProjectId,
-      threadId,
-      resourceId: row.sessionId,
-      sessionId: row.sessionId,
-    });
-    if (latest?.orgId === row.orgId && latest.revokedAt && latest.revokedAt >= since) binding = latest;
+    // The binding records the memory resource the run used: the Factory's, its
+    // own id for a run kept on its own resource, or its owner's for a person's
+    // session the run started in.
+    for (const resourceId of new Set([row.factoryProjectId, row.sessionId, row.userId])) {
+      const latest = await workItems.findRunBindingBySession({
+        factoryProjectId: row.factoryProjectId,
+        threadId,
+        resourceId,
+        sessionId: row.sessionId,
+      });
+      if (latest?.orgId === row.orgId && latest.revokedAt && latest.revokedAt >= since) {
+        binding = latest;
+        break;
+      }
+    }
   }
   if (binding) {
     return {
@@ -474,6 +489,7 @@ async function sessionAudience(
     sender: { sessionId: row.sessionId, threadId, userId: row.userId },
     recipient: { sessionId: row.originSessionId, threadId: row.originThreadId },
     subject: `The side session "${row.title ?? row.sessionId}"`,
+    mutedAt: row.originMutedAt ?? null,
   };
 }
 
@@ -496,6 +512,8 @@ export function createSessionRunEndReporter(deps: SessionReportDependencies): Fa
       });
       return;
     }
+    // A muted origin still hears when the session is blocked: nothing else would tell it the session is waiting.
+    if (audience.mutedAt && outcome.status !== 'blocked') return;
     const resolved = await deps.reporting();
     if (!resolved) return;
     await sendRunEndReport(resolved, {

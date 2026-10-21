@@ -43,7 +43,7 @@ if (!globalThis.localStorage) {
     key: index => Array.from(store.keys())[index] ?? null,
     removeItem: key => store.delete(key),
     setItem: (key, value) => store.set(key, value),
-  } as Storage;
+  };
 }
 
 // jsdom polyfills used by the settings UI.

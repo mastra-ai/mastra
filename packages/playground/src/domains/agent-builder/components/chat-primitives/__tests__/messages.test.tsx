@@ -226,7 +226,7 @@ describe('MessageRow dynamic-tool rendering', () => {
   });
 
   it('renders assistant text through the shared MarkdownRenderer', () => {
-    const { container } = renderMessage(buildMessage([{ type: 'text', text: 'reply **bold**' } as ToolPart]));
+    const { container } = renderMessage(buildMessage([{ type: 'text', text: 'reply **bold**' }]));
 
     expect(container.querySelector('strong')?.textContent).toBe('bold');
   });
@@ -270,7 +270,7 @@ describe('MessageRow dynamic-tool rendering', () => {
   });
 
   it('routes assistant text through the shared MessageText error-prefix handling', () => {
-    const { container } = renderMessage(buildMessage([{ type: 'text', text: 'Error: it broke' } as ToolPart]));
+    const { container } = renderMessage(buildMessage([{ type: 'text', text: 'Error: it broke' }]));
 
     // The shared MessageText turns an `Error:`-prefixed body into a destructive notice.
     expect(container.textContent).toContain('it broke');
@@ -352,7 +352,7 @@ describe('MessageRow dynamic-tool rendering', () => {
           contents: [{ type: 'text', text: 'github: 2' }],
           attributes: { pending: 2, priority: 'high' },
         },
-      } as ToolPart,
+      },
     ]);
 
     expect(container.textContent).toContain('Notification summary');
@@ -482,7 +482,7 @@ describe('MessageRow dynamic-tool rendering', () => {
         tools: {},
         agents: { 'my-agent': true },
         workflows: { 'my-workflow': true },
-      } as Partial<AgentBuilderEditFormValues>,
+      },
     );
 
     const text = container.textContent ?? '';
@@ -508,7 +508,7 @@ describe('MessageRow dynamic-tool rendering', () => {
           output: { success: true },
         }),
       ],
-      { tools: {}, agents: {}, workflows: {} } as Partial<AgentBuilderEditFormValues>,
+      { tools: {}, agents: {}, workflows: {} },
     );
 
     expect(container.textContent).toContain('Enabling tools: none');
@@ -532,7 +532,7 @@ describe('MessageRow dynamic-tool rendering', () => {
           output: { success: true },
         }),
       ],
-      { skills: { 'sk-1': true, 'sk-2': true } } as Partial<AgentBuilderEditFormValues>,
+      { skills: { 'sk-1': true, 'sk-2': true } },
     );
 
     expect(container.textContent).toContain('Enabling skills:');
@@ -555,7 +555,7 @@ describe('MessageRow dynamic-tool rendering', () => {
           output: { success: true },
         }),
       ],
-      { skills: {} } as Partial<AgentBuilderEditFormValues>,
+      { skills: {} },
     );
 
     expect(container.textContent).toContain('Enabling skills: none');

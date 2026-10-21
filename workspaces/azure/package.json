@@ -1,6 +1,6 @@
 {
   "name": "@mastra/azure",
-  "version": "0.3.2-alpha.0",
+  "version": "0.3.2",
   "description": "Azure provider for Mastra - includes Blob Storage workspace filesystem",
   "type": "module",
   "main": "dist/index.js",
@@ -43,7 +43,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@azure/storage-blob": "^12.31.0"
+    "@azure/storage-blob": "^12.34.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

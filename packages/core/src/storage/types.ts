@@ -2343,6 +2343,8 @@ export interface UpdateWorkflowStateOptions {
   };
   /** When an agent resume claimed this suspended run. See `WorkflowRunState.resumeClaimedAt`. */
   resumeClaimedAt?: number;
+  /** The claim an agent resume started under a run-ownership lease. See `WorkflowRunState.resumeLeasedClaimAt`. */
+  resumeLeasedClaimAt?: number;
   /**
    * Optional compare-and-set guard. When provided, the update is applied only if the
    * persisted snapshot's status matches one of these values. Otherwise the update is a
