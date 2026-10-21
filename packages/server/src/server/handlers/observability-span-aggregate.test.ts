@@ -1,5 +1,9 @@
 import type { Mastra } from '@mastra/core';
-import { TraceQueryExecutionError, spanAggregateRequestSchema } from '@mastra/core/storage';
+import {
+  TraceQueryExecutionError,
+  TraceQueryResourceLimitError,
+  spanAggregateRequestSchema,
+} from '@mastra/core/storage';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { z } from 'zod/v4';
 
@@ -40,7 +44,7 @@ async function captureHttpException(call: Promise<unknown>) {
   }
 }
 
-function getDeclaredErrorSchema(status: 400 | 413 | 422 | 501 | 504): z.ZodTypeAny {
+function getDeclaredErrorSchema(status: 400 | 413 | 422 | 501 | 503 | 504): z.ZodTypeAny {
   const schema = AGGREGATE_SPANS.openapi?.responses[status]?.content?.['application/json']?.schema;
   if (!schema) throw new Error(`Missing OpenAPI error schema for ${status}`);
   return schema as z.ZodTypeAny;
@@ -209,6 +213,21 @@ describe('AGGREGATE_SPANS', () => {
     expect(unscopedStore.observabilityStore.aggregateSpans).not.toHaveBeenCalled();
   });
 
+  it('returns a structured 503 when the query hits a resource limit', async () => {
+    const { mastra, observabilityStore } = createHarness();
+    observabilityStore.aggregateSpans.mockRejectedValue(new TraceQueryResourceLimitError());
+
+    const error = await captureHttpException(
+      AGGREGATE_SPANS.handler(params(mastra, { timeRange: TIME_RANGE, measures: ['count'] })),
+    );
+
+    expect(error.status).toBe(503);
+    expect(getDeclaredErrorSchema(503).parse(await error.getResponse().json())).toEqual({
+      code: 'TRACE_QUERY_RESOURCE_LIMIT',
+      message: 'The query exceeded its resource limit',
+    });
+  });
+
   it('returns a structured 504 without exposing database errors', async () => {
     const { mastra, observabilityStore } = createHarness();
     observabilityStore.aggregateSpans.mockRejectedValue(new TraceQueryExecutionError());
@@ -231,7 +250,15 @@ describe('AGGREGATE_SPANS', () => {
     expect(AGGREGATE_SPANS.method).toBe('POST');
     expect(AGGREGATE_SPANS.path).toBe('/observability/spans/aggregate');
     expect(AGGREGATE_SPANS.maxBodySize).toBe(256 * 1024);
-    expect(Object.keys(AGGREGATE_SPANS.openapi?.responses ?? {})).toEqual(['200', '400', '413', '422', '501', '504']);
+    expect(Object.keys(AGGREGATE_SPANS.openapi?.responses ?? {})).toEqual([
+      '200',
+      '400',
+      '413',
+      '422',
+      '501',
+      '503',
+      '504',
+    ]);
 
     const document = generateOpenAPIDocument([AGGREGATE_SPANS], { title: 'Test', version: '1.0.0' });
     const responses = document.paths['/observability/spans/aggregate'].post.responses;

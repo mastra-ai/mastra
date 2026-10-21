@@ -636,6 +636,9 @@ export const AGGREGATE_SPANS = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_SPANS, {
     try {
       return await observabilityStore.aggregateSpans(plan);
     } catch (error) {
+      if (error instanceof coreStorage.TraceQueryResourceLimitError) {
+        throwTraceQueryError(503, { code: error.code, message: error.message });
+      }
       if (error instanceof coreStorage.TraceQueryExecutionError) {
         throwTraceQueryError(504, { code: error.code, message: error.message });
       }
@@ -660,6 +663,10 @@ if (AGGREGATE_SPANS.openapi) {
   AGGREGATE_SPANS.openapi.responses[501] = {
     description: 'The configured observability store does not support span aggregation',
     content: { 'application/json': { schema: spanAggregateUnsupportedErrorSchema } },
+  };
+  AGGREGATE_SPANS.openapi.responses[503] = {
+    description: 'Span aggregate query exceeded a bounded execution resource limit',
+    content: { 'application/json': { schema: traceQueryResourceLimitErrorSchema } },
   };
   AGGREGATE_SPANS.openapi.responses[504] = {
     description: 'Span aggregate query exceeded the configured database execution timeout',
