@@ -166,6 +166,11 @@ describe('MemoryMessageRefs', () => {
       source: 'v8:tokenx',
     };
     expect(isMemoryMessageRef(mappedRefs.dehydrate(mappedCounted).messages[0])).toBe(true);
+    const renamed = structuredClone(mappedCounted);
+    const renamedEstimate = (renamed.messages[0]!.content.parts[0] as any).providerMetadata.mastra.tokenEstimate;
+    renamedEstimate.other = renamedEstimate.client;
+    delete renamedEstimate.client;
+    expect(isMemoryMessageRef(mappedRefs.dehydrate(renamed).messages[0])).toBe(false);
     (mappedCounted.messages[0]!.content.parts[0] as any).providerMetadata.mastra.tokenEstimate.client.tokens = 8;
     expect(isMemoryMessageRef(mappedRefs.dehydrate(mappedCounted).messages[0])).toBe(false);
   });

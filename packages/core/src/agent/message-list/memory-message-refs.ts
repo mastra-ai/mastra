@@ -206,6 +206,7 @@ function withoutEstimate(metadata: Record<string, any> | undefined): Record<stri
     const soleEntry = entries[0]?.[1];
     const soleClient =
       entries.length === 1 &&
+      entries[0]?.[0] === 'client' &&
       soleEntry !== null &&
       typeof soleEntry === 'object' &&
       'source' in soleEntry &&
