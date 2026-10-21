@@ -180,16 +180,37 @@ export const microsoftWordScenario: Scenario = {
         description: `@mastra/connect smoke test ${runId}`,
       });
 
-      try {
-        const link = await call<{ id: string }>('microsoft_word_create_sharing_link', {
-          driveId,
-          itemId: documentId,
-          type: 'view',
-          scope: isPersonalAccount ? 'anonymous' : 'organization',
-        });
-        steps.push(makeStep('create sharing link', 'microsoft_word_create_sharing_link', 'pass', link.id));
-      } catch (error) {
-        steps.push(makeStep('create sharing link', 'microsoft_word_create_sharing_link', 'fail', errorMessage(error)));
+      if (isPersonalAccount) {
+        // Personal accounts cannot create organization-scoped links. Probe with a synthetic item so the smoke test never publishes an anonymous link.
+        steps.push(
+          await probeTool(
+            call,
+            tools,
+            'create sharing link (personal account probe)',
+            'microsoft_word_create_sharing_link',
+            {
+              driveId,
+              itemId: 'mastra-smoke-missing',
+              type: 'view',
+              scope: 'organization',
+            },
+            /status=(400|401|403|404)|personal|msa account|work or school|not supported/i,
+          ),
+        );
+      } else {
+        try {
+          const link = await call<{ id: string }>('microsoft_word_create_sharing_link', {
+            driveId,
+            itemId: documentId,
+            type: 'view',
+            scope: 'organization',
+          });
+          steps.push(makeStep('create sharing link', 'microsoft_word_create_sharing_link', 'pass', link.id));
+        } catch (error) {
+          steps.push(
+            makeStep('create sharing link', 'microsoft_word_create_sharing_link', 'fail', errorMessage(error)),
+          );
+        }
       }
       await attempt('list Word permissions', 'microsoft_word_list_word_document_permissions', {
         drive_id: driveId,

@@ -665,10 +665,11 @@ export default action;
 
     const manifest = JSON.parse(
       readFileSync(resolve(packageRoot, 'src/providers/first-provider-alias/.manifest.json'), 'utf8'),
-    ) as { providerId: string; localId: string };
+    ) as { providerId: string; localId: string; toolCount: number };
     expect(manifest).toMatchObject({
       providerId: 'first-provider-alias',
       localId: 'first-provider-alias',
+      toolCount: 1,
     });
   });
 
@@ -690,7 +691,7 @@ export default action;
       resolve(packageRoot, 'src/providers/microsoft-excel/tools/get-user-drive.ts'),
       'utf8',
     );
-    expect(delegatedTool).toContain('userId: z.string().optional().describe');
+    expect(delegatedTool).toMatch(/userId:\s*z\s*\.string\(\)\s*\.min\(1\)\s*\.optional\(\)\s*\.describe/);
     expect(delegatedTool).toMatch(
       /endpoint: input\.userId\s*\? `\/v1\.0\/users\/\$\{encodeURIComponent\(input\.userId\)\}\/drive`\s*: ["']\/v1\.0\/me\/drive["']/,
     );

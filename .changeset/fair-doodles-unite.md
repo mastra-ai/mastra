@@ -2,4 +2,4 @@
 '@mastra/connect': patch
 ---
 
-Fixed provider generation to discover template aliases exposed as symlinks.
+Fixed provider generation so aliased integration templates can be discovered and added with `add-provider`.

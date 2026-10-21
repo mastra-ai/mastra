@@ -5,7 +5,7 @@ import { z } from 'zod';
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
 export const getUserDriveInputSchema = z.object({
-  userId: z.string().optional().describe('User ID. Example: "aea0ba47-35e8-4a85-92bb-03ea32f9d3f6"'),
+  userId: z.string().min(1).optional().describe('User ID. Example: "aea0ba47-35e8-4a85-92bb-03ea32f9d3f6"'),
 });
 
 const ProviderDriveSchema = z.object({
