@@ -143,8 +143,8 @@ function providerVerdict(status: number | undefined, codes: string, evidence: st
 function narrowInvalidRequest(evidence: string, status: number | undefined): ProviderFailureKind {
   // Anthropic reports an exhausted credit balance as a 400 invalid request.
   if (BILLING_EXHAUSTED.test(evidence)) return 'quota';
-  // Claude Max reports an exhausted usage cap as a plain 400; the same words on a 404 or 422 name something else.
-  if ((status === undefined || status === 400) && usageKind(evidence) === 'quota') return 'quota';
+  // Claude Max reports an exhausted usage cap as a 400; a frame the provider coded invalid, or a 404 or 422, names something else.
+  if (status === 400 && usageKind(evidence) === 'quota') return 'quota';
   return terminalKindFromWording(evidence) ?? 'invalid_request';
 }
 

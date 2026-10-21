@@ -304,7 +304,7 @@ const classifications: Array<[name: string, error: unknown, kind: ProviderFailur
         message: "Invalid value 'monthly limit' for parameter mode.",
       },
     },
-    'quota',
+    'invalid_request',
   ],
   ['plain 400 weekly limit', apiError(400, 'Your weekly limit has been reached, try again later'), 'quota'],
   ['plain 400 Claude Max usage limit', apiError(400, 'You have exceeded your usage limit for Claude Max'), 'quota'],
