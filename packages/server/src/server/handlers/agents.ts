@@ -14,13 +14,13 @@ import { mergeVersionOverrides, MASTRA_VERSIONS_KEY } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { PROVIDER_REGISTRY, parseModelString, defaultGateways, ModelRouterLanguageModel } from '@mastra/core/llm';
 import type { MastraModelGatewayInterface, ProviderConfig, SystemMessage } from '@mastra/core/llm';
+import type { Mastra } from '@mastra/core/mastra';
 import type {
   InputProcessor,
   OutputProcessor,
   InputProcessorOrWorkflow,
   OutputProcessorOrWorkflow,
 } from '@mastra/core/processors';
-import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { StorageModelListEntry } from '@mastra/core/storage';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
@@ -3750,26 +3750,32 @@ export const REORDER_AGENT_MODEL_LIST_ROUTE = createRoute({
         requestContext,
         versionOptions: { status: versionStatus },
       });
+      const mutableAgent = versionStatus === 'draft' ? agent.__fork() : agent;
 
-      if (typeof agent.model === 'function') {
+      if (typeof mutableAgent.model === 'function') {
         throw new HTTPException(409, {
           message: 'Agent model list is dynamic (model is a function) and cannot be edited',
         });
       }
 
-      const modelList = await agent.getModelList(requestContext);
+      const modelList = await mutableAgent.getModelList(requestContext);
       if (!modelList || modelList.length === 0) {
         throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
       }
 
-      const applied = agent.reorderModels(reorderedModelIds);
+      const applied = mutableAgent.reorderModels(reorderedModelIds);
       if (applied === false) {
         throw new HTTPException(400, { message: 'Agent model list could not be reordered' });
       }
 
-      const reorderedModelList = await agent.getModelList(requestContext);
+      const reorderedModelList = await mutableAgent.getModelList(requestContext);
       if (reorderedModelList) {
-        await persistEditorOwnedModelList({ mastra, agent, modelList: reorderedModelList, requestContext });
+        await persistEditorOwnedModelList({
+          mastra,
+          agent: mutableAgent,
+          modelList: reorderedModelList,
+          requestContext,
+        });
       }
 
       return { message: 'Model list reordered' };
@@ -3803,14 +3809,15 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
         requestContext,
         versionOptions: { status: versionStatus },
       });
+      const mutableAgent = versionStatus === 'draft' ? agent.__fork() : agent;
 
-      if (typeof agent.model === 'function') {
+      if (typeof mutableAgent.model === 'function') {
         throw new HTTPException(409, {
           message: 'Agent model list is dynamic (model is a function) and cannot be edited',
         });
       }
 
-      const modelList = await agent.getModelList(requestContext);
+      const modelList = await mutableAgent.getModelList(requestContext);
       if (!modelList || modelList.length === 0) {
         throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
       }
@@ -3830,14 +3837,14 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
         ...(enabled !== undefined ? { enabled } : {}),
       };
 
-      const applied = agent.updateModelInModelList(updated);
+      const applied = mutableAgent.updateModelInModelList(updated);
       if (applied === false) {
         throw new HTTPException(404, { message: `Model config with id ${modelConfigId} not found` });
       }
 
-      const updatedModelList = await agent.getModelList(requestContext);
+      const updatedModelList = await mutableAgent.getModelList(requestContext);
       if (updatedModelList) {
-        await persistEditorOwnedModelList({ mastra, agent, modelList: updatedModelList, requestContext });
+        await persistEditorOwnedModelList({ mastra, agent: mutableAgent, modelList: updatedModelList, requestContext });
       }
 
       return { message: 'Model updated in model list' };

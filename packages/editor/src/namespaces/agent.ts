@@ -620,13 +620,16 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
       }
 
       const codeModelsById = new Map(codeModel.map(model => [model.id, model]));
-      const modelList = storedConfig.modelList.map(storedModel => {
+      const appliedModelIds = new Set<string>();
+      const modelList = storedConfig.modelList.flatMap(storedModel => {
         const codeModelEntry = codeModelsById.get(storedModel.id);
         if (!codeModelEntry) {
-          throw new Error(
-            `Agent "${agent.id}" has a stored model-list entry "${storedModel.id}" that does not exist in its code-defined fallback list.`,
+          this.logger?.warn(
+            `[applyStoredOverrides] Ignoring stale stored model-list entry "${storedModel.id}" for agent "${agent.id}"`,
           );
+          return [];
         }
+        appliedModelIds.add(storedModel.id);
 
         const codeModelRef =
           typeof codeModelEntry.model === 'string'
@@ -641,15 +644,32 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
                 : undefined;
         const storedModelRef = `${storedModel.provider}/${storedModel.modelId}`;
 
-        return {
-          ...codeModelEntry,
-          id: storedModel.id,
-          model: codeModelRef === storedModelRef ? codeModelEntry.model : storedModelRef,
-          enabled: storedModel.enabled,
-          maxRetries: storedModel.maxRetries,
-          maxRetriesConfigured: true,
-        };
+        return [
+          {
+            ...codeModelEntry,
+            id: storedModel.id,
+            model: codeModelRef === storedModelRef ? codeModelEntry.model : storedModelRef,
+            enabled: storedModel.enabled,
+            maxRetries: storedModel.maxRetries,
+            maxRetriesConfigured: true,
+          },
+        ];
       });
+      modelList.push(
+        ...codeModel.flatMap(model =>
+          model.id && !appliedModelIds.has(model.id)
+            ? [
+                {
+                  ...model,
+                  id: model.id,
+                  enabled: model.enabled ?? true,
+                  maxRetries: model.maxRetries ?? 0,
+                  maxRetriesConfigured: 'maxRetriesConfigured' in model ? (model.maxRetriesConfigured ?? false) : false,
+                },
+              ]
+            : [],
+        ),
+      );
       fork.__updateModel({ model: modelList });
     }
 

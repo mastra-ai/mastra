@@ -95,6 +95,43 @@ describe('applyStoredOverrides', () => {
     ]);
   });
 
+  it('reconciles stale stored entries with newly added code models', async () => {
+    const storage = new InMemoryStore();
+    const editor = new MastraEditor();
+    const codeAgent = new Agent({
+      id: 'my-agent',
+      name: 'Code Agent',
+      instructions: 'Code instructions',
+      model: [
+        { id: 'primary', model: 'openai/gpt-4o' },
+        { id: 'new-fallback', model: 'openai/gpt-4.1' },
+      ],
+      editor: { model: true },
+    });
+    new Mastra({ storage, editor, agents: { 'my-agent': codeAgent } });
+
+    const agentsStore = await storage.getStore('agents');
+    await agentsStore?.create({
+      agent: {
+        id: 'my-agent',
+        name: 'Stored Agent',
+        instructions: 'Stored instructions',
+        model: { provider: 'openai', name: 'gpt-4o' },
+        modelList: [
+          { id: 'removed-fallback', provider: 'openai', modelId: 'gpt-4o-mini', enabled: true, maxRetries: 1 },
+          { id: 'primary', provider: 'openai', modelId: 'gpt-4o', enabled: false, maxRetries: 0 },
+        ],
+      } as never,
+    });
+
+    const result = await editor.agent.applyStoredOverrides(codeAgent);
+
+    expect(await result.getModelList()).toMatchObject([
+      { id: 'primary', enabled: false },
+      { id: 'new-fallback', model: { modelId: 'gpt-4.1' }, enabled: true },
+    ]);
+  });
+
   it('preserves a configured code model instance when the stored selection is unchanged', async () => {
     const storage = new InMemoryStore();
     const editor = new MastraEditor();

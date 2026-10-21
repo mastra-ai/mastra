@@ -990,6 +990,10 @@ describe('Agent Handlers', () => {
         requestContext,
       });
 
+      expect(await agent.getModelList()).toMatchObject([
+        { id: 'primary', model: { modelId: 'gpt-4o' } },
+        { id: 'fallback', model: { modelId: 'gpt-4o-mini' } },
+      ]);
       expect(create).toHaveBeenCalledWith({
         id: 'editor-owned-models',
         name: 'test-agent',
@@ -1058,6 +1062,10 @@ describe('Agent Handlers', () => {
         requestContext,
       });
 
+      expect(await agent.getModelList()).toMatchObject([
+        { id: 'primary', model: { modelId: 'gpt-4o' } },
+        { id: 'fallback', model: { modelId: 'gpt-4o-mini' }, enabled: true, maxRetries: 1 },
+      ]);
       expect(update).toHaveBeenCalledWith({
         id: 'editor-owned-models',
         modelList: [
@@ -1110,9 +1118,26 @@ describe('Agent Handlers', () => {
       expect(getById).toHaveBeenNthCalledWith(1, 'stored-only-agent', { status: 'draft' });
       expect(getById).toHaveBeenNthCalledWith(2, 'stored-only-agent', { status: 'draft' });
       expect(update).toHaveBeenCalledTimes(2);
+      expect(update).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({
+          id: 'stored-only-agent',
+          modelList: [expect.objectContaining({ id: 'fallback' }), expect.objectContaining({ id: 'primary' })],
+        }),
+      );
+      expect(update).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({
+          id: 'stored-only-agent',
+          modelList: [
+            expect.objectContaining({ id: 'primary' }),
+            expect.objectContaining({ id: 'fallback', enabled: false }),
+          ],
+        }),
+      );
       expect(await agent.getModelList()).toMatchObject([
-        { id: 'fallback', enabled: false },
         { id: 'primary', enabled: true },
+        { id: 'fallback', enabled: true },
       ]);
     });
 
