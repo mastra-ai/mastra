@@ -15,6 +15,7 @@ import type { SessionRowStatus } from '../services/sessionStatus';
 import { ActivityBelt } from '@mastra/playground-ui/components/Activity';
 import { SessionPreviewCard } from './SessionPreviewCard';
 import type { SessionPreviewDetails } from './SessionPreviewCard';
+import { SessionSharingPopover } from './SessionSharingPopover';
 
 /**
  * Shared sidebar row for workspace/user sessions. Built on `Sidebar.NavLink`
@@ -72,7 +73,7 @@ export function SessionNavRow({
   /** Omitted for sessions the viewer does not own: the server only lets owners rename. */
   onRegenerateTitle?: () => void;
   regeneratingTitle?: boolean;
-  /** `org` rows are marked as shared; omit for sessions without a visibility. */
+  /** Private rows show a sharing popover; shared rows have no visibility badge. */
   visibility?: 'org' | 'private';
   /** Omitted for sessions the viewer does not own: the server only lets owners change visibility. */
   onVisibilityChange?: (visibility: 'org' | 'private') => void;
@@ -101,9 +102,6 @@ export function SessionNavRow({
       {pinned && !loading ? (
         <Pin aria-label={`${name} pinned`} className="text-muted-foreground/70 size-2 shrink-0 rotate-45" />
       ) : null}
-      {visibility === 'org' ? (
-        <Users aria-label={`${name} shared with organization`} className="text-muted-foreground/70 size-2.5 shrink-0" />
-      ) : null}
     </button>
   );
   const belt = loading ? undefined : status;
@@ -112,6 +110,14 @@ export function SessionNavRow({
   const action = (
     <>
       {belt ? <ActivityBelt status={belt} label={beltLabel(belt, name)} /> : null}
+      {visibility === 'private' ? (
+        <SessionSharingPopover
+          name={name}
+          disabled={disabled || loading}
+          onShare={onVisibilityChange ? () => onVisibilityChange('org') : undefined}
+          sharing={changingVisibility}
+        />
+      ) : null}
       <span className={cn(trailingSlot, trailing ? 'grid' : revealedSlot)}>
         {trailing === 'loading' ? (
           <Spinner size="sm" aria-label={`Opening ${name}`} className="text-muted-foreground" />

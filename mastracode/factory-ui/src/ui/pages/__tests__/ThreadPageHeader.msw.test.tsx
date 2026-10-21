@@ -1,11 +1,14 @@
+import { Toaster } from '@mastra/playground-ui/components/Toaster';
+import userEvent from '@testing-library/user-event';
 import { screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
-import { findPageHeader, renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
+import { findPageHeader, renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import { createAppRoutes } from '../../router';
+import type { FactoryUserSession } from '../../domains/workspaces/services/user-sessions';
 
 const FACTORY_ID = 'fp-1';
 const REPO_ID = 'ghp-1';
@@ -19,6 +22,7 @@ const workspaceSession = {
   projectRepositoryId: REPO_ID,
   orgId: 'org-1',
   userId: 'user-1',
+  visibility: 'org' as const,
   branch: 'factory/issue-42',
   baseBranch: 'main',
   sandboxId: 'sb-1',
@@ -62,21 +66,28 @@ function deferred() {
 
 const USER_SESSION_ID = 'sess-2';
 
-const userSession = {
+const userSession: FactoryUserSession = {
   ...workspaceSession,
   id: 'row-2',
   sessionId: USER_SESSION_ID,
-  branch: `mastracode/session-${USER_SESSION_ID}`,
+  branch: `user/session-${USER_SESSION_ID}`,
+  visibility: 'private',
   title: 'salut ca va ?',
 };
 
 function stubThreadRoute({
   gateSession = false,
   userSessionTitle = userSession.title,
-  threads = [] as Array<{ id: string; title: string }>,
+  threads = [],
+  sessionOverrides = {},
+}: {
+  gateSession?: boolean;
+  userSessionTitle?: string;
+  threads?: Array<{ id: string; title: string }>;
+  sessionOverrides?: Partial<FactoryUserSession>;
 } = {}) {
   const sessionGate = deferred();
-  const storedUserSession = { ...userSession, title: userSessionTitle };
+  const storedUserSession = { ...userSession, title: userSessionTitle, ...sessionOverrides };
 
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -85,6 +96,10 @@ function stubThreadRoute({
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
     ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}`, () =>
+      HttpResponse.json({ project: { id: FACTORY_ID, name: 'Acme Factory', defaultModelId: 'openai/gpt-4o-mini' } }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: 'openai/gpt-4o-mini' })),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
       HttpResponse.json({
         connections: [
@@ -117,16 +132,33 @@ function stubThreadRoute({
     http.get(`${TEST_BASE_URL}/web/user-sessions/${USER_SESSION_ID}`, () =>
       HttpResponse.json({ session: storedUserSession }),
     ),
-    http.post(`${AC}/sessions`, () =>
-      HttpResponse.json({ controllerId: 'code', resourceId: SESSION_ID, threadId: SESSION_ID }),
-    ),
-    http.get(`${AC}/sessions/:resourceId`, () =>
+    http.put(`${TEST_BASE_URL}/web/user-sessions/${USER_SESSION_ID}/visibility`, async ({ request }) => {
+      const body = await request.json();
+      if (
+        body &&
+        typeof body === 'object' &&
+        'visibility' in body &&
+        (body.visibility === 'org' || body.visibility === 'private')
+      ) {
+        storedUserSession.visibility = body.visibility;
+      }
+      return HttpResponse.json({ session: storedUserSession });
+    }),
+    http.post(`${AC}/sessions`, async ({ request }) => {
+      const body = await request.json();
+      const threadId =
+        body && typeof body === 'object' && 'threadId' in body && typeof body.threadId === 'string'
+          ? body.threadId
+          : SESSION_ID;
+      return HttpResponse.json({ controllerId: 'code', resourceId: threadId, threadId });
+    }),
+    http.get(`${AC}/sessions/:resourceId`, ({ params }) =>
       HttpResponse.json({
         controllerId: 'code',
-        resourceId: SESSION_ID,
+        resourceId: params.resourceId,
         modeId: 'build',
         modelId: 'openai/gpt-4o-mini',
-        threadId: SESSION_ID,
+        threadId: params.resourceId,
         settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
       }),
     ),
@@ -151,7 +183,12 @@ function stubThreadRoute({
 
 function renderRoute(path: string) {
   const router = createMemoryRouter(createAppRoutes(), { initialEntries: [path] });
-  return renderWithProviders(<RouterProvider router={router} />);
+  return renderWithProviders(
+    <>
+      <RouterProvider router={router} />
+      <Toaster position="bottom-right" />
+    </>,
+  );
 }
 
 afterEach(() => {
@@ -186,8 +223,81 @@ describe('ThreadPage header', () => {
     expect(screen.getByRole('button', { name: 'Workspace files' }).closest('header')).toBe(header);
   });
 
+  it('shares from the header and restores privacy from the sidebar menu', async () => {
+    stubThreadRoute();
+    const user = userEvent.setup();
+    const { client } = renderRoute(`/factories/${FACTORY_ID}/user/threads/${USER_SESSION_ID}`);
+    await waitForMutationsIdle(client);
+
+    const header = await findPageHeader();
+    const privacy = await within(header).findByRole('button', { name: 'Private session' });
+    expect(privacy).toHaveTextContent('Private');
+    await user.click(privacy);
+    expect(await screen.findByRole('heading', { name: 'This session is private' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Share with organization' }));
+    expect(await screen.findByText('Session shared with your organization')).toBeInTheDocument();
+    await waitFor(() =>
+      expect(within(header).queryByRole('button', { name: 'Private session' })).not.toBeInTheDocument(),
+    );
+    expect(screen.queryByRole('button', { name: `Private session: ${userSession.title}` })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: `Session actions for ${userSession.title}` }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Make private' }));
+    expect(await screen.findByText('Session is now private')).toBeInTheDocument();
+    expect(await within(header).findByRole('button', { name: 'Private session' })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: `Private session: ${userSession.title}` })).toBeInTheDocument();
+  });
+
+  it('shows the server reason when sharing from the header is refused and keeps the session private', async () => {
+    stubThreadRoute();
+    const reason = 'Wait for the session to finish its run before changing visibility';
+    server.use(
+      http.put(`${TEST_BASE_URL}/web/user-sessions/${USER_SESSION_ID}/visibility`, () =>
+        HttpResponse.json({ error: reason }, { status: 409 }),
+      ),
+    );
+    const user = userEvent.setup();
+    const { client } = renderRoute(`/factories/${FACTORY_ID}/user/threads/${USER_SESSION_ID}`);
+    await waitForMutationsIdle(client);
+
+    const header = await findPageHeader();
+    await user.click(await within(header).findByRole('button', { name: 'Private session' }));
+    await user.click(await screen.findByRole('button', { name: 'Share with organization' }));
+    await waitForMutationsIdle(client);
+
+    expect(await screen.findByText(reason)).toBeInTheDocument();
+    expect(within(header).getByRole('button', { name: 'Private session' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'This session is private' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Share with organization' })).toBeEnabled();
+  });
+
+  it.each(['user-1', 'user-2'])('does not show a sharing control for a shared session owned by %s', async userId => {
+    stubThreadRoute({ sessionOverrides: { visibility: 'org', userId } });
+    const { client } = renderRoute(`/factories/${FACTORY_ID}/user/threads/${USER_SESSION_ID}`);
+    await waitForMutationsIdle(client);
+
+    const header = await findPageHeader();
+    await within(header).findByText('salut ca va ?');
+    expect(within(header).queryByRole('button', { name: 'Private session' })).not.toBeInTheDocument();
+  });
+
+  it('keeps source-managed private Slack sessions read-only in the header', async () => {
+    stubThreadRoute({ sessionOverrides: { branch: 'slack/1700000000-000100' } });
+    const user = userEvent.setup();
+    const { client } = renderRoute(`/factories/${FACTORY_ID}/user/threads/${USER_SESSION_ID}`);
+    await waitForMutationsIdle(client);
+
+    const header = await findPageHeader();
+    await user.click(await within(header).findByRole('button', { name: 'Private session' }));
+    expect(await screen.findByRole('heading', { name: 'This session is private' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Share with organization' })).not.toBeInTheDocument();
+  });
+
   it('picks up the generated title once the thread is named', async () => {
-    stubThreadRoute({ userSessionTitle: undefined, threads: [{ id: USER_SESSION_ID, title: 'salut ca va ?' }] });
+    stubThreadRoute({
+      sessionOverrides: { title: undefined },
+      threads: [{ id: USER_SESSION_ID, title: 'salut ca va ?' }],
+    });
     renderRoute(`/factories/${FACTORY_ID}/user/threads/${USER_SESSION_ID}`);
 
     const breadcrumb = await screen.findByRole('navigation', { name: 'Breadcrumb' });
