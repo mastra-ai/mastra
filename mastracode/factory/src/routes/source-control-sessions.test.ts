@@ -352,7 +352,7 @@ describe('source-control session routes', () => {
         threadId,
         content: expect.objectContaining({
           metadata: expect.objectContaining({
-            signal: expect.objectContaining({ type: 'reactive', tagName: 'session-owner' }),
+            signal: expect.objectContaining({ type: 'reactive', tagName: 'factory-session-owner' }),
           }),
         }),
       }),
