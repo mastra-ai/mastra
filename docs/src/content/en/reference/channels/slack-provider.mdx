@@ -109,6 +109,14 @@ await slack.configure({
       "Dialect for the agent's final reply text, forwarded to the Slack adapter. `'markdown'` (the default) posts replies as markdown so Slack renders bold text, links, and tables natively. `'plain'` posts literal plain text, the escape hatch for agents prompted to emit Slack mrkdwn. Applies to buffered replies (`streaming: false`) and the streaming fallback; native streaming is always markdown.",
   },
   {
+    name: 'textDisplay',
+    type: "'show' | 'hidden'",
+    isOptional: true,
+    defaultValue: "'show'",
+    description:
+      "Whether the agent's reply text is posted to Slack. `'hidden'` never posts it, so the agent speaks only through tools you give it. Tool display, approval prompts, errors, and typing status are unaffected.",
+  },
+  {
     name: 'toolDisplay',
     type: 'ToolDisplay',
     isOptional: true,

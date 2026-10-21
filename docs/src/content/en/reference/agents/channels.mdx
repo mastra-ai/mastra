@@ -229,6 +229,14 @@ const agent = new Agent({
       "Dialect for the agent's final reply text. `'markdown'` (the default) posts replies as markdown: adapters with native markdown rendering (Slack) render it directly, others convert it to their platform format. `'plain'` posts replies as literal plain text, restoring the pre-markdown behavior for agents prompted to emit a platform dialect such as Slack mrkdwn. Applies to final reply text only; tool cards, error messages, and tripwire notices are unaffected. Native streaming is always markdown regardless of this setting.",
   },
   {
+    name: 'textDisplay',
+    type: "'show' | 'hidden'",
+    isOptional: true,
+    defaultValue: "'show'",
+    description:
+      "Whether the agent's reply text is posted to the channel. `'hidden'` never posts reply text, so the agent speaks in the channel only through tools you give it, such as a reply tool. Tool display, approval prompts, error messages, and typing status are unaffected, and the text still reaches the agent's stream and memory.",
+  },
+  {
     name: 'toolDisplay',
     type: "'cards' | 'text' | 'timeline' | 'grouped' | 'hidden' | ToolDisplayFn",
     isOptional: true,

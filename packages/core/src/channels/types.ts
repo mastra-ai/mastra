@@ -74,6 +74,16 @@ export interface ChannelAdapterBaseConfig {
   textFormat?: 'markdown' | 'plain';
 
   /**
+   * Whether the agent's reply text is posted to the channel.
+   * - `'show'` (default) - reply text streams (or posts) to the thread as it does today.
+   * - `'hidden'` - reply text is never posted. The agent speaks in the channel only
+   *   through tools you give it (for example a reply tool that posts to the thread).
+   *
+   * Tool display, approval prompts, error messages, and typing status are unaffected.
+   */
+  textDisplay?: 'show' | 'hidden';
+
+  /**
    * What to do with buffered (not-yet-posted) reply text when a run is aborted.
    * Only affects the static (non-streaming) driver.
    * - `'flush'` (default) — post the partial buffered text before stopping.

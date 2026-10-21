@@ -40,10 +40,15 @@ export interface ChatChannelRenderContext {
   formatError?: (error: Error) => unknown;
   /** Dialect for the final reply text. Absent means `'markdown'` (driver-level default). */
   textFormat?: 'markdown' | 'plain';
+  /** `'hidden'` keeps reply text out of the channel. Absent means `'show'`. */
+  textDisplay?: 'show' | 'hidden';
   /** Buffered-text behavior on abort. Absent means `'flush'` (driver-level default). */
   onAbort?: 'flush' | 'discard';
   approvalContext?: { toolCallId: string; messageId: string };
 }
+
+/** Chunks that carry reply text, kept out of the channel by `textDisplay: 'hidden'`. */
+const TEXT_CHUNK_TYPES: ReadonlySet<string> = new Set(['text-start', 'text-delta', 'text-end']);
 
 /** Key the processor reads off `requestContext` to locate its render deps. */
 export const CHAT_CHANNEL_RENDER_CONTEXT_KEY = '__mastra_chat_channel_render';
@@ -180,10 +185,12 @@ export class ChatChannelOutputProcessor {
     // Skip the approval card when no human decision is pending (e.g. the
     // controller auto-resolves the tool's policy). The chunk still flows on so
     // the run itself can resolve the approval.
+    const isHiddenText = render.textDisplay === 'hidden' && TEXT_CHUNK_TYPES.has(part.type);
     const renderPart =
-      part.type !== 'tool-call-approval' ||
-      !this.#agentChannels ||
-      (await this.#agentChannels.shouldRenderToolApproval(requestContext, (part as any).payload?.toolName));
+      !isHiddenText &&
+      (part.type !== 'tool-call-approval' ||
+        !this.#agentChannels ||
+        (await this.#agentChannels.shouldRenderToolApproval(requestContext, (part as any).payload?.toolName)));
     if (renderPart) {
       session.queue.push(part as AgentChunkType<any>);
     }
