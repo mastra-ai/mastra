@@ -142,12 +142,17 @@ describe('Factory list failures', () => {
     });
 
     expect(await screen.findByRole('alert')).toHaveTextContent('Unable to load your factories');
-    expect(router.state.location.pathname).toBe('/factories/factory-1/work');
+    const currentUrl = () => {
+      const { pathname, search, hash } = router.state.location;
+      return `${pathname}${search}${hash}`;
+    };
+    expect(currentUrl()).toBe(CURRENT_PATH);
     expect(screen.queryByRole('heading', { name: 'Set up your factory.' })).not.toBeInTheDocument();
 
     listAvailable = true;
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
     expect(await screen.findByRole('textbox', { name: 'Draft' })).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(currentUrl()).toBe(CURRENT_PATH);
   });
 });
