@@ -54,16 +54,20 @@ async function acmeWikiImporters(options: {
         const seen = new Set<string>();
         for (const page of pages) {
           const address = `acme-wiki:${site}:page:${page.id}`;
-          seen.add(address);
-          const node = await importer.upsertNode(address, { name: page.title, metadata: { pageId: page.id } });
+          seen.add(page.id);
+          const node = await importer.upsertNode(address, {
+            name: page.title,
+            metadata: { pageId: page.id },
+            scopes: [options.scope],
+          });
           const existing = await node.listKnowledge();
           if (existing.some(record => record.text === page.body)) continue;
           for (const record of existing) await node.removeKnowledge(record.id);
           await node.appendKnowledge({ text: page.body });
         }
         for (const node of await importer.listNodes()) {
-          if (seen.has(node.node.address)) continue;
           const pageId = String(node.node.metadata?.pageId);
+          if (seen.has(pageId)) continue;
           if ((await probePage(client, connection.id, pageId)) === 'removed') {
             for (const record of await node.listKnowledge()) await node.removeKnowledge(record.id);
           }
@@ -213,9 +217,14 @@ describe('custom Knowledge importer on the public @mastra/connect surface', () =
     const { platform, run, snapshot } = await setup();
     await run();
     platform.state.pages = platform.state.pages.filter(page => page.id !== 'p2');
+    platform.state.calls = [];
     const second = await run();
     expect(second.error ?? null).toBeNull();
     expect(second.status).toBe('succeeded');
+    // Only the page missing from the list is looked up; listed pages are never probed.
+    expect(platform.state.calls.filter(call => /\/proxy\/pages\/./.test(call))).toEqual([
+      'GET /v2/connections/con_wiki/proxy/pages/p2',
+    ]);
     expect(await snapshot()).toEqual({
       nodes: ['Onboarding', 'Retired runbook'],
       records: ['Start with the handbook.'],
