@@ -1,6 +1,6 @@
 {
   "name": "@internal/workspace",
-  "version": "0.0.16",
+  "version": "0.0.17",
   "description": "Internal conventions shared by Mastra sandbox providers and their consumers",
   "private": true,
   "type": "module",

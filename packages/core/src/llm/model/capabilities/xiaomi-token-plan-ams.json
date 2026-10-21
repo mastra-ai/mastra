@@ -13,17 +13,17 @@
         "type": "toggle"
       }
     ],
-    "mimo-v2.5": [
-      {
-        "type": "toggle"
-      }
-    ],
     "mimo-v2.5-pro": [
       {
         "type": "toggle"
       }
     ],
     "mimo-v2-pro": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "mimo-v2.5": [
       {
         "type": "toggle"
       }

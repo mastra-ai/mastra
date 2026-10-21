@@ -193,26 +193,36 @@ function extractRememberedMessages(llmSpan: SpanRecord, currentInputContent: str
   return messages.map(msg => createMastraDBMessage(msg, llmSpan.startedAt));
 }
 
-const TOOL_SPAN_TYPES: ReadonlySet<string> = new Set([SpanType.TOOL_CALL, SpanType.MCP_TOOL_CALL]);
+const TOOL_SPAN_TYPES: ReadonlySet<string> = new Set([
+  SpanType.TOOL_CALL,
+  SpanType.MCP_TOOL_CALL,
+  SpanType.PROVIDER_TOOL_CALL,
+]);
 
 /**
  * Collect the tool call spans an agent run made itself. At runtime, tool spans are
  * nested under model_generation > model_step, so we walk all descendants instead of
  * only direct children. We do not descend into tool spans (an agent or workflow used
  * as a tool keeps its inner calls) or into nested agent runs (sub-agents own their calls).
+ *
+ * Children are visited in tree order, which the span tree already sorted by startedAt,
+ * so the final stable sort keeps the stored order for calls that start in the same
+ * millisecond (parallel tool calls). Provider tool spans can parent under a later
+ * model step than the one that issued the call, which is why the sort is still needed.
  */
 function collectAgentToolSpans(spanTree: SpanTree, agentSpanId: string): SpanRecord[] {
   const toolSpans: SpanRecord[] = [];
-  const pending = [...(spanTree.childrenMap.get(agentSpanId) ?? [])];
 
-  while (pending.length > 0) {
-    const span = pending.pop()!;
-    if (TOOL_SPAN_TYPES.has(span.spanType)) {
-      toolSpans.push(span);
-    } else if (span.spanType !== SpanType.AGENT_RUN) {
-      pending.push(...(spanTree.childrenMap.get(span.spanId) ?? []));
+  const visit = (parentSpanId: string) => {
+    for (const span of spanTree.childrenMap.get(parentSpanId) ?? []) {
+      if (TOOL_SPAN_TYPES.has(span.spanType)) {
+        toolSpans.push(span);
+      } else if (span.spanType !== SpanType.AGENT_RUN) {
+        visit(span.spanId);
+      }
     }
-  }
+  };
+  visit(agentSpanId);
 
   return toolSpans.sort((a, b) => new Date(a.startedAt).getTime() - new Date(b.startedAt).getTime());
 }
