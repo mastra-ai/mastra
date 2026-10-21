@@ -304,6 +304,13 @@ const classifications: Array<[name: string, error: unknown, kind: ProviderFailur
         message: "Invalid value 'monthly limit' for parameter mode.",
       },
     },
+    'quota',
+  ],
+  ['plain 400 weekly limit', apiError(400, 'Your weekly limit has been reached, try again later'), 'quota'],
+  ['plain 400 Claude Max usage limit', apiError(400, 'You have exceeded your usage limit for Claude Max'), 'quota'],
+  [
+    'usage-limit wording on a 404',
+    apiError(404, 'You have exceeded your usage limit for Claude Max'),
     'invalid_request',
   ],
   [
@@ -345,6 +352,11 @@ const classifications: Array<[name: string, error: unknown, kind: ProviderFailur
       '{"error":{"message":"The model `gpt-9` does not exist or you do not have access to it.","type":"invalid_request_error","param":null,"code":"model_not_found"}}',
     ),
     'model_rejected',
+  ],
+  [
+    'dual-code overflow body behind a bare Bad Request',
+    apiError(400, 'Bad Request', '{"error":{"type":"invalid_request_error","code":"context_length_exceeded"}}'),
+    'context_overflow',
   ],
   [
     'code-only context_length_exceeded under invalid_request_error',

@@ -118,7 +118,7 @@ export function classifyProviderError(error: unknown): ProviderFailureKind {
   const facts = collectFacts(error);
   const evidence = [...facts.codes, ...facts.texts].join('\n');
   const verdict = providerVerdict(facts.statusCode, facts.codes.join('\n'), evidence);
-  if (verdict === 'invalid_request') return narrowInvalidRequest(evidence);
+  if (verdict === 'invalid_request') return narrowInvalidRequest(evidence, facts.statusCode);
   if (verdict) return verdict;
   return (
     usageKind(evidence) ??
@@ -140,9 +140,11 @@ function providerVerdict(status: number | undefined, codes: string, evidence: st
 }
 
 // A request the provider named invalid is final; its wording may only say which final kind.
-function narrowInvalidRequest(evidence: string): ProviderFailureKind {
+function narrowInvalidRequest(evidence: string, status: number | undefined): ProviderFailureKind {
   // Anthropic reports an exhausted credit balance as a 400 invalid request.
   if (BILLING_EXHAUSTED.test(evidence)) return 'quota';
+  // Claude Max reports an exhausted usage cap as a plain 400; the same words on a 404 or 422 name something else.
+  if ((status === undefined || status === 400) && usageKind(evidence) === 'quota') return 'quota';
   return terminalKindFromWording(evidence) ?? 'invalid_request';
 }
 
