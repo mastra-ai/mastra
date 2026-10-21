@@ -80,7 +80,7 @@ async function openTakeoverConfirm(user: ReturnType<typeof userEvent.setup>) {
 
 async function confirmTakeover(user: ReturnType<typeof userEvent.setup>) {
   await openTakeoverConfirm(user);
-  expect(await screen.findByText(/a running agent stops\./)).toBeInTheDocument();
+  expect(screen.getByText('Take Ward Peeters’s session?')).toBeInTheDocument();
   await user.click(screen.getByRole('button', { name: 'Take ownership' }));
 }
 
@@ -90,10 +90,12 @@ function openWardSessionAs(
     session = wardSession,
     path = USER_THREAD_PATH,
     threadMessages = [],
+    agentRunning = false,
   }: {
     session?: typeof wardSession | typeof wardSessionWithoutProfile;
     path?: string;
     threadMessages?: MastraDBMessage[];
+    agentRunning?: boolean;
   } = {},
 ) {
   server.use(
@@ -146,9 +148,17 @@ function openWardSessionAs(
     http.get(
       `${AC}/sessions/:resourceId/stream`,
       () =>
-        new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
-          headers: { 'content-type': 'text/event-stream' },
-        }),
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              if (agentRunning) controller.enqueue(new TextEncoder().encode('data: {"type":"agent_start"}\n\n'));
+            },
+            cancel() {},
+          }),
+          {
+            headers: { 'content-type': 'text/event-stream' },
+          },
+        ),
     ),
     http.get(`${AC}/sessions/:resourceId/permissions`, () => HttpResponse.json({})),
     http.get(`${AC}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads: [] })),
@@ -261,14 +271,14 @@ describe("a teammate's Factory session", () => {
   });
 
   describe('before a teammate confirms the takeover', () => {
-    it('says billing stays on the organization’s credentials when the Factory pays for its sessions', async () => {
+    it('says the Factory keeps paying when it pays for its sessions', async () => {
       serveModelCatalogs({ sessionScope: 'factory', viewerModels: [] });
       openWardSessionAs('user-damien');
 
       await openTakeoverConfirm(userEvent.setup());
 
-      expect(await screen.findByText(/Billing stays on the organization’s credentials/)).toBeInTheDocument();
-      expect(screen.queryByText(/prompt cache/)).not.toBeInTheDocument();
+      expect(await screen.findByText('The Factory keeps paying, and the model stays the same.')).toBeInTheDocument();
+      expect(screen.queryByText(/cached/)).not.toBeInTheDocument();
     });
 
     it('names the viewer’s own credential and the model the session keeps when each owner pays', async () => {
@@ -278,9 +288,10 @@ describe("a teammate's Factory session", () => {
       await openTakeoverConfirm(userEvent.setup());
 
       expect(
-        await screen.findByText(/Billing moves to your OpenAI API key, still on GPT-4o Mini\./),
+        await screen.findByText(
+          'Your OpenAI API key pays from your next message, on the same GPT-4o Mini. This session is cached on Ward Peeters’s account, so that reply re-reads all of it and costs more.',
+        ),
       ).toBeInTheDocument();
-      expect(screen.getByText(/the next turn re-reads the whole thread without the prompt cache/)).toBeInTheDocument();
     });
 
     it('asks the viewer to connect the session’s provider first when they have none', async () => {
@@ -289,12 +300,31 @@ describe("a teammate's Factory session", () => {
 
       await openTakeoverConfirm(userEvent.setup());
 
-      expect(await screen.findByText(/You have no OpenAI connection/)).toBeInTheDocument();
+      expect(
+        await screen.findByText(/You have no OpenAI connection, so GPT-4o Mini can’t run for you\./),
+      ).toBeInTheDocument();
       expect(screen.getByRole('link', { name: 'Your models' })).toHaveAttribute(
         'href',
         `/factories/${FACTORY_ID}/settings/personal-models`,
       );
       expect(screen.getByRole('button', { name: 'Take ownership' })).toBeEnabled();
+    });
+
+    it('says the running agent stops only while one is running', async () => {
+      openWardSessionAs('user-damien', { agentRunning: true });
+
+      await openTakeoverConfirm(userEvent.setup());
+
+      expect(await screen.findByText('The running agent stops.')).toBeInTheDocument();
+    });
+
+    it('says nothing about stopping an agent when none is running', async () => {
+      openWardSessionAs('user-damien');
+
+      await openTakeoverConfirm(userEvent.setup());
+
+      expect(screen.getByText('Take Ward Peeters’s session?')).toBeInTheDocument();
+      expect(screen.queryByText('The running agent stops.')).not.toBeInTheDocument();
     });
   });
 
