@@ -132,7 +132,7 @@ npx mastra api trace query '{
 }'
 ```
 
-Choose a time range containing your exported traces, up to 31 days. Results appear in `data.traces`.
+Choose a time range containing your exported traces. Any range works as long as `from` is earlier than `to`; there's no maximum duration. Results appear in `data.traces`.
 
 Mastra Platform uses the same trace-query endpoints and request format as Mastra Server. Use the [Advanced trace queries reference](/reference/observability/tracing/advanced-queries#send-an-http-request) for HTTP requests, supported filters, pagination, polling, and field discovery.
 
