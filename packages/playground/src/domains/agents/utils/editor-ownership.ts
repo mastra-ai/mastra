@@ -7,6 +7,8 @@ export interface EditorOwnership {
   ownsTools: boolean;
   /** User owns tool descriptions (implied by ownsTools). */
   ownsToolDescriptions: boolean;
+  /** User owns the model fallback list. */
+  ownsModel: boolean;
   /** Instructions are owned by code and must render read-only. */
   isInstructionsLocked: boolean;
   /** Tools are owned by code and must render read-only. */
@@ -34,6 +36,8 @@ export interface EditorOwnership {
  *   editor unset (undefined)               → owned (membership + descriptions)
  *   editor.tools === true                  → owned (membership + descriptions)
  *   editor.tools === { description: true } → owns tool descriptions only
+ * Model ownership is explicit:
+ *   editor.model === true → owned
  *
  * The `undefined` case was the source of a previous bug (for both instructions and tools): `=== true`-only
  * checks made an editor-unset code agent send an empty instructions array and drop tool edits on save,
@@ -54,14 +58,16 @@ export function getEditorOwnership(
     config === undefined ||
     toolsConfig === true ||
     (typeof toolsConfig === 'object' && toolsConfig.description === true);
+  const ownsModel = !isOverride || (config !== false && config?.model === true);
 
   return {
     ownsInstructions,
     ownsTools,
     ownsToolDescriptions,
+    ownsModel,
     isInstructionsLocked: !ownsInstructions,
     isToolsLocked: !ownsTools && !ownsToolDescriptions,
     toolDescriptionsOnly: !ownsTools && ownsToolDescriptions,
-    isFullyLocked: !ownsInstructions && !ownsTools && !ownsToolDescriptions,
+    isFullyLocked: !ownsInstructions && !ownsTools && !ownsToolDescriptions && !ownsModel,
   };
 }

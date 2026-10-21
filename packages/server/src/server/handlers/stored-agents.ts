@@ -72,6 +72,7 @@ const AGENT_SNAPSHOT_CONFIG_FIELDS = [
   'description',
   'instructions',
   'model',
+  'modelList',
   'tools',
   'defaultOptions',
   'workflows',
@@ -92,6 +93,7 @@ const AGENT_SNAPSHOT_CONFIG_FIELDS = [
 
 const CODE_AGENT_OVERRIDE_FIELDS = [
   'instructions',
+  'modelList',
   'tools',
   'integrationTools',
   'mcpClients',
@@ -106,26 +108,28 @@ const CODE_AGENT_OVERRIDE_FIELDS = [
  */
 function getCodeAgentOwnership(editorConfig: unknown): {
   ownsInstructions: boolean;
+  ownsModel: boolean;
   ownsTools: boolean;
   ownsToolDescriptionsOnly: boolean;
 } {
   if (editorConfig === false) {
-    return { ownsInstructions: false, ownsTools: false, ownsToolDescriptionsOnly: false };
+    return { ownsInstructions: false, ownsModel: false, ownsTools: false, ownsToolDescriptionsOnly: false };
   }
   if (editorConfig === undefined || editorConfig === null) {
     // Legacy default: code agents without explicit editor config behave as fully editable.
-    return { ownsInstructions: true, ownsTools: true, ownsToolDescriptionsOnly: false };
+    return { ownsInstructions: true, ownsModel: false, ownsTools: true, ownsToolDescriptionsOnly: false };
   }
   if (typeof editorConfig !== 'object') {
-    return { ownsInstructions: false, ownsTools: false, ownsToolDescriptionsOnly: false };
+    return { ownsInstructions: false, ownsModel: false, ownsTools: false, ownsToolDescriptionsOnly: false };
   }
-  const cfg = editorConfig as { instructions?: unknown; tools?: unknown };
+  const cfg = editorConfig as { instructions?: unknown; model?: unknown; tools?: unknown };
   const ownsInstructions = cfg.instructions === true;
+  const ownsModel = cfg.model === true;
   const toolsCfg = cfg.tools;
   const ownsTools = toolsCfg === true;
   const ownsToolDescriptionsOnly =
     typeof toolsCfg === 'object' && toolsCfg !== null && (toolsCfg as { description?: unknown }).description === true;
-  return { ownsInstructions, ownsTools, ownsToolDescriptionsOnly };
+  return { ownsInstructions, ownsModel, ownsTools, ownsToolDescriptionsOnly };
 }
 
 function hasNonEmptyInstructions(value: unknown): boolean {
@@ -188,6 +192,7 @@ function buildExportConfig(
     if (input[field] === undefined) continue;
     if (ownership) {
       if (field === 'instructions' && !ownership.ownsInstructions) continue;
+      if (field === 'modelList' && !ownership.ownsModel) continue;
       if (
         (field === 'tools' || field === 'integrationTools' || field === 'mcpClients') &&
         !ownership.ownsTools &&
@@ -394,7 +399,7 @@ async function buildStoredAgentExport({
     throw new HTTPException(404, { message: `Agent with id ${storedAgentId} not found` });
   }
 
-  const config = buildExportConfig(body, codeAgent);
+  const config = buildExportConfig({ ...storedAgent, ...body }, codeAgent);
   const content = `${JSON.stringify(config, null, 2)}\n`;
 
   return {

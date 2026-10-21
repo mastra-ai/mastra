@@ -14,6 +14,7 @@ import { mergeVersionOverrides, MASTRA_VERSIONS_KEY } from '@mastra/core/di';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { PROVIDER_REGISTRY, parseModelString, defaultGateways, ModelRouterLanguageModel } from '@mastra/core/llm';
 import type { MastraModelGatewayInterface, ProviderConfig, SystemMessage } from '@mastra/core/llm';
+import type { Mastra } from '@mastra/core/mastra';
 import type {
   InputProcessor,
   OutputProcessor,
@@ -21,6 +22,7 @@ import type {
   OutputProcessorOrWorkflow,
 } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
+import type { StorageModelListEntry } from '@mastra/core/storage';
 import { zodToJsonSchema } from '@mastra/core/utils/zod-to-json';
 import { toStandardSchema, standardSchemaToJSONSchema } from '@mastra/schema-compat/schema';
 import type { PublicSchema } from '@mastra/schema-compat/schema';
@@ -139,6 +141,85 @@ function ensureDefaultVersionStatus(ctx: RequestContext, versionOptions: { versi
 
 function getIsStudioFromContext(requestContext: RequestContext): boolean {
   return requestContext.get(MASTRA_IS_STUDIO_KEY) === true;
+}
+
+function toStoredModelList(
+  modelList: NonNullable<Awaited<ReturnType<Agent['getModelList']>>>,
+): StorageModelListEntry[] {
+  return modelList.map(model => ({
+    id: model.id,
+    provider: model.model.provider,
+    modelId: model.model.modelId,
+    enabled: model.enabled,
+    maxRetries: model.maxRetries,
+  }));
+}
+
+function toStoredInstructions(instructions: unknown): string {
+  if (typeof instructions === 'string') return instructions;
+  if (Array.isArray(instructions)) return instructions.map(toStoredInstructions).join('\n\n');
+  if (!instructions || typeof instructions !== 'object' || !('content' in instructions)) return '';
+
+  const { content } = instructions;
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+
+  return content
+    .map(part => {
+      if (typeof part === 'string') return part;
+      if (part && typeof part === 'object' && 'text' in part && typeof part.text === 'string') return part.text;
+      return '';
+    })
+    .join('\n\n');
+}
+
+async function persistEditorOwnedModelList({
+  mastra,
+  agent,
+  modelList,
+  requestContext,
+}: {
+  mastra: Mastra;
+  agent: Agent;
+  modelList: NonNullable<Awaited<ReturnType<Agent['getModelList']>>>;
+  requestContext: RequestContext;
+}): Promise<boolean> {
+  const editorConfig = agent.__getEditorConfig?.();
+  if (!editorConfig || editorConfig.model !== true) return false;
+
+  const editorAgent = mastra.getEditor?.()?.agent;
+  const storage = mastra.getStorage?.();
+  const agentsStore = await storage?.getStore('agents');
+  if (!editorAgent || !agentsStore) {
+    throw new HTTPException(500, { message: 'Editor and agent storage are required for Editor-owned model lists' });
+  }
+
+  const storedModelList = toStoredModelList(modelList);
+  const storedAgent = await agentsStore.getById(agent.id);
+  if (storedAgent) {
+    await editorAgent.update({ id: agent.id, modelList: storedModelList });
+  } else {
+    const [instructions, llm] = await Promise.all([
+      agent.getInstructions({ requestContext }),
+      agent.getLLM({ requestContext }),
+    ]);
+    const { provider, modelId } = getAgentModelRef(agent.model, llm);
+    if (!provider || !modelId) {
+      throw new HTTPException(400, {
+        message: 'Agent model could not be resolved for initial Editor persistence',
+      });
+    }
+
+    await editorAgent.create({
+      id: agent.id,
+      name: agent.name,
+      instructions: toStoredInstructions(instructions),
+      model: { provider, name: modelId },
+      modelList: storedModelList,
+    });
+  }
+
+  return true;
 }
 
 function normalizePublicExecutionOptions(
@@ -3656,24 +3737,45 @@ export const REORDER_AGENT_MODEL_LIST_ROUTE = createRoute({
   description: 'Reorders the model list for agents with multiple model configurations',
   tags: ['Agents', 'Models'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, reorderedModelIds }) => {
+  handler: async ({ mastra, agentId, reorderedModelIds, requestContext }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      let versionStatus: 'draft' | 'published' = 'draft';
+      try {
+        const editorConfig = mastra.getAgentById(agentId).__getEditorConfig?.();
+        versionStatus = editorConfig !== false && editorConfig?.model === true ? 'draft' : 'published';
+      } catch {}
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        requestContext,
+        versionOptions: { status: versionStatus },
+      });
+      const mutableAgent = versionStatus === 'draft' ? agent.__fork() : agent;
 
-      if (typeof agent.model === 'function') {
+      if (typeof mutableAgent.model === 'function') {
         throw new HTTPException(409, {
           message: 'Agent model list is dynamic (model is a function) and cannot be edited',
         });
       }
 
-      const modelList = await agent.getModelList();
+      const modelList = await mutableAgent.getModelList(requestContext);
       if (!modelList || modelList.length === 0) {
         throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
       }
 
-      const applied = agent.reorderModels(reorderedModelIds);
+      const applied = mutableAgent.reorderModels(reorderedModelIds);
       if (applied === false) {
         throw new HTTPException(400, { message: 'Agent model list could not be reordered' });
+      }
+
+      const reorderedModelList = await mutableAgent.getModelList(requestContext);
+      if (reorderedModelList) {
+        await persistEditorOwnedModelList({
+          mastra,
+          agent: mutableAgent,
+          modelList: reorderedModelList,
+          requestContext,
+        });
       }
 
       return { message: 'Model list reordered' };
@@ -3694,17 +3796,28 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
   description: 'Updates a specific model configuration in the agent model list',
   tags: ['Agents', 'Models'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, modelConfigId, model: bodyModel, maxRetries, enabled }) => {
+  handler: async ({ mastra, agentId, modelConfigId, model: bodyModel, maxRetries, enabled, requestContext }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      let versionStatus: 'draft' | 'published' = 'draft';
+      try {
+        const editorConfig = mastra.getAgentById(agentId).__getEditorConfig?.();
+        versionStatus = editorConfig !== false && editorConfig?.model === true ? 'draft' : 'published';
+      } catch {}
+      const agent = await getAgentFromSystem({
+        mastra,
+        agentId,
+        requestContext,
+        versionOptions: { status: versionStatus },
+      });
+      const mutableAgent = versionStatus === 'draft' ? agent.__fork() : agent;
 
-      if (typeof agent.model === 'function') {
+      if (typeof mutableAgent.model === 'function') {
         throw new HTTPException(409, {
           message: 'Agent model list is dynamic (model is a function) and cannot be edited',
         });
       }
 
-      const modelList = await agent.getModelList();
+      const modelList = await mutableAgent.getModelList(requestContext);
       if (!modelList || modelList.length === 0) {
         throw new HTTPException(400, { message: 'Agent model list is not found or empty' });
       }
@@ -3724,9 +3837,14 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
         ...(enabled !== undefined ? { enabled } : {}),
       };
 
-      const applied = agent.updateModelInModelList(updated);
+      const applied = mutableAgent.updateModelInModelList(updated);
       if (applied === false) {
         throw new HTTPException(404, { message: `Model config with id ${modelConfigId} not found` });
+      }
+
+      const updatedModelList = await mutableAgent.getModelList(requestContext);
+      if (updatedModelList) {
+        await persistEditorOwnedModelList({ mastra, agent: mutableAgent, modelList: updatedModelList, requestContext });
       }
 
       return { message: 'Model updated in model list' };

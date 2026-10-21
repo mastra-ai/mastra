@@ -242,6 +242,7 @@ export const AGENT_VERSIONS_SCHEMA: Record<string, StorageColumn> = {
   description: { type: 'text', nullable: true },
   instructions: { type: 'text', nullable: false },
   model: { type: 'jsonb', nullable: false },
+  modelList: { type: 'jsonb', nullable: true },
   tools: { type: 'jsonb', nullable: true },
   defaultOptions: { type: 'jsonb', nullable: true },
   workflows: { type: 'jsonb', nullable: true },

@@ -1133,7 +1133,7 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
   },
   {
     name: 'editor',
-    type: 'false | { instructions?: boolean; tools?: boolean | { description?: boolean } }',
+    type: 'false | { instructions?: boolean; tools?: boolean | { description?: boolean }; model?: boolean }',
     isOptional: true,
     description:
       'Controls which fields the editor can override for this code-defined agent. Omit to allow editing instructions and tools. See Editor overrides below.',
@@ -1218,15 +1218,15 @@ When you register the [`MastraEditor`](/reference/editor/mastra-editor), the `ed
   content={[
   {
     name: 'editor',
-    type: 'false | { instructions?: boolean; tools?: boolean | { description?: boolean } }',
+    type: 'false | { instructions?: boolean; tools?: boolean | { description?: boolean }; model?: boolean }',
     isOptional: true,
     description:
-      'Omit to allow editing instructions and tools. Set to `false` to lock the agent. Set `instructions: true` to allow instruction edits. Set `tools: true` to allow tool membership and description edits, or `tools: { description: true }` to allow only description edits.',
+      'Omit to allow editing instructions and tools. Set to `false` to lock the agent. Set `instructions: true` to allow instruction edits. Set `tools: true` to allow tool membership and description edits, `tools: { description: true }` to allow only description edits, or `model: true` to allow edits to a static model fallback list.',
   },
 ]}
 />
 
-The agent's `id`, `name`, and `model` always come from code and can't be overridden through Editor. See [Editor](/docs/studio/editor) for usage.
+The agent's `id` and `name` always come from code. Models also remain code-owned unless you set `model: true`. Model ownership supports static fallback arrays whose entries have immutable IDs; function-valued model configuration can't be overridden through Editor. See [Editor](/docs/studio/editor) for usage.
 
 ## Returns
 
