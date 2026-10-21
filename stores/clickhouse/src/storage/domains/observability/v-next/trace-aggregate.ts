@@ -97,8 +97,9 @@ interface AggregateSource {
   /**
    * Bounds the usage scan. Traces semi-join their candidates; spans read the tenant's usage rows
    * since `from` instead, because ClickHouse re-runs a CTE at every reference and a second
-   * selection pass doubled memory (X46). A `traceId IN` semi-join would not cut that read either:
-   * `traceId` is not in the metric table's sort key, so it prunes nothing (X52).
+   * selection pass doubled memory (X46). A `traceId IN` semi-join is no general fix either:
+   * `traceId` is not in the metric table's sort key, so it cuts the read only when the selection
+   * has few traces, and reads more than this scan for `model_generation` (X52).
    *
    * The cost of that read grows with how far back `from` is, since it covers every usage row
    * written since then, not just the window's; installs that write no `organizationId` read all
