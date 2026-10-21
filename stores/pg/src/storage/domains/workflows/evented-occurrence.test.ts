@@ -101,6 +101,62 @@ describe('Postgres evented occurrence replay', () => {
     20_000,
   );
 
+  it.each(['step', 'parallel', 'foreach', 'nested'] as const)(
+    'removes recovery-only snapshots after a %s suspension but preserves resumable snapshots',
+    async kind => {
+      for (const persistSuspended of [false, true]) {
+        let shouldPersistSuspended = persistSuspended;
+        const driver = new RedeliveryDriver();
+        const schema = z.object({ n: z.number() });
+        const pause = createStep({
+          id: 'pause',
+          inputSchema: schema,
+          outputSchema: schema,
+          execute: async ({ suspend }) => suspend({ reason: 'approval' }),
+        });
+        const child = createWorkflow({ id: `child-${randomUUID()}`, inputSchema: schema, outputSchema: schema })
+          .then(pause)
+          .commit();
+        const workflow = createWorkflow({
+          id: `suspend-${randomUUID()}`,
+          inputSchema: kind === 'foreach' ? z.array(schema) : schema,
+          outputSchema: z.any(),
+          options: {
+            shouldPersistSnapshot: ({ workflowStatus }) => shouldPersistSuspended && workflowStatus === 'suspended',
+          },
+        });
+        if (kind === 'parallel') workflow.parallel([pause]);
+        else if (kind === 'foreach') workflow.foreach(pause);
+        else workflow.then(kind === 'nested' ? child : pause);
+        workflow.commit();
+        const mastra = new Mastra({ storage, pubsub: driver.pubsub, workflows: { [workflow.id]: workflow } });
+        await mastra.startWorkers();
+        try {
+          const run = await workflow.createRun();
+          const result = run.start({ inputData: kind === 'foreach' ? [{ n: 0 }] : { n: 0 } });
+          expect(await result).toMatchObject({ status: 'suspended' });
+          const store = await storage.getStore('workflows');
+          await vi.waitFor(async () => {
+            const snapshot = await store!.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
+            if (persistSuspended) expect(snapshot?.status).toBe('suspended');
+            else expect(snapshot).toBeNull();
+          });
+          if (persistSuspended && kind === 'step') {
+            shouldPersistSuspended = false;
+            expect(await run.resume({ resumeData: {} })).toMatchObject({ status: 'suspended' });
+            expect(await store!.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId })).toMatchObject({
+              context: { pause: { status: 'suspended', suspendPayload: { reason: 'approval' } } },
+            });
+          }
+        } finally {
+          await mastra.stopWorkers();
+          driver.dispose();
+        }
+      }
+    },
+    20_000,
+  );
+
   it.each(['step', 'loop'] as const)(
     'retries a saved failed %s after the worker dies before publishing its retry',
     async kind => {

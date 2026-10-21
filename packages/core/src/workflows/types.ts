@@ -425,6 +425,8 @@ export interface WorkflowRunState {
    * @internal
    */
   resumeClaimedAt?: number;
+  /** @internal Snapshot created only to guard evented step deliveries. */
+  guardedOnlySnapshot?: boolean;
   /** Tripwire data when status is 'tripwire' */
   tripwire?: StepTripwireInfo;
   stepExecutionPath?: string[];

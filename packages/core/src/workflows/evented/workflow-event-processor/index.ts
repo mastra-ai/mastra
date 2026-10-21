@@ -782,6 +782,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           __state: initialState,
         } as WorkflowRunState['context'],
         status: 'running',
+        guardedOnlySnapshot: !!requiresGuardedSnapshot && !shouldPersist,
         value: initialState,
       };
       await workflowsStore?.persistWorkflowSnapshot({
@@ -1151,6 +1152,15 @@ export class WorkflowEventProcessor extends EventProcessor {
       runId,
       data: { ...args, workflow: undefined, state: finalState },
     });
+
+    if (!restart && !timeTravel && !resumeSteps?.length) {
+      const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
+      const snapshot = await workflowsStore?.loadWorkflowSnapshot({ workflowName: args.workflowId, runId });
+      // Retain recovery records until suspend propagation succeeds, but never delete resumable snapshots.
+      if (snapshot?.guardedOnlySnapshot && snapshot.status === 'running') {
+        await workflowsStore?.deleteWorkflowRunById({ workflowName: args.workflowId, runId });
+      }
+    }
 
     // Clean up run-scoped internal workflow registrations (e.g. execution-workflow)
     // now that all events for this run have been processed.
@@ -3275,6 +3285,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           ...(nestedRunId && {
             metadata: {
               ...(prevResult as any).metadata,
+              startedBy: stepResults[stepId]?.metadata?.startedBy,
               nestedRunId,
             },
           }),
