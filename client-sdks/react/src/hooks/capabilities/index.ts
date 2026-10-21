@@ -4,4 +4,5 @@ export * from './use-trace-aggregate-available';
 export * from './use-span-aggregate-available';
 export * from './use-trace-query-discovery-available';
 export * from './use-trace-query-root-duration-available';
+export * from './use-trace-query-delta-polling-available';
 export * from './use-feedback-available';

@@ -428,6 +428,9 @@ export interface UpsertSessionRepositoryInput {
 export type SessionBranchKey =
   | { projectRepositoryId: string; userId: string; branch: string }
   | { factoryProjectId: string; userId: string; branch: string };
+export type TransferSourceControlSessionOwnerResult =
+  | { status: 'updated'; session: SourceControlSession }
+  | { status: 'conflict'; reason: 'stale_owner' | 'branch_owned'; session: SourceControlSession | null };
 
 export interface SourceControlStorageHandle {
   readonly integrationId: string;
@@ -513,14 +516,21 @@ export interface SourceControlStorageHandle {
     rename(args: { sessionId: string; title: string }): Promise<void>;
     /** Mute or unmute the side session's reports to its origin. Keyed by the controller-facing `sessionId`. */
     setOriginMuted(args: { sessionId: string; muted: boolean }): Promise<void>;
-    /** Change who can see the session. Returns the updated row, or null when it does not exist. */
+    /** Change who can see the session while `expectedUserId` still owns it. Null when it does not exist or changed owner. */
     setVisibility(args: {
       sessionId: string;
       visibility: SourceControlSessionVisibility;
+      expectedUserId: string;
     }): Promise<SourceControlSession | null>;
     /** Keyed by the link (today's callers) or by the factory. */
     getForBranch(args: SessionBranchKey): Promise<SourceControlSession | null>;
     create(input: CreateSourceControlSessionInput): Promise<SourceControlSession>;
+    /** Move a shared session to `toUserId` while `expectedUserId` still owns it; a private one is a `stale_owner` conflict. */
+    transferOwner(args: {
+      sessionId: string;
+      expectedUserId: string;
+      toUserId: string;
+    }): Promise<TransferSourceControlSessionOwnerResult>;
     setSandbox(args: { id: string; sandboxId: string | null; sandboxWorkdir: string }): Promise<void>;
     /**
      * Record when the session's workspace was first materialized. Write-once:
@@ -1491,11 +1501,12 @@ export class SourceControlStorage extends FactoryStorageDomain {
             updated_at: new Date(),
           }));
         },
-        setVisibility: async ({ sessionId, visibility }) => {
-          const row = await db().updateAtomic<SessionDbRow>(SESSIONS, { session_id: sessionId }, () => ({
-            visibility,
-            updated_at: new Date(),
-          }));
+        setVisibility: async ({ sessionId, visibility, expectedUserId }) => {
+          const row = await db().updateAtomic<SessionDbRow>(
+            SESSIONS,
+            { session_id: sessionId, user_id: expectedUserId },
+            () => ({ visibility, updated_at: new Date() }),
+          );
           return row ? toSession(row) : null;
         },
         getForBranch: async args => {
@@ -1571,6 +1582,34 @@ export class SourceControlStorage extends FactoryStorageDomain {
             if (!row) throw error;
             return reuse(row);
           }
+        },
+        transferOwner: async ({ sessionId, expectedUserId, toUserId }) => {
+          let refusedPrivate = false;
+          try {
+            const updated = await db().updateAtomic<SessionDbRow>(
+              SESSIONS,
+              { session_id: sessionId, user_id: expectedUserId },
+              current => {
+                // Shared is "not private", as in toSession: rows from before visibility existed hold NULL.
+                if (current.visibility === 'private') {
+                  refusedPrivate = true;
+                  return null;
+                }
+                return current.user_id === toUserId ? null : { user_id: toUserId, updated_at: new Date() };
+              },
+            );
+            if (updated) {
+              return refusedPrivate
+                ? { status: 'conflict', reason: 'stale_owner', session: toSession(updated) }
+                : { status: 'updated', session: toSession(updated) };
+            }
+          } catch (error) {
+            if (!(error instanceof UniqueViolationError)) throw error;
+            const session = await db().findOne<SessionDbRow>(SESSIONS, { session_id: sessionId });
+            return { status: 'conflict', reason: 'branch_owned', session: session ? toSession(session) : null };
+          }
+          const session = await db().findOne<SessionDbRow>(SESSIONS, { session_id: sessionId });
+          return { status: 'conflict', reason: 'stale_owner', session: session ? toSession(session) : null };
         },
         setSandbox: async ({ id, sandboxId, sandboxWorkdir }) => {
           await db().updateMany(

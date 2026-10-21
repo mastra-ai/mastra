@@ -26,7 +26,9 @@ export const traceQueryCapabilities: GetObservabilityCapabilitiesResponse = {
     traceAggregate: true,
     spanAggregate: true,
     threadQuery: true,
+    threadQueryRows: true,
     spanQuery: true,
+    spanQueryContextFields: true,
     feedback: true,
   },
 };
@@ -99,6 +101,15 @@ export const noRootDurationCapabilities: GetObservabilityCapabilitiesResponse = 
   capabilities: {
     ...traceQueryCapabilities.capabilities,
     traceQueryRootDuration: false,
+  },
+};
+
+/** Store runs trace queries but does not declare `delta-polling` (or the feature flag is off). */
+export const noDeltaPollingCapabilities: GetObservabilityCapabilitiesResponse = {
+  observabilityStorageType: 'ObservabilityStorageDuckDB',
+  capabilities: {
+    ...traceQueryCapabilities.capabilities,
+    deltaPolling: false,
   },
 };
 

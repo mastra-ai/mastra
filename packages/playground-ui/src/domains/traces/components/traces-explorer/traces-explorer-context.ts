@@ -27,6 +27,8 @@ export type TracesConfigContextValue = {
   withQueryTrace: boolean;
   withFeedback: boolean;
   withRootDuration: boolean;
+  /** The server supports delta polling, so auto-refresh merges new traces instead of reloading pages. */
+  withDeltaPolling: boolean;
   /** Whether field discovery should run: the server supports it and the trace query API is on. */
   withDiscovery: boolean;
   isCapabilitiesLoading: boolean;

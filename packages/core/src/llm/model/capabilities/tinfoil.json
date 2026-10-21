@@ -23,10 +23,10 @@
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "gemma4-31b": [
+    "kimi-k3": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "high", "max"]
       }
     ],
     "gpt-oss-120b": [
@@ -35,10 +35,10 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "kimi-k3": [
+    "gemma4-31b": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "glm-5-3": [

@@ -394,7 +394,7 @@ function compileUsageCte(plan: AggregatePlan, parameters: ParameterBuilder, sour
   const costRow = `name IN (${costNames.join(', ')})`;
   const from = parameters.add(plan.timeRange.from, "DateTime64(3, 'UTC')");
   const tenant = compileTenantScope(plan.scope, parameters);
-  const priced = `${costRow} AND isNotNull(estimatedCost) AND isNotNull(costUnit) AND NOT hasError`;
+  const priced = `${costRow} AND isNotNull(estimatedCost) AND isNotNull(costUnit) AND (NOT hasError OR partialCost)`;
   const failed = `${costRow} AND (hasError OR (isNotNull(estimatedCost) AND isNull(costUnit)))`;
   // Retried writes share a metricId, and copies with different timestamps never merge under the
   // (name, timestamp, metricId) sort key. Collapse them with a parallel, spillable aggregation
@@ -414,13 +414,15 @@ function compileUsageCte(plan: AggregatePlan, parameters: ParameterBuilder, sour
         latest.2 AS value,
         latest.3 AS estimatedCost,
         latest.4 AS costUnit,
-        latest.5 AS hasError
+        latest.5 AS hasError,
+        latest.6 AS partialCost
       FROM (
         SELECT ${key},
-          argMax(tuple(name, value, estimatedCost, costUnit, hasError), timestamp) AS latest
+          argMax(tuple(name, value, estimatedCost, costUnit, hasError, partialCost), timestamp) AS latest
         FROM (
           SELECT ${key}, metricId, timestamp, name, value, estimatedCost, costUnit,
-            if(${costRow}, ifNull(JSONHas(costMetadata, 'error') AND JSONType(costMetadata, 'error') != 'Null', 0), 0) AS hasError
+            if(${costRow}, ifNull(JSONHas(costMetadata, 'error') AND JSONType(costMetadata, 'error') != 'Null', 0), 0) AS hasError,
+            if(${costRow}, ifNull(JSONExtractString(costMetadata, 'error') = 'partial_cost', 0), 0) AS partialCost
           FROM ${TABLE_METRIC_EVENTS}
           WHERE ${source.usageBound}
             AND name IN (${names.join(', ')})

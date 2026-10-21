@@ -704,13 +704,13 @@ Token and cost measures read the model usage metrics recorded for each trace, so
 
 A trace that recorded at least one usage metric is usage-bearing. `tokens.<kind>.sum` adds the tokens of a group's usage-bearing traces, and `tokens.<kind>.avg` divides that sum by the number of usage-bearing traces, not by `count`. Both are `null` when the group has no usage-bearing traces.
 
-Cost comes from estimated cost recorded on total input and total output token metrics. `cost.sum` adds the cost of traces with at least one priced metric, and `cost.avg` divides by the number of those traces. A metric whose pricing failed, including a partial cost, isn't priced.
+Cost comes from estimated cost recorded on total input and total output token metrics. `cost.sum` adds the cost of traces with at least one priced metric, and `cost.avg` divides by the number of those traces. A partly priced call, where Mastra could price some token types but not others, adds the cost of the priced token types. A metric with any other pricing failure adds no cost.
 
 When you request any `cost.*` measure, every row also includes a `cost` object:
 
 | Field | Description |
 | - | - |
-| `coverage` | Fraction of usage-bearing traces whose usage was fully priced, from 0 to 1. `null` when the group has no usage-bearing traces. |
+| `coverage` | Fraction of usage-bearing traces whose usage was fully priced, from 0 to 1. A trace with a partly priced call isn't fully priced, so it lowers coverage even though its known cost is in `cost.sum`. `null` when the group has no usage-bearing traces. |
 | `unit` | Cost unit of the priced metrics, such as `USD`. `'mixed'` when they use more than one unit, and `null` when none are priced. |
 
 `cost.sum` and `cost.avg` are `null` when the group has no priced traces or `unit` is `'mixed'`. A coverage below 1 means the cost understates the group's spend. The `cost` object isn't a measure, so `having` and `orderBy` can't reference it.
