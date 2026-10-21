@@ -17,6 +17,7 @@ export function RunErrorNotice({ error, entryId }: { error: MastraErrorPart['err
     {
       ...error,
       entryId,
+      sessionId: session?.sessionId,
       resourceId: session?.resourceId,
       threadId: displayedThread?.threadId ?? session?.sessionThreadId,
     },

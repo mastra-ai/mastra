@@ -59,6 +59,10 @@ const UNAVAILABLE =
 const HTTP_REASON_PHRASE =
   /^(?:bad request|unauthorized|payment required|forbidden|not found|method not allowed|not acceptable|proxy authentication required|request timeout|conflict|gone|length required|precondition failed|(?:payload|content|request entity) too large|(?:request-)?uri too long|unsupported media type|(?:requested )?range not satisfiable|expectation failed|i'm a teapot|misdirected request|unprocessable (?:entity|content)|locked|failed dependency|too early|upgrade required|precondition required|too many requests|request header fields too large|unavailable for legal reasons|internal server error|not implemented|bad gateway|service unavailable|gateway timeout|http version not supported|variant also negotiates|insufficient storage|loop detected|not extended|network authentication required)\.?$/i;
 
+// A provider call saved before its status was kept says only the HTTP phrase; elsewhere a bare phrase names nobody.
+const PROVIDER_CALL_ERROR_NAME = /^(?:AI_)?APICallError$/;
+const ACCESS_DENIED_PHRASE = /^(?:unauthorized|forbidden)\.?$/i;
+
 interface CollectedFacts {
   statusCode?: number;
   codes: string[];
@@ -128,7 +132,20 @@ export function classifyProviderError(error: unknown): ProviderFailureKind {
     usageKind(evidence) ??
     terminalKindFromWording(evidence) ??
     transientKindFromWording(evidence) ??
+    (isDeniedProviderCall(error) ? 'auth' : undefined) ??
     (facts.texts.some(text => HTTP_REASON_PHRASE.test(text.trim())) ? 'invalid_request' : 'unknown')
+  );
+}
+
+function isDeniedProviderCall(error: unknown): boolean {
+  if (typeof error !== 'object' || error === null) return false;
+  const name = readField(error, 'name');
+  const message = readField(error, 'message');
+  return (
+    typeof name === 'string' &&
+    PROVIDER_CALL_ERROR_NAME.test(name) &&
+    typeof message === 'string' &&
+    ACCESS_DENIED_PHRASE.test(message.trim())
   );
 }
 

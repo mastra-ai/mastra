@@ -37,7 +37,7 @@ function ErrorSession({ messages, liveEvent }: { messages: MastraDBMessage[]; li
       <ChatSessionContext.Provider
         value={{
           sessionId: 'session-1',
-          resourceId: 'session-1',
+          resourceId: 'resource-1',
           sessionThreadId: 'thread-1',
           sessionEnabled: true,
           resourceReady: true,
@@ -55,7 +55,7 @@ function ErrorSession({ messages, liveEvent }: { messages: MastraDBMessage[]; li
             state: {
               controllerId: 'code',
               sessionId: 'session-1',
-              resourceId: 'session-1',
+              resourceId: 'resource-1',
               modeId: 'build',
               modelId: 'openai/gpt-5',
             },
@@ -109,7 +109,8 @@ describe('chat run errors', () => {
       name: 'AI_APICallError',
       message: 'Bad Request',
       entryId: 'failed-reply',
-      resourceId: 'session-1',
+      sessionId: 'session-1',
+      resourceId: 'resource-1',
       threadId: 'thread-1',
     });
   });

@@ -46,6 +46,12 @@ describe('describeRunError', () => {
     expect(description).toEqual({ title: 'Model request rejected', message: 'Invalid value for parameter timeout.' });
   });
 
+  it('keeps a non-provider error neutral even when its reason differs from its message', () => {
+    expect(
+      describeRunError({ name: 'StorageError', message: 'Request failed', reason: 'Database connection refused' }),
+    ).toEqual({ title: 'Run stopped', message: 'Database connection refused' });
+  });
+
   it('leaves an unrelated error unclassified', () => {
     expect(describeRunError({ name: 'Error', message: 'Something unexpected happened' })).toEqual({
       title: 'Run stopped',

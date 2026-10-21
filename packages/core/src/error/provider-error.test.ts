@@ -410,6 +410,9 @@ const classifications: Array<[name: string, error: unknown, kind: ProviderFailur
   ],
   ['400 without a reason', apiError(400, 'Bad Request'), 'invalid_request'],
   ['persisted "Bad Request" without a status', { name: 'AI_APICallError', message: 'Bad Request' }, 'invalid_request'],
+  ['persisted "Unauthorized" without a status', { name: 'AI_APICallError', message: 'Unauthorized' }, 'auth'],
+  ['persisted "Forbidden" without a status', { name: 'APICallError', message: 'Forbidden' }, 'auth'],
+  ['a bare "Unauthorized" outside a provider call', new Error('Unauthorized'), 'invalid_request'],
   ['plain error', new Error('Network connection lost'), 'unknown'],
   ['undefined', undefined, 'unknown'],
 ];

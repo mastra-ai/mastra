@@ -9,6 +9,7 @@ interface RunErrorDescription {
 }
 
 const PROVIDER_ERROR_NAMES = new Set(['AI_APICallError', 'APICallError']);
+const UNEXPECTED_ERROR = 'An unexpected error stopped the run. Copy the error details to investigate.';
 const NO_REASON_AVAILABLE =
   'The provider rejected the request. A specific reason isn’t available here. Copy the error details and check the server logs.';
 
@@ -60,17 +61,12 @@ export function describeRunError(error: MastraErrorPart['error']): RunErrorDescr
         title: 'Model provider temporarily unavailable',
         message: 'The provider could not complete the request. Send a message to continue the run.',
       };
-    case 'unknown':
+    default:
       return describeUnclassifiedError(error);
   }
 }
 
 function describeUnclassifiedError(error: MastraErrorPart['error']): RunErrorDescription {
-  const reason = providerErrorReason(error);
-  const providerShaped = PROVIDER_ERROR_NAMES.has(error.name) || (reason !== undefined && reason !== error.message);
-  if (providerShaped) return { title: 'Model request failed', message: reason ?? error.message };
-  return {
-    title: 'Run stopped',
-    message: error.message || 'An unexpected error stopped the run. Copy the error details to investigate.',
-  };
+  const message = providerErrorReason(error) ?? (error.message || UNEXPECTED_ERROR);
+  return { title: PROVIDER_ERROR_NAMES.has(error.name) ? 'Model request failed' : 'Run stopped', message };
 }
