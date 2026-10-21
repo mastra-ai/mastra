@@ -743,6 +743,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
             action: 'factory.session.owner_transferred',
             targets: [{ type: 'session', id: session.id, name: session.title ?? session.branch }],
             metadata: { fromOwnerId: expectedOwnerId, toOwnerId: userId },
+            factoryProjectId: session.factoryProjectId ?? undefined,
             projectRepositoryId: session.projectRepositoryId ?? undefined,
           })
           .catch(error => {

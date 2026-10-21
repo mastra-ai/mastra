@@ -402,7 +402,7 @@ describe('source-control session routes', () => {
   });
 
   it('takes a shared session with a compare-and-set on its owner, audits, and recycles the live host', async () => {
-    const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
+    const { seed, sourceControl, projectRepository, project } = await seedGitLabRepository();
     const sessionId = 'factory-session-transfer';
     await sourceControl.sessions.create({
       sessionId,
@@ -431,6 +431,7 @@ describe('source-control session routes', () => {
         actorId: 'user-2',
         action: 'factory.session.owner_transferred',
         metadata: { fromOwnerId: 'user-1', toOwnerId: 'user-2' },
+        factoryProjectId: project.id,
       }),
     );
 
