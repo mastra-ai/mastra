@@ -138,7 +138,7 @@ describe('loadCustomTheme / listCustomThemes', () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.error).toContain('completely-unrelated');
-    expect(result.error).toContain('/theme list');
+    expect(result.error).toContain('/settings');
   });
 
   it('suggests the closest theme name for a typo', () => {

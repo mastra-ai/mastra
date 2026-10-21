@@ -334,6 +334,8 @@ export interface GlobalSettings {
     yolo: boolean | null;
     /** 'auto' | 'dark' | 'light', or the name of a custom theme file in ~/.mastracode/themes/<name>.json */
     theme: 'auto' | 'dark' | 'light' | (string & {});
+    /** Repaint the terminal's own background (OSC 11) to match the active theme. Restored on exit. */
+    terminalBackground: boolean;
     /** Default reasoning effort level used for all threads/models unless overridden in-session. */
     thinkingLevel: ThinkingLevelSetting;
     /** Whether native subagents are enabled for Mastra Code TUI sessions. */
@@ -514,6 +516,7 @@ const DEFAULTS: GlobalSettings = {
   preferences: {
     yolo: null,
     theme: 'auto',
+    terminalBackground: false,
     thinkingLevel: 'off',
     subagentsEnabled: false,
     previewLines: 2,
@@ -699,6 +702,7 @@ function parsePreferences(rawPreferences: unknown): GlobalSettings['preferences'
     ...DEFAULTS.preferences,
     ...raw,
     thinkingLevel: parseThinkingLevel(raw.thinkingLevel),
+    terminalBackground: raw.terminalBackground === true,
     subagentsEnabled:
       typeof raw.subagentsEnabled === 'boolean' ? raw.subagentsEnabled : DEFAULTS.preferences.subagentsEnabled,
     previewLines: parsePreviewLines(raw),

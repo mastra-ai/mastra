@@ -490,7 +490,7 @@ function setTheme(colors: ThemeColors): void {
 
 /**
  * Monotonic counter bumped on every theme change. Components that cache
- * rendered lines key their cache on this so a `/theme` switch invalidates
+ * rendered lines key their cache on this so a theme switch invalidates
  * styled output built under the previous palette.
  */
 let themeGeneration = 0;

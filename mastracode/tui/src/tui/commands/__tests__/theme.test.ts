@@ -10,6 +10,10 @@ const mocks = vi.hoisted(() => ({
   listCustomThemes: vi.fn(),
   listBundledThemes: vi.fn(),
   getThemesDir: vi.fn(),
+  getContrastBg: vi.fn(),
+  paintTerminalBackground: vi.fn(),
+  clearTerminalBackground: vi.fn(),
+  resetTerminalBackground: vi.fn(),
 }));
 
 vi.mock('@mastra/code-sdk/onboarding/settings', () => ({
@@ -24,6 +28,7 @@ vi.mock('../../detect-theme.js', () => ({
 vi.mock('../../theme.js', () => ({
   applyThemeMode: mocks.applyThemeMode,
   getThemeMode: mocks.getThemeMode,
+  getContrastBg: mocks.getContrastBg,
   getSelectListTheme: vi.fn(() => ({})),
   theme: {
     fg: (_c: string, text: string) => text,
@@ -39,11 +44,13 @@ vi.mock('../../custom-themes.js', () => ({
   getThemesDir: mocks.getThemesDir,
 }));
 
-vi.mock('../../overlay.js', () => ({
-  showModalOverlay: vi.fn(),
+vi.mock('../../terminal-background.js', () => ({
+  paintTerminalBackground: mocks.paintTerminalBackground,
+  clearTerminalBackground: mocks.clearTerminalBackground,
+  resetTerminalBackground: mocks.resetTerminalBackground,
 }));
 
-import { handleThemeCommand, normalizeThemePreference } from '../theme.js';
+import { getActiveThemePreference, listThemeOptions, normalizeThemePreference, setThemePreference } from '../theme.js';
 
 function createCtx() {
   return {
@@ -60,7 +67,7 @@ function createCtx() {
   } as any;
 }
 
-describe('handleThemeCommand', () => {
+describe('setThemePreference', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.loadSettings.mockReturnValue({ preferences: { theme: 'auto' } });
@@ -69,52 +76,35 @@ describe('handleThemeCommand', () => {
     mocks.listCustomThemes.mockReturnValue([]);
     mocks.listBundledThemes.mockReturnValue(['dracula', 'nord']);
     mocks.getThemesDir.mockReturnValue('/home/user/.mastracode/themes');
+    mocks.getContrastBg.mockReturnValue('#020202');
   });
 
-  it('lists built-in, bundled, and custom themes via /theme list', async () => {
-    mocks.loadSettings.mockReturnValue({ preferences: { theme: 'nord' } });
-    mocks.listCustomThemes.mockReturnValue(['my-theme']);
-    const ctx = createCtx();
+  it('paints the terminal with the built-in surface color', async () => {
+    await setThemePreference(createCtx(), 'dark');
 
-    await handleThemeCommand(ctx, ['list']);
+    expect(mocks.paintTerminalBackground).toHaveBeenCalledWith('#020202');
+  });
 
-    expect(ctx.showInfo).toHaveBeenCalledWith(
-      [
-        'Built-in: auto, dark, light',
-        'Pairs: catppuccin-latte/catppuccin-mocha, solarized-light/solarized-dark',
-        'Bundled: dracula, nord ●',
-        'Custom: my-theme',
-      ].join('\n'),
+  it("paints the terminal with a custom theme's own background", async () => {
+    mocks.loadCustomTheme.mockReturnValue({
+      ok: true,
+      theme: { name: 'neon', appearance: 'dark', bg: '#101014', colors: {} },
+    });
+
+    await setThemePreference(createCtx(), 'neon');
+
+    expect(mocks.paintTerminalBackground).toHaveBeenCalledWith('#101014');
+  });
+
+  it("restores the user's background before detecting it for auto", async () => {
+    await setThemePreference(createCtx(), 'auto');
+
+    expect(mocks.resetTerminalBackground).toHaveBeenCalledTimes(1);
+    expect(mocks.resetTerminalBackground.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.detectTerminalTheme.mock.invocationCallOrder[0]!,
     );
-    expect(mocks.saveSettings).not.toHaveBeenCalled();
-    expect(mocks.applyThemeMode).not.toHaveBeenCalled();
-  });
-
-  it('points at the themes dir when no custom themes exist', async () => {
-    const ctx = createCtx();
-
-    await handleThemeCommand(ctx, ['list']);
-
-    expect(ctx.showInfo).toHaveBeenCalledWith(
-      [
-        'Built-in: auto ●, dark, light',
-        'Pairs: catppuccin-latte/catppuccin-mocha, solarized-light/solarized-dark',
-        'Bundled: dracula, nord',
-        'Custom: none (add .json files to /home/user/.mastracode/themes)',
-      ].join('\n'),
-    );
-  });
-
-  it('shows current theme mode and persisted preference via /theme status', async () => {
-    mocks.loadSettings.mockReturnValue({ preferences: { theme: 'light' } });
-    mocks.getThemeMode.mockReturnValue('dark');
-    const ctx = createCtx();
-
-    await handleThemeCommand(ctx, ['status']);
-
-    expect(ctx.showInfo).toHaveBeenCalledWith('Theme: dark (preference: light)');
-    expect(mocks.saveSettings).not.toHaveBeenCalled();
-    expect(mocks.applyThemeMode).not.toHaveBeenCalled();
+    expect(mocks.clearTerminalBackground).toHaveBeenCalledTimes(1);
+    expect(mocks.paintTerminalBackground).not.toHaveBeenCalled();
   });
 
   it('persists and immediately applies an explicit dark theme', async () => {
@@ -122,7 +112,7 @@ describe('handleThemeCommand', () => {
     mocks.loadSettings.mockReturnValue(settings);
     const ctx = createCtx();
 
-    await handleThemeCommand(ctx, ['dark']);
+    await setThemePreference(ctx, 'dark');
 
     expect(settings.preferences.theme).toBe('dark');
     expect(mocks.saveSettings).toHaveBeenCalledWith(settings);
@@ -137,7 +127,7 @@ describe('handleThemeCommand', () => {
     mocks.detectTerminalTheme.mockResolvedValue({ mode: 'light', detectedBgHex: '#eeeeee' });
     const ctx = createCtx();
 
-    await handleThemeCommand(ctx, ['auto']);
+    await setThemePreference(ctx, 'auto');
 
     expect(settings.preferences.theme).toBe('auto');
     expect(mocks.saveSettings).toHaveBeenCalledWith(settings);
@@ -157,7 +147,7 @@ describe('handleThemeCommand', () => {
     });
     const ctx = createCtx();
 
-    await handleThemeCommand(ctx, ['neon']);
+    await setThemePreference(ctx, 'neon');
 
     expect(mocks.loadCustomTheme).toHaveBeenCalledWith('neon');
     expect(mocks.applyThemeMode).toHaveBeenCalledWith('dark', undefined, colors, '#101014');
@@ -170,7 +160,7 @@ describe('handleThemeCommand', () => {
     mocks.loadCustomTheme.mockReturnValue({ ok: false, error: 'theme "nope" not found (expected /x/nope.json)' });
     const ctx = createCtx();
 
-    await handleThemeCommand(ctx, ['nope']);
+    await setThemePreference(ctx, 'nope');
 
     expect(ctx.showError).toHaveBeenCalledWith('Could not load theme: theme "nope" not found (expected /x/nope.json)');
     expect(mocks.saveSettings).not.toHaveBeenCalled();
@@ -189,7 +179,7 @@ describe('handleThemeCommand', () => {
     });
     const ctx = createCtx();
 
-    await handleThemeCommand(ctx, ['neon']);
+    await setThemePreference(ctx, 'neon');
 
     expect(mocks.detectTerminalTheme).toHaveBeenCalledTimes(1);
     expect(mocks.applyThemeMode).toHaveBeenCalledWith('light', '#0d0d0d', colors);
@@ -208,7 +198,7 @@ describe('handleThemeCommand', () => {
     });
     const ctx = createCtx();
 
-    await handleThemeCommand(ctx, ['catppuccin-latte/catppuccin-mocha']);
+    await setThemePreference(ctx, 'catppuccin-latte/catppuccin-mocha');
 
     expect(mocks.loadCustomTheme).toHaveBeenCalledWith('catppuccin-mocha');
     expect(mocks.applyThemeMode).toHaveBeenCalledWith('dark', undefined, colors, '#1e1e2e');
@@ -225,22 +215,40 @@ describe('handleThemeCommand', () => {
     });
     const ctx = createCtx();
 
-    await handleThemeCommand(ctx, ['catppuccin-latte/catppuccin-mocha']);
+    await setThemePreference(ctx, 'catppuccin-latte/catppuccin-mocha');
 
     expect(mocks.loadCustomTheme).toHaveBeenCalledWith('catppuccin-latte');
     expect(mocks.applyThemeMode).toHaveBeenCalledWith('light', '#eff1f5', colors);
     expect(ctx.showInfo).toHaveBeenCalledWith('Theme set to Catppuccin Latte (light)');
   });
+});
 
-  it('normalizes built-in modes typed in any case', async () => {
-    const settings = { preferences: { theme: 'auto' } };
-    mocks.loadSettings.mockReturnValue(settings);
-    const ctx = createCtx();
+describe('listThemeOptions', () => {
+  it('lists built-in modes, pairs, bundled, then custom themes without duplicates', () => {
+    mocks.listCustomThemes.mockReturnValue(['my-theme', 'nord']);
+    mocks.listBundledThemes.mockReturnValue(['dracula', 'nord']);
 
-    await handleThemeCommand(ctx, ['Dark']);
+    expect(listThemeOptions().map(option => option.value)).toEqual([
+      'auto',
+      'dark',
+      'light',
+      'catppuccin-latte/catppuccin-mocha',
+      'solarized-light/solarized-dark',
+      'dracula',
+      'my-theme',
+      'nord',
+    ]);
+  });
+});
 
-    expect(mocks.applyThemeMode).toHaveBeenCalledWith('dark');
-    expect(settings.preferences.theme).toBe('dark');
+describe('getActiveThemePreference', () => {
+  it('prefers MASTRA_THEME over the saved preference', () => {
+    mocks.loadSettings.mockReturnValue({ preferences: { theme: 'nord' } });
+    vi.stubEnv('MASTRA_THEME', 'Light');
+    expect(getActiveThemePreference()).toBe('light');
+    vi.stubEnv('MASTRA_THEME', '');
+    expect(getActiveThemePreference()).toBe('nord');
+    vi.unstubAllEnvs();
   });
 });
 

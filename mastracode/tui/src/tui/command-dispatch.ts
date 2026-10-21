@@ -42,7 +42,6 @@ import {
   handleReportIssueCommand as handleReportIssueCmd,
   handleSetupCommand,
   handleBrowserCommand,
-  handleThemeCommand,
   handleUpdateCommand,
   handleMastraGatewayCommand,
   handleApiKeysCommand,
@@ -298,9 +297,6 @@ export async function dispatchSlashCommand(
       return true;
     case 'browser':
       await handleBrowserCommand(ctx, args);
-      return true;
-    case 'theme':
-      await handleThemeCommand(ctx, args);
       return true;
     case 'update':
     // Hidden alias: works when typed, but isn't listed in autocomplete or help.

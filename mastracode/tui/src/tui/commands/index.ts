@@ -35,7 +35,6 @@ export { handleFactoryCommand, handleLocalCommand } from './factory.js';
 export { handleReviewCommand } from './review.js';
 export { handleReportIssueCommand } from './report-issue.js';
 export { handleSetupCommand } from './setup.js';
-export { handleThemeCommand } from './theme.js';
 export { handleUpdateCommand } from './update.js';
 export { handleMastraGatewayCommand } from './mastra-gateway.js';
 export { handleApiKeysCommand } from './api-keys.js';

@@ -42,6 +42,7 @@ import {
 import { resolveTuiSubagents } from './subagent-settings.js';
 import { applyThemePreference, normalizeThemePreference } from './tui/commands/theme.js';
 import { MastraTUI } from './tui/index.js';
+import { resetTerminalBackground, setTerminalBackgroundEnabled } from './tui/terminal-background.js';
 import { getUpdateCommandArgs, runUpdateCommand } from './update-command.js';
 import { getCurrentVersion } from './version.js';
 
@@ -103,6 +104,7 @@ async function tuiMain(startupMessage: StartupMessage = {}, resumeThreadId?: str
   // MASTRA_THEME env var is the highest-priority override (mode name or custom theme name)
   const envTheme = normalizeThemePreference(process.env.MASTRA_THEME ?? '');
   const themeMode = envTheme || settings.preferences.theme || 'auto';
+  setTerminalBackgroundEnabled(settings.preferences.terminalBackground);
   await applyThemePreference(themeMode);
 
   analytics = createMastraCodeAnalytics({ version: getCurrentVersion() });
@@ -388,6 +390,7 @@ process.on('exit', () => {
         '\x1b[>4;0m' + // disable modifyOtherKeys
         '\x1b[?25h', // show cursor
     );
+    resetTerminalBackground();
     if (process.stdin.setRawMode) {
       process.stdin.setRawMode(false);
     }

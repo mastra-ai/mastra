@@ -12,7 +12,15 @@ import { askModalQuestion } from '../modal-question.js';
 import type { NotificationMode } from '../notify.js';
 import { showModalOverlay } from '../overlay.js';
 import { applyPreviewLinesToRenderedComponents } from '../preview-lines.js';
+import { setTerminalBackgroundEnabled } from '../terminal-background.js';
 import { handleApiKeysCommand } from './api-keys.js';
+import {
+  applyThemePreference,
+  getActiveThemePreference,
+  listThemeOptions,
+  previewThemePreference,
+  setThemePreference,
+} from './theme.js';
 import type { SlashCommandContext } from './types.js';
 
 function getCurrentModeColor(ctx: SlashCommandContext): string | undefined {
@@ -205,6 +213,9 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
       (globalSettings.preferences.webSearchProvider === 'parallel' && !process.env.PARALLEL_API_KEY)
         ? 'auto'
         : globalSettings.preferences.webSearchProvider,
+    theme: getActiveThemePreference(),
+    themeOptions: listThemeOptions(),
+    terminalBackground: globalSettings.preferences.terminalBackground,
     tavilyKeyAvailable: !!process.env.TAVILY_API_KEY,
     parallelKeyAvailable: !!process.env.PARALLEL_API_KEY,
   };
@@ -293,6 +304,16 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
         current.preferences.webSearchProvider = provider;
         saveSettings(current);
         ctx.showInfo(`Web search provider: ${provider}`);
+      },
+      onThemePreview: pref => previewThemePreference(ctx, pref),
+      onThemeChange: pref => setThemePreference(ctx, pref),
+      onTerminalBackgroundChange: async enabled => {
+        const current = loadSettings();
+        current.preferences.terminalBackground = enabled;
+        saveSettings(current);
+        setTerminalBackgroundEnabled(enabled);
+        if (enabled) await applyThemePreference(getActiveThemePreference());
+        ctx.showInfo(`Terminal background: ${enabled ? 'on' : 'off'}`);
       },
       onApiKeys: () => {
         ctx.state.ui.hideOverlay();

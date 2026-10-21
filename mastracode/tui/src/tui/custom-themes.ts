@@ -254,7 +254,7 @@ export function loadCustomTheme(name: string, themesDir: string = getThemesDir()
     const bundled = Object.hasOwn(BUNDLED_THEMES, name) ? BUNDLED_THEMES[name] : undefined;
     if (!bundled) {
       const suggestion = closestThemeName(name, themesDir);
-      const hint = suggestion ? `did you mean "${suggestion}"?` : `run /theme list to see available themes`;
+      const hint = suggestion ? `did you mean "${suggestion}"?` : `pick one in /settings → Theme`;
       return { ok: false, error: `theme "${name}" not found — ${hint}` };
     }
     json = JSON.stringify(bundled);
