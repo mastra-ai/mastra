@@ -43,7 +43,7 @@ The routes do no authentication of their own: the server's auth pipeline authent
     name: 'resourceId',
     type: '(ctx: { requestContext?, user? }) => string | undefined | Promise<string | undefined>',
     description:
-      "Derives the caller's resource ID per request, overriding the default. Defaults to the server-derived resource ID that mapUserToResourceId sets after authentication. A request where the callback returns a falsy value or throws is rejected with 401.",
+      "Derives the caller's project-scoped resource ID per request, overriding the default. Defaults to the server-derived value that mapUserToResourceId sets after authentication. The trimmed value must contain 1 to 256 characters. A request where the callback returns a falsy or invalid value, or throws, is rejected with 401.",
     isOptional: true,
   },
   {
@@ -81,17 +81,45 @@ When `providers` is omitted, the routes use the project's end-user provider list
 
 ## Routes
 
-All routes are gated on the caller's resource ID and respond with `Cache-Control: no-store`. Paths below use the default `/connect` base path.
+All routes are gated on the caller's resource ID and respond with `Cache-Control: no-store`. Paths below use the default `/connect` base path. The [end-user connection UI helpers](/reference/connect/user-connection-ui) use this default prefix; call the routes directly when you configure another `basePath`.
 
 | Route | Description |
 | - | - |
 | `GET /connect/providers` | The connectable providers from the platform catalog, filtered by the effective provider policy: `{ providers: [{ id, displayName, logoUrl, authType, authFields }] }`. |
 | `GET /connect/connections` | Global connections plus the caller's own: `{ connections: [{ id, integrationId, displayName, logoUrl, status, accountLabel, scope }] }` where `scope` is `'global'` or `'user'`. Not filtered by the provider policy, because the policy gates new connects, not existing connections. `displayName` and `logoUrl` are resolved from the full catalog so rows for providers outside the policy still render. |
-| `POST /connect/:provider/sessions` | Creates a connect session owned by the caller: `{ connectionId, integrationId, launchUrl, expiresAt }`. `launchUrl` is a server-relative path to the launch route; neither the provider's authorization URL nor the vendor session token is returned to the browser. Providers outside the effective policy (or unknown to the catalog when the full catalog is inherited) return 404. |
-| `GET /connect/connections/:id/status` | Poll target for a visible (global or own) connection: `{ id, status, scope }`. An invisible connection returns the same 404 as an unknown ID. |
-| `DELETE /connect/connections/:id` | Disconnects the caller's own connection (204). Global connections return 403. |
-| `GET /connect/connections/:id/launch` | Launch gate for a pending session. Verifies the caller owns the session, then responds with a 302 redirect to the provider's authorization flow, or, with `Accept: application/json`, returns `{ sessionToken, expiresAt }` so the owner's browser can run headless authorization through the provider's own consent popup. A session owned by another user, an expired session, or an unknown ID all return the same 404, so a leaked launch URL can't bind someone else's account. |
-| `GET /connect/:provider?returnTo=...` | Hosted connect page: a Connect button opens the provider's authorization flow in a popup, polls the status route, and redirects to the validated `returnTo` with `connectionId` and `status` query parameters. Loaded by top-level navigation, so it requires [cookie-based auth](/docs/mastra-platform/connect/end-user-connections#let-users-connect-their-accounts); with token-only auth it returns 401 and the JSON routes are the alternative. |
+| `POST /connect/:provider/sessions` | Creates a pending session owned by the caller and returns `{ connectionId, integrationId, launchUrl, expiresAt }` with status 201. `launchUrl` is a server-relative path to the launch gate. The session response contains neither the provider authorization URL nor its session token. Providers outside the effective policy, and unknown providers under the full-catalog policy, return 404. |
+| `GET /connect/connections/:id/status` | Returns `{ id, status, scope }` for a visible global or caller-owned connection. Another user's connection, another project's connection, and an unknown ID return the same 404. During a newly created attempt, clients can treat a short-lived 404 as pending until the provider handshake makes the row visible. |
+| `DELETE /connect/connections/:id` | Disconnects the caller's own connection and returns 204. Global connections return 403. Invisible and unknown IDs return the same 404. |
+| `GET /connect/connections/:id/launch` | Verifies the caller owns the pending session. Normal navigation returns a 302 into the hosted provider flow. A request with `Accept: application/json` returns `{ sessionToken, expiresAt }` for provider-direct headless authorization. If the stored vendor URL doesn't contain an extractable token, `sessionToken` is null and the client can use the 302 flow. Another user's session, another project's session, an expired session, and an unknown ID return the same 404. |
+| `GET /connect/:provider?returnTo=...` | Renders the hosted connect page. It opens authorization in a popup, polls status, and redirects to the validated `returnTo` with `connectionId` and `status` query parameters. Top-level navigation carries no bearer header, so the page requires [cookie-readable auth](/docs/mastra-platform/connect/end-user-connections#use-the-hosted-page). Token-only applications use the JSON routes instead. |
+
+## Provider authorization fields
+
+Each provider returned by `GET /connect/providers` includes an `authType` and optional `authFields`. Custom interfaces use them to decide whether to render a form before authorization.
+
+| Field | Type | Description |
+| - | - | - |
+| `name` | `string` | Provider field name sent to the authorization SDK. |
+| `target` | `'credentials' \| 'params' \| null` | `credentials` values are exchanged with the provider. `params` configure the flow, such as an MCP server URL. A missing value is treated as `credentials` by the UI helpers. |
+| `label` | `string \| null` | Human-readable form label. |
+| `description` | `string \| null` | Supporting field instructions. |
+| `placeholder` | `string \| null` | Suggested input placeholder. |
+| `secret` | `boolean \| null` | Whether the interface should conceal the value. |
+| `required` | `boolean \| null` | Whether the user must supply the value before headless authorization. |
+| `order` | `number \| null` | Suggested display order. |
+
+The platform catalog may omit fields for standard `API_KEY` and `BASIC` providers. The [headless field helpers](/reference/connect/user-connection-ui#headless-authorization-helpers) synthesize the standard API-key or username-and-password inputs.
+
+## Launch behavior
+
+The launch gate is the only route that releases the pending authorization capability. Both response modes repeat the caller's resource assertion immediately before release.
+
+- Use normal browser navigation for the hosted flow. The gate redirects without exposing the vendor URL in a JSON response.
+- Use `Accept: application/json` for headless authorization. The proven owner receives the Nango connect session token, not the vendor URL.
+- Never cache or persist the launch response. Treat the token as a short-lived bearer capability for the current authorization attempt.
+- Keep polling after the provider window reports success. Connection activation completes asynchronously when the platform receives the provider webhook.
+
+The hosted page restricts framing with `frame-ancestors 'none'` and validates `returnTo` before rendering. Relative paths are always allowed. Absolute HTTP or HTTPS URLs require their origin in `returnTo.allowedOrigins`.
 
 ## Error responses
 
@@ -103,7 +131,7 @@ Errors are JSON: `{ error: { code, message } }`. Platform failure details don't 
 | 400 | `invalid_return_to` | `returnTo` isn't a relative path or an allowlisted origin |
 | 403 | `forbidden` | Deleting a global connection |
 | 404 | `provider_not_found`, `connection_not_found` | Provider outside the effective policy (or unknown when the full catalog is inherited), or an invisible connection |
-| 409 | `conflict` | The platform refused the request as conflicting (for example the per-resource connection limit); the message carries the platform's actionable detail |
+| 409 | `conflict` | The platform refused the request as conflicting (for example the per-resource connection limit); the message carries the platform's specific detail |
 | 429 | `rate_limited` | The platform rate-limited the request |
 | 500 | `misconfigured` | Missing platform token or other configuration problem |
 | 502 | `platform_error` | The platform request failed |

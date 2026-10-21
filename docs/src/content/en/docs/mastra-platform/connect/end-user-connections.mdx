@@ -3,15 +3,21 @@ title: 'End-user connections | Connect'
 description: 'Let each user of your app connect their own provider accounts, and scope agent tools to the calling user.'
 packages:
   - '@mastra/connect'
+  - '@mastra/playground-ui'
 ---
 
 # End-user connections
 
-By default, connections belong to your project: every agent request uses the same Linear workspace or Slack account. End-user connections add a second kind of connection, owned by one user of your application. Each connection carries a resource ID, an opaque key you choose for that user, and the platform only serves it to requests asserting the same key.
+By default, a connection is global to a project: every agent request can use the same Linear workspace or Slack account. End-user connections belong to one user of your application. Each connection carries a resource ID, an opaque key you choose, and the platform only serves it to requests asserting the same key.
 
-With end-user connections, an agent resolves your project's shared connections plus the calling user's own, so "create an issue" lands in that user's Linear workspace rather than yours.
+An agent resolving tools for one user receives the project's global connections plus that user's own connections. It never receives another user's connections.
 
-Before you start, follow the [Connect setup](/docs/mastra-platform/connect/overview#get-started) to configure your project.
+| Connection scope | Who can use it | Who can disconnect it from the end-user surface |
+| - | - | - |
+| Global | Every user of the project | Nobody. Manage it from Mastra Platform or the Connect CLI. |
+| End user | The resource ID that owns it | The owning user. |
+
+Before you start, follow the [Connect setup](/docs/mastra-platform/connect/overview#get-started) to configure the platform token and project ID.
 
 ## Identify your users
 
@@ -24,15 +30,16 @@ export const mastra = new Mastra({
   server: {
     auth: {
       authenticateToken: async token => verifyToken(token),
-      // The resource ID is the key end-user connections are stored under.
-      // Use a stable, non-reusable identifier for the user.
+      // Use a stable identifier that is never reassigned to another user.
       mapUserToResourceId: user => user.id,
     },
   },
 })
 ```
 
-The server derives the resource ID after authentication, so a client can't claim another user's key.
+The server derives the resource ID after authentication, so a client can't claim another user's key. The value is scoped to the project, trimmed, and must contain 1 to 256 characters. Keep it stable across sessions. If your identity system can recycle usernames or email addresses, use its immutable user ID instead.
+
+You can override the server-derived value with the `resourceId` callback on [`userConnectRoutes()`](/reference/connect/user-connect-routes). The callback still runs on the server and must derive the value from trusted request context.
 
 ## Scope agent tools to the calling user
 
@@ -56,23 +63,25 @@ export const assistant = new Agent({
 })
 ```
 
-Calling `tools()` per request is cheap: identical options share one internal state, with snapshots cached per resource ID. When the resource ID resolves to `undefined`, the agent gets global connections only, the same behavior as before.
+Calling `tools()` per request is cheap. Resolvers with identical options share internal state, with snapshots cached separately per resource ID. The resolver keeps up to 50 resource snapshots and evicts the least recently used scope when the limit is reached.
 
-If both a global and a user connection exist for one provider, the agent sees both through the usual [multi-connection handling](/docs/mastra-platform/connect/tools#choose-between-connections).
+When the callback returns `undefined`, the agent gets global connections only. If a global and an end-user connection exist for the same provider, the agent sees both through the usual [multi-connection handling](/docs/mastra-platform/connect/tools#choose-between-connections).
 
-## How user isolation is enforced
+## How isolation is enforced
 
-Scoping by an identifier is only as strong as the binding between the signed-in user and that identifier. In systems where application code passes a user ID as an ordinary parameter, isolation depends on every call site labeling every request correctly. Mastra removes that burden: the resource ID is never a value a request gets to choose, and the binding is verified again on every call.
+Scoping by an identifier is only as strong as the binding between the signed-in user and that identifier. Mastra verifies the binding at each layer instead of accepting a resource ID from request input.
 
-- The server derives the resource ID. `mapUserToResourceId` runs after authentication and writes the result to a reserved request-context key that clients can't set. No route or tool accepts a resource ID from request input.
-- The platform verifies it at execution time. Every call made under a resource ID carries an assertion, and the platform compares it to the connection's stored resource ID before serving tool calls, credentials, or proxy traffic. A mismatch is rejected as if the connection didn't exist, so one user's connection can never serve another user's request.
-- Ownership is checked before OAuth begins. Creating a connection returns a launch URL that re-verifies the caller owns the pending session before redirecting into the provider's flow. See [the authorization link never leaves the server](#the-authorization-link-never-leaves-the-server).
+- The server derives the resource ID. `mapUserToResourceId` runs after authentication and writes the value to reserved request context that clients can't set.
+- `userConnectRoutes()` creates a platform client scoped to that resource ID for every request.
+- The platform compares the resource assertion to the connection's stored resource ID before listing connections, returning credentials, proxying tools, reconnecting, or disconnecting.
+- A scope mismatch returns the same 404 as an unknown connection. This prevents an existence oracle for another user's rows.
+- The launch gate verifies ownership immediately before a browser enters authorization. A leaked launch URL can't attach an account to another user's pending session.
 
-The inverse is deliberate: a connection without a resource ID is global. It belongs to the project, ignores the assertion, and serves every user's requests. Only create a global connection for an account meant to be shared by everyone, such as a team Slack workspace. Anything a single user should own belongs in an end-user connection.
+A connection without a resource ID is global. The platform deliberately ignores the resource assertion for that row, so every user in the project can resolve it. Only use global connections for accounts intended to be shared by everyone.
 
-## Let users connect their accounts
+## Mount the connection routes
 
-[`userConnectRoutes()`](/reference/connect/user-connect-routes) mounts the API your frontend needs: a provider catalog, the caller's connections, connect-session creation, status polling, disconnect, and a hosted connect page. Register it on the server:
+[`userConnectRoutes()`](/reference/connect/user-connect-routes) mounts the API the frontend needs: provider discovery, connection listing, session creation, authorization launch, status polling, disconnect, and an optional hosted page.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
@@ -95,54 +104,181 @@ export const mastra = new Mastra({
 })
 ```
 
-### Control which providers users can connect
+The routes don't authenticate users themselves. The server auth pipeline must authenticate the request before the route runs. Every route returns 401 when Mastra can't derive a resource ID.
 
-In the project's **Settings** page, use **End-user connections** to allow the full catalog, select specific providers, or disable new end-user connections. Omit `providers` from `userConnectRoutes()` to use this project setting. Pass `providers` when the application must enforce its own fixed allowlist.
+All platform calls happen on the server with your platform token. The browser communicates only with the mounted routes. Responses use `Cache-Control: no-store`.
 
-The code-level value takes priority over the project setting. The same precedence applies to the built-in `request_connection` tool. See the [provider policy reference](/reference/connect/provider-configuration) for the configuration states, resolution order, and cache behavior.
+### Control which providers users can add
 
-The routes do no authentication of their own. Your server's auth pipeline authenticates each request, and the routes are gated on the resource ID it derives, so a request without one gets a 401. All platform calls happen server-side with your platform token. The browser never sees it.
+In the project's **Settings** page, use **End-user connections** to inherit the full catalog, select specific providers, or disable new end-user connections. Omit `providers` from `userConnectRoutes()` to use this project setting. Pass `providers` when the application must enforce its own fixed allowlist.
 
-To start a connection, send the user to the hosted page:
+The code-level value takes priority over the project setting. Project settings are cached for 30 seconds. The same precedence determines which providers the built-in `request_connection` tool can offer. See the [provider policy reference](/reference/connect/provider-configuration).
+
+Changing the project policy or the `providers` option on `userConnectRoutes()` only affects new connections, so existing rows remain visible and disconnectable. Normal tool resolution follows the separate `providers` configuration passed to `tools()`. A project-policy change alone doesn't remove existing tools.
+
+## Choose a frontend flow
+
+The mounted routes support several interfaces over the same resource-scoped connection lifecycle.
+
+| Interface | Use it when | Authorization behavior |
+| - | - | - |
+| Hosted page | You want the smallest integration and use cookie-readable auth. | Mastra renders the page, opens the provider flow, polls, and redirects back. |
+| Custom UI | You need your own connection list, dialogs, or bearer-token auth. | Your frontend calls the JSON routes. It can use provider-direct headless authorization or the hosted launch fallback. |
+| Studio **Connections** page | You are testing or managing the current Studio identity during development. | Studio uses the JSON routes and headless authorization helpers. |
+| Studio chat connect card | You want an agent to ask for a missing connection during a conversation. | The `request_connection` tool produces a structured card that starts the mounted flow. |
+
+### Use the hosted page
+
+Send the browser to the provider route:
 
 ```text
 GET /connect/linear?returnTo=/settings/integrations
 ```
 
-The page shows a Connect button, opens the provider's authorization flow in a popup, polls until the connection is active, and then redirects back to `returnTo` with `connectionId` and `status` query parameters. `returnTo` accepts relative paths only, unless you allowlist origins with `returnTo.allowedOrigins`.
+The page shows a Connect action, opens authorization in a popup, polls until the connection settles, and redirects to `returnTo` with `connectionId` and `status` query parameters. Relative `returnTo` paths are accepted by default. Absolute HTTP or HTTPS URLs require their origin in `returnTo.allowedOrigins`. Protocol-relative URLs, non-HTTP schemes, and redirect-normalization tricks are rejected.
 
-The hosted page is a plain browser navigation: it carries no `Authorization` header, and the page's own status calls send only same-origin cookies. It therefore requires auth that can authenticate the request itself, such as a session cookie. `authenticateToken` receives the raw request as its second argument:
+The hosted page is a top-level browser navigation. It carries no `Authorization` header, and its status requests use same-origin cookies. Configure cookie-readable auth for this flow:
 
 ```typescript title="src/mastra/index.ts"
 const auth = {
   authenticateToken: async (token: string, request: Request) => {
-    // JSON routes send a bearer token.
+    // JSON routes can send a bearer token.
     if (token) return verifyToken(token)
-    // The hosted page sends no token: authenticate the session cookie.
+    // Top-level hosted-page navigation must authenticate from the request.
     return verifySessionCookie(request.headers.get('cookie'))
   },
   mapUserToResourceId: (user: { id: string }) => user.id,
 }
 ```
 
-With token-only auth, the hosted page returns a 401. The JSON routes still work: call them with the bearer token and build your own UI instead.
+With token-only auth, the hosted page returns 401. Use the JSON routes or the React helpers instead.
 
-Prefer your own UI? Call the JSON routes directly. See the [route reference](/reference/connect/user-connect-routes#routes).
+### Build a custom React UI
 
-### The authorization link never leaves the server
+`@mastra/playground-ui/domains/connect` exports the same hooks Studio uses. The hooks reuse the Mastra client base URL, headers, credentials mode, refresh-aware fetch implementation, and TanStack Query cache.
 
-The provider's authorization link is a bearer capability: anyone who opens it can bind their third-party account to the pending connection. For end-user sessions, that link stays on the platform. Session creation returns a `launchUrl` instead: an authenticated route that re-verifies the caller owns the session before redirecting into the provider's flow. A forwarded or leaked launch URL returns 404 for anyone else, so another user can't attach their account to a session they don't own.
+```tsx title="src/components/connect-provider.tsx"
+import { useConnectSurface, usePendingConnect } from '@mastra/playground-ui/domains/connect'
+
+export function ConnectProvider() {
+  const surface = useConnectSurface()
+  const { connect, cancel, pending, settled, isCreating, createError } = usePendingConnect()
+
+  if (surface.data?.status !== 'ready') return null
+
+  return (
+    <div>
+      {surface.data.providers.map(provider => (
+        <button
+          key={provider.id}
+          disabled={isCreating || pending !== null}
+          onClick={() => connect(provider)}
+        >
+          Connect {provider.displayName ?? provider.id}
+        </button>
+      ))}
+
+      {pending ? <button onClick={cancel}>Cancel</button> : null}
+      {pending?.fallbackUrl ? <a href={pending.fallbackUrl}>Open the connect window</a> : null}
+      {createError ? <p role="alert">{createError.message}</p> : null}
+      {settled?.status === 'failed' ? (
+        <p role="alert">{settled.message ?? 'The connection was not completed.'}</p>
+      ) : null}
+    </div>
+  )
+}
+```
+
+Wrap the component in `MastraClientProvider` and `QueryClientProvider`. The [end-user connection UI reference](/reference/connect/user-connection-ui) documents the setup, listing and disconnect hooks, form helpers, return values, cancellation, and failure states.
+
+Calling `connect(provider)` handles OAuth providers without additional input. If an API key, Basic, two-step, or custom flow requires fields and the UI doesn't supply values, the hook uses the hosted fallback. To keep those flows headless, render the provider's `authFields`, key them with `headlessAuthFieldKey()`, and pass the values to `connect(provider, values)`.
+
+### Implement the JSON lifecycle directly
+
+A non-React frontend can call the routes directly:
+
+1. Request `GET /connect/providers` to load the policy-filtered provider catalog, including each provider's `authType` and `authFields`.
+1. Request `GET /connect/connections` to display global connections and the caller's own connections. Existing rows remain in this response even if their provider is no longer allowed for new connections.
+1. Request `POST /connect/:provider/sessions` to create a caller-owned pending connection. Store the returned `connectionId`, `launchUrl`, and `expiresAt` for the current attempt.
+1. Start authorization through one of the launch modes below.
+1. Poll `GET /connect/connections/:id/status` until the status leaves `pending`. A short-lived 404 can mean the provider handshake hasn't made the row visible yet, so treat it as pending during an active attempt.
+1. Refresh `GET /connect/connections` after the connection becomes active.
+1. Request `DELETE /connect/connections/:id` when the owner disconnects the account. Global rows return 403.
+
+See the [`userConnectRoutes()` route reference](/reference/connect/user-connect-routes#routes) for response and error shapes.
+
+## Authorization modes
+
+Session creation returns a protected `launchUrl`, never the vendor authorization URL. The launch route supports two modes.
+
+### Provider-direct headless authorization
+
+Request the launch URL with `Accept: application/json`. After verifying ownership, the route returns `{ sessionToken, expiresAt }`. Use the session token with the Nango frontend SDK, or call `startHeadlessAuth()` from the [UI helpers](/reference/connect/user-connection-ui#headless-authorization-helpers).
+
+Headless behavior depends on the provider:
+
+- OAuth, custom OAuth, Model Context Protocol (MCP) OAuth, and app-install flows open the provider's own consent window.
+- API-key and Basic flows submit credentials without opening a popup.
+- Two-step flows are headless when the provider catalog supplies credential fields.
+- Required `params` fields configure the authorization flow, such as an MCP server URL. Required `credentials` fields are exchanged with the provider.
+
+If the launch response contains `sessionToken: null`, use the hosted fallback. This can happen when the platform's vendor URL format can't be recognized.
+
+### Hosted launch fallback
+
+Open `launchUrl` as a browser navigation without the JSON `Accept` header. The route verifies ownership and responds with a 302 into the hosted authorization flow.
+
+Open hosted-only popups synchronously from the user's selection gesture when possible. If a popup blocker rejects an asynchronously opened fallback window, show the launch URL as an explicit link.
+
+### Polling and cancellation
+
+Authorization completion and connection activation are separate events. The provider window can close before the activation webhook reaches the platform. Keep polling briefly after the window closes instead of immediately reporting failure.
+
+Studio and `usePendingConnect()` poll every two seconds for up to five minutes and allow a 15-second grace period after a popup closes. They settle the interface on active status, non-active terminal status, authorization failure, polling failure, cancellation, closed-popup abandonment, or timeout.
+
+Canceling an interface attempt stops local polling and closes a headless provider window. A hosted window that has already loaded the provider page can't always be closed programmatically, but its eventual result should no longer update the canceled interface state.
+
+## The launch URL stays bound to its owner
+
+The vendor authorization URL and session token are bearer capabilities: anyone who receives one can enter that pending authorization flow. Mastra stores the vendor URL on the platform and returns only a server-relative launch URL from session creation.
+
+Both launch modes repeat the resource-ownership check immediately before releasing the capability. Another user, another project, an expired session, and an unknown connection all receive the same 404. The launch response is never cached.
+
+The hosted page also sets a restrictive Content Security Policy, including `frame-ancestors 'none'`, to prevent a cookie-authenticated Connect action from being embedded and clickjacked.
 
 ## Let agents prompt for a connection
 
-Resource-scoped tool resolutions include a built-in `request_connection` tool. When a task needs a provider the user hasn't connected (or the user asks to connect one), the agent calls it and gets back a structured list of connectable providers with their current connection state. Chat UIs that understand the payload (Studio does) render it as a connect card: the user clicks Connect, authorizes in a popup through the mounted routes, and the agent can retry the task against fresh tools.
+Resource-scoped tool resolutions include a built-in `request_connection` tool. When a task needs a provider the user hasn't connected, or the user explicitly asks to connect one, the agent calls it and gets a structured provider list with current connection state.
 
-The connectable set follows the effective provider policy: the `providers` allowlist passed to `tools()` when present, otherwise the project's end-user provider list from Mastra Platform. An unconfigured project list inherits the full platform catalog. The tool never creates sessions or handles authorization links. It only reports what can be connected. It's also never added to global-only resolutions, since there is no user to scope a new connection to. To turn it off, pass `connectPrompt: false` to [`tools()`](/reference/connect/tools).
+Studio chat renders that payload as a connect card. The user selects **Connect**, authorizes through the mounted routes, and the agent can retry the task against fresh tools. Historical messages render the card read-only.
 
-## Inspect connections in Studio
+The connectable set follows the effective provider policy: the `providers` array passed to `tools()` when present, otherwise the project's end-user provider list. An unconfigured project list inherits the full catalog. The tool reports what can be connected but doesn't create sessions or return authorization capabilities. Global-only resolutions never include it because they have no user scope.
 
-With `userConnectRoutes()` mounted, Studio's **Connections** page shows the project's global connections alongside the connections belonging to the resource ID your studio session resolves to, and lets you run the connect flow against the providers your routes expose. Because the routes are gated on an end-user identity, the page needs `server.auth` with `mapUserToResourceId` configured. Without it, Studio shows a setup prompt instead.
+Disable the prompt tool with `connectPrompt: false`. The [`tools()` reference](/reference/connect/tools) documents its configuration and output behavior.
 
-## Clean up after deleted users
+## Use the Studio Connections page
 
-When you delete a user from your application, delete their connections too. Each mounted `DELETE /connect/connections/:id` call disconnects one of the caller's own connections; for offboarding, use the platform API's bulk cleanup for the user's resource ID from your backend.
+With `userConnectRoutes()` mounted, Studio shows **Connections** in the sidebar after the surface probe succeeds or returns an authentication setup response. The page separates:
+
+- **Your connections**: The current Studio identity's resource-scoped rows, with disconnect actions.
+- **Global connections**: Project-wide rows, shown as read-only.
+- **Add connection**: A searchable, policy-filtered provider picker with headless credential forms, provider consent windows, hosted fallback, status polling, cancellation, and retry states.
+
+Studio requires `server.auth` with `mapUserToResourceId`, or a `resourceId` callback on `userConnectRoutes()`. Without a resource identity, the page shows setup guidance. When the routes aren't mounted, the sidebar item stays hidden, but the page remains directly reachable with setup instructions.
+
+## Handle errors
+
+Route errors use `{ error: { code, message } }`. Show the returned message for user-correctable failures.
+
+- A 409 conflict includes specific detail about the caller's state, such as a per-resource connection limit or an existing pending attempt.
+- A 429 response means the user should retry later.
+- A 404 deliberately doesn't reveal whether a connection exists outside the caller's scope.
+- Other platform failures use a generic message so the end-user surface doesn't expose details about the developer's platform account.
+
+Keep the selected provider and collected field values when authorization fails so the user can correct credentials and retry. Return to the provider picker when they choose a different provider.
+
+## Clean up deleted users
+
+Disconnect a user's connections when deleting that user from your application. The mounted `DELETE /connect/connections/:id` route removes one connection owned by the current caller. For backend offboarding, use the platform API's bulk cleanup for the resource ID.
+
+Don't reassign a deleted user's resource ID. A stable, non-reusable identifier preserves the ownership boundary for any delayed cleanup or audit records.

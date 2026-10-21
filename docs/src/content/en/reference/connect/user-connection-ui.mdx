@@ -1,0 +1,252 @@
+---
+title: 'Reference: End-user connection UI | Connect'
+description: 'React hooks, route types, and headless authorization helpers for building an end-user connection interface.'
+packages:
+  - '@mastra/playground-ui'
+---
+
+# End-user connection UI
+
+`@mastra/playground-ui/domains/connect` exports React hooks, route-contract types, and authorization helpers for interfaces backed by [`userConnectRoutes()`](/reference/connect/user-connect-routes). Studio uses the same exports for its **Connections** page and `request_connection` chat cards.
+
+The hooks use the Mastra client from `MastraClientProvider` and TanStack Query. They call the default `/connect` route prefix. If you mount `userConnectRoutes()` at another `basePath`, call the [JSON routes](/reference/connect/user-connect-routes#routes) directly.
+
+## Provider setup
+
+Wrap the interface in `MastraClientProvider` and `QueryClientProvider`. Configure headers for bearer-token authentication, or rely on cookies through the default `credentials="include"` behavior.
+
+```tsx title="src/app/providers.tsx"
+import { MastraClientProvider } from '@mastra/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import type { ReactNode } from 'react'
+
+const queryClient = new QueryClient()
+
+export function Providers({ children, accessToken }: { children: ReactNode; accessToken: string }) {
+  return (
+    <MastraClientProvider
+      baseUrl="https://api.example.com"
+      headers={{ Authorization: `Bearer ${accessToken}` }}
+    >
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    </MastraClientProvider>
+  )
+}
+```
+
+The Mastra server must mount `userConnectRoutes()` and derive a resource ID for the authenticated request. See [End-user connections](/docs/mastra-platform/connect/end-user-connections).
+
+## Surface and connection hooks
+
+### `useConnectSurface()`
+
+Probes `GET /connect/providers` without retries and distinguishes the supported setup states.
+
+Returns a TanStack Query result whose `data` is one of:
+
+| Status | Meaning |
+| - | - |
+| `{ status: 'ready', providers }` | The routes are mounted and the request has an end-user identity. |
+| `{ status: 'not-mounted' }` | The provider route returned 404. |
+| `{ status: 'unauthenticated' }` | The route returned 401 because no resource ID was resolved. |
+
+Other failures are exposed as `UserConnectRequestError` through the query result.
+
+### `useUserConnections({ enabled })`
+
+Lists the project's global connections and the caller's own resource-scoped connections. The query is disabled when `enabled` is false.
+
+Returns a TanStack Query result whose `data` is `UserConnection[]`.
+
+### `useCreateConnectSession()`
+
+Returns a mutation that creates a pending connection owned by the caller.
+
+```typescript
+const session = useCreateConnectSession()
+
+session.mutate({ provider: 'linear' })
+```
+
+The mutation resolves to `UserConnectSessionResponse` without exposing the provider URL or session token. Its server-relative `launchUrl` is protected by the launch gate.
+
+### `useConnectLaunchHref()`
+
+Returns a function that resolves a server-relative `launchUrl` against the Mastra client `baseUrl`. Use it for top-level navigation or an explicit fallback link. The input already includes the `/connect` prefix, so the helper doesn't add `CONNECT_BASE_PATH` again.
+
+### `useConnectionStatus({ connectionId })`
+
+Polls the connection every two seconds until its status leaves `pending`, up to five minutes. Pass `null` to disable polling.
+
+A 404 during polling is treated as `pending` because the platform row may not be visible until the provider handshake completes. A settled result invalidates the connections query.
+
+### `useDisconnectUserConnection()`
+
+Returns a mutation that disconnects one of the caller's own connections and refreshes the connections query.
+
+```typescript
+const disconnect = useDisconnectUserConnection()
+
+disconnect.mutate({ connectionId })
+```
+
+Global connections return 403 and can't be removed from the end-user surface.
+
+## `usePendingConnect(options?)`
+
+Drives one complete add-connection attempt: session creation, launch-gate redemption, headless or hosted authorization, status polling, cancellation, and settlement.
+
+```tsx
+import { usePendingConnect } from '@mastra/playground-ui/domains/connect'
+import type { UserConnectProvider } from '@mastra/playground-ui/domains/connect'
+
+function ConnectAction({ provider }: { provider: UserConnectProvider }) {
+  const { connect, cancel, pending, settled, isCreating, createError } = usePendingConnect()
+
+  return (
+    <div>
+      <button disabled={isCreating || pending !== null} onClick={() => connect(provider)}>
+        Connect {provider.displayName ?? provider.id}
+      </button>
+      {pending ? <button onClick={cancel}>Cancel</button> : null}
+      {createError ? <p>{createError.message}</p> : null}
+      {settled?.status === 'failed' ? <p>{settled.message ?? 'Connection failed.'}</p> : null}
+    </div>
+  )
+}
+```
+
+`connect(provider, values?)` accepts a `ConnectTarget` and optional values collected from the provider's `authFields`.
+
+- Supported OAuth, app-install, and custom flows redeem the launch gate as JSON and open the provider's own consent window through the Nango SDK.
+- API key, Basic, and supported two-step flows submit collected credentials without opening a popup.
+- Providers that require values but receive none use the hosted flow, where the hosted page renders the required form.
+- Unsupported auth types use the hosted flow.
+- If JSON redemption returns a null token or fails, the hook falls back to the hosted launch URL.
+- If a popup is blocked, `pending.fallbackUrl` contains a link the interface can show to the user.
+
+The hook stops an attempt when the connection settles, authorization fails, polling fails, the popup remains closed past the grace period, or the five-minute polling budget expires. `cancel()` closes a headless provider window and clears the current attempt. It can't revoke a hosted popup that has already loaded another page, but its result no longer controls the current interface state.
+
+### Options
+
+<PropertiesTable
+  content={[
+  {
+    name: 'popupCloseGraceMs',
+    type: 'number',
+    description:
+      'Time to keep polling after the provider popup closes. Defaults to 15 seconds so a trailing activation webhook can arrive.',
+    isOptional: true,
+  },
+  {
+    name: 'pendingTimeoutMs',
+    type: 'number',
+    description: 'Maximum duration of one attempt. Defaults to five minutes.',
+    isOptional: true,
+  },
+]}
+/>
+
+### Return value
+
+| Property | Type | Description |
+| - | - | - |
+| `pending` | `PendingConnect \| null` | Current provider, connection ID, authorization mode, and optional fallback URL. |
+| `connect` | `(provider: ConnectTarget, values?: Record<string, string>) => void` | Starts a new attempt and clears the previous settled outcome. |
+| `cancel` | `() => void` | Abandons the current attempt and closes a headless provider window. |
+| `settled` | `SettledConnect \| null` | Most recent `active` or `failed` outcome. Failed authorization can include a displayable message. |
+| `connectedProviders` | `ReadonlySet<string>` | Provider IDs that became active during the hook's lifetime. |
+| `isCreating` | `boolean` | Whether session creation is in progress. |
+| `createError` | `UserConnectRequestError \| null` | Session-creation failure, including status, code, and displayable message. |
+
+## Headless authorization helpers
+
+Use these helpers when you need to compose the authorization lifecycle instead of using `usePendingConnect()`.
+
+### `supportsHeadlessAuth(authType, authFields?)`
+
+Returns whether the browser can complete the provider's flow without the hosted Connect page.
+
+| Auth type | Headless behavior |
+| - | - |
+| `OAUTH1`, `OAUTH2`, `MCP_OAUTH2`, `MCP_OAUTH2_GENERIC`, `APP`, `CUSTOM` | Opens the provider's consent or installation window. Required flow parameters must be collected first. |
+| `API_KEY` | Submits the API key without a popup. |
+| `BASIC` | Submits a username and password without a popup. |
+| `TWO_STEP` | Supported when the catalog exposes at least one credential field. |
+| Other or missing auth type | Uses the hosted flow. |
+
+### `headlessAuthFields(provider)`
+
+Returns the provider's catalog fields in their declared order. If the catalog omits fields for `API_KEY` or `BASIC`, the helper returns the standard API-key or username-and-password fields.
+
+### `headlessAuthRequiresForm(provider)`
+
+Returns true when at least one headless authorization field is required. A caller that doesn't render a form can omit values and let `usePendingConnect()` fall back to the hosted page.
+
+### `headlessAuthFieldKey(field)`
+
+Returns a stable form key in the form `<target>:<name>`, for example `credentials:apiKey` or `params:serverUrl`.
+
+### `splitHeadlessAuthValues(fields, values)`
+
+Converts keyed form values into the Nango SDK's separate `credentials` and `params` objects. Missing `target` values are treated as credentials for compatibility with older servers.
+
+### `startHeadlessAuth(input)`
+
+Starts provider-direct authorization with a launch-gate session token.
+
+```typescript
+const handle = startHeadlessAuth({
+  sessionToken,
+  integrationId: provider.id,
+  authType: provider.authType,
+  credentials,
+  params,
+})
+
+await handle.result
+```
+
+Returns `{ result, close }`. `result` resolves when the provider authorization completes. `close()` closes the provider popup when one exists. Failures reject with `HeadlessAuthError`, whose `reason` is `popup_blocked`, `window_closed`, or `failed`.
+
+Authorization completion doesn't mean the connection row is active yet. Continue polling the status route until it settles.
+
+## Constants and utilities
+
+### `CONNECT_BASE_PATH`
+
+The default `/connect` prefix used by the React hooks.
+
+### `UserConnectRequestError`
+
+Error class used by the route hooks. It carries the HTTP `status`, route error `code`, and displayable `message` returned by the mounted surface.
+
+### `isConnectPromptPayload(output)`
+
+Type guard for the structured output of the built-in `request_connection` tool. It returns true when `output` is an object with `type: 'connect-prompt'` and a `providers` array.
+
+## Exported types
+
+The module exports route contracts, hook state, headless authorization state, and chat payload types.
+
+| Type | Important fields or purpose |
+| - | - |
+| `UserConnectAuthField` | `name`, `target`, `label`, `description`, `placeholder`, `secret`, `required`, `order` |
+| `UserConnectProvider` | `id`, `displayName`, `logoUrl`, `authType`, `authFields` |
+| `UserConnectProvidersResponse` | `{ providers: UserConnectProvider[] }` |
+| `UserConnectionScope` | `'global' \| 'user'` |
+| `UserConnection` | `id`, `integrationId`, `displayName`, `logoUrl`, `status`, `accountLabel`, `scope` |
+| `UserConnectionsResponse` | `{ connections: UserConnection[] }` |
+| `UserConnectSessionResponse` | `connectionId`, `integrationId`, `launchUrl`, `expiresAt` |
+| `UserConnectLaunchTokenResponse` | `sessionToken`, `expiresAt` |
+| `UserConnectionStatusResponse` | `id`, `status`, `scope` |
+| `UserConnectErrorBody` | `{ error: { code, message } }` |
+| `ConnectTarget` | Provider ID plus optional `authType` and `authFields` passed to `connect()`. |
+| `PendingConnect` | Current `provider`, `connectionId`, `mode`, and `fallbackUrl`. |
+| `UsePendingConnectOptions` | Optional popup-close grace period and pending timeout. |
+| `SettledConnect` | Most recent provider, `active` or `failed` status, and optional failure message. |
+| `HeadlessAuthValues` | Optional `credentials` and `params` records. |
+| `HeadlessAuthHandle` | Authorization `result` promise and `close()` callback. |
+| `HeadlessAuthFailure` | `'popup_blocked' \| 'window_closed' \| 'failed'` |
+| `ConnectPromptProvider` | Provider display data plus `connected` and serving `scope`. |
+| `ConnectPromptPayload` | `type: 'connect-prompt'`, optional `requestedProvider`, and provider list. |

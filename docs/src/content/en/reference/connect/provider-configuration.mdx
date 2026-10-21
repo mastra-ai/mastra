@@ -31,7 +31,7 @@ Code-level and project policies have different empty-list behavior:
 
 Provider IDs are matched case-insensitively.
 
-The policy gates new end-user connects: the provider catalog, session creation, and the hosted connect page. Existing connections are unaffected: they stay visible on the connections routes, remain disconnectable, and `tools()` keeps resolving them.
+The project policy and the `providers` option on `userConnectRoutes()` gate provider discovery, session creation, and the hosted connect page. Existing connections stay visible and disconnectable. Normal tool resolution follows the separate `providers` configuration passed to `tools()`. A project-policy change alone doesn't remove existing tools.
 
 ## Use the project policy
 
@@ -68,6 +68,6 @@ apiRoutes: [
 ]
 ```
 
-When this option is present, `userConnectRoutes()` doesn't load the project provider setting. Providers outside the allowlist return 404 from provider and connection routes.
+When this option is present, `userConnectRoutes()` doesn't load the project provider setting. Providers outside the allowlist return 404 from provider discovery, session creation, and the hosted connect page. Existing connection rows remain available through listing, status, and disconnect routes.
 
-The same precedence applies to [`tools()`](/reference/connect/tools). A `providers.only` allowlist set in code takes priority over the project policy used by the built-in `request_connection` tool.
+The same precedence applies to the built-in `request_connection` tool from [`tools()`](/reference/connect/tools). A `providers` array set on `tools()` takes priority over the project policy when the prompt tool builds its connectable provider list. The project policy doesn't filter normal tool resolution, but the `providers` option on `tools()` still does.
