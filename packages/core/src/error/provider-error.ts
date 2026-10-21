@@ -1,6 +1,6 @@
 // Reads an APICallError, a raw stream error frame, a cause chain or the persisted
-// `{ name, message, statusCode?, code? }` identity. Status and codes decide first;
-// context overflow and billing exhaustion have no code on any provider, so their wording lives here, once.
+// `{ name, message, statusCode?, code? }` identity. The status and symbolic codes are the provider's
+// verdict; wording only narrows an invalid request, or speaks when the provider named nothing.
 export type ProviderFailureKind =
   | 'auth'
   | 'quota'
@@ -46,8 +46,8 @@ const MODEL_REJECTED =
   /model_not_found|model not found|no[_ ]?such[_ ]?model|not_found_error|invalid[_ ]model|unsupported[_ ]parameter|unsupported[_ ]value/i;
 const TOOL_HISTORY_REJECTED =
   /no tool output found for (?:function|tool) call|tool_call_ids.*(?:response|respond)|tool_use.*tool_result/i;
-const INVALID_REQUEST_CODE = /invalid_request_error/i;
-const TIMED_OUT = /timed ?out|timeout|deadline exceeded/i;
+const INVALID_REQUEST_CODE = /invalid_request_error|invalid_prompt/i;
+const TIMED_OUT = /timed ?out|timeout|deadline[_ ]exceeded/i;
 const RATE_LIMITED = /rate[_ ]limit|too many requests|resource_exhausted|throttl/i;
 const UNAVAILABLE =
   /internal server error|server_error|internal_error|service[_ ]?unavailable|temporarily[_ ]?unavailable|bad gateway|overloaded/i;
@@ -113,27 +113,55 @@ function collectFacts(error: unknown): CollectedFacts {
 
 export function classifyProviderError(error: unknown): ProviderFailureKind {
   const facts = collectFacts(error);
-  const status = facts.statusCode;
   const evidence = [...facts.codes, ...facts.texts].join('\n');
-  if (status === 401 || status === 403) return 'auth';
-  if (status === 402 || BILLING_EXHAUSTED.test(evidence)) return 'quota';
-  if (USAGE_CAPPED.test(evidence)) return RENEWS_WITHIN_THE_HOUR.test(evidence) ? 'rate_limited' : 'quota';
+  const verdict = providerVerdict(facts.statusCode, facts.codes.join('\n'), evidence);
+  if (verdict === 'invalid_request') return narrowInvalidRequest(evidence);
+  if (verdict) return verdict;
+  return (
+    usageKind(evidence) ??
+    terminalKindFromWording(evidence) ??
+    transientKindFromWording(evidence) ??
+    (facts.texts.some(text => HTTP_REASON_PHRASE.test(text.trim())) ? 'invalid_request' : 'unknown')
+  );
+}
+
+function providerVerdict(status: number | undefined, codes: string, evidence: string): ProviderFailureKind | undefined {
+  if (status === 401 || status === 403 || ACCESS_DENIED.test(codes)) return 'auth';
+  if (status === 402 || BILLING_EXHAUSTED.test(codes)) return 'quota';
   // Token-per-minute limits are 429s whose message asks to shorten the request; waiting is the fix.
-  if (status === 429) return 'rate_limited';
-  if (status === 408 || status === 504) return 'timeout';
-  if (status !== undefined && status >= 500) return 'unavailable';
+  if (status === 429 || RATE_LIMITED.test(codes)) return usageKind(evidence) ?? 'rate_limited';
+  if (status === 408 || status === 504 || TIMED_OUT.test(codes)) return 'timeout';
+  if ((status !== undefined && status >= 500) || UNAVAILABLE.test(codes)) return 'unavailable';
+  if (status === 400 || status === 404 || status === 422 || INVALID_REQUEST_CODE.test(codes)) return 'invalid_request';
+  return undefined;
+}
+
+// A request the provider named invalid is final; its wording may only say which final kind.
+function narrowInvalidRequest(evidence: string): ProviderFailureKind {
+  if (usageKind(evidence) === 'quota') return 'quota';
+  return terminalKindFromWording(evidence) ?? 'invalid_request';
+}
+
+function usageKind(evidence: string): 'quota' | 'rate_limited' | undefined {
+  if (BILLING_EXHAUSTED.test(evidence)) return 'quota';
+  if (USAGE_CAPPED.test(evidence)) return RENEWS_WITHIN_THE_HOUR.test(evidence) ? 'rate_limited' : 'quota';
+  return undefined;
+}
+
+function terminalKindFromWording(evidence: string): ProviderFailureKind | undefined {
   if (ACCESS_DENIED.test(evidence)) return 'auth';
   if (CONTEXT_OVERFLOW.some(pattern => pattern.test(evidence))) return 'context_overflow';
   if (MODEL_REJECTED.test(evidence)) return 'model_rejected';
   if (TOOL_HISTORY_REJECTED.test(evidence)) return 'tool_history_rejected';
-  // A request the provider named invalid is final, whatever its wording mentions.
   if (INVALID_REQUEST_CODE.test(evidence)) return 'invalid_request';
+  return undefined;
+}
+
+function transientKindFromWording(evidence: string): ProviderFailureKind | undefined {
   if (TIMED_OUT.test(evidence)) return 'timeout';
   if (RATE_LIMITED.test(evidence)) return 'rate_limited';
   if (UNAVAILABLE.test(evidence)) return 'unavailable';
-  if (status === 400 || status === 404 || status === 422) return 'invalid_request';
-  if (facts.texts.some(text => HTTP_REASON_PHRASE.test(text.trim()))) return 'invalid_request';
-  return 'unknown';
+  return undefined;
 }
 
 /** The JSON-safe facts worth carrying next to a failure's name and message, on the wire and in history. */

@@ -128,6 +128,36 @@ describe('StreamErrorRetryProcessor', () => {
     expect(isRetryableOpenAIResponsesStreamError(frame)).toBe(false);
   });
 
+  it('never retries a frame the provider marked invalid, whatever passing condition its wording names', () => {
+    const cappedWording = {
+      type: 'error',
+      sequence_number: 1,
+      error: {
+        type: 'invalid_request_error',
+        code: 'invalid_prompt',
+        message: "Invalid value 'quota exceeded per minute' for parameter mode.",
+      },
+    };
+    const timeoutWording = {
+      type: 'error',
+      sequence_number: 1,
+      error: { code: 'invalid_prompt', message: 'Invalid timeout parameter' },
+    };
+
+    expect(isRetryableOpenAIResponsesStreamError(cappedWording)).toBe(false);
+    expect(isRetryableOpenAIResponsesStreamError(timeoutWording)).toBe(false);
+  });
+
+  it('retries a server_error frame whose wording mentions authentication', () => {
+    const frame = {
+      type: 'error',
+      sequence_number: 1,
+      error: { type: 'server_error', code: 'server_error', message: 'Upstream authentication service unavailable' },
+    };
+
+    expect(isRetryableOpenAIResponsesStreamError(frame)).toBe(true);
+  });
+
   it('retries a rate-limit frame worded as a per-minute quota and never an exhausted billing quota', () => {
     const frame = (code: string, message: string) => ({ type: 'error', sequence_number: 1, error: { code, message } });
 

@@ -266,6 +266,36 @@ describe('classifyProviderError', () => {
       { name: 'AI_APICallError', message: 'ServiceUnavailableException' },
       'unavailable',
     ],
+    [
+      'Responses server_error frame that mentions authentication',
+      {
+        type: 'error',
+        error: { type: 'server_error', code: 'server_error', message: 'Upstream authentication service unavailable' },
+      },
+      'unavailable',
+    ],
+    [
+      'invalid_prompt frame worded as a renewing cap',
+      {
+        type: 'error',
+        error: {
+          type: 'invalid_request_error',
+          code: 'invalid_prompt',
+          message: "Invalid value 'quota exceeded per minute' for parameter mode.",
+        },
+      },
+      'invalid_request',
+    ],
+    [
+      '400 invalid_prompt that mentions a timeout',
+      apiError(400, 'Invalid timeout parameter', undefined, { error: { code: 'invalid_prompt' } }),
+      'invalid_request',
+    ],
+    [
+      'invalid_prompt frame that mentions a timeout',
+      { type: 'error', error: { code: 'invalid_prompt', message: 'Invalid timeout parameter' } },
+      'invalid_request',
+    ],
     ['400 without a reason', apiError(400, 'Bad Request'), 'invalid_request'],
     [
       'persisted "Bad Request" without a status',
