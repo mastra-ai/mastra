@@ -167,7 +167,9 @@ export class EventedExecutionEngine extends ExecutionEngine {
           data: {
             workflowId: params.workflowId,
             runId: params.runId,
-            parentWorkflow: params.parentWorkflow as ParentWorkflow | undefined,
+            parentWorkflow: params.parentWorkflow
+              ? this.eventProcessor.restoreParentWorkflow(params.parentWorkflow)
+              : undefined,
             executionPath: params.resume.resumePath,
             stepResults: params.resume.stepResults,
             resumeSteps: params.resume.steps,

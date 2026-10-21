@@ -169,6 +169,16 @@ describe('evented concurrent resume', () => {
           iteration.suspendPayload?.__workflow_meta?.runId,
       ) as string[];
       expect(nestedRunIds).toEqual([expect.any(String), expect.any(String)]);
+      for (const runId of nestedRunIds) {
+        const childSnapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: childWorkflow.id, runId });
+        expect(childSnapshot?.parentWorkflow).toMatchObject({
+          workflowId: parentWorkflow.id,
+          runId: parentRun.runId,
+          stepId: childWorkflow.id,
+        });
+        expect(childSnapshot?.parentWorkflow).not.toHaveProperty('stepGraph');
+        expect(structuredClone(childSnapshot?.parentWorkflow)).toEqual(childSnapshot?.parentWorkflow);
+      }
 
       const childRuns = await Promise.all(nestedRunIds.map(runId => childWorkflow.createRun({ runId })));
       const alphaResume = childRuns[0]!.resume({ resumeData: { approved: true } });
