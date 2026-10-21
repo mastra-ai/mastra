@@ -207,12 +207,12 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
     },
   );
 
+  const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
   describe('foreach item-end checkpoints', () => {
     afterEach(() => {
       vi.restoreAllMocks();
     });
-
-    const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
     async function setup(concurrency: number) {
       const storage = new MockStore();
@@ -282,23 +282,22 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
       let foreachContext: { activeStepsPath: Record<string, number[]> } | undefined;
       let itemEndWrites = 0;
       const persistStepUpdate = DefaultExecutionEngine.prototype.persistStepUpdate;
-      vi.spyOn(DefaultExecutionEngine.prototype, 'persistStepUpdate').mockImplementation(async function (
-        this: DefaultExecutionEngine,
-        params,
-      ) {
-        if (!params.phase?.startsWith('foreach-item-end.')) return persistStepUpdate.call(this, params);
-        foreachContext = params.executionContext;
-        const n = itemEndWrites++;
-        pending++;
-        try {
-          // The first checkpoint fails at once while any later one is still being written.
-          await sleep(n === 0 ? 0 : 100);
-          if (n === 0) throw new Error('checkpoint write failed');
-          return await persistStepUpdate.call(this, params);
-        } finally {
-          pending--;
-        }
-      });
+      vi.spyOn(DefaultExecutionEngine.prototype, 'persistStepUpdate').mockImplementation(
+        async function (this: DefaultExecutionEngine, params) {
+          if (!params.phase?.startsWith('foreach-item-end.')) return persistStepUpdate.call(this, params);
+          foreachContext = params.executionContext;
+          const n = itemEndWrites++;
+          pending++;
+          try {
+            // The first checkpoint fails at once while any later one is still being written.
+            await sleep(n === 0 ? 0 : 100);
+            if (n === 0) throw new Error('checkpoint write failed');
+            return await persistStepUpdate.call(this, params);
+          } finally {
+            pending--;
+          }
+        },
+      );
 
       await expect((await workflow.createRun()).start({ inputData: [0, 1, 2, 3] })).rejects.toThrow(
         'checkpoint write failed',
@@ -309,6 +308,71 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
       expect(errorChildSpan).toHaveBeenCalledWith(
         expect.objectContaining({ operationId: expect.stringContaining('.foreach.') }),
       );
+    });
+  });
+
+  describe('per-run queue for foreach snapshot writes', () => {
+    // Every foreach item-start and item-end write of a run goes through one queue; these
+    // pin that suspend/resume and nested foreach still finish rather than wait on it.
+    it('suspends and resumes items inside a foreach while sibling items finish', async () => {
+      const storage = new MockStore();
+      const item = createStep({
+        id: 'item',
+        inputSchema: anySchema,
+        outputSchema: anySchema,
+        resumeSchema: anySchema,
+        execute: async ({ inputData, resumeData, suspend }) => {
+          if (inputData % 2 === 1 && !resumeData) return suspend({ waiting: inputData });
+          return { value: inputData, approved: resumeData?.ok ?? null };
+        },
+      });
+      const workflow = createWorkflow({ id: 'foreach-queue-suspend', inputSchema: anySchema, outputSchema: anySchema })
+        .foreach(item, { concurrency: 3 })
+        .commit();
+      new Mastra({ logger: false, storage, workflows: { wf: workflow } });
+
+      const run = await workflow.createRun();
+      const first = await run.start({ inputData: [0, 1, 2, 3, 4] });
+      expect(first.status).toBe('suspended');
+
+      let result: any = first;
+      for (const forEachIndex of [1, 3]) {
+        result = await run.resume({ step: 'item', forEachIndex, resumeData: { ok: true } });
+      }
+
+      expect(result.status).toBe('success');
+      expect(result.result).toEqual([
+        { value: 0, approved: null },
+        { value: 1, approved: true },
+        { value: 2, approved: null },
+        { value: 3, approved: true },
+        { value: 4, approved: null },
+      ]);
+    });
+
+    it('runs a foreach whose items are nested workflows with their own foreach', async () => {
+      const storage = new MockStore();
+      const inner = step('inner', async ({ inputData }) => {
+        await sleep(5);
+        return inputData * 2;
+      });
+      const nested = createWorkflow({ id: 'nested-foreach', inputSchema: anySchema, outputSchema: anySchema })
+        .foreach(inner.step, { concurrency: 2 })
+        .commit();
+      const workflow = createWorkflow({ id: 'outer-foreach', inputSchema: anySchema, outputSchema: anySchema })
+        .foreach(nested, { concurrency: 3 })
+        .commit();
+      new Mastra({ logger: false, storage, workflows: { wf: workflow } });
+
+      const result: any = await (
+        await workflow.createRun()
+      ).start({
+        inputData: [[1, 2, 3], [4, 5], [6, 7, 8, 9], [10]],
+      });
+
+      expect(result.status).toBe('success');
+      expect(result.result).toEqual([[2, 4, 6], [8, 10], [12, 14, 16, 18], [20]]);
+      expect(inner.fn).toHaveBeenCalledTimes(10);
     });
   });
 });
