@@ -41,6 +41,7 @@ import { defineLazyWriter } from '../../../../workflows/utils';
 import { createStep } from '../../../../workflows/workflow';
 import { stopGoalActivity } from '../../../goal';
 import type { MessageList } from '../../../message-list';
+import type { MastraDBMessage } from '../../../message-list/state/types';
 import type { SaveQueueManager } from '../../../save-queue';
 import { resolveDeclineReason } from '../../../tool-approval';
 import { TripWire } from '../../../trip-wire';
@@ -685,16 +686,28 @@ export function createDurableToolCallStep() {
         else await clearAndPublish();
       };
       let resumeMessageList = messageList;
-      // A durable engine can replay the completed LLM step on a cold resume,
-      // so its runtime rehydration never runs before this suspended tool step.
-      // The suspension metadata was flushed to memory before suspending.
-      if (!resumeMessageList && workflowResumeData !== undefined && memory && state?.threadId) {
+      // Observational memory loads history in the LLM step, which a cold resume skips.
+      // Recover the persisted invocation before clearing or replacing its metadata.
+      const hasInvocation = (msg: MastraDBMessage) =>
+        msg.role === 'assistant' &&
+        (msg.content?.parts ?? []).some(
+          part => part?.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCallId,
+        );
+      if (
+        workflowResumeData !== undefined &&
+        memory &&
+        state?.threadId &&
+        !messageList?.get.all.db().some(hasInvocation)
+      ) {
         const { messages } = await memory.recall({
           threadId: state.threadId,
           resourceId: state.resourceId,
           perPage: false,
         });
-        if (messages.length) {
+        if (messageList) {
+          const invocation = [...messages].reverse().find(hasInvocation);
+          if (invocation) messageList.add(invocation, 'memory');
+        } else if (messages.length) {
           resumeMessageList = createRunMessageList({
             mastra,
             threadId: state.threadId,
