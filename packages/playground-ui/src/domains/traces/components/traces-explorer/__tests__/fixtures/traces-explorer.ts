@@ -4,6 +4,7 @@ import type {
   GetTraceQueryFieldsResponse,
   MastraClient,
   TraceQueryKeysetTraceResponse,
+  TraceQueryResponse,
 } from '@mastra/client-js';
 import type { ListScoresResponse } from '@mastra/core/evals';
 import { SpanType } from '@mastra/core/observability';
@@ -41,6 +42,11 @@ export const traceQueryCapabilities: GetObservabilityCapabilitiesResponse = {
 export const noRootDurationCapabilities: GetObservabilityCapabilitiesResponse = {
   ...traceQueryCapabilities,
   capabilities: { ...traceQueryCapabilities.capabilities, traceQueryRootDuration: false },
+};
+
+export const noDeltaPollingCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...traceQueryCapabilities,
+  capabilities: { ...traceQueryCapabilities.capabilities, deltaPolling: false },
 };
 
 export const emptyTraceQueryFields: GetTraceQueryFieldsResponse = {
@@ -84,6 +90,13 @@ export const twoTracesPage: TraceQueryKeysetTraceResponse = {
 };
 
 export const emptyTracesPage: TraceQueryKeysetTraceResponse = { traces: [], page: { next: null } };
+
+/** A delta poll with nothing new since the cursor. */
+export const idleDeltaBatch: Extract<TraceQueryResponse, { delta: unknown }> = {
+  traces: [],
+  delta: { limit: 100, hasMore: false },
+  deltaCursor: 'delta-cursor-idle',
+};
 
 export const emptyLightTraces: Awaited<ReturnType<MastraClient['listTracesLight']>> = {
   spans: [],

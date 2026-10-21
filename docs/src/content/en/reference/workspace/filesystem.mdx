@@ -18,8 +18,8 @@ The `WorkspaceFilesystem` interface defines how workspaces interact with file st
 Read file contents.
 
 ```typescript
-const content = await filesystem.readFile('/docs/guide.md', { encoding: 'utf-8' })
-const buffer = await filesystem.readFile('/image.png') // Buffer
+const content = await filesystem.readFile('docs/guide.md', { encoding: 'utf-8' })
+const buffer = await filesystem.readFile('image.png') // Buffer
 ```
 
 **Parameters:**
@@ -60,8 +60,8 @@ const buffer = await filesystem.readFile('/image.png') // Buffer
 Write file contents.
 
 ```typescript
-await filesystem.writeFile('/docs/new.md', '# New Document')
-await filesystem.writeFile('/nested/path/file.md', content, { recursive: true })
+await filesystem.writeFile('docs/new.md', '# New Document')
+await filesystem.writeFile('nested/path/file.md', content, { recursive: true })
 ```
 
 **Parameters:**
@@ -120,8 +120,8 @@ await filesystem.writeFile('/nested/path/file.md', content, { recursive: true })
 Delete a file.
 
 ```typescript
-await filesystem.deleteFile('/docs/old.md')
-await filesystem.deleteFile('/docs/maybe.md', { force: true }) // Don't throw if missing
+await filesystem.deleteFile('docs/old.md')
+await filesystem.deleteFile('docs/maybe.md', { force: true }) // Don't throw if missing
 ```
 
 **Parameters:**
@@ -161,7 +161,7 @@ await filesystem.deleteFile('/docs/maybe.md', { force: true }) // Don't throw if
 Append content to a file, creating it if it doesn't already exist. Parent directories are created automatically.
 
 ```typescript
-await filesystem.appendFile('/logs/app.log', 'New log entry\n')
+await filesystem.appendFile('logs/app.log', 'New log entry\n')
 ```
 
 **Parameters:**
@@ -186,7 +186,7 @@ await filesystem.appendFile('/logs/app.log', 'New log entry\n')
 Copy a file to a new location.
 
 ```typescript
-await filesystem.copyFile('/docs/template.md', '/docs/new-doc.md')
+await filesystem.copyFile('docs/template.md', 'docs/new-doc.md')
 ```
 
 **Parameters:**
@@ -231,7 +231,7 @@ await filesystem.copyFile('/docs/template.md', '/docs/new-doc.md')
 Move or rename a file.
 
 ```typescript
-await filesystem.moveFile('/docs/draft.md', '/docs/final.md')
+await filesystem.moveFile('docs/draft.md', 'docs/final.md')
 ```
 
 **Parameters:**
@@ -276,7 +276,7 @@ await filesystem.moveFile('/docs/draft.md', '/docs/final.md')
 List directory contents.
 
 ```typescript
-const entries = await filesystem.readdir('/docs')
+const entries = await filesystem.readdir('docs')
 // [{ name: 'guide.md', type: 'file' }, { name: 'api', type: 'directory' }]
 ```
 
@@ -297,8 +297,8 @@ interface FileEntry {
 Create a directory.
 
 ```typescript
-await filesystem.mkdir('/docs/api')
-await filesystem.mkdir('/deeply/nested/path', { recursive: true })
+await filesystem.mkdir('docs/api')
+await filesystem.mkdir('deeply/nested/path', { recursive: true })
 ```
 
 **Parameters:**
@@ -338,8 +338,8 @@ await filesystem.mkdir('/deeply/nested/path', { recursive: true })
 Remove a directory.
 
 ```typescript
-await filesystem.rmdir('/docs/old')
-await filesystem.rmdir('/docs/nested', { recursive: true })
+await filesystem.rmdir('docs/old')
+await filesystem.rmdir('docs/nested', { recursive: true })
 ```
 
 **Parameters:**
@@ -386,7 +386,7 @@ await filesystem.rmdir('/docs/nested', { recursive: true })
 Check if a path exists.
 
 ```typescript
-const exists = await filesystem.exists('/docs/guide.md')
+const exists = await filesystem.exists('docs/guide.md')
 ```
 
 **Returns:** `Promise<boolean>`
@@ -396,8 +396,8 @@ const exists = await filesystem.exists('/docs/guide.md')
 Get file or directory metadata.
 
 ```typescript
-const stat = await filesystem.stat('/docs/guide.md')
-// { name: 'guide.md', path: '/docs/guide.md', type: 'file', size: 1234, createdAt: Date, modifiedAt: Date }
+const stat = await filesystem.stat('docs/guide.md')
+// { name: 'guide.md', path: 'docs/guide.md', type: 'file', size: 1234, createdAt: Date, modifiedAt: Date }
 ```
 
 **Returns:** `Promise<FileStat>`

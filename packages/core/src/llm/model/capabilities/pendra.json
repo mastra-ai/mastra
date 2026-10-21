@@ -10,16 +10,16 @@
   ],
   "structuredOutput": ["deepseek-v4-flash", "gpt-oss:120b", "qwen3.6:27b"],
   "reasoning": {
-    "gpt-oss:120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "deepseek-v4-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "gpt-oss:120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ]
   }

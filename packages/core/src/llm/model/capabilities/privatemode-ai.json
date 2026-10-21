@@ -31,18 +31,7 @@
     "kimi-latest"
   ],
   "reasoning": {
-    "kimi-k2.6": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "glm-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "glm-5.3": [
+    "glm-flash-latest": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -54,7 +43,17 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-flash-latest": [
+    "kimi-latest": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "kimi-k2.6": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-latest": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -66,9 +65,10 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "kimi-latest": [
+    "glm-5.3": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }
