@@ -47,6 +47,8 @@ export type DataListRootProps = Omit<ScrollAreaProps, 'children' | 'orientation'
   fit?: DataListFit;
   /** Surface treatment; defaults to `default` (rows on a raised card panel). */
   variant?: DataListVariant;
+  /** Disable the internal scroll area when a parent owns scrolling, allowing row effects to extend outside the list. */
+  scrollable?: boolean;
   /**
    * Edge fades from the underlying ScrollArea. DataList keeps the top fade off
    * by default so it does not fade the sticky top header.
@@ -220,6 +222,7 @@ function DataListBase({
   className,
   fit = 'content',
   variant = 'default',
+  scrollable = true,
   mask,
   scrollRef,
   reorder,
@@ -260,6 +263,14 @@ function DataListBase({
       </FluidMenuItems>
     </div>
   );
+
+  if (!scrollable) {
+    return (
+      <div {...props} className={cn('w-full rounded-xl p-1', dataListVariantClasses[variant], className)}>
+        <DataListReorderContext.Provider value={reorder}>{grid}</DataListReorderContext.Provider>
+      </div>
+    );
+  }
 
   // DataList uses the DS ScrollArea: an overlay scrollbar, so the sticky header
   // spans the full width. Masks default to every overflowing edge except the
