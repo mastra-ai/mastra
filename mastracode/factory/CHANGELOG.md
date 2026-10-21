@@ -1,5 +1,19 @@
 # @mastra/factory
 
+## 0.24.0-alpha.14
+
+### Patch Changes
+
+- Added a sidebar toggle to the top of the Factory sidebar, next to search. The search shortcut now shows in the search button's tooltip instead of next to the icon. ([#27688](https://github.com/mastra-ai/mastra/pull/27688))
+
+- Factory servers now start listening right away instead of waiting for the one-time move of existing sessions to their new memory owners. On a large or remote database that step could take minutes to an hour, with no output, so `mastra factory dev` looked stuck. The move now runs in the background, logs how many sessions it is moving, and reports progress every 10 seconds. Sessions that haven't been moved yet keep working as before. ([#27976](https://github.com/mastra-ai/mastra/pull/27976))
+
+- Factory web no longer opens the onboarding wizard when the factory list fails to load. A failed request for the list used to look like "no factories yet", so members who already had a Factory were asked to set one up again. The page now shows a retry screen until the list loads. ([#27956](https://github.com/mastra-ai/mastra/pull/27956))
+
+- Pressing `[` now opens and closes the Factory sidebar, as the sidebar button's tooltip says. The shortcut is ignored while typing in a text field. ([#27701](https://github.com/mastra-ai/mastra/pull/27701))
+
+- Fixed the Factory development server reloading the whole page when shared UI components rebuild. Factory now builds with the same Vite and React plugin versions as Studio. ([#27654](https://github.com/mastra-ai/mastra/pull/27654))
+
 ## 0.24.0-alpha.13
 
 ### Minor Changes
