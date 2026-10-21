@@ -197,6 +197,8 @@ export function buildFactorySessionRow({
 
 export interface UserSessionRowInput {
   session: FactoryUserSession;
+  /** The work item a Slack-origin user session is bound to, if loaded. */
+  item?: WorkItem;
   factoryId: string;
   pathname: string;
   running: boolean;
@@ -206,6 +208,7 @@ export interface UserSessionRowInput {
 
 export function buildUserSessionRow({
   session,
+  item,
   factoryId,
   pathname,
   running,
@@ -214,13 +217,14 @@ export function buildUserSessionRow({
 }: UserSessionRowInput): SessionListRow {
   const url = `/factories/${factoryId}/user/threads/${session.sessionId}`;
   const ownedByViewer = isOwnedByViewer(session, viewer);
+  const fromSlack = session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX);
   return {
     session,
     origin: 'user',
     board: undefined,
     kind: 'User session',
-    source: 'user',
-    name: getUserSessionLabel(session),
+    source: fromSlack ? 'slack-thread' : 'user',
+    name: (fromSlack && !session.title?.trim() && item?.title.trim()) || getUserSessionLabel(session),
     url,
     openPath: url,
     active: pathname === url,
@@ -245,7 +249,6 @@ function pullRequestMergeTarget({ session, threadId, pullRequest }: SessionListR
     {
       sessionId: session.sessionId,
       threadId,
-      projectPath: session.sessionId,
       pullRequestNumber: pullRequest.number,
       provider: pullRequest.provider,
       knownMerged: pullRequest.knownMerged,

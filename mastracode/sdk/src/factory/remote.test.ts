@@ -41,6 +41,16 @@ async function connected() {
 }
 
 describe('RemoteSession', () => {
+  it('is addressed by its session id and works on the resource the Factory reports', async () => {
+    const { remote } = fakeRemote();
+    remote.create.mockResolvedValueOnce({ sessionId: 'res-1', resourceId: 'factory-1' } as any);
+    const session = new RemoteSession(address, 'res-1', remote as any);
+    await session.connect();
+    expect(session.identity.getId()).toBe('res-1');
+    expect(session.identity.getResourceId()).toBe('factory-1');
+    expect(remote.create).toHaveBeenCalledWith();
+  });
+
   it('hydrates settings, token usage, and permission rules', async () => {
     const { session } = await connected();
     expect(session.state.get()).toMatchObject({ yolo: true, thinkingLevel: 'high' });

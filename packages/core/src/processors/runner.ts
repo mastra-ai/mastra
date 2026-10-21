@@ -1478,7 +1478,7 @@ export class ProcessorRunner {
             );
 
             const enqueueTripwire = (r?: string, opts?: TripWireOptions<unknown>, pid?: string) => {
-              void this.logger.debug('Stream part blocked by output processor', {
+              this.logger.debug('Stream part blocked by output processor', {
                 agent: this.agentName,
                 reason: r,
                 originalPart: value,

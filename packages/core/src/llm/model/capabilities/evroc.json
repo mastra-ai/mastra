@@ -36,17 +36,6 @@
         "type": "budget_tokens"
       }
     ],
-    "openai/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "google/gemma-4-26B-A4B-it": [
-      {
-        "type": "toggle"
-      }
-    ],
     "mistralai/Mistral-Medium-3.5-128B": [
       {
         "type": "effort",
@@ -74,6 +63,17 @@
       {
         "type": "effort",
         "values": ["high", "max"]
+      }
+    ],
+    "google/gemma-4-26B-A4B-it": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "evroc/roc": [

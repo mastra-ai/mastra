@@ -4,7 +4,7 @@ import { HoverCard, HoverCardTrigger } from '@mastra/playground-ui/components/Ho
 import { Sidebar, useMaybeSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { MoreHorizontal, Pin, PinOff, RefreshCw, Trash2, User } from 'lucide-react';
+import { Lock, MoreHorizontal, Pin, PinOff, RefreshCw, Trash2, User, Users } from 'lucide-react';
 import { useRef } from 'react';
 import type { RefObject } from 'react';
 
@@ -15,6 +15,7 @@ import type { SessionRowStatus } from '../services/sessionStatus';
 import { ActivityBelt } from '@mastra/playground-ui/components/Activity';
 import { SessionPreviewCard } from './SessionPreviewCard';
 import type { SessionPreviewDetails } from './SessionPreviewCard';
+import { SessionSharingPopover } from './SessionSharingPopover';
 
 /**
  * Shared sidebar row for workspace/user sessions. Built on `Sidebar.NavLink`
@@ -44,6 +45,9 @@ export function SessionNavRow({
   onDelete,
   onRegenerateTitle,
   regeneratingTitle,
+  visibility,
+  onVisibilityChange,
+  changingVisibility,
 }: {
   name: string;
   /** Hover tooltip, typically the branch name. */
@@ -69,6 +73,12 @@ export function SessionNavRow({
   /** Omitted for sessions the viewer does not own: the server only lets owners rename. */
   onRegenerateTitle?: () => void;
   regeneratingTitle?: boolean;
+  /** Private rows show a sharing popover; shared rows have no visibility badge. */
+  visibility?: 'org' | 'private';
+  /** Omitted for sessions the viewer does not own: the server only lets owners change visibility. */
+  onVisibilityChange?: (visibility: 'org' | 'private') => void;
+  /** Disables the visibility item while a change is in flight, so overlapping requests cannot land out of order. */
+  changingVisibility?: boolean;
 }) {
   const anchor = useRef<HTMLLIElement>(null);
   // Selecting a session navigates away, so the mobile nav drawer must close.
@@ -100,6 +110,14 @@ export function SessionNavRow({
   const action = (
     <>
       {belt ? <ActivityBelt status={belt} label={beltLabel(belt, name)} /> : null}
+      {visibility === 'private' ? (
+        <SessionSharingPopover
+          name={name}
+          disabled={disabled || loading}
+          onShare={onVisibilityChange ? () => onVisibilityChange('org') : undefined}
+          sharing={changingVisibility}
+        />
+      ) : null}
       <span className={cn(trailingSlot, trailing ? 'grid' : revealedSlot)}>
         {trailing === 'loading' ? (
           <Spinner size="sm" aria-label={`Opening ${name}`} className="text-muted-foreground" />
@@ -124,6 +142,9 @@ export function SessionNavRow({
             onDelete={onDelete}
             onRegenerateTitle={onRegenerateTitle}
             regeneratingTitle={regeneratingTitle}
+            visibility={visibility}
+            onVisibilityChange={onVisibilityChange}
+            changingVisibility={changingVisibility}
           />
         )}
       </span>
@@ -185,6 +206,9 @@ function SessionActionsMenu({
   onDelete,
   onRegenerateTitle,
   regeneratingTitle,
+  visibility,
+  onVisibilityChange,
+  changingVisibility,
 }: {
   name: string;
   anchor: RefObject<HTMLElement | null>;
@@ -194,6 +218,9 @@ function SessionActionsMenu({
   onDelete?: () => void;
   onRegenerateTitle?: () => void;
   regeneratingTitle?: boolean;
+  visibility?: 'org' | 'private';
+  onVisibilityChange?: (visibility: 'org' | 'private') => void;
+  changingVisibility?: boolean;
 }) {
   return (
     <DropdownMenu>
@@ -220,6 +247,15 @@ function SessionActionsMenu({
           <DropdownMenu.Item disabled={regeneratingTitle} onClick={onRegenerateTitle}>
             <RefreshCw className={cn(regeneratingTitle && 'animate-spin')} />
             Regenerate title
+          </DropdownMenu.Item>
+        ) : null}
+        {onVisibilityChange && visibility ? (
+          <DropdownMenu.Item
+            disabled={changingVisibility}
+            onClick={() => onVisibilityChange(visibility === 'private' ? 'org' : 'private')}
+          >
+            {visibility === 'private' ? <Users /> : <Lock />}
+            {visibility === 'private' ? 'Share with organization' : 'Make private'}
           </DropdownMenu.Item>
         ) : null}
         {onDelete ? (
