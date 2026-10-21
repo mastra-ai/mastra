@@ -215,18 +215,16 @@ export const microsoftPowerpointScenario: Scenario = {
       return steps;
     }
 
-    let parentId: string | undefined;
     if (!tools['microsoft_powerpoint_get_presentation']) {
       steps.push(
         makeStep('get presentation', 'microsoft_powerpoint_get_presentation', 'skip', 'tool not in project toolset'),
       );
     } else {
       try {
-        const presentation = await call<{ id: string; name: string; parentReference?: { id?: string } }>(
-          'microsoft_powerpoint_get_presentation',
-          { driveId, itemId: originalId },
-        );
-        parentId = presentation.parentReference?.id;
+        const presentation = await call<{ id: string; name: string }>('microsoft_powerpoint_get_presentation', {
+          driveId,
+          itemId: originalId,
+        });
         const matches = presentation.id === originalId && presentation.name === `${originalFilename}.pptx`;
         steps.push(
           makeStep(
@@ -473,29 +471,17 @@ export const microsoftPowerpointScenario: Scenario = {
       steps.push(
         makeStep('move presentation', 'microsoft_powerpoint_move_presentation', 'skip', 'tool not in project toolset'),
       );
-    } else if (parentId) {
-      try {
-        await call('microsoft_powerpoint_move_presentation', {
-          driveId,
-          itemId: originalId,
-          destinationFolderId: parentId,
-        });
-        steps.push(makeStep('move presentation', 'microsoft_powerpoint_move_presentation', 'pass'));
-      } catch (error) {
-        steps.push(
-          makeStep('move presentation', 'microsoft_powerpoint_move_presentation', 'fail', errorMessage(error)),
-        );
-      }
     } else {
-      // The toolset can't create a destination folder. If metadata didn't
-      // expose the current parent, use a synthetic folder id so Graph rejects
-      // the move before changing the presentation.
+      log.error(
+        'Cannot verify move presentation: the provider has no tool for creating a distinct destination folder.',
+      );
       steps.push(
-        await probeTool(call, tools, 'move presentation (probe)', 'microsoft_powerpoint_move_presentation', {
-          driveId,
-          itemId: originalId,
-          destinationFolderId: `mastra-smoke-missing-folder-${runId}`,
-        }),
+        makeStep(
+          'move presentation',
+          'microsoft_powerpoint_move_presentation',
+          'skip',
+          'no distinct destination folder available',
+        ),
       );
     }
 
