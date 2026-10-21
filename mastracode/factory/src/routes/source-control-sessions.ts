@@ -18,6 +18,7 @@ import {
   userSessionResourceFor,
 } from '../session/session-threads.js';
 import { normalizeSessionTitle } from '../session/session-title.js';
+import type { ChannelIdentityStorage } from '../storage/domains/channel-identity/base.js';
 import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
 import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
@@ -57,6 +58,8 @@ export interface SourceControlSessionRoutesOptions {
   sourceControls: readonly SourceControlStorageHandle[];
   projects: Pick<FactoryProjectsStorage, 'get'>;
   users?: SessionOwnerUserProvider;
+  /** Organization-scoped display names from verified Slack account links. */
+  channelIdentity?: Pick<ChannelIdentityStorage, 'getAccountDisplayNames'>;
   controller?: MountedMastraCode['controller'];
   memorySettings: Pick<MemorySettingsStorage, 'get'>;
   sessionRetirement?: SessionRetirementCoordinator;
@@ -258,7 +261,10 @@ function titleModel(modelId: string) {
     resolveModel(modelId, { remapForCodexOAuth: true, requestContext });
 }
 
-function createSessionOwnerProfileResolver(users: SessionOwnerUserProvider | undefined) {
+function createSessionOwnerProfileResolver(
+  users: SessionOwnerUserProvider | undefined,
+  channelIdentity: SourceControlSessionRoutesOptions['channelIdentity'],
+) {
   const cache = new Map<string, { profile?: SessionOwnerProfile; expiresAt: number }>();
   const cacheProfile = (userId: string, profile: SessionOwnerProfile | undefined, expiresAt: number) => {
     cache.delete(userId);
@@ -269,7 +275,7 @@ function createSessionOwnerProfileResolver(users: SessionOwnerUserProvider | und
     }
   };
 
-  return async (userIds: string[]): Promise<Map<string, SessionOwnerProfile>> => {
+  const resolveDirectoryProfiles = async (userIds: string[]): Promise<Map<string, SessionOwnerProfile>> => {
     if (!users) return new Map();
     const requestedUserIds = [...new Set(userIds)].slice(0, MAX_SESSION_OWNER_PROFILES);
     const profiles = new Map<string, SessionOwnerProfile>();
@@ -319,6 +325,23 @@ function createSessionOwnerProfileResolver(users: SessionOwnerUserProvider | und
     for (const userId of unresolvedUserIds) cacheProfile(userId, profiles.get(userId), expiresAt);
     return profiles;
   };
+
+  return async (orgId: string, userIds: string[]): Promise<Map<string, SessionOwnerProfile>> => {
+    const profiles = await resolveDirectoryProfiles(userIds);
+    const missing = [...new Set(userIds)].filter(userId => !profiles.has(userId));
+    if (!channelIdentity || missing.length === 0) return profiles;
+    try {
+      // Keep Slack names out of the directory cache: links are organization-scoped
+      // and a disconnect or relink must take effect on the next read, across replicas.
+      const names = await channelIdentity.getAccountDisplayNames({ platform: 'slack', orgId, userIds: missing });
+      for (const [id, name] of names) profiles.set(id, { id, name });
+    } catch (error) {
+      console.warn('[Factory Sessions] Linked owner name lookup failed', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    return profiles;
+  };
 }
 
 function withOwnerProfile(session: SourceControlSession, owners: Map<string, SessionOwnerProfile>) {
@@ -348,7 +371,10 @@ function projectSessionRoutes(
           projectRepositoryId: project.project.id,
           viewerUserId: userId,
         });
-        const owners = await resolveOwnerProfiles(sessions.map(session => session.userId));
+        const owners = await resolveOwnerProfiles(
+          orgId,
+          sessions.map(session => session.userId),
+        );
         return c.json({ sessions: sessions.map(session => withOwnerProfile(session, owners)) });
       },
     }),
@@ -453,7 +479,7 @@ function projectSessionRoutes(
 
 export function buildSourceControlSessionRoutes(options: SourceControlSessionRoutesOptions): ApiRoute[] {
   const nameSession = createSessionNaming();
-  const resolveOwnerProfiles = createSessionOwnerProfileResolver(options.users);
+  const resolveOwnerProfiles = createSessionOwnerProfileResolver(options.users, options.channelIdentity);
   return [
     registerApiRoute('/web/factory/projects/:id/sessions', {
       method: 'GET',
@@ -473,7 +499,10 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
             ),
           )
         ).flat();
-        const owners = await resolveOwnerProfiles(sessions.map(session => session.userId));
+        const owners = await resolveOwnerProfiles(
+          orgId,
+          sessions.map(session => session.userId),
+        );
         return c.json({ sessions: sessions.map(session => withOwnerProfile(session, owners)) });
       },
     }),
@@ -496,7 +525,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         if (!canReadSessionResource(session, resourceId, resolved.tenant)) {
           return c.json({ error: 'Session not found' }, 404);
         }
-        const owners = await resolveOwnerProfiles([session.userId]);
+        const owners = await resolveOwnerProfiles(resolved.tenant.orgId, [session.userId]);
         const recreateSandbox =
           canRecreateSandbox(options) &&
           (await sessionManagePermission(loose(c), options.auth, resolved.tenant, session)) === 'allowed';
@@ -726,7 +755,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         const live = await controller?.getSession(sessionId);
         if (live && threadIds.length > 0) await controller!.deleteSession({ sessionId });
         else if (live) await controller!.setResourceId(live, { resourceId });
-        const owners = await resolveOwnerProfiles([updated.userId]);
+        const owners = await resolveOwnerProfiles(resolved.tenant.orgId, [updated.userId]);
         return c.json({ session: withOwnerProfile(updated, owners) });
       },
     }),

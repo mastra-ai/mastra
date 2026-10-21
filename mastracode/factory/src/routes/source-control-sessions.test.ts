@@ -34,7 +34,12 @@ type RouteOptions = Parameters<typeof buildSourceControlSessionRoutes>[0];
 
 function buildApp(
   sourceControls: readonly SourceControlStorageHandle[],
-  { memorySettings, projects, users }: Pick<RouteOptions, 'memorySettings' | 'projects' | 'users'>,
+  {
+    memorySettings,
+    projects,
+    users,
+    channelIdentity,
+  }: Pick<RouteOptions, 'memorySettings' | 'projects' | 'users' | 'channelIdentity'>,
   controller?: RouteOptions['controller'],
   workItems?: RouteOptions['workItems'],
   viewer: { workosId: string; organizationId: string } = user,
@@ -54,6 +59,7 @@ function buildApp(
       memorySettings,
       controller,
       users,
+      channelIdentity,
       ...(workItems ? { workItems } : {}),
       ...(moveThread ? { moveThread } : {}),
     }),
@@ -99,6 +105,128 @@ async function seedGitLabRepository() {
   });
   return { seed, sourceControl, projectRepository, project };
 }
+
+describe('Slack session owner names', () => {
+  async function seedOwner() {
+    const env = await seedGitLabRepository();
+    const session = await env.sourceControl.sessions.create({
+      sessionId: 'linked-owner-session',
+      projectRepositoryId: env.projectRepository.id,
+      factoryProjectId: env.project.id,
+      orgId: 'org-1',
+      userId: 'user-2',
+      branch: 'user/session-linked-owner',
+      baseBranch: 'main',
+      visibility: 'org',
+    });
+    const key = { platform: 'slack', externalTeamId: 'T-work', externalUserId: 'U-owner' };
+    await env.seed.channelIdentity.saveAccountLink({
+      ...key,
+      orgId: 'org-1',
+      userId: 'user-2',
+      externalUserName: '  Grace Hopper  ',
+    });
+    return { ...env, session, key };
+  }
+
+  it.each(['absent', 'missing', 'unavailable'] as const)(
+    'shows linked Slack names across session reads when the user directory is %s',
+    async directory => {
+      const { seed, sourceControl, projectRepository, project, session } = await seedOwner();
+      const users =
+        directory === 'absent'
+          ? undefined
+          : {
+              getUser: async () => {
+                if (directory === 'unavailable') throw new Error('Directory unavailable');
+                return null;
+              },
+            };
+      const app = buildApp([sourceControl], { ...seed, users });
+      const owner = { id: 'user-2', name: 'Grace Hopper' };
+      for (const path of [
+        `/web/factory/projects/${project.id}/sessions`,
+        `/web/source-control/projects/${projectRepository.id}/sessions`,
+        `/web/github/projects/${projectRepository.id}/sessions`,
+      ]) {
+        const response = await app.request(path);
+        expect(response.status).toBe(200);
+        await expect(response.json()).resolves.toMatchObject({ sessions: [{ userId: 'user-2', owner }] });
+      }
+      const opened = await app.request(`/web/user-sessions/${session.sessionId}`);
+      expect(opened.status).toBe(200);
+      await expect(opened.json()).resolves.toMatchObject({ session: { userId: 'user-2', owner } });
+    },
+  );
+
+  it('keeps the directory profile ahead of a linked Slack name', async () => {
+    const { seed, sourceControl, session } = await seedOwner();
+    const profile = { id: 'user-2', name: 'Directory name', avatarUrl: 'https://example.com/avatar.png' };
+    const app = buildApp([sourceControl], { ...seed, users: { getUser: async () => profile } });
+    await expect((await app.request(`/web/user-sessions/${session.sessionId}`)).json()).resolves.toMatchObject({
+      session: { owner: profile },
+    });
+  });
+
+  it('reads current links after disconnect, relink, and a move to another organization', async () => {
+    const { seed, sourceControl, session, key } = await seedOwner();
+    // Exercise the directory's negative cache as well as repeated Slack lookups.
+    const app = buildApp([sourceControl], { ...seed, users: { getUser: async () => null } });
+    const read = async () => {
+      const response = await app.request(`/web/user-sessions/${session.sessionId}`);
+      expect(response.status).toBe(200);
+      return (await response.json()).session;
+    };
+    expect((await read()).owner).toEqual({ id: 'user-2', name: 'Grace Hopper' });
+    await seed.channelIdentity.deleteAccountLinkForUser({ ...key, userId: 'user-2' });
+    expect(await read()).not.toHaveProperty('owner');
+    await seed.channelIdentity.saveAccountLink({ ...key, orgId: 'org-1', userId: 'user-2', externalUserName: 'Grace' });
+    expect((await read()).owner).toEqual({ id: 'user-2', name: 'Grace' });
+    await seed.channelIdentity.saveAccountLink({
+      ...key,
+      orgId: 'org-2',
+      userId: 'user-2',
+      externalUserName: 'Other org',
+    });
+    expect(await read()).not.toHaveProperty('owner');
+    await seed.channelIdentity.saveAccountLink({ ...key, userId: 'user-2', externalUserName: 'Personal account' });
+    expect(await read()).not.toHaveProperty('owner');
+  });
+
+  it('does not make private sessions or another organization visible', async () => {
+    const { seed, sourceControl, project, session } = await seedOwner();
+    await sourceControl.sessions.setVisibility({ sessionId: session.sessionId, visibility: 'private' });
+    const teammate = buildApp([sourceControl], seed);
+    expect((await teammate.request(`/web/user-sessions/${session.sessionId}`)).status).toBe(404);
+    await expect((await teammate.request(`/web/factory/projects/${project.id}/sessions`)).json()).resolves.toEqual({
+      sessions: [],
+    });
+    const outsider = buildApp([sourceControl], seed, undefined, undefined, {
+      workosId: 'user-2',
+      organizationId: 'org-2',
+    });
+    expect((await outsider.request(`/web/user-sessions/${session.sessionId}`)).status).toBe(404);
+    expect((await outsider.request(`/web/factory/projects/${project.id}/sessions`)).status).toBe(404);
+  });
+
+  it('returns the same owner after a visibility change without changing its identity', async () => {
+    const { seed, sourceControl, session } = await seedOwner();
+    const app = buildApp([sourceControl], seed, undefined, seed.workItems, {
+      workosId: 'user-2',
+      organizationId: 'org-1',
+    });
+    const response = await app.request(`/web/user-sessions/${session.sessionId}/visibility`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ visibility: 'private' }),
+    });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({
+      session: { userId: 'user-2', visibility: 'private', owner: { id: 'user-2', name: 'Grace Hopper' } },
+    });
+    await expect(sourceControl.sessions.getBySessionId(session.sessionId)).resolves.toMatchObject({ userId: 'user-2' });
+  });
+});
 
 describe('source-control session routes', () => {
   it('resolves binding, run audit, and title flows when the hosted thread differs from the Factory session', async () => {

@@ -134,7 +134,9 @@ export const queryKeys = {
   factoryAudit: (githubProjectId: string | undefined, group: string, actorKey?: string) =>
     ['factory', 'audit', githubProjectId ?? null, group, actorKey ?? null] as const,
   factoryAuditPortal: () => ['factory', 'audit-portal'] as const,
+  sessionsRoot: () => ['sessions'] as const,
   sessions: (factoryId: string | undefined) => ['sessions', factoryId ?? null] as const,
+  userSessionsRoot: () => ['user-session'] as const,
   userSession: (sessionId: string | undefined) => ['user-session', sessionId ?? null] as const,
   providers: () => ['providers'] as const,
   availableModels: (filter?: AvailableModelsFilter) =>

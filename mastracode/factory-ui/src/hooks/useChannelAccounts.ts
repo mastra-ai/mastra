@@ -38,15 +38,19 @@ export function useSetDefaultFactoryMutation() {
   });
 }
 
-/** Sever one of the caller's links; refreshes the list on success. */
+/** Sever a link and refresh the accounts and sessions that may display its profile. */
 export function useDisconnectChannelAccountMutation() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (key: Pick<ConnectedChannelAccount, 'platform' | 'externalTeamId' | 'externalUserId'>) =>
       disconnectChannelAccount(baseUrl, key),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: queryKeys.channelAccounts() });
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.channelAccounts() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.sessionsRoot() }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.userSessionsRoot() }),
+      ]);
     },
   });
 }

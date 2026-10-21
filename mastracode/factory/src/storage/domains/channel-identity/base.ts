@@ -47,6 +47,8 @@ export interface ChannelAccountLinkNames {
   externalUserName?: string;
 }
 
+const ACCOUNT_DISPLAY_NAME_BATCH_SIZE = 100;
+
 export const CHANNEL_ACCOUNT_LINKS_SCHEMA: CollectionSchema = {
   name: 'channel_account_links',
   columns: {
@@ -221,6 +223,43 @@ export class ChannelIdentityStorage extends FactoryStorageDomain {
   async listAccountLinksForUser(userId: string): Promise<ChannelAccountLinkEntry[]> {
     const rows = await this.#db.findMany<ChannelAccountLinkDbRow>('channel_account_links', { user_id: userId });
     return rows.map(toEntry);
+  }
+
+  /** Display-only names for users in one organization, newest named link first. */
+  async getAccountDisplayNames({
+    platform,
+    orgId,
+    userIds,
+  }: {
+    platform: string;
+    orgId: string;
+    userIds: readonly string[];
+  }): Promise<Map<string, string>> {
+    const names = new Map<string, string>();
+    const ids = [...new Set(userIds)];
+    if (ids.length === 0) return names;
+    await this.ensureReady();
+    for (let offset = 0; offset < ids.length; offset += ACCOUNT_DISPLAY_NAME_BATCH_SIZE) {
+      const rows = await this.#db.findMany<ChannelAccountLinkDbRow>(
+        'channel_account_links',
+        {
+          platform,
+          org_id: orgId,
+          user_id: { in: ids.slice(offset, offset + ACCOUNT_DISPLAY_NAME_BATCH_SIZE) },
+        },
+        {
+          orderBy: [
+            ['linked_at', 'desc'],
+            ['id', 'desc'],
+          ],
+        },
+      );
+      for (const row of rows) {
+        const name = row.external_user_name?.trim();
+        if (name && !names.has(row.user_id)) names.set(row.user_id, name);
+      }
+    }
+    return names;
   }
 
   /** All links bound to an organization, for the mention-roster fallback. */

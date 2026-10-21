@@ -5,6 +5,68 @@ import { createFactoryStorageForTests } from '../../test-utils.js';
 const slackKey = { platform: 'slack', externalTeamId: 'T-123', externalUserId: 'U-abc' };
 
 describe('ChannelIdentityStorage', () => {
+  it('resolves display names only for the requested platform, organization, and users', async () => {
+    const { channelIdentity } = await createFactoryStorageForTests();
+    for (const link of [
+      { ...slackKey, orgId: 'org-1', userId: 'user-1', externalUserName: '  Grace Hopper  ' },
+      { ...slackKey, externalTeamId: 'T-other', orgId: 'org-2', userId: 'user-1', externalUserName: 'Other org' },
+      { ...slackKey, externalTeamId: 'T-personal', userId: 'user-1', externalUserName: 'Personal' },
+      { ...slackKey, platform: 'discord', orgId: 'org-1', userId: 'user-1', externalUserName: 'Other platform' },
+      { ...slackKey, externalUserId: 'U-other', orgId: 'org-1', userId: 'user-2', externalUserName: 'Other user' },
+    ]) {
+      await channelIdentity.saveAccountLink(link);
+    }
+    expect(
+      await channelIdentity.getAccountDisplayNames({
+        platform: 'slack',
+        orgId: 'org-1',
+        userIds: ['user-1', 'missing'],
+      }),
+    ).toEqual(new Map([['user-1', 'Grace Hopper']]));
+    expect(await channelIdentity.getAccountDisplayNames({ platform: 'slack', orgId: 'org-1', userIds: [] })).toEqual(
+      new Map(),
+    );
+  });
+
+  it('uses the newest named link and falls back to an older link when the newer one has no name', async () => {
+    const { channelIdentity, storage } = await createFactoryStorageForTests();
+    for (const [index, name] of ['Older name', 'Current name', '   '].entries()) {
+      const key = { ...slackKey, externalTeamId: `T-${index}` };
+      await channelIdentity.saveAccountLink({ ...key, orgId: 'org-1', userId: 'user-1', externalUserName: name });
+      await storage.ops.updateMany(
+        'channel_account_links',
+        { platform: key.platform, external_team_id: key.externalTeamId, external_user_id: key.externalUserId },
+        { linked_at: new Date(Date.UTC(2026, 0, index + 1)) },
+      );
+    }
+    expect(
+      await channelIdentity.getAccountDisplayNames({ platform: 'slack', orgId: 'org-1', userIds: ['user-1'] }),
+    ).toEqual(new Map([['user-1', 'Current name']]));
+    await channelIdentity.deleteAccountLink({ ...slackKey, externalTeamId: 'T-1' });
+    expect(
+      await channelIdentity.getAccountDisplayNames({ platform: 'slack', orgId: 'org-1', userIds: ['user-1'] }),
+    ).toEqual(new Map([['user-1', 'Older name']]));
+  });
+
+  it('finds requested owners beyond the roster limit and across lookup batches', async () => {
+    const { channelIdentity } = await createFactoryStorageForTests();
+    const names = new Map<string, string>();
+    for (let index = 0; index < 205; index++) {
+      const userId = `user-${index}`;
+      names.set(userId, `Slack owner ${index}`);
+      await channelIdentity.saveAccountLink({
+        ...slackKey,
+        externalUserId: `U-${index}`,
+        orgId: 'org-1',
+        userId,
+        externalUserName: names.get(userId),
+      });
+    }
+    expect(
+      await channelIdentity.getAccountDisplayNames({ platform: 'slack', orgId: 'org-1', userIds: [...names.keys()] }),
+    ).toEqual(names);
+  });
+
   it('returns null for an unlinked sender', async () => {
     const seed = await createFactoryStorageForTests();
 
