@@ -138,7 +138,8 @@ function providerVerdict(status: number | undefined, codes: string, evidence: st
 
 // A request the provider named invalid is final; its wording may only say which final kind.
 function narrowInvalidRequest(evidence: string): ProviderFailureKind {
-  if (usageKind(evidence) === 'quota') return 'quota';
+  // Anthropic reports an exhausted credit balance as a 400 invalid request.
+  if (BILLING_EXHAUSTED.test(evidence)) return 'quota';
   return terminalKindFromWording(evidence) ?? 'invalid_request';
 }
 

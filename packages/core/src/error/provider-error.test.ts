@@ -287,6 +287,18 @@ describe('classifyProviderError', () => {
       'invalid_request',
     ],
     [
+      'invalid_prompt frame worded as a monthly limit',
+      {
+        type: 'error',
+        error: {
+          type: 'invalid_request_error',
+          code: 'invalid_prompt',
+          message: "Invalid value 'monthly limit' for parameter mode.",
+        },
+      },
+      'invalid_request',
+    ],
+    [
       '400 invalid_prompt that mentions a timeout',
       apiError(400, 'Invalid timeout parameter', undefined, { error: { code: 'invalid_prompt' } }),
       'invalid_request',
