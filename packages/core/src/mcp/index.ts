@@ -8,6 +8,8 @@ import type { InternalCoreTool, MCPToolType } from '../tools';
 import { slugify } from '../utils/slugify';
 import type {
   MCPServerConfig,
+  MCPServerEventInfo,
+  MCPServerEventsInspector,
   MCPServerHonoSSEOptions,
   MCPServerIcon,
   MCPServerHTTPOptions,
@@ -372,4 +374,18 @@ export abstract class MCPServerBase<TId extends string = string> extends MastraB
       _meta?: Record<string, unknown>;
     }>;
   }>;
+
+  /**
+   * The event types this server declares, or `undefined` when it has none.
+   * Optional: implementations without events omit it.
+   * @experimental
+   */
+  public getEventsInfo?(): { events: MCPServerEventInfo[] } | undefined;
+
+  /**
+   * Polls, streams, and test-emits this server's events in-process (used by Studio),
+   * or `undefined` when it has none.
+   * @experimental
+   */
+  public getEventsInspector?(): MCPServerEventsInspector | undefined;
 }

@@ -14,6 +14,7 @@ import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
 import { createFilesystemTestSuite } from '@internal/workspace-test-utils';
+import { LocalFilesystem } from '@mastra/core/workspace';
 import { afterAll, describe, expect, it } from 'vitest';
 
 import type { SandboxCommandResult, SandboxExec } from './sandbox-filesystem';
@@ -88,6 +89,36 @@ createFilesystemTestSuite({
   },
   // Every operation shells out (often several commands), so give slow CI
   // hosts more headroom than the 5s default.
+  testTimeout: 20000,
+});
+
+/**
+ * Same suite with the sandbox exposing a native filesystem (the host disk,
+ * unconfined, standing in for a provider's file API). Proves the delegation
+ * wiring — absolute paths, workspace-relative `stat` paths, which operations
+ * delegate and which stay on the shell — against the shared contract.
+ */
+createFilesystemTestSuite({
+  suiteName: 'SandboxFilesystem Conformance (native filesystem)',
+  createFilesystem: () => {
+    const workdir = realpathSync(mkdtempSync(join(tmpdir(), 'mastra-sandbox-native-fs-')));
+    tmpDirs.push(workdir);
+    const sandbox = { ...createLocalShellExec(), filesystem: new LocalFilesystem({ basePath: '/', contained: false }) };
+    return new SandboxFilesystem({ sandbox, workdir });
+  },
+  capabilities: {
+    supportsAppend: true,
+    supportsBinaryFiles: true,
+    supportsForceDelete: true,
+    supportsOverwrite: true,
+    supportsEmptyDirectories: true,
+    deleteThrowsOnMissing: true,
+    supportsConcurrency: true,
+    supportsPermissions: false,
+    supportsMounting: false,
+    // appendFile and no-overwrite writes still travel as one base64 argument.
+    maxTestFileSize: 64 * 1024,
+  },
   testTimeout: 20000,
 });
 

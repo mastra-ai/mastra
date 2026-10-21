@@ -86,34 +86,10 @@
     "zai-glm-5-3"
   ],
   "reasoning": {
-    "mistral-large-4": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
     "zai-glm-5-2": [
       {
         "type": "effort",
         "values": ["none", "high", "max"]
-      }
-    ],
-    "mistral-medium-latest": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "mistral-medium-2604": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "mistral-small-latest": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
       }
     ],
     "zai-glm-5-3": [
@@ -122,7 +98,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "labs-leanstral-1-5-1": [
+    "mistral-medium-2604": [
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -134,13 +110,37 @@
         "values": ["none", "high", "max"]
       }
     ],
-    "magistral-medium-latest": [
+    "labs-leanstral-1-5-1": [
       {
         "type": "effort",
         "values": ["none", "high"]
       }
     ],
     "mistral-small-2603": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "mistral-medium-latest": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "magistral-medium-latest": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "mistral-large-4": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "mistral-small-latest": [
       {
         "type": "effort",
         "values": ["none", "high"]

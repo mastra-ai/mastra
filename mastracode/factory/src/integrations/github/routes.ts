@@ -21,6 +21,7 @@ import type { FactoryStorage } from '@mastra/core/storage';
 import type { FactorySandbox } from '@mastra/core/workspace';
 import type { Context } from 'hono';
 import type { RouteAuth } from '../../routes/route.js';
+import { canReadSessionResource, canViewSourceControlSession } from '../../routes/session-access.js';
 import { AUTO_TRIAGED_LABEL, NEEDS_APPROVAL_LABEL } from '../../rules/types.js';
 import { requireExec } from '../../sandbox/materialization.js';
 import type { ExecutableSandbox } from '../../sandbox/materialization.js';
@@ -1462,14 +1463,14 @@ function buildProjectGitRoutes({
         const session = await github.sourceControlStorage.sessions.getBySessionId(c.req.param('sessionId'));
         // Private sessions 404 (not 403) for non-owners so their IDs do not
         // leak existence; the body must match the genuinely-missing case.
-        if (
-          !session ||
-          session.orgId !== resolved.tenant.orgId ||
-          (session.visibility === 'private' && session.userId !== resolved.tenant.userId)
-        ) {
+        if (!session || !canViewSourceControlSession(session, resolved.tenant)) {
           return c.json({ error: 'Session not found' }, 404);
         }
-        return c.json({ session: { ...session, resourceId: await sessionMemoryResourceId(controller, session, workItems) } });
+        const resourceId = await sessionMemoryResourceId(controller, session, workItems);
+        if (!canReadSessionResource(session, resourceId, resolved.tenant)) {
+          return c.json({ error: 'Session not found' }, 404);
+        }
+        return c.json({ session: { ...session, resourceId } });
       },
     }),
     registerApiRoute('/web/user-sessions/:sessionId', {
