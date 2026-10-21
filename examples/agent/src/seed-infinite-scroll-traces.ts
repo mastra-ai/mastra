@@ -10,10 +10,11 @@
  * Usage: npx tsx src/seed-infinite-scroll-traces.ts [count]   (default: 200)
  */
 import { randomUUID } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { DuckDBStore } from '@mastra/duckdb';
 
 // `mastra dev` runs from `src/mastra/public`, where `./mastra-observability.duckdb` resolves.
-const DB_PATH = new URL('./mastra/public/mastra-observability.duckdb', import.meta.url).pathname;
+const DB_PATH = fileURLToPath(new URL('./mastra/public/mastra-observability.duckdb', import.meta.url));
 const SPACING_MS = 60_000;
 
 const count = Number.parseInt(process.argv[2] ?? '200', 10);
