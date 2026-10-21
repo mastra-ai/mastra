@@ -1,5 +1,7 @@
 import type { MastraMessageContentV2 } from '../../../agent';
 import type { MastraDBMessage, StorageThreadType } from '../../../memory/types';
+import type { ListActionsQuery } from '../../../new-message-format/storage';
+import type { PersistableAction } from '../../../new-message-format/types';
 import type { RunFence } from '../../run-fencing';
 import { runFencingNotSupportedError } from '../../run-fencing';
 import type {
@@ -29,8 +31,6 @@ import type {
   CreateReflectionGenerationInput,
   UpdateObservationalMemoryConfigInput,
 } from '../../types';
-import type { ListActionsQuery } from '../../../new-message-format/storage';
-import type { PersistableAction } from '../../../new-message-format/types';
 import { StorageDomain } from '../base';
 
 export type { ListActionsQuery, PersistableAction };

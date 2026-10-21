@@ -1,6 +1,7 @@
 import type { BackgroundTask } from '../../background-tasks/types';
 import type { ScoreRowData } from '../../evals/types';
 import type { StorageThreadType } from '../../memory/types';
+import type { PersistableAction } from '../../new-message-format/types';
 import type {
   StorageAgentType,
   StorageMCPClientType,
@@ -36,7 +37,6 @@ import type { ScorerDefinitionVersion } from './scorer-definitions';
 import type { SkillVersion } from './skills';
 import type { WorkflowDefinition } from './workflow-definitions';
 import type { WorkspaceVersion } from './workspaces';
-import type { PersistableAction } from '../../new-message-format/types';
 
 /**
  * InMemoryDB is a thin database layer for in-memory storage.
