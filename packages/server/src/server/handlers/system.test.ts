@@ -833,7 +833,7 @@ describe('System Handlers', () => {
           getFeatures() {
             return ['span-query'] as const;
           }
-          override async aggregateSpans() {
+          async aggregateSpans() {
             return { rows: [], truncated: false };
           }
         }
