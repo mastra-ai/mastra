@@ -55,7 +55,7 @@ export function SessionSharingPopover({
           }
           actionSlot={
             onShare ? (
-              <Button onClick={onShare} disabled={sharing} aria-busy={sharing}>
+              <Button onClick={onShare} disabled={disabled || sharing} aria-busy={sharing}>
                 {sharing ? <Spinner size="sm" aria-hidden /> : <Users />}
                 Share with organization
               </Button>
