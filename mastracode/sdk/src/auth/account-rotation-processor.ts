@@ -67,9 +67,8 @@ export type RotationCredentialStore = CredentialStore & {
   /**
    * Force one refresh of the active account's tokens regardless of expiry
    * (401/403 path — a rejected-but-unexpired token usually means clock skew
-   * or a refresh race). `AuthStorage` provides it; deployed per-tenant stores
-   * don't, and the auth path degrades to plain rotation (which itself no-ops
-   * without registry methods).
+   * or a refresh race). `AuthStorage` provides it for its active account;
+   * deployed per-tenant stores provide it for their single credential.
    */
   forceRefreshActiveAccount?(providerId: string, accountInstanceId?: string): Promise<string | undefined>;
 };
@@ -659,8 +658,15 @@ export class AccountRotationProcessor implements Processor {
     // `ProviderAuthRequiredError` from an empty registry) a refresh can never
     // succeed, so skip it and fall through to the retry:false surface below,
     // which rethrows the original auth error instead of a generic pool
-    // exhaustion message.
-    if (classification.kind === 'rotate' && classification.reason === 'auth-failed' && active) {
+    // exhaustion message. Stores without an account registry (deployed
+    // per-tenant stores) hold one credential per provider, so they refresh
+    // that credential instead.
+    const hasAccountRegistry = typeof store.listAccounts === 'function';
+    if (
+      classification.kind === 'rotate' &&
+      classification.reason === 'auth-failed' &&
+      (active || !hasAccountRegistry)
+    ) {
       const forced = getForcedRefreshInstances(state);
       const refreshKey = `${providerId}:${active?.id ?? 'active'}`;
       if (!forced.has(refreshKey) && typeof store.forceRefreshActiveAccount === 'function') {
