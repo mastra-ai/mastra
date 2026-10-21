@@ -1,3 +1,4 @@
+import { ScrollArea as ScrollAreaPrimitive } from '@base-ui/react/scroll-area';
 import type { CSSProperties, ReactNode, RefObject } from 'react';
 import { useId, useMemo } from 'react';
 import {
@@ -226,6 +227,10 @@ function DataListBase({
   mask,
   scrollRef,
   reorder,
+  maxHeight,
+  autoScroll,
+  scrollButtons,
+  revealScrollbarOnHover,
   ...props
 }: DataListBaseProps) {
   const scopeId = useId();
@@ -266,9 +271,13 @@ function DataListBase({
 
   if (!scrollable) {
     return (
-      <div {...props} className={cn('w-full rounded-xl p-1', dataListVariantClasses[variant], className)}>
+      // Preserve Base UI's render/style/ref contract without adding a clipping viewport.
+      <ScrollAreaPrimitive.Root
+        {...props}
+        className={cn('w-full rounded-xl p-1', dataListVariantClasses[variant], className)}
+      >
         <DataListReorderContext.Provider value={reorder}>{grid}</DataListReorderContext.Provider>
-      </div>
+      </ScrollAreaPrimitive.Root>
     );
   }
 
@@ -278,6 +287,10 @@ function DataListBase({
   return (
     <ScrollArea
       {...props}
+      maxHeight={maxHeight}
+      autoScroll={autoScroll}
+      scrollButtons={scrollButtons}
+      revealScrollbarOnHover={revealScrollbarOnHover}
       orientation="both"
       mask={getDataListMask(mask)}
       // Outer radius = row radius (8px) + 4px inset so the corners stay concentric.
