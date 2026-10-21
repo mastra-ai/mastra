@@ -23,7 +23,7 @@ await agent.sendMessage('Compare that with the previous option.', {
 })
 ```
 
-Mastra checks the thread first. If it is idle, the message starts a new run. If a run is already active, the message joins it and the model sees it on the next request. The signal is stored on the thread, so later runs and your UI see it too. [Signals in the agent loop](/docs/signals/signals-in-the-agent-loop) explains exactly when a run can take new input.
+Mastra checks the thread first. If it is idle, the message starts a new run. If a run is already active, the message joins it and the model sees it on the next request. When the agent has memory, the message is stored on the thread, so later runs and your UI see it too. [Signals in the agent loop](/docs/signals/signals-in-the-agent-loop) explains exactly when a run can take new input.
 
 When several people share a thread, add `attributes` so the model can tell their messages apart. Mastra renders them as XML attributes on the user message:
 
