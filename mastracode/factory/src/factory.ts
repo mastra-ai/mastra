@@ -474,6 +474,8 @@ export class MastraFactory {
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
   /** Environment builds through the sandbox's `builds`; undefined when the sandbox has none. */
   #environmentBuilds: EnvironmentBuildRunner | undefined;
+  /** The background session resource migration; resolves `true` when it moved run bindings. */
+  #sessionResourceMigration: Promise<boolean> | undefined;
   #preparing = false;
 
   constructor(config: MastraFactoryConfig) {
@@ -774,17 +776,19 @@ export class MastraFactory {
       integrations.some(integration => integration.intake !== undefined) && storage.isDomainReady('intake');
     const factoryReady = storage.isDomainReady('projects') && storage.isDomainReady('work-items');
     // Sessions from before shared resources ran under their own id. Move them
-    // onto their Factory or owner before any session is served. Run bindings
-    // decide which sessions belong to a Factory, so it waits for work items.
+    // onto their Factory or owner in the background: it can take minutes on a
+    // remote database, and an unmoved session keeps working under its own id
+    // meanwhile. Run bindings decide which sessions belong to a Factory, so it
+    // waits for work items.
     if (storage.isDomainReady('source-control') && storage.isDomainReady('work-items')) {
-      await timedPhase('prepare.migrate.sessionResources', async () => {
+      this.#sessionResourceMigration = timedPhase('background.migrate.sessionResources', async () => {
         try {
           const mastraStorage = storage.getMastraStorage();
           const memory = await mastraStorage.getStore('memory');
-          if (!memory) return;
+          if (!memory) return false;
           // The sessions' own Memory, so a moved thread takes its observation vectors along.
           const sessionMemory = getDynamicMemory(mastraStorage, vector);
-          await migrateSessionResources({
+          const report = await migrateSessionResources({
             sessions: sourceControlStorage,
             workItems: workItemsStorage,
             ...(storage.isDomainReady('integrations') ? { integrations: integrationStorage } : {}),
@@ -793,11 +797,13 @@ export class MastraFactory {
           });
           await sessionMemory.settled();
           await privatizeOwnerResourceSessions({ sessions: sourceControlStorage, workItems: workItemsStorage, memory });
+          return report.runBindings > 0;
         } catch (error) {
           // Unmoved sessions keep working under their own id; the next start retries.
           console.warn(
             `[factory] session resource migration stopped early: ${error instanceof Error ? error.message : error}`,
           );
+          return false;
         }
       });
     }
@@ -2050,6 +2056,15 @@ export class MastraFactory {
       'finalize.reconcileBoundThreads',
       () => this.#factoryProcessor?.reconcileAllBoundThreads() ?? Promise.resolve(),
     );
+    // A thread's messages move before its run binding does, so a reconcile that
+    // overlapped the migration can miss them. Catch up once the bindings moved.
+    void this.#sessionResourceMigration
+      ?.then(movedRunBindings => (movedRunBindings ? this.#factoryProcessor?.reconcileAllBoundThreads() : undefined))
+      .catch(error =>
+        console.warn(
+          `[factory] reconciling bound threads after the session resource migration failed: ${error instanceof Error ? error.message : error}`,
+        ),
+      );
     this.#dispatcher?.start();
   }
 
