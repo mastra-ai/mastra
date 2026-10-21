@@ -11,6 +11,7 @@ import { createTool } from '../../tools';
 import type { WorkflowRunState, WorkflowRunStatus } from '../../workflows/types';
 import { Agent } from '../agent';
 import { createDurableAgent } from '../durable';
+import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import { AGENT_THREAD_KEY_SEPARATOR, createHarness, setupRuntime } from './thread-stream-test-utils';
 import type { ThreadStreamHarness } from './thread-stream-test-utils';
 
@@ -237,12 +238,14 @@ describe('thread stream runtime reads stored run state', () => {
     const { runtime, pubsub, emit, streamPart } = setupRuntime(harness);
     const key = [harness.resourceId, harness.threadId].join(AGENT_THREAD_KEY_SEPARATOR);
     pubsub.retain = true;
+    // The lease is still held when the backlog replays, so the registration reads as live.
     pubsub.owners.set(key, runId);
     const registered = published.find(event => event.data.type === 'run-registered')!.data;
     harness.streamId = registered.streamId;
     await emit(registered);
     await streamPart({ type: 'tool-call-approval', payload: { toolCallId, toolName: 'lookup', args: {} } });
     await emit(published.find(event => event.data.type === 'run-suspended')!.data);
+    await vi.advanceTimersByTimeAsync(1);
 
     const subscription = await runtime.subscribeToThread(
       harness.agent,
@@ -263,5 +266,105 @@ describe('thread stream runtime reads stored run state', () => {
     await consumed;
     // The approval was already answered, so its stale prompt must not reach the subscriber.
     expect(replayedTypes).not.toContain('tool-call-approval');
+  });
+
+  it('keeps a live remote suspension parked when storage has no row for it', async () => {
+    vi.useFakeTimers();
+    const harness = createHarness('stored-live-missing');
+    // Readable storage without a row, as with a policy that skips suspended snapshots.
+    withStorage(harness, new InMemoryStore({ id: 'stored-live-missing' }));
+    const { runtime, pubsub, emit, streamPart } = setupRuntime(harness);
+    const key = [harness.resourceId, harness.threadId].join(AGENT_THREAD_KEY_SEPARATOR);
+    pubsub.owners.set(key, harness.runId);
+
+    const subscription = await runtime.subscribeToThread(
+      harness.agent,
+      { threadId: harness.threadId, resourceId: harness.resourceId },
+      pubsub,
+    );
+    const types: string[] = [];
+    const consumed = (async () => {
+      for await (const part of subscription.stream) types.push((part as any).type);
+    })();
+
+    await emit({ type: 'run-registered', runId: harness.runId, streamId: harness.streamId, streamSeq: 1 });
+    await streamPart({ type: 'tool-call-approval', payload: { toolCallId: 'call-1', toolName: 'lookup', args: {} } });
+    await emit({ type: 'run-suspended', runId: harness.runId, streamId: harness.streamId });
+    await flush();
+
+    expect(types).toContain('tool-call-approval');
+    expect(runtime.getThreadState({ threadId: harness.threadId, resourceId: harness.resourceId }, pubsub)).toBe(
+      'active',
+    );
+
+    subscription.unsubscribe();
+    await consumed;
+  });
+  it('keeps a live local suspension parked when its run has no stored suspended row', async () => {
+    const prompt = 'local missing row';
+    llm.on(
+      { userMessage: prompt, sequenceIndex: 0 },
+      { toolCalls: [{ id: 'call_local', name: 'lookup', arguments: {} }] },
+    );
+    llm.on({ userMessage: prompt, sequenceIndex: 1 }, { content: 'done' });
+    const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` });
+    const storage = new InMemoryStore();
+    const workflows = (await storage.getStore('workflows'))!;
+    const pubsub = new EventEmitterPubSub();
+    const suspendedEvents: unknown[] = [];
+    const publish = pubsub.publish.bind(pubsub);
+    pubsub.publish = async (topic, event) => {
+      if ((event as any)?.data?.type === 'run-suspended') suspendedEvents.push((event as any).data);
+      return publish(topic, event);
+    };
+    const base = new Agent({
+      id: 'local-missing',
+      name: 'local-missing',
+      instructions: 'Look it up.',
+      model: openai('gpt-4o-mini'),
+      memory: new MockMemory(),
+      tools: {
+        lookup: createTool({
+          id: 'lookup',
+          description: 'Looks something up',
+          inputSchema: z.object({}),
+          requireApproval: true,
+          execute: async () => ({ found: true }),
+        }),
+      },
+    });
+    // A policy that never persists snapshots: the live suspended run has no row.
+    const durable = createDurableAgent({ agent: base, shouldPersistSnapshot: () => false });
+    const mastra = new Mastra({ agents: { agent: durable as any }, storage, pubsub, logger: false });
+    const agent = mastra.getAgent('agent') as any;
+    const memory = { thread: 'local-missing-thread', resource: 'local-missing-user' };
+    const ids = { threadId: memory.thread, resourceId: memory.resource };
+
+    const subscription = await agent.subscribeToThread(ids);
+    const consumed = (async () => {
+      for await (const _part of subscription.stream);
+    })();
+
+    const result = await agent.stream(prompt, { memory });
+    let toolCallId: string | undefined;
+    for await (const chunk of result.fullStream) {
+      if (chunk.type === 'tool-call-approval') {
+        toolCallId = chunk.payload.toolCallId;
+        break;
+      }
+    }
+    expect(toolCallId).toBeTruthy();
+    await vi.waitFor(() => expect(suspendedEvents.length).toBeGreaterThan(0));
+    await new Promise(resolve => setTimeout(resolve, 200));
+    const { runs } = await workflows.listWorkflowRuns({});
+    expect(runs.filter(run => run.runId === result.runId)).toEqual([]);
+
+    expect(agentThreadStreamRuntime.getActiveThreadRunId(ids, agent.getPubSub())).toBe(result.runId);
+    expect(
+      agentThreadStreamRuntime.getResumableThreadRunSuspension({ ...ids, runId: result.runId }, agent.getPubSub()),
+    ).toBeDefined();
+
+    subscription.unsubscribe();
+    await consumed;
   });
 });

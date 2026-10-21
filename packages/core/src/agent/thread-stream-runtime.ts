@@ -5468,12 +5468,16 @@ export class AgentThreadStreamRuntime {
         // finished. Both loops persist the suspended row before publishing
         // run-suspended and delete it when the run finishes, so a readable store
         // without that row (or with a terminal one) means the run is no longer parked.
-        // A missing row only counts for replayed streams: a local run whose
+        // A missing row only counts for backlog suspensions (deferred, or
+        // published before this subscription): a live suspension whose
         // persistence policy skips suspended rows is still parked.
         const storedStatus =
           data.type === 'run-suspended' ? await this.#readStoredRunStatus(agent, data.runId) : undefined;
+        const suspendedAt = event.createdAt === undefined ? undefined : new Date(event.createdAt).getTime();
+        const historicalSuspension =
+          deferredRecord !== undefined || (suspendedAt !== undefined && suspendedAt < subscribedAt);
         const suspendedRunEnded =
-          (storedStatus === 'missing' && (deferredRecord !== undefined || replayedStreamIds.has(eventStreamId))) ||
+          (storedStatus === 'missing' && historicalSuspension) ||
           (storedStatus !== undefined && storedStatus !== 'missing' && TERMINAL_STORED_RUN_STATUSES.has(storedStatus));
         // Its prompt was answered; keep the history but drop the stale prompt.
         if (suspendedRunEnded) answeredStreamIds.add(eventStreamId);
@@ -5554,6 +5558,8 @@ export class AgentThreadStreamRuntime {
     };
 
     let historyReadAt: number | undefined;
+    /** Events published before this subscription started are backlog. */
+    const subscribedAt = Date.now();
     const storedStreamIds = new Set<string>();
     const suspendedStreamIdsByRunId = new Map<string, string>();
     /** streamSeq of each registered stream, per run. */
