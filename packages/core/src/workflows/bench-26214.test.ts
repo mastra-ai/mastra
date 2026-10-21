@@ -13,6 +13,7 @@ const SIZE = Number(process.env.BENCH_SIZE ?? 2000);
 const C = Number(process.env.BENCH_C ?? 1);
 const LABEL = process.env.BENCH_LABEL ?? 'unknown';
 const OUT = process.env.BENCH_OUT ?? '/tmp/bench.jsonl';
+const DELAY = Number(process.env.BENCH_DELAY_MS ?? 0);
 const DB_FILE = '/tmp/bench-26214.db';
 const PG_URL = 'postgresql://postgres:postgres@127.0.0.1:5432/bench';
 
@@ -77,7 +78,10 @@ it(
       id: 'item',
       inputSchema: z.number(),
       outputSchema: z.object({ i: z.number(), data: z.string() }),
-      execute: async ({ inputData }) => ({ i: inputData, data: payload }),
+      execute: async ({ inputData }) => {
+        if (DELAY) await new Promise(resolve => setTimeout(resolve, DELAY));
+        return { i: inputData, data: payload };
+      },
     });
     const workflow = createWorkflow({
       id: 'bench',
@@ -114,6 +118,7 @@ it(
       store: STORE,
       n: N,
       size: SIZE,
+      delayMs: DELAY,
       c: C,
       writes: stats.writes,
       bytes: stats.bytes,

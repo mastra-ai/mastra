@@ -1,0 +1,8 @@
+{"label":"main","store":"libsql","n":300,"size":32000,"delayMs":100,"c":1,"writes":303,"bytes":29292165,"largest":19214467,"wallMs":31019,"storeMs":761,"diskGrowth":47677504}
+{"label":"coalesce","store":"libsql","n":300,"size":32000,"delayMs":100,"c":1,"writes":36,"bytes":183291203,"largest":19214467,"wallMs":31692,"storeMs":2794,"diskGrowth":47677504}
+{"label":"main","store":"pg","n":300,"size":32000,"delayMs":100,"c":1,"writes":303,"bytes":29292165,"largest":19214467,"wallMs":31531,"storeMs":1280,"diskGrowth":589824,"diskGrowthAfterVacuum":606208}
+{"label":"coalesce","store":"pg","n":300,"size":32000,"delayMs":100,"c":1,"writes":35,"bytes":176464858,"largest":19214467,"wallMs":30977,"storeMs":4058,"diskGrowth":2678784,"diskGrowthAfterVacuum":2719744}
+{"label":"main","store":"libsql","n":100,"size":32000,"delayMs":1000,"c":10,"writes":103,"bytes":9684468,"largest":6404868,"wallMs":10169,"storeMs":187,"diskGrowth":15510176}
+{"label":"coalesce","store":"libsql","n":100,"size":32000,"delayMs":1000,"c":10,"writes":23,"bytes":24074251,"largest":6404868,"wallMs":10212,"storeMs":385,"diskGrowth":18744376}
+{"label":"main","store":"pg","n":100,"size":32000,"delayMs":1000,"c":10,"writes":103,"bytes":9684468,"largest":6404868,"wallMs":10288,"storeMs":679,"diskGrowth":294912,"diskGrowthAfterVacuum":270336}
+{"label":"coalesce","store":"pg","n":100,"size":32000,"delayMs":1000,"c":10,"writes":23,"bytes":24074251,"largest":6404868,"wallMs":10263,"storeMs":522,"diskGrowth":458752,"diskGrowthAfterVacuum":475136}

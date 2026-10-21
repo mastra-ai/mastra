@@ -1,0 +1,50 @@
+[33mTesting types with tsc and vue-tsc is an experimental feature.
+Breaking changes might not follow SemVer, please pin Vitest's version when using it.[39m
+
+[1m[30m[46m RUN [49m[39m[22m [36mv4.1.11 [39m[90m/workspace/mastra/packages/core[39m
+
+ [31m❯[39m [30m[42m unit:packages/core [49m[39m src/workflows/bench-26214.test.ts [2m([22m[2m1 test[22m[2m | [22m[31m1 failed[39m[2m)[22m[33m 20507[2mms[22m[39m
+[31m   [31m×[31m bench[39m[33m 20505[2mms[22m[39m
+
+[31m⎯⎯⎯⎯⎯⎯⎯[39m[1m[41m Failed Tests 1 [49m[22m[31m⎯⎯⎯⎯⎯⎯⎯[39m
+
+[41m[1m FAIL [22m[49m [30m[42m unit:packages/core [49m[39m src/workflows/bench-26214.test.ts[2m > [22mbench
+[31m[1mError[22m: total size of jsonb object elements exceeds the maximum of 268435455 bytes[39m
+[90m [2m❯[22m WorkflowsPG.persistWorkflowSnapshot ../../stores/pg/src/storage/domains/workflows/index.ts:[2m690:13[22m[39m
+[36m [2m❯[22m WorkflowsPG.wrapped.persistWorkflowSnapshot src/workflows/bench-26214.test.ts:[2m64:16[22m[39m
+    [90m 62|[39m       [35mconst[39m t1 [33m=[39m performance[33m.[39m[34mnow[39m()[33m;[39m
+    [90m 63|[39m       [35mtry[39m {
+    [90m 64|[39m         [35mreturn[39m [35mawait[39m [34mrealPersist[39m(args)[33m;[39m
+    [90m   |[39m                [31m^[39m
+    [90m 65|[39m       } [35mfinally[39m {
+    [90m 66|[39m         stats[33m.[39mstoreMs [33m+=[39m performance[33m.[39m[34mnow[39m() [33m-[39m t1[33m;[39m
+[90m [2m❯[22m write src/workflows/handlers/entry.ts:[2m246:7[22m[39m
+[90m [2m❯[22m src/workflows/handlers/entry.ts:[2m256:7[22m[39m
+[90m [2m❯[22m persistStepUpdate src/workflows/handlers/entry.ts:[2m203:3[22m[39m
+[90m [2m❯[22m DefaultExecutionEngine.execute src/workflows/default.ts:[2m1222:5[22m[39m
+[90m [2m❯[22m Run.#executeOwned src/workflows/workflow.ts:[2m4981:14[22m[39m
+[90m [2m❯[22m Run._start src/workflows/workflow.ts:[2m4242:20[22m[39m
+[90m [2m❯[22m src/workflows/bench-26214.test.ts:[2m97:20[22m[39m
+
+[31m[1mCaused by: error[22m: total size of jsonb object elements exceeds the maximum of 268435455 bytes[39m
+[90m [2m❯[22m ../../../../home/user/.local/share/pnpm/store/v11/links/@/pg-pool/3.14.0/69d3ebdfd3f7b90ad4b38ca18be8e3b69884de43d6ca2fc1220945d7cabee0b8/node_modules/pg-pool/index.js:[2m45:11[22m[39m
+[90m [2m❯[22m PoolAdapter.none ../../stores/pg/src/storage/client.ts:[2m117:5[22m[39m
+[90m [2m❯[22m WorkflowsPG.persistWorkflowSnapshot ../../stores/pg/src/storage/domains/workflows/index.ts:[2m664:7[22m[39m
+[36m [2m❯[22m WorkflowsPG.wrapped.persistWorkflowSnapshot src/workflows/bench-26214.test.ts:[2m64:16[22m[39m
+[90m [2m❯[22m write src/workflows/handlers/entry.ts:[2m246:7[22m[39m
+[90m [2m❯[22m src/workflows/handlers/entry.ts:[2m256:7[22m[39m
+[90m [2m❯[22m persistStepUpdate src/workflows/handlers/entry.ts:[2m203:3[22m[39m
+[90m [2m❯[22m DefaultExecutionEngine.execute src/workflows/default.ts:[2m1222:5[22m[39m
+[90m [2m❯[22m Run.#executeOwned src/workflows/workflow.ts:[2m4981:14[22m[39m
+
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[22m[39m
+[31m[1mSerialized Error:[22m[39m [90m{ length: 179, severity: 'ERROR', code: '54000', detail: undefined, hint: undefined, position: undefined, internalPosition: undefined, internalQuery: undefined, where: 'unnamed portal parameter $4 = \'...\'', schema: undefined, table: undefined, dataType: undefined, constraint: undefined, file: 'jsonb_util.c', routine: 'convertJsonbObject' }[39m
+[31m[2m⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯[22m[39m
+
+
+[2m Test Files [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2m      Tests [22m [1m[31m1 failed[39m[22m[90m (1)[39m
+[2mType Errors [22m [2mno errors[22m
+[2m   Start at [22m 02:27:31
+[2m   Duration [22m 30.25s[2m (transform 11.83s, setup 47ms, import 9.45s, tests 20.51s, environment 0ms)[22m
+
