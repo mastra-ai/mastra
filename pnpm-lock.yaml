@@ -5165,8 +5165,8 @@ importers:
         specifier: ^10.3.1
         version: 10.3.1
       pino-pretty:
-        specifier: ^13.1.3
-        version: 13.1.3
+        specifier: ^13.2.0
+        version: 13.2.0
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -28049,8 +28049,8 @@ packages:
     resolution: {integrity: sha512-oXwn7ICywaZPHmu3epHGU2oJX4nPmKvHvB/bwrJHlGcbEWaVcotkpyVHMKLKmiVryWYByNp0jpgAcXpFJDXJzA==}
     hasBin: true
 
-  pino-pretty@13.1.3:
-    resolution: {integrity: sha512-ttXRkkOz6WWC95KeY9+xxWL6AtImwbyMHrL1mSwqwW9u+vLp/WIElvHvCSDg0xO/Dzrggz1zv3rN5ovTRVowKg==}
+  pino-pretty@13.2.0:
+    resolution: {integrity: sha512-jjghD1ML+Di/WxjJDz6j6Y4FT7hIXOlb8h27AyJ+ohtAXJXH4PS/xkv7si+RCCIW59HMgZsMKTDgzdr0RhuRrg==}
     hasBin: true
 
   pino-std-serializers@6.2.2:
@@ -29828,6 +29828,9 @@ packages:
 
   sonic-boom@4.2.1:
     resolution: {integrity: sha512-w6AxtubXa2wTXAUsZMMWERrsIRAdrK0Sc+FUytWvYAhBJLyuI4llrMIC1DtlNSdI99EI86KZum2MMq3EAZlF9Q==}
+
+  sonic-boom@5.0.2:
+    resolution: {integrity: sha512-/JEruzo6yhNVhsLblTRchgTQHIt7SsdJP0YyrfWaNKjIOQDfrdZv9gwYraYCAsmKV39/LAdV31FLL5NCDpoL/A==}
 
   sonner@2.0.7:
     resolution: {integrity: sha512-W6ZN4p58k8aDKA4XPcx2hpIQXBRAgyiWVkYhT7CvK6D3iAu7xjvVyhQHg2/iaKJZ1XVJ4r7XuwGL+WGEK37i9w==}
@@ -34310,7 +34313,7 @@ snapshots:
       fetch-cookie: 3.2.0
       openai: 4.104.0(encoding@0.1.13)(ws@8.21.3(bufferutil@4.1.0))(zod@4.6.7)
       pino: 9.14.0
-      pino-pretty: 13.1.3
+      pino-pretty: 13.2.0
       uuid: 11.1.1
       ws: 8.21.3(bufferutil@4.1.0)
       zod: 4.6.7
@@ -38519,7 +38522,7 @@ snapshots:
       '@livekit/rtc-ffi-bindings': 0.12.73
       '@livekit/typed-emitter': 3.0.0
       pino: 9.14.0
-      pino-pretty: 13.1.3
+      pino-pretty: 13.2.0
 
   '@livekit/throws-transformer@0.1.8(typescript@7.0.2)':
     dependencies:
@@ -52678,7 +52681,7 @@ snapshots:
       sonic-boom: 4.2.1
       strip-json-comments: 3.1.1
 
-  pino-pretty@13.1.3:
+  pino-pretty@13.2.0:
     dependencies:
       colorette: 2.0.20
       dateformat: 4.6.3
@@ -52691,7 +52694,7 @@ snapshots:
       pino-abstract-transport: 3.0.0
       pump: 3.0.4
       secure-json-parse: 4.1.0
-      sonic-boom: 4.2.1
+      sonic-boom: 5.0.2
       strip-json-comments: 5.0.3
 
   pino-std-serializers@6.2.2: {}
@@ -55190,6 +55193,10 @@ snapshots:
       atomic-sleep: 1.0.0
 
   sonic-boom@4.2.1:
+    dependencies:
+      atomic-sleep: 1.0.0
+
+  sonic-boom@5.0.2:
     dependencies:
       atomic-sleep: 1.0.0
 
