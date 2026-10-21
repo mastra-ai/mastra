@@ -144,33 +144,50 @@ describe.each([undefined, 'durable', 'evented'] as const)('two processes on one 
   });
 });
 
-describe('two processes on one resource', () => {
-  it("runs a notification another process sends to this process's thread here", async () => {
-    const { storage, a, b, readMarker } = await startTwoProcesses();
-    const target = { resourceId: a.session.identity.getResourceId(), threadId: a.session.thread.getId()! };
+/**
+ * B sends A's idle thread a notification, B wins three fires of the shared
+ * dispatch schedule, then A runs one.
+ */
+async function notifyFromOtherProcess(priority: 'high' | 'low') {
+  const { storage, a, b, readMarker } = await startTwoProcesses();
+  const target = { resourceId: a.session.identity.getResourceId(), threadId: a.session.thread.getId()! };
+  const sent = await b.agent.sendNotificationSignal(
+    { source: 'inbox', kind: 'task', priority, summary: 'Note' },
+    target,
+  );
+  const notifications = (await storage.getStore('notifications'))! as any;
+  const dispatchFrom = (process: { controller: AgentController<any> }, minutesFromNow: number) =>
+    dispatchDueNotifications({
+      mastra: process.controller.getMastra()!,
+      storage: notifications,
+      now: new Date(Date.now() + 60_000 * minutesFromNow),
+    });
+  for (let pass = 1; pass <= 3; pass++) await dispatchFrom(b, pass);
+  await dispatchFrom(a, 4);
+  const getRecord = () => notifications.getNotification({ ...target, id: sent.record.id });
+  return { a, b, readMarker, sent, getRecord };
+}
 
-    const sent = await b.agent.sendNotificationSignal(
-      { source: 'inbox', kind: 'task', priority: 'high', summary: 'New task' },
-      target,
-    );
-    const notifications = (await storage.getStore('notifications'))! as any;
-    const dispatchFrom = (process: { controller: AgentController<any> }, minutesFromNow: number) =>
-      dispatchDueNotifications({
-        mastra: process.controller.getMastra()!,
-        storage: notifications,
-        now: new Date(Date.now() + 60_000 * minutesFromNow),
-      });
-    // The sender wins the shared schedule a few times before the owner's turn.
-    for (let pass = 1; pass <= 3; pass++) await dispatchFrom(b, pass);
-    await dispatchFrom(a, 4);
+describe('a notification one process sends to a thread another process runs', () => {
+  it('wakes the thread in the process that runs it', async () => {
+    const { a, b, readMarker, sent, getRecord } = await notifyFromOtherProcess('high');
     await vi.waitFor(() => expect(readMarker()).toHaveLength(1), { timeout: 10_000 });
     await vi.waitFor(() => expect(a.session.run.isRunning()).toBe(false), { timeout: 10_000 });
 
     expect(readMarker()).toEqual(['written in a']);
     expect(b.runs).not.toHaveBeenCalled();
     expect(a.errors).toEqual([]);
-    const record = await notifications.getNotification({ ...target, id: sent.record.id });
-    expect(record).toMatchObject({ status: 'delivered', deliveryAttempts: 0 });
+    expect(await getRecord()).toMatchObject({ status: 'delivered', deliveryAttempts: 0 });
     expect(sent.decision).toMatchObject({ action: 'defer', hold: true });
+  });
+
+  it('wakes neither process when it is low priority', async () => {
+    const { a, b, sent, getRecord } = await notifyFromOtherProcess('low');
+    await vi.waitFor(async () => expect((await getRecord()).summaryAt).toBeFalsy(), { timeout: 10_000 });
+
+    expect(a.runs).not.toHaveBeenCalled();
+    expect(b.runs).not.toHaveBeenCalled();
+    expect(a.errors).toEqual([]);
+    expect(sent.decision).toMatchObject({ action: 'summarize', hold: true });
   });
 });

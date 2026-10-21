@@ -1361,13 +1361,15 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
           // Another process sharing the database runs it, with its own
           // workspace and model. Never wake it from here, where the run would
           // start with no session: leave it pending for that process's own
-          // dispatch pass. That holds when it is first sent too, which `hold`
-          // alone does not cover, so a wake becomes a delivery due now. A
-          // sender that asked for the thread's claimed owner is already routed
-          // to that process, so its first send goes ahead.
+          // dispatch pass. `hold` covers that at delivery time but is ignored
+          // when a notification is first sent, so an action that wakes the
+          // thread at first send becomes a delivery due now. A sender that
+          // asked for the thread's claimed owner is already routed to that
+          // process, so its first send goes ahead.
           if (owner === FOREIGN_THREAD || owner === undefined) {
+            const wakesAtFirstSend = decision.action === 'deliver' || decision.action === 'queue';
             const routedToOwner = readNotificationRoutingRequirement(input.record.metadata)?.requireClaimedOwner;
-            if (routedToOwner || decision.action === 'discard') return { ...decision, hold: true };
+            if (!wakesAtFirstSend || routedToOwner) return { ...decision, hold: true };
             return { action: 'defer', deliverAt: input.now, reason: decision.reason, hold: true };
           }
           const streamOptions = await getWakeStreamOptions({
