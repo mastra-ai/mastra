@@ -121,6 +121,7 @@ import { LiveSessions } from './session/live-sessions.js';
 import { hydrateSessionMemorySettings, layerPersonalMemorySettings } from './session/memory-settings-hydration.js';
 import { hasResolvedOrg } from './session/org-seed.js';
 import { FactoryReplyCredentialProcessor } from './session/reply-credential-processor.js';
+import { FactoryReplyReminderProcessor } from './session/reply-reminder-processor.js';
 import { createChannelReactionTools, createReplyTool } from './session/reply-tool.js';
 import { migrateSessionResources, privatizeOwnerResourceSessions } from './session/resource-migration.js';
 import { observeSessionRunEnd } from './session/run-audit.js';
@@ -1432,6 +1433,7 @@ export class MastraFactory {
         // comes after it.
         inputProcessors: async ({ requestContext }: { requestContext: RequestContext }) => {
           const channelReplyProcessor = new FactoryChannelReplyProcessor();
+          const replyReminderProcessor = new FactoryReplyReminderProcessor();
           const environmentProcessor = new FactoryEnvironmentStateProcessor();
           const sessionsProcessor =
             workItemsStorage && storage.isDomainReady('source-control')
@@ -1456,7 +1458,13 @@ export class MastraFactory {
               : [];
           if (factoryProcessor) {
             await factoryProcessor.prepareMemorySettings(requestContext);
-            return [channelReplyProcessor, environmentProcessor, ...sessionsProcessor, factoryProcessor];
+            return [
+              channelReplyProcessor,
+              replyReminderProcessor,
+              environmentProcessor,
+              ...sessionsProcessor,
+              factoryProcessor,
+            ];
           }
           // Without work items there is no run binding, so the caller's row applies.
           try {
@@ -1464,7 +1472,7 @@ export class MastraFactory {
           } catch (error) {
             reportMemorySettingsUnavailable(requestContext, error instanceof Error ? error.message : String(error));
           }
-          return [channelReplyProcessor, environmentProcessor, ...sessionsProcessor];
+          return [channelReplyProcessor, replyReminderProcessor, environmentProcessor, ...sessionsProcessor];
         },
         outputProcessors: [new FactoryChannelSessionLinkProcessor(), new FactoryReplyCredentialProcessor()],
         ...(vector ? { vector } : {}),
