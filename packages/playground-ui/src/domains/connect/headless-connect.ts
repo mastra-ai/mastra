@@ -1,4 +1,5 @@
-import Nango, { AuthError, type AuthOptions, type ConnectionConfig } from '@nangohq/frontend';
+import Nango, { AuthError } from '@nangohq/frontend';
+import type { AuthOptions, ConnectionConfig } from '@nangohq/frontend';
 
 import type { UserConnectAuthField, UserConnectProvider } from './types';
 

@@ -22,10 +22,8 @@ ONE outcome. Same shape for MSW tests (`src/**`) and Playwright E2E specs
 
 Fixtures: nearby `__tests__/fixtures/`, typed with @mastra/client-js response
 types (no inline types, no `as any`). MSW is wired in `vitest.setup.ts`.
-Exception: the end-user connect surface (`/connect/*` mounted by
-`userConnectRoutes()`) is not part of the @mastra/client-js SDK; its fixtures
-are typed with the route-contract types from
-`@mastra/playground-ui/domains/connect` instead.
+Exception: `/connect/*` fixtures use `@mastra/playground-ui/domains/connect`
+types (routes not in the SDK).
 
 Playwright E2E (`e2e-tests-studio` skill) only when MSW can't model the journey
 (multi-page, real server, streaming, real browser concerns).
