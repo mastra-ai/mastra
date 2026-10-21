@@ -27,6 +27,7 @@ export function mountApiRoutes(app: Hono<any>, routes: ApiRoute[]): void {
 export interface TestAuthUser {
   workosId: string;
   organizationId?: string;
+  displayName?: string;
 }
 
 /**
@@ -50,7 +51,7 @@ export function fakeRouteAuth(
     ensureUser: async c => user(c),
     tenant: c => {
       const u = user(c);
-      return u ? { orgId: u.organizationId, userId: u.workosId } : undefined;
+      return u ? { orgId: u.organizationId, userId: u.workosId, displayName: u.displayName } : undefined;
     },
     isOrganizationAdmin: async (c, organizationId) => {
       const u = user(c);

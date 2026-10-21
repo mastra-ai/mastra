@@ -27,6 +27,8 @@ export interface FactoryUserSession {
    */
   resourceId?: string;
   owner?: FactoryUserSessionOwner;
+  /** The owner's name, else email, saved when the session was created. */
+  ownerName?: string | null;
   visibility: 'org' | 'private';
   title?: string;
   branch: string;

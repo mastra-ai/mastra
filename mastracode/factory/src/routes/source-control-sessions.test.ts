@@ -22,6 +22,7 @@ import type { SourceControlStorageHandle } from '../storage/domains/source-contr
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { buildSourceControlSessionRoutes } from './source-control-sessions.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
+import type { TestAuthUser } from './test-utils.js';
 
 vi.mock('../session/filesystem-capture.js', async importOriginal => {
   const actual = await importOriginal<typeof import('../session/filesystem-capture.js')>();
@@ -37,7 +38,7 @@ function buildApp(
   { memorySettings, projects, users }: Pick<RouteOptions, 'memorySettings' | 'projects' | 'users'>,
   controller?: RouteOptions['controller'],
   workItems?: RouteOptions['workItems'],
-  viewer: { workosId: string; organizationId: string } = user,
+  viewer: TestAuthUser = user,
   moveThread?: RouteOptions['moveThread'],
 ) {
   const app = new Hono();
@@ -404,6 +405,31 @@ describe('source-control session routes', () => {
     expect(opened.status).toBe(200);
     await expect(opened.json()).resolves.toMatchObject({
       session: { userId: 'user-2', owner: { id: 'user-2', name: 'Ward Peeters', avatarUrl: 'https://x/w.png' } },
+    });
+  });
+
+  it("names the owner from the creator's profile when the auth provider cannot look users up", async () => {
+    const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
+    const creator = buildApp([sourceControl], seed, undefined, undefined, { ...user, displayName: 'Ward Peeters' });
+    const teammate = buildApp([sourceControl], seed, undefined, undefined, {
+      workosId: 'user-2',
+      organizationId: 'org-1',
+    });
+    const sessionId = '22222222-2222-4222-8222-222222222222';
+
+    const created = await creator.request(`/web/source-control/projects/${projectRepository.id}/sessions`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ sessionId }),
+    });
+    expect(created.status).toBe(200);
+
+    const opened = await teammate.request(`/web/user-sessions/${sessionId}`);
+    expect(opened.status).toBe(200);
+    await expect(opened.json()).resolves.toMatchObject({ session: { userId: 'user-1', ownerName: 'Ward Peeters' } });
+    const listed = await teammate.request(`/web/source-control/projects/${projectRepository.id}/sessions`);
+    await expect(listed.json()).resolves.toMatchObject({
+      sessions: [{ sessionId, userId: 'user-1', ownerName: 'Ward Peeters' }],
     });
   });
 

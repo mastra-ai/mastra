@@ -24,7 +24,10 @@ export function getSessionOwnerDetails(
 ): SessionOwnerDetails {
   const isViewer = Boolean(viewer?.userId) && session.userId === viewer?.userId;
   const name =
-    (isViewer && (viewer?.name?.trim() || viewer?.email?.trim())) || session.owner?.name?.trim() || session.userId;
+    (isViewer && (viewer?.name?.trim() || viewer?.email?.trim())) ||
+    session.owner?.name?.trim() ||
+    session.ownerName?.trim() ||
+    session.userId;
   const avatarUrl = (isViewer && viewer?.avatarUrl?.trim()) || session.owner?.avatarUrl?.trim();
   return {
     name,
