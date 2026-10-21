@@ -291,6 +291,44 @@ export function registerApiCommand(program: CommanderCommand): void {
     ],
   });
 
+  const span = api.command('span').description('Query and aggregate observability spans');
+  addAction(span, 'query', 'POST /observability/spans/query', {
+    description: 'Query observability spans with advanced predicates',
+    input: 'required',
+    examples: [
+      {
+        description: 'Query failed tool calls in the last day',
+        command: `mastra api span query '{"timeRange":{"from":"2026-08-07T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"where":{"op":"and","args":[{"op":"eq","left":{"path":"spanType"},"right":{"literal":"tool_call"}},{"op":"eq","left":{"path":"status"},"right":{"literal":"error"}}]}}'`,
+      },
+      {
+        description: 'Query runs of one agent, including runs nested under other agents or workflows',
+        command: `mastra api span query '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"where":{"op":"and","args":[{"op":"eq","left":{"path":"spanType"},"right":{"literal":"agent_run"}},{"op":"eq","left":{"path":"entityName"},"right":{"literal":"weather-agent"}}]},"page":{"limit":50}}'`,
+      },
+      {
+        description: 'Fetch the next page by passing data.page.next as page.after',
+        command: `mastra api span query '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"where":{"op":"and","args":[{"op":"eq","left":{"path":"spanType"},"right":{"literal":"agent_run"}},{"op":"eq","left":{"path":"entityName"},"right":{"literal":"weather-agent"}}]},"page":{"limit":50,"after":"NEXT_CURSOR"}}'`,
+      },
+    ],
+  });
+  addAction(span, 'aggregate', 'POST /observability/spans/aggregate', {
+    description: 'Aggregate observability spans into grouped measures',
+    input: 'required',
+    examples: [
+      {
+        description: 'Daily agent runs by status',
+        command: `mastra api span aggregate '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"where":{"op":"eq","left":{"path":"spanType"},"right":{"literal":"agent_run"}},"groupBy":["status"],"interval":"1d","measures":["count"]}'`,
+      },
+      {
+        description: 'Tools with the highest error rate, with call count and p95 duration',
+        command: `mastra api span aggregate '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"where":{"op":"eq","left":{"path":"spanType"},"right":{"literal":"tool_call"}},"groupBy":["entityName"],"measures":["count","errorRate","duration.p95"],"orderBy":{"field":"errorRate","direction":"desc"},"limit":10}'`,
+      },
+      {
+        description: 'Model tokens and cost per root entity',
+        command: `mastra api span aggregate '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"where":{"op":"eq","left":{"path":"spanType"},"right":{"literal":"model_generation"}},"groupBy":["rootEntityName"],"measures":["tokens.total.sum","cost.sum"]}'`,
+      },
+    ],
+  });
+
   const log = api.command('log').description('Inspect runtime logs');
   addAction(log, 'list', 'GET /observability/logs', {
     description: 'List runtime logs',
