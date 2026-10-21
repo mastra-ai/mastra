@@ -1497,7 +1497,7 @@ export class MastraFactory {
           const channels = () => this.#prepared?.base.controller.getChannels();
           mergeTools('factory-attach-file', await createShareFileTool(requestContext, { channels }));
           mergeTools('factory-reply', await createReplyTool(requestContext, { channels }));
-          mergeTools('channel-reactions', createChannelReactionTools(requestContext, channels()));
+          mergeTools('channel-reactions', await createChannelReactionTools(requestContext, { channels }));
           if (storage.isDomainReady('source-control')) {
             mergeTools(
               'source-control',

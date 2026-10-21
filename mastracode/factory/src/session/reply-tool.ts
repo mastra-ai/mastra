@@ -1,5 +1,4 @@
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
-import type { AgentChannels } from '@mastra/core/channels';
 import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
@@ -79,16 +78,44 @@ function firstReplyLink(requestContext: RequestContext): string | undefined {
   });
 }
 
+const reactionInput = z.object({
+  messageId: z.string().describe('The ID of the message to react to'),
+  emoji: z.string().describe('The emoji to react with (e.g. "thumbsup")'),
+});
+
 /**
- * The channel's `add_reaction` / `remove_reaction`, so the agent can
- * acknowledge a message without posting. They find their thread through the
- * inbound message's channel context, so a run without one (a woken run, a
- * fork) gets none rather than a tool that fails when called.
+ * `add_reaction` / `remove_reaction`, so the agent can acknowledge a message
+ * without posting. Core's versions find their thread only through an inbound
+ * message, so these resolve it like `reply_in_thread` does: a session whose
+ * thread lives in a chat channel gets them on every run, including ones
+ * prompted from the web UI or woken by a signal. A fork's thread has no
+ * channel, so forks get none.
  */
-export function createChannelReactionTools(
+export async function createChannelReactionTools(
   requestContext: RequestContext,
-  channels: AgentChannels | null | undefined,
-): IntegrationTools {
-  if (!requestContext.get('channel')) return {};
-  return (channels?.getTools() ?? {}) as IntegrationTools;
+  deps: ShareFileToolDeps = {},
+): Promise<IntegrationTools> {
+  const render = await resolveRenderContext(requestContext, deps);
+  if (!render) return {};
+  const { adapter, chatThread } = render;
+  return {
+    add_reaction: createTool({
+      id: 'add_reaction',
+      description: 'Add an emoji reaction to a message in this chat thread.',
+      inputSchema: reactionInput,
+      execute: async ({ messageId, emoji }) => {
+        await adapter.addReaction(chatThread.id, messageId, emoji);
+        return { ok: true };
+      },
+    }),
+    remove_reaction: createTool({
+      id: 'remove_reaction',
+      description: 'Remove an emoji reaction from a message in this chat thread.',
+      inputSchema: reactionInput,
+      execute: async ({ messageId, emoji }) => {
+        await adapter.removeReaction(chatThread.id, messageId, emoji);
+        return { ok: true };
+      },
+    }),
+  };
 }
