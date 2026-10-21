@@ -90,7 +90,7 @@ describe('repository commits for a time window', () => {
     expect(result.current.olderFailed).toBe(false);
   });
 
-  it('stops paging when the server answers an older page with commits it already sent', async () => {
+  it('stops paging, and lists each commit once, when the server answers older pages with commits it already sent', async () => {
     const requested: string[] = [];
     server.use(
       http.get(endpoint, ({ request }) => {
@@ -100,9 +100,10 @@ describe('repository commits for a time window', () => {
     );
     const { result, client } = renderHookWithProviders(() => useRepositoryCommits('repo-1', minutesAgo(10_000)));
 
-    await waitFor(() => expect(result.current.commits).toHaveLength(300));
+    await waitFor(() => expect(requested).toHaveLength(3));
     await act(async () => {});
     await waitFor(() => expect(client.isFetching()).toBe(0));
     expect(requested).toEqual(['1', '2', '3']);
+    expect(result.current.commits).toHaveLength(100);
   });
 });

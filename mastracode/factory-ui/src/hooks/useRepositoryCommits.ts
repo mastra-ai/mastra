@@ -40,6 +40,15 @@ function nextOlderPageNumber(
   return pageFull && !repeatsPreviousPage ? pageNumber + 1 : undefined;
 }
 
+function uniqueBySha(commits: RepositoryCommit[]): RepositoryCommit[] {
+  const seenShas = new Set<string>();
+  return commits.filter(commit => {
+    if (seenShas.has(commit.sha)) return false;
+    seenShas.add(commit.sha);
+    return true;
+  });
+}
+
 export function useRepositoryCommits(projectRepositoryId: string | undefined, viewStartMs: number) {
   const { baseUrl } = useApiConfig();
   const newest = useQuery({
@@ -84,7 +93,7 @@ export function useRepositoryCommits(projectRepositoryId: string | undefined, vi
   }, [wantsOlderPage, loadedOlderCommits, fetchNextPage]);
 
   const commits = useMemo(
-    () => newest.data && [...newest.data.commits, ...(older.data?.commits ?? [])],
+    () => newest.data && uniqueBySha([...newest.data.commits, ...(older.data?.commits ?? [])]),
     [newest.data, older.data],
   );
 

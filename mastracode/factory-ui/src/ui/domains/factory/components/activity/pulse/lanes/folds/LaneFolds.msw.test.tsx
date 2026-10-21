@@ -68,9 +68,9 @@ describe('LaneFolds', () => {
     expect(names).toHaveLength(21);
     expect(names[0]).toMatch(/^Run 24/);
     expect(names[19]).toMatch(/^Run 5/);
-    expect(names[20]).toBe('Show all 25 runs');
+    expect(names[20]).toBe('Show more rows');
 
-    await user.click(screen.getByRole('menuitem', { name: 'Show all 25 runs' }));
+    await user.click(screen.getByRole('menuitem', { name: 'Show more rows' }));
     expect(onExpandLane).toHaveBeenCalledOnce();
   });
 
@@ -81,6 +81,6 @@ describe('LaneFolds', () => {
     await user.click(screen.getByRole('button', { name: '+25 runs, folded' }));
 
     expect(await menuItemNames()).toHaveLength(20);
-    expect(screen.queryByRole('menuitem', { name: /^Show all/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Show more rows' })).not.toBeInTheDocument();
   });
 });

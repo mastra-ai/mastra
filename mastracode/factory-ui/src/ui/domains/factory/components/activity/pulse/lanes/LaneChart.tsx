@@ -19,7 +19,7 @@ import { timeKeyHandler, useTimeGestures } from '../time/useTimeGestures';
 import { LaneFolds } from './folds/LaneFolds';
 import { HandoffCurves } from './HandoffCurves';
 import { InspectGuides, LaneAxis } from './LaneAxis';
-import { FOLDED_LANE_ROWS, packLanes, placeLanes } from './layout/laneLayout';
+import { EXPANDED_LANE_ROWS, FOLDED_LANE_ROWS, packLanes, placeLanes } from './layout/laneLayout';
 import type { PackedLane, PlacedRun } from './layout/laneLayout';
 import { MIN_BAR_WIDTH_PX, laneHeightPx } from './layout/laneSizes';
 import { LaneRunBar } from './LaneRunBar';
@@ -81,8 +81,8 @@ function LaneFoldToggle({
       variant="ghost"
       size="icon-sm"
       aria-expanded={expanded}
-      aria-label={expanded ? `Fold ${laneLabel} runs` : `Show all ${laneLabel} runs`}
-      tooltip={expanded ? `Fold to ${FOLDED_LANE_ROWS} rows` : 'Show every row'}
+      aria-label={expanded ? `Fold ${laneLabel} runs` : `Show more ${laneLabel} runs`}
+      tooltip={expanded ? `Fold to ${FOLDED_LANE_ROWS} rows` : `Show up to ${EXPANDED_LANE_ROWS} rows`}
       onClick={onToggle}
     >
       {expanded ? <ChevronsDownUp /> : <ChevronsUpDown />}

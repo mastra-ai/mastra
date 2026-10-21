@@ -47,8 +47,6 @@ function headPollOptions(source: TrailSource, queryClient: QueryClient, live: bo
     queryKey: queryKeys.factoryAudit(source.factoryProjectId, 'pulse:head'),
     queryFn: async ({ signal }) => {
       const head = await readRunPage(source, { before: NEWEST_PAGE, limit: HEAD_RUN_EVENTS, signal });
-      // A page read in flight would land on the pages it started from and drop this fold.
-      await queryClient.cancelQueries({ queryKey: trailKey, exact: true });
       const pages = queryClient.getQueryData(trailKey);
       const folded = foldHeadPage(pages, head);
       if (folded !== pages) queryClient.setQueryData(trailKey, folded);

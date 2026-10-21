@@ -54,7 +54,7 @@ function FoldMenuItems({
       {onExpandLane === undefined ? null : (
         <>
           <DropdownMenu.Separator />
-          <DropdownMenu.Item onClick={onExpandLane}>{`Show all ${runCount(runs.length)}`}</DropdownMenu.Item>
+          <DropdownMenu.Item onClick={onExpandLane}>Show more rows</DropdownMenu.Item>
         </>
       )}
     </>
