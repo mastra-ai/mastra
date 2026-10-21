@@ -95,13 +95,38 @@ describe('mergeTraceQueryDelta', () => {
   });
 
   describe('when a listed trace comes back', () => {
-    it('updates a row in place even when its sort value changed', () => {
+    it('updates the row in place when its sort value is unchanged', () => {
       const data = pagesOf(traceQueryOnlyPage);
-      const moved = { ...queriedTraceNewest, startedAt: at(0), status: 'error' as const };
+      const updated = { ...queriedTraceNewest, status: 'error' as const };
 
-      const merged = mergeTraceQueryDelta(data, [moved]);
+      const merged = mergeTraceQueryDelta(data, [updated]);
 
-      expect(merged.pages[0]?.traces).toEqual([moved, traceQueryOnlyPage.traces[1]]);
+      expect(merged.pages[0]?.traces).toEqual([updated, traceQueryOnlyPage.traces[1]]);
+    });
+  });
+
+  describe('when a listed trace comes back with a new sort value', () => {
+    const byEndedAt = [{ field: 'endedAt' as const, direction: 'desc' as const }];
+    const ended = (traceId: string, endedAt: string | undefined) => queriedTrace(traceId, at(0), { endedAt });
+
+    it('moves the trace to its sorted position once it ends', () => {
+      const data = pagesOf(
+        page([ended('trace-a', at(8)), ended('trace-b', at(6))], 'page-cursor-1'),
+        page([ended('trace-c', at(4)), ended('trace-running', undefined)], null),
+      );
+
+      const merged = mergeTraceQueryDelta(data, [ended('trace-running', at(7))], byEndedAt);
+
+      expect(ids(merged)).toEqual([['trace-a', 'trace-running', 'trace-b'], ['trace-c']]);
+      expect(merged.pages.map(p => p.page.next)).toEqual(['page-cursor-1', null]);
+    });
+
+    it('drops the trace from the loaded rows when it now sorts past them and more pages remain', () => {
+      const data = pagesOf(page([ended('trace-a', at(8)), ended('trace-b', at(6))], 'page-cursor-1'));
+
+      const merged = mergeTraceQueryDelta(data, [ended('trace-a', at(1))], byEndedAt);
+
+      expect(ids(merged)).toEqual([['trace-b']]);
     });
   });
 });

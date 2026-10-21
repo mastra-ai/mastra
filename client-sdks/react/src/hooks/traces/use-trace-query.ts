@@ -146,8 +146,9 @@ function compareTraces(orderBy: TraceQueryOrderBy) {
 
 /**
  * Merges delta-polled traces into the pages of a `useTraceQuery` list, without mutating `data`.
- * A trace already on a page is replaced in place (its status or `endedAt` may have changed). A new
- * trace goes into the first page whose last row sorts after it; when no loaded page does, it is
+ * A trace already on a page is replaced in place when its sort value is unchanged; otherwise it is
+ * removed and placed again like a new trace (sorting by `endedAt`, a running trace moves once it
+ * ends). A new trace goes into the first page whose last row sorts after it; when no loaded page does, it is
  * appended to the last page if that is the end of the list, and skipped otherwise, since keyset
  * pagination returns it once the user scrolls there. Page cursors are kept as they are, and `data`
  * itself is returned when nothing changed.
@@ -167,16 +168,25 @@ export function mergeTraceQueryDelta(
     changed.add(pageIndex);
   };
 
+  const sortBy = orderBy?.[0] ?? { field: 'startedAt', direction: 'desc' };
+  const compare = compareTraces(sortBy);
+
+  const replacedInPlace = new Set<string>();
   rows.forEach((pageRows, pageIndex) => {
     if (!pageRows.some(row => incoming.has(row.traceId))) return;
-    write(
-      pageIndex,
-      pageRows.map(row => incoming.get(row.traceId) ?? row),
-    );
+    const next: TraceQueryTrace[] = [];
+    for (const row of pageRows) {
+      const update = incoming.get(row.traceId);
+      if (!update) next.push(row);
+      else if (traceSortValue(update, sortBy.field) === traceSortValue(row, sortBy.field)) {
+        next.push(update);
+        replacedInPlace.add(row.traceId);
+      }
+    }
+    write(pageIndex, next);
   });
-  for (const pageRows of rows) for (const row of pageRows) incoming.delete(row.traceId);
+  for (const traceId of replacedInPlace) incoming.delete(traceId);
 
-  const compare = compareTraces(orderBy?.[0] ?? { field: 'startedAt', direction: 'desc' });
   const lastIndex = rows.length - 1;
   for (const trace of incoming.values()) {
     let pageIndex = rows.findIndex(pageRows => {
