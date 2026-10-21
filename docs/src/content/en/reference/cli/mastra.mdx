@@ -1752,7 +1752,7 @@ mastra api span aggregate '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":
 
 Token and cost measures count usage on the span that recorded it, usually a `model_generation` span. They aren't added to parent spans such as `agent_run`. For span dimensions, measures, and limits, see [Aggregate spans](/reference/observability/tracing/advanced-queries#aggregate-spans). Run `mastra api span aggregate --help` for more examples.
 
-The response has the same `rows` and `truncated` shape as `trace aggregate`, nested under `data`. Servers whose observability store doesn't support span aggregation return `501`, which the CLI prints as an `HTTP_ERROR`.
+Like `trace aggregate`, the command prints `rows` and `truncated` under `data`, and if the observability store can't aggregate spans, the CLI prints the server's `501` response as an `HTTP_ERROR`.
 
 #### `mastra api trace get`
 
