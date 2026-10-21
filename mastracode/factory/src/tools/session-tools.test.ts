@@ -347,6 +347,24 @@ beforeEach(() => {
 });
 
 describe('factory_switch_session_model', () => {
+  it('lets an agent inspect the available models before choosing an exact ID from the user’s intent', async () => {
+    const env = await setup();
+    const started = (await env.start({ prompt: 'Investigate the build.' })) as { sessionId: string };
+
+    await expect(env.switchModel({ sessionId: started.sessionId })).resolves.toEqual({
+      sessionId: started.sessionId,
+      models: ['openai/gpt-5.6', 'openai/gpt-6.1-sol'],
+    });
+    expect(env.controller.setThreadModel).not.toHaveBeenCalled();
+
+    await expect(
+      env.switchModel({ sessionId: started.sessionId, modelId: 'openai/gpt-6.1-sol' }),
+    ).resolves.toMatchObject({
+      modelId: 'openai/gpt-6.1-sol',
+      live: true,
+    });
+  });
+
   it('switches a running session immediately, a stopped one for its next run, and rejects unavailable models or other users', async () => {
     const env = await setup();
     const started = (await env.start({ prompt: 'Investigate the build.' })) as { sessionId: string };
@@ -423,6 +441,12 @@ describe('factory_switch_session_model with stored credentials', () => {
 
   it('lets a user-scoped session switch to a model its owner holds a credential for, and nothing else', async () => {
     const env = await tenantSetup('user');
+
+    await expect(env.switchModel({ sessionId: env.sessionId })).resolves.toEqual({
+      sessionId: env.sessionId,
+      models: ['anthropic/claude-opus-5-5'],
+    });
+    expect(env.controller.setThreadModel).not.toHaveBeenCalled();
 
     await expect(env.switchModel({ sessionId: env.sessionId, modelId: 'anthropic/claude-opus-5-5' })).resolves.toEqual({
       sessionId: env.sessionId,
