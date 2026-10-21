@@ -52,6 +52,66 @@ function createInnerWorkflow(execute: () => Promise<any>) {
 }
 
 describe('evented workflows over a serializing pubsub', () => {
+  it.each([1024, 2 * 1024 * 1024])('streams a nested completion with %i bytes of parent history', async size => {
+    const child = createWorkflow({
+      id: 'streaming_child',
+      inputSchema: z.object({ prompt: z.string() }),
+      outputSchema: z.object({ answer: z.string() }),
+    })
+      .then(
+        createStep({
+          id: 'respond',
+          inputSchema: z.object({ prompt: z.string() }),
+          outputSchema: z.object({ answer: z.string() }),
+          execute: async ({ inputData }) => ({ answer: `Answered: ${inputData.prompt}` }),
+        }),
+      )
+      .commit();
+    const parent = createWorkflow({
+      id: 'streaming_parent',
+      inputSchema: z.object({ prompt: z.string() }),
+      outputSchema: z.object({ answer: z.string() }),
+    })
+      .then(
+        createStep({
+          id: 'load_history',
+          inputSchema: z.object({ prompt: z.string() }),
+          outputSchema: z.object({ prompt: z.string(), history: z.string() }),
+          execute: async ({ inputData }) => ({ prompt: inputData.prompt, history: 'x'.repeat(size) }),
+        }),
+      )
+      .map(({ inputData }) => ({ prompt: inputData.prompt }))
+      .then(child)
+      .commit();
+    const pubsub = new SerializingPubSub();
+    const published = vi.spyOn(pubsub, 'publish');
+    const mastra = new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      workflows: { streaming_parent: parent, streaming_child: child },
+      pubsub,
+    });
+    await mastra.startWorkers();
+    try {
+      const run = await parent.createRun();
+      const stream = run.stream({ inputData: { prompt: 'hello' } });
+      const chunks: any[] = [];
+      for await (const chunk of stream.fullStream) chunks.push(chunk);
+      const result = await stream.result;
+      expect(result.status).toBe('success');
+      expect(result.status === 'success' && result.result).toEqual({ answer: 'Answered: hello' });
+      expect(chunks.some(chunk => chunk.type === 'workflow-finish')).toBe(true);
+
+      const childFinish = published.mock.calls
+        .filter(([topic, event]) => topic === 'workflows-finish' && event.data.workflowId === 'streaming_child')
+        .map(([, event]) => event);
+      expect(childFinish).toHaveLength(1);
+      expect(Buffer.byteLength(JSON.stringify(childFinish[0]))).toBeLessThan(4096);
+    } finally {
+      await mastra.stopWorkers();
+    }
+  });
+
   it.each([false, true])('preserves state written by a bailing step (nested: %s)', async nested => {
     const workflow = createWorkflow({
       id: 'bail_state',
