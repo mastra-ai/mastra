@@ -491,8 +491,12 @@ class PlatformProcessHandleOverLease extends CommandsApiProcessHandle {
           })
           .catch(() => undefined);
         if (reattached === 'ended') throw new ProcessEndedUnseenError(error);
-        // Couldn't reach the VM: it may still be running, so leave it unexited and killable.
-        if (!reattached) throw error;
+        if (!reattached) {
+          // Couldn't reach the VM: it may still be running, so leave it unexited
+          // and killable, and let the next wait() try again.
+          this.exited = undefined;
+          throw error;
+        }
         this.inner = reattached;
       }
     }

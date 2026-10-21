@@ -322,6 +322,35 @@ describe('PlatformSandbox.processes', () => {
     expect(await sandbox.processes!.list()).toEqual([]);
   });
 
+  it('tries the reattach again on the next wait when the VM could not be reached', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(created())
+      .mockResolvedValueOnce(e2bLease('first'))
+      .mockImplementation(async () => e2bLease('second'));
+    let unreachable = true;
+    const { sandbox } = makeSandbox(fetchMock, jwt =>
+      vm.commandsFor(jwt, {
+        list: () => (jwt === 'second' && unreachable ? new Error('connection refused') : undefined),
+      }),
+    );
+
+    const handle = await sandbox.processes!.spawn('echo before; read _; echo after');
+    const first = handle.wait();
+    await until(() => handle.stdout === 'before\n');
+
+    rotateLease(sandbox);
+    vm.expire('first');
+    expect(await first).toMatchObject({ success: false });
+    expect(handle.exitCode).toBeUndefined();
+
+    unreachable = false;
+    const second = handle.wait();
+    await until(() => vm.calls.includes('second connect'));
+    await handle.sendStdin('go\n');
+    expect(await second).toMatchObject({ success: true, stdout: 'before\nafter\n' });
+  });
+
   it('turns a 410 lease into SandboxDestroyedError and clears state', async () => {
     const fetchMock = vi
       .fn()
