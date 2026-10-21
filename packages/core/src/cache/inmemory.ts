@@ -50,6 +50,14 @@ export class InMemoryServerCache extends MastraServerCache {
     this.cache.set(key, value, { ttl: ttlMs > 0 ? ttlMs : Infinity });
   }
 
+  async expire(key: string, ttlMs: number): Promise<void> {
+    if (ttlMs <= 0) return;
+    const value = this.cache.get(key);
+    if (value === undefined) return;
+    // Re-setting is how TTLCache applies a new deadline; it keeps the value.
+    this.cache.set(key, value, { ttl: ttlMs });
+  }
+
   async listLength(key: string): Promise<number> {
     const value = this.cache.get(key);
     if (value === undefined) {

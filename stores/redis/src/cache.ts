@@ -245,6 +245,11 @@ export class RedisServerCache extends MastraServerCache {
     return value;
   }
 
+  async expire(key: string, ttlMs: number): Promise<void> {
+    if (ttlMs <= 0) return;
+    await this.client.expire(this.getKey(key), Math.max(1, Math.ceil(ttlMs / 1000)));
+  }
+
   /**
    * Single round-trip index allocation + list append + TTL refresh via Lua.
    * This is the durable stream per-chunk hot path (issue #22477).

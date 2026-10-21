@@ -65,4 +65,15 @@ describe('ValkeyServerCache', () => {
       '300',
     ]);
   });
+
+  it('expire sets the key TTL in seconds and ignores a non-positive TTL', async () => {
+    command.mockResolvedValueOnce(1);
+
+    await cache.expire('events', 91_000);
+    expect(command.mock.calls[0]?.[0]).toEqual(['EXPIRE', 'mastra:cache:events', '91']);
+
+    await cache.expire('events', 0);
+    // Valkey treats EXPIRE with a non-positive TTL as a delete, so it is skipped.
+    expect(command).toHaveBeenCalledTimes(1);
+  });
 });

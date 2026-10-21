@@ -12,10 +12,22 @@
  * observe() exists only on the durable engines, so `normal` and `fs` are skipped.
  */
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import { expect, it } from 'vitest';
+import { expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { SUSPENDED_RUN_LOG_RETENTION_MS } from '../../../../agent/durable/constants';
+import { InMemoryServerCache } from '../../../../cache/inmemory';
 import { createTool } from '../../../../tools';
 import { createSharedAgent, describeForAllEngines, useLoopScenarioAimock } from '../aimock-scenario';
+
+/** Records every retention refresh so a parked run's log lifetime is assertable. */
+class RecordingCache extends InMemoryServerCache {
+  expirations: Array<[string, number]> = [];
+
+  async expire(key: string, ttlMs: number): Promise<void> {
+    this.expirations.push([key, ttlMs]);
+    await super.expire(key, ttlMs);
+  }
+}
 
 /** Long enough that a hanging observation is unambiguous, short enough for CI. */
 const CLOSE_WITHIN_MS = 3_000;
@@ -262,6 +274,49 @@ describeForAllEngines(
         expect(replay.timedOut).toBe(false);
         expect(replay.types).toContain('abort');
         expect(replay.types.at(-1)).toBe('finish');
+      } finally {
+        run.cleanup?.();
+      }
+    }, 30_000);
+
+    it('extends the run log retention while the run waits for approval', async () => {
+      const llm = getMock();
+      llm.on(
+        { endpoint: 'chat', hasToolResult: false },
+        { toolCalls: [{ id: 'call_retain', name: 'lookup_status', arguments: { query: 'alpha' } }] },
+      );
+      const lookup = createTool({
+        id: 'lookup_status',
+        description: 'Look up a status.',
+        inputSchema: z.object({ query: z.string() }),
+        execute: async ({ query }) => ({ status: `OK:${query}` }),
+      });
+      const cache = new RecordingCache();
+      const { agent } = await createSharedAgent(llm, { engine, cache, tools: { lookup_status: lookup } });
+
+      const run = await agent.stream('Look up alpha', { requireToolApproval: true, maxSteps: 5 });
+      try {
+        let toolCallId: string | undefined;
+        for await (const chunk of run.fullStream) {
+          if (chunk.type === 'tool-call-approval') {
+            toolCallId = chunk.payload.toolCallId;
+            break;
+          }
+        }
+        expect(toolCallId).toBe('call_retain');
+
+        // The retention bump lands once the leg has settled as suspended, which is
+        // after the approval chunk reached the stream.
+        await vi.waitFor(
+          () => {
+            const extended = cache.expirations.filter(([, ttl]) => ttl === SUSPENDED_RUN_LOG_RETENTION_MS);
+            const keys = extended.map(([key]) => key);
+            expect(keys.some(key => key.includes(run.runId) && !key.endsWith(':counter'))).toBe(true);
+            // The counter has to outlive the list, so both carry the new deadline.
+            expect(keys.some(key => key.includes(run.runId) && key.endsWith(':counter'))).toBe(true);
+          },
+          { timeout: 5_000 },
+        );
       } finally {
         run.cleanup?.();
       }

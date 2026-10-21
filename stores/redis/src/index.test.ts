@@ -250,6 +250,27 @@ describe('RedisServerCache', () => {
     });
   });
 
+  describe('expire', () => {
+    it('sets a prefixed key TTL in seconds', async () => {
+      await cache.expire('events', 90_000);
+
+      expect(mockClient.expire).toHaveBeenCalledWith('mastra:cache:events', 90);
+    });
+
+    it('rounds up sub-second TTLs so the key is not removed', async () => {
+      await cache.expire('events', 1);
+
+      // Redis treats EXPIRE with a non-positive TTL as a delete.
+      expect(mockClient.expire).toHaveBeenCalledWith('mastra:cache:events', 1);
+    });
+
+    it('does nothing for a non-positive TTL', async () => {
+      await cache.expire('events', 0);
+
+      expect(mockClient.expire).not.toHaveBeenCalled();
+    });
+  });
+
   describe('delete', () => {
     it('should delete a key', async () => {
       mockClient.del.mockResolvedValue(1);

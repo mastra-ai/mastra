@@ -129,6 +129,11 @@ export class ValkeyServerCache extends MastraServerCache {
     return value;
   }
 
+  async expire(key: string, ttlMs: number): Promise<void> {
+    if (ttlMs <= 0) return;
+    await this.command(['EXPIRE', this.getKey(key), String(Math.max(1, Math.ceil(ttlMs / 1000)))]);
+  }
+
   /**
    * GLIDE always runs the append through Lua, so allocation and append are one
    * atomic operation.

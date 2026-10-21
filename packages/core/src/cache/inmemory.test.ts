@@ -248,6 +248,32 @@ describe('InMemoryServerCache', () => {
         expect(sorted).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
       });
     });
+
+    describe('expire', () => {
+      it('should keep a key alive past its cache TTL', async () => {
+        const ttlCache = new InMemoryServerCache({ ttlMs: 20 });
+        await ttlCache.set('key', 'value');
+
+        await ttlCache.expire('key', 5_000);
+        await new Promise(resolve => setTimeout(resolve, 60));
+
+        expect(await ttlCache.get('key')).toBe('value');
+      });
+
+      it('should not create a key and should ignore a non-positive TTL', async () => {
+        const ttlCache = new InMemoryServerCache({ ttlMs: 20 });
+
+        await ttlCache.expire('missing', 5_000);
+        expect(await ttlCache.get('missing')).toBeUndefined();
+
+        // A non-positive TTL means "no extension", not "delete": the key keeps
+        // running on its own deadline.
+        await ttlCache.set('key', 'value');
+        await ttlCache.expire('key', 0);
+        await new Promise(resolve => setTimeout(resolve, 60));
+        expect(await ttlCache.get('key')).toBeUndefined();
+      });
+    });
   });
 
   describe('Complex Scenarios', () => {

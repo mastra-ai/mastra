@@ -169,6 +169,7 @@ async function buildScenarioAgent({
   | 'errorProcessors'
   | 'defaultOptions'
   | 'pubsub'
+  | 'cache'
   | 'engine'
   | 'inputProcessors'
   | 'fsRouted'

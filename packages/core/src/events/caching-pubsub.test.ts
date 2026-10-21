@@ -1489,5 +1489,38 @@ describe('CachingPubSub', () => {
       expect(await shared.listFromTo(`pubsub:{${topic}}`, 0)).toHaveLength(1);
       expect(await shared.get(`pubsub:{${topic}}:counter`)).toBe(1);
     });
+
+    it('extends the retention of the log and its counter together', async () => {
+      const shared = new InMemoryServerCache();
+      const expire = vi.spyOn(shared, 'expire');
+      const pubsub = new CachingPubSub(new EventEmitterPubSub(), shared);
+
+      await pubsub.extendRetention(topic, 86_400_000);
+
+      // The counter has to outlive the list by exactly nothing, so both keys
+      // get the new deadline; extending one alone would restart numbering at 0
+      // under a subscriber that still holds its cursor.
+      expect(expire.mock.calls).toEqual([
+        [`pubsub:{${topic}}`, 86_400_000],
+        [`pubsub:{${topic}}:counter`, 86_400_000],
+      ]);
+    });
+
+    it('keeps a parked run observable past the cache default retention', async () => {
+      vi.useFakeTimers();
+      try {
+        const shared = new InMemoryServerCache({ ttlMs: 1_000 });
+        const pubsub = new CachingPubSub(new EventEmitterPubSub(), shared);
+        await pubsub.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 0 } });
+
+        await pubsub.extendRetention(topic, 60_000);
+        await vi.advanceTimersByTimeAsync(30_000);
+
+        expect(await shared.listFromTo(`pubsub:{${topic}}`, 0)).toHaveLength(1);
+        expect(await shared.get(`pubsub:{${topic}}:counter`)).toBe(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
   });
 });

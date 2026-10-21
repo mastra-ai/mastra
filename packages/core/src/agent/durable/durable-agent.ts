@@ -53,6 +53,7 @@ import {
   DurableStepIds,
   markErrorForStreamRejection,
   shouldRejectStream,
+  SUSPENDED_RUN_LOG_RETENTION_MS,
 } from './constants';
 import { runDurableStreamUntilIdle, runResumeDurableStreamUntilIdle } from './durable-stream-until-idle';
 import {
@@ -2425,6 +2426,23 @@ export class DurableAgent<
   }
 
   /**
+   * Best-effort retention refresh for a parked run's stream log: the run can
+   * wait for a human longer than a cache's default retention, and an expired
+   * log makes a resumed run start numbering at 0 under an attached observer.
+   * Terminal cleanup deletes the log, so a suspension is the only point that
+   * has to extend it.
+   */
+  async #extendRunLogRetention(runId: string): Promise<void> {
+    try {
+      const pubsub = this.pubsub;
+      if (!(pubsub instanceof CachingPubSub)) return;
+      await pubsub.extendRetention(AGENT_STREAM_TOPIC(runId), SUSPENDED_RUN_LOG_RETENTION_MS);
+    } catch (error) {
+      this.logger.warn('Failed to extend the run stream log retention', { runId, error });
+    }
+  }
+
+  /**
    * Whether `executeWorkflow()` resolves only after a suspended snapshot has
    * been persisted, reporting `{ status: 'suspended' }`. When true,
    * `closeOnSuspend` streams close on that result instead of on the SUSPENDED
@@ -2665,6 +2683,10 @@ export class DurableAgent<
     outcome: { status?: string; error?: Error },
   ): Promise<void> {
     const { status, error } = outcome;
+    // A suspended run parks until someone answers it. Refresh the stream log's
+    // retention after the leg settled, so an approval wait longer than the
+    // cache's default does not expire the log under an attached observer.
+    if (status === 'suspended') await this.#extendRunLogRetention(runId);
     const reportError = async (reported: Error) => {
       try {
         await this.emitError(runId, reported, fence?.generation);

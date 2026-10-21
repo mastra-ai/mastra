@@ -432,6 +432,31 @@ export class CachingPubSub extends PubSub {
   }
 
   /**
+   * Keep a topic's retained log alive for `ttlMs` from now, refreshing the list
+   * and its counter together.
+   *
+   * Call this at the point a run parks rather than on every append: a durable
+   * run suspended on a tool approval can wait far longer than the cache's
+   * default retention, and if the log expires mid-suspend the resumed run
+   * restarts numbering at 0 while an attached subscriber still holds the old
+   * cursor. Terminal cleanup still deletes the log (`clearTopic`), so the
+   * extension only covers the parked window.
+   *
+   * Best-effort: a cache that cannot expire a single key keeps its configured
+   * TTL, and failures are logged rather than thrown.
+   */
+  async extendRetention(topic: string, ttlMs: number): Promise<void> {
+    try {
+      await Promise.all([
+        this.cache.expire(this.getCacheKey(topic), ttlMs),
+        this.cache.expire(this.getCounterKey(topic), ttlMs),
+      ]);
+    } catch (error) {
+      this.logError(`[CachingPubSub] Failed to extend retention for topic ${topic}`, error);
+    }
+  }
+
+  /**
    * Clear cached events for a specific topic (and the index counter), and
    * forward the clear to the inner transport.
    *
