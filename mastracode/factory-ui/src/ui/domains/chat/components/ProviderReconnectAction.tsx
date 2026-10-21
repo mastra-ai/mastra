@@ -2,19 +2,25 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ArrowRight } from 'lucide-react';
 import { Link, useLocation } from 'react-router';
 
+import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { settingsSectionPath } from '../../settings/settingsSections';
 import { useChatModelScope } from '../context/useChatModelScope';
+import { useChatSessionContext } from '../context/useChatSessionContext';
 
-/**
- * Sends the user to the settings page that owns the credential the session
- * runs on: organization credentials for factory-scoped sessions, the user's
- * own sign-ins otherwise.
- */
-export function ProviderLoginAction() {
+export function ProviderReconnectAction() {
   const location = useLocation();
   const { factoryId, modelScope, scopeLoading } = useChatModelScope();
-  // Wait for the scope so the link never points at the wrong credentials page.
-  if (!factoryId || scopeLoading) return null;
+  const { owner } = useChatSessionContext();
+  const authQuery = useFactoryAuth();
+  const payerUnknown = !factoryId || scopeLoading || authQuery.isPending;
+  if (payerUnknown) return null;
+
+  const paidByTeammate =
+    modelScope === 'user' &&
+    authQuery.data?.authEnabled === true &&
+    owner !== undefined &&
+    owner.id !== authQuery.data.user?.userId;
+  if (paidByTeammate) return <span>{owner.name ?? 'The session owner'} needs to reconnect</span>;
 
   const section = modelScope === 'factory' ? 'models' : 'personal-models';
   return (
