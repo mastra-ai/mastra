@@ -186,6 +186,7 @@
     "@lezer/highlight": "^1.2.3",
     "@lukeed/uuid": "^2.0.1",
     "@mcp-ui/client": "^7.1.0",
+    "@nangohq/frontend": "0.71.9",
     "@pierre/diffs": "1.5.1",
     "@radix-ui/react-visually-hidden": "^1.2.4",
     "@tailwindcss/typography": "^0.5.19",

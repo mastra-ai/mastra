@@ -5786,6 +5786,9 @@ importers:
       '@mcp-ui/client':
         specifier: ^7.1.0
         version: 7.1.1(@cfworker/json-schema@4.1.1)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)(supports-color@10.2.2)
+      '@nangohq/frontend':
+        specifier: 0.71.9
+        version: 0.71.9(supports-color@10.2.2)
       '@pierre/diffs':
         specifier: 1.5.1
         version: 1.5.1(@shikijs/themes@4.4.3)(react-dom@19.2.7(react@19.2.7))(react@19.2.7)
@@ -15821,8 +15824,14 @@ packages:
   '@nangohq/frontend@0.71.6':
     resolution: {integrity: sha512-KJv0+SRIkhNiUb1muV+2ImgrgmDFv5tO4PrmuCU2Sv4a00iGFO1K5Pw8G4BCoY9sDD/zMPPToZxBOEhWNGBdBg==}
 
+  '@nangohq/frontend@0.71.9':
+    resolution: {integrity: sha512-uth54lRaPJ5iNUxer0aEHFQElEQt4pzOOiknn+gLk08uW6A6Tjmc33EPNI7RrJAd3Dc+FHmyLvkUe8m6y9Yo8Q==}
+
   '@nangohq/types@0.71.6':
     resolution: {integrity: sha512-kPYKv5JbjxmavgBhtKoUcMtdqnP510HiugSUA3gXtdoJr1V75k03e/gNNMpb/lvbkiHzI8POJQJegxCNBjYtJA==}
+
+  '@nangohq/types@0.71.9':
+    resolution: {integrity: sha512-fYqlWEvxjyQdtichCjGTxmLoNumGXQb403A8XVSzljuP+aNLMii0es/ggqR7mC8q7igWKw/GVdL2luKR4TdMDg==}
 
   '@napi-rs/simple-git-android-arm-eabi@0.1.22':
     resolution: {integrity: sha512-JQZdnDNm8o43A5GOzwN/0Tz3CDBQtBUNqzVwEopm32uayjdjxev1Csp1JeaqF3v9djLDIvsSE39ecsN2LhCKKQ==}
@@ -29666,7 +29675,7 @@ packages:
 
   serialize-error-cjs@0.1.4:
     resolution: {integrity: sha512-6a6dNqipzbCPlTFgztfNP2oG+IGcflMe/01zSzGrQcxGMKbIjOemBBD85pH92klWaJavAUWxAh9Z0aU28zxW6A==}
-    deprecated: Rolling release, please update to 0.3.0
+    deprecated: Rolling release, please update to 0.2.0
 
   serialize-error@7.0.1:
     resolution: {integrity: sha512-8I8TjW5KMOKsZQTvoxjuSIa7foAwPWGOts+6o7sgjz41/qMD9VQHEDxi6PBvK2l0MXUmqZyNpUK+T2tQaaElvw==}
@@ -39055,7 +39064,23 @@ snapshots:
       - debug
       - supports-color
 
+  '@nangohq/frontend@0.71.9(supports-color@10.2.2)':
+    dependencies:
+      '@nangohq/types': 0.71.9(supports-color@10.2.2)
+    transitivePeerDependencies:
+      - debug
+      - supports-color
+
   '@nangohq/types@0.71.6(supports-color@10.2.2)':
+    dependencies:
+      axios: 1.20.0(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
+      json-schema: 0.4.0
+      type-fest: 4.41.0
+    transitivePeerDependencies:
+      - debug
+      - supports-color
+
+  '@nangohq/types@0.71.9(supports-color@10.2.2)':
     dependencies:
       axios: 1.20.0(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
       json-schema: 0.4.0
