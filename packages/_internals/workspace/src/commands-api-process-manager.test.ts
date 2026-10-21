@@ -239,12 +239,13 @@ describe('CommandsApiProcessManager', () => {
 
   it('keeps output that arrives before an attach resolves', async () => {
     const processes = setup();
-    const other = await commands.run('sleep 0.2; echo attached; sleep 0.2', {});
-    commands.outputBeforeStart = 'stdout';
+    const other = await commands.run('sleep 0.2; echo attached; echo warn >&2; sleep 0.2', {});
+    commands.outputBeforeStart = 'both';
     const handle = await processes.get(String(other.pid));
     expect(handle).toBeDefined();
     await handle!.wait();
     expect(handle!.stdout).toBe('attached\n');
+    expect(handle!.stderr).toBe('warn\n');
   });
 
   it('lists exited processes it still holds until they are released', async () => {
