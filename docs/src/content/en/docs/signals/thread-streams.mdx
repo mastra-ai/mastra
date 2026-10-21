@@ -8,24 +8,27 @@ packages:
 
 # Thread streams
 
-A thread stream is the ordered output and lifecycle of a thread: model text, tool calls, approvals, errors, and run events. You read it through a subscription, which can include recent stored history before continuing with live output.
+A thread stream is the ordered output and lifecycle of a [thread](/docs/memory/overview): model text, tool calls, approvals, errors, and run events, delivered as [chunks](/reference/streaming/ChunkType). You read it through a subscription, which can start with stored history as a [`thread-history` chunk](/reference/streaming/ChunkType#thread-history) before live output. Use [`Agent.subscribeToThread()`](/reference/agents/agent#subscribetothreadoptions) when your code owns the [Agent](/reference/agents/agent), or the [client SDK](/reference/client-js/agents#subscribetothread) when it calls a running server.
 
-## Subscribe before you send
+## Quickstart
 
-Subscribe before you send input. A run starts in response to a signal, so a subscription created afterward misses the beginning of the stream. The [overview quickstart](/docs/signals/overview#quickstart) shows the same order with `Agent`. The client SDK follows the same flow:
+Subscribe before you send input. A run starts in response to a signal, so a subscription created afterward misses the beginning of the stream. This example uses the JavaScript client SDK against a running Mastra server. If your code owns the `Agent` instance, see the [Agent example](/docs/signals/overview#use-an-agent).
 
 ```typescript title="src/app/chat.ts"
-const agent = client.getAgent('supportAgent')
+import { MastraClient } from '@mastra/client-js'
+
+const client = new MastraClient({ baseUrl: 'http://localhost:4111' })
+const agent = client.getAgent('support-agent')
 
 const subscription = await agent.subscribeToThread({
-  resourceId: 'user_123',
-  threadId: 'thread_456',
+  resourceId: 'user-123',
+  threadId: 'thread-456',
 })
 
 await agent.sendMessage({
   message: 'Show the shorter version.',
-  resourceId: 'user_123',
-  threadId: 'thread_456',
+  resourceId: 'user-123',
+  threadId: 'thread-456',
 })
 
 await subscription.processDataStream({
@@ -35,6 +38,8 @@ await subscription.processDataStream({
   reconnect: true,
 })
 ```
+
+The example creates a client, subscribes to the thread, sends a message, and reads the chunks from that subscription. `sendMessage()` returns when Mastra accepts the input; the output arrives through `onChunk`.
 
 ## Read the stream
 
@@ -117,14 +122,3 @@ List the public surfaces: `AgentChunkType` plus `ThreadHistoryChunk`. Link to th
 State that the internal runtime event union is not public and is not documented.
 
 :::
-
-## Related
-
-| Goal | Start here |
-| - | - |
-| Subscribe to a thread from an Agent | [`Agent.subscribeToThread()`](/reference/agents/agent#subscribetothreadoptions) |
-| Subscribe from the client SDK | [`client.getAgent().subscribeToThread()`](/reference/client-js/agents#subscribetothread) |
-| Approve or decline a paused tool call | [`client.getAgent().sendToolApproval()`](/reference/client-js/agents#sendtoolapproval) |
-| Look up chunk shapes, including `thread-history` | [ChunkType reference](/reference/streaming/ChunkType#thread-history) |
-| Observe queued message counts | [Thread events reference](/reference/signals/thread-events) |
-| Send input into a subscribed thread | [Sending signals](/docs/signals/sending-signals) |
