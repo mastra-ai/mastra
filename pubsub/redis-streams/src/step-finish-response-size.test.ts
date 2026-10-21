@@ -1,5 +1,6 @@
 import { execFile } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { LLMock } from '@copilotkit/aimock';
@@ -98,13 +99,13 @@ describe('evented agent Redis Streams step-finish transport', () => {
       // Each frame also carries the current step's tool output separately from the response delta.
       expect(frames.reduce((total, frame) => total + Buffer.byteLength(frame), 0)).toBeLessThan(20 * RESULT_BYTES);
 
-      const worker = new URL('../test-fixtures/response-observer.entry.ts', import.meta.url).pathname;
+      const worker = fileURLToPath(new URL('../test-fixtures/response-observer.entry.ts', import.meta.url));
       const runObserver = async (firstStep: number) => {
         const { stdout } = await execFileAsync(
           './node_modules/.bin/tsx',
           [worker, REDIS_URL, keys[0]!, String(firstStep)],
           {
-            cwd: new URL('..', import.meta.url).pathname,
+            cwd: fileURLToPath(new URL('..', import.meta.url)),
           },
         );
         return JSON.parse(stdout.trim().split('\n').at(-1)!) as { observed: string[][] };
