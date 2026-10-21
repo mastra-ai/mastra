@@ -29,12 +29,6 @@ A host application calls `MastraFactory.prepare()`, constructs its `Mastra` inst
 
 `prepare()` initializes the Factory-owned resources needed before Mastra is constructed. `finalize()` connects those resources to the completed host, including Factory routes, integrations, storage-backed behavior, and agent-controller features. Consumers should keep frontend concerns in `factory-ui` and host-specific environment or deployment wiring in `web` rather than adding them to this package.
 
-### Session owner names
-
-Session lists and details use the auth provider's owner profile when available. If the provider cannot resolve an owner, Factory falls back to the name saved on that person's linked Slack account in the same organization. With multiple Slack links, it uses the most recently linked account with a nonblank name. These labels are for display; ownership and permissions continue to use the Factory user ID.
-
-The fallback reads existing links without calling Slack or requesting additional permissions. Disconnecting or relinking an account affects subsequent session reads. Links without a stored name keep the user ID fallback; reconnecting through the existing Slack connection flow can capture a name. Slack avatars and automatic profile refresh are not included.
-
 ### Product telemetry
 
 Factory records `factory_web_activity` in Mastra's existing PostHog project for users signed in through the default `mastra-studio` auth provider. The browser sends only a known page category and an activity type to the authenticated `/web/telemetry/activity` endpoint. The server adds the verified account and deployment context.
