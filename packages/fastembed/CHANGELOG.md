@@ -1,5 +1,13 @@
 # @mastra/fastembed
 
+## 1.3.4-alpha.2
+
+### Patch Changes
+
+- FastEmbed embedding models now throw an error when the model returns a different number of embeddings than input texts, instead of returning a result where embeddings can't be matched to their inputs. The error reports the expected and received counts. ([#27767](https://github.com/mastra-ai/mastra/pull/27767))
+
+- Fixed FastEmbed accepting invalid batch sizes. `embed`, `passageEmbed`, and `countTruncated` now reject a `batchSize` that is not a positive whole number with a clear `RangeError` before any text is processed. Previously `batchSize: 0` caused an unrelated `TypeError` while embedding and could make `countTruncated` loop forever. ([#27766](https://github.com/mastra-ai/mastra/pull/27766))
+
 ## 1.3.4-alpha.1
 
 ### Patch Changes

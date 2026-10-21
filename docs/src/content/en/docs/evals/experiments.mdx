@@ -35,8 +35,8 @@ const summary = await dataset.startExperiment({
 })
 
 console.log(summary.status) // 'completed' | 'failed'
-console.log(summary.succeededCount) // number of items that ran successfully
-console.log(summary.failedCount) // number of items that failed
+console.log(summary.succeededCount) // items that executed without an error
+console.log(summary.failedCount) // items with execution errors
 ```
 
 `startExperiment()` blocks until all items finish. For fire-and-forget execution, see [async experiments](#async-experiments).
@@ -50,6 +50,31 @@ To configure scorers for one item, edit the item and enable **Override dataset s
 After running an experiment, the **Experiments** tab shows all runs for that dataset (with status, counts, and timestamps). Select an experiment to see per-item results, scores, and execution traces.
 
 In the **Experiments** tab, select **Compare** and choose two or more experiments to compare their scores and results side by side.
+
+## Interpret results
+
+An experiment's status and counts describe execution. Use the scores to assess output quality. A `completed` experiment can contain execution errors, and `failedCount: 0` doesn't mean every answer meets your quality requirements.
+
+| Result | What it tells you |
+| - | - |
+| `succeededCount` and `failedCount` | How many items executed without an error or ended with an execution error |
+| Each item's `scores` | How the output performed against each scorer's criteria, with a reason when provided |
+| Average score | Aggregate performance for a scorer, which can hide individual failures |
+
+For example, an experiment with one item asks `2 + 2?` and returns `5`. An accuracy scorer assigns `0`, but the task itself returns without throwing. Its summary contains:
+
+```typescript
+console.log(summary.status) // 'completed'
+console.log(summary.succeededCount) // 1
+console.log(summary.failedCount) // 0
+console.log(summary.results[0].scores[0].score) // 0
+```
+
+In Studio, open the experiment and inspect per-item outputs, scores, and reasons before deciding whether a change improved your agent. Check scorer errors too: a missing score provides no evidence of quality.
+
+If every item must meet a requirement, check each item's score against it. For a binary scorer where `1` means the requirement was met, five scores of `1` and one of `0` average about `0.83`, but one item still fails the requirement.
+
+For automated quality checks in CI, [`runEvals()` gates and verdicts](/docs/evals/gates-and-verdicts) provide explicit pass/fail criteria. Those options belong to `runEvals()`. Dataset experiment status and counts remain execution results.
 
 ## Delete experiments
 

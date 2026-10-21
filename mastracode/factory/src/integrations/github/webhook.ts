@@ -5,7 +5,7 @@ import type { Context } from 'hono';
 import { requestsChangesVerdict } from '../../review-verdict.js';
 import { resolveSubscriptionSession, subscriptionRunContext } from '../subscription-session.js';
 import type { FactorySessionOwner } from '../subscription-session.js';
-import { GithubAppIdentity } from './app-identity.js';
+import type { GithubAppIdentity } from './app-identity.js';
 import type { GithubIntegration, GithubRepositoryPermission } from './integration.js';
 import { listPullRequestSubscriptionsForWebhook, retirePullRequestSubscription } from './subscriptions.js';
 import type {

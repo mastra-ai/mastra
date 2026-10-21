@@ -5,7 +5,7 @@
 
 import { Container, Text } from '@earendil-works/pi-tui';
 import type { TUI } from '@earendil-works/pi-tui';
-import { highlight } from 'cli-highlight';
+import { highlightCode } from '../syntax-highlight.js';
 import { theme } from '../theme.js';
 
 export interface CollapsibleOptions {
@@ -138,10 +138,7 @@ export class CollapsibleFileViewer extends CollapsibleComponent {
     // Apply syntax highlighting
     let highlightedLines = codeLines;
     try {
-      const highlighted = highlight(codeLines.join('\n'), {
-        language: getLanguageFromPath(path),
-        ignoreIllegals: true,
-      });
+      const highlighted = highlightCode(codeLines.join('\n'), getLanguageFromPath(path));
       highlightedLines = highlighted.split('\n');
     } catch {
       // If highlighting fails, use original content

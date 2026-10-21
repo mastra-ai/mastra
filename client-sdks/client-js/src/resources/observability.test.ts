@@ -773,9 +773,10 @@ describe('Observability Methods', () => {
 
       const result = await client.queryTraceThreads(request);
 
-      expectTypeOf(result).toEqualTypeOf<QueryTraceThreadsResult>();
-      expectTypeOf<QueryTraceThreadsResult['threads'][number]>().toEqualTypeOf<{ threadId: string }>();
-      expectTypeOf<QueryTraceThreadsResult['threads'][number]>().not.toHaveProperty('traceId');
+      expectTypeOf(result).toEqualTypeOf<QueryTraceThreadsResult<typeof request>>();
+      expectTypeOf<QueryTraceThreadsResult<typeof request>['threads'][number]>().toEqualTypeOf<{ threadId: string }>();
+      expectTypeOf<QueryTraceThreadsResult['threads'][number]>().toHaveProperty('firstTraceId');
+      expectTypeOf<QueryTraceThreadsResult['threads'][number]['traceCount']>().toEqualTypeOf<number>();
       expect(global.fetch).toHaveBeenCalledWith(
         `${clientOptions.baseUrl}/api/observability/threads/query`,
         expect.objectContaining({

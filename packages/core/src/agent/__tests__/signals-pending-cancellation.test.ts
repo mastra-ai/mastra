@@ -140,9 +140,15 @@ describe('Agent signals: pending cancellation', () => {
             await nextTick();
           }
           // Hold a real control handler while cancellation and a Redis-style republished retry arrive.
+          // Only a clearing abort reads the lease, so that is the request that can be held.
           await pubsub.publish(topic, {
             type: 'run-abort-requested',
-            data: { type: 'run-abort-requested', runId: first.runId, streamId: registration.streamId },
+            data: {
+              type: 'run-abort-requested',
+              runId: first.runId,
+              streamId: registration.streamId,
+              clearPendingSignals: true,
+            },
           });
           await vi.waitFor(() => expect(readOwner).toHaveBeenCalled());
           await pubsub.publish(topic, {

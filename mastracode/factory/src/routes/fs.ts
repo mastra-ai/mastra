@@ -2,6 +2,7 @@ import { lstat, open, readdir, realpath, stat } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { isAbsolute, join, posix as posixPath, resolve, sep } from 'node:path';
 
+import { SETUP_MARKER_DIR } from '@internal/workspace';
 import { SandboxFilesystem } from '@mastra/code-sdk/agents/sandbox-filesystem';
 import { detectProject, getResourceIdOverride } from '@mastra/code-sdk/utils/project';
 import { registerApiRoute } from '@mastra/core/server';
@@ -13,8 +14,6 @@ import type { ExecutableSandbox } from '../sandbox/materialization.js';
 import { peekSessionSandbox, sessionLayout } from '../sandbox/session-sandbox.js';
 import type { SessionLayout, SessionLayoutRepository } from '../sandbox/session-sandbox.js';
 import { peekSessionEnvironment } from '../session/environment-state-processor.js';
-import { waitForPendingFilesystemCapture } from '../session/filesystem-capture.js';
-import type { FilesystemStorage } from '../storage/domains/filesystem/base.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import type { RouteAuth } from './route.js';
 
@@ -80,18 +79,26 @@ export interface WorkspaceFile {
   truncated?: boolean;
 }
 
-export interface WorkspaceFilesListing {
-  /** The Factory session resource id. */
+export interface WorkspaceTreeEntry {
+  name: string;
+  /** Path from the session's layout root, the form the file route takes. */
+  path: string;
+  type: 'file' | 'directory';
+  size?: number;
+  /** Set when the entry is a symlink: where it points, as written in the link. */
+  symlinkTarget?: string;
+  /** Set when the entry is a symlink: the tree path of what it resolves to. */
+  linkedPath?: string;
+}
+
+/** One directory of a session's checkouts, read live from its sandbox. */
+export interface WorkspaceTreeListing {
   workspacePath: string;
-  /** The agent thread whose terminal file list was captured. */
-  threadId: string;
-  files: Array<{ path: string }>;
-  /**
-   * The environment repositories the paths are prefixed by, in position
-   * order. Present only when the session's environment holds two or more
-   * repositories; a one-repository session lists unprefixed paths.
-   */
-  repositories?: Array<{ slug: string; prefix: string }>;
+  /** The listed directory; empty for the top level. */
+  path: string;
+  /** False when this process holds no sandbox for the session, so nothing was read. */
+  available: boolean;
+  entries: WorkspaceTreeEntry[];
 }
 
 export type WorkspaceChangeStatus =
@@ -238,11 +245,11 @@ async function realPathWithinRoot(candidate: string, root: string): Promise<stri
 }
 
 function assertRelativePath(path: string, label: string): string {
-  const trimmed = path.trim();
-  if (!trimmed) throw new Error(`Missing required query param: ${label}`);
-  if (isAbsolute(trimmed)) throw new Error(`${label} must be relative`);
-  if (trimmed.split(/[\\/]+/).includes('..')) throw new Error(`${label} escapes workspace`);
-  const normalized = resolve('/', trimmed).slice(1);
+  // Names may start or end with spaces; only a blank path is missing.
+  if (!path.trim()) throw new Error(`Missing required query param: ${label}`);
+  if (isAbsolute(path)) throw new Error(`${label} must be relative`);
+  if (path.split(/[\\/]+/).includes('..')) throw new Error(`${label} escapes workspace`);
+  const normalized = resolve('/', path).slice(1);
   if (!normalized || normalized === '..' || normalized.startsWith(`..${sep}`))
     throw new Error(`${label} escapes workspace`);
   return normalized;
@@ -451,7 +458,6 @@ export async function listArtifacts(root: string, workspacePath: string): Promis
 export interface SessionFsDeps {
   auth: RouteAuth;
   sessions: { getBySessionId(sessionId: string): Promise<SourceControlSession | null> };
-  filesystem: Pick<FilesystemStorage, 'listFiles'>;
 }
 
 /**
@@ -476,30 +482,6 @@ async function resolveAuthorizedSession(
     }
   }
   return session;
-}
-
-export async function listSessionFilesystemFiles(
-  filesystem: Pick<FilesystemStorage, 'listFiles'>,
-  session: SourceControlSession,
-  threadId: string,
-): Promise<WorkspaceFilesListing> {
-  const safeThreadId = threadId.trim();
-  if (!safeThreadId) throw new Error('Missing required query param: threadId');
-
-  // The turn-end capture no longer gates agent_end, so a reader refetching on
-  // run completion could otherwise race it and serve the previous turn's
-  // listing. Await the in-flight capture (bounded) before reading.
-  await waitForPendingFilesystemCapture(session.sessionId);
-
-  const layout = sessionLayout(peekSessionSandbox(session.id));
-  return {
-    workspacePath: session.sessionId,
-    threadId: safeThreadId,
-    files: await filesystem.listFiles({ resourceId: session.sessionId, threadId: safeThreadId }),
-    ...(layout && layout.repos.length > 1
-      ? { repositories: layout.repos.map(repo => ({ slug: repo.slug, prefix: repo.prefix })) }
-      : {}),
-  };
 }
 
 interface SessionSandboxHandle {
@@ -528,7 +510,9 @@ async function sessionSandbox(session: SourceControlSession): Promise<SessionSan
   const sandbox = requireExec(entry.sandbox);
   return {
     sandbox,
-    filesystem: new SandboxFilesystem({ sandbox, workdir: layout.root }),
+    // Session viewers read these files over HTTP, so a symlink must not lead
+    // them outside the checkout.
+    filesystem: new SandboxFilesystem({ sandbox, workdir: layout.root, verifySymlinks: true }),
     layout,
     baseBranches: repositoryBaseBranches(session, layout, entry.ownRepo),
   };
@@ -626,32 +610,246 @@ export async function listSessionRenderedPath(
   return { workspacePath: session.sessionId, root: safeRoot, rootPath, entries };
 }
 
-/** Read a file inside a session's sandbox. Paths outside rendered roots require a persisted-file allowlist check in the route. */
-export async function readSessionWorkspaceFile(
-  session: SourceControlSession,
+/**
+ * Directory entries the file tree never shows or serves: git internals and the
+ * sandbox's own setup markers.
+ */
+const HIDDEN_TREE_ENTRIES = new Set(['.git', SETUP_MARKER_DIR]);
+
+/**
+ * Where a tree path lives. Inside a checkout: that checkout and the path within
+ * it (a bare repository directory resolves to its root). Elsewhere in the
+ * working directory (a multi-repository session's root, `.artifacts`): no
+ * checkout, so no ignore rules apply.
+ */
+function treeLocation(
+  layout: SessionLayout,
   path: string,
-  options: { allowUnapprovedPath?: boolean } = {},
-): Promise<WorkspaceFile> {
+): { repo: SessionLayoutRepository; relative: string } | { repo: undefined; relative: string } {
+  const safePath = path ? assertRelativePath(path, 'path') : '';
+  if (safePath.split('/').some(segment => HIDDEN_TREE_ENTRIES.has(segment))) {
+    throw new Error('Path is not available in this session');
+  }
+  if (layout.repos.length === 1) return { repo: layout.repos[0]!, relative: safePath };
+  const repo = layout.repos
+    .filter(candidate => `${safePath}/`.startsWith(candidate.prefix))
+    .toSorted((a, b) => b.prefix.length - a.prefix.length)[0];
+  return repo ? { repo, relative: safePath.slice(repo.prefix.length) } : { repo: undefined, relative: safePath };
+}
+
+/**
+ * The checkout-relative paths git ignores, in one `git check-ignore` call.
+ * Ignored files (`.env`, build output, `node_modules`) are neither listed nor
+ * served: viewers of a session shouldn't read its local secrets. Fails closed
+ * when git can't answer.
+ */
+async function ignoredPaths(sandbox: ExecutableSandbox, repoDir: string, paths: string[]): Promise<Set<string>> {
+  if (paths.length === 0) return new Set();
+  // Paths go in as positional arguments, never into the script text, and back
+  // NUL-separated so no filename needs quoting either way.
+  const result = await sandbox.executeCommand(
+    'sh',
+    ['-c', 'cd "$1" && shift && printf \'%s\\0\' "$@" | git check-ignore -z --stdin', 'sh', repoDir, ...paths],
+    { timeout: 30_000, maxRetainedBytes: Infinity },
+  );
+  // 0: some paths are ignored, 1: none are.
+  if (result.exitCode === 1) return new Set();
+  if (result.exitCode !== 0) throw new Error(`Unable to check ignored files: ${result.stderr.trim() || 'git failed'}`);
+  return new Set(result.stdout.split('\0').filter(Boolean));
+}
+
+/**
+ * The real absolute location of each path (relative to `root`), following
+ * every symlink, or `''` when it doesn't exist; plus `root`'s own. Paths go in
+ * as positional arguments and come back NUL-separated.
+ */
+async function realPaths(
+  sandbox: ExecutableSandbox,
+  root: string,
+  paths: string[],
+): Promise<{ root: string; paths: string[] }> {
+  const result = await sandbox.executeCommand(
+    'sh',
+    [
+      '-c',
+      'cd "$1" && shift && printf \'%s\\0\' "$(pwd -P)" && for p; do printf \'%s\\0\' "$([ -e "$p" ] && readlink -f -- "$p")"; done',
+      'sh',
+      root,
+      ...paths,
+    ],
+    { timeout: 30_000, maxRetainedBytes: Infinity },
+  );
+  if (result.exitCode !== 0) throw new Error(`Unable to resolve symlinks: ${result.stderr.trim() || 'failed'}`);
+  const [physicalRoot = '', ...resolved] = result.stdout.split('\0');
+  return { root: physicalRoot, paths: resolved.slice(0, paths.length) };
+}
+
+/** The first `bytes` bytes of a file, base64-encoded in the sandbox so binary content survives. */
+async function readFilePrefix(sandbox: ExecutableSandbox, path: string, bytes: number): Promise<Buffer> {
+  const result = await sandbox.executeCommand(
+    'sh',
+    // Not a pipe: sh reports only the last command's status, so a failed head
+    // would read as an empty file.
+    [
+      '-c',
+      't=$(mktemp) && trap \'rm -f "$t"\' EXIT && head -c "$1" -- "$2" >"$t" && base64 <"$t"',
+      'sh',
+      String(bytes),
+      path,
+    ],
+    { timeout: 30_000, maxRetainedBytes: Infinity },
+  );
+  if (result.exitCode !== 0) throw new Error(`Unable to read file: ${result.stderr.trim() || 'failed'}`);
+  return Buffer.from(result.stdout, 'base64');
+}
+
+/**
+ * Where a real absolute path sits in the tree, or `undefined` when the tree
+ * can't show it: missing, outside the working directory, or inside git
+ * internals or setup markers.
+ */
+function treePathOf(layout: SessionLayout, physicalRoot: string, real: string): string | undefined {
+  if (!real) return undefined;
+  const relative = posixPath.relative(physicalRoot, real);
+  if (relative === '..' || relative.startsWith('../') || posixPath.isAbsolute(relative)) return undefined;
+  try {
+    treeLocation(layout, relative);
+  } catch {
+    return undefined;
+  }
+  return relative;
+}
+
+/** Which tree paths their checkout ignores: one `git check-ignore` per checkout involved. */
+async function ignoredTreePaths(
+  sandbox: ExecutableSandbox,
+  layout: SessionLayout,
+  paths: string[],
+): Promise<Set<string>> {
+  const byRepo = new Map<SessionLayoutRepository, Map<string, string>>();
+  for (const path of paths) {
+    const { repo, relative } = treeLocation(layout, path);
+    if (!repo || !relative) continue;
+    const inRepo = byRepo.get(repo) ?? new Map<string, string>();
+    inRepo.set(relative, path);
+    byRepo.set(repo, inRepo);
+  }
+  const ignored = new Set<string>();
+  for (const [repo, inRepo] of byRepo) {
+    for (const relative of await ignoredPaths(sandbox, repo.dir, [...inRepo.keys()])) {
+      ignored.add(inRepo.get(relative)!);
+    }
+  }
+  return ignored;
+}
+
+/**
+ * List one directory of a session's working directory from its sandbox,
+ * without git internals or entries a checkout ignores. Passive like every
+ * session read: a session with no sandbox in this process comes back
+ * `available: false` instead of starting one.
+ */
+export async function listSessionWorkspaceTree(
+  session: SourceControlSession,
+  path = '',
+): Promise<WorkspaceTreeListing> {
+  const requested = path.trim() ? path : '';
+  const handle = await sessionSandbox(session);
+  const listing = { workspacePath: session.sessionId, path: requested };
+  if (!handle) return { ...listing, available: false, entries: [] };
+
+  const { layout, sandbox, filesystem } = handle;
+  const location = treeLocation(layout, requested);
+  const dir = (location.repo ? location.repo.prefix + location.relative : location.relative).replace(/\/$/, '');
+  const children = (await filesystem.readdir(dir || '.')).filter(entry => !HIDDEN_TREE_ENTRIES.has(entry.name));
+  const childPath = (name: string) => (dir ? `${dir}/${name}` : name);
+
+  // A symlink is shown (not expanded) only when what it leads to could be
+  // shown itself; it's judged by its target, since that is what a read serves.
+  // The folder itself must be where its path says: the tree doesn't go
+  // through symlinked folders.
+  const links = children.filter(entry => entry.isSymlink);
+  const resolve = [...(dir ? [dir] : []), ...links.map(entry => childPath(entry.name))];
+  const real = resolve.length > 0 ? await realPaths(sandbox, layout.root, resolve) : undefined;
+  const linkTargets = real ? real.paths.slice(dir ? 1 : 0) : [];
+  if (dir && real!.paths[0] !== posixPath.join(real!.root, dir)) {
+    throw new Error('Path is not available in this session');
+  }
+  const targets = new Map(links.map((entry, i) => [entry.name, treePathOf(layout, real!.root, linkTargets[i]!)]));
+  const ignored = await ignoredTreePaths(sandbox, layout, [
+    ...(dir ? [dir] : []),
+    ...children.map(entry => childPath(entry.name)),
+    ...[...targets.values()].filter((target): target is string => target !== undefined),
+  ]);
+  if (dir && ignored.has(dir)) throw new Error('Path is not available in this session');
+  const visible = children.filter(entry => {
+    if (ignored.has(childPath(entry.name))) return false;
+    if (!entry.isSymlink) return true;
+    const target = targets.get(entry.name);
+    return target !== undefined && !ignored.has(target);
+  });
+
+  const entries = visible
+    .map(
+      (entry): WorkspaceTreeEntry => ({
+        name: entry.name,
+        path: childPath(entry.name),
+        type: entry.type,
+        ...(entry.type === 'file' && entry.size !== undefined && { size: entry.size }),
+        ...(entry.isSymlink && {
+          symlinkTarget: entry.symlinkTarget ?? targets.get(entry.name)!,
+          linkedPath: targets.get(entry.name)!,
+        }),
+      }),
+    )
+    .toSorted((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'directory' ? -1 : 1));
+  return { ...listing, available: true, entries };
+}
+
+/**
+ * Read a file inside a session's sandbox: anything under an approved rendered
+ * root, or anything the tree would list (not git internals, not ignored by its
+ * checkout).
+ */
+export async function readSessionWorkspaceFile(session: SourceControlSession, path: string): Promise<WorkspaceFile> {
   const safePath = assertRelativePath(path, 'path');
-  if (!options.allowUnapprovedPath) assertApprovedRenderedRoot(safePath.split('/')[0] ?? '');
 
   const handle = await sessionSandbox(session);
   if (!handle) throw new Error('Session workspace is not available');
+  const { layout, sandbox } = handle;
+  treeLocation(layout, safePath);
+  // Judge the file by where it really is as well as by the path asked for: a
+  // symlink to `.env` must not serve it. Rendered roots (plans, reports) are
+  // served even when a checkout ignores them, but not through such a symlink.
+  const parent = posixPath.dirname(safePath);
+  const real = await realPaths(sandbox, layout.root, parent === '.' ? [safePath] : [safePath, parent]);
+  const target = treePathOf(layout, real.root, real.paths[0]!);
+  // The file itself may be a symlink, but not a folder on the way to it.
+  const throughLink = parent !== '.' && real.paths[1] !== posixPath.join(real.root, parent);
+  if (target === undefined || throughLink) throw new Error('Path is not available in this session');
+  const trusted = APPROVED_RENDERED_ROOTS.has(safePath.split('/')[0] ?? '');
+  const checked = [...new Set([...(trusted ? [] : [safePath]), ...(target === safePath ? [] : [target])])];
+  if ((await ignoredTreePaths(sandbox, layout, checked)).size > 0) {
+    throw new Error('Path is not available in this session');
+  }
   const { filesystem } = handle;
   const info = await filesystem.stat(safePath);
   if (info.type === 'directory') throw new Error('Path is a directory');
 
-  const buffer = (await filesystem.readFile(safePath)) as Buffer;
-  const truncated = buffer.length > MAX_TEXT_FILE_BYTES;
+  // Only the shown prefix of a large file leaves the sandbox.
+  const truncated = info.size > MAX_TEXT_FILE_BYTES;
+  const buffer = truncated
+    ? await readFilePrefix(sandbox, real.paths[0]!, MAX_TEXT_FILE_BYTES)
+    : ((await filesystem.readFile(safePath)) as Buffer);
   const base = {
     workspacePath: session.sessionId,
     path: safePath,
     name: posixPath.basename(safePath),
-    size: buffer.length,
+    size: info.size,
     updatedAt: info.modifiedAt.toISOString(),
   };
   try {
-    const content = TEXT_DECODER.decode(truncated ? buffer.subarray(0, MAX_TEXT_FILE_BYTES) : buffer);
+    const content = TEXT_DECODER.decode(buffer);
     return { ...base, contentType: 'text', content, truncated };
   } catch {
     return { ...base, contentType: 'unsupported' };
@@ -1058,25 +1256,6 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
         }
       },
     }),
-    registerApiRoute('/web/workspace/files', {
-      method: 'GET',
-      requiresAuth: false,
-      handler: async c => {
-        const workspacePath = c.req.query('workspacePath');
-        const threadId = c.req.query('threadId')?.trim();
-        if (!workspacePath) return c.json({ error: 'Missing required query param: workspacePath' }, 400);
-        if (!threadId) return c.json({ error: 'Missing required query param: threadId' }, 400);
-        try {
-          const session = await resolveAuthorizedSession(loose(c), sessionFs, workspacePath);
-          if (!session || !sessionFs) return c.json({ error: 'Session workspace is not available' }, 403);
-          return c.json(await listSessionFilesystemFiles(sessionFs.filesystem, session, threadId));
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          const status = message.includes('not available') ? 403 : 500;
-          return c.json({ error: message }, status);
-        }
-      },
-    }),
     registerApiRoute('/web/workspace/changes', {
       method: 'GET',
       requiresAuth: false,
@@ -1116,33 +1295,39 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
         }
       },
     }),
+    registerApiRoute('/web/workspace/tree', {
+      method: 'GET',
+      requiresAuth: false,
+      handler: async c => {
+        const workspacePath = c.req.query('workspacePath');
+        if (!workspacePath) return c.json({ error: 'Missing required query param: workspacePath' }, 400);
+        try {
+          const session = await resolveAuthorizedSession(loose(c), sessionFs, workspacePath);
+          if (!session || !sessionFs) return c.json({ error: 'Session workspace is not available' }, 403);
+          return c.json(await listSessionWorkspaceTree(session, c.req.query('path') ?? ''));
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          const status =
+            message.includes('relative') || message.includes('escapes') || message.includes('not available')
+              ? 403
+              : message.includes('not found')
+                ? 404
+                : 500;
+          return c.json({ error: message }, status);
+        }
+      },
+    }),
     registerApiRoute('/web/workspace/file', {
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
         const workspacePath = c.req.query('workspacePath');
         const path = c.req.query('path');
-        const requestedThreadId = c.req.query('threadId');
-        const threadId = requestedThreadId?.trim();
         if (!workspacePath) return c.json({ error: 'Missing required query param: workspacePath' }, 400);
         if (!path) return c.json({ error: 'Missing required query param: path' }, 400);
-        if (requestedThreadId !== undefined && !threadId) {
-          return c.json({ error: 'Missing required query param: threadId' }, 400);
-        }
         try {
           const session = await resolveAuthorizedSession(loose(c), sessionFs, workspacePath);
-          if (session && sessionFs) {
-            if (threadId) {
-              const safePath = assertRelativePath(path, 'path');
-              const listing = await listSessionFilesystemFiles(sessionFs.filesystem, session, threadId);
-              if (!listing.files.some(file => file.path === safePath)) {
-                return c.json({ error: 'Path is not available for this thread' }, 404);
-              }
-              return c.json(await readSessionWorkspaceFile(session, safePath, { allowUnapprovedPath: true }));
-            }
-            return c.json(await readSessionWorkspaceFile(session, path));
-          }
-          if (threadId) return c.json({ error: 'Session workspace is not available' }, 403);
+          if (session && sessionFs) return c.json(await readSessionWorkspaceFile(session, path));
           return c.json(await readWorkspaceFile(root, workspacePath, path));
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);

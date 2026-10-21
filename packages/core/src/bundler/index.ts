@@ -3,6 +3,8 @@ import { parse } from 'dotenv';
 
 import { MastraBase } from '../base';
 
+export type { BundlerConfig } from './types';
+
 export interface IBundler {
   loadEnvVars(): Promise<Map<string, string>>;
   getEnvFiles(): Promise<string[]>;

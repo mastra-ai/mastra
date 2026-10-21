@@ -367,6 +367,49 @@ describe('Agent signals: state and notification signals', () => {
     }
   });
 
+  it('schedules a notification for retry when the delivery policy throws at send time', async () => {
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'throwing-policy-storage', domains: { notifications } });
+    const agent = new Agent({
+      id: 'throwing-policy-agent',
+      name: 'Throwing Policy Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('unused'),
+      notifications: {
+        deliveryPolicy: {
+          decide: () => {
+            throw new Error('owner unavailable');
+          },
+        },
+      },
+    });
+    const mastra = new Mastra({ agents: { throwingPolicyAgent: agent }, storage, logger: false });
+    const ensureDispatch = vi.spyOn(mastra, '__ensureNotificationDispatchReady').mockResolvedValue(undefined as any);
+    const sendSignal = vi.spyOn(agentThreadStreamRuntime, 'sendSignal');
+
+    try {
+      const result = await agent.sendNotificationSignal(
+        { source: 'github', kind: 'ci-status', priority: 'high', summary: 'Policy throws' },
+        { resourceId: 'notification-user', threadId: 'notification-thread' },
+      );
+
+      expect(sendSignal).not.toHaveBeenCalled();
+      expect(result.signal).toBeUndefined();
+      expect(result.record).toMatchObject({
+        status: 'pending',
+        deliveryAttempts: 1,
+        lastDeliveryError: 'owner unavailable',
+      });
+      expect(result.record.deliverAt).toBeInstanceOf(Date);
+      expect(ensureDispatch).toHaveBeenCalled();
+      const due = await notifications.listDueNotifications({ now: new Date(Date.now() + 1000) });
+      expect(due.map(record => record.id)).toContain(result.record.id);
+    } finally {
+      sendSignal.mockRestore();
+      ensureDispatch.mockRestore();
+    }
+  });
+
   it('keeps a rejected notification summary due for retry', async () => {
     const notifications = new InMemoryNotificationsStorage();
     const storage = new MastraCompositeStore({ id: 'rejected-summary-storage', domains: { notifications } });

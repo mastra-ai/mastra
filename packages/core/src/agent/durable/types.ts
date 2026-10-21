@@ -4,7 +4,7 @@ import type {
   SharedV2ProviderMetadata,
 } from '@ai-sdk/provider-v5';
 import type { LanguageModelRequestMetadata, LogProbs as LanguageModelV1LogProbs } from '@internal/ai-sdk-v4';
-import type { LanguageModelUsage } from '@internal/ai-sdk-v5';
+import type { LanguageModelUsage, ModelMessage } from '@internal/ai-sdk-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { z } from 'zod';
 
@@ -40,10 +40,11 @@ import type {
 } from '../../tools/types';
 import type { Workspace } from '../../workspace';
 import type { AgentExecutionOptions } from '../agent.types';
-import type { MessageList } from '../message-list';
+import type { AIV5ResponseMessage, MessageList } from '../message-list';
 import type { SerializedMessageListState } from '../message-list/state';
 import type { SaveQueueManager } from '../save-queue';
 import type { CreatedAgentSignal } from '../signals';
+import type { TripwireData } from '../trip-wire';
 import type { GoalConfig, StructuredOutputOptions } from '../types';
 import type { ExecutionFence } from './execution-fence';
 
@@ -77,15 +78,11 @@ export interface SerializableModelConfig {
   specificationVersion?: string;
   /** Original model string/config for resolution at runtime (e.g., 'openai/gpt-4o') */
   originalConfig?: string | Record<string, unknown>;
-  /** Additional model settings */
-  settings?: {
-    temperature?: number;
-    maxTokens?: number;
-    topP?: number;
-    frequencyPenalty?: number;
-    presencePenalty?: number;
-    [key: string]: unknown;
-  };
+  /**
+   * Per-entry call settings from a model list entry's `modelSettings`, merged
+   * over call-time `modelSettings` on each attempt. Headers are excluded.
+   */
+  settings?: SerializableModelSettings;
   /** Provider-specific options for the model call */
   providerOptions?: SharedProviderOptions;
 }
@@ -368,6 +365,8 @@ export interface DurableAgenticWorkflowInput {
    * Only plain JSON-safe entries should appear here.
    */
   requestContextEntries?: Record<string, unknown>;
+  /** Initial processor rejection, with metadata snapshotted for cross-process execution. */
+  inputTripwire?: TripwireData;
 }
 
 /**
@@ -654,6 +653,12 @@ export type DurableAgentStepFinishResult = AgentStepFinishEventData & { runId: s
 export interface AgentFinishEventData {
   output: DurableAgenticLoopOutput['output'];
   stepResult: DurableLLMStepOutput['stepResult'];
+  /** The run's conversation, as on the default loop's finish chunk. */
+  messages?: {
+    all: ModelMessage[];
+    user: ModelMessage[];
+    nonUser: AIV5ResponseMessage[];
+  };
 }
 
 /**
@@ -735,6 +740,8 @@ export interface RegistryModelListEntry {
  * Registry entry for a single run's non-serializable state
  */
 export interface RunRegistryEntry {
+  /** Effective public ID of the owning agent; absent on legacy or manually seeded entries. */
+  agentId?: string;
   /**
    * Marks a minimal cross-process placeholder entry (e.g. seeded by
    * @mastra/inngest resume() to carry an abort controller). Placeholder
@@ -918,7 +925,15 @@ export interface RunRegistryEntry {
     messageListState: SerializedMessageListState;
     requestContext?: RequestContext;
     tracingContext?: TracingContext;
-  }) => Promise<void>;
+  }) => Promise<string | undefined>;
+  /**
+   * True for a stream() run whose merged `generateTitle` config sets `emitEvent`. The finish
+   * step then waits for the title and streams it as a transient `data-thread-title` chunk
+   * before FINISH, as the in-process loop does. Cross-process engines lose it and skip the chunk.
+   */
+  streamThreadTitle?: boolean;
+  /** `memory.onTitleGenerated` from the call options. Non-serializable, like generateThreadTitle. */
+  onTitleGenerated?: (title: string) => void | Promise<void>;
   /**
    * Signal messages already present in the `messageList` at run start (from
    * persisted history). These are echoed as `data-signal` stream data parts

@@ -5,6 +5,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
+import { closePropertiesMenus, openPropertiesMenu } from '../../../e2e/ui/properties-menu';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { createAppRoutes } from '../router';
 import { saveKanbanView } from './boardLayoutQueries';
@@ -96,9 +97,12 @@ describe('Board empty-state actions', () => {
     renderBoard(search);
     const user = userEvent.setup();
     if (layout === 'board' && search) {
-      await user.click(await screen.findByRole('button', { name: 'Filter cards' }));
-      await user.click(screen.getByRole('button', { name: 'Save as view' }));
-      expect(within(await screen.findByRole('group', { name: 'View filters' })).getByText('Manual')).toBeVisible();
+      await screen.findByRole('button', { name: /^Board properties/ });
+      await openPropertiesMenu(user, 'Board properties');
+      await user.click(screen.getByRole('menuitem', { name: 'Save as view' }));
+      await openPropertiesMenu(user, 'Board properties');
+      expect(screen.getByRole('menuitem', { name: /^Intake source\s*Manual$/ })).toBeVisible();
+      await closePropertiesMenus(user);
       await user.click(screen.getByRole('radio', { name: 'Board' }));
       await user.click(screen.getByRole('button', { name: 'Save view' }));
       await screen.findByRole('group', { name: 'Board columns' });
@@ -115,7 +119,7 @@ describe('Board empty-state actions', () => {
 
   it('clears all filters and temporary search together while preserving the sort', async () => {
     stubWorkBoard();
-    const router = renderBoard('?q=missing&search=also-missing&source=manual&sort=created-newest');
+    const router = renderBoard('?search=also-missing&source=manual&sort=created-newest');
     const user = userEvent.setup();
     const intake = await screen.findByTestId('board-column-intake');
 
@@ -130,11 +134,11 @@ describe('Board empty-state actions', () => {
 
   it('clears a saved view and search as an unsaved edit that can be reset', async () => {
     stubWorkBoard();
-    renderBoard('?q=Created');
+    renderBoard('?label=later');
     const user = userEvent.setup();
     await screen.findByText('Created later');
-    await user.click(screen.getByRole('button', { name: 'Filter cards' }));
-    await user.click(screen.getByRole('button', { name: 'Save as view' }));
+    await openPropertiesMenu(user, 'Board properties');
+    await user.click(screen.getByRole('menuitem', { name: 'Save as view' }));
     await user.click(await screen.findByRole('button', { name: 'Save view' }));
     await screen.findByRole('button', { name: 'Untitled view', pressed: true });
     await user.type(screen.getByRole('searchbox', { name: 'Search cards' }), 'missing');

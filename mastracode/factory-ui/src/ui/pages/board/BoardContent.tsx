@@ -5,6 +5,7 @@ import type { InstalledBoardInfo } from '../../../api/types';
 import { useRecentAuditEvents } from '../../../hooks/useAuditEvents';
 import { cardMatchesSourceFilters, hasBoardSourceFilters } from '../../domains/factory/boardSourceFilters';
 import { useFactoryAuth } from '../../../hooks/useFactoryAuth';
+import { useGithubStatusQuery } from '../../../hooks/useGithubStatus';
 import { stageContentCount } from '../../domains/factory/boardCandidates';
 import type { BoardCandidate } from '../../domains/factory/boardCandidates';
 import { boardLoadingStages, itemAppearsInStage } from '../../domains/factory/boardStages';
@@ -24,14 +25,13 @@ import { useItemSessionStatuses } from '../../domains/factory/hooks/useItemSessi
 import { useBoardItems } from '../../domains/factory/hooks/useBoardItems';
 import { useBoardRuns } from '../../domains/factory/hooks/useBoardRuns';
 import { useRepositoryChoice } from '../../domains/factory/hooks/useRepositoryChoice';
+import { boardLabels, candidateMatchesLabels, workItemMatchesLabels } from '../../domains/factory/boardLabels';
 import {
-  boardLabels,
   boardParticipants,
-  candidateMatchesLabels,
-  candidateMatchesRelevance,
-  workItemMatchesLabels,
-  workItemMatchesRelevance,
-} from '../../domains/factory/boardRelevance';
+  boardPersonIdentity,
+  candidateMatchesPeople,
+  workItemMatchesPeople,
+} from '../../domains/factory/boardPeople';
 import { boardFiltersActive } from '../../domains/factory/boardFilters';
 import { useBoardView } from '../../domains/factory/hooks/useBoardView';
 import { BUSY_CARD_MOVE_REFUSAL, canMoveTo } from '../../domains/factory/boardCardState';
@@ -67,6 +67,9 @@ function countUnfilteredCandidates({
   return participantCandidates.filter(candidate => !isPersistedCandidate(knownSourceKeys, candidate)).length;
 }
 
+// One item can sit in several stages; each copy is its own card.
+const workItemCardKey = (stageId: string, itemId: string) => `${stageId}/${itemId}`;
+
 export function BoardContent({
   factory,
   repository,
@@ -84,10 +87,10 @@ export function BoardContent({
   const stages = definition.phases.map(phase => ({ ...phase, label: phase.title }));
   const auth = useFactoryAuth();
   const currentUserId = auth.data?.user?.userId;
-  const view = useBoardView({ factoryProjectId, kind, currentUserId });
+  const githubStatus = useGithubStatusQuery();
+  const personId = boardPersonIdentity(currentUserId, githubStatus.data?.userGithubUsername);
+  const view = useBoardView({ factoryProjectId, kind, currentUserId, personId });
   const { searchParams, filters, sort, layout } = view;
-  const cardMatchesViewSearch = (card: Parameters<typeof cardMatchesSearch>[0]) =>
-    cardMatchesSearch(card, filters.search) && cardMatchesSearch(card, view.search);
   const targetItemId = searchParams.get('item') || undefined;
   const targetCommentId = targetItemId !== undefined ? (searchParams.get('comment') ?? undefined) : undefined;
 
@@ -157,27 +160,27 @@ export function BoardContent({
     candidates: intake.participantCandidates,
     activityPage,
     currentUser: auth.data?.user,
+    personId,
   });
   const participantCandidateBySourceKey = new Map(
     intake.participantCandidates.map(candidate => [candidate.sourceKey, candidate]),
   );
   const availableLabels = boardLabels({ items: items.all, candidates: intake.participantCandidates });
   const candidateMatchesView = (candidate: BoardCandidate): boolean => {
-    if (!candidateMatchesRelevance(candidate, filters.participantIds, filters.relevanceTypes)) return false;
-    if (!candidateMatchesLabels(candidate, filters.labels)) return false;
+    if (!candidateMatchesPeople(candidate, filters, personId)) return false;
+    if (!candidateMatchesLabels(candidate, filters.label)) return false;
     if (!cardMatchesSourceFilters(candidate, filters)) return false;
-    return cardMatchesViewSearch(candidate);
+    return cardMatchesSearch(candidate, view.search);
   };
   const filteredCandidates = intake.candidates.filter(candidateMatchesView);
   const unfilteredWorkItemsForStage = (stage: (typeof stages)[number]['id']) =>
     items.visible.filter(item => itemAppearsInStage(item, stage, stages));
   const workItemMatchesView = (item: WorkItem): boolean => {
     const liveCandidate = item.sourceKey ? participantCandidateBySourceKey.get(item.sourceKey) : undefined;
-    if (!workItemMatchesRelevance(item, activityPage, filters.participantIds, filters.relevanceTypes, liveCandidate))
-      return false;
-    if (!workItemMatchesLabels(item, filters.labels, liveCandidate)) return false;
+    if (!workItemMatchesPeople(item, activityPage, filters, personId, liveCandidate)) return false;
+    if (!workItemMatchesLabels(item, filters.label, liveCandidate)) return false;
     if (!cardMatchesSourceFilters(item, filters, liveCandidate)) return false;
-    return cardMatchesViewSearch(item);
+    return cardMatchesSearch(item, view.search);
   };
   const workItemsForStage = (stage: (typeof stages)[number]['id']) => {
     const matchingItems = unfilteredWorkItemsForStage(stage).filter(workItemMatchesView);
@@ -227,7 +230,7 @@ export function BoardContent({
     knownSourceKeys: items.knownSourceKeys,
   });
   const unfilteredTaskCount = unfilteredVisibleWorkItems.size + unfilteredCandidateCount;
-  const anyFilterActive = boardFiltersActive(filters, kind) || view.search.trim() !== '';
+  const anyFilterActive = boardFiltersActive(filters) || view.search.trim() !== '';
   const filtersExcludeAll = anyFilterActive && totalTaskCount === 0 && unfilteredTaskCount > 0;
   const hasIntakeSource = intake.available.length > 0;
 
@@ -307,15 +310,14 @@ export function BoardContent({
         >
           <VirtualBoardItems
             items={stageWorkItems}
-            itemKey={item => item.id}
+            itemKey={item => workItemCardKey(stage.id, item.id)}
             layout={layout}
-            pinnedKey={targetItemId}
+            pinnedKey={targetItemId && workItemCardKey(stage.id, targetItemId)}
             renderItem={item => (
               <WorkItemCard
                 layout={layout}
                 item={item}
                 deepLinkRef={registerDeepLinkedCard(item.id)}
-                deepLinkCommentId={targetItemId === item.id ? targetCommentId : undefined}
                 highlighted={targetItemId === item.id}
                 columnStage={stage.id}
                 relatedItems={relatedItemsFor(item)}
@@ -394,6 +396,11 @@ export function BoardContent({
         layout={layout}
         stages={stageViews}
         totalTaskCount={totalTaskCount}
+        linkedComment={
+          targetItemId !== undefined && targetCommentId !== undefined && targetStages[0] !== undefined
+            ? { cardKey: workItemCardKey(targetStages[0], targetItemId), commentId: targetCommentId }
+            : undefined
+        }
         onDrop={dropWithRepository}
         toolbar={
           <BoardViewControls

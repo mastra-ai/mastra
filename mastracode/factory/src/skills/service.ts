@@ -8,8 +8,7 @@ import type { Workspace } from '@mastra/core/workspace';
 import { BOARD_ROLE_FACTORY_SKILLS, REVIEW_ONLY_FACTORY_SKILLS, rescanFactorySkills } from '../workspace.js';
 
 export interface SkillInvocationInput {
-  resourceId: string;
-  scope?: string;
+  sessionId: string;
   name: string;
   arguments?: string;
 }
@@ -66,19 +65,19 @@ function escapeSkillBoundary(value: string): string {
 
 /** Kicks a run off from a plain prompt, for runs that activate no skill. */
 export async function resolvePromptInvocation(
-  controller: Pick<AgentController<MastraCodeState>, 'getSessionByResource'>,
-  input: { resourceId: string; scope?: SkillInvocationInput['scope']; prompt: string },
+  controller: Pick<AgentController<MastraCodeState>, 'getSession'>,
+  input: { sessionId: string; prompt: string },
 ): Promise<{ session: SkillSession; message: string }> {
-  const session = (await controller.getSessionByResource(input.resourceId, input.scope)) as SkillSession | undefined;
+  const session = (await controller.getSession(input.sessionId)) as SkillSession | undefined;
   if (!session) throw new SkillInvocationError('session_not_found', 'Agent controller session not found.');
   return { session, message: input.prompt };
 }
 
 export async function resolveSkillInvocation(
-  controller: Pick<AgentController<MastraCodeState>, 'getSessionByResource'>,
+  controller: Pick<AgentController<MastraCodeState>, 'getSession'>,
   input: SkillInvocationInput,
 ): Promise<{ session: SkillSession; skillName: string; message: string }> {
-  const session = (await controller.getSessionByResource(input.resourceId, input.scope)) as SkillSession | undefined;
+  const session = (await controller.getSession(input.sessionId)) as SkillSession | undefined;
   if (!session) throw new SkillInvocationError('session_not_found', 'Agent controller session not found.');
 
   const skill = await findSkill(session, input.name);
@@ -103,10 +102,10 @@ export async function resolveSkillInvocation(
  * skill tool.
  */
 export async function resolveSkillResumeInvocation(
-  controller: Pick<AgentController<MastraCodeState>, 'getSessionByResource'>,
+  controller: Pick<AgentController<MastraCodeState>, 'getSession'>,
   input: SkillInvocationInput,
 ): Promise<{ session: SkillSession; skillName: string; message: string }> {
-  const session = (await controller.getSessionByResource(input.resourceId, input.scope)) as SkillSession | undefined;
+  const session = (await controller.getSession(input.sessionId)) as SkillSession | undefined;
   if (!session) throw new SkillInvocationError('session_not_found', 'Agent controller session not found.');
 
   const skill = await findSkill(session, input.name);
@@ -128,7 +127,7 @@ export async function resolveSkillResumeInvocation(
 }
 
 export async function dispatchSkillInvocation(
-  controller: Pick<AgentController<MastraCodeState>, 'getSessionByResource'>,
+  controller: Pick<AgentController<MastraCodeState>, 'getSession'>,
   input: SkillInvocationInput,
   requestContext?: RequestContext,
 ): Promise<{ skillName: string; message: string }> {

@@ -7,8 +7,13 @@ import { relationshipLabel } from '../../factory/services/relationships';
 import type { WorkItem } from '../../factory/services/workItems';
 import { isTerminalStage } from '../../factory/stages';
 import type { SessionPreviewDetails } from '../components/SessionPreviewCard';
-import { getFactorySessionKind, getSessionOwnerDetails, getUserSessionLabel } from './sessionPresentation';
-import type { SessionOwnerDetails, SessionViewerProfile } from './sessionPresentation';
+import {
+  getFactorySessionKind,
+  getFactorySessionSource,
+  getSessionOwnerDetails,
+  getUserSessionLabel,
+} from './sessionPresentation';
+import type { SessionOwnerDetails, SessionSource, SessionViewerProfile } from './sessionPresentation';
 import { sessionRowStatus } from './sessionStatus';
 import type { SessionRowStatus } from './sessionStatus';
 import { SLACK_SESSION_BRANCH_PREFIX } from './user-sessions';
@@ -54,6 +59,7 @@ export interface SessionListRow {
   origin: 'factory' | 'user';
   board: string | undefined;
   kind: SessionPreviewDetails['kind'];
+  source: SessionSource;
   name: string;
   url: string;
   openPath: string;
@@ -165,6 +171,7 @@ export function buildFactorySessionRow({
     origin: 'factory',
     board: sessionBoard(session, item),
     kind: getFactorySessionKind(session, item) === 'review' ? 'Review session' : 'Work session',
+    source: getFactorySessionSource(session, item),
     name: factorySessionName(session, item),
     url,
     openPath: `${url}/threads/${session.sessionId}`,
@@ -190,6 +197,8 @@ export function buildFactorySessionRow({
 
 export interface UserSessionRowInput {
   session: FactoryUserSession;
+  /** The work item a Slack-origin user session is bound to, if loaded. */
+  item?: WorkItem;
   factoryId: string;
   pathname: string;
   running: boolean;
@@ -199,6 +208,7 @@ export interface UserSessionRowInput {
 
 export function buildUserSessionRow({
   session,
+  item,
   factoryId,
   pathname,
   running,
@@ -207,12 +217,14 @@ export function buildUserSessionRow({
 }: UserSessionRowInput): SessionListRow {
   const url = `/factories/${factoryId}/user/threads/${session.sessionId}`;
   const ownedByViewer = isOwnedByViewer(session, viewer);
+  const fromSlack = session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX);
   return {
     session,
     origin: 'user',
     board: undefined,
     kind: 'User session',
-    name: getUserSessionLabel(session),
+    source: fromSlack ? 'slack-thread' : 'user',
+    name: (fromSlack && !session.title?.trim() && item?.title.trim()) || getUserSessionLabel(session),
     url,
     openPath: url,
     active: pathname === url,
@@ -237,7 +249,6 @@ function pullRequestMergeTarget({ session, threadId, pullRequest }: SessionListR
     {
       sessionId: session.sessionId,
       threadId,
-      projectPath: session.sessionId,
       pullRequestNumber: pullRequest.number,
       provider: pullRequest.provider,
       knownMerged: pullRequest.knownMerged,

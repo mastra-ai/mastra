@@ -29,13 +29,13 @@ beforeAll(() => {
             devicePixelContentBoxSize: size,
           },
         ],
-        this as unknown as ResizeObserver,
+        this,
       );
     }
     unobserve() {}
     disconnect() {}
   }
-  globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver;
+  globalThis.ResizeObserver = ResizeObserverStub;
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 1200, 800));
   // Base UI's scroll area waits on animations; jsdom has no Web Animations API.
   Element.prototype.getAnimations ??= () => [];

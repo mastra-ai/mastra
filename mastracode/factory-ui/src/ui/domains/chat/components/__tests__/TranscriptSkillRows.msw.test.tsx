@@ -62,7 +62,7 @@ function entryViaReducer(message: MastraDBMessage): TimelineEntry {
     type: 'mergeWindow',
     messages: [message],
   });
-  return state.entries[0]!;
+  return state.entries[0];
 }
 
 /** Build a pre-coerced user message entry (simpler, for most tests). */

@@ -65,8 +65,7 @@ export function NewExperimentDialog({
   const requestContextInput = useRequestContextInput(datasetChoice.datasetId);
   const experimentName = useExperimentName({ initialName, targetLabel: targetChoice.target?.label });
   const [description, setDescription] = useState(initialDescription ?? '');
-  // A rerun that pins a version or carries a description opens with those fields showing.
-  const [advancedOpen, setAdvancedOpen] = useState(initialDatasetVersion !== undefined || Boolean(initialDescription));
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const { triggerExperiment } = useDatasetMutations();
 
   const { target } = targetChoice;

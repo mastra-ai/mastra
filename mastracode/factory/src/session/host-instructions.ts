@@ -2,7 +2,6 @@ import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { RequestContext } from '@mastra/core/request-context';
 
-import { getFactoryAuthOrgId, getFactoryAuthUserFromContext } from '../auth.js';
 import { resolveFactorySessionAddress } from '../rules/binding-context.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
@@ -23,7 +22,7 @@ interface FactoryHostInstructionsDeps {
 export function createFactoryHostInstructions(deps: FactoryHostInstructionsDeps) {
   return async ({ requestContext }: { requestContext: RequestContext }): Promise<string | undefined> => {
     const controller = requestContext.get('controller') as SessionController | undefined;
-    if (!controller?.threadId || !controller.resourceId) return undefined;
+    if (!controller?.threadId || !controller.sessionId) return undefined;
     const binding = await restoreTrustStateBeforePrompt(controller, requestContext, deps);
     if (binding === 'bound' || requestContext.get('channel')) return undefined;
     const sessions = deps.readySourceControlSessions();
@@ -44,14 +43,13 @@ async function restoreTrustStateBeforePrompt(
   controller: SessionController,
   requestContext: RequestContext,
   deps: FactoryHostInstructionsDeps,
-): Promise<'bound' | 'unbound' | 'unknown'> {
+): Promise<'bound' | 'unbound'> {
   const current = controller.getState();
   const trustStateComplete =
     Boolean(current.factoryProjectId) &&
     Boolean(current.factoryOrgId) &&
     typeof current.untrustedCheckout === 'boolean';
   if (trustStateComplete) return 'bound';
-  if (!getFactoryAuthOrgId(getFactoryAuthUserFromContext(requestContext))) return 'unknown';
   const sessions = deps.readySourceControlSessions();
   const recovered = await resolveFactorySessionAddress({
     requestContext,
