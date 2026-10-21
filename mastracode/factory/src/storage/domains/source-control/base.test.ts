@@ -620,6 +620,23 @@ describe('SourceControlStorage', () => {
     });
   });
 
+  it('transfers a legacy shared session whose visibility was never written', async () => {
+    const project = await createProject();
+    const link = await linkRepository({ factoryProjectId: project.id });
+    const session = await github.sessions.create({
+      sessionId: '00000000-0000-4000-8000-000000000034',
+      projectRepositoryId: link.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'user/session-legacy-visibility',
+      baseBranch: 'main',
+    });
+    await backend.ops.updateMany('source_control_sessions', { session_id: session.sessionId }, { visibility: null });
+    await expect(
+      github.sessions.transferOwner({ sessionId: session.sessionId, expectedUserId: 'user-1', toUserId: 'user-2' }),
+    ).resolves.toMatchObject({ status: 'updated', session: { userId: 'user-2', visibility: 'org' } });
+  });
+
   it('records first_message_at write-once via markFirstMessage', async () => {
     const project = await createProject();
     const link = await linkRepository({ factoryProjectId: project.id });

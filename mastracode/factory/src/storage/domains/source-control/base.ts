@@ -1589,20 +1589,31 @@ export class SourceControlStorage extends FactoryStorageDomain {
           }
         },
         transferOwner: async ({ sessionId, expectedUserId, toUserId }) => {
+          let refusedPrivate = false;
           try {
             const updated = await db().updateAtomic<SessionDbRow>(
               SESSIONS,
-              { session_id: sessionId, user_id: expectedUserId, visibility: 'org' },
-              current =>
-                current.user_id === toUserId
+              { session_id: sessionId, user_id: expectedUserId },
+              current => {
+                // Shared is "not private", as in toSession: rows from before visibility existed hold NULL.
+                if (current.visibility === 'private') {
+                  refusedPrivate = true;
+                  return null;
+                }
+                return current.user_id === toUserId
                   ? null
                   : {
                       user_id: toUserId,
                       created_by_user_id: current.created_by_user_id ?? current.user_id,
                       updated_at: new Date(),
-                    },
+                    };
+              },
             );
-            if (updated) return { status: 'updated', session: toSession(updated) };
+            if (updated) {
+              return refusedPrivate
+                ? { status: 'conflict', reason: 'stale_owner', session: toSession(updated) }
+                : { status: 'updated', session: toSession(updated) };
+            }
           } catch (error) {
             if (!(error instanceof UniqueViolationError)) throw error;
             const session = await db().findOne<SessionDbRow>(SESSIONS, { session_id: sessionId });

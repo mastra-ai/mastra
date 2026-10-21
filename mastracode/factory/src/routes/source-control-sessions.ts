@@ -260,8 +260,8 @@ const OWNER_CONFLICT_MESSAGES = {
   branch_owned: 'You already have a session on this branch',
 } as const;
 
-/** One ownership transfer per session at a time, so a later transfer never mirrors an older owner onto the thread. */
-function createSessionTransferQueue() {
+/** One owner or visibility change per session at a time, so neither lands on a row the other moved under it. */
+function createSessionChangeQueue() {
   const tails = new Map<string, Promise<void>>();
   return <T>(sessionId: string, run: () => Promise<T>): Promise<T> => {
     const result = (tails.get(sessionId) ?? Promise.resolve()).then(run);
@@ -477,7 +477,7 @@ function projectSessionRoutes(
 
 export function buildSourceControlSessionRoutes(options: SourceControlSessionRoutesOptions): ApiRoute[] {
   const nameSession = createSessionNaming();
-  const transferOwnerSerially = createSessionTransferQueue();
+  const changeSessionSerially = createSessionChangeQueue();
   const resolveOwnerProfiles = createSessionOwnerProfileResolver(options.users);
   return [
     registerApiRoute('/web/factory/projects/:id/sessions', {
@@ -655,7 +655,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
         }
         const controller = options.controller;
 
-        return transferOwnerSerially(sessionId, async () => {
+        return changeSessionSerially(sessionId, async () => {
           // A run reads its payer from the row on every model call, and a parked one dies with its live host.
           if (controller) {
             const threads = await listFactorySessionThreads(controller, session, options.workItems);
@@ -823,71 +823,73 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           return c.json({ error: "visibility must be 'private' or 'org'" }, 400);
         }
         const sessionId = c.req.param('sessionId');
-        const match = await resolveSession(options.sourceControls, sessionId);
-        const row = match?.session;
-        // Only the owner may share or unshare; everyone else gets the same 404
-        // as a missing session so org-visible ids are not confirmed either.
-        if (!match || !row || row.orgId !== resolved.tenant.orgId || row.userId !== resolved.tenant.userId) {
-          return c.json({ error: 'Session not found' }, 404);
-        }
-        // Without work-item storage there's no telling whether this is a Factory
-        // run, so refuse rather than let a run be made private.
-        if (!options.workItems) {
-          return c.json(
-            {
-              error:
-                "Session visibility can't be changed yet: Factory storage is still starting up. Try again in a moment.",
-            },
-            503,
-          );
-        }
-        // Only sessions a person started in the UI can change. Factory runs and
-        // Slack threads keep the visibility they were created with: runs and
-        // channel threads stay with the team, Slack DMs stay private.
-        if (
-          row.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX) ||
-          (row.factoryProjectId !== null &&
-            (await options.workItems.hasRunBindingForSession({
-              orgId: row.orgId,
-              factoryProjectId: row.factoryProjectId,
-              sessionId,
-            })))
-        ) {
-          return c.json({ error: 'Only user sessions can change visibility' }, 409);
-        }
-        // Sharing puts the session on its Factory's memory; without a Factory there is nowhere to share it to.
-        if (visibility === 'org' && !row.factoryProjectId) {
-          return c.json({ error: "This session isn't linked to a Factory, so it can't be shared." }, 409);
-        }
-        const resourceId = userSessionResourceFor(row, visibility);
-        const controller = options.controller;
-        // The resource says who may read a session, so its threads move with it.
-        const threadIds = controller ? await sessionThreadsToMove(controller, row, resourceId) : [];
-        if (threadIds.length > 0 && !options.moveThread) {
-          return c.json({ error: 'Changing session visibility is not available on this server.' }, 503);
-        }
-        if (controller?.listActiveThreadRuns().some(run => threadIds.includes(run.threadId))) {
-          return c.json({ error: 'Wait for the session to finish its run before changing visibility' }, 409);
-        }
-        // Write in the order that fails closed: threads leave the Factory before the
-        // row says private, and the row says shared before threads reach the Factory.
-        // A failed move then leaves the session less visible, never more, and a retry
-        // moves what is left.
-        const moveThreads = async () => {
-          for (const threadId of threadIds) await options.moveThread!({ threadId, resourceId });
-        };
-        if (visibility === 'private') await moveThreads();
-        const updated = await match.sourceControl.sessions.setVisibility({ sessionId, visibility });
-        if (!updated) return c.json({ error: 'Session not found' }, 404);
-        if (visibility === 'org') await moveThreads();
-        // A live session keeps the resource it started on. Drop it so the next
-        // request resumes on its moved thread, or point it at the new resource
-        // when it has no thread to resume from yet.
-        const live = await controller?.getSession(sessionId);
-        if (live && threadIds.length > 0) await controller!.deleteSession({ sessionId });
-        else if (live) await controller!.setResourceId(live, { resourceId });
-        const owners = await resolveOwnerProfiles([updated.userId]);
-        return c.json({ session: withOwnerProfile(updated, owners) });
+        return changeSessionSerially(sessionId, async () => {
+          const match = await resolveSession(options.sourceControls, sessionId);
+          const row = match?.session;
+          // Only the owner may share or unshare; everyone else gets the same 404
+          // as a missing session so org-visible ids are not confirmed either.
+          if (!match || !row || row.orgId !== resolved.tenant.orgId || row.userId !== resolved.tenant.userId) {
+            return c.json({ error: 'Session not found' }, 404);
+          }
+          // Without work-item storage there's no telling whether this is a Factory
+          // run, so refuse rather than let a run be made private.
+          if (!options.workItems) {
+            return c.json(
+              {
+                error:
+                  "Session visibility can't be changed yet: Factory storage is still starting up. Try again in a moment.",
+              },
+              503,
+            );
+          }
+          // Only sessions a person started in the UI can change. Factory runs and
+          // Slack threads keep the visibility they were created with: runs and
+          // channel threads stay with the team, Slack DMs stay private.
+          if (
+            row.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX) ||
+            (row.factoryProjectId !== null &&
+              (await options.workItems.hasRunBindingForSession({
+                orgId: row.orgId,
+                factoryProjectId: row.factoryProjectId,
+                sessionId,
+              })))
+          ) {
+            return c.json({ error: 'Only user sessions can change visibility' }, 409);
+          }
+          // Sharing puts the session on its Factory's memory; without a Factory there is nowhere to share it to.
+          if (visibility === 'org' && !row.factoryProjectId) {
+            return c.json({ error: "This session isn't linked to a Factory, so it can't be shared." }, 409);
+          }
+          const resourceId = userSessionResourceFor(row, visibility);
+          const controller = options.controller;
+          // The resource says who may read a session, so its threads move with it.
+          const threadIds = controller ? await sessionThreadsToMove(controller, row, resourceId) : [];
+          if (threadIds.length > 0 && !options.moveThread) {
+            return c.json({ error: 'Changing session visibility is not available on this server.' }, 503);
+          }
+          if (controller?.listActiveThreadRuns().some(run => threadIds.includes(run.threadId))) {
+            return c.json({ error: 'Wait for the session to finish its run before changing visibility' }, 409);
+          }
+          // Write in the order that fails closed: threads leave the Factory before the
+          // row says private, and the row says shared before threads reach the Factory.
+          // A failed move then leaves the session less visible, never more, and a retry
+          // moves what is left.
+          const moveThreads = async () => {
+            for (const threadId of threadIds) await options.moveThread!({ threadId, resourceId });
+          };
+          if (visibility === 'private') await moveThreads();
+          const updated = await match.sourceControl.sessions.setVisibility({ sessionId, visibility });
+          if (!updated) return c.json({ error: 'Session not found' }, 404);
+          if (visibility === 'org') await moveThreads();
+          // A live session keeps the resource it started on. Drop it so the next
+          // request resumes on its moved thread, or point it at the new resource
+          // when it has no thread to resume from yet.
+          const live = await controller?.getSession(sessionId);
+          if (live && threadIds.length > 0) await controller!.deleteSession({ sessionId });
+          else if (live) await controller!.setResourceId(live, { resourceId });
+          const owners = await resolveOwnerProfiles([updated.userId]);
+          return c.json({ session: withOwnerProfile(updated, owners) });
+        });
       },
     }),
     registerApiRoute('/web/user-sessions/:sessionId/title', {

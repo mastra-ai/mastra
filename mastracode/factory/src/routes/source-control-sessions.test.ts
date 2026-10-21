@@ -462,6 +462,63 @@ describe('source-control session routes', () => {
     expect(await controller.getSession(sessionId)).toBeUndefined();
   });
 
+  it('runs a visibility change and a transfer of the same session one after the other', async () => {
+    const { seed, sourceControl, projectRepository, project } = await seedGitLabRepository();
+    const sessionId = 'factory-visibility-vs-transfer';
+    await sourceControl.sessions.create({
+      sessionId,
+      projectRepositoryId: projectRepository.id,
+      factoryProjectId: project.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      branch: 'factory/visibility-vs-transfer',
+      baseBranch: 'main',
+      visibility: 'org',
+    });
+    const controller = await startOwnershipController('factory-visibility-vs-transfer');
+    await controller.createSession({ id: sessionId, resourceId: sessionId, ownerId: 'user-1', threadId: sessionId });
+    let markStallReached = () => {};
+    const stallReached = new Promise<void>(resolve => {
+      markStallReached = resolve;
+    });
+    let markTransferSettled = () => {};
+    const transferSettled = new Promise<void>(resolve => {
+      markTransferSettled = resolve;
+    });
+    // The owner's request parks between reading the row and writing it private, where a transfer could slip in.
+    // Unqueued, the transfer lands and lifts the park; queued, it cannot move until the timer does.
+    // The transfer's own thread lookup asks the same question and must not park.
+    let visibilityParked = false;
+    const workItems: RouteOptions['workItems'] = {
+      clearSessionReferences: async () => 0,
+      hasRunBindingForSession: async () => {
+        if (visibilityParked) return false;
+        visibilityParked = true;
+        markStallReached();
+        await Promise.race([transferSettled, new Promise(resolve => setTimeout(resolve, 200))]);
+        return false;
+      },
+    };
+    const app = buildApp([sourceControl], seed, controller, workItems, headers => ({
+      workosId: headers.get('x-viewer')!,
+      organizationId: 'org-1',
+    }));
+
+    const madePrivate = app.request(`/web/user-sessions/${sessionId}/visibility`, {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json', 'x-viewer': 'user-1' },
+      body: JSON.stringify({ visibility: 'private' }),
+    });
+    await stallReached;
+    const taken = await takeOwnership(app, sessionId, 'user-1', { 'x-viewer': 'user-2' }).finally(markTransferSettled);
+    expect((await madePrivate).status).toBe(200);
+    expect(taken.status).toBe(404);
+    await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toMatchObject({
+      userId: 'user-1',
+      visibility: 'private',
+    });
+  });
+
   it('treats acquisition by the current owner as a CAS-checked no-op', async () => {
     const { seed, sourceControl, projectRepository } = await seedGitLabRepository();
     const session = await sourceControl.sessions.create({
