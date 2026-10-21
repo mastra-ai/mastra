@@ -37,7 +37,7 @@ interface SlackAdapterChannelConfigBase {
 
   /**
    * Whether the agent's reply text is posted to Slack. See `ChannelAdapterConfig['textDisplay']`.
-   * `'hidden'` keeps it out of the thread, so the agent speaks only through tools you give it.
+   * `'hidden'` keeps it out of the thread, so the agent's own messages reach it only through tools you give it.
    *
    * @default 'show'
    */

@@ -234,7 +234,7 @@ const agent = new Agent({
     isOptional: true,
     defaultValue: "'show'",
     description:
-      "Whether the agent's reply text is posted to the channel. `'hidden'` never posts reply text, so the agent speaks in the channel only through tools you give it, such as a reply tool. Tool display, approval prompts, error messages, and typing status are unaffected, and the text still reaches the agent's stream and memory.",
+      "Whether the agent's reply text is posted to the channel. `'hidden'` never posts reply text, so the agent's own messages reach the channel only through tools you give it, such as a reply tool. Tool display, approval prompts, error messages, and typing status are unaffected, and the text still reaches the agent's stream and memory.",
   },
   {
     name: 'toolDisplay',
