@@ -10,6 +10,7 @@ export class WorkflowStepConflictError extends Error {
     readonly reason: 'stale' | 'completed' | 'legacy' | 'missing',
     readonly storedResult?: StepResult<any, any, any, any>,
     readonly storedRequestContext?: Record<string, any>,
+    readonly storedSnapshot?: WorkflowRunState,
   ) {
     super(
       `Workflow step delivery rejected (${reason}).${reason === 'legacy' ? ' Legacy runs must be drained with their original core/store versions.' : ''}`,
@@ -41,11 +42,16 @@ export function assertWorkflowStepGuard({
   const eventId = (startGuard ?? completionGuard)!.eventId;
   if (startedBy === eventId) {
     if (stored?.status === 'running') return;
-    throw new WorkflowStepConflictError('completed', stored, snapshot.requestContext);
+    throw new WorkflowStepConflictError('completed', stored, snapshot.requestContext, snapshot);
   }
   if (startGuard) {
     if (!stored && startGuard.expectedStartedBy === undefined) return;
-    if (stored && stored.status !== 'running' && startedBy === startGuard.expectedStartedBy) return;
+    if (
+      stored &&
+      (stored.status !== 'running' || stored.metadata?.__restartPending === true) &&
+      startedBy === startGuard.expectedStartedBy
+    )
+      return;
   }
   throw new WorkflowStepConflictError('stale', stored);
 }

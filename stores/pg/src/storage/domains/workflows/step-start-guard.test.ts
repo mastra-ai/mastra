@@ -123,6 +123,27 @@ describe('Postgres workflow occurrence guards', () => {
     expect(await load()).toEqual(before);
   });
 
+  it('allows only one delivery to claim a checkpointed restart successor', async () => {
+    const { a, b, runId, write, load } = await setup();
+    await a!.updateWorkflowResults({
+      workflowName,
+      runId,
+      stepId: 'step',
+      requestContext: {},
+      result: {
+        status: 'running',
+        startedAt: 1,
+        payload: {},
+        metadata: { startedBy: 'restart', __restartPending: true },
+      },
+    });
+    await expect(write(a, 'stale', 'wrong-restart')).rejects.toMatchObject({ reason: 'stale' });
+    const outcomes = await Promise.allSettled([write(a, 'successor-a', 'restart'), write(b, 'successor-b', 'restart')]);
+    expect(outcomes.filter(result => result.status === 'fulfilled')).toHaveLength(1);
+    expect(outcomes.filter(result => result.status === 'rejected')).toHaveLength(1);
+    expect((await load())!.context.step.metadata?.__restartPending).toBeUndefined();
+  });
+
   it('fails explicitly rather than executing a guarded step without its run snapshot', async () => {
     const worker = await stores[0]!.getStore('workflows');
     await expect(

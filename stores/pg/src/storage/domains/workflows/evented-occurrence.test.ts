@@ -101,6 +101,140 @@ describe('Postgres evented occurrence replay', () => {
     20_000,
   );
 
+  it.each(['run', 'end'] as const)(
+    'continues a saved linear result after losing its continuation and reclaiming step.%s',
+    async delivery => {
+      const driver = new RedeliveryDriver();
+      const schema = z.object({ n: z.number() });
+      const calls: string[] = [];
+      const first = createStep({
+        id: 'first',
+        inputSchema: schema,
+        outputSchema: schema,
+        execute: async ({ requestContext, setState }) => {
+          calls.push('first');
+          requestContext.set('committed', true);
+          await setState({ n: 1 });
+          return { n: 1 };
+        },
+      });
+      const second = createStep({
+        id: 'second',
+        inputSchema: schema,
+        outputSchema: schema,
+        execute: async ({ inputData, requestContext, state }) => {
+          calls.push('second');
+          expect(requestContext.get('committed')).toBe(true);
+          expect(state).toEqual({ n: 1 });
+          return { n: inputData.n + 1 };
+        },
+      });
+      const workflow = createWorkflow({
+        id: `linear-crash-${randomUUID()}`,
+        inputSchema: schema,
+        outputSchema: schema,
+        stateSchema: schema,
+      })
+        .then(first)
+        .then(second)
+        .commit();
+      const mastra = new Mastra({ storage, pubsub: driver.pubsub, workflows: { [workflow.id]: workflow } });
+      const publish = driver.pubsub.publish.bind(driver.pubsub);
+      let reached!: () => void;
+      const saved = new Promise<void>(resolve => {
+        reached = resolve;
+      });
+      const interrupted = vi.spyOn(driver.pubsub, 'publish').mockImplementation(async (topic, event, options) => {
+        if (topic === 'workflows' && event.type === 'workflow.step.run' && event.data.executionPath[0] === 1) {
+          reached();
+          return;
+        }
+        return publish(topic, event, options);
+      });
+      await mastra.startWorkers();
+      try {
+        const run = await workflow.createRun();
+        const result = run.start({ inputData: { n: 0 }, initialState: { n: 0 } });
+        await saved;
+        const original =
+          delivery === 'run'
+            ? driver.stepRuns({ spec: '0', runId: run.runId })[0]!
+            : driver.events.find(event => event.type === 'workflow.step.end' && event.runId === run.runId)!;
+        interrupted.mockRestore();
+        const leaseKey = `workflow-step-run:${run.runId}:${original.id}`;
+        await driver.pubsub.releaseLease(leaseKey, (await driver.pubsub.getLeaseOwner(leaseKey))!);
+        await driver.redeliverEvent(
+          delivery === 'end'
+            ? {
+                ...original,
+                data: {
+                  ...original.data,
+                  prevResult: { ...original.data.prevResult, output: { n: 999 } },
+                  state: { n: 999 },
+                  requestContext: { committed: false },
+                },
+              }
+            : original,
+        );
+        await expect.poll(() => calls, { timeout: 1_500 }).toEqual(['first', 'second']);
+        expect(await result).toMatchObject({ status: 'success', result: { n: 2 } });
+        expect(calls).toEqual(['first', 'second']);
+      } finally {
+        interrupted.mockRestore();
+        await mastra.stopWorkers();
+        driver.dispose();
+      }
+    },
+    8_000,
+  );
+
+  it('restarts a completed boundary whose successor reuses the step ID on Postgres', async () => {
+    const driver = new RedeliveryDriver();
+    const schema = z.object({ n: z.number() });
+    const calls: number[] = [];
+    const body = createStep({
+      id: 'body',
+      inputSchema: schema,
+      outputSchema: schema,
+      execute: async ({ inputData }) => {
+        calls.push(inputData.n);
+        return { n: inputData.n + 1 };
+      },
+    });
+    const workflow = createWorkflow({ id: `restart-reused-${randomUUID()}`, inputSchema: schema, outputSchema: schema })
+      .then(body)
+      .then(body)
+      .commit();
+    const mastra = new Mastra({ storage, pubsub: driver.pubsub, workflows: { [workflow.id]: workflow } });
+    const publish = driver.pubsub.publish.bind(driver.pubsub);
+    let reached!: () => void;
+    const saved = new Promise<void>(resolve => {
+      reached = resolve;
+    });
+    const interrupted = vi.spyOn(driver.pubsub, 'publish').mockImplementation(async (topic, event, options) => {
+      if (topic === 'workflows' && event.type === 'workflow.step.run' && event.data.executionPath[0] === 1) {
+        reached();
+        return;
+      }
+      return publish(topic, event, options);
+    });
+    await mastra.startWorkers();
+    try {
+      const run = await workflow.createRun();
+      void run.start({ inputData: { n: 0 } });
+      await saved;
+      interrupted.mockRestore();
+      const restarted = await workflow.createRun({ runId: run.runId });
+      const result = restarted.restart();
+      await expect.poll(() => calls, { timeout: 1_500 }).toEqual([0, 1]);
+      expect(await result).toMatchObject({ status: 'success', result: { n: 2 } });
+    } finally {
+      interrupted.mockRestore();
+      await mastra.stopWorkers();
+      driver.dispose();
+    }
+  }, 8_000);
+
   it.each(['step', 'parallel', 'foreach', 'nested'] as const)(
     'removes recovery-only snapshots after a %s suspension but preserves resumable snapshots',
     async kind => {
