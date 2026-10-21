@@ -721,7 +721,7 @@ export function buildSourceControlSessionRoutes(options: SourceControlSessionRou
           );
         }
         const controller = options.controller;
-        // A running turn reads its payer from the row on every model call, so it stops with the old owner.
+        // Model calls now bill the taker, so stop the turn; only after the CAS, so a lost race never kills it.
         await abortActiveRun(controller, sessionId, options.abortSettleTimeoutMs ?? ABORT_SETTLE_TIMEOUT_MS);
         // The live host acts as the old owner; the next message starts one as the new.
         if (controller && (await controller.getSession(sessionId))) {
