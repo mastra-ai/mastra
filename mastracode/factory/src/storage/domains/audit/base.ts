@@ -159,8 +159,10 @@ export function decodeAuditCursor(cursor: string): { occurredAt: Date; id: strin
   return { occurredAt, id };
 }
 
-/** An `after` cursor that sorts before every audit row, so paging from it misses nothing. */
-export const AUDIT_TRAIL_START = `${new Date(0).toISOString()}_00000000-0000-0000-0000-000000000000`;
+/** An `after` cursor at an instant: paging from it skips every row recorded at or before then. */
+export function auditCursorAt(instant: Date): string {
+  return `${instant.toISOString()}_ffffffff-ffff-ffff-ffff-ffffffffffff`;
+}
 
 const AUDIT_EVENT_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 

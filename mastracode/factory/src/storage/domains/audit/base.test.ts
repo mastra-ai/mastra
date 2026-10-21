@@ -4,7 +4,7 @@ import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgFactoryStorage } from '@mastra/pg';
 import { describe, expect, it, onTestFinished } from 'vitest';
 
-import { AUDIT_TRAIL_START, AuditStorage, clampAuditLimit, encodeAuditCursor } from './base.js';
+import { AuditStorage, auditCursorAt, clampAuditLimit, encodeAuditCursor } from './base.js';
 
 describe('clampAuditLimit', () => {
   it('defaults non-finite values and truncates fractions', () => {
@@ -160,13 +160,28 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('AuditStorage pa
     expect(seen).toEqual(inOrder.slice(1).map(e => e.id));
   });
 
-  it('pages forward from the start of an empty trail, and picks up its first event', async () => {
+  it('pages forward from a point in time, skipping everything recorded at or before it', async () => {
     const { audit: storage, orgId } = await makeBackendStorage();
+    const at = new Date('2026-10-21T12:00:00.000Z');
 
-    expect((await storage.list({ orgId, after: AUDIT_TRAIL_START })).events).toEqual([]);
+    expect((await storage.list({ orgId, after: auditCursorAt(at) })).events).toEqual([]);
 
-    const row = await storage.record({ orgId, actorId: 'user:alice', action: 'a.one', targets: [] });
-    expect((await storage.list({ orgId, after: AUDIT_TRAIL_START })).events.map(e => e.id)).toEqual([row.id]);
+    await storage.record({
+      orgId,
+      actorId: 'user:alice',
+      action: 'a.before',
+      targets: [],
+      occurredAt: new Date(at.getTime() - 1),
+    });
+    await storage.record({ orgId, actorId: 'user:alice', action: 'a.at', targets: [], occurredAt: at });
+    await storage.record({
+      orgId,
+      actorId: 'user:alice',
+      action: 'a.after',
+      targets: [],
+      occurredAt: new Date(at.getTime() + 1),
+    });
+    expect((await storage.list({ orgId, after: auditCursorAt(at) })).events.map(e => e.action)).toEqual(['a.after']);
   });
 
   it('refuses to page both ways at once, or forward from an unreadable cursor', async () => {

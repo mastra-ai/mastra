@@ -6,7 +6,7 @@ import { EventEmitterPubSub } from '@mastra/core/events';
 import { MCPClient } from '@mastra/mcp';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry } from '../boards/index.js';
 import { PLATFORM_AUTH_PROVIDER } from '../platform-auth-host.js';
@@ -17,6 +17,7 @@ import { AuditDomain } from '../storage/domains/audit/domain.js';
 import { CommentsDomain } from '../storage/domains/comments/domain.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryToolDependencies } from '../tools/index.js';
+import { ACTIVITY_SETTLE_MS } from './events.js';
 import {
   buildFactoryMcpRoutes,
   connectorSessionId,
@@ -433,8 +434,29 @@ describe('Factory MCP server', () => {
 });
 
 describe('Factory activity over MCP events', () => {
-  const poll = (url: string, token: string, cursor: string | null, args: Record<string, unknown> = {}) =>
-    claudeRequest(url, 'events/poll', { name: 'factory.activity', arguments: args, cursor }, token);
+  // Polling only moves past events once they have settled, so these tests drive the clock.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+  const tick = (ms: number) => vi.setSystemTime(Date.now() + ms);
+  const settle = () => tick(ACTIVITY_SETTLE_MS + 1);
+
+  const poll = (
+    url: string,
+    token: string,
+    cursor: string | null | undefined,
+    args: Record<string, unknown> = {},
+    options: { maxAgeMs?: number } = {},
+  ) =>
+    claudeRequest(
+      url,
+      'events/poll',
+      { name: 'factory.activity', arguments: args, ...(cursor === undefined ? {} : { cursor }), ...options },
+      token,
+    );
 
   const renameItem = (url: string, workItem: string, title: string) =>
     claudeRequest(
@@ -469,9 +491,11 @@ describe('Factory activity over MCP events', () => {
     const start = await poll(url, 'token-alice', null);
     expect(start.body?.result).toMatchObject({ events: [], cursor: expect.any(String) });
 
+    tick(1000);
     const rename = await renameItem(url, item.id, 'Fix the sign-in page');
     expect(rename.body?.result.isError).not.toBe(true);
 
+    settle();
     const next = await poll(url, 'token-alice', start.body!.result.cursor);
     expect(next.body?.result.events).toEqual([
       expect.objectContaining({
@@ -508,9 +532,82 @@ describe('Factory activity over MCP events', () => {
     expect(restart.status).toBe(200);
     expect(restart.body?.result).toMatchObject({ events: [], truncated: true, cursor: expect.any(String) });
 
+    tick(1000);
     await renameItem(url, item.id, 'Fix the sign-in page');
+    settle();
     const next = await poll(url, 'token-alice', restart.body!.result.cursor);
     expect(next.body?.result.events.map((event: any) => event.data.action)).toEqual(['factory.work_item.updated']);
+  });
+
+  it('an event written while a poll runs is still delivered on the next poll', async () => {
+    const { url, project, item, audit } = await setup();
+    const record = (action: string, occurredAt?: Date) =>
+      audit.record({
+        orgId: 'org-1',
+        actorId: 'alice',
+        action,
+        targets: [{ type: 'work_item', id: item.id, name: item.title }],
+        factoryProjectId: project.id,
+        ...(occurredAt ? { occurredAt } : {}),
+      });
+    const start = await poll(url, 'token-alice', null);
+    tick(1000);
+
+    await record('factory.work_item.created');
+    const during = await poll(url, 'token-alice', start.body!.result.cursor);
+    expect(during.body?.result).toMatchObject({ events: [], cursor: start.body!.result.cursor });
+    // Written in the same millisecond as that poll, or stamped just before it and committed after.
+    await record('factory.work_item.updated');
+    await record('factory.work_item.stage_moved', new Date(Date.now() - 10));
+
+    settle();
+    const next = await poll(url, 'token-alice', during.body!.result.cursor);
+    expect(next.body?.result.events.map((event: any) => event.data.action).sort()).toEqual([
+      'factory.work_item.created',
+      'factory.work_item.stage_moved',
+      'factory.work_item.updated',
+    ]);
+  });
+
+  it('a client resuming an old cursor with maxAgeMs skips older events and is told it did', async () => {
+    const { url, item } = await setup();
+    const start = await poll(url, 'token-alice', null);
+    tick(1000);
+    await renameItem(url, item.id, 'Fix the sign-in page');
+
+    tick(10 * 60_000);
+    const resumed = await poll(url, 'token-alice', start.body!.result.cursor, {}, { maxAgeMs: 60_000 });
+    expect(resumed.body?.result).toMatchObject({ events: [], truncated: true });
+    expect(resumed.body!.result.cursor).not.toBe(start.body!.result.cursor);
+
+    const after = await poll(url, 'token-alice', resumed.body!.result.cursor);
+    expect(after.body?.result.events).toEqual([]);
+  });
+
+  it.each([
+    { cursor: null, truncated: false },
+    { cursor: undefined, truncated: false },
+    { cursor: '', truncated: true },
+    { cursor: 'not-a-cursor', truncated: true },
+  ])('a client polling with cursor $cursor starts from now (truncated: $truncated)', async ({ cursor, truncated }) => {
+    const { url, project, item, audit } = await setup();
+    await audit.record({
+      orgId: 'org-1',
+      actorId: 'alice',
+      action: 'factory.work_item.created',
+      targets: [{ type: 'work_item', id: item.id, name: item.title }],
+      factoryProjectId: project.id,
+    });
+    settle();
+
+    const first = await poll(url, 'token-alice', cursor);
+    expect(first.status).toBe(200);
+    expect(first.body?.result.events).toEqual([]);
+    expect(first.body?.result.truncated === true).toBe(truncated);
+
+    settle();
+    const next = await poll(url, 'token-alice', first.body!.result.cursor);
+    expect(next.body?.result.events).toEqual([]);
   });
 
   it('activity from another org’s Factory never shows up', async () => {
@@ -519,7 +616,9 @@ describe('Factory activity over MCP events', () => {
     const globexUrl = mcpUrl(base, globex.id);
 
     const start = await poll(globexUrl, 'token-mallory', null);
+    tick(1000);
     await renameItem(url, item.id, 'Fix the sign-in page');
+    settle();
     const next = await poll(globexUrl, 'token-mallory', start.body!.result.cursor);
     expect(next.body?.result.events).toEqual([]);
 
@@ -532,6 +631,7 @@ describe('Factory activity over MCP events', () => {
   it('a private session’s activity isn’t visible to other users', async () => {
     const { url, project, item, audit } = await setup();
     const start = await poll(url, 'token-alice', null);
+    tick(1000);
 
     // Another member's agent signals a private session: activity on the session, not on a work item.
     await audit.record({
@@ -545,6 +645,7 @@ describe('Factory activity over MCP events', () => {
     });
     await renameItem(url, item.id, 'Fix the sign-in page');
 
+    settle();
     const next = await poll(url, 'token-alice', start.body!.result.cursor);
     expect(next.body?.result.events.map((event: { data: { action: string } }) => event.data.action)).toEqual([
       'factory.work_item.updated',

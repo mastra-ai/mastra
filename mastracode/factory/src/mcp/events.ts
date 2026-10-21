@@ -6,7 +6,7 @@ import { AUDIT_ACTOR_TYPES } from '../storage/domains/audit/actors.js';
 import type { AuditStorage, AuditEventRow } from '../storage/domains/audit/base.js';
 import {
   ACTOR_PROFILE_METADATA_KEY,
-  AUDIT_TRAIL_START,
+  auditCursorAt,
   decodeAuditAfterCursor,
   encodeAuditCursor,
 } from '../storage/domains/audit/base.js';
@@ -32,7 +32,6 @@ const activityPayload = z.object({
     name: z.string().optional(),
   }),
   workItemId: z.string(),
-  sessionId: z.string().optional(),
   summary: z.string(),
 });
 
@@ -50,7 +49,6 @@ function workItemTarget(event: AuditEventRow) {
 }
 
 function toActivity(event: AuditEventRow, workItem: { id: string; name?: string }): FactoryActivity {
-  const sessionId = event.targets.find(target => target.type === 'session')?.id;
   const profile = event.metadata[ACTOR_PROFILE_METADATA_KEY] as { name?: unknown } | undefined;
   const parsed = parseAuditAction(event.action);
   const verb = parsed
@@ -65,24 +63,28 @@ function toActivity(event: AuditEventRow, workItem: { id: string; name?: string 
       ...(typeof profile?.name === 'string' ? { name: profile.name } : {}),
     },
     workItemId: workItem.id,
-    ...(sessionId ? { sessionId } : {}),
     summary: `${verb}: ${workItem.name ?? workItem.id}`,
   };
 }
 
 /**
+ * How long polling waits before moving past a row. `occurred_at` is set when the
+ * row is written, so a row that commits after a poll is still younger than this
+ * and lies ahead of the cursor, even if it shares a millisecond with the cursor row.
+ */
+export const ACTIVITY_SETTLE_MS = 5_000;
+
+/**
  * `factory.activity`: the Factory's audit trail as polled MCP events (SEP-3415, experimental).
  *
  * Only work item activity is served — the same events `factory_inspect_work_item`
- * already shows any member of the Factory. Session-only activity (signals, git
- * pushes from private sessions) stays out until the trail has a visibility rule.
+ * already shows any member of the Factory — and without session ids. Session
+ * activity (signals, git pushes from private sessions) stays out until the
+ * trail has a visibility rule.
  *
  * Poll-only by design: the MCP server is built per request, so there is nothing
- * to push from, and every poll reads storage from the client's cursor.
- *
- * Cursors are `(occurred_at, id)` keysets, so a row that commits after a poll
- * with an earlier `occurred_at` than the cursor (clock skew between instances)
- * is not delivered.
+ * to push from, and every poll reads storage from the client's cursor. Events are
+ * delivered once they are {@link ACTIVITY_SETTLE_MS} old.
  */
 export function factoryActivityEvent(deps: FactoryActivityEventDeps) {
   const project = { orgId: deps.orgId, factoryProjectId: deps.factoryProjectId };
@@ -95,34 +97,46 @@ export function factoryActivityEvent(deps: FactoryActivityEventDeps) {
     authorize: async ({ arguments: args }) =>
       !args.workItemId ||
       (await deps.workItems.getForProject(deps.orgId, deps.factoryProjectId, args.workItemId)) !== null,
-    poll: async ({ arguments: args, cursor, maxEvents }) => {
-      const start = cursor && decodeAuditAfterCursor(cursor) ? cursor : undefined;
-      if (!start) {
+    poll: async ({ arguments: args, cursor, maxEvents, maxAgeMs }) => {
+      const now = Date.now();
+      if (cursor == null || !decodeAuditAfterCursor(cursor)) {
         // No cursor means "from now". An unreadable one can't be resumed, so say events may have been missed.
-        const newest = (await deps.audit.list({ ...project, limit: 1 })).events[0];
-        return {
-          events: [],
-          cursor: newest ? encodeAuditCursor(newest) : AUDIT_TRAIL_START,
-          ...(cursor ? { truncated: true } : {}),
-        };
+        return { events: [], cursor: auditCursorAt(new Date(now)), ...(cursor != null ? { truncated: true } : {}) };
       }
 
       const page = await deps.audit.list({
         ...project,
         ...(args.actions?.length ? { actions: args.actions } : {}),
-        after: start,
+        after: cursor,
         limit: maxEvents,
       });
-      const last = page.events.at(-1);
-      return {
-        events: page.events.flatMap(event => {
-          const workItem = workItemTarget(event);
-          if (!workItem || (args.workItemId && workItem.id !== args.workItemId)) return [];
-          return [{ eventId: event.id, timestamp: event.occurredAt, data: toActivity(event, workItem) }];
-        }),
+      const settledUntil = now - ACTIVITY_SETTLE_MS;
+      const expiredBefore = maxAgeMs === undefined ? -Infinity : now - maxAgeMs;
+      const events = [];
+      let next = cursor;
+      let unsettled = false;
+      let expired = false;
+      for (const event of page.events) {
+        const at = event.occurredAt.getTime();
+        if (at > settledUntil) {
+          unsettled = true;
+          break;
+        }
         // Skipped rows still advance the cursor, so a filtered-out page isn't read again.
-        cursor: last ? encodeAuditCursor(last) : start,
-        ...(page.nextCursor ? { hasMore: true } : {}),
+        next = encodeAuditCursor(event);
+        if (at < expiredBefore) {
+          expired = true;
+          continue;
+        }
+        const workItem = workItemTarget(event);
+        if (!workItem || (args.workItemId && workItem.id !== args.workItemId)) continue;
+        events.push({ eventId: event.id, timestamp: event.occurredAt, data: toActivity(event, workItem) });
+      }
+      return {
+        events,
+        cursor: next,
+        ...(page.nextCursor && !unsettled ? { hasMore: true } : {}),
+        ...(expired ? { truncated: true } : {}),
       };
     },
   });
