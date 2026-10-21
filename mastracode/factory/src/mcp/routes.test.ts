@@ -2,15 +2,20 @@ import { createServer } from 'node:http';
 import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 
+import { EventEmitterPubSub } from '@mastra/core/events';
 import { MCPClient } from '@mastra/mcp';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 
 import { createBoardRegistry } from '../boards/index.js';
 import { PLATFORM_AUTH_PROVIDER } from '../platform-auth-host.js';
 import type { RouteAuth } from '../routes/route.js';
-import type { WorkItemRow } from '../storage/domains/work-items/base.js';
+import { FactoryTransitionService } from '../rules/transition-service.js';
+import { createSourceControlSessionLookup } from '../session/factory-session.js';
+import { AuditDomain } from '../storage/domains/audit/domain.js';
+import { CommentsDomain } from '../storage/domains/comments/domain.js';
+import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryToolDependencies } from '../tools/index.js';
 import {
   buildFactoryMcpRoutes,
@@ -18,7 +23,6 @@ import {
   PLATFORM_MCP_AUTHORIZATION_SERVER,
   resolveMcpAuthorizationServers,
 } from './routes.js';
-import type { FactoryMcpRoutesDeps } from './routes.js';
 
 describe('resolveMcpAuthorizationServers', () => {
   it('prefers config, then env, then Platform AuthKit', () => {
@@ -51,41 +55,22 @@ describe('resolveMcpAuthorizationServers', () => {
   });
 });
 
-const ITEM_ID = '7f3c2a10-1111-4222-8333-444455556666';
+const PUBLIC_ORIGIN = 'https://factory.example.com';
 
-const USERS: Record<string, { orgId: string; userId: string }> = {
+/**
+ * Bearer token → tenant. Platform's `/auth/verify` is the real boundary and
+ * can't run here; everything behind it (projects, work items, sessions,
+ * subscriptions, audit) is real Factory storage.
+ */
+const USERS: Record<string, { orgId?: string; userId: string }> = {
   'token-alice': { orgId: 'org-1', userId: 'alice' },
   'token-mallory': { orgId: 'org-2', userId: 'mallory' },
+  'token-no-org': { userId: 'drifter' },
 };
 
-const item = {
-  id: ITEM_ID,
-  orgId: 'org-1',
-  factoryProjectId: 'project-1',
-  board: null,
-  externalSource: null,
-  claimKey: null,
-  parentWorkItemId: null,
-  title: 'Fix the login page',
-  stages: ['intake'],
-  stageHistory: [],
-  sessions: {},
-  metadata: null,
-  triageType: null,
-  autonomyArmedAt: null,
-  plansPreapprovedAt: null,
-  acceptedAt: null,
-  commentCount: 0,
-  feedActivityAt: null,
-  revision: 1,
-  createdBy: 'alice',
-  createdAt: new Date('2026-10-01T00:00:00Z'),
-  updatedAt: new Date('2026-10-01T00:00:00Z'),
-} as unknown as WorkItemRow;
-
-function setup(overrides: Partial<FactoryMcpRoutesDeps> = {}) {
-  const tenants = new WeakMap<Context, { orgId: string; userId: string }>();
-  const auth: RouteAuth = {
+function tokenAuth(): RouteAuth {
+  const tenants = new WeakMap<Context, { orgId?: string; userId: string }>();
+  return {
     enabled: () => true,
     ensureUser: async c => {
       const token = c.req.header('Authorization')?.replace(/^Bearer /, '');
@@ -96,49 +81,73 @@ function setup(overrides: Partial<FactoryMcpRoutesDeps> = {}) {
     tenant: c => tenants.get(c),
     isOrganizationAdmin: async () => false,
   };
-  const subscribeToWorkItem = vi.fn(async (args: Record<string, unknown>) => ({ ...args, reason: args.reason }));
-  const workItems = {
-    list: vi.fn(async ({ orgId, factoryProjectId }) =>
-      [item].filter(row => row.orgId === orgId && row.factoryProjectId === factoryProjectId),
-    ),
-    getForProject: vi.fn(async (orgId, factoryProjectId, id) =>
-      item.orgId === orgId && item.factoryProjectId === factoryProjectId && item.id === id ? item : null,
-    ),
-    listByIds: vi.fn(async () => []),
-    listRunBindings: vi.fn(async () => []),
-    listDeferredDecisions: vi.fn(async () => []),
-    listDecisionsForEvaluations: vi.fn(async () => []),
-    listWorkItemSubscribers: vi.fn(async () => []),
-    listSessionSubscriptions: vi.fn(async () => []),
-    subscribeToWorkItem,
+}
+
+async function setup() {
+  const seed = await createFactoryStorageForTests();
+  const auth = tokenAuth();
+  const boards = createBoardRegistry();
+  const sourceControl = seed.sourceControl.forIntegration('github');
+  const auditDomain = new AuditDomain({ auth, audit: seed.audit, projects: seed.projects });
+  const tools: FactoryToolDependencies = {
+    workItems: seed.workItems,
+    comments: seed.comments,
+    feed: new CommentsDomain({
+      auth,
+      comments: seed.comments,
+      workItems: seed.workItems,
+      projects: seed.projects,
+      audit: auditDomain,
+      pubsub: new EventEmitterPubSub(),
+    }),
+    audit: seed.audit,
+    boards,
+    transitionService: new FactoryTransitionService({
+      configVersion: 'mcp-test',
+      boards,
+      storage: seed.workItems,
+      audit: auditDomain,
+    }),
+    auditRecorder: auditDomain,
+    sessions: createSourceControlSessionLookup([sourceControl]),
+    sessionModel: { projects: seed.projects, modelDefaults: seed.modelDefaults },
+    intake: seed.intake,
+    startCoordinator: () => undefined,
+    // No live agent controller: nothing is mid-run.
+    messaging: async () => null,
   };
-  const tools = {
-    workItems,
-    comments: { listRecent: vi.fn(async () => []) },
-    audit: { list: vi.fn(async () => ({ events: [] })) },
-    boards: createBoardRegistry(),
-    sessions: { getBySessionId: vi.fn(async () => null), getSourceControlBySessionId: vi.fn(async () => null) },
-  } as unknown as FactoryToolDependencies;
-  const deps: FactoryMcpRoutesDeps = {
-    auth,
-    publicOrigin: 'https://factory.example.com',
-    authorizationServers: ['https://auth.example.com'],
-    projects: {
-      get: vi.fn(async ({ orgId, id }) =>
-        orgId === 'org-1' && id === 'project-1' ? ({ id, orgId, name: 'Acme' } as never) : null,
-      ),
-    },
-    sourceControls: [],
-    tools,
-    ...overrides,
-  };
+
+  const project = await seed.projects.create({ orgId: 'org-1', userId: 'alice', input: { name: 'Acme' } });
+  const { item } = await seed.workItems.upsert({
+    orgId: 'org-1',
+    userId: 'alice',
+    factoryProjectId: project.id,
+    input: { title: 'Fix the login page', stages: ['intake'], metadata: {} },
+  });
+  await seed.workItems.upsert({
+    orgId: 'org-1',
+    userId: 'alice',
+    factoryProjectId: project.id,
+    input: { title: 'Speed up the board', stages: ['intake'], metadata: {} },
+  });
+
   const app = new Hono();
-  for (const route of buildFactoryMcpRoutes(deps)) {
-    app.on(route.method === 'ALL' ? ['GET', 'POST', 'DELETE'] : [route.method], route.path, c =>
+  const routes = buildFactoryMcpRoutes({
+    auth,
+    publicOrigin: PUBLIC_ORIGIN,
+    authorizationServers: ['https://auth.example.com'],
+    projects: seed.projects,
+    // No repository is linked, so the connector session has no row to file.
+    sourceControls: [sourceControl],
+    tools,
+  });
+  for (const route of routes) {
+    app.on([route.method], route.path, c =>
       (route as { handler: (c: Context) => Promise<Response> | Response }).handler(c),
     );
   }
-  return { app, subscribeToWorkItem };
+  const base = await serve(app);
+  return { ...seed, project, item, base, url: mcpUrl(base, project.id) };
 }
 
 const servers: Server[] = [];
@@ -148,7 +157,7 @@ afterEach(async () => {
   await Promise.all(servers.splice(0).map(server => new Promise(resolve => server.close(resolve))));
 });
 
-/** Serve a Hono app over a real HTTP port so the MCP client talks to it end to end. */
+/** Serve a Hono app over a real HTTP port so MCP clients talk to it end to end. */
 async function serve(app: Hono): Promise<string> {
   const server = createServer(async (req, res) => {
     const chunks: Buffer[] = [];
@@ -184,83 +193,225 @@ function client(url: string, token: string): MCPClient {
   return mcp;
 }
 
-const mcpUrl = (base: string, project = 'project-1') => `${base}/web/factory/projects/${project}/mcp`;
+const mcpUrl = (base: string, project: string) => `${base}/web/factory/projects/${project}/mcp`;
+
+const PROTOCOL_VERSION = '2026-07-28';
+
+/**
+ * One MCP `2026-07-28` request as Claude's connector sends it: the per-request
+ * `_meta` envelope and the `Mcp-Protocol-Version` / `Mcp-Method` / `Mcp-Name`
+ * headers derived from it. Shape copied from `@modelcontextprotocol/client`
+ * 2.2.0 (`outboundEnvelope` for 2026-07-28 and `_applyBodyDerivedHeaders`).
+ */
+async function claudeRequest(
+  url: string,
+  method: string,
+  params: Record<string, unknown> = {},
+  token?: string,
+): Promise<{ status: number; headers: Headers; body: { result?: any; error?: any } | null }> {
+  const name = method === 'tools/call' ? (params.name as string) : undefined;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/json, text/event-stream',
+      'Mcp-Protocol-Version': PROTOCOL_VERSION,
+      'Mcp-Method': method,
+      ...(name ? { 'Mcp-Name': name } : {}),
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify({
+      jsonrpc: '2.0',
+      id: 1,
+      method,
+      params: {
+        ...params,
+        _meta: {
+          'io.modelcontextprotocol/protocolVersion': PROTOCOL_VERSION,
+          'io.modelcontextprotocol/clientInfo': { name: 'claude-ai', version: '0.1.0' },
+          'io.modelcontextprotocol/clientCapabilities': {},
+        },
+      },
+    }),
+  });
+  return { status: response.status, headers: response.headers, body: await readJsonRpc(response) };
+}
+
+/** A JSON-RPC reply, whether the server answered with JSON or a one-shot SSE stream. */
+async function readJsonRpc(response: Response): Promise<{ result?: any; error?: any } | null> {
+  const text = await response.text();
+  if (!text) return null;
+  if (!response.headers.get('Content-Type')?.includes('text/event-stream')) return JSON.parse(text);
+  const messages = text
+    .split('\n')
+    .filter(line => line.startsWith('data:'))
+    .map(line => JSON.parse(line.slice('data:'.length)));
+  return messages.find(message => 'result' in message || 'error' in message) ?? null;
+}
+
+function toolText(result: { content: Array<{ type: string; text: string }> }): any {
+  return JSON.parse(result.content.find(part => part.type === 'text')!.text);
+}
 
 describe('Factory MCP server', () => {
-  it('rejects anonymous callers with a pointer to the OAuth metadata', async () => {
-    const base = await serve(setup().app);
-    const response = await fetch(mcpUrl(base), {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream' },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
-    });
+  it('Claude’s connector is sent to sign in', async () => {
+    const { base, project, url } = await setup();
+
+    const response = await claudeRequest(url, 'server/discover');
+
     expect(response.status).toBe(401);
-    const challenge = response.headers.get('WWW-Authenticate');
-    expect(challenge).toContain(
-      'resource_metadata="https://factory.example.com/.well-known/oauth-protected-resource/web/factory/projects/project-1/mcp"',
+    const challenge = response.headers.get('WWW-Authenticate') ?? '';
+    const metadataUrl = /resource_metadata="([^"]+)"/.exec(challenge)?.[1];
+    expect(metadataUrl).toBe(
+      `${PUBLIC_ORIGIN}/.well-known/oauth-protected-resource/web/factory/projects/${project.id}/mcp`,
     );
 
-    const metadata = await fetch(`${base}/.well-known/oauth-protected-resource/web/factory/projects/project-1/mcp`);
-    expect(await metadata.json()).toMatchObject({
-      resource: 'https://factory.example.com/web/factory/projects/project-1/mcp',
+    // The connector follows the pointer; this server answers it under its local address.
+    const metadata = await fetch(`${base}${new URL(metadataUrl!).pathname}`);
+    expect(metadata.status).toBe(200);
+    expect(await metadata.json()).toEqual({
+      resource: `${PUBLIC_ORIGIN}/web/factory/projects/${project.id}/mcp`,
       authorization_servers: ['https://auth.example.com'],
+      bearer_methods_supported: ['header'],
+      resource_name: 'Mastra Factory',
     });
   });
 
-  it('lists the Factory tools with annotations and runs a read tool', async () => {
-    const base = await serve(setup().app);
-    const tools = await client(mcpUrl(base), 'token-alice').listTools();
+  it('Claude’s connector discovers the Factory and lists its tools', async () => {
+    const { url } = await setup();
 
-    expect(Object.keys(tools)).toEqual(
-      expect.arrayContaining([
-        'factory_search',
-        'factory_fetch',
-        'factory_factory_list_work_items',
-        'factory_factory_subscribe_work_item',
-      ]),
-    );
-    expect(Object.keys(tools)).not.toContain('factory_factory_message_origin');
+    const discover = await claudeRequest(url, 'server/discover', {}, 'token-alice');
+    expect(discover.status).toBe(200);
+    expect(discover.body?.error).toBeUndefined();
+    expect(discover.body?.result.supportedVersions).toContain(PROTOCOL_VERSION);
+    expect(discover.body?.result.capabilities.tools).toBeDefined();
+    expect(discover.body?.result._meta['io.modelcontextprotocol/serverInfo']).toMatchObject({ name: 'Acme Factory' });
+
+    const list = await claudeRequest(url, 'tools/list', {}, 'token-alice');
+    expect(list.status).toBe(200);
+    const tools = new Map<string, any>(list.body!.result.tools.map((tool: any) => [tool.name, tool]));
+    for (const name of ['search', 'fetch', 'factory_list_work_items', 'factory_subscribe_work_item']) {
+      expect(tools.has(name), name).toBe(true);
+    }
+    expect(tools.get('search').annotations).toMatchObject({ readOnlyHint: true, title: 'Search work items' });
+    expect(tools.get('factory_list_work_items').annotations).toMatchObject({ readOnlyHint: true });
+    expect(tools.has('factory_message_origin')).toBe(false);
     // No connected repository, so the connector session has no row to start sub-sessions under.
-    expect(Object.keys(tools)).not.toContain('factory_factory_start_session');
+    expect(tools.has('factory_start_session')).toBe(false);
+  });
 
-    const result = (await tools.factory_search!.execute!({ query: 'login' }, {} as never)) as {
-      content: Array<{ text: string }>;
-    };
-    expect(JSON.parse(result.content[0]!.text)).toEqual({
+  it('Claude calls a tool and reads real Factory data', async () => {
+    const { url, project, item } = await setup();
+
+    const search = await claudeRequest(
+      url,
+      'tools/call',
+      { name: 'search', arguments: { query: 'login' } },
+      'token-alice',
+    );
+    expect(search.status).toBe(200);
+    expect(search.body?.result.isError).not.toBe(true);
+    expect(toolText(search.body!.result)).toEqual({
       results: [
         {
-          id: ITEM_ID,
+          id: item.id,
           title: 'Fix the login page',
-          url: `https://factory.example.com/factory/project-1/work-items/${ITEM_ID}`,
+          url: `${PUBLIC_ORIGIN}/factory/${project.id}/work-items/${item.id}`,
         },
       ],
     });
-  });
 
-  it('runs a write tool from the caller’s connector session', async () => {
-    const { app, subscribeToWorkItem } = setup();
-    const base = await serve(app);
-    const tools = await client(mcpUrl(base), 'token-alice').listTools();
-
-    await tools.factory_factory_subscribe_work_item!.execute!({ workItem: ITEM_ID }, {} as never);
-
-    const sessionId = connectorSessionId('org-1', 'alice', 'project-1');
-    expect(subscribeToWorkItem).toHaveBeenCalledWith(
-      expect.objectContaining({ orgId: 'org-1', workItemId: ITEM_ID, userId: 'alice', sessionId }),
+    const fetched = await claudeRequest(
+      url,
+      'tools/call',
+      { name: 'fetch', arguments: { id: item.id } },
+      'token-alice',
     );
+    expect(fetched.body?.result.isError).not.toBe(true);
+    const document = toolText(fetched.body!.result);
+    expect(document).toMatchObject({
+      id: item.id,
+      title: 'Fix the login page',
+      url: `${PUBLIC_ORIGIN}/factory/${project.id}/work-items/${item.id}`,
+      metadata: { factoryProjectId: project.id },
+    });
+    expect(JSON.parse(document.text).item).toMatchObject({ id: item.id, title: 'Fix the login page' });
   });
 
-  it('denies a user from another organization', async () => {
-    const base = await serve(setup().app);
-    const response = await fetch(mcpUrl(base), {
+  it('a write from Claude lands on the caller’s connector session', async () => {
+    const { url, project, item, workItems } = await setup();
+
+    const call = await claudeRequest(
+      url,
+      'tools/call',
+      { name: 'factory_subscribe_work_item', arguments: { workItem: item.id } },
+      'token-alice',
+    );
+    expect(call.body?.result.isError).not.toBe(true);
+
+    const sessionId = connectorSessionId('org-1', 'alice', project.id);
+    const subscriptions = await workItems.listSessionSubscriptions({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      sessionId,
+    });
+    expect(subscriptions).toEqual([expect.objectContaining({ workItemId: item.id, sessionId, userId: 'alice' })]);
+  });
+
+  it('the Mastra MCP client lists and runs the same tools', async () => {
+    const { url, item, project } = await setup();
+    const tools = await client(url, 'token-alice').listTools();
+
+    expect(Object.keys(tools)).toEqual(expect.arrayContaining(['factory_search', 'factory_fetch']));
+    const result = (await tools.factory_search!.execute!({ query: 'login' }, {} as never)) as {
+      content: Array<{ type: string; text: string }>;
+    };
+    expect(toolText(result).results).toEqual([
+      { id: item.id, title: 'Fix the login page', url: `${PUBLIC_ORIGIN}/factory/${project.id}/work-items/${item.id}` },
+    ]);
+  });
+
+  it('an older MCP client gets a clear unsupported-version error', async () => {
+    const { url } = await setup();
+
+    // A 2025-era opening: `initialize`, no `_meta` envelope, no 2026 headers.
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
-        Authorization: 'Bearer token-mallory',
+        Authorization: 'Bearer token-alice',
         'Content-Type': 'application/json',
         Accept: 'application/json, text/event-stream',
       },
-      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+      body: JSON.stringify({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-11-25',
+          capabilities: {},
+          clientInfo: { name: 'vscode', version: '1.0.0' },
+        },
+      }),
     });
+    const body = await readJsonRpc(response);
+
+    expect(response.status).toBe(400);
+    expect(body?.error).toMatchObject({
+      message: 'Unsupported protocol version: 2025-11-25',
+      data: { supported: [PROTOCOL_VERSION], requested: '2025-11-25' },
+    });
+  });
+
+  it('denies a user from another organization', async () => {
+    const { url } = await setup();
+    const response = await claudeRequest(url, 'tools/list', {}, 'token-mallory');
     expect(response.status).toBe(404);
+  });
+
+  it('refuses a signed-in user without an organization', async () => {
+    const { url } = await setup();
+    const response = await claudeRequest(url, 'tools/list', {}, 'token-no-org');
+    expect(response.status).toBe(403);
+    expect(response.body).toEqual({ error: 'organization_required' });
   });
 });
