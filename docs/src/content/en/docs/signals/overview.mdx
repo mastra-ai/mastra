@@ -111,8 +111,16 @@ The `Agent` methods are the canonical Signals API. `Session` is a higher-level c
 
 ## Next steps
 
-- [Thread streams](/docs/signals/thread-streams)
-- [Sending signals](/docs/signals/sending-signals)
-- [Notifications](/docs/signals/notifications)
-- [Notifications reference](/reference/signals/notifications)
-- [Thread events reference](/reference/signals/thread-events)
+Use this table to find the right page for what you want to do next:
+
+| Goal | Start here |
+| - | - |
+| Stream a thread's output and lifecycle into your app | [Thread streams](/docs/signals/thread-streams) |
+| Send a user message, typed signal, state signal, or notification | [Sending signals](/docs/signals/sending-signals) |
+| Understand when a signal interrupts a run or waits for the next step | [Signals in the agent loop](/docs/signals/signals-in-the-agent-loop) |
+| Keep named, thread-scoped context across turns | [State signals](/docs/signals/state-signals) |
+| Deliver external events through a durable inbox | [Notifications](/docs/signals/notifications) |
+| Connect polling sources or webhooks to agents | [Signal providers](/docs/signals/signal-providers) |
+| Coordinate threads across multiple processes | [Running across processes](/docs/signals/running-across-processes) |
+| Look up notification records, priorities, and delivery policies | [Notifications reference](/reference/signals/notifications) |
+| Observe queued messages with `subscribeThreadEvents()` | [Thread events reference](/reference/signals/thread-events) |
