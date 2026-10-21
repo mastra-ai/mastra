@@ -60,7 +60,7 @@ export function evaluateSpanAggregateRequest(
 // | trace | span        | type             | name             | dur   | entity       | parent  | root    | model attr  | notes                    |
 // |-------|-------------|------------------|------------------|-------|--------------|---------|---------|-------------|--------------------------|
 // | t1    | t1-root     | agent_run        | agent:support    | 10 s  | agent/support| –       | support |             | 08-01 00:00              |
-// | t1    | t1-model    | model_generation | llm              | 2 s   | –            | support | support | gpt-4o      | older copy ran 9 s       |
+// | t1    | t1-model    | model_generation | llm              | 2 s   | –            | support | support | gpt-4o      | older copy ran 1 s       |
 // | t1    | t1-tool     | tool_call        | search           | 3 s   | tool/search  | support | support |             | error                    |
 // | t2    | t2-root     | agent_run        | agent:billing    | 20 s  | agent/billing| –       | billing |             | 08-01 01:30              |
 // | t2    | t2-model    | model_generation | llm              | 4 s   | –            | billing | billing | gpt-4o-mini |                          |
@@ -69,6 +69,9 @@ export function evaluateSpanAggregateRequest(
 // | t3    | t3-model    | model_generation | llm              | 6 s   | –            | nightly | nightly | (none)      |                          |
 // | t3    | t3-pending  | tool_call        | search           | –     | tool/search  | nightly | nightly |             | pending: excluded        |
 // | t4    | t4-late     | tool_call        | search           | 1 s   | tool/search  | –       | –       |             | 08-05: outside window    |
+//
+// The older t1-model copy is written first and also ends first, so every store's version rule
+// (latest end time or latest write) picks the 2 s copy; without the collapse, llm counts 4 spans.
 //
 // Usage (input / output tokens, cost on total rows):
 // - t1-model: 100 / 50, 0.25 + 0.5 usd. The output row is written twice under one metricId.
@@ -175,7 +178,7 @@ export const SPAN_AGGREGATE_FIXTURE_DATA: TraceAggregateFixtureData = {
       spanType: 'model_generation',
       name: 'llm',
       startedAt: after(t1, 1),
-      seconds: 9,
+      seconds: 1,
       model: 'gpt-4o',
       ...child(support),
     }),

@@ -62,6 +62,11 @@ export const observabilityStorageCapabilitiesSchema = z.object({
     .describe(
       'Trace aggregation (POST /observability/traces/aggregate). Unlike `traceQuery`, clients should treat a missing value as unavailable.',
     ),
+  spanAggregate: z
+    .boolean()
+    .describe(
+      'Span aggregation (POST /observability/spans/aggregate). Unlike `spanQuery`, clients should treat a missing value as unavailable.',
+    ),
   threadQuery: z.boolean().describe('Advanced thread queries (POST /observability/threads/query)'),
   threadQueryRows: z
     .boolean()

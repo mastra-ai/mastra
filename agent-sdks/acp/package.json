@@ -1,6 +1,6 @@
 {
   "name": "@mastra/acp",
-  "version": "0.4.3-alpha.1",
+  "version": "0.4.3",
   "description": "ACP package for Mastra",
   "type": "module",
   "main": "dist/index.js",

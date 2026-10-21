@@ -14,6 +14,8 @@ import { randomUUID } from 'node:crypto';
 import { createClient } from '@clickhouse/client';
 import {
   createObservabilityVNextTests,
+  SPAN_AGGREGATE_CONFORMANCE_CASES,
+  SPAN_AGGREGATE_FIXTURE_DATA,
   TRACE_AGGREGATE_CONFORMANCE_CASES,
   TRACE_AGGREGATE_FIXTURE_DATA,
   TRACE_AGGREGATE_TOKEN_CONFORMANCE_CASES,
@@ -33,6 +35,8 @@ import { EntityType, SpanType } from '@mastra/core/observability';
 import {
   parseTraceAggregateRequest,
   parseTraceQueryRequest,
+  planSpanAggregate,
+  planSpanQuery,
   planTraceAggregate,
   planThreadRowsQuery,
   planTraceQuery,
@@ -78,6 +82,7 @@ import {
 import { feedbackRecordToRow, scoreRecordToRow, spanRecordToRow } from './helpers';
 import { isReplacingMergeTreeEngine } from './migration';
 import { backfillCurrentScores } from './score-current';
+import { TRACE_BRANCHES_SPAN_FIELD_COLUMNS } from './span-query';
 import {
   compileClickHouseTraceQuery,
   compileClickHouseTraceQueryKeys,
@@ -1070,6 +1075,7 @@ LIMIT 1`,
         'trace-aggregate',
         'span-query',
         'span-query-context-fields',
+        'span-aggregate',
         'thread-query-rows',
       ]);
     });
@@ -1101,6 +1107,7 @@ LIMIT 1`,
           'trace-aggregate',
           'span-query',
           'span-query-context-fields',
+          'span-aggregate',
           'thread-query-rows',
         ]);
       } finally {
@@ -7304,6 +7311,99 @@ describe('ObservabilityStorageClickhouseVNext aggregateTraces', () => {
     } finally {
       await client.command({ query: `SYSTEM START MERGES ${TABLE_TRACE_ROOTS}` });
       await client.close();
+    }
+  });
+});
+
+describe('ObservabilityStorageClickhouseVNext aggregateSpans', () => {
+  let storage: ObservabilityStorageClickhouseVNext;
+
+  beforeAll(async () => {
+    storage = new ObservabilityStorageClickhouseVNext({
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+    });
+    await storage.init();
+    await storage.dangerouslyClearAll();
+    await writeTraceAggregateFixture(
+      storage as unknown as ObservabilityStorage,
+      SPAN_AGGREGATE_FIXTURE_DATA,
+      'completion-only',
+    );
+  });
+
+  afterAll(async () => {
+    await storage.dangerouslyClearAll();
+  });
+
+  it.each(SPAN_AGGREGATE_CONFORMANCE_CASES.map(testCase => [testCase.name, testCase] as const))(
+    'matches the reference evaluator: %s',
+    async (_name, testCase) => {
+      const response = await storage.aggregateSpans(planSpanAggregate(testCase.request, { scope: testCase.scope }));
+      expect(traceAggregateResponseMismatch(response, testCase), JSON.stringify(response)).toBeNull();
+    },
+  );
+
+  it('has a trace_branches column for every field the branch path reads', async () => {
+    const client = createClient({
+      url: process.env.CLICKHOUSE_URL || 'http://localhost:8123',
+      username: process.env.CLICKHOUSE_USERNAME || 'default',
+      password: process.env.CLICKHOUSE_PASSWORD || 'password',
+    });
+    try {
+      const result = await client.query({
+        query: 'SELECT name FROM system.columns WHERE database = currentDatabase() AND table = {table:String}',
+        query_params: { table: TABLE_TRACE_BRANCHES },
+        format: 'JSONEachRow',
+      });
+      const columns = new Set(((await result.json()) as { name: string }[]).map(row => row.name));
+      const missing = Object.values(TRACE_BRANCHES_SPAN_FIELD_COLUMNS)
+        .flat()
+        .filter(column => !columns.has(column));
+      expect(missing).toEqual([]);
+    } finally {
+      await client.close();
+    }
+  });
+
+  it('counts the same spans querySpans pages through', async () => {
+    const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-08-04T00:00:00Z' };
+    const aggregate = await storage.aggregateSpans(planSpanAggregate({ timeRange, measures: ['count'] }));
+    const spans = await storage.querySpans(planSpanQuery({ timeRange }));
+    expect(spans.spans).toHaveLength(8);
+    expect(aggregate.rows[0]?.measures.count).toBe(spans.spans.length);
+  });
+
+  it('counts the latest copy of a nested agent run whether it reads branches or every span', async () => {
+    const timeRange = { from: '2026-09-01T00:00:00Z', to: '2026-09-02T00:00:00Z' };
+    const run = {
+      traceId: 'copied-run-trace',
+      spanId: 'copied-run',
+      parentSpanId: 'copied-run-parent',
+      name: 'copied-run',
+      spanType: SpanType.AGENT_RUN,
+      isEvent: false,
+      entityType: EntityType.AGENT,
+      entityName: 'nested',
+      startedAt: new Date('2026-09-01T10:00:00.000Z'),
+    } as const;
+    // The superseded copy failed; the retry that replaced it succeeded and ended later.
+    await storage.createSpan({
+      span: { ...run, endedAt: new Date('2026-09-01T10:00:05.000Z'), error: { message: 'interrupted' } },
+    });
+    await storage.createSpan({ span: { ...run, endedAt: new Date('2026-09-01T10:00:09.000Z') } });
+
+    for (const where of [
+      { op: 'eq', left: { path: 'spanType' }, right: { literal: 'agent_run' } },
+      { op: 'eq', left: { path: 'entityName' }, right: { literal: 'nested' } },
+    ]) {
+      const response = await storage.aggregateSpans(
+        planSpanAggregate({ timeRange, where, groupBy: ['status'], measures: ['count', 'duration.max'] }),
+      );
+      expect(response.rows).toEqual([
+        { dimensions: { status: 'success' }, measures: { count: 1, 'duration.max': 9000 } },
+      ]);
     }
   });
 });

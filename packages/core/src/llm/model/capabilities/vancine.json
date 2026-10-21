@@ -16,7 +16,10 @@
         "type": "toggle"
       }
     ],
-    "glm-5.3-flash": [
+    "deepseek-v4.1-flash": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -28,6 +31,12 @@
         "values": ["none", "high"]
       }
     ],
+    "glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "qwen3.8-flash": [
       {
         "type": "toggle"
@@ -35,12 +44,6 @@
       {
         "type": "budget_tokens",
         "max": 262144
-      }
-    ],
-    "glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ],
     "qwen3.8-max": [
@@ -66,10 +69,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-v4.1-flash": [
-      {
-        "type": "toggle"
-      },
+    "glm-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]

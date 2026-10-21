@@ -892,6 +892,9 @@ export class DurableAgent<
     this.#cleanupTimeoutMs = cleanupTimeoutMs ?? 30_000;
     this.#shouldCache = shouldCache;
     this.userShouldPersistSnapshot = shouldPersistSnapshot;
+
+    // Keep processor access on the wrapped agent, but dispatch through this wrapper.
+    this.#wrappedAgent.getChannels()?.__setDispatchAgent(this);
   }
 
   /** @internal Read one request-context value captured in a suspended durable run snapshot. */
@@ -2054,6 +2057,7 @@ export class DurableAgent<
 
   override setChannels(agentChannels: any) {
     this.#wrappedAgent.setChannels(agentChannels);
+    agentChannels.__setDispatchAgent(this);
   }
 
   // --- PubSub (base Agent fields — DurableAgent has its own pubsub) ---
@@ -2145,6 +2149,7 @@ export class DurableAgent<
    * @internal
    */
   override __fork(): Agent<TAgentId, TTools, TOutput> {
+    const sharedChannels = this.#wrappedAgent.getChannels();
     const innerFork = this.#wrappedAgent.__fork();
 
     const Ctor = this.constructor as new (
@@ -2162,6 +2167,12 @@ export class DurableAgent<
       shouldCache: this.#shouldCache,
       shouldPersistSnapshot: this.userShouldPersistSnapshot,
     });
+
+    // A transient version fork must not take over the singleton's channel ingress.
+    if (sharedChannels && sharedChannels === innerFork.getChannels()) {
+      sharedChannels.__setAgent(this.#wrappedAgent);
+      sharedChannels.__setDispatchAgent(this);
+    }
 
     // Preserve runtime state set after construction (mastra registration and the
     // wired inner pubsub, e.g. mastra.pubsub) without re-triggering registration
