@@ -1162,11 +1162,11 @@ export interface AgentControllerRequestContext<TState = unknown> {
   /** Thread owner captured once when this run starts. */
   threadOwnerId?: string;
 
-  /** Current resource ID */
+  /** Current resource ID: whose threads and memory this session uses. Several sessions may share it. */
   resourceId: string;
 
-  /** Optional isolation scope used to identify this session within its resource. */
-  scope?: string;
+  /** ID of the session handling this request. Look the session up with `AgentController.getSession(sessionId)`. */
+  sessionId: string;
 
   /**
    * Snapshot of the relevant session-owned values for this request.

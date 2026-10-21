@@ -116,7 +116,7 @@ async function setup() {
   const context = (sessionId = 'parent', threadId = 'parent-thread') => {
     const requestContext = new RequestContext();
     requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
-    requestContext.set('controller', { resourceId: sessionId, threadId });
+    requestContext.set('controller', { sessionId, resourceId: sessionId, threadId });
     return requestContext;
   };
   type Signal = Awaited<ReturnType<FactorySessionsStateProcessor['computeStateSignal']>>;

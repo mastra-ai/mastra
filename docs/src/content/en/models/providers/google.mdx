@@ -7,7 +7,7 @@ description: "Browse Google model IDs, capabilities, context windows, and pricin
 
 # <img src="https://models.dev/logos/google.svg" alt="Google logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Google
 
-Access 40 Google models through Mastra's model router. Authentication is handled automatically using one of the following environment variables: `GOOGLE_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`.
+Access 41 Google models through Mastra's model router. Authentication is handled automatically using one of the following environment variables: `GOOGLE_API_KEY`, `GOOGLE_GENERATIVE_AI_API_KEY`.
 
 Learn more in the [Google documentation](https://ai.google.dev/gemini-api/docs/models).
 
@@ -423,6 +423,18 @@ for await (const chunk of stream) {
     "maxOutput": 65536,
     "inputCost": 1.5,
     "outputCost": 17.5
+  },
+  {
+    "model": "google/gemini-pro-latest",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 2,
+    "outputCost": 12
   },
   {
     "model": "google/gemma-4-26b-a4b-it",

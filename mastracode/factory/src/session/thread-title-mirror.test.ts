@@ -17,7 +17,7 @@ function createSession(title?: string) {
     }),
   );
   const session: ThreadTitleMirrorSession = {
-    identity: { getResourceId: () => 'resource-1' },
+    identity: { getId: () => 'resource-1' },
     thread: { getById },
     subscribe: listener => {
       listeners.push(listener);

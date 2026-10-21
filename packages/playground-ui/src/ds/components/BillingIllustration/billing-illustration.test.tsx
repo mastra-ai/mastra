@@ -4,11 +4,12 @@ import { BillingIllustration } from './billing-illustration';
 import type { BillingIllustrationName } from './billing-illustration';
 
 const projectSizes: BillingIllustrationName[] = ['serverless', 'small', 'medium', 'large'];
+const plans: BillingIllustrationName[] = ['free', 'starter', 'teams', 'enterprise'];
 
 const draw = (name: BillingIllustrationName) => renderToStaticMarkup(<BillingIllustration name={name} />);
 
 describe('BillingIllustration', () => {
-  it.each(projectSizes)('draws %s hidden from assistive technology', name => {
+  it.each([...projectSizes, ...plans])('draws %s hidden from assistive technology', name => {
     const markup = draw(name);
 
     expect(markup).toMatch(/^<svg[^>]* aria-hidden="true"/);
@@ -52,12 +53,35 @@ describe('BillingIllustration', () => {
     expect(delays).toEqual(['0', '50', '100']);
   });
 
+  it('lights each plan screen and window and windows on hover, in drawing order', () => {
+    const delays = (name: BillingIllustrationName) =>
+      [...draw(name).matchAll(/\[fill-opacity:0\][^>]*style="transition-delay:(\d+)ms"/g)].map(([, ms]) => Number(ms));
+
+    expect(plans.map(name => delays(name).length)).toEqual([1, 1, 8, 7]);
+    expect(delays('enterprise')).toEqual([0, 50, 100, 150, 200, 250, 300]);
+  });
+
   it('powers on for keyboard focus inside the hover group, as it does for hover', () => {
     const markup = draw('serverless') + draw('large');
 
     expect(markup).toContain('group-focus-within/billing-illustration:[fill-opacity:1]');
     expect(markup).toContain('group-focus-within/billing-illustration:[stroke-dasharray:1.5_0]');
     expect(markup).toContain('group-focus-within/billing-illustration:[translate:0_-3px]');
+  });
+
+  it('draws the credits coin stacks with one coin that drops in on hover or focus', () => {
+    const markup = draw('credits');
+    const [, classes = '', coin = ''] =
+      markup.match(/<g class="([^"]*opacity-0[^"]*)"[^>]*>((?:(?!<\/g>).)*)<\/g>/) ?? [];
+    const translates = classes.split(' ').filter(name => name.includes('translate'));
+
+    expect(markup).toMatch(/^<svg[^>]* aria-hidden="true"/);
+    expect(markup).toContain('data-illustration="credits"');
+    expect(coin.match(/<path /g)).toHaveLength(2);
+    expect(classes).toContain('group-hover/billing-illustration:opacity-100');
+    expect(classes).toContain('group-focus-within/billing-illustration:opacity-100');
+    expect(translates.length).toBeGreaterThan(0);
+    expect(translates.every(name => name.startsWith('motion-safe:'))).toBe(true);
   });
 
   it('gives every instance its own mask so a table of projects draws each thumbnail', () => {

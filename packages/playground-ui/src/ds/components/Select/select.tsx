@@ -10,7 +10,13 @@ import { controlTriggerOpenState } from '@/ds/primitives/control-size';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
 import { fieldTriggerErrorBorder, fieldTriggerStyle, fieldTriggerWidthStyle } from '@/ds/primitives/form-element';
-import { menuItemCheckClass, menuItemClass, menuPopupClass, menuPositionerClass } from '@/ds/primitives/menu-item';
+import {
+  menuItemCheckClass,
+  menuItemClass,
+  menuPopupClass,
+  menuPositionerClass,
+  menuSeparatorClass,
+} from '@/ds/primitives/menu-item';
 import { menuScrollPopupClass, MenuScrollArea } from '@/ds/primitives/menu-scroll-area';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { transitions } from '@/ds/primitives/transitions';
@@ -266,4 +272,18 @@ const SelectItem = React.forwardRef<HTMLDivElement, SelectItemProps>(({ classNam
 ));
 SelectItem.displayName = 'SelectItem';
 
-export { Select, SelectGroup, SelectValue, SelectTrigger, SelectContent, SelectItem };
+export type SelectSeparatorProps = Omit<SelectPrimitive.Separator.Props, 'className'> & {
+  className?: string;
+};
+
+const SelectSeparator = React.forwardRef<HTMLDivElement, SelectSeparatorProps>(({ className, ...props }, ref) => (
+  <SelectPrimitive.Separator
+    ref={ref}
+    data-slot="select-separator"
+    className={cn(menuSeparatorClass, className)}
+    {...props}
+  />
+));
+SelectSeparator.displayName = 'SelectSeparator';
+
+export { Select, SelectGroup, SelectValue, SelectTrigger, SelectContent, SelectItem, SelectSeparator };

@@ -63,6 +63,7 @@ function renderModelCredential({
     http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json(catalog)),
   );
   const session: ChatSessionContextApi = {
+    sessionId: 'session-1',
     resourceId: 'session-1',
     sessionThreadId: 'session-1',
     draftSessionId: draft ? 'draft-1' : undefined,

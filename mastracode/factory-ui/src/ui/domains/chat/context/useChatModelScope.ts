@@ -10,7 +10,7 @@ import { useChatSessionContext } from './useChatSessionContext';
 /** Live threads use the same server-resolved owner and billing policy as model invocations. */
 export function useChatModelScope() {
   const { factoryId: routeFactoryId } = useParams<{ factoryId: string }>();
-  const { kind, factorySessionState, draftSessionId, resourceId, sessionThreadId, resourceReady } =
+  const { kind, factorySessionState, draftSessionId, sessionId, resourceId, sessionThreadId, resourceReady } =
     useChatSessionContext();
   // The displayed thread decides billing; the session-primary thread is only a fallback.
   const displayedThreadId = useContext(ChatThreadMessagesContext)?.threadId;
@@ -20,8 +20,9 @@ export function useChatModelScope() {
     ? undefined
     : {
         factoryProjectId: factoryId,
+        sessionId,
         resourceId,
-        threadId: displayedThreadId ?? sessionThreadId ?? resourceId,
+        threadId: displayedThreadId ?? sessionThreadId ?? sessionId,
         enabled: resourceReady,
       };
   const sessionModelsQuery = useSessionModelCatalogQuery(sessionTarget);
