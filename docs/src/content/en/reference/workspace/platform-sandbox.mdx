@@ -331,7 +331,7 @@ await handle.kill()
 
 A process has no time limit unless you pass `timeout` to `spawn()` or the constructor. Call `get(pid)` to attach to a process this manager didn't start, for example after your app restarts. Output written before attaching isn't available.
 
-A long-running process's output stream reconnects periodically, and the process keeps running through it. Output written during a reconnect is lost, and a process that exits during one reports exit code `1` from `wait()` instead of its real exit code.
+A long-running process's output stream reconnects periodically, and the process keeps running through it. Output written during a reconnect is lost, and a process that exits while its stream reconnects reports exit code `1` from `wait()` instead of its real exit code.
 
 ## Constructor parameters
 
