@@ -7047,10 +7047,10 @@ importers:
   stores/azure-ai-search:
     dependencies:
       '@azure/core-auth':
-        specifier: ^1.7.2
-        version: 1.10.1(supports-color@10.2.2)
+        specifier: ^1.11.0
+        version: 1.11.0(supports-color@10.2.2)
       '@azure/search-documents':
-        specifier: ^12.0.0
+        specifier: ^12.2.0
         version: 12.2.0(supports-color@10.2.2)
     devDependencies:
       '@internal/lint':
@@ -9494,8 +9494,8 @@ importers:
         specifier: ^4.0.0
         version: 4.13.1(supports-color@10.2.2)
       '@azure/storage-blob':
-        specifier: ^12.31.0
-        version: 12.31.0(supports-color@10.2.2)
+        specifier: ^12.34.0
+        version: 12.34.0(supports-color@10.2.2)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -9813,7 +9813,7 @@ importers:
     dependencies:
       files-sdk:
         specifier: ^1.9.0
-        version: 1.9.0(79830a1e774cb16686b4ccceed13972a)
+        version: 1.9.0(7874cd01acdaa9a9708a237b51ad56ed)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -11193,17 +11193,20 @@ packages:
     resolution: {integrity: sha512-nBrLsEWm4J2u5LpAPjxADTlq3trDgVZZXHNKabeXZtpq3d3AbN/KGO82R87rdDz5/lYB024rtEf10/q0urNgsA==}
     engines: {node: '>=18.0.0'}
 
-  '@azure/core-auth@1.10.1':
-    resolution: {integrity: sha512-ykRMW8PjVAn+RS6ww5cmK9U2CyH9p4Q88YJwvUslfuMmN98w/2rdGRLPqJYObapBCdzBVeDgYWdJnFPFb7qzpg==}
-    engines: {node: '>=20.0.0'}
+  '@azure/core-auth@1.11.0':
+    resolution: {integrity: sha512-IUZydyTUkDnYdstOW9pFOOUQlBjAepK5teihDE3x6yxsPJs/hsAaaYpeGxdxrgtOiJbBKSjKW7MDk7AEhb4LRg==}
+    engines: {node: '>=22.0.0'}
 
   '@azure/core-client@1.10.1':
     resolution: {integrity: sha512-Nh5PhEOeY6PrnxNPsEHRr9eimxLwgLlpmguQaHKBinFYA/RU9+kOYVOQqOrTsCL+KSxrLLl1gD8Dk5BFW/7l/w==}
     engines: {node: '>=20.0.0'}
 
-  '@azure/core-http-compat@2.3.1':
-    resolution: {integrity: sha512-az9BkXND3/d5VgdRRQVkiJb2gOmDU8Qcq4GvjtBmDICNiQ9udFmDk4ZpSB5Qq1OmtDJGlQAfBaS4palFsazQ5g==}
-    engines: {node: '>=20.0.0'}
+  '@azure/core-http-compat@2.5.0':
+    resolution: {integrity: sha512-BoSmXPx2er1Ai+wKlDvj29jIQespCNBwEmKyZVHO2kEFsWbGjAjwMCGzug3DJM5/QYIV3vej0S1zcU5bq9fa8w==}
+    engines: {node: '>=22.0.0'}
+    peerDependencies:
+      '@azure/core-client': ^1.10.0
+      '@azure/core-rest-pipeline': ^1.22.0
 
   '@azure/core-lro@2.7.2':
     resolution: {integrity: sha512-0YIpccoX8m/k00O7mDDMdJpbr6mf1yWo2dfmxt5A8XVZVVMz2SSKaEbMCeJRvgQ0IaSlqhjT47p4hVIRRy90xw==}
@@ -11213,9 +11216,9 @@ packages:
     resolution: {integrity: sha512-YKWi9YuCU04B55h25cnOYZHxXYtEvQEbKST5vqRga7hWY9ydd3FZHdeQF8pyh+acWZvppw13M/LMGx0LABUVMA==}
     engines: {node: '>=18.0.0'}
 
-  '@azure/core-rest-pipeline@1.22.1':
-    resolution: {integrity: sha512-UVZlVLfLyz6g3Hy7GNDpooMQonUygH7ghdiSASOOHy97fKj/mPLqgDX7aidOijn+sCMU+WU8NjlPlNTgnvbcGA==}
-    engines: {node: '>=20.0.0'}
+  '@azure/core-rest-pipeline@1.25.0':
+    resolution: {integrity: sha512-bMs8ekJLjX8wPV+9IPBges1SLPyuDtE9g5gLDWOpxzKcoOFQnpLGkbcT1tdw3FaAmDS1gnPmMmJ6y/T5B96kIA==}
+    engines: {node: '>=22.0.0'}
 
   '@azure/core-tracing@1.3.1':
     resolution: {integrity: sha512-9MWKevR7Hz8kNzzPLfX4EAtGM2b8mr50HPDBvio96bURP/9C+HjdH3sBlLSNNrvRAr5/k/svoH457gB5IKpmwQ==}
@@ -11265,13 +11268,13 @@ packages:
     resolution: {integrity: sha512-4+Qw+qaGqnkdUCq/vEFzk/bkROogTvdbPb1fmI8poxNfDDN1q2WHxBmhI7CYwesrBj1yXC4i5E0aISBxZqZi0g==}
     engines: {node: '>=20.0.0'}
 
-  '@azure/storage-blob@12.31.0':
-    resolution: {integrity: sha512-DBgNv10aCSxopt92DkTDD0o9xScXeBqPKGmR50FPZQaEcH4JLQ+GEOGEDv19V5BMkB7kxr+m4h6il/cCDPvmHg==}
-    engines: {node: '>=20.0.0'}
+  '@azure/storage-blob@12.34.0':
+    resolution: {integrity: sha512-cXDTCAMwDx8Ng9yUe82kOOd2kPnZ8AQqe4FkLMcpaQ3Mvr3/PXVdvRhyP0FtY5/U5Oh6JGk3EcEibaFOymRLFw==}
+    engines: {node: '>=22.0.0'}
 
-  '@azure/storage-common@12.3.0':
-    resolution: {integrity: sha512-/OFHhy86aG5Pe8dP5tsp+BuJ25JOAl9yaMU3WZbkeoiFMHFtJ7tu5ili7qEdBXNW9G5lDB19trwyI6V49F/8iQ==}
-    engines: {node: '>=20.0.0'}
+  '@azure/storage-common@12.5.0':
+    resolution: {integrity: sha512-bttzuhQiCIwrkzjPDA+AtAR7dg19L/CC6ztcqJ5LfvWpXuys9mHp0UQ0udYnoUvv9SCT9KTR5kqFvFr0e6k0lQ==}
+    engines: {node: '>=22.0.0'}
 
   '@babel/code-frame@7.29.7':
     resolution: {integrity: sha512-Aup7aUOfpbAUg2ROOJN6Iw5f9DMBlzu0mIkm/malLQFN/YQgO48wCj0Kxa3sEHJvPVFg7siR+qRInwXd2qhQKw==}
@@ -21165,9 +21168,9 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@typespec/ts-http-runtime@0.3.1':
-    resolution: {integrity: sha512-SnbaqayTVFEA6/tYumdF0UmybY0KHyKwGPBXnyckFlrrKdhWFrL3a2HIPXHjht5ZOElKGcXfD2D63P36btb+ww==}
-    engines: {node: '>=20.0.0'}
+  '@typespec/ts-http-runtime@0.3.9':
+    resolution: {integrity: sha512-edSdeAqkdxBVzA1yL1LrLCml1YjyCVvPMtMqJpbF+6K609tHe8V6sQUzFQSGcYNhcuhOceZtjvN32+mpIth30A==}
+    engines: {node: '>=22.0.0'}
 
   '@uiw/codemirror-extensions-basic-setup@4.25.11':
     resolution: {integrity: sha512-otyFa+n9IOYtEjaKOxPedHkj15fTPUF21wdR9pv0GpZPfuGl27cvmcv6+tognbRu9VvEcsHKE+ESoszeo3KfTw==}
@@ -22023,6 +22026,10 @@ packages:
 
   apache-arrow@18.1.0:
     resolution: {integrity: sha512-v/ShMp57iBnBp4lDgV8Jx3d3Q5/Hac25FWmQ98eMahUiHPXcvwIMKJD0hBIgclm/FCG+LwPkAKtkRO1O/W0YGg==}
+    hasBin: true
+
+  apache-arrow@21.2.0:
+    resolution: {integrity: sha512-Hxe6Agq26gQOM954qpzYSllJBPJl+e16U5CkfuMUhLrNba+5nKkttIVlflaovN6oaTratqMGAO8H5u/aNhmHWQ==}
     hasBin: true
 
   apache-md5@1.1.8:
@@ -26124,6 +26131,9 @@ packages:
 
   json-stringify-safe@5.0.1:
     resolution: {integrity: sha512-ZClg6AaYvamvYEE82d3Iyd3vSSIjQ+odgjaTzRuO3s7toCdFKczob2i0zCh7JE8kWn17yvAWhUVxvqGwUalsRA==}
+
+  json-with-bigint@3.5.12:
+    resolution: {integrity: sha512-uwbF/wSSuOgC7qqlq27Xp5B6a2MHVug3t0idZdTqu0JnlFvgJuH7ju+KAk/J06C7GfhoYy2gnb9wz2INqcne7w==}
 
   json11@2.0.2:
     resolution: {integrity: sha512-HIrd50UPYmP6sqLuLbFVm75g16o0oZrVfxrsY0EEys22klz8mRoWlX9KAEDOSOR9Q34rcxsyC8oDveGrCz5uLQ==}
@@ -33233,10 +33243,10 @@ snapshots:
   '@azure-rest/core-client@2.5.1(supports-color@10.2.2)':
     dependencies:
       '@azure/abort-controller': 2.1.2
-      '@azure/core-auth': 1.10.1(supports-color@10.2.2)
-      '@azure/core-rest-pipeline': 1.22.1(supports-color@10.2.2)
+      '@azure/core-auth': 1.11.0(supports-color@10.2.2)
+      '@azure/core-rest-pipeline': 1.25.0(supports-color@10.2.2)
       '@azure/core-tracing': 1.3.1
-      '@typespec/ts-http-runtime': 0.3.1(supports-color@10.2.2)
+      '@typespec/ts-http-runtime': 0.3.9(supports-color@10.2.2)
       tslib: 2.8.1
     transitivePeerDependencies:
       - supports-color
@@ -33245,7 +33255,7 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
-  '@azure/core-auth@1.10.1(supports-color@10.2.2)':
+  '@azure/core-auth@1.11.0(supports-color@10.2.2)':
     dependencies:
       '@azure/abort-controller': 2.1.2
       '@azure/core-util': 1.13.1(supports-color@10.2.2)
@@ -33256,8 +33266,8 @@ snapshots:
   '@azure/core-client@1.10.1(supports-color@10.2.2)':
     dependencies:
       '@azure/abort-controller': 2.1.2
-      '@azure/core-auth': 1.10.1(supports-color@10.2.2)
-      '@azure/core-rest-pipeline': 1.22.1(supports-color@10.2.2)
+      '@azure/core-auth': 1.11.0(supports-color@10.2.2)
+      '@azure/core-rest-pipeline': 1.25.0(supports-color@10.2.2)
       '@azure/core-tracing': 1.3.1
       '@azure/core-util': 1.13.1(supports-color@10.2.2)
       '@azure/logger': 1.3.0(supports-color@10.2.2)
@@ -33265,13 +33275,11 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@azure/core-http-compat@2.3.1(supports-color@10.2.2)':
+  '@azure/core-http-compat@2.5.0(@azure/core-client@1.10.1(supports-color@10.2.2))(@azure/core-rest-pipeline@1.25.0(supports-color@10.2.2))':
     dependencies:
       '@azure/abort-controller': 2.1.2
       '@azure/core-client': 1.10.1(supports-color@10.2.2)
-      '@azure/core-rest-pipeline': 1.22.1(supports-color@10.2.2)
-    transitivePeerDependencies:
-      - supports-color
+      '@azure/core-rest-pipeline': 1.25.0(supports-color@10.2.2)
 
   '@azure/core-lro@2.7.2(supports-color@10.2.2)':
     dependencies:
@@ -33286,14 +33294,14 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
-  '@azure/core-rest-pipeline@1.22.1(supports-color@10.2.2)':
+  '@azure/core-rest-pipeline@1.25.0(supports-color@10.2.2)':
     dependencies:
       '@azure/abort-controller': 2.1.2
-      '@azure/core-auth': 1.10.1(supports-color@10.2.2)
+      '@azure/core-auth': 1.11.0(supports-color@10.2.2)
       '@azure/core-tracing': 1.3.1
       '@azure/core-util': 1.13.1(supports-color@10.2.2)
       '@azure/logger': 1.3.0(supports-color@10.2.2)
-      '@typespec/ts-http-runtime': 0.3.1(supports-color@10.2.2)
+      '@typespec/ts-http-runtime': 0.3.9(supports-color@10.2.2)
       tslib: 2.8.1
     transitivePeerDependencies:
       - supports-color
@@ -33305,7 +33313,7 @@ snapshots:
   '@azure/core-util@1.13.1(supports-color@10.2.2)':
     dependencies:
       '@azure/abort-controller': 2.1.2
-      '@typespec/ts-http-runtime': 0.3.1(supports-color@10.2.2)
+      '@typespec/ts-http-runtime': 0.3.9(supports-color@10.2.2)
       tslib: 2.8.1
     transitivePeerDependencies:
       - supports-color
@@ -33318,9 +33326,9 @@ snapshots:
   '@azure/identity@4.13.1(supports-color@10.2.2)':
     dependencies:
       '@azure/abort-controller': 2.1.2
-      '@azure/core-auth': 1.10.1(supports-color@10.2.2)
+      '@azure/core-auth': 1.11.0(supports-color@10.2.2)
       '@azure/core-client': 1.10.1(supports-color@10.2.2)
-      '@azure/core-rest-pipeline': 1.22.1(supports-color@10.2.2)
+      '@azure/core-rest-pipeline': 1.25.0(supports-color@10.2.2)
       '@azure/core-tracing': 1.3.1
       '@azure/core-util': 1.13.1(supports-color@10.2.2)
       '@azure/logger': 1.3.0(supports-color@10.2.2)
@@ -33335,8 +33343,8 @@ snapshots:
     dependencies:
       '@azure-rest/core-client': 2.5.1(supports-color@10.2.2)
       '@azure/abort-controller': 2.1.2
-      '@azure/core-auth': 1.10.1(supports-color@10.2.2)
-      '@azure/core-rest-pipeline': 1.22.1(supports-color@10.2.2)
+      '@azure/core-auth': 1.11.0(supports-color@10.2.2)
+      '@azure/core-rest-pipeline': 1.25.0(supports-color@10.2.2)
       '@azure/core-tracing': 1.3.1
       '@azure/core-util': 1.13.1(supports-color@10.2.2)
       '@azure/logger': 1.3.0(supports-color@10.2.2)
@@ -33348,10 +33356,10 @@ snapshots:
     dependencies:
       '@azure-rest/core-client': 2.5.1(supports-color@10.2.2)
       '@azure/abort-controller': 2.1.2
-      '@azure/core-auth': 1.10.1(supports-color@10.2.2)
+      '@azure/core-auth': 1.11.0(supports-color@10.2.2)
       '@azure/core-lro': 2.7.2(supports-color@10.2.2)
       '@azure/core-paging': 1.6.2
-      '@azure/core-rest-pipeline': 1.22.1(supports-color@10.2.2)
+      '@azure/core-rest-pipeline': 1.25.0(supports-color@10.2.2)
       '@azure/core-tracing': 1.3.1
       '@azure/core-util': 1.13.1(supports-color@10.2.2)
       '@azure/keyvault-common': 2.1.0(supports-color@10.2.2)
@@ -33362,7 +33370,7 @@ snapshots:
 
   '@azure/logger@1.3.0(supports-color@10.2.2)':
     dependencies:
-      '@typespec/ts-http-runtime': 0.3.1(supports-color@10.2.2)
+      '@typespec/ts-http-runtime': 0.3.9(supports-color@10.2.2)
       tslib: 2.8.1
     transitivePeerDependencies:
       - supports-color
@@ -33382,11 +33390,11 @@ snapshots:
 
   '@azure/search-documents@12.2.0(supports-color@10.2.2)':
     dependencies:
-      '@azure/core-auth': 1.10.1(supports-color@10.2.2)
+      '@azure/core-auth': 1.11.0(supports-color@10.2.2)
       '@azure/core-client': 1.10.1(supports-color@10.2.2)
-      '@azure/core-http-compat': 2.3.1(supports-color@10.2.2)
+      '@azure/core-http-compat': 2.5.0(@azure/core-client@1.10.1(supports-color@10.2.2))(@azure/core-rest-pipeline@1.25.0(supports-color@10.2.2))
       '@azure/core-paging': 1.6.2
-      '@azure/core-rest-pipeline': 1.22.1(supports-color@10.2.2)
+      '@azure/core-rest-pipeline': 1.25.0(supports-color@10.2.2)
       '@azure/core-tracing': 1.3.1
       '@azure/core-util': 1.13.1(supports-color@10.2.2)
       '@azure/logger': 1.3.0(supports-color@10.2.2)
@@ -33395,37 +33403,39 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@azure/storage-blob@12.31.0(supports-color@10.2.2)':
+  '@azure/storage-blob@12.34.0(supports-color@10.2.2)':
     dependencies:
       '@azure/abort-controller': 2.1.2
-      '@azure/core-auth': 1.10.1(supports-color@10.2.2)
+      '@azure/core-auth': 1.11.0(supports-color@10.2.2)
       '@azure/core-client': 1.10.1(supports-color@10.2.2)
-      '@azure/core-http-compat': 2.3.1(supports-color@10.2.2)
+      '@azure/core-http-compat': 2.5.0(@azure/core-client@1.10.1(supports-color@10.2.2))(@azure/core-rest-pipeline@1.25.0(supports-color@10.2.2))
       '@azure/core-lro': 2.7.2(supports-color@10.2.2)
       '@azure/core-paging': 1.6.2
-      '@azure/core-rest-pipeline': 1.22.1(supports-color@10.2.2)
+      '@azure/core-rest-pipeline': 1.25.0(supports-color@10.2.2)
       '@azure/core-tracing': 1.3.1
       '@azure/core-util': 1.13.1(supports-color@10.2.2)
       '@azure/core-xml': 1.5.1
       '@azure/logger': 1.3.0(supports-color@10.2.2)
-      '@azure/storage-common': 12.3.0(supports-color@10.2.2)
+      '@azure/storage-common': 12.5.0(@azure/core-client@1.10.1(supports-color@10.2.2))(supports-color@10.2.2)
+      apache-arrow: 21.2.0
       events: 3.3.0
       tslib: 2.8.1
     transitivePeerDependencies:
       - supports-color
 
-  '@azure/storage-common@12.3.0(supports-color@10.2.2)':
+  '@azure/storage-common@12.5.0(@azure/core-client@1.10.1(supports-color@10.2.2))(supports-color@10.2.2)':
     dependencies:
       '@azure/abort-controller': 2.1.2
-      '@azure/core-auth': 1.10.1(supports-color@10.2.2)
-      '@azure/core-http-compat': 2.3.1(supports-color@10.2.2)
-      '@azure/core-rest-pipeline': 1.22.1(supports-color@10.2.2)
+      '@azure/core-auth': 1.11.0(supports-color@10.2.2)
+      '@azure/core-http-compat': 2.5.0(@azure/core-client@1.10.1(supports-color@10.2.2))(@azure/core-rest-pipeline@1.25.0(supports-color@10.2.2))
+      '@azure/core-rest-pipeline': 1.25.0(supports-color@10.2.2)
       '@azure/core-tracing': 1.3.1
       '@azure/core-util': 1.13.1(supports-color@10.2.2)
       '@azure/logger': 1.3.0(supports-color@10.2.2)
       events: 3.3.0
       tslib: 2.8.1
     transitivePeerDependencies:
+      - '@azure/core-client'
       - supports-color
 
   '@babel/code-frame@7.29.7':
@@ -44846,7 +44856,7 @@ snapshots:
   '@typescript/typescript-win32-x64@7.0.2':
     optional: true
 
-  '@typespec/ts-http-runtime@0.3.1(supports-color@10.2.2)':
+  '@typespec/ts-http-runtime@0.3.9(supports-color@10.2.2)':
     dependencies:
       http-proxy-agent: 7.0.2(supports-color@10.2.2)
       https-proxy-agent: 7.0.6(supports-color@10.2.2)
@@ -45864,6 +45874,13 @@ snapshots:
       command-line-usage: 7.0.3
       flatbuffers: 24.12.23
       json-bignum: 0.0.3
+      tslib: 2.8.1
+
+  apache-arrow@21.2.0:
+    dependencies:
+      '@types/node': 22.19.15
+      flatbuffers: 25.9.23
+      json-with-bigint: 3.5.12
       tslib: 2.8.1
 
   apache-md5@1.1.8: {}
@@ -48930,7 +48947,7 @@ snapshots:
   file-uri-to-path@1.0.0:
     optional: true
 
-  files-sdk@1.9.0(79830a1e774cb16686b4ccceed13972a):
+  files-sdk@1.9.0(7874cd01acdaa9a9708a237b51ad56ed):
     dependencies:
       commander: 15.0.0
       picomatch: 4.0.7
@@ -48938,9 +48955,9 @@ snapshots:
       '@anthropic-ai/claude-agent-sdk': 0.3.220(@anthropic-ai/sdk@0.112.3(zod@4.6.7))(@modelcontextprotocol/sdk@1.32.1(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.7))(zod@4.6.7)
       '@aws-sdk/client-s3': 3.1104.0
       '@aws-sdk/lib-storage': 3.997.0(@aws-sdk/client-s3@3.1104.0)
-      '@azure/core-auth': 1.10.1(supports-color@10.2.2)
+      '@azure/core-auth': 1.11.0(supports-color@10.2.2)
       '@azure/identity': 4.13.1(supports-color@10.2.2)
-      '@azure/storage-blob': 12.31.0(supports-color@10.2.2)
+      '@azure/storage-blob': 12.34.0(supports-color@10.2.2)
       '@google-cloud/storage': 7.21.0(encoding@0.1.13)(supports-color@10.2.2)
       '@modelcontextprotocol/sdk': 1.32.1(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.7)
       '@openai/agents': 0.11.6(@aws-sdk/credential-provider-node@3.972.78)(@cfworker/json-schema@4.1.1)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.6.12)(bufferutil@4.1.0)(supports-color@10.2.2)(ws@8.21.3(bufferutil@4.1.0))(zod@4.6.7)
@@ -50573,6 +50590,8 @@ snapshots:
 
   json-stringify-safe@5.0.1: {}
 
+  json-with-bigint@3.5.12: {}
+
   json11@2.0.2: {}
 
   json5@2.2.3: {}
@@ -51832,7 +51851,7 @@ snapshots:
 
   microsoft-cognitiveservices-speech-sdk@1.49.0(bufferutil@4.1.0)(supports-color@10.2.2):
     dependencies:
-      '@azure/core-auth': 1.10.1(supports-color@10.2.2)
+      '@azure/core-auth': 1.11.0(supports-color@10.2.2)
       '@types/webrtc': 0.0.37
       agent-base: 6.0.2(supports-color@10.2.2)
       bent: 7.3.12
@@ -56422,7 +56441,7 @@ snapshots:
 
   tedious@20.0.0(supports-color@10.2.2):
     dependencies:
-      '@azure/core-auth': 1.10.1(supports-color@10.2.2)
+      '@azure/core-auth': 1.11.0(supports-color@10.2.2)
       '@azure/identity': 4.13.1(supports-color@10.2.2)
       '@azure/keyvault-keys': 4.10.2(supports-color@10.2.2)
       '@js-joda/core': 6.1.0
