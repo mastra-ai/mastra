@@ -1,4 +1,3 @@
-import { safeStringify } from '../../../utils/safe-stringify';
 import { InMemoryStore } from '../../mock';
 import type { StorageWorkflowRun } from '../../types';
 import { InMemoryDB } from '../inmemory-db';
@@ -48,29 +47,46 @@ class SerializingDB extends InMemoryDB {
   }
 }
 
-class SerializingWorkflows extends WorkflowsInMemory {
-  override updateWorkflowResults(args: Parameters<WorkflowsInMemory['updateWorkflowResults']>[0]) {
-    const { result, state, requestContext, ...control } = args;
-    return super.updateWorkflowResults({
-      ...control,
-      ...JSON.parse(safeStringify({ result, state, requestContext })),
-    });
-  }
-
-  override updateWorkflowState(args: Parameters<WorkflowsInMemory['updateWorkflowState']>[0]) {
-    const { opts, ...control } = args;
-    const { expectedStatus, ...values } = opts;
-    return super.updateWorkflowState({
-      ...control,
-      opts: { ...JSON.parse(safeStringify(values)), expectedStatus },
-    });
-  }
+// Mirrors stores/libsql/src/storage/db/utils.ts without adding an adapter dependency.
+// Keep the depth, cycle, proxy and toJSON semantics aligned with that sanitizer.
+function safeStringify(value: unknown): string {
+  const ancestors = new Set<object>();
+  const sanitize = (val: unknown, depth = 0): unknown => {
+    if (val === null || val === undefined) return val;
+    if (typeof val === 'function' || typeof val === 'symbol') return undefined;
+    if (typeof val === 'bigint') return val.toString();
+    if (typeof val !== 'object') return val;
+    if (depth > 100) return '[Max depth exceeded]';
+    if (ancestors.has(val)) return undefined;
+    try {
+      (val as Record<string, unknown>).toJSON;
+      Object.keys(val);
+    } catch {
+      return undefined;
+    }
+    if (typeof (val as Record<string, unknown>).toJSON === 'function') {
+      return sanitize((val as { toJSON: () => unknown }).toJSON(), depth + 1);
+    }
+    ancestors.add(val);
+    try {
+      if (Array.isArray(val)) return val.map(item => sanitize(item, depth + 1));
+      const result: Record<string, unknown> = {};
+      for (const key of Object.keys(val)) {
+        const sanitized = sanitize((val as Record<string, unknown>)[key], depth + 1);
+        if (sanitized !== undefined) result[key] = sanitized;
+      }
+      return result;
+    } finally {
+      ancestors.delete(val);
+    }
+  };
+  return JSON.stringify(sanitize(value)) ?? 'null';
 }
 
 // Test-only persistence boundary. Other domains retain ordinary in-memory behavior.
 export function createSerializingStore(onWrite?: (rows: SerializedWorkflowRow[]) => void) {
   const db = new SerializingDB(onWrite);
   const store = new InMemoryStore();
-  store.stores.workflows = new SerializingWorkflows({ db });
+  store.stores.workflows = new WorkflowsInMemory({ db });
   return { store, inspect: () => db.workflows.inspect() };
 }

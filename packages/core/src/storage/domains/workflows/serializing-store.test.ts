@@ -30,7 +30,7 @@ describe('serializing workflow storage', () => {
     expect(loaded?.context.input.left).not.toBe(loaded?.context.input.right);
   });
 
-  it('uses safeStringify semantics for cycles and bigint without collapsing shared references', async () => {
+  it('drops cyclic keys and stringifies bigint like LibSQL', async () => {
     const { store, inspect } = createSerializingStore();
     const workflows = (await store.getStore('workflows'))!;
     const snapshot = createEmptyWorkflowSnapshot(target.runId);
@@ -40,9 +40,8 @@ describe('serializing workflow storage', () => {
     await workflows.persistWorkflowSnapshot({ ...target, snapshot });
     expect((await workflows.loadWorkflowSnapshot(target))?.context.input).toEqual({
       count: '42',
-      self: '[Circular]',
     });
-    expect(JSON.parse(inspect()[0]!.snapshot).context.input).toEqual({ count: '42', self: '[Circular]' });
+    expect(JSON.parse(inspect()[0]!.snapshot).context.input).toEqual({ count: '42' });
   });
 
   it('detaches full writes and every read path from stored rows', async () => {
@@ -69,11 +68,27 @@ describe('serializing workflow storage', () => {
     expect(inspect()[0]!.snapshot).not.toBe('mutated inspection');
   });
 
-  it('serializes partial results, state and request context before returning them', async () => {
+  it('caps deeply nested stored values at LibSQL’s depth limit', async () => {
+    const { store, inspect } = createSerializingStore();
+    const workflows = (await store.getStore('workflows'))!;
+    const snapshot = createEmptyWorkflowSnapshot(target.runId);
+    let nested: Record<string, unknown> = { leaf: true };
+    for (let i = 0; i < 150; i++) nested = { child: nested };
+    snapshot.context.input = nested;
+    await workflows.persistWorkflowSnapshot({ ...target, snapshot });
+    let value = JSON.parse(inspect()[0]!.snapshot).context.input;
+    // snapshot (0), context (1), input (2): the next 99 children reach depth 101.
+    for (let i = 0; i < 99; i++) value = value.child;
+    expect(value).toBe('[Max depth exceeded]');
+    expect(inspect()[0]!.snapshot).not.toContain('leaf');
+  });
+
+  it('serializes partial writes without changing their runtime return values', async () => {
     const { store, inspect } = createSerializingStore();
     const workflows = (await store.getStore('workflows'))!;
     await workflows.persistWorkflowSnapshot({ ...target, snapshot: createEmptyWorkflowSnapshot(target.runId) });
-    const output = { date: new Date(0), optional: undefined, error: new Error('hidden') };
+    // BigInt exercises mergeWorkflowStepResult's raw-context fallback rather than its JSON-cloned return.
+    const output = { date: new Date(0), optional: undefined, error: new Error('hidden'), count: 42n };
     const context = await workflows.updateWorkflowResults({
       ...target,
       stepId: 'tool',
@@ -81,21 +96,35 @@ describe('serializing workflow storage', () => {
       requestContext: { date: new Date(0), optional: undefined },
       state: { date: new Date(0) },
     });
-    expect(context.tool).toEqual({ status: 'success', output: { date: new Date(0).toISOString(), error: {} } });
+    expect(context.tool!.output.date).toBeInstanceOf(Date);
+    expect(context.tool!.output.error).toBeInstanceOf(Error);
+    expect(context.tool!.output.error.message).toBe('hidden');
+    expect(context.tool!.output).toHaveProperty('optional', undefined);
+    expect(context.__state).toEqual({ date: new Date(0) });
     const stored = JSON.parse(inspect()[0]!.snapshot);
-    expect(stored.context).toEqual(context);
+    expect(stored.context.tool).toEqual({
+      status: 'success',
+      output: { date: new Date(0).toISOString(), error: {}, count: '42' },
+    });
     expect(stored.requestContext).toEqual({ date: new Date(0).toISOString() });
     expect(stored.context.__state).toEqual({ date: new Date(0).toISOString() });
     output.date.setTime(100);
-    context.tool!.output.date = 'mutated return';
+    context.tool!.output.date.setTime(200);
     const result = await workflows.updateWorkflowState({
       ...target,
       opts: { status: 'completed', result: { status: 'success', output } },
     });
-    expect(result?.result).toEqual({ status: 'success', output: { date: new Date(100).toISOString(), error: {} } });
+    expect(result?.result?.output).toBe(output);
+    expect(result?.result?.output.date).toBeInstanceOf(Date);
+    expect(result?.result?.output.error).toBeInstanceOf(Error);
+    expect(JSON.parse(inspect()[0]!.snapshot).result).toEqual({
+      status: 'success',
+      output: { date: new Date(100).toISOString(), error: {}, count: '42' },
+    });
     result!.context.input = 'mutated state return';
+    output.date.setTime(300);
     expect((await workflows.loadWorkflowSnapshot(target))?.context).toEqual(stored.context);
-    expect(JSON.parse(inspect()[0]!.snapshot).result).toEqual(result?.result);
+    expect(JSON.parse(inspect()[0]!.snapshot).result.output.date).toBe(new Date(100).toISOString());
   });
 
   it('commits concurrent disjoint updates atomically and observes each complete stored prefix', async () => {
