@@ -25,7 +25,9 @@ export const traceQueryCapabilities: GetObservabilityCapabilitiesResponse = {
     traceQueryTimeToFirstChunkSort: true,
     traceAggregate: true,
     threadQuery: true,
+    threadQueryRows: true,
     spanQuery: true,
+    spanQueryContextFields: true,
     feedback: true,
   },
 };
