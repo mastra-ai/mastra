@@ -694,11 +694,11 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
             (transcript ?? (await openMessageListState(params, state))).read(),
           );
           const messages = list.get.response.aiV5.model();
-          // Without a registry entry (cross-process engines) nothing tracks what was sent: send everything.
-          // Compared per message rather than by count, since the turn's assistant message keeps growing
-          // across steps (#26332) and retries can roll messages back.
-          const sent = registryEntry?.emittedResponseMessageFingerprints ?? [];
-          if (registryEntry) fingerprints = messages.map(fingerprintMessage);
+          // The iteration state carries the cursor through persisted workflow steps and remote engines.
+          // Compare per message: assistant content grows across steps and retries can roll messages back.
+          const sent =
+            state.emittedResponseMessageFingerprints ?? registryEntry?.emittedResponseMessageFingerprints ?? [];
+          fingerprints = messages.map(fingerprintMessage);
           let from = 0;
           while (
             fingerprints &&
@@ -716,7 +716,10 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
 
         try {
           await this.emitChunk(rt, deferredChunk);
-          if (registryEntry && fingerprints) registryEntry.emittedResponseMessageFingerprints = fingerprints;
+          if (fingerprints) {
+            state.emittedResponseMessageFingerprints = fingerprints;
+            if (registryEntry) registryEntry.emittedResponseMessageFingerprints = fingerprints;
+          }
         } catch (error) {
           rt.logger?.warn?.(`[DurableAgent] Failed to emit deferred step-finish: ${error}`);
         }
@@ -1040,6 +1043,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               },
               usageAggregationVersion: 1,
               lastStepResult: undefined,
+              emittedResponseMessageFingerprints: undefined,
             };
             return iterationState;
           },

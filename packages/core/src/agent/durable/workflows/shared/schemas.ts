@@ -196,6 +196,8 @@ export const baseIterationStateSchema = z.object({
   lastStepResult: z.any().optional(),
   // Step-finish waits here until the loop's continuation policy resolves.
   deferredStepFinishChunk: z.any().optional(),
+  // Sent-message cursors survive workflow step boundaries, including remote engines.
+  emittedResponseMessageFingerprints: z.array(z.string()).optional(),
   // Background task tracking
   backgroundTaskPending: z.boolean().optional(),
   // Set when a delegation hook calls ctx.bail() — signals the loop to stop
