@@ -13,7 +13,7 @@ import { ImpersonationBanner } from '@/domains/auth/components/impersonation-ban
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { getPermissionForRoute, hasRoutePermission } from '@/domains/auth/route-permissions';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
-import { MastraVersionFooter } from '@/domains/configuration/components/mastra-version-footer';
+import { MastraVersionNavLink } from '@/domains/configuration/components/mastra-version-nav-link';
 import { useNavigationCommand } from '@/lib/command';
 import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
 import { getIsLinkActive } from '@/lib/nav/get-is-link-active';
@@ -138,19 +138,17 @@ export function AppSidebar() {
       </Sidebar.Nav>
 
       <Sidebar.Footer>
-        {filteredBottom.length > 0 && (
-          <Sidebar.NavList>
-            {filteredBottom.map(item => (
-              <Sidebar.NavLink
-                key={item.name}
-                state={state}
-                link={toSidebarLink(item)}
-                isActive={getIsLinkActive(item, pathname)}
-              />
-            ))}
-          </Sidebar.NavList>
-        )}
-        <MastraVersionFooter collapsed={state === 'collapsed'} />
+        <Sidebar.NavList>
+          {filteredBottom.map(item => (
+            <Sidebar.NavLink
+              key={item.name}
+              state={state}
+              link={toSidebarLink(item)}
+              isActive={getIsLinkActive(item, pathname)}
+            />
+          ))}
+          <MastraVersionNavLink state={state} />
+        </Sidebar.NavList>
       </Sidebar.Footer>
     </Sidebar>
   );
