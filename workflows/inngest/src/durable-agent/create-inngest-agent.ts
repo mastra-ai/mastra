@@ -51,6 +51,7 @@ import {
   deleteRunRegistryEntry,
   publishAbortRequest,
   normalizeResumeGenerateArgs,
+  validateModelTimeoutSettings,
 } from '@mastra/core/agent/durable';
 import type { AgentStepFinishEventData, AgentSuspendedEventData } from '@mastra/core/agent/durable';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
@@ -161,9 +162,10 @@ const RESUME_SNAPSHOT_POLL_MS = 100;
 async function withDefaultOptions<T extends { requestContext?: AgentExecutionOptions<any>['requestContext'] }>(
   agent: Agent<any, any, any>,
   options: T | undefined,
-): Promise<T> {
+): Promise<T & Pick<AgentExecutionOptions, 'modelSettings'>> {
   const defaults = await agent.getDefaultOptions({ requestContext: options?.requestContext });
-  return deepMerge((defaults ?? {}) as Record<string, unknown>, (options ?? {}) as Record<string, unknown>) as T;
+  return deepMerge((defaults ?? {}) as Record<string, unknown>, (options ?? {}) as Record<string, unknown>) as T &
+    Pick<AgentExecutionOptions, 'modelSettings'>;
 }
 
 // =============================================================================
@@ -1264,6 +1266,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           ...(resumeOptions?.requestContext?.entries() ?? []),
         ]),
       });
+      validateModelTimeoutSettings(callbackOptions.modelSettings?.timeout);
       const resumeOffset = await getPubsubOffset(runId);
 
       // Install a fresh abort controller scoped to the resumed segment and
