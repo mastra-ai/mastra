@@ -321,19 +321,21 @@ await editor.agent.update({
 })
 ```
 
-The direct `editor.agent.update()` method activates the new version immediately. To create a draft without changing the live agent, use the stored-agent REST API or Client SDK instead:
+The direct `editor.agent.update()` method saves the changed snapshot fields as a new version, but that version starts as an inactive draft. The method only changes record fields such as `status` or `activeVersionId` when you pass them. The published agent keeps serving its previous version until you publish. To publish, fetch the draft's version ID (for example with `listVersions()` from the Client SDK) and assign it explicitly:
 
-```bash title="Create a draft through the REST API"
-curl -X PATCH http://localhost:4111/api/stored/agents/support-agent \
-  -H "Content-Type: application/json" \
-  -d '{
-    "instructions": "Help customers with Acme products. Reply in their language."
-  }'
+```typescript title="src/scripts/publish-agent.ts"
+await editor.agent.update({
+  id: 'support-agent',
+  status: 'published',
+  activeVersionId: versionId,
+})
 ```
+
+The stored-agent REST API follows the same rule. `PATCH /api/stored/agents/support-agent` creates an inactive draft unless you set `autoPublish: true`, and `POST /api/stored/agents/support-agent/versions/:versionId/activate` publishes an existing version.
 
 The default server prefix is `/api`. Developers can set a custom prefix in the server configuration.
 
-See the [`MastraEditor` namespaces](/reference/editor/mastra-editor#namespaces) and [Client SDK agents API](/reference/client-js/agents#stored-agents) for available operations.
+See the [Editor versioning reference](/reference/editor/versioning) for the draft, publish, and restore lifecycle, and the [`MastraEditor` namespaces](/reference/editor/mastra-editor#namespaces) and [Client SDK agents API](/reference/client-js/agents#stored-agents) for available operations.
 
 ## Next steps
 
