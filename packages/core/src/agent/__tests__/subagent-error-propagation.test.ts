@@ -118,7 +118,7 @@ describe('sub-agent error propagation to parent', () => {
     const { supervisor, receivedPrompts } = setup();
     let hookCtx: any;
 
-    const stream = await supervisor.streamMessageList('go', {
+    const stream = await supervisor.stream('go', {
       delegation: {
         onDelegationComplete: ctx => {
           hookCtx = ctx;
@@ -149,7 +149,7 @@ describe('sub-agent error propagation to parent', () => {
     const memory = new MockMemory();
     const { supervisor, receivedPrompts } = setup(failingModel(), memory);
     const onDelegationComplete = vi.fn((_ctx: DelegationCompleteContext) => ({ resultText }));
-    const stream = await supervisor.streamMessageList('go', {
+    const stream = await supervisor.stream('go', {
       memory: { thread: 'parent-thread', resource: 'parent-resource' },
       delegation: { onDelegationComplete },
     });
@@ -187,7 +187,7 @@ describe('sub-agent error propagation to parent', () => {
     const onDelegationComplete = vi.fn((_ctx: DelegationCompleteContext) => {
       throw new Error('hook failure');
     });
-    await (await supervisor.streamMessageList('go', { delegation: { onDelegationComplete } })).consumeStream();
+    await (await supervisor.stream('go', { delegation: { onDelegationComplete } })).consumeStream();
     expect(onDelegationComplete).toHaveBeenCalledTimes(1);
     expect(onDelegationComplete.mock.calls[0]![0].error?.message).toBe(CAUSE);
     expect(toolResultSeenByModel(receivedPrompts).value).toBe(DEFAULT_ERROR);
@@ -202,9 +202,9 @@ describe('sub-agent error propagation to parent', () => {
       const onDelegationComplete = vi.fn((ctx: DelegationCompleteContext) => ctx.bail());
       const options = { delegation: { onDelegationComplete } };
       if (mode === 'stream') {
-        await (await supervisor.streamMessageList('go', options)).consumeStream();
+        await (await supervisor.stream('go', options)).consumeStream();
       } else {
-        await supervisor.generateMessageList('go', options);
+        await supervisor.generate('go', options);
       }
       expect(onDelegationComplete).toHaveBeenCalledTimes(1);
       expect(onDelegationComplete.mock.calls[0]![0].success).toBe(false);
@@ -232,7 +232,7 @@ describe('sub-agent error propagation to parent', () => {
     const { supervisor, receivedPrompts } = setup(model, memory);
     const onDelegationComplete = vi.fn<(ctx: DelegationCompleteContext) => void>();
     await (
-      await supervisor.streamMessageList('go', {
+      await supervisor.stream('go', {
         memory: { thread: 'supervisor-thread', resource: 'supervisor-resource' },
         delegation: { onDelegationComplete },
       })
@@ -301,7 +301,7 @@ describe('sub-agent error propagation to parent', () => {
     const { supervisor, mastra } = setup(model, undefined, maxRetries);
     const onDelegationComplete = vi.fn<(ctx: DelegationCompleteContext) => void>();
     try {
-      await (await supervisor.streamMessageList('go', { delegation: { onDelegationComplete } })).consumeStream();
+      await (await supervisor.stream('go', { delegation: { onDelegationComplete } })).consumeStream();
       const listed = await mastra.backgroundTaskManager!.listTasks();
       expect(listed.tasks).toHaveLength(1);
       const task = await mastra.backgroundTaskManager!.waitForNextTask([listed.tasks[0]!.id], { timeoutMs: 5000 });
@@ -319,7 +319,7 @@ describe('sub-agent error propagation to parent', () => {
   it('generate: keeps the underlying cause out of the parent prompt', async () => {
     const { supervisor, receivedPrompts } = setup();
 
-    await supervisor.generateMessageList('go');
+    await supervisor.generate('go');
 
     const output = toolResultSeenByModel(receivedPrompts);
     expect(output.type).toBe('error-text');

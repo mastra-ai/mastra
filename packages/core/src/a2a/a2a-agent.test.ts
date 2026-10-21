@@ -391,7 +391,7 @@ describe('A2AAgent', () => {
       maxBackoffMs: 0,
     });
 
-    const output = await agent.generateMessageList('Do the thing');
+    const output = await agent.generate('Do the thing');
 
     expect(output.text).toBe('Remote task complete');
     expect(output.task?.status.state).toBe('completed');
@@ -413,7 +413,7 @@ describe('A2AAgent', () => {
       fetch: fetchMock as typeof fetch,
     });
 
-    const output = await agent.generateMessageList('Use the generate path');
+    const output = await agent.generate('Use the generate path');
 
     expect(output.text).toBe('Generate path response');
     expect(output.message?.kind).toBe('message');
@@ -430,7 +430,7 @@ describe('A2AAgent', () => {
       fetch: fetchMock as typeof fetch,
     });
 
-    const output = await agent.generateMessageList('Use the generate path', {
+    const output = await agent.generate('Use the generate path', {
       memory: {
         thread: 'subagent-thread-1',
         resource: 'subagent-resource-1',
@@ -483,7 +483,7 @@ describe('A2AAgent', () => {
       maxBackoffMs: 0,
     });
 
-    const initial = await agent.generateMessageList('Initial task', { runId: 'run-1' });
+    const initial = await agent.generate('Initial task', { runId: 'run-1' });
     expect(initial.resumePayload).toMatchObject({
       taskId: 'task-input',
       contextId: 'ctx-input',
@@ -522,7 +522,7 @@ describe('A2AAgent', () => {
       maxBackoffMs: 0,
     });
 
-    const result = await agent.generateMessageList('Authenticate', { runId: 'run-auth' });
+    const result = await agent.generate('Authenticate', { runId: 'run-auth' });
 
     expect(result.finishReason).toBe('suspended');
     expect(result.resumePayload).toMatchObject({ taskId: 'task-auth', waitingForInput: true });
@@ -580,7 +580,7 @@ describe('A2AAgent', () => {
       fetch: fetchMock as typeof fetch,
     });
 
-    const initial = await agent.streamMessageList('Book a flight', { runId: 'stream-run-hitl' });
+    const initial = await agent.stream('Book a flight', { runId: 'stream-run-hitl' });
     expect(await initial.suspendPayload).toMatchObject({
       taskId: 'task-stream-input',
       waitingForInput: true,
@@ -603,7 +603,7 @@ describe('A2AAgent', () => {
       fetch: fetchMock as typeof fetch,
     });
 
-    const stream = await agent.streamMessageList('Buffered request');
+    const stream = await agent.stream('Buffered request');
     const events: StreamEventWithOptionalId[] = [];
     for await (const event of stream.fullStream) {
       events.push(event as StreamEventWithOptionalId);
@@ -665,7 +665,7 @@ describe('A2AAgent', () => {
       fetch: fetchMock as typeof fetch,
     });
 
-    const stream = await agent.streamMessageList('Hello stream', { runId: 'stream-run-2' });
+    const stream = await agent.stream('Hello stream', { runId: 'stream-run-2' });
     const events: StreamEventWithOptionalId[] = [];
     for await (const event of stream.fullStream) {
       events.push(event as StreamEventWithOptionalId);
@@ -740,7 +740,7 @@ describe('A2AAgent', () => {
       fetch: fetchMock as typeof fetch,
     });
 
-    const streamPromise = agent.streamMessageList('Live stream please', { runId: 'stream-run-live' });
+    const streamPromise = agent.stream('Live stream please', { runId: 'stream-run-live' });
     const winner = await Promise.race([
       streamPromise.then(() => 'stream-resolved' as const),
       finalChunkEnqueued.promise,
@@ -808,7 +808,7 @@ describe('A2AAgent', () => {
       fetch: fetchMock as typeof fetch,
     });
 
-    const stream = await agent.streamMessageList('Recover after malformed frame', { runId: 'stream-run-malformed' });
+    const stream = await agent.stream('Recover after malformed frame', { runId: 'stream-run-malformed' });
 
     expect(await stream.text).toBe('Recovered text');
     expect((await stream.task)?.status.state).toBe('working');
@@ -852,7 +852,7 @@ describe('A2AAgent', () => {
       fetch: fetchMock as typeof fetch,
     });
 
-    const stream = await agent.streamMessageList('Chunked stream', { runId: 'stream-run-chunked' });
+    const stream = await agent.stream('Chunked stream', { runId: 'stream-run-chunked' });
 
     expect(await stream.text).toBe('Hello world');
     expect((await stream.task)?.artifacts).toEqual([
@@ -900,7 +900,7 @@ describe('A2AAgent', () => {
     ]);
     const agent = new A2AAgent({ url: 'https://remote.example.com', fetch: fetchMock as typeof fetch });
 
-    const stream = await agent.streamMessageList('Replace artifact', { runId: 'stream-run-replace' });
+    const stream = await agent.stream('Replace artifact', { runId: 'stream-run-replace' });
 
     expect(await stream.text).toBe('Goodbye');
     expect((await stream.task)?.artifacts).toMatchObject([
@@ -927,7 +927,7 @@ describe('A2AAgent', () => {
     ]);
     const agent = new A2AAgent({ url: 'https://remote.example.com', fetch: fetchMock as typeof fetch });
 
-    await expect(agent.generateMessageList('Continue missing task')).rejects.toMatchObject({
+    await expect(agent.generate('Continue missing task')).rejects.toMatchObject({
       code: -32001,
       message: 'Task not found',
       data: { taskId: 'missing' },
@@ -951,7 +951,7 @@ describe('A2AAgent', () => {
     ]);
     const agent = new A2AAgent({ url: 'https://remote.example.com', fetch: fetchMock as typeof fetch });
 
-    await expect(agent.generateMessageList('Accept null error')).resolves.toMatchObject({ text: 'Successful response' });
+    await expect(agent.generate('Accept null error')).resolves.toMatchObject({ text: 'Successful response' });
   });
 
   it('throws JSON-RPC errors received through SSE', async () => {
@@ -977,7 +977,7 @@ describe('A2AAgent', () => {
       ),
     ]);
     const agent = new A2AAgent({ url: 'https://remote.example.com', fetch: fetchMock as typeof fetch });
-    const stream = await agent.streamMessageList('Stream error');
+    const stream = await agent.stream('Stream error');
     const resultPromises = [stream.text, stream.task, stream.suspendPayload, stream.resumeSchema, stream.getResult()];
 
     await expect(async () => {
@@ -1003,7 +1003,7 @@ describe('A2AAgent', () => {
       retries: 2,
     });
 
-    await expect(agent.generateMessageList('Do not retry 400')).rejects.toMatchObject({
+    await expect(agent.generate('Do not retry 400')).rejects.toMatchObject({
       name: 'MastraA2AError',
       data: {
         status: 400,
@@ -1043,7 +1043,7 @@ describe('A2AAgent', () => {
       fetch: fetchMock as typeof fetch,
     });
 
-    const stream = await agent.streamMessageList('Progressy stream', { runId: 'stream-run-progress' });
+    const stream = await agent.stream('Progressy stream', { runId: 'stream-run-progress' });
 
     expect(await stream.text).toBe('Final answer');
   });
@@ -1088,7 +1088,7 @@ describe('A2AAgent', () => {
       fetch: fetchMock as typeof fetch,
     });
 
-    const initial = await agent.streamMessageList('Start remote work', { runId: 'stream-run-3' });
+    const initial = await agent.stream('Start remote work', { runId: 'stream-run-3' });
     expect(await initial.suspendPayload).toMatchObject({
       taskId: 'task-1',
       waitingForInput: false,
@@ -1136,7 +1136,7 @@ describe('A2AAgent', () => {
       fetch: fetchMock as typeof fetch,
     });
 
-    const output = await agent.generateMessageList('Use A2A v1');
+    const output = await agent.generate('Use A2A v1');
 
     expect(output.text).toBe('V1 delegation complete');
     expect(output.message?.role).toBe('agent');
@@ -1173,7 +1173,7 @@ describe('A2AAgent', () => {
       fetch: fetchMock as typeof fetch,
     });
 
-    const initial = await agent.streamMessageList('Start v1 work', { runId: 'v1-generate-resume' });
+    const initial = await agent.stream('Start v1 work', { runId: 'v1-generate-resume' });
     expect(await initial.suspendPayload).toMatchObject({ taskId: 'v1-task-1', waitingForInput: false });
 
     const resumed = await agent.resumeGenerate(undefined, { runId: 'v1-generate-resume' });
@@ -1225,7 +1225,7 @@ describe('A2AAgent', () => {
       fetch: fetchMock as typeof fetch,
     });
 
-    const initial = await agent.streamMessageList('Start v1 stream', { runId: 'v1-stream-resume' });
+    const initial = await agent.stream('Start v1 stream', { runId: 'v1-stream-resume' });
     expect(await initial.suspendPayload).toMatchObject({ taskId: 'v1-task-1', waitingForInput: false });
 
     const resumed = await agent.resumeStream(undefined, { runId: 'v1-stream-resume' });
@@ -1283,7 +1283,7 @@ describe('A2AAgent', () => {
       fetch: fetchMock as typeof fetch,
     });
 
-    const output = await agent.streamMessageList('Stream over A2A v1');
+    const output = await agent.stream('Stream over A2A v1');
     const eventTypes: string[] = [];
     for await (const event of output.fullStream) {
       eventTypes.push(event.type);

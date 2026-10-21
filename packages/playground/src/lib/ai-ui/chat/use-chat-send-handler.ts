@@ -349,8 +349,6 @@ export const useChatSendHandler = ({
       } catch (error: any) {
         console.error('Error occurred in ChatProvider', error);
         if (error.name === 'AbortError') {
-          // The server has already stored the thread and the aborted run.
-          void refreshThreadList?.();
           return true;
         }
         setStreamErrors(prev => [...prev, buildStreamErrorMessage({ runId: 'thrown', payload: { error } })]);

@@ -105,8 +105,8 @@ export const STREAM_WORKFLOW_BUILDER_ROUTE = createRoute({
         abortSignal,
       };
       const result = structuredOutput
-        ? await agent.streamMessageList(messages, { ...options, structuredOutput })
-        : await agent.streamMessageList(messages, options);
+        ? await agent.stream(messages, { ...options, structuredOutput })
+        : await agent.stream(messages, options);
       return result.fullStream;
     } catch (error) {
       return handleError(error, 'Error streaming workflow builder response');

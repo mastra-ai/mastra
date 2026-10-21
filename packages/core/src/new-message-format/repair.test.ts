@@ -378,11 +378,11 @@ describe('approvals after repair', () => {
 
   it('a new user message instead of an approval answer denies the call as superseded', async () => {
     const { agent, storage, prompts, executed } = setup();
-    const first = await (await agent.stream('Delete /tmp/x', { memory })).result;
+    const first = await (await agent.__streamActions('Delete /tmp/x', { memory })).result;
     const runId = first.actions[0]!.runId!;
 
     await (
-      await agent.stream('Actually, never mind.', { memory })
+      await agent.__streamActions('Actually, never mind.', { memory })
     ).result;
     const store = (await storage.getStore('memory'))!;
     const log = await store.listActions({ threadId: 'th1' });
@@ -393,14 +393,14 @@ describe('approvals after repair', () => {
     });
     expectValidToolPairs(prompts[1]);
     expect(executed()).toBe(0);
-    await expect(agent.approveToolCall({ runId, memory })).rejects.toThrow(/No pending tool approval/);
+    await expect(agent.__approveToolCallActions({ runId, memory })).rejects.toThrow(/No pending tool approval/);
   });
 
   it('an approval answer resumes the call: it stays open and executes', async () => {
     const { agent, storage, executed } = setup();
-    const first = await (await agent.stream('Delete /tmp/x', { memory })).result;
+    const first = await (await agent.__streamActions('Delete /tmp/x', { memory })).result;
     await (
-      await agent.approveToolCall({ runId: first.actions[0]!.runId!, memory })
+      await agent.__approveToolCallActions({ runId: first.actions[0]!.runId!, memory })
     ).result;
 
     const log = await (await storage.getStore('memory'))!.listActions({ threadId: 'th1' });

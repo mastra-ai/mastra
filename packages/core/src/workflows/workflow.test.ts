@@ -580,7 +580,7 @@ describe('Workflow (Default Engine Specifics)', () => {
     }
 
     async function streamAndCollectToolResults(agent: Agent) {
-      const stream = await agent.streamMessageList('Fetch task test-task-123');
+      const stream = await agent.stream('Fetch task test-task-123');
       for await (const _chunk of stream.fullStream) {
         // consume stream to drive execution
       }

@@ -170,7 +170,7 @@ export class AgentBuilder<TTools extends ToolsInput = ToolsInput, TOutput = unde
    * Enhanced stream method with AgentBuilder-specific configuration
    * Overrides the base Agent stream method to provide additional project context
    */
-  async streamMessageList<
+  async stream<
     OUTPUT extends StandardSchemaWithJSON<any, any>,
     T extends InferStandardSchemaOutput<OUTPUT> = InferStandardSchemaOutput<OUTPUT>,
   >(
@@ -179,20 +179,20 @@ export class AgentBuilder<TTools extends ToolsInput = ToolsInput, TOutput = unde
       structuredOutput: PublicStructuredOutputOptions<T>;
     },
   ): Promise<MastraModelOutput<T>>;
-  async streamMessageList<OUTPUT extends {}>(
+  async stream<OUTPUT extends {}>(
     messages: MessageListInput,
     streamOptions: AgentExecutionOptionsBase<OUTPUT> & {
       structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
     },
   ): Promise<MastraModelOutput<OUTPUT>>;
-  async streamMessageList(
+  async stream(
     messages: MessageListInput,
     streamOptions: AgentExecutionOptionsBase<unknown> & {
       structuredOutput?: never;
     },
   ): Promise<MastraModelOutput<TOutput>>;
-  async streamMessageList(messages: MessageListInput): Promise<MastraModelOutput<TOutput>>;
-  async streamMessageList<OUTPUT = TOutput>(
+  async stream(messages: MessageListInput): Promise<MastraModelOutput<TOutput>>;
+  async stream<OUTPUT = TOutput>(
     messages: MessageListInput,
     streamOptions?: AgentExecutionOptionsBase<any> & {
       structuredOutput?: PublicStructuredOutputOptions<any>;
@@ -222,10 +222,10 @@ export class AgentBuilder<TTools extends ToolsInput = ToolsInput, TOutput = unde
       projectPath: this.builderConfig.projectPath,
     });
 
-    return super.streamMessageList(messages, enhancedOptions);
+    return super.stream(messages, enhancedOptions);
   }
 
-  async generateMessageList<
+  async generate<
     OUTPUT extends StandardSchemaWithJSON<any, any>,
     T extends InferStandardSchemaOutput<OUTPUT> = InferStandardSchemaOutput<OUTPUT>,
   >(
@@ -234,20 +234,20 @@ export class AgentBuilder<TTools extends ToolsInput = ToolsInput, TOutput = unde
       structuredOutput: PublicStructuredOutputOptions<T>;
     },
   ): Promise<FullOutput<T>>;
-  async generateMessageList<OUTPUT extends {}>(
+  async generate<OUTPUT extends {}>(
     messages: MessageListInput,
     options: AgentExecutionOptionsBase<OUTPUT> & {
       structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
     },
   ): Promise<FullOutput<OUTPUT>>;
-  async generateMessageList(
+  async generate(
     messages: MessageListInput,
     options: AgentExecutionOptionsBase<unknown> & {
       structuredOutput?: never;
     },
   ): Promise<FullOutput<TOutput>>;
-  async generateMessageList<OUTPUT = TOutput>(messages: MessageListInput): Promise<FullOutput<OUTPUT>>;
-  async generateMessageList<OUTPUT = TOutput>(
+  async generate<OUTPUT = TOutput>(messages: MessageListInput): Promise<FullOutput<OUTPUT>>;
+  async generate<OUTPUT = TOutput>(
     messages: MessageListInput,
     options?: AgentExecutionOptionsBase<any> & {
       structuredOutput?: PublicStructuredOutputOptions<any>;
@@ -277,6 +277,6 @@ export class AgentBuilder<TTools extends ToolsInput = ToolsInput, TOutput = unde
       projectPath: this.builderConfig.projectPath,
     });
 
-    return super.generateMessageList(messages, enhancedOptions);
+    return super.generate(messages, enhancedOptions);
   }
 }

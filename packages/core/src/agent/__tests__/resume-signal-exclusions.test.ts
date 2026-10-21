@@ -74,7 +74,7 @@ describe.each([false, true])('resume signals (durable: %s)', durable => {
         onTestFinished(() => mastra.stopEventEngine());
         const registered = mastra.getAgent('agent');
         expect(registered.constructor.name).toBe(durable ? 'DurableAgent' : 'Agent');
-        const initial = await registered.streamMessageList('hello');
+        const initial = await registered.stream('hello');
         const initialParts = [];
         for await (const part of initial.fullStream) {
           initialParts.push(part);

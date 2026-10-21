@@ -1,4 +1,3 @@
-import { delegateStream } from '../../agent/subagent';
 import { parsePartialJson } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
 import type { Mastra } from '../..';
@@ -946,7 +945,7 @@ export async function createNetworkLoop({
             abortSignal,
             onAbort,
           })
-        : delegateStream(agentForStep)(messagesForSubAgent, {
+        : agentForStep.stream(messagesForSubAgent, {
             requestContext: requestContext,
             runId,
             memory: {

@@ -17,7 +17,7 @@
  * controller session engine — the session engine's debounced save-queue
  * deadlocks a synthetic mid-run fork (flushMessages awaits a queue the suspended
  * parent stream never drains); calling execute() directly exercises the identical
- * tools.ts fork code (clone context -> delete render key -> parentAgent.streamMessageList())
+ * tools.ts fork code (clone context -> delete render key -> parentAgent.stream())
  * and the identical output processor, deterministically.
  *
  * Claim (a) — RENDER: a channel run on the parent agent posts to the fake adapter
@@ -148,7 +148,7 @@ describe('controller-channels instance injection: forked-subagent render-key cle
       model: createTextModel(PARENT_TEXT),
     });
     renderAgent.setChannels(new AgentChannels({ adapters: { discord: adapter } }));
-    const parentRun = await renderAgent.streamMessageList(PARENT_TEXT, { requestContext: parentRunContext });
+    const parentRun = await renderAgent.stream(PARENT_TEXT, { requestContext: parentRunContext });
     for await (const _ of parentRun.fullStream) {
       // drain
     }

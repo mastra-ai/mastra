@@ -1,10 +1,10 @@
 # Action-native agent: behavior catalog
 
-Source of truth for what the old-loop tests in `packages/core/legacy-tests.json` protected. Those files are
-excluded from the default run (`LEGACY_TESTS=1` re-enables them) and are deleted with the old loop.
+Which behaviors of the MessageList loop the action-native path covers. The MessageList loop and its
+tests are unchanged; this catalog tracks what the action path still needs before it can replace it.
 
 Each behavior gets one test, at the cheapest layer that proves it:
-`unit` = pure converter test · `aimock` = `Agent.stream` against AIMock (offline, `scenarios/`) · `run` = `runAgent` + mock v7 model · `e2e` = live model.
+`unit` = pure converter test · `aimock` = the action runner against AIMock (offline, `scenarios/`) · `run` = `runAgent` + mock v7 model · `e2e` = live model.
 
 Status: **covered** (has a new-path test) · **port** (in scope, needs a new-path test) ·
 **later** (feature not on the new path yet) · **drop** (old-loop internals, no equivalent).

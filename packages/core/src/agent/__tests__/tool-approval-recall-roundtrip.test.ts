@@ -142,7 +142,7 @@ async function runApprovalFlow(decision: 'approve' | 'decline', declineReason?: 
   const registered = mastra.getAgent('userAgent');
 
   const threadId = `thread-${decision}${declineReason ? '-custom-reason' : ''}`;
-  const stream = await registered.streamMessageList('Find the user with name - Dero Israel', {
+  const stream = await registered.stream('Find the user with name - Dero Israel', {
     requireToolApproval: true,
     memory: { resource: 'user-1', thread: { id: threadId } },
   });
@@ -157,8 +157,8 @@ async function runApprovalFlow(decision: 'approve' | 'decline', declineReason?: 
 
   const resumeStream =
     decision === 'approve'
-      ? await registered.approveToolCallMessageList({ runId: stream.runId, toolCallId })
-      : await registered.declineToolCallMessageList({ runId: stream.runId, toolCallId, reason: declineReason });
+      ? await registered.approveToolCall({ runId: stream.runId, toolCallId })
+      : await registered.declineToolCall({ runId: stream.runId, toolCallId, reason: declineReason });
 
   for await (const _chunk of resumeStream.fullStream) {
     // drain so the resumed turn persists

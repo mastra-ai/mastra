@@ -2877,7 +2877,7 @@ export class DurableAgent<
    * Stream a response from the agent using durable execution.
    */
   // @ts-expect-error - Intentionally different signature for durable execution
-  async streamMessageList(
+  async stream(
     messages: MessageListInput,
     options?: DurableAgentStreamOptions<TOutput>,
   ): Promise<DurableAgentStreamResult<TOutput>> {
@@ -3509,7 +3509,7 @@ export class DurableAgent<
         resume: (innerRunId: string, innerResumeData: unknown, innerOptions?: DurableAgentResumeOptions<TOutput>) =>
           this.resume(innerRunId, innerResumeData, innerOptions),
         stream: (innerMessages: MessageListInput, innerOptions?: DurableAgentStreamOptions<TOutput>) =>
-          this.streamMessageList(innerMessages, innerOptions),
+          this.stream(innerMessages, innerOptions),
       } as unknown as DurableAgent<any, any, TOutput>;
       return runResumeDurableStreamUntilIdle<TOutput>(
         resolvedOptionsAgent,
@@ -4427,7 +4427,7 @@ export class DurableAgent<
    * Override the inherited `approveToolCall()` to route through the durable
    * `resume()` path.
    */
-  override async approveToolCallMessageList(
+  override async approveToolCall(
     options: { runId: string; toolCallId?: string } & Record<string, any>,
   ): Promise<MastraModelOutput<any>> {
     return this.resumeStream({ approved: true }, options);
@@ -4437,7 +4437,7 @@ export class DurableAgent<
    * Override the inherited `declineToolCall()` to route through the durable
    * `resume()` path.
    */
-  override async declineToolCallMessageList(
+  override async declineToolCall(
     options: { runId: string; toolCallId?: string; reason?: string } & Record<string, any>,
   ): Promise<MastraModelOutput<any>> {
     const { reason, ...resumeOptions } = options;
@@ -4487,7 +4487,7 @@ export class DurableAgent<
    * `resumeGenerate()` to find the snapshot.
    */
   // @ts-expect-error - Intentionally different signature for durable execution
-  async generateMessageList(
+  async generate(
     messages: MessageListInput,
     options?: DurableAgentStreamOptions<TOutput>,
   ): Promise<FullOutput<TOutput>> {
@@ -5851,7 +5851,7 @@ export class DurableAgent<
     streamOptions?: DurableAgentStreamOptions<OUTPUT> & { maxIdleMs?: number },
   ): Promise<DurableAgentStreamResult<OUTPUT>> {
     const { maxIdleMs, ...options } = streamOptions ?? {};
-    return this.streamMessageList(messages, {
+    return this.stream(messages, {
       ...options,
       untilIdle: maxIdleMs === undefined ? true : { maxIdleMs },
     } as DurableAgentStreamOptions<TOutput>) as unknown as Promise<DurableAgentStreamResult<OUTPUT>>;

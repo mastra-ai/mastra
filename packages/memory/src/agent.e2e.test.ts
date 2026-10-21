@@ -80,7 +80,7 @@ const types = (actions: PersistableAction[]) => actions.map(a => a.type);
 describe.skipIf(!process.env.OPENAI_API_KEY)('Agent.stream on actions (LibSQL)', () => {
   it('plain text: deltas, then the closing text; result drains', async () => {
     const mem = newThread();
-    const { streamed, result } = await drain(await agent.stream('Say exactly: hello world', { memory: mem }));
+    const { streamed, result } = await drain(await agent.__streamActions('Say exactly: hello world', { memory: mem }));
 
     const text = streamed.findLast(a => a.type === 'text' && a.role === 'assistant');
     if (text?.type !== 'text') throw new Error('no assistant text');
@@ -98,14 +98,14 @@ describe.skipIf(!process.env.OPENAI_API_KEY)('Agent.stream on actions (LibSQL)',
   });
 
   it('generate() returns the drained result', async () => {
-    const result = await agent.generate('Reply with the single word: pong', { memory: newThread() });
+    const result = await agent.__generateActions('Reply with the single word: pong', { memory: newThread() });
     expect(result.text.toLowerCase()).toContain('pong');
   });
 
   it('tools: tool-input deltas, then tool-call → tool-result', async () => {
     const mem = newThread();
     const { streamed, result } = await drain(
-      await agent.stream('What is the weather in Paris? Use the weather tool.', { memory: mem }),
+      await agent.__streamActions('What is the weather in Paris? Use the weather tool.', { memory: mem }),
     );
 
     const call = streamed.find(a => a.type === 'tool-call');
@@ -134,7 +134,7 @@ describe.skipIf(!process.env.OPENAI_API_KEY)('Agent.stream on actions (LibSQL)',
   it('tool error: stored as tool-error, not a run error', async () => {
     const mem = newThread();
     const { streamed, result } = await drain(
-      await agent.stream('Look up order 42 with the lookupOrder tool.', { memory: mem, maxSteps: 2 }),
+      await agent.__streamActions('Look up order 42 with the lookupOrder tool.', { memory: mem, maxSteps: 2 }),
     );
     const stored = await expectStoredMatchesStream(mem.thread, result.runId, streamed);
     const toolError = stored.find(a => a.type === 'tool-error');
@@ -147,7 +147,7 @@ describe.skipIf(!process.env.OPENAI_API_KEY)('Agent.stream on actions (LibSQL)',
     ['decline', false],
   ] as const)('approval round trip: %s', async (_label, approved) => {
     const mem = newThread();
-    const first = await drain(await agent.stream('Delete the file /tmp/report.txt.', { memory: mem }));
+    const first = await drain(await agent.__streamActions('Delete the file /tmp/report.txt.', { memory: mem }));
 
     const request = first.streamed.find(a => a.type === 'tool-approval-requested');
     if (request?.type !== 'tool-approval-requested') throw new Error('no approval request');
@@ -157,8 +157,8 @@ describe.skipIf(!process.env.OPENAI_API_KEY)('Agent.stream on actions (LibSQL)',
     const resumeOptions = { memory: mem, runId: first.result.runId, toolCallId: request.toolCallId };
     const resumed = await drain(
       approved
-        ? await agent.approveToolCall(resumeOptions)
-        : await agent.declineToolCall({ ...resumeOptions, reason: 'not allowed' }),
+        ? await agent.__approveToolCallActions(resumeOptions)
+        : await agent.__declineToolCallActions({ ...resumeOptions, reason: 'not allowed' }),
     );
 
     const runLog = await memory.listActions({ threadId: mem.thread, runId: first.result.runId });
@@ -177,13 +177,13 @@ describe.skipIf(!process.env.OPENAI_API_KEY)('Agent.stream on actions (LibSQL)',
     }
     expect(runLog.at(-1)?.type).toBe('run-end');
 
-    await expect(agent.approveToolCall(resumeOptions)).rejects.toThrow(/No pending tool approval/);
+    await expect(agent.__approveToolCallActions(resumeOptions)).rejects.toThrow(/No pending tool approval/);
   });
 
   it('recall across runs with mixed input formats (v5 UIMessage, then v7 ModelMessage)', async () => {
     const mem = newThread();
     const first = await drain(
-      await agent.stream(
+      await agent.__streamActions(
         [
           {
             id: 'm1',
@@ -195,7 +195,7 @@ describe.skipIf(!process.env.OPENAI_API_KEY)('Agent.stream on actions (LibSQL)',
       ),
     );
     const second = await drain(
-      await agent.stream(
+      await agent.__streamActions(
         [{ role: 'user', content: [{ type: 'text', text: 'What is my favourite colour? One word.' }] }],
         {
           memory: mem,
@@ -214,7 +214,7 @@ describe.skipIf(!process.env.OPENAI_API_KEY)('Agent.stream on actions (LibSQL)',
   it('abort: ends with run-aborted and stores what streamed', async () => {
     const mem = newThread();
     const controller = new AbortController();
-    const output = await agent.stream('Write a 400 word story about a lighthouse.', {
+    const output = await agent.__streamActions('Write a 400 word story about a lighthouse.', {
       memory: mem,
       abortSignal: controller.signal,
     });

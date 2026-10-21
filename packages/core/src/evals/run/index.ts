@@ -59,27 +59,28 @@ export type EvalTurn = {
 };
 
 type RunEvalsDataItem<TTarget = unknown> = TTarget extends Agent
-  ? | (RunEvalsDataItemBase & { input: AgentInputType; inputs?: never; turns?: never })
-    | (RunEvalsDataItemBase & {
-        input?: AgentInputType;
-        /**
-         * Multi-turn inputs. When provided, each entry is sent sequentially to the agent
-         * on the same thread. Scorers see the accumulated output from all turns.
-         * Only supported for Agent targets (not Workflows).
-         */
-        inputs: AgentInputType[];
-        turns?: never;
-      })
-    | (RunEvalsDataItemBase & {
-        input?: never;
-        inputs?: never;
-        /**
-         * Multi-turn conversation with per-turn assertions. Each turn is sent sequentially
-         * on the same thread; its `gates`/`scorers` evaluate only that turn's output.
-         * Only supported for Agent targets (not Workflows).
-         */
-        turns: EvalTurn[];
-      })
+  ?
+      | (RunEvalsDataItemBase & { input: AgentInputType; inputs?: never; turns?: never })
+      | (RunEvalsDataItemBase & {
+          input?: AgentInputType;
+          /**
+           * Multi-turn inputs. When provided, each entry is sent sequentially to the agent
+           * on the same thread. Scorers see the accumulated output from all turns.
+           * Only supported for Agent targets (not Workflows).
+           */
+          inputs: AgentInputType[];
+          turns?: never;
+        })
+      | (RunEvalsDataItemBase & {
+          input?: never;
+          inputs?: never;
+          /**
+           * Multi-turn conversation with per-turn assertions. Each turn is sent sequentially
+           * on the same thread; its `gates`/`scorers` evaluate only that turn's output.
+           * Only supported for Agent targets (not Workflows).
+           */
+          turns: EvalTurn[];
+        })
   : TTarget extends Workflow<any, any>
     ? RunEvalsDataItemBase & { input: any; inputs?: never; turns?: never }
     : RunEvalsDataItemBase & { input: unknown; inputs?: never; turns?: never };
@@ -236,7 +237,7 @@ export function runEvals<TAgent extends Agent>(config: {
   targetOptions?: RunEvalsAgentOptions;
   onItemComplete?: (params: {
     item: RunEvalsDataItem<TAgent>;
-    targetResult: Awaited<ReturnType<Agent['generateMessageList']>>;
+    targetResult: Awaited<ReturnType<Agent['generate']>>;
     scorerResults: Record<string, any>; // Flat structure: { scorerName: result }
   }) => void | Promise<void>;
   concurrency?: number;
@@ -252,7 +253,7 @@ export function runEvals<TAgent extends Agent>(config: {
   targetOptions?: RunEvalsAgentOptions;
   onItemComplete?: (params: {
     item: RunEvalsDataItem<TAgent>;
-    targetResult: Awaited<ReturnType<Agent['generateMessageList']>>;
+    targetResult: Awaited<ReturnType<Agent['generate']>>;
     scorerResults: Record<string, any>; // Flat structure: { scorerName: result }
   }) => void | Promise<void>;
   concurrency?: number;
@@ -304,7 +305,7 @@ export function runEvals<TAgent extends Agent>(config: {
   targetOptions?: RunEvalsAgentOptions;
   onItemComplete?: (params: {
     item: RunEvalsDataItem<TAgent>;
-    targetResult: Awaited<ReturnType<Agent['generateMessageList']>>;
+    targetResult: Awaited<ReturnType<Agent['generate']>>;
     scorerResults: {
       agent?: Record<string, any>;
       trajectory?: Record<string, any>;
@@ -1047,8 +1048,8 @@ async function executeAgent(agent: Agent, item: RunEvalsDataItem<any>, targetOpt
       ...(memory ? { memory: memory as AgentMemoryOption } : {}),
     };
     const result = structuredOutput
-      ? await agent.generateMessageList(item.input, { ...baseOptions, structuredOutput })
-      : await agent.generateMessageList(item.input, baseOptions);
+      ? await agent.generate(item.input, { ...baseOptions, structuredOutput })
+      : await agent.generate(item.input, baseOptions);
 
     return {
       ...result,
@@ -1133,8 +1134,8 @@ async function runAgentTurns(
         memory: turnMemory,
       };
       result = structuredOutput
-        ? await agent.generateMessageList(turnInput, { ...baseOptions, structuredOutput })
-        : await agent.generateMessageList(turnInput, baseOptions);
+        ? await agent.generate(turnInput, { ...baseOptions, structuredOutput })
+        : await agent.generate(turnInput, baseOptions);
     } else {
       result = await agent.generateLegacy(turnInput, {
         ...restOptions,

@@ -521,8 +521,6 @@ const toolCallActionBodySchema = z.object({
   model: z.string().optional(),
   requestContext: z.record(z.string(), z.unknown()).optional(),
   toolCallId: z.string(),
-  // Action-native runs resume from the thread's stored action log.
-  memory: agentMemoryOptionSchema.optional(),
   format: z.string().optional(),
   providerOptions: z.record(z.string(), z.record(z.string(), jsonValueSchema)).optional(),
   modelSettings: typedPermissive<ModelSettings>(z.unknown()).optional(),

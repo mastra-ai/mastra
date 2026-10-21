@@ -154,7 +154,7 @@ describe('sub-agent delegation auto-resume persistence', () => {
     const memory = { thread: 'thread-1', resource: 'user-1' };
 
     for (const content of ['Start the task', 'Option A', 'Yes']) {
-      const stream = await supervisor.streamMessageList(content, { memory });
+      const stream = await supervisor.stream(content, { memory });
       await stream.consumeStream();
     }
 

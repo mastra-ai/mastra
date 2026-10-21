@@ -202,7 +202,7 @@ export function definePublishLagSuite(name: string, backend: PublishLagBackend) 
     const topicParts = () => backend.topicParts(pubsub, { threadId, resourceId });
     it('reconnecting to a run waiting on approval delivers only the approval', async () => {
       const agent = setup({ durable, delayMs, tool: 'lookup' });
-      await drain(await agent.streamMessageList('go', { memory: memoryOption }));
+      await drain(await agent.stream('go', { memory: memoryOption }));
 
       expect((await join(agent)).map(c => c.type)).toEqual(['thread-history', 'tool-call-approval']);
     });
@@ -217,10 +217,10 @@ export function definePublishLagSuite(name: string, backend: PublishLagBackend) 
         toolGate: toolGate.promise,
         onToolStart: toolStarted.resolve,
       });
-      const first = await agent.streamMessageList('go', { memory: memoryOption });
+      const first = await agent.stream('go', { memory: memoryOption });
       await drain(first);
 
-      const resumed = drain(await agent.approveToolCallMessageList({ runId: first.runId, toolCallId: 'call-1' }));
+      const resumed = drain(await agent.approveToolCall({ runId: first.runId, toolCallId: 'call-1' }));
       await toolStarted.promise;
       const chunks = join(
         agent,
@@ -249,10 +249,10 @@ export function definePublishLagSuite(name: string, backend: PublishLagBackend) 
       const consumed = (async () => {
         for await (const chunk of subscription.stream) types.push(chunk.type);
       })();
-      const first = await agent.streamMessageList('go', { memory: memoryOption });
+      const first = await agent.stream('go', { memory: memoryOption });
       await drain(first);
       await vi.waitFor(() => expect(types).toContain('tool-call-approval'));
-      await drain(await agent.approveToolCallMessageList({ runId: first.runId, toolCallId: 'call-1' }));
+      await drain(await agent.approveToolCall({ runId: first.runId, toolCallId: 'call-1' }));
       await vi.waitFor(() => expect(types.at(-1)).toBe('finish'));
       subscription.unsubscribe();
       await consumed;
@@ -273,7 +273,7 @@ export function definePublishLagSuite(name: string, backend: PublishLagBackend) 
         saveEachStep: true,
         onStepSaved: stepSaved.resolve,
       });
-      const run = drain(await agent.streamMessageList('go', { memory: memoryOption }));
+      const run = drain(await agent.stream('go', { memory: memoryOption }));
       await stepSaved.promise;
 
       const chunks = join(
@@ -305,10 +305,10 @@ export function definePublishLagSuite(name: string, backend: PublishLagBackend) 
         toolGate: toolGate.promise,
         onToolStart: toolStarted.resolve,
       });
-      const first = await agent.streamMessageList('go', { memory: memoryOption });
+      const first = await agent.stream('go', { memory: memoryOption });
       await drain(first);
 
-      const resumed = drain(await agent.approveToolCallMessageList({ runId: first.runId, toolCallId: 'call-1' }));
+      const resumed = drain(await agent.approveToolCall({ runId: first.runId, toolCallId: 'call-1' }));
       await toolStarted.promise;
       const subscription = await agent.subscribeToThread({ threadId, resourceId, withInitialHistory: true });
       const chunks: any[] = [];
@@ -336,7 +336,7 @@ export function definePublishLagSuite(name: string, backend: PublishLagBackend) 
         saveEachStep: true,
         onStepSaved: stepSaved.resolve,
       });
-      const run = drain(await agent.streamMessageList('go', { memory: memoryOption }));
+      const run = drain(await agent.stream('go', { memory: memoryOption }));
       await stepSaved.promise;
       await vi.waitFor(async () => {
         const parts = await topicParts();
@@ -367,7 +367,7 @@ export function definePublishLagSuite(name: string, backend: PublishLagBackend) 
         await publish(topic, event);
         if (event.data?.type === 'stream-part') published.push(event.data.part.type);
       };
-      const run = drain(await agent.streamMessageList('go', { memory: memoryOption, savePerStep: true }));
+      const run = drain(await agent.stream('go', { memory: memoryOption, savePerStep: true }));
 
       await step2Started.promise;
       await vi.waitFor(() => expect(published).toContain('step-finish'));

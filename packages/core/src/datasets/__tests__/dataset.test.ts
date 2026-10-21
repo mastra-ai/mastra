@@ -508,7 +508,7 @@ describe('Dataset', () => {
     await new Promise(r => setTimeout(r, 500));
   });
 
-  it('startExperimentAsync forwards requestContext to agent.generateMessageList()', async () => {
+  it('startExperimentAsync forwards requestContext to agent.generate()', async () => {
     await ds.addItem({ input: { prompt: 'Hello' } });
 
     const mockAgent = createMockAgent('Response');

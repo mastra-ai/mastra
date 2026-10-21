@@ -461,7 +461,8 @@ export type ToolOutputDeltaAction = ActionBase &
 // Signals
 
 type SignalContent =
-  { type: 'text'; text: string } | { type: 'file'; data: string; mediaType: string; filename?: string };
+  | { type: 'text'; text: string }
+  | { type: 'file'; data: string; mediaType: string; filename?: string };
 
 type SignalBase = ActionBase & {
   type: 'signal';

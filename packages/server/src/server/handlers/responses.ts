@@ -44,7 +44,7 @@ import type {
 } from './responses.storage';
 import { enforceThreadAccess, getEffectiveResourceId, getEffectiveThreadId } from './utils';
 
-type AgentExecutionInput = Parameters<Agent['generateMessageList']>[0];
+type AgentExecutionInput = Parameters<Agent['generate']>[0];
 type ResolvedAgentModel = Awaited<ReturnType<Agent['getModel']>>;
 
 type ResponseExecutionResult = {
@@ -389,7 +389,7 @@ async function executeGenerate({
     } as never)) as ResponseExecutionResult;
   }
 
-  return (await agent.generateMessageList(input, commonOptions as never)) as ResponseExecutionResult;
+  return (await agent.generate(input, commonOptions as never)) as ResponseExecutionResult;
 }
 
 /**
@@ -455,7 +455,7 @@ async function executeStream({
     } as never)) as ResponseStreamResult;
   }
 
-  return (await agent.streamMessageList(input, commonOptions as never)) as ResponseStreamResult;
+  return (await agent.stream(input, commonOptions as never)) as ResponseStreamResult;
 }
 
 async function resolveUsage(result: ResponseExecutionResult | ResponseStreamResult): Promise<UsageLike> {

@@ -77,7 +77,9 @@ describe('agent without Memory', () => {
     const { agent, storage, executed } = setup();
     expect(await agent.getMemory()).toBeUndefined();
 
-    const first = await (await agent.stream('Delete /tmp/x', { memory: { thread: 'th1', resource: 'u1' } })).result;
+    const first = await (
+      await agent.__streamActions('Delete /tmp/x', { memory: { thread: 'th1', resource: 'u1' } })
+    ).result;
     const store = (await storage.getStore('memory'))!;
     expect(await store.getThreadById({ threadId: 'th1' })).toMatchObject({ id: 'th1', resourceId: 'u1' });
     const pending = (await store.listActions({ threadId: 'th1' })).find(a => a.type === 'tool-approval-requested');
@@ -86,7 +88,7 @@ describe('agent without Memory', () => {
 
     const runId = first.actions[0]!.runId!;
     await (
-      await agent.approveToolCall({ runId, memory: { thread: 'th1', resource: 'u1' } })
+      await agent.__approveToolCallActions({ runId, memory: { thread: 'th1', resource: 'u1' } })
     ).result;
     expect(executed()).toBe(1);
     const log = await store.listActions({ threadId: 'th1' });
@@ -102,20 +104,22 @@ describe('agent without Memory', () => {
     store.listActions = MemoryStorage.prototype.listActions;
     store.getLatestActionId = MemoryStorage.prototype.getLatestActionId;
 
-    const out = await (await agent.stream('Delete /tmp/x', { memory: { thread: 'th1', resource: 'u1' } })).result;
+    const out = await (
+      await agent.__streamActions('Delete /tmp/x', { memory: { thread: 'th1', resource: 'u1' } })
+    ).result;
     expect(out.actions.some(a => a.type === 'tool-approval-requested')).toBe(true);
     expect(await store.getThreadById({ threadId: 'th1' })).toBeNull();
   });
 
   it('falls back to the runId as the thread and still declines from the log', async () => {
     const { agent, storage, executed } = setup();
-    const first = await (await agent.stream('Delete /tmp/x')).result;
+    const first = await (await agent.__streamActions('Delete /tmp/x')).result;
     const runId = first.actions[0]!.runId!;
     const store = (await storage.getStore('memory'))!;
     expect(await store.getThreadById({ threadId: runId })).toMatchObject({ id: runId, resourceId: runId });
 
     await (
-      await agent.declineToolCall({ runId, reason: 'no' })
+      await agent.__declineToolCallActions({ runId, reason: 'no' })
     ).result;
     expect(executed()).toBe(0);
     const log = await store.listActions({ threadId: runId });

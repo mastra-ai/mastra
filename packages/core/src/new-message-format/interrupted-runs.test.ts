@@ -67,13 +67,13 @@ describe('the start gate', () => {
     const store = (await storage.getStore('memory'))!;
     const memory = { thread: 'th1', resource: 'u1' };
 
-    const first = await (await agent.stream('Delete /x', { memory })).result;
+    const first = await (await agent.__streamActions('Delete /x', { memory })).result;
     const save = store.saveActions.bind(store);
     store.saveActions = async args => {
       if (hasStarted(args.actions)) throw new Error('write failed');
       return save(args);
     };
-    await (await agent.approveToolCall({ runId: first.actions[0]!.runId!, memory })).result.catch(() => {});
+    await (await agent.__approveToolCallActions({ runId: first.actions[0]!.runId!, memory })).result.catch(() => {});
 
     expect(executed).toBe(0);
     const log = await store.listActions({ threadId: 'th1' });
@@ -253,10 +253,10 @@ describe('two pending approvals in one run', () => {
     const store = (await storage.getStore('memory'))!;
     const memory = { thread: 'th1', resource: 'u1' };
 
-    const first = await (await agent.stream('Delete /a and /b', { memory })).result;
+    const first = await (await agent.__streamActions('Delete /a and /b', { memory })).result;
     const runId = first.actions[0]!.runId!;
     await (
-      await agent.approveToolCall({ runId, memory })
+      await agent.__approveToolCallActions({ runId, memory })
     ).result;
     const between = await store.listActions({ threadId: 'th1' });
     // The run waits for the other answer: nothing ran, and the wait is not an interruption.
@@ -265,7 +265,7 @@ describe('two pending approvals in one run', () => {
     expect(between.filter(a => a.type === 'run-end').map(a => a.finishReason)).toEqual(['tool-calls']);
 
     await (
-      await agent.approveToolCall({ runId, memory })
+      await agent.__approveToolCallActions({ runId, memory })
     ).result;
     expect([...executed].sort()).toEqual(['/a', '/b']);
     const log = await store.listActions({ threadId: 'th1' });
@@ -304,10 +304,10 @@ describe('two pending approvals in one run', () => {
     const store = (await storage.getStore('memory'))!;
     const memory = { thread: 'th1', resource: 'u1' };
 
-    const first = await (await agent.stream('Delete /a and /b', { memory })).result;
+    const first = await (await agent.__streamActions('Delete /a and /b', { memory })).result;
     const runId = first.actions[0]!.runId!;
     await (
-      await agent.approveToolCall({ runId, toolCallId: 'c1', memory })
+      await agent.__approveToolCallActions({ runId, toolCallId: 'c1', memory })
     ).result;
     // What an earlier resume leaves when the process dies while c1 runs: c1's tool-started, no outcome.
     const nextId = await createActionIdGenerator(store, 'th1');
@@ -327,7 +327,7 @@ describe('two pending approvals in one run', () => {
     });
 
     await (
-      await agent.approveToolCall({ runId, toolCallId: 'c2', memory })
+      await agent.__approveToolCallActions({ runId, toolCallId: 'c2', memory })
     ).result;
     const log = await store.listActions({ threadId: 'th1' });
     const c1Errors = log.filter(a => a.type === 'tool-error' && a.toolCallId === 'c1');
@@ -365,7 +365,7 @@ describe('two pending approvals in one run', () => {
     const store = (await storage.getStore('memory'))!;
     const memory = { thread: 'th1', resource: 'u1' };
 
-    const first = await (await agent.stream('Delete /a and /b', { memory })).result;
+    const first = await (await agent.__streamActions('Delete /a and /b', { memory })).result;
     const runId = first.actions[0]!.runId!;
     const request = first.actions.find(a => a.type === 'tool-approval-requested' && a.toolCallId === 'c1')!;
     // The client disconnects as soon as it sees its answer acknowledged.
@@ -392,7 +392,7 @@ describe('two pending approvals in one run', () => {
     expect(between.filter(a => a.type === 'run-end').map(a => a.finishReason)).toEqual(['tool-calls']);
 
     await (
-      await agent.approveToolCall({ runId, toolCallId: 'c2', memory })
+      await agent.__approveToolCallActions({ runId, toolCallId: 'c2', memory })
     ).result;
     expect([...executed].sort()).toEqual(['/a', '/b']);
     const log = await store.listActions({ threadId: 'th1' });

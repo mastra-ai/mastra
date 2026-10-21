@@ -194,9 +194,9 @@ async function runDelegation({
   };
 
   if (method === 'generate') {
-    await supervisor.generateMessageList(DELEGATION_PROMPT, options);
+    await supervisor.generate(DELEGATION_PROMPT, options);
   } else {
-    const streamResult = await supervisor.streamMessageList(DELEGATION_PROMPT, options);
+    const streamResult = await supervisor.stream(DELEGATION_PROMPT, options);
     for await (const _chunk of streamResult.fullStream) {
       // drain
     }
@@ -295,7 +295,7 @@ describe('sub-agent delegation with own memory config (fallback input path)', ()
     });
 
     let delegationThreadId: string | undefined;
-    const result = await supervisor.generateMessageList(DELEGATION_PROMPT, {
+    const result = await supervisor.generate(DELEGATION_PROMPT, {
       maxSteps: 3,
       memory: { resource: globalThis.crypto.randomUUID(), thread: globalThis.crypto.randomUUID() },
       delegation: {

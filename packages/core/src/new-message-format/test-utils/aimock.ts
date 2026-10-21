@@ -73,7 +73,7 @@ export async function runScenario(
   options: ActionRunOptions & { thread?: string } = {},
 ): Promise<ActionScenarioResult> {
   const thread = options.thread ?? `thread-${++counter}`;
-  const output = await agent.stream(input, { ...options, memory: { thread, resource: 'user-1' } });
+  const output = await agent.__streamActions(input, { ...options, memory: { thread, resource: 'user-1' } });
   const result = await drainRun(output, memory, thread);
   expectStorageInvariant(result);
   return result;

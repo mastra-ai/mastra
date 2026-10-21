@@ -63,7 +63,7 @@ export async function runStreamUntilIdle<OUTPUT>(
     agent,
     streamOptions,
     deps,
-    opts => agent.streamMessageList(messages, opts as any) as Promise<MastraModelOutput<OUTPUT>>,
+    opts => agent.stream(messages, opts as any) as Promise<MastraModelOutput<OUTPUT>>,
     opts => (agent.stream as any)([], opts) as Promise<{ fullStream: ReadableStream<any> }>,
     (first, ctx) => {
       // No ctx means no bgManager / no memory — fall through without wrapping.

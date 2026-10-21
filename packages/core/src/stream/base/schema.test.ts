@@ -11,7 +11,7 @@
  * const schema = z.object({
  *   rate: z.string().nullish().default(""),
  * });
- * const result = await agent.generateMessageList(prompt, { structuredOutput: { schema } });
+ * const result = await agent.generate(prompt, { structuredOutput: { schema } });
  * // Error: Transforms cannot be represented in JSON Schema
  * ```
  */

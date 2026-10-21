@@ -1187,7 +1187,7 @@ Start by listing your tasks and work through them systematically!
       const resolvedModel = await agentBuilder.getModel();
       const isSupported = isSupportedLanguageModel(resolvedModel);
 
-      const result = isSupported ? await agentBuilder.streamMessageList(prompt) : await agentBuilder.streamLegacy(prompt);
+      const result = isSupported ? await agentBuilder.stream(prompt) : await agentBuilder.streamLegacy(prompt);
 
       // Extract actual conflict resolution details from agent execution
       const actualResolutions: Array<{

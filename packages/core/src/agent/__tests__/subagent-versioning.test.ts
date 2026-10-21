@@ -196,7 +196,7 @@ describe('Sub-agent version resolution', () => {
     // Spy on resolveVersionedAgent to verify it's called with the correct selector
     const resolveSpy = vi.spyOn(mastra, 'resolveVersionedAgent').mockResolvedValue(sub);
 
-    await supervisor.generateMessageList('Do something', { maxSteps: 3 });
+    await supervisor.generate('Do something', { maxSteps: 3 });
 
     expect(resolveSpy).toHaveBeenCalledWith(sub, { versionId: 'v42' });
   });
@@ -227,7 +227,7 @@ describe('Sub-agent version resolution', () => {
 
     const resolveSpy = vi.spyOn(mastra, 'resolveVersionedAgent').mockResolvedValue(sub);
 
-    await supervisor.generateMessageList('Do something', {
+    await supervisor.generate('Do something', {
       maxSteps: 3,
       versions: callSiteVersions,
     });
@@ -261,7 +261,7 @@ describe('Sub-agent version resolution', () => {
 
     const resolveSpy = vi.spyOn(mastra, 'resolveVersionedAgent');
 
-    await supervisor.generateMessageList('Do something', { maxSteps: 3 });
+    await supervisor.generate('Do something', { maxSteps: 3 });
 
     expect(resolveSpy).not.toHaveBeenCalled();
   });
@@ -294,7 +294,7 @@ describe('Sub-agent version resolution', () => {
     vi.spyOn(mastra, 'resolveVersionedAgent').mockRejectedValue(new Error('Editor not configured'));
 
     // Should not throw — falls back to default agent
-    const result = await supervisor.generateMessageList('Do something', { maxSteps: 3 });
+    const result = await supervisor.generate('Do something', { maxSteps: 3 });
     expect(result.text).toBeDefined();
 
     // Verify the code-defined sub-agent was invoked (fallback)
@@ -337,7 +337,7 @@ describe('Sub-agent version resolution', () => {
 
     vi.spyOn(mastra, 'resolveVersionedAgent').mockResolvedValue(versionedSub);
 
-    await supervisor.generateMessageList('Do something', { maxSteps: 3 });
+    await supervisor.generate('Do something', { maxSteps: 3 });
 
     // The sub-agent should have been resolved with the versioned model
     expect(mastra.resolveVersionedAgent).toHaveBeenCalledWith(sub, { versionId: 'v99' });
@@ -401,7 +401,7 @@ describe('Sub-agent version resolution', () => {
 
     const resolveSpy = vi.spyOn(mastra, 'resolveVersionedAgent').mockResolvedValue(sub);
 
-    await supervisor.generateMessageList('Do something', { maxSteps: 3 });
+    await supervisor.generate('Do something', { maxSteps: 3 });
 
     expect(resolveSpy).toHaveBeenCalledWith(sub, { status: 'draft' });
   });
@@ -431,7 +431,7 @@ describe('Sub-agent version resolution', () => {
 
     const resolveSpy = vi.spyOn(mastra, 'resolveVersionedAgent').mockResolvedValue(sub);
 
-    await supervisor.generateMessageList('Do something', { maxSteps: 3 });
+    await supervisor.generate('Do something', { maxSteps: 3 });
 
     expect(resolveSpy).toHaveBeenCalledWith(sub, { status: 'draft' });
   });
@@ -464,7 +464,7 @@ describe('Sub-agent version resolution', () => {
 
     const resolveSpy = vi.spyOn(mastra, 'resolveVersionedAgent').mockResolvedValue(sub);
 
-    await supervisor.generateMessageList('Do something', { maxSteps: 3 });
+    await supervisor.generate('Do something', { maxSteps: 3 });
 
     // Explicit per-agent override wins over defaultStatus
     expect(resolveSpy).toHaveBeenCalledWith(sub, { versionId: 'v42' });
@@ -495,7 +495,7 @@ describe('Sub-agent version resolution', () => {
 
     const resolveSpy = vi.spyOn(mastra, 'resolveVersionedAgent').mockResolvedValue(sub);
 
-    await supervisor.generateMessageList('Do something', { maxSteps: 3, requestContext: ctx });
+    await supervisor.generate('Do something', { maxSteps: 3, requestContext: ctx });
 
     expect(resolveSpy).toHaveBeenCalledWith(sub, { status: 'published' });
   });
@@ -530,7 +530,7 @@ describe('Sub-agent version resolution', () => {
     const ctx = new RequestContext();
     ctx.set(MASTRA_VERSIONS_KEY, presetVersions);
 
-    await supervisor.generateMessageList('Do something', {
+    await supervisor.generate('Do something', {
       maxSteps: 3,
       requestContext: ctx,
     });

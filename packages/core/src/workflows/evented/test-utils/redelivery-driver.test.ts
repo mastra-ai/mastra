@@ -373,7 +373,7 @@ describe('RedeliveryDriver', () => {
 
     await withMastra(driver, { agents: { 'driver-agent': agent }, storage: new InMemoryStore() }, async () => {
       driver.assertEvented(agent.getWorkflow() as { engineType?: string });
-      const { output, cleanup } = await agent.streamMessageList('hi');
+      const { output, cleanup } = await agent.stream('hi');
       try {
         const consumed = output.consumeStream();
         await started.promise;

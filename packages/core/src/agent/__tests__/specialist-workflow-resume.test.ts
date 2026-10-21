@@ -202,7 +202,7 @@ describe.each<SpecialistMemoryMode>(['none', 'own-memory', 'own-memory-with-defa
       });
       const sup = mastra.getAgent('supervisor');
 
-      const stream = await sup.streamMessageList('Handle the widget intake.', {
+      const stream = await sup.stream('Handle the widget intake.', {
         maxSteps: 6,
         memory: { resource: 'r1', thread: 'thread-1' },
       });

@@ -367,7 +367,7 @@ export class AgentChannels {
     requestContext: RequestContext;
     memory: { thread: string; resource: string };
   }): Promise<void> {
-    const resumed = await this.agent.approveToolCallMessageList({
+    const resumed = await this.agent.approveToolCall({
       runId: args.runId,
       toolCallId: args.toolCallId,
       requestContext: args.requestContext,
@@ -389,7 +389,7 @@ export class AgentChannels {
     requestContext: RequestContext;
     memory: { thread: string; resource: string };
   }): Promise<void> {
-    const resumed = await this.agent.declineToolCallMessageList({
+    const resumed = await this.agent.declineToolCall({
       runId: args.runId,
       toolCallId: args.toolCallId,
       requestContext: args.requestContext,
@@ -704,7 +704,8 @@ export class AgentChannels {
                               m =>
                                 (
                                   m.content?.providerMetadata?.mastra as
-                                    { channels?: Record<string, { author?: { userId?: string } }> } | undefined
+                                    | { channels?: Record<string, { author?: { userId?: string } }> }
+                                    | undefined
                                 )?.channels?.[platform]?.author?.userId,
                             )
                             .filter((id): id is string => !!id),

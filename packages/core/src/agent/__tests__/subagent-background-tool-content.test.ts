@@ -128,7 +128,7 @@ describe('sub-agent background dispatch tool content', () => {
     });
     mastra.addAgent(supervisor, 'supervisor');
 
-    const stream = await supervisor.streamMessageList('Please delegate.', { maxSteps: 3 });
+    const stream = await supervisor.stream('Please delegate.', { maxSteps: 3 });
     for await (const _ of stream.fullStream) {
       // drain
     }
@@ -155,7 +155,7 @@ describe('sub-agent background dispatch tool content', () => {
     });
     mastra.addAgent(supervisor, 'supervisor-sync');
 
-    const stream = await supervisor.streamMessageList('Please delegate.', { maxSteps: 3 });
+    const stream = await supervisor.stream('Please delegate.', { maxSteps: 3 });
     for await (const _ of stream.fullStream) {
       // drain
     }

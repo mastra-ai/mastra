@@ -1115,13 +1115,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
         },
       } as MastraMessagePart;
 
-      const deniedMessage = withParts(targetMessage, parts);
-      const meta = deniedMessage.content.metadata as MastraDBMessageMetadata | undefined;
-      if (meta?.requireApprovalMetadata?.[chunk.payload.toolCallId]) {
-        const { [chunk.payload.toolCallId]: _answered, ...stillPending } = meta.requireApprovalMetadata;
-        deniedMessage.content = { ...deniedMessage.content, metadata: { ...meta, requireApprovalMetadata: stillPending } };
-      }
-      return replaceAt(result, messageIndex, deniedMessage);
+      return replaceAt(result, messageIndex, withParts(targetMessage, parts));
     }
 
     case 'tool-error':
@@ -1488,7 +1482,6 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
                 toolCallId: chunk.payload.toolCallId,
                 toolName: chunk.payload.toolName,
                 args: chunk.payload.args as Record<string, unknown>,
-                runId: chunk.runId,
               },
             },
           },

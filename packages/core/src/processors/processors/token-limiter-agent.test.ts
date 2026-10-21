@@ -113,7 +113,7 @@ describe('TokenLimiterProcessor through an agent', () => {
         inputProcessors: [new ToolCallFilter({ exclude: ['listRules'] }), new TokenLimiterProcessor(8000)],
       });
 
-      await agent.generateMessageList(issueHistory());
+      await agent.generate(issueHistory());
 
       const prompt = JSON.stringify(prompts.at(-1));
       expect(prompt).toContain(ANSWER);
@@ -130,7 +130,7 @@ describe('TokenLimiterProcessor through an agent', () => {
         inputProcessors: [new ToolCallFilter({ exclude: ['listRules'] }), new TokenLimiterProcessor(8000)],
       });
 
-      const result = await agent.streamMessageList(issueHistory());
+      const result = await agent.stream(issueHistory());
       await result.consumeStream();
 
       const prompt = JSON.stringify(prompts.at(-1));
@@ -175,7 +175,7 @@ describe('TokenLimiterProcessor through an agent', () => {
         inputProcessors: () => [new ToolCallFilter({ exclude: ['listRules'] }), new TokenLimiterProcessor(8000)],
       });
 
-      await agent.generateMessageList(issueHistory());
+      await agent.generate(issueHistory());
 
       const prompt = JSON.stringify(prompts.at(-1));
       expect(prompt).toContain(ANSWER);
@@ -194,7 +194,7 @@ describe('TokenLimiterProcessor through an agent', () => {
         inputProcessors: [new TokenLimiterProcessor(500)],
       });
 
-      await agent.generateMessageList(longHistory());
+      await agent.generate(longHistory());
 
       const count = nonSystemCount(prompts.at(-1));
       expect(count).toBeGreaterThan(0);
@@ -247,7 +247,7 @@ describe('TokenLimiterProcessor through an agent', () => {
         inputProcessors: [workflow],
       });
 
-      await agent.generateMessageList(longHistory());
+      await agent.generate(longHistory());
 
       const count = nonSystemCount(prompts.at(-1));
       expect(count).toBeGreaterThan(0);

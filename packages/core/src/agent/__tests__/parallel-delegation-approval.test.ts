@@ -185,7 +185,7 @@ describe('parallel sub-agent delegation (suspend/resume)', () => {
     processedOrders.length = 0;
     const supervisor = buildSupervisorAgent();
 
-    const stream = await supervisor.streamMessageList('Process both orders in parallel.', {
+    const stream = await supervisor.stream('Process both orders in parallel.', {
       maxSteps: 6,
       memory: { resource: 'rep_approval', thread: 'thread-emit' },
     });
@@ -205,7 +205,7 @@ describe('parallel sub-agent delegation (suspend/resume)', () => {
     processedOrders.length = 0;
     const supervisor = buildSupervisorAgent();
 
-    const stream = await supervisor.streamMessageList('Process both orders in parallel.', {
+    const stream = await supervisor.stream('Process both orders in parallel.', {
       maxSteps: 6,
       memory: { resource: 'rep_approval', thread: 'thread-wrong-target' },
     });
@@ -215,7 +215,7 @@ describe('parallel sub-agent delegation (suspend/resume)', () => {
 
     let resumeError: unknown;
     try {
-      const resumed = await supervisor.approveToolCallMessageList({
+      const resumed = await supervisor.approveToolCall({
         runId: stream.runId,
         toolCallId: bogusToolCallId,
       });
@@ -240,7 +240,7 @@ describe('parallel sub-agent delegation (suspend/resume)', () => {
     processedOrders.length = 0;
     const supervisor = buildSupervisorAgent();
 
-    const stream = await supervisor.streamMessageList('Process both orders in parallel.', {
+    const stream = await supervisor.stream('Process both orders in parallel.', {
       maxSteps: 6,
       memory: { resource: 'rep_approval', thread: 'thread-surface' },
     });
@@ -261,7 +261,7 @@ describe('parallel sub-agent delegation (suspend/resume)', () => {
     processedOrders.length = 0;
     const supervisor = buildSupervisorAgent();
 
-    const stream = await supervisor.streamMessageList('Process both orders in parallel.', {
+    const stream = await supervisor.stream('Process both orders in parallel.', {
       maxSteps: 6,
       memory: { resource: 'rep_approval', thread: 'thread-out-of-order' },
     });
@@ -275,7 +275,7 @@ describe('parallel sub-agent delegation (suspend/resume)', () => {
     const outOfOrder = [...approvals].reverse();
     const resumeErrors: string[] = [];
     for (const a of outOfOrder) {
-      const resumed = await supervisor.approveToolCallMessageList({ runId, toolCallId: a.toolCallId });
+      const resumed = await supervisor.approveToolCall({ runId, toolCallId: a.toolCallId });
       for await (const chunk of resumed.fullStream) {
         if (chunk.type === 'tool-error') resumeErrors.push(JSON.stringify((chunk as any).payload ?? chunk));
       }
@@ -290,7 +290,7 @@ describe('parallel sub-agent delegation (suspend/resume)', () => {
     processedOrders.length = 0;
     const supervisor = buildSupervisorAgent();
 
-    const stream = await supervisor.streamMessageList('Process both orders in parallel.', {
+    const stream = await supervisor.stream('Process both orders in parallel.', {
       maxSteps: 6,
       memory: { resource: 'rep_approval', thread: 'thread-resume' },
     });
@@ -302,7 +302,7 @@ describe('parallel sub-agent delegation (suspend/resume)', () => {
     // Approve each pending tool call by id, one at a time.
     const resumeErrors: string[] = [];
     for (const a of approvals) {
-      const resumed = await supervisor.approveToolCallMessageList({ runId, toolCallId: a.toolCallId });
+      const resumed = await supervisor.approveToolCall({ runId, toolCallId: a.toolCallId });
       for await (const chunk of resumed.fullStream) {
         if (chunk.type === 'tool-error') resumeErrors.push(JSON.stringify((chunk as any).payload ?? chunk));
       }
@@ -337,7 +337,7 @@ describe('parallel sub-agent delegation (suspend/resume)', () => {
     >();
     {
       const supervisor = buildSupervisorAgent(storage);
-      const stream = await supervisor.streamMessageList('Process both orders in parallel.', {
+      const stream = await supervisor.stream('Process both orders in parallel.', {
         maxSteps: 6,
         memory: { resource: 'rep_approval', thread: 'thread-reload' },
       });

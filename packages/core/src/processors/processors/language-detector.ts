@@ -318,7 +318,7 @@ export class LanguageDetector implements Processor<'language-detector'> {
 
       let result: LanguageDetectionResult;
       if (isSupportedLanguageModel(model)) {
-        const response = await this.detectionAgent.generateMessageList(prompt, {
+        const response = await this.detectionAgent.generate(prompt, {
           structuredOutput: {
             schema,
           },

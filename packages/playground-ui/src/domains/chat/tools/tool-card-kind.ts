@@ -50,7 +50,7 @@ export const isWorkflowCall = (metadata: MessageMetadata | undefined, toolName: 
   isNetworkFrom(metadata, 'WORKFLOW') || toolName.startsWith('workflow-');
 
 export const isSettledState = (state: string | undefined): boolean =>
-  state === 'output-available' || state === 'output-denied' || state === 'result';
+  state === 'output-available' || state === 'result';
 
 /** A call neither settled nor carried by a live run reads as idle, so stale history never shimmers. */
 export function badgeStatus(state: string | undefined, chatRunning: boolean): ActivityStatus {

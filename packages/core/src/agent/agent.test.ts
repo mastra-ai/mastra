@@ -2970,7 +2970,7 @@ describe('sub-agent tool input schema coercion', () => {
       agents: { child },
     });
 
-    const stream = await supervisor.streamMessageList('delegate please');
+    const stream = await supervisor.stream('delegate please');
     const chunks: any[] = [];
     for await (const c of stream.fullStream) chunks.push(c);
 

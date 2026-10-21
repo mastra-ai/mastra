@@ -28,9 +28,7 @@ const agent = new Agent({
 const gc = (globalThis as typeof globalThis & { gc?: () => void }).gc;
 if (!gc) throw new Error('GC is not exposed');
 
-let output: Awaited<ReturnType<typeof agent.streamMessageList>> | undefined = await agent.streamMessageList('hello', {
-  runId,
-});
+let output: Awaited<ReturnType<typeof agent.stream>> | undefined = await agent.stream('hello', { runId });
 let outputCollected = false;
 const outputFinalizer = new FinalizationRegistry(() => {
   outputCollected = true;

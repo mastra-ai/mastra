@@ -189,9 +189,9 @@ describe('P0 Regression', () => {
     });
   });
 
-  // T-D: AbortSignal forwarded to agent.generateMessageList()
+  // T-D: AbortSignal forwarded to agent.generate()
   describe('Bug D: AbortSignal forwarded to agent', () => {
-    it('passes abortSignal to agent.generateMessageList() options', async () => {
+    it('passes abortSignal to agent.generate() options', async () => {
       await setupDataset(1);
 
       const generateSpy = vi.fn().mockResolvedValue({ text: 'ok' });

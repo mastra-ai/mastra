@@ -43,7 +43,7 @@ describe('ModelRouter - Custom Provider Support', () => {
         },
       });
 
-      await agent.generateMessageList('test', { maxSteps: 1 });
+      await agent.generate('test', { maxSteps: 1 });
 
       // Verify createOpenAICompatible was called with the right params
       expect(createOpenAICompatible).toHaveBeenCalledWith({
@@ -171,7 +171,7 @@ describe('ModelRouter - Custom Provider Support', () => {
       });
 
       // With the mock in place, this should succeed without any errors
-      const result = await agent.generateMessageList('test', { maxSteps: 1 });
+      const result = await agent.generate('test', { maxSteps: 1 });
       expect(result).toBeDefined();
     });
   });
@@ -192,7 +192,7 @@ describe('ModelRouter - Custom Provider Support', () => {
 
       // The error should happen when trying to use the agent
       await expect(async () => {
-        await agent.generateMessageList('test');
+        await agent.generate('test');
       }).rejects.toThrow(/Could not find config for provider unknown-provider/);
     });
 
@@ -206,7 +206,7 @@ describe('ModelRouter - Custom Provider Support', () => {
 
       // The error should happen when trying to use the agent
       await expect(async () => {
-        await agent.generateMessageList('test');
+        await agent.generate('test');
       }).rejects.toThrow(/Could not find config for provider unknown-provider/);
     });
   });
@@ -234,7 +234,7 @@ describe('ModelRouter - Custom Provider Support', () => {
         },
       });
 
-      await agent.generateMessageList('hi', { maxSteps: 1, modelSettings: { temperature: 0.7, topP: 0.9 } });
+      await agent.generate('hi', { maxSteps: 1, modelSettings: { temperature: 0.7, topP: 0.9 } });
 
       expect(receivedOptions).toHaveLength(1);
       expect(receivedOptions[0].temperature).toBeUndefined();
@@ -263,7 +263,7 @@ describe('ModelRouter - Custom Provider Support', () => {
         },
       });
 
-      await agent.generateMessageList('hi', { maxSteps: 1, modelSettings: { temperature: 0.7 } });
+      await agent.generate('hi', { maxSteps: 1, modelSettings: { temperature: 0.7 } });
 
       expect(receivedOptions).toHaveLength(1);
       expect(receivedOptions[0].temperature).toBe(0.7);
@@ -291,7 +291,7 @@ describe('ModelRouter - Custom Provider Support', () => {
         },
       });
 
-      const result = await agent.streamMessageList('hi', { maxSteps: 1, modelSettings: { temperature: 0.7, topK: 40 } });
+      const result = await agent.stream('hi', { maxSteps: 1, modelSettings: { temperature: 0.7, topK: 40 } });
       await result.text;
 
       expect(receivedOptions).toHaveLength(1);
@@ -321,7 +321,7 @@ describe('ModelRouter - Custom Provider Support', () => {
         },
       });
 
-      await agent.generateMessageList('hi', { maxSteps: 1, modelSettings: { temperature: 0.5, topP: 0.8 } });
+      await agent.generate('hi', { maxSteps: 1, modelSettings: { temperature: 0.5, topP: 0.8 } });
 
       expect(receivedOptions).toHaveLength(1);
       expect(receivedOptions[0].temperature).toBe(0.5);

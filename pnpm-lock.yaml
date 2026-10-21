@@ -5436,9 +5436,15 @@ importers:
         specifier: 'catalog:'
         version: 4.6.7
     devDependencies:
+      '@ai-sdk/openai':
+        specifier: ^1.3.24
+        version: 1.3.24(zod@4.6.7)
       '@ai-sdk/openai-v5':
         specifier: npm:@ai-sdk/openai@2.0.135
         version: '@ai-sdk/openai@2.0.135(zod@4.6.7)'
+      '@ai-sdk/openai-v7':
+        specifier: npm:@ai-sdk/openai@4.0.96
+        version: '@ai-sdk/openai@4.0.96(zod@4.6.7)'
       '@copilotkit/aimock':
         specifier: ^1.29.0
         version: 1.29.0(vitest@4.1.11)
@@ -5463,6 +5469,9 @@ importers:
       '@mastra/core':
         specifier: workspace:*
         version: link:../core
+      '@mastra/libsql':
+        specifier: workspace:*
+        version: link:../../stores/libsql
       '@types/json-schema':
         specifier: ^7.0.15
         version: 7.0.15

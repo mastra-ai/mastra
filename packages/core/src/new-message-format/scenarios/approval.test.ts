@@ -32,7 +32,7 @@ describe('action-native approvals (aimock)', () => {
     llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Done.' });
 
     const { agent, memory } = createActionAgent(llm, { tools: { remove } });
-    const output = await agent.stream('clean up', { memory: { thread: 't-cond', resource: 'u' } });
+    const output = await agent.__streamActions('clean up', { memory: { thread: 't-cond', resource: 'u' } });
     const first = await drainRun(output, memory, 't-cond');
     expectStorageInvariant(first);
 
@@ -41,7 +41,7 @@ describe('action-native approvals (aimock)', () => {
     expect(executed).toEqual(['/tmp/a']);
 
     const resumed = await drainRun(
-      await agent.approveToolCall({
+      await agent.__approveToolCallActions({
         runId: first.runId,
         toolCallId: 'guarded',
         memory: { thread: 't-cond', resource: 'u' },
@@ -57,7 +57,10 @@ describe('action-native approvals (aimock)', () => {
     const ctx = new RequestContext();
     ctx.set('strict', true);
     const strict = await drainRun(
-      await agent.stream('clean again', { memory: { thread: 't-strict', resource: 'u' }, requestContext: ctx }),
+      await agent.__streamActions('clean again', {
+        memory: { thread: 't-strict', resource: 'u' },
+        requestContext: ctx,
+      }),
       memory,
       't-strict',
     );
@@ -90,12 +93,12 @@ describe('action-native approvals (aimock)', () => {
 
     const { agent, memory } = createActionAgent(llm, { tools: { send } });
     const thread = { thread: 't-conc', resource: 'u' };
-    const first = await drainRun(await agent.stream('email both', { memory: thread }), memory, 't-conc');
+    const first = await drainRun(await agent.__streamActions('email both', { memory: thread }), memory, 't-conc');
     expect(first.streamed.filter(a => a.type === 'tool-approval-requested')).toHaveLength(2);
     expect(executed).toEqual([]);
 
     const approved = await drainRun(
-      await agent.approveToolCall({ runId: first.runId, toolCallId: 'e1', memory: thread }),
+      await agent.__approveToolCallActions({ runId: first.runId, toolCallId: 'e1', memory: thread }),
       memory,
       't-conc',
     );
@@ -104,7 +107,7 @@ describe('action-native approvals (aimock)', () => {
     expect(llm.getRequests()).toHaveLength(1);
 
     const declined = await drainRun(
-      await agent.declineToolCall({ runId: first.runId, toolCallId: 'e2', memory: thread }),
+      await agent.__declineToolCallActions({ runId: first.runId, toolCallId: 'e2', memory: thread }),
       memory,
       't-conc',
     );

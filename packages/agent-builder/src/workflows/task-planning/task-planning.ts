@@ -117,7 +117,7 @@ const planningIterationStep = createStep({
             research,
           });
 
-      const result = await planningAgent.generateMessageList(planningPrompt, {
+      const result = await planningAgent.generate(planningPrompt, {
         structuredOutput: {
           schema: PlanningAgentOutputSchema,
         },

@@ -53,7 +53,7 @@ export async function tryGenerateWithJsonFallback<OUTPUT>(
   }
 
   try {
-    const result = await agent.generateMessageList(prompt, options);
+    const result = await agent.generate(prompt, options);
     // Some models resolve without throwing but produce no parseable structured
     // object (empty/malformed JSON). Treat that the same as a thrown error so the
     // caller still gets the json-prompt-injection retry instead of a downstream
@@ -71,7 +71,7 @@ export async function tryGenerateWithJsonFallback<OUTPUT>(
     if (!isStructuredOutputFormatError(error)) throw error;
 
     agent.__getLogger().warn('Error in tryGenerateWithJsonFallback. Attempting fallback.', error);
-    const result = await agent.generateMessageList(prompt, {
+    const result = await agent.generate(prompt, {
       ...options,
       structuredOutput: {
         ...options.structuredOutput,
@@ -101,11 +101,11 @@ export async function tryStreamWithJsonFallback<OUTPUT extends {}>(
     structuredOutput: StructuredOutputOptions<OUTPUT>;
     /** Override injection placement only for the structured-output retry. */
     fallbackJsonPromptInjection?: 'system' | 'inline';
-    onStream?: (stream: Awaited<ReturnType<Agent['streamMessageList']>>) => void | Promise<void>;
+    onStream?: (stream: Awaited<ReturnType<Agent['stream']>>) => void | Promise<void>;
     /** Called immediately before each primary or fallback stream invocation. */
     onStreamAttempt?: () => void | Promise<void>;
     /** Called after each stream invocation is consumed, including a failed structured-output attempt. */
-    onStreamFinish?: (stream: Awaited<ReturnType<Agent['streamMessageList']>>) => void | Promise<void>;
+    onStreamFinish?: (stream: Awaited<ReturnType<Agent['stream']>>) => void | Promise<void>;
   },
 ) {
   if (!options.structuredOutput?.schema) {
@@ -121,8 +121,8 @@ export async function tryStreamWithJsonFallback<OUTPUT extends {}>(
 
   try {
     await onStreamAttempt?.();
-    const result = await agent.streamMessageList(prompt, streamOptions);
-    void onStream?.(result as unknown as Awaited<ReturnType<Agent['streamMessageList']>>);
+    const result = await agent.stream(prompt, streamOptions);
+    void onStream?.(result as unknown as Awaited<ReturnType<Agent['stream']>>);
     try {
       const object = await result.object;
       if (object === undefined) {
@@ -135,14 +135,14 @@ export async function tryStreamWithJsonFallback<OUTPUT extends {}>(
       }
       return result;
     } finally {
-      await onStreamFinish?.(result as unknown as Awaited<ReturnType<Agent['streamMessageList']>>);
+      await onStreamFinish?.(result as unknown as Awaited<ReturnType<Agent['stream']>>);
     }
   } catch (error) {
     if (!isStructuredOutputFormatError(error)) throw error;
 
     agent.__getLogger().warn('Error in tryStreamWithJsonFallback. Attempting fallback.', error);
     await onStreamAttempt?.();
-    const result = await agent.streamMessageList(prompt, {
+    const result = await agent.stream(prompt, {
       ...streamOptions,
       structuredOutput: {
         ...streamOptions.structuredOutput,
@@ -154,7 +154,7 @@ export async function tryStreamWithJsonFallback<OUTPUT extends {}>(
             : true),
       },
     });
-    void onStream?.(result as unknown as Awaited<ReturnType<Agent['streamMessageList']>>);
+    void onStream?.(result as unknown as Awaited<ReturnType<Agent['stream']>>);
     try {
       const object = await result.object;
       if (object === undefined) {
@@ -167,7 +167,7 @@ export async function tryStreamWithJsonFallback<OUTPUT extends {}>(
       }
       return result;
     } finally {
-      await onStreamFinish?.(result as unknown as Awaited<ReturnType<Agent['streamMessageList']>>);
+      await onStreamFinish?.(result as unknown as Awaited<ReturnType<Agent['stream']>>);
     }
   }
 }

@@ -374,7 +374,7 @@ export class ObserverRunner {
               this.withAbortCheck(async () => {
                 try {
                   attemptMemory = temporaryMemory?.newThread();
-                  const streamResult = await agent.streamMessageList(observerMessages, {
+                  const streamResult = await agent.stream(observerMessages, {
                     // One prompt, one reply. Without this cap, a reply cut off with finishReason
                     // "other" or "unknown" makes the loop continue from the partial text, and
                     // assertCompleteModelResponse would only see the final step's "stop".
@@ -707,7 +707,7 @@ export class ObserverRunner {
             callback: childObservabilityContext =>
               this.withAbortCheck(async () => {
                 try {
-                  const streamResult = await agent.streamMessageList(observerMessages, {
+                  const streamResult = await agent.stream(observerMessages, {
                     // One prompt, one reply. Without this cap, a reply cut off with finishReason
                     // "other" or "unknown" makes the loop continue from the partial text, and
                     // assertCompleteModelResponse would only see the final step's "stop".

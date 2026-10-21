@@ -96,7 +96,7 @@ export interface ScorerJudgeConfig {
   /** Default memory options passed to the internal judge agent run. */
   defaultMemoryOptions?: AgentMemoryOption;
   /** Optional callback for observing the internal judge agent stream as soon as it starts. */
-  onStream?: (stream: Awaited<ReturnType<Agent['streamMessageList']>>) => void | Promise<void>;
+  onStream?: (stream: Awaited<ReturnType<Agent['stream']>>) => void | Promise<void>;
   /** Optional callback fired after each model step in the internal judge agent. */
   onStepFinish?: MastraOnStepFinishCallback<unknown>;
   /** Optional callback fired when an internal judge agent invocation finishes. */
@@ -1518,7 +1518,7 @@ class MastraScorer<
     const recordAttempt = () => {
       telemetry.attemptCount += 1;
     };
-    const recordStreamResult = async (result: Awaited<ReturnType<Agent['streamMessageList']>>) => {
+    const recordStreamResult = async (result: Awaited<ReturnType<Agent['stream']>>) => {
       let consumeError: unknown;
       if (typeof result.consumeStream === 'function') {
         try {
@@ -1774,8 +1774,8 @@ class MastraScorer<
       } else if (scorerStep.name === 'generateReason') {
         if (isSupportedLanguageModel(resolvedModel)) {
           recordAttempt();
-          const result = await judge.streamMessageList(prompt, createJudgeStreamRunOptions());
-          void onStream?.(result as unknown as Awaited<ReturnType<Agent['streamMessageList']>>);
+          const result = await judge.stream(prompt, createJudgeStreamRunOptions());
+          void onStream?.(result as unknown as Awaited<ReturnType<Agent['stream']>>);
           const reason = await (async () => {
             try {
               return await result.text;

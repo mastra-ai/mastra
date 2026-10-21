@@ -1,12 +1,11 @@
+import type { MastraClient } from '@mastra/client-js';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
-import type { MastraAction } from '@mastra/core/new-message-format';
 import { skipToken, useInfiniteQuery } from '@tanstack/react-query';
 import type { InfiniteData, QueryKey } from '@tanstack/react-query';
-import { actionsToMessages } from '../../lib/mastra-db/actions';
 import { useMastraClient } from '../../mastra-client-context';
 import type { MastraInfiniteQueryOptions } from '../shared/query-options';
 
-type AgentMessagesPage = { messages: MastraDBMessage[]; hasMore: boolean };
+type AgentMessagesPage = Awaited<ReturnType<MastraClient['listThreadMessages']>>;
 
 type AgentMessagesData = InfiniteData<AgentMessagesPage, string> & { messages: MastraDBMessage[] };
 
@@ -40,11 +39,17 @@ export const useAgentMessages = <TData = AgentMessagesData>({
     initialPageParam: NEWEST_PAGE,
     queryFn:
       memory && threadId
-        ? async () => {
-            // Action-native threads: history is the stored action log, rebuilt into chat messages.
-            const { actions } = await client.getMemoryThread({ threadId, agentId }).listActions({ requestContext });
-            return { messages: actionsToMessages(actions as unknown as MastraAction[]), hasMore: false };
-          }
+        ? ({ pageParam: olderThan }) =>
+            client.listThreadMessages(threadId, {
+              agentId,
+              requestContext,
+              includeSystemReminders: true,
+              perPage: PER_PAGE,
+              orderBy: { field: 'createdAt', direction: 'DESC' },
+              // Inclusive bound: messages sharing the oldest createdAt of the previous page
+              // may have been cut off by perPage, so re-ask for them and dedupe by id below.
+              filter: olderThan ? { dateRange: { end: new Date(olderThan) } } : undefined,
+            })
         : skipToken,
     getNextPageParam: (lastPage, _allPages, lastPageParam) => {
       if (!lastPage.hasMore || lastPage.messages.length === 0) return undefined;

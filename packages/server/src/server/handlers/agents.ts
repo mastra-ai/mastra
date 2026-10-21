@@ -1562,7 +1562,7 @@ export const GENERATE_AGENT_ROUTE = createRoute({
       };
 
       const result = structuredOutput
-        ? await agent.generateMessageList(messages, { ...options, structuredOutput })
+        ? await agent.generate(messages, { ...options, structuredOutput })
         : await agent.generate(messages, options);
 
       return result;
@@ -1965,14 +1965,11 @@ export const STREAM_GENERATE_ROUTE = createRoute({
         options.untilIdle = untilIdle;
       }
 
-      if (structuredOutput || untilIdle) {
-        const legacy = structuredOutput
-          ? await agent.streamMessageList(messages, { ...options, structuredOutput })
-          : await agent.streamMessageList(messages, options);
-        return legacy.fullStream;
-      }
+      const streamResult = structuredOutput
+        ? await agent.stream(messages, { ...options, structuredOutput })
+        : await agent.stream(messages, options);
 
-      return toReadableStream((await agent.stream(messages, options)).fullStream);
+      return streamResult.fullStream;
     } catch (error) {
       return handleError(error, 'error streaming agent response');
     }
@@ -2824,7 +2821,7 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
         abortSignal,
       });
 
-      return toReadableStream(streamResult.fullStream);
+      return streamResult.fullStream;
     } catch (error) {
       return handleError(error, 'error approving tool call');
     }
@@ -3028,7 +3025,7 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
         abortSignal,
       });
 
-      return toReadableStream(streamResult.fullStream);
+      return streamResult.fullStream;
     } catch (error) {
       return handleError(error, 'error declining tool call');
     }
@@ -3846,7 +3843,7 @@ export const ENHANCE_INSTRUCTIONS_ROUTE = createRoute({
         model,
       });
 
-      const result = await systemPromptAgent.generateMessageList(
+      const result = await systemPromptAgent.generate(
         `We need to improve the system prompt.
 Current: ${instructions}
 ${comment ? `User feedback: ${comment}` : ''}`,
@@ -3972,18 +3969,3 @@ export const GET_AGENT_SKILL_ROUTE = createRoute({
     }
   },
 });
-
-/** Adapts an action-native run's `fullStream` to the ReadableStream the server adapters consume. */
-function toReadableStream<T>(source: AsyncIterable<T>): ReadableStream<T> {
-  const iterator = source[Symbol.asyncIterator]();
-  return new ReadableStream<T>({
-    async pull(controller) {
-      const { done, value } = await iterator.next();
-      if (done) controller.close();
-      else controller.enqueue(value);
-    },
-    async cancel() {
-      await iterator.return?.();
-    },
-  });
-}

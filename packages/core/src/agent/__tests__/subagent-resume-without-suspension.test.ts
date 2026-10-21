@@ -148,7 +148,7 @@ describe('sub-agent delegation with model-authored resumeData and no suspended r
   it('runs the sub-agent instead of resuming (stream)', async () => {
     const supervisor = buildSupervisor();
 
-    const result = await supervisor.streamMessageList('do the work', { maxSteps: 3 });
+    const result = await supervisor.stream('do the work', { maxSteps: 3 });
 
     const chunks: any[] = [];
     for await (const chunk of result.fullStream) {
@@ -162,7 +162,7 @@ describe('sub-agent delegation with model-authored resumeData and no suspended r
   it('runs the sub-agent instead of resuming (generate)', async () => {
     const supervisor = buildSupervisor();
 
-    const result = await supervisor.generateMessageList('do the work', { maxSteps: 3 });
+    const result = await supervisor.generate('do the work', { maxSteps: 3 });
 
     expect(mentionsNoSnapshotError(result.toolResults)).toBe(false);
     expect(subAgentCalls).toBe(1);

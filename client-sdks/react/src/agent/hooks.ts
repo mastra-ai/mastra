@@ -433,17 +433,6 @@ export const useChat = ({
       setMessages(formattedMessages);
       setTasks(extractLatestTasksFromMessages(formattedMessages));
     }
-    const declinedInHistory: Record<string, { status: 'declined' }> = {};
-    for (const message of formattedMessages) {
-      for (const part of message.content.parts ?? []) {
-        if (part.type === 'tool-invocation' && (part.toolInvocation.state as string) === 'output-denied') {
-          declinedInHistory[part.toolInvocation.toolCallId] = { status: 'declined' };
-        }
-      }
-    }
-    if (Object.keys(declinedInHistory).length > 0) {
-      setToolCallApprovals(prev => ({ ...declinedInHistory, ...prev }));
-    }
     const pendingApprovals = extractPendingToolApprovalIdsFromMessages(formattedMessages, liveRunId.current);
     for (const toolCallId of liveApprovalIds.current) {
       if (pendingToolApprovalIdsRef.current.has(toolCallId)) pendingApprovals.add(toolCallId);

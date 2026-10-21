@@ -636,48 +636,6 @@ describe('ChatProvider', () => {
     expect(seen.hasCancel).toBe(true);
   });
 
-  describe('when a streaming run is cancelled', () => {
-    it('refreshes the thread list so the stored thread appears', async () => {
-      server.use(
-        http.post(
-          `${BASE_URL}/api/agents/agent-1/stream`,
-          () =>
-            new HttpResponse(new ReadableStream<Uint8Array>({ start() {} }), {
-              headers: { 'content-type': 'text/event-stream' },
-            }),
-        ),
-        ...baseHandlers([]),
-      );
-      const refreshThreadList = vi.fn();
-      const Harness = () => {
-        const send = useChatSend();
-        const { cancelRun } = useChatRunning();
-        return (
-          <>
-            <button onClick={() => send({ message: 'Write a story' })}>Send</button>
-            <button onClick={() => cancelRun?.()}>Cancel</button>
-          </>
-        );
-      };
-
-      render(
-        <Wrapper>
-          <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={[]} refreshThreadList={refreshThreadList}>
-            <Harness />
-          </ChatProvider>
-        </Wrapper>,
-      );
-
-      fireEvent.click(screen.getByText('Send'));
-      await act(async () => {
-        await new Promise(resolve => setTimeout(resolve, 50));
-      });
-      fireEvent.click(screen.getByText('Cancel'));
-
-      await waitFor(() => expect(refreshThreadList).toHaveBeenCalled());
-    });
-  });
-
   it.each([
     ['generate', { chatWithGenerate: true }],
     ['network', { chatWithNetwork: true }],

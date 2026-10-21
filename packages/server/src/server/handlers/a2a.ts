@@ -1152,7 +1152,7 @@ async function executeMessageSend({
           ...(resume.toolCallId ? { toolCallId: resume.toolCallId } : {}),
           requestContext,
         })
-      : await agent.generateMessageList([convertToCoreMessage(message)], {
+      : await agent.generate([convertToCoreMessage(message)], {
           runId: currentData.id,
           requestContext,
           memory,
@@ -1718,7 +1718,7 @@ export async function* handleMessageStream({
           requestContext,
           abortSignal: taskAbortController.signal,
         })
-      : await agent.streamMessageList([convertToCoreMessage(message)], {
+      : await agent.stream([convertToCoreMessage(message)], {
           runId: taskId,
           requestContext,
           abortSignal: taskAbortController.signal,

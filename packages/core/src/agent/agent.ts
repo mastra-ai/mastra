@@ -72,7 +72,7 @@ import type { ActionResumeOptions, ActionRunOptions } from '../new-message-forma
 import { createRunOutput } from '../new-message-format/output';
 import type { ActionRunOutput, ActionRunResult } from '../new-message-format/output';
 import { lastRuns, runAgent } from '../new-message-format/run';
-import type { ActionStore, RunAgentOptions } from '../new-message-format/run';
+import type { RunAgentOptions } from '../new-message-format/run';
 import type { ActionDraft, AgentInput } from '../new-message-format/to-actions';
 import { toV7Tools } from '../new-message-format/tools';
 import { resolveDeliveryFailureUpdate, resolveNotificationDeliveryDecision } from '../notifications/delivery-policy';
@@ -229,7 +229,6 @@ import type { AgentScopesSnapshot, ResolvedAgentScopes } from './scopes';
 import type { CreatedAgentSignal } from './signals';
 import { signalSpanAttributes } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
-import { delegateGenerate, delegateStream } from './subagent';
 import type { SubAgent, SubAgentToolCall, SubAgentToolResult } from './subagent';
 import { agentThreadStreamRuntime } from './thread-stream-runtime';
 import type { ActiveThreadRun } from './thread-stream-runtime';
@@ -1993,7 +1992,8 @@ export class Agent<
    * ```
    */
   public listAgents({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    Record<string, SubAgent<string, TRequestContext>> | Promise<Record<string, SubAgent<string, TRequestContext>>> {
+    | Record<string, SubAgent<string, TRequestContext>>
+    | Promise<Record<string, SubAgent<string, TRequestContext>>> {
     const agentsToUse = this.#agents
       ? typeof this.#agents === 'function'
         ? this.#agents({ requestContext: requestContext as RequestContext<TRequestContext> })
@@ -2741,7 +2741,8 @@ export class Agent<
    */
   #inheritedMemory(requestContext?: RequestContext): DynamicArgument<MastraMemory, TRequestContext> | undefined {
     const inherited = requestContext?.getRaw(MASTRA_INHERITED_MEMORY_KEY) as
-      { agentId: string; memory: DynamicArgument<MastraMemory, any> } | undefined;
+      | { agentId: string; memory: DynamicArgument<MastraMemory, any> }
+      | undefined;
     return inherited?.agentId === this.id
       ? (inherited.memory as DynamicArgument<MastraMemory, TRequestContext>)
       : undefined;
@@ -3169,7 +3170,8 @@ export class Agent<
    * ```
    */
   public getInstructions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    AgentInstructions | Promise<AgentInstructions> {
+    | AgentInstructions
+    | Promise<AgentInstructions> {
     if (typeof this.#instructions === 'function') {
       const result = this.#instructions({
         requestContext: requestContext as RequestContext<TRequestContext>,
@@ -3306,7 +3308,9 @@ export class Agent<
    * ```
    */
   public getMetadata({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    Record<string, unknown> | undefined | Promise<Record<string, unknown> | undefined> {
+    | Record<string, unknown>
+    | undefined
+    | Promise<Record<string, unknown> | undefined> {
     if (this.#metadata === undefined) {
       return undefined;
     }
@@ -3451,7 +3455,8 @@ export class Agent<
    * ```
    */
   public getDefaultOptions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    AgentExecutionOptions<TOutput> | Promise<AgentExecutionOptions<TOutput>> {
+    | AgentExecutionOptions<TOutput>
+    | Promise<AgentExecutionOptions<TOutput>> {
     if (typeof this.#defaultOptions !== 'function') {
       return this.#defaultOptions;
     }
@@ -3494,7 +3499,8 @@ export class Agent<
    * ```
    */
   public getDefaultNetworkOptions({ requestContext = new RequestContext() }: { requestContext?: RequestContext } = {}):
-    NetworkOptions | Promise<NetworkOptions> {
+    | NetworkOptions
+    | Promise<NetworkOptions> {
     if (typeof this.#defaultNetworkOptions !== 'function') {
       return this.#defaultNetworkOptions;
     }
@@ -6202,7 +6208,7 @@ export class Agent<
                         allowDelegationDispatch: false,
                       },
                     })
-                  : await delegateGenerate(resolvedAgent)(messagesForSubAgent, {
+                  : await resolvedAgent.generate(messagesForSubAgent, {
                       requestContext: subAgentRequestContext,
                       actor: invocationActor,
                       ...resolveObservabilityContext(context ?? {}),
@@ -6341,7 +6347,7 @@ export class Agent<
                         allowDelegationDispatch: false,
                       },
                     })
-                  : await delegateStream(resolvedAgent)(messagesForSubAgent, {
+                  : await resolvedAgent.stream(messagesForSubAgent, {
                       requestContext: subAgentRequestContext,
                       actor: invocationActor,
                       ...resolveObservabilityContext(context ?? {}),
@@ -8787,7 +8793,8 @@ export class Agent<
       : undefined;
     const persistedTracingContext = isResume
       ? (resumeContext?.snapshot?.tracingContext as
-          { traceId?: string; spanId?: string; parentSpanId?: string } | undefined)
+          | { traceId?: string; spanId?: string; parentSpanId?: string }
+          | undefined)
       : undefined;
 
     // Only fall back to persisted traceId/parentSpanId when the caller didn't provide
@@ -9537,25 +9544,26 @@ export class Agent<
   }
 
   /**
-   * Runs the agent on the action-native path: input in any supported message format, actions out.
+   * @internal Runs the agent on the action-native path: input in any supported message format, actions out.
    * The stream carries persistable actions plus transient deltas; storage holds only the former.
+   * Not public until the `messageFormat` opt-in lands.
    */
-  async stream(input: AgentInput, options: ActionRunOptions = {}): Promise<ActionRunOutput> {
+  async __streamActions(input: AgentInput, options: ActionRunOptions = {}): Promise<ActionRunOutput> {
     return this.#runActions({ ...options, input });
   }
 
-  /** Same as `stream()`, drained to its result. */
-  async generate(input: AgentInput, options: ActionRunOptions = {}): Promise<ActionRunResult> {
-    return (await this.stream(input, options)).result;
+  /** @internal Same as `__streamActions()`, drained to its result. */
+  async __generateActions(input: AgentInput, options: ActionRunOptions = {}): Promise<ActionRunResult> {
+    return (await this.__streamActions(input, options)).result;
   }
 
-  /** Approves a pending tool call by appending the approval response and resuming the run from the log. */
-  async approveToolCall(options: ActionResumeOptions): Promise<ActionRunOutput> {
+  /** @internal Approves a pending tool call by appending the approval response and resuming the run from the log. */
+  async __approveToolCallActions(options: ActionResumeOptions): Promise<ActionRunOutput> {
     return this.#respondToApproval(options, true);
   }
 
-  /** Declines a pending tool call by appending the denial and resuming the run from the log. */
-  async declineToolCall(options: ActionResumeOptions & { reason?: string }): Promise<ActionRunOutput> {
+  /** @internal Declines a pending tool call by appending the denial and resuming the run from the log. */
+  async __declineToolCallActions(options: ActionResumeOptions & { reason?: string }): Promise<ActionRunOutput> {
     return this.#respondToApproval(options, false, options.reason);
   }
 
@@ -9665,7 +9673,7 @@ export class Agent<
     return createRunOutput(runId, source);
   }
 
-  async generateMessageList<
+  async generate<
     OUTPUT extends StandardSchemaWithJSON<any, any>,
     T extends InferStandardSchemaOutput<OUTPUT> = InferStandardSchemaOutput<OUTPUT>,
   >(
@@ -9674,20 +9682,20 @@ export class Agent<
       structuredOutput: PublicStructuredOutputOptions<T>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<T>>;
-  async generateMessageList<OUTPUT extends {}>(
+  async generate<OUTPUT extends {}>(
     messages: MessageListInput,
     options: AgentExecutionOptionsBase<OUTPUT> & {
       structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<OUTPUT>>;
-  async generateMessageList(
+  async generate(
     messages: MessageListInput,
     options: AgentExecutionOptionsBase<unknown> & {
       structuredOutput?: never;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<FullOutput<TOutput>>;
-  async generateMessageList<OUTPUT = TOutput>(messages: MessageListInput): Promise<FullOutput<OUTPUT>>;
-  async generateMessageList<OUTPUT = TOutput>(
+  async generate<OUTPUT = TOutput>(messages: MessageListInput): Promise<FullOutput<OUTPUT>>;
+  async generate<OUTPUT = TOutput>(
     messages: MessageListInput,
     options?: AgentExecutionOptionsBase<any> & {
       structuredOutput?: PublicStructuredOutputOptions<any>;
@@ -9841,7 +9849,8 @@ export class Agent<
     resourceId: string;
     threadId: string;
     streamOptions?:
-      AgentExecutionOptions<OUTPUT> | (() => AgentExecutionOptions<OUTPUT> | Promise<AgentExecutionOptions<OUTPUT>>);
+      | AgentExecutionOptions<OUTPUT>
+      | (() => AgentExecutionOptions<OUTPUT> | Promise<AgentExecutionOptions<OUTPUT>>);
     peer?: false | AgentClaimThreadPeerOptions;
     /**
      * Called when another process asks to claim this thread. Return `true` to
@@ -10465,7 +10474,7 @@ export class Agent<
     return agentThreadStreamRuntime.sendSignal<OUTPUT>(this.#getThreadRuntimeAgent(), signal, target, this.getPubSub());
   }
 
-  async streamMessageList<
+  async stream<
     OUTPUT extends StandardSchemaWithJSON<any, any>,
     T extends InferStandardSchemaOutput<OUTPUT> = InferStandardSchemaOutput<OUTPUT>,
   >(
@@ -10474,20 +10483,20 @@ export class Agent<
       structuredOutput: PublicStructuredOutputOptions<T>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<T>>;
-  async streamMessageList<OUTPUT extends {}>(
+  async stream<OUTPUT extends {}>(
     messages: MessageListInput,
     streamOptions: AgentExecutionOptionsBase<OUTPUT> & {
       structuredOutput: PublicStructuredOutputOptions<OUTPUT>;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<OUTPUT>>;
-  async streamMessageList(
+  async stream(
     messages: MessageListInput,
     streamOptions: AgentExecutionOptionsBase<unknown> & {
       structuredOutput?: never;
     } & { model?: DynamicArgument<MastraModelConfig> },
   ): Promise<MastraModelOutput<TOutput>>;
-  async streamMessageList(messages: MessageListInput): Promise<MastraModelOutput<TOutput>>;
-  async streamMessageList<OUTPUT = TOutput>(
+  async stream(messages: MessageListInput): Promise<MastraModelOutput<TOutput>>;
+  async stream<OUTPUT = TOutput>(
     messages: MessageListInput,
     streamOptions?: AgentExecutionOptionsBase<any> & {
       structuredOutput?: PublicStructuredOutputOptions<any>;
@@ -11287,7 +11296,7 @@ export class Agent<
    * }
    * ```
    */
-  async approveToolCallMessageList<OUTPUT = undefined>(
+  async approveToolCall<OUTPUT = undefined>(
     options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string } & {
       model?: DynamicArgument<MastraModelConfig>;
     },
@@ -11620,7 +11629,7 @@ export class Agent<
    * tool invocation's `approval.reason` and surfaced to the model in place of the default
    * "Tool call was not approved by the user" message.
    */
-  async declineToolCallMessageList<OUTPUT = undefined>(
+  async declineToolCall<OUTPUT = undefined>(
     options: AgentExecutionOptions<OUTPUT> & { runId: string; toolCallId?: string; reason?: string } & {
       model?: DynamicArgument<MastraModelConfig>;
     },

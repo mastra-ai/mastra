@@ -546,7 +546,7 @@ export async function runDefaultCompletionCheck(
   `;
 
   try {
-    const stream = await agent.streamMessageList(completionPrompt, {
+    const stream = await agent.stream(completionPrompt, {
       maxSteps: 1,
       structuredOutput: {
         schema: defaultCompletionSchema,
@@ -665,7 +665,7 @@ export async function generateFinalResult(
     }
   `;
 
-  const stream = await agent.streamMessageList(prompt, {
+  const stream = await agent.stream(prompt, {
     maxSteps: 1,
     structuredOutput: { schema: finalResultSchema },
     abortSignal,
@@ -749,7 +749,7 @@ export async function generateStructuredFinalResult<OUTPUT extends {}>(
     Use the conversation history and primitive results to craft the response.
   `;
 
-  const stream = await agent.streamMessageList<OUTPUT>(prompt, {
+  const stream = await agent.stream<OUTPUT>(prompt, {
     maxSteps: 1,
     structuredOutput: structuredOutputOptions,
     abortSignal,

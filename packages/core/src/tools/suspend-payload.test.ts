@@ -88,7 +88,7 @@ describe('suspendPayload on resume', () => {
     });
     new Mastra({ agents: { agent }, logger: false, storage: new InMemoryStore() });
 
-    const stream = await agent.streamMessageList('Charge 990');
+    const stream = await agent.stream('Charge 990');
     let suspended: { toolCallId: string; suspendPayload: unknown } | undefined;
     for await (const chunk of stream.fullStream) {
       if (chunk.type === 'tool-call-suspended') {

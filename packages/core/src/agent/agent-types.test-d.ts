@@ -317,8 +317,8 @@ describe('Agent Type Tests', () => {
     const agent = new Agent({ id: 'a', name: 'A', model: {} as any, instructions: 'hi' });
 
     it('accepts `model` on approveToolCall / declineToolCall (stream)', () => {
-      const approve: Parameters<typeof agent.approveToolCallMessageList>[0] = { runId: 'r', model: {} as any };
-      const decline: Parameters<typeof agent.declineToolCallMessageList>[0] = { runId: 'r', model: {} as any };
+      const approve: Parameters<typeof agent.approveToolCall>[0] = { runId: 'r', model: {} as any };
+      const decline: Parameters<typeof agent.declineToolCall>[0] = { runId: 'r', model: {} as any };
       assertType<string>(approve.runId);
       assertType<string>(decline.runId);
     });
