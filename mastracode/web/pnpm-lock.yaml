@@ -79,7 +79,7 @@ importers:
         specifier: ^7.0.2
         version: 7.0.2
       varlock:
-        specifier: ^1.9.0
+        specifier: ^1.23.0
         version: 1.23.0
       vitest:
         specifier: 4.1.11
