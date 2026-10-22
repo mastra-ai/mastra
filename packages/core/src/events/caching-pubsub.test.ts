@@ -1469,6 +1469,30 @@ describe('CachingPubSub', () => {
 
       expect(received).toEqual([0, 1, 2]);
       expect(maxActive).toBe(1);
+
+      // Same transport, but the retained frame is the next one, so it is
+      // delivered directly rather than through a backfill. The history read
+      // must still wait for that callback to finish.
+      const nextInner = new UnawaitedReplayPubSub();
+      const nextLog = new InMemoryServerCache();
+      const nextFrames = [await append(nextLog, 0), await append(nextLog, 1), await append(nextLog, 2)];
+      nextInner.retained.set(topic, [nextFrames[0]!]);
+
+      const nextReceived: number[] = [];
+      let nextActive = 0;
+      let nextMaxActive = 0;
+      await new CachingPubSub(nextInner, nextLog).subscribeFromOffset(topic, 0, async event => {
+        nextActive++;
+        nextMaxActive = Math.max(nextMaxActive, nextActive);
+        await new Promise(resolve => setTimeout(resolve, 5));
+        nextReceived.push(event.index!);
+        nextActive--;
+      });
+      await vi.waitFor(() => expect(nextReceived.length).toBeGreaterThanOrEqual(3));
+      await new Promise(resolve => setTimeout(resolve, 30));
+
+      expect(nextReceived).toEqual([0, 1, 2]);
+      expect(nextMaxActive).toBe(1);
     });
 
     it('resyncs when the log expired and a new run segment restarted numbering at 0', async () => {

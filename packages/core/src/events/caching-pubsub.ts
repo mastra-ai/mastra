@@ -252,6 +252,8 @@ export class CachingPubSub extends PubSub {
     // (a frame that is next) delivery stays synchronous.
     let pending: Promise<void> | null = null;
     let deferred = false;
+    // True until the transport's `subscribe()` resolves (retained replay window).
+    let attaching = true;
 
     const emit = (event: Event, ack?: () => Promise<void>, nack?: () => Promise<void>) => {
       if (typeof event.index === 'number') next = event.index + 1;
@@ -375,7 +377,9 @@ export class CachingPubSub extends PubSub {
 
       deferred = false;
       const result = reconcile(event, ack, nack);
-      if (!deferred) return result;
+      // While attaching, a direct delivery the transport did not await must
+      // also finish before the history read starts delivering later frames.
+      if (!deferred && !(attaching && result instanceof Promise)) return result;
 
       // A gap triggered a backfill: hold later frames until it completes.
       return track(result as Promise<void>, nack);
@@ -386,6 +390,7 @@ export class CachingPubSub extends PubSub {
       // Subscribe before reading history so no frame is missed. Live frames
       // arriving during the read queue behind it.
       await this.inner.subscribe(topic, wrappedCb);
+      attaching = false;
 
       // A transport that replays retained frames without awaiting the callback
       // can start a delivery chain (a backfill) before `subscribe()` resolves.
