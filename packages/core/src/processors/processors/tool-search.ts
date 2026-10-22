@@ -526,7 +526,9 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
     const queryLower = query.toLowerCase();
     const exactNames = new Set<string>();
     for (const name of catalog.descriptions.keys()) {
-      const escapedName = name.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const nameLower = name.toLowerCase();
+      if (!queryLower.includes(nameLower)) continue;
+      const escapedName = nameLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       // Hyphens and underscores belong to IDs: do not match a suffix or prefix
       // of another identifier. Punctuation around a complete ID is allowed.
       if (new RegExp(`(?:^|[^\\p{L}\\p{N}_-])${escapedName}(?=$|[^\\p{L}\\p{N}_-])`, 'u').test(queryLower)) {
@@ -534,10 +536,11 @@ export class ToolSearchProcessor implements Processor<'tool-search'> {
       }
     }
 
-    // Rank all matches before truncating so named tools retain their BM25 score
-    // even below the old candidate cutoff, and denied tools cannot crowd out allowed ones.
+    // Retrieve all matches for exact names and filters so named tools retain their
+    // BM25 score and denied tools cannot crowd out allowed ones. Bound ordinary searches.
+    const searchLimit = this.filter || exactNames.size > 0 ? catalog.index.size : this.searchConfig.topK * 2;
     const candidates = new Map(
-      catalog.index.search(queryTokens.join(' '), catalog.index.size, 0).map(result => [result.id, result.score]),
+      catalog.index.search(queryTokens.join(' '), searchLimit, 0).map(result => [result.id, result.score]),
     );
     // A complete ID may have no indexed tokens (for example, a one-letter ID).
     for (const name of exactNames) {
