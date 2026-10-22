@@ -490,17 +490,6 @@ describe('StepExecutor', () => {
   });
 
   describe('step pubsub numbering', () => {
-    /**
-     * A cache that cannot allocate an index and append in one step. Concurrent
-     * processes could reuse an index through such a cache, so events stay
-     * unnumbered (live-only) rather than risking a duplicate.
-     */
-    class NonAtomicCache extends InMemoryServerCache {
-      get supportsAtomicAppend(): boolean {
-        return false;
-      }
-    }
-
     async function captureStepPubsub(target: Mastra): Promise<Record<PropertyKey, any>> {
       let captured: Record<PropertyKey, any> | undefined;
       const step = createStep({
@@ -528,29 +517,7 @@ describe('StepExecutor', () => {
       return captured;
     }
 
-    it('publishes unnumbered through a cache that cannot append atomically', async () => {
-      const cache = new NonAtomicCache();
-      const target = new Mastra({ cache });
-      const context = await captureStepPubsub(target);
-      const stepPubsub = context[PUBSUB_SYMBOL] as PubSub;
-
-      const live: Event[] = [];
-      const topic = AGENT_STREAM_TOPIC('run-plain');
-      await target.pubsub.subscribe(topic, (event: Event) => {
-        live.push(event);
-      });
-      await stepPubsub.publish(topic, {
-        type: 'chunk',
-        runId: 'run-plain',
-        data: { n: 0 },
-      } as any);
-
-      expect(stepPubsub).toBeInstanceOf(CachingPubSub);
-      expect(live[0]?.index).toBeUndefined();
-      expect(await cache.listLength(`pubsub:{${topic}}`)).toBe(0);
-    });
-
-    it('numbers agent-stream events published from a step when the cache is atomic', async () => {
+    it('numbers agent-stream events published from a step', async () => {
       const cache = new InMemoryServerCache();
       const context = await captureStepPubsub(new Mastra({ cache }));
       const stepPubsub = context[PUBSUB_SYMBOL] as PubSub;

@@ -2,14 +2,10 @@
 '@mastra/redis': patch
 ---
 
-`RedisServerCache` now supports atomic appends.
+`RedisServerCache.listPushIndexed` accepts an optional TTL as its fourth argument. Durable run logs use it to stay cached for 24 hours, so an approval wait that outlives the cache's default TTL keeps its frames.
 
-`listPushIndexed` allocates the entry's index and appends it in one Lua script, and writes the topic log and its counter with one TTL. The list and the counter that numbers it must expire together: a counter that outlives its list restarts at zero while subscribed observers still expect the old numbering, and a counter that expires first reuses indices already in the list. Every append sets both keys to `ttlSeconds` (default 300 seconds), or to the longer TTL the caller passes as the fourth argument, and `clearTopic` removes both. A cache configured with `ttlSeconds: 0` stays without expiry.
+Every append sets the list and its counter to `ttlSeconds` (default 300 seconds), or to the longer TTL passed in. A requested TTL never shortens `ttlSeconds`, and a cache configured with `ttlSeconds: 0` stays without expiry.
 
 ```ts
-import { RedisServerCache } from '@mastra/redis';
-
-const cache = new RedisServerCache({ client: redis, ttlSeconds: 300 });
+await cache.listPushIndexed('pubsub:{run}', 'pubsub:{run}:counter', frame, 24 * 60 * 60 * 1000);
 ```
-
-`supportsAtomicAppend` reports whether `client.eval` is available, which is what lets `CachingPubSub` number durable run frames and replay them from an offset. Without scripting there is no atomic append, so frames are published unnumbered instead; `listPushIndexed` fails fast with `listPushIndexed requires scripting support (client.eval)` rather than falling back to a non-atomic `increment` plus `listPush`.

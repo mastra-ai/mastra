@@ -32,6 +32,12 @@ export interface CachingPubSubOptions {
    * the policy has to be supplied at construction time instead.
    */
   shouldCache?: (topic: string) => boolean;
+  /**
+   * @deprecated No longer used. Evented steps now cache their frames when they
+   * publish, so nothing needs to be copied in from another PubSub. Accepted and
+   * ignored for compatibility.
+   */
+  source?: PubSub;
 }
 
 /**
@@ -46,17 +52,15 @@ export interface CachingPubSubOptions {
  *
  * ## One append path
  *
- * Every cached publish goes through {@link MastraServerCache.listPushIndexed}:
- * one atomic operation that allocates the frame's index and appends it. The
+ * Every cached publish goes through {@link MastraServerCache.listPushIndexed},
+ * which allocates the frame's index and appends it. The
  * cache list is therefore the run's log — position and index always agree —
  * and the transport only carries the live tail of that log. Subscribers hold a
  * single integer cursor and backfill any gap they observe from the log rather
  * than relying on transport replay.
  *
- * A cache that cannot append atomically cannot back a numbered stream, so
- * {@link CachingPubSub} publishes unnumbered (live-only) events through it:
- * delivery still works, but `offset` replay is unavailable because there is no
- * ordering to replay from.
+ * If caching a frame fails, it is published without an index and delivered
+ * live only.
  *
  * ## Batching
  *
@@ -98,6 +102,12 @@ export class CachingPubSub extends PubSub {
     this.logger = options.logger;
     this.shouldCache = options.shouldCache;
   }
+
+  /**
+   * @deprecated No longer used; see {@link CachingPubSubOptions.source}. Kept as
+   * a no-op for compatibility.
+   */
+  __setSource(_source: PubSub | undefined): void {}
 
   /** Unwrap to the inner transport so capability checks see through this decorator. */
   override __rawBus(): PubSub {
@@ -172,17 +182,15 @@ export class CachingPubSub extends PubSub {
     // and allocate the index as part of that append so list position and index
     // cannot disagree.
     let index: number | undefined;
-    if (this.cache.supportsAtomicAppend) {
-      try {
-        index = await this.cache.listPushIndexed(
-          this.getCacheKey(topic),
-          this.getCounterKey(topic),
-          fullEvent,
-          cachedLogTtlMs(topic),
-        );
-      } catch (error) {
-        this.logError(`[CachingPubSub] Failed to cache event for ${topic}`, error);
-      }
+    try {
+      index = await this.cache.listPushIndexed(
+        this.getCacheKey(topic),
+        this.getCounterKey(topic),
+        fullEvent,
+        cachedLogTtlMs(topic),
+      );
+    } catch (error) {
+      this.logError(`[CachingPubSub] Failed to cache event for ${topic}`, error);
     }
 
     // On cache failure leave `index` undefined rather than defaulting to 0:
@@ -276,7 +284,7 @@ export class CachingPubSub extends PubSub {
 
       const seq = event.index;
       if (typeof seq !== 'number') {
-        // No numbering (the cache cannot append atomically): live-only delivery.
+        // No numbering (the frame failed to cache): live-only delivery.
         return cb(event, ack, nack);
       }
 

@@ -54,9 +54,7 @@ export class StepExecutor extends MastraBase {
    * reports.
    *
    * Reusing an existing `CachingPubSub`, or wrapping the bus with one that
-   * shares `mastra.serverCache`, puts every frame through one atomic append
-   * path. The wrapper self-checks `supportsAtomicAppend` and publishes
-   * unnumbered (live-only) through a cache that cannot append atomically.
+   * shares `mastra.serverCache`, puts every frame through one append path.
    */
   #getStepPubsub(): PubSub {
     if (this.#stepPubsub) return this.#stepPubsub;

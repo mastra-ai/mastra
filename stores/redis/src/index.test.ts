@@ -174,21 +174,6 @@ describe('RedisServerCache', () => {
     });
   });
 
-  describe('supportsAtomicAppend', () => {
-    it('reports true when the client can run the atomic append script', () => {
-      expect(cache.supportsAtomicAppend).toBe(true);
-    });
-
-    it('reports false when the client has no eval', () => {
-      const { eval: _eval, ...clientWithoutEval } = mockClient;
-      const fallbackCache = new RedisServerCache({ client: clientWithoutEval as RedisClient });
-
-      // Without eval the allocate+append pair is two round-trips, so publishers
-      // can interleave and hand out the same index.
-      expect(fallbackCache.supportsAtomicAppend).toBe(false);
-    });
-  });
-
   describe('listPushIndexed', () => {
     it('runs one Lua script instead of INCR/EXPIRE/RPUSH/EXPIRE', async () => {
       mockClient.eval.mockResolvedValue(4);
@@ -249,20 +234,34 @@ describe('RedisServerCache', () => {
       expect(mockClient.eval.mock.calls[0]![5]).toBe('0');
     });
 
-    it('throws when the client has no eval', async () => {
+    it('falls back to INCR + RPUSH when the client has no eval', async () => {
       const { eval: _eval, ...clientWithoutEval } = mockClient;
       const fallbackCache = new RedisServerCache({ client: clientWithoutEval as RedisClient });
+      mockClient.incr.mockResolvedValue(3);
 
-      // `supportsAtomicAppend` is false, so publishers stay unnumbered; a
-      // caller appending anyway must not get a non-atomic index.
-      await expect(fallbackCache.listPushIndexed('events', 'events:counter', { type: 'x' })).rejects.toThrow(
-        'listPushIndexed requires scripting support',
-      );
-      expect(mockClient.incr).not.toHaveBeenCalled();
-      expect(mockClient.rpush).not.toHaveBeenCalled();
+      const index = await fallbackCache.listPushIndexed('events', 'events:counter', { type: 'x' });
+
+      expect(index).toBe(2);
+      expect(mockClient.incr).toHaveBeenCalledWith('mastra:cache:events:counter');
+      expect(mockClient.rpush).toHaveBeenCalledWith('mastra:cache:events', '{"type":"x","index":2}');
     });
 
-    it('rethrows script errors', async () => {
+    it('permanently falls back after a CROSSSLOT rejection (Redis Cluster)', async () => {
+      mockClient.eval.mockRejectedValue(new Error("CROSSSLOT Keys in request don't hash to the same slot"));
+      mockClient.incr.mockResolvedValue(1);
+      mockClient.rpush.mockResolvedValue(1);
+
+      expect(await cache.listPushIndexed('events', 'events:counter', { type: 'x' })).toBe(0);
+      expect(mockClient.eval).toHaveBeenCalledTimes(1);
+      expect(mockClient.rpush).toHaveBeenCalledWith('mastra:cache:events', '{"type":"x","index":0}');
+
+      mockClient.incr.mockResolvedValue(2);
+      expect(await cache.listPushIndexed('events', 'events:counter', { type: 'y' })).toBe(1);
+      // No second eval attempt once scripting is known to be unusable
+      expect(mockClient.eval).toHaveBeenCalledTimes(1);
+    });
+
+    it('rethrows non-CROSSSLOT script errors', async () => {
       mockClient.eval.mockRejectedValue(new Error('connection lost'));
       await expect(cache.listPushIndexed('events', 'events:counter', { type: 'x' })).rejects.toThrow('connection lost');
       expect(mockClient.incr).not.toHaveBeenCalled();

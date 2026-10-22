@@ -130,14 +130,6 @@ export class ValkeyServerCache extends MastraServerCache {
   }
 
   /**
-   * GLIDE always runs the append through Lua, so allocation and append are one
-   * atomic operation.
-   */
-  get supportsAtomicAppend(): boolean {
-    return true;
-  }
-
-  /**
    * Single round-trip index allocation + list append + TTL refresh via Lua.
    * The list and counter keys share one TTL; see
    * {@link ValkeyServerCacheOptions.ttlSeconds}.

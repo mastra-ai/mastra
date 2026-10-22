@@ -11,9 +11,8 @@ export interface RedisClient {
   scan(cursor: string | number, ...args: unknown[]): Promise<[string | number, string[]]>;
   incr(key: string): Promise<number>;
   /**
-   * Server-side Lua scripting. Optional: without it the cache cannot append
-   * atomically, so `supportsAtomicAppend` is `false` and streams backed by this
-   * cache publish live-only (no index, no replay).
+   * Server-side Lua scripting. Optional: clients without it fall back to the
+   * two-round-trip `increment` + `listPush` path for `listPushIndexed`.
    */
   eval?(...args: unknown[]): Promise<unknown>;
 }
@@ -126,7 +125,7 @@ export class RedisServerCache extends MastraServerCache {
   private pushToList: (client: RedisClient, key: string, value: unknown) => Promise<number>;
   private getListRange: (client: RedisClient, key: string, start: number, stop: number) => Promise<unknown[]>;
   private evalScript: (client: RedisClient, script: string, keys: string[], args: string[]) => Promise<unknown>;
-  /** Set once scripting is known to be unusable (the client has no `eval`). */
+  /** Set once scripting is known to be unusable (no `eval`, or Cluster CROSSSLOT). */
   private scriptingDisabled: boolean;
 
   constructor(config: { client: RedisClient }, options: RedisServerCacheOptions = {}) {
@@ -146,15 +145,6 @@ export class RedisServerCache extends MastraServerCache {
 
   private getKey(key: string): string {
     return `${this.keyPrefix}${key}`;
-  }
-
-  /**
-   * True only while the Lua script is usable. A client without `eval` cannot
-   * allocate and append atomically, so numbered streams are unavailable and
-   * `CachingPubSub` publishes live-only.
-   */
-  get supportsAtomicAppend(): boolean {
-    return !this.scriptingDisabled;
   }
 
   private serialize(value: unknown): string {
@@ -256,25 +246,36 @@ export class RedisServerCache extends MastraServerCache {
     ttlMs?: number,
   ): Promise<number> {
     if (this.scriptingDisabled) {
-      // `supportsAtomicAppend` is false here, so a caller reaching this point is
-      // bypassing the capability check. Failing loudly beats a non-atomic append
-      // that hands two frames the same index.
-      throw new Error('[RedisServerCache] listPushIndexed requires scripting support (client.eval).');
+      return super.listPushIndexed(listKey, counterKey, value, ttlMs);
     }
 
     const { index: _ignored, ...body } = value;
-    const result = await this.evalScript(
-      this.client,
-      LIST_PUSH_INDEXED_SCRIPT,
-      [this.getKey(listKey), this.getKey(counterKey)],
-      [
-        this.serialize(body),
-        // A cache without expiry stays that way; otherwise `ttlMs` can only
-        // raise the default.
-        String(this.ttlSeconds > 0 ? Math.max(this.ttlSeconds, Math.ceil((ttlMs ?? 0) / 1000)) : 0),
-      ],
-    );
-    return Number(result);
+    try {
+      const result = await this.evalScript(
+        this.client,
+        LIST_PUSH_INDEXED_SCRIPT,
+        [this.getKey(listKey), this.getKey(counterKey)],
+        [
+          this.serialize(body),
+          // A cache without expiry stays that way; otherwise `ttlMs` can only
+          // raise the default.
+          String(this.ttlSeconds > 0 ? Math.max(this.ttlSeconds, Math.ceil((ttlMs ?? 0) / 1000)) : 0),
+        ],
+      );
+      return Number(result);
+    } catch (error) {
+      // Redis Cluster rejects multi-key scripts whose keys hash to different
+      // slots. Callers that do not hash-tag their keys degrade to the composed
+      // path instead of losing replay caching entirely.
+      if (error instanceof Error && error.message.includes('CROSSSLOT')) {
+        this.scriptingDisabled = true;
+        this.logger.warn(
+          '[RedisServerCache] listPushIndexed script rejected with CROSSSLOT; falling back to increment + listPush',
+        );
+        return super.listPushIndexed(listKey, counterKey, value, ttlMs);
+      }
+      throw error;
+    }
   }
 }
 

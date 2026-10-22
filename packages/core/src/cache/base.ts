@@ -40,21 +40,6 @@ export abstract class MastraServerCache extends MastraBase {
   abstract increment(key: string): Promise<number>;
 
   /**
-   * Whether {@link listPushIndexed} allocates the index and appends the value
-   * as one atomic operation, so list position and `index` agree even when
-   * several processes append concurrently.
-   *
-   * Defaults to `false`. A cache that cannot append atomically cannot back a
-   * numbered stream: two processes would interleave allocate and append,
-   * handing two frames the same index or landing a lower index behind a higher
-   * one. `CachingPubSub` publishes live-only through such a cache rather than
-   * risk a subscriber dropping a frame as a duplicate.
-   */
-  get supportsAtomicAppend(): boolean {
-    return false;
-  }
-
-  /**
    * Atomically allocate the next index from `counterKey` and append `value`
    * (with `index` set to the 0-based allocated index) to the list at `listKey`.
    * Returns the assigned index.
@@ -69,9 +54,8 @@ export abstract class MastraServerCache extends MastraBase {
    *   omitted, the cache's default TTL applies.
    *
    * The default implementation composes `increment()` + `listPush()` (two
-   * round-trips) and is therefore NOT atomic, which is why
-   * {@link supportsAtomicAppend} defaults to `false`. Overrides should perform
-   * both steps in one server-side operation.
+   * round-trips) and is therefore NOT atomic, and ignores `ttlMs`. Overrides
+   * should perform both steps in one server-side operation.
    */
   async listPushIndexed(
     listKey: string,

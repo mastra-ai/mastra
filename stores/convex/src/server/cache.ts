@@ -277,66 +277,9 @@ export async function handleCacheOperation(ctx: MutationCtx<any>, request: Cache
 
       return { ok: true, result: nextCounter };
     }
-
-    case 'listPushIndexed': {
-      // Allocation and append in one mutation: Convex mutations are
-      // serializable, so no other writer can observe the counter between the
-      // two writes.
-      let counterDoc = await findCacheDoc(ctx, request.counterKey);
-      if (counterDoc && (isExpired(counterDoc, now) || counterDoc.kind === 'deleted')) {
-        const cleanup = await deleteCacheKey(ctx, request.counterKey);
-        if (cleanup.hasMore) {
-          return { ok: true, hasMore: true };
-        }
-        counterDoc = null;
-      }
-      if (counterDoc && counterDoc.kind !== 'counter') {
-        return { ok: false, error: `${request.counterKey} exists but is not a number` };
-      }
-
-      // Resolve and validate the list document before touching the counter: a
-      // cleanup batch or a type error returns without an insert, so committing
-      // the counter first would burn an index and leave a gap.
-      let listDoc = await findCacheDoc(ctx, request.key);
-      if (listDoc && (isExpired(listDoc, now) || listDoc.kind === 'deleted')) {
-        const cleanup = await deleteCacheKey(ctx, request.key);
-        if (cleanup.hasMore) {
-          return { ok: true, hasMore: true };
-        }
-        listDoc = null;
-      }
-      if (listDoc && listDoc.kind !== 'list') {
-        return { ok: false, error: `${request.key} exists but is not an array` };
-      }
-
-      const index = counterDoc?.counter ?? 0;
-      await writeCacheDoc(ctx, request.counterKey, counterDoc, {
-        kind: 'counter',
-        keyPrefix: request.keyPrefix,
-        counter: index + 1,
-        expiresAt: request.expiresAt,
-      });
-
-      await writeCacheDoc(ctx, request.key, listDoc, {
-        kind: 'list',
-        keyPrefix: request.keyPrefix,
-        counter: (listDoc?.counter ?? 0) + 1,
-        expiresAt: request.expiresAt,
-      });
-
-      await ctx.db.insert(CACHE_LIST_TABLE, {
-        key: request.key,
-        keyPrefix: request.keyPrefix,
-        index,
-        value: encodeValue(request.value),
-      });
-
-      return { ok: true, result: index };
-    }
-
-    default:
-      return { ok: false, error: `Unsupported operation ${(request as any).op}` };
   }
+
+  return { ok: false, error: `Unsupported operation ${(request as any).op}` };
 }
 
 export const mastraCache = mutationGeneric(

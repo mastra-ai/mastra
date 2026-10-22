@@ -113,10 +113,6 @@ export class InMemoryServerCache extends MastraServerCache {
    * one task at a time and nothing here awaits, so no other publish can observe
    * the counter after it is bumped but before the entry is appended.
    */
-  get supportsAtomicAppend(): boolean {
-    return true;
-  }
-
   async listPushIndexed(
     listKey: string,
     counterKey: string,

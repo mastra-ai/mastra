@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { MastraServerCache } from '../cache/base';
 import { InMemoryServerCache } from '../cache/inmemory';
 import type { IMastraLogger } from '../logger';
 import { CachingPubSub, withCaching } from './caching-pubsub';
@@ -707,6 +708,18 @@ describe('CachingPubSub', () => {
     });
   });
 
+  describe('deprecated source', () => {
+    it('accepts a source without copying its frames', async () => {
+      const source = new EventEmitterPubSub();
+      const pubsub = new CachingPubSub(innerPubsub, cache, { source });
+      pubsub.__setSource(source);
+
+      await source.publish('source-topic', { type: 'test', runId: 'run-1', data: {} });
+
+      expect(await pubsub.getHistory('source-topic')).toEqual([]);
+    });
+  });
+
   describe('lease provider', () => {
     it('exposes the inner pubsub as the lease provider when the inner can lease', () => {
       const leaseProvider = cachingPubsub.getLeaseProvider();
@@ -839,26 +852,26 @@ describe('CachingPubSub', () => {
       expect(await cache.listLength(`pubsub:{${topic}}`)).toBe(0);
     });
 
-    it('publishes unnumbered through a cache that cannot append atomically', async () => {
-      const topic = 'non-atomic-topic';
+    it('numbers and caches frames through a cache that only has the default append', async () => {
+      const topic = 'default-append-topic';
 
-      class NonAtomicCache extends InMemoryServerCache {
-        override get supportsAtomicAppend(): boolean {
-          return false;
+      // Third-party caches that never override `listPushIndexed` inherit the
+      // base increment + listPush composition and must keep offset replay.
+      class DefaultAppendCache extends InMemoryServerCache {
+        override listPushIndexed(listKey: string, counterKey: string, value: Record<string, unknown>) {
+          return MastraServerCache.prototype.listPushIndexed.call(this, listKey, counterKey, value);
         }
       }
 
-      const nonAtomic = new NonAtomicCache();
-      const pubsub = new CachingPubSub(innerPubsub, nonAtomic);
+      const cache = new DefaultAppendCache();
+      const pubsub = new CachingPubSub(innerPubsub, cache);
       const callback = vi.fn();
       await pubsub.subscribe(topic, callback);
       await pubsub.publish(topic, { type: 'test', runId: 'run-1', data: {} });
+      await pubsub.publish(topic, { type: 'test', runId: 'run-1', data: {} });
 
-      // Without an atomic allocate+append there is no trustworthy numbering, so
-      // the frame stays unnumbered and the topic is live-only (no replay).
-      expect(callback).toHaveBeenCalledTimes(1);
-      expect(callback.mock.calls[0]![0]).not.toHaveProperty('index');
-      expect(await nonAtomic.listLength(`pubsub:{${topic}}`)).toBe(0);
+      expect(callback.mock.calls.map(call => call[0].index)).toEqual([0, 1]);
+      expect(await cache.listLength(`pubsub:{${topic}}`)).toBe(2);
     });
 
     it('publishes through a single listPushIndexed cache call (no separate increment/listPush)', async () => {
