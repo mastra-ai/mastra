@@ -2419,7 +2419,7 @@ describe('Agent Routes Authorization', () => {
       expect(recoverMock).toHaveBeenCalled();
     });
 
-    it('should call agent.recover(runId, { abortSignal }) and return fullStream', async () => {
+    it('should recover without coupling durable execution to the HTTP request signal', async () => {
       const expectedStream = new ReadableStream();
       const recoverMock = vi.fn().mockResolvedValue({ fullStream: expectedStream });
       (mockDurableAgent as any).recover = recoverMock;
@@ -2437,7 +2437,7 @@ describe('Agent Routes Authorization', () => {
         runId: 'recover-run-1',
       } as any);
 
-      expect(recoverMock).toHaveBeenCalledWith('recover-run-1', { abortSignal: abortController.signal });
+      expect(recoverMock).toHaveBeenCalledWith('recover-run-1');
       expect(result).toBe(expectedStream);
 
       delete (mockAgent as any).recover;

@@ -510,8 +510,7 @@ export async function getSerializedAgentTools(
 
         const outputSchema = schemaToJsonSchema(
           resolveLazySchema('outputSchema' in tool ? tool.outputSchema : undefined) as
-            | PublicSchema<unknown>
-            | undefined,
+            PublicSchema<unknown> | undefined,
         );
         if (outputSchema !== undefined) {
           outputSchemaForReturn = stringify(outputSchema);
@@ -519,8 +518,7 @@ export async function getSerializedAgentTools(
 
         const requestContextSchema = schemaToJsonSchema(
           resolveLazySchema('requestContextSchema' in tool ? tool.requestContextSchema : undefined) as
-            | PublicSchema<unknown>
-            | undefined,
+            PublicSchema<unknown> | undefined,
         );
         if (requestContextSchema !== undefined) {
           requestContextSchemaForReturn = stringify(requestContextSchema);
@@ -1956,7 +1954,8 @@ export const STREAM_GENERATE_ROUTE = createRoute({
         ...restOptions,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
-        abortSignal,
+        // A disconnected HTTP observer must not cancel durable execution.
+        abortSignal: isDurableAgentLike(agent) ? undefined : abortSignal,
       };
 
       // Support `untilIdle` option on the /stream endpoint — delegates to
@@ -2150,8 +2149,7 @@ async function handleAgentMessageRoute({
   invoke: (agent: Agent, target: SendAgentSignalOptions) => SendAgentSignalResult;
 }) {
   const idleStreamOptions = ifIdle?.streamOptions as
-    | (Record<string, unknown> & { requestContext?: Record<string, unknown>; versions?: VersionOverrides })
-    | undefined;
+    (Record<string, unknown> & { requestContext?: Record<string, unknown>; versions?: VersionOverrides }) | undefined;
   const bodyRequestContext = idleStreamOptions?.requestContext;
   const normalizedIdleStreamOptions = normalizePublicExecutionOptions(idleStreamOptions, serverRequestContext);
   const versionOptions = extractVersionOptions(serverRequestContext, bodyRequestContext);
@@ -2605,7 +2603,8 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
         context: restOptions.context as AIV5Type.ModelMessage[] | undefined,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
-        abortSignal,
+        // A disconnected HTTP observer must not cancel durable execution.
+        abortSignal: isDurableAgentLike(agent) ? undefined : abortSignal,
       };
 
       const streamResult = structuredOutput
@@ -2818,7 +2817,7 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
       const streamResult = await agent.approveToolCall({
         ...params,
         requestContext,
-        abortSignal,
+        abortSignal: isDurableAgentLike(agent) ? undefined : abortSignal,
       });
 
       return streamResult.fullStream;
@@ -3022,7 +3021,7 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
       const streamResult = await agent.declineToolCall({
         ...params,
         requestContext,
-        abortSignal,
+        abortSignal: isDurableAgentLike(agent) ? undefined : abortSignal,
       });
 
       return streamResult.fullStream;
@@ -3136,7 +3135,8 @@ export const RESUME_STREAM_ROUTE = createRoute({
         ...restOptions,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
-        abortSignal,
+        // A disconnected HTTP observer must not cancel durable execution.
+        abortSignal: isDurableAgentLike(agent) ? undefined : abortSignal,
       };
 
       // Support `untilIdle` option on the /resume-stream endpoint — delegates
@@ -3219,9 +3219,7 @@ export const RECOVER_ROUTE = createRoute({
       // NOTE: DurableAgent.recover() reads the workflow's requestContext from
       // the persisted snapshot. serverRequestContext is only used above for
       // ownership checks and version resolution.
-      const streamResult = await (agent as any).recover(runId, {
-        abortSignal,
-      });
+      const streamResult = await (agent as any).recover(runId);
 
       return streamResult.fullStream;
     } catch (error) {
@@ -3343,7 +3341,8 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         context: restOptions.context as AIV5Type.ModelMessage[] | undefined,
         requestContext: serverRequestContext,
         memory: authorizedMemoryOption,
-        abortSignal,
+        // A disconnected HTTP observer must not cancel durable execution.
+        abortSignal: isDurableAgentLike(agent) ? undefined : abortSignal,
       };
 
       const streamResult = structuredOutput

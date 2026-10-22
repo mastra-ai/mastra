@@ -159,9 +159,11 @@ describeForAllEngines('AIMock loop scenario: cancelling an untilIdle stream whil
     );
   }
 
-  it('breaking out of the stream while a tool is still running aborts the run', async () => {
+  it('breaking out while a tool runs detaches durable readers but aborts plain execution (COR-1489)', async () => {
     const llm = getMock();
     const memory = new MockMemory();
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => (release = resolve));
     let toolSignal: AbortSignal | undefined;
     let markStarted!: () => void;
     const started = new Promise<void>(resolve => (markStarted = resolve));
@@ -172,10 +174,13 @@ describeForAllEngines('AIMock loop scenario: cancelling an untilIdle stream whil
       execute: async (_input, context) => {
         toolSignal = context?.abortSignal;
         markStarted();
-        await new Promise<void>(resolve => {
-          if (toolSignal?.aborted) return resolve();
-          toolSignal?.addEventListener('abort', () => resolve(), { once: true });
-        });
+        await Promise.race([
+          gate,
+          new Promise<void>(resolve => {
+            if (toolSignal?.aborted) return resolve();
+            toolSignal?.addEventListener('abort', () => resolve(), { once: true });
+          }),
+        ]);
         return { ok: true };
       },
     });
@@ -209,7 +214,22 @@ describeForAllEngines('AIMock loop scenario: cancelling an untilIdle stream whil
       }
     }
 
-    await vi.waitFor(() => expect(toolSignal?.aborted).toBe(true), { timeout: 10_000, interval: 20 });
-    expect(llm.getRequests()).toHaveLength(1);
+    try {
+      if (isDurableEngineVariant(engine)) {
+        expect(toolSignal?.aborted).toBe(false);
+        release();
+        const observer = await shared.agent.observe(result.runId);
+        const chunks = await collect(observer.fullStream);
+        expect(textOf(chunks)).toBe('Done.');
+        expect(chunks.some(c => c.type === 'finish')).toBe(true);
+        expect(chunks.some(c => c.type === 'abort')).toBe(false);
+        expect(llm.getRequests()).toHaveLength(2);
+      } else {
+        await vi.waitFor(() => expect(toolSignal?.aborted).toBe(true), { timeout: 10_000, interval: 20 });
+        expect(llm.getRequests()).toHaveLength(1);
+      }
+    } finally {
+      release();
+    }
   }, 30_000);
 });
