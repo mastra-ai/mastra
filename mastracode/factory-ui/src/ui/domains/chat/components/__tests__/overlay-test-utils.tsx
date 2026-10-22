@@ -134,10 +134,11 @@ export function useOverlayControllerHandlers() {
 
 /** Renders where a command navigated and the location it carries back, so tests can assert both. */
 function NavigatedPath() {
-  const { pathname, state } = useLocation();
+  const { pathname, hash, state } = useLocation();
   return (
     <span data-testid="navigated-path" data-return-to={JSON.stringify(state)}>
       {pathname}
+      {hash}
     </span>
   );
 }
