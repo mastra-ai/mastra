@@ -18,10 +18,11 @@ import { useDownloadTraceJson } from '../hooks/use-download-trace-json';
 import { useTraceSearch } from '../hooks/use-trace-search';
 import type { TraceUsageSummary } from '../trace-list-columns';
 import type { LightSpanRecord } from '../types';
+import { getTraceModel } from '../utils/span-utils';
 import { formatHierarchicalSpans } from './format-hierarchical-spans';
 import { TraceSpanTimeline } from './trace-span-timeline';
 import { TraceSpanTree } from './trace-span-tree';
-import { TraceEntityMeta, TraceStatusMeta, TraceSummaryDescription } from './trace-summary-description';
+import { TraceEntityMeta, TraceModelMeta, TraceStatusMeta, TraceSummaryDescription } from './trace-summary-description';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DataPanel } from '@/ds/components/DataPanel';
@@ -305,6 +306,10 @@ export function TraceDataPanelView({
     () => (anchorSpanId ? spans?.find(s => s.spanId === anchorSpanId) : spans?.find(s => s.parentSpanId == null)),
     [spans, anchorSpanId],
   );
+  const traceModel = useMemo(
+    () => (rootSpan && spans ? getTraceModel(spans, rootSpan.spanId) : undefined),
+    [spans, rootSpan],
+  );
   const rootError = getSpanError(rootSpan?.error);
   const handleSpanClick = (id: string) => {
     const newId = selectedSpanId === id ? undefined : id;
@@ -465,6 +470,7 @@ export function TraceDataPanelView({
                 <DataPanel.Header>
                   <DataPanel.Metadata>
                     <TraceEntityMeta rootSpan={rootSpan} entityHref={entityHref} LinkComponent={LinkComponent} />
+                    {traceModel && <TraceModelMeta {...traceModel} />}
                     <TraceStatusMeta rootSpan={rootSpan} />
                   </DataPanel.Metadata>
                   <div className="ml-auto flex min-w-0">

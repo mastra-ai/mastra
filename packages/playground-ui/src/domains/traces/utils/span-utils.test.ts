@@ -1,9 +1,59 @@
 import type { SpanRecord } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
-import { getSpanDurationMs, getInputPreview, getTokenLimitMessage, isTokenLimitExceeded } from './span-utils';
+import {
+  getSpanDurationMs,
+  getInputPreview,
+  getTokenLimitMessage,
+  getTraceModel,
+  isTokenLimitExceeded,
+} from './span-utils';
 
 const START = new Date('2026-01-01T00:00:00.000Z');
 const at = (offsetMs: number) => new Date(START.getTime() + offsetMs);
+
+describe('getTraceModel', () => {
+  const span = (
+    spanId: string,
+    parentSpanId: string | null,
+    spanType: string,
+    offsetMs: number,
+    attributes?: object,
+  ) => ({
+    spanId,
+    parentSpanId,
+    spanType,
+    startedAt: at(offsetMs),
+    ...(attributes && { attributes }),
+  });
+
+  it('reads the provider and model of the earliest model generation under an agent run', () => {
+    const spans = [
+      span('root', null, 'agent_run', 0),
+      span('gen-2', 'root', 'model_generation', 20, { model: 'gpt-4o-mini', provider: 'openai' }),
+      span('gen-1', 'root', 'model_generation', 10, { model: 'gpt-4o', provider: 'openai' }),
+    ];
+    expect(getTraceModel(spans, 'root')).toEqual({ model: 'gpt-4o', provider: 'openai' });
+  });
+
+  it('returns the model without a provider when the provider is missing', () => {
+    const spans = [
+      span('root', null, 'agent_run', 0),
+      span('gen', 'root', 'model_generation', 10, { model: 'gpt-4o' }),
+    ];
+    expect(getTraceModel(spans, 'root')).toEqual({ model: 'gpt-4o', provider: undefined });
+  });
+
+  it('returns undefined for non-agent roots and for spans without attributes', () => {
+    const workflow = [
+      span('root', null, 'workflow_run', 0),
+      span('gen', 'root', 'model_generation', 10, { model: 'gpt-4o', provider: 'openai' }),
+    ];
+    expect(getTraceModel(workflow, 'root')).toBeUndefined();
+
+    const light = [span('root', null, 'agent_run', 0), span('gen', 'root', 'model_generation', 10)];
+    expect(getTraceModel(light, 'root')).toBeUndefined();
+  });
+});
 
 describe('getSpanDurationMs', () => {
   it('returns the elapsed milliseconds for Date and ISO string inputs', () => {

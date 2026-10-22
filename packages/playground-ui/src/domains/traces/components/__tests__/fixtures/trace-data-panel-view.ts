@@ -8,6 +8,7 @@ import type { LightSpanRecord } from '../../../types';
 // shape from the client method rather than the component prop type.
 type GetTraceLightResponse = Awaited<ReturnType<MastraClient['getTraceLight']>>;
 type TraceSpan = GetTraceLightResponse['spans'][number];
+type FullTraceSpan = Awaited<ReturnType<MastraClient['getTrace']>>['spans'][number];
 
 // One root span so the panel renders the actions row (the button is gated on
 // `hierarchicalSpans.length > 0`). The timeline reads these fields directly.
@@ -84,4 +85,36 @@ export const deepTraceFixture: LightSpanRecord[] = [
   deepSpan('wf-1', 'root', 'workflow run', SpanType.WORKFLOW_RUN, 50, { entityName: 'report-workflow' }),
   deepSpan('step-1', 'wf-1', 'step normalize', SpanType.WORKFLOW_STEP, 60),
   deepSpan('gen-2', 'wf-1', 'llm generation', SpanType.MODEL_GENERATION, 70, { entityName: 'summarizer' }),
+];
+
+// An agent run as `client.getTrace` delivers it: full spans, so the model
+// generations carry their `attributes`. The agent calls a sub-agent that runs on
+// another model, which must not leak into the root agent's header.
+const fullSpan = (
+  spanId: string,
+  parentSpanId: string | null,
+  name: string,
+  spanType: SpanType,
+  offsetMs: number,
+  extra: Partial<FullTraceSpan> = {},
+): FullTraceSpan => ({
+  ...deepSpan(spanId, parentSpanId, name, spanType, offsetMs),
+  ...extra,
+});
+
+export const agentWithModelFixture: LightSpanRecord[] = [
+  fullSpan('root', null, 'agent run', SpanType.AGENT_RUN, 0, {
+    entityId: 'weather-agent',
+    entityName: 'weather-agent',
+  }),
+  fullSpan('sub-agent', 'root', 'sub agent run', SpanType.AGENT_RUN, 10, { entityName: 'research-agent' }),
+  fullSpan('sub-gen', 'sub-agent', 'sub llm generation', SpanType.MODEL_GENERATION, 20, {
+    attributes: { model: 'claude-sonnet-4-20250514', provider: 'anthropic' },
+  }),
+  fullSpan('gen-1', 'root', 'llm generation', SpanType.MODEL_GENERATION, 30, {
+    attributes: { model: 'gpt-4o', provider: 'openai' },
+  }),
+  fullSpan('gen-2', 'root', 'llm generation', SpanType.MODEL_GENERATION, 40, {
+    attributes: { model: 'gpt-4o-mini', provider: 'openai' },
+  }),
 ];

@@ -10,7 +10,12 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 
 import { TraceDataPanelView } from '../trace-data-panel-view';
 import type { TraceDataPanelViewProps } from '../trace-data-panel-view';
-import { deepTraceFixture, nestedSpanFixture, rootSpanFixture } from './fixtures/trace-data-panel-view';
+import {
+  agentWithModelFixture,
+  deepTraceFixture,
+  nestedSpanFixture,
+  rootSpanFixture,
+} from './fixtures/trace-data-panel-view';
 import { installHighlightApi } from '@/test/highlight-api';
 import type { HighlightApiHarness } from '@/test/highlight-api';
 
@@ -234,6 +239,29 @@ describe('TraceDataPanelView — trace summary description', () => {
     expect(screen.queryByText('Ended at')).toBeNull();
     expect(screen.queryByText('Trace input tokens')).toBeNull();
     expect(screen.queryByText('Trace est. cost')).toBeNull();
+  });
+});
+
+describe('TraceDataPanelView — model meta', () => {
+  it("shows the agent's first model call right after the agent badge", () => {
+    render(<TraceDataPanelView {...baseProps} spans={agentWithModelFixture} />);
+
+    const model = screen.getByText('gpt-4o');
+    const entity = screen.getAllByText('weather-agent')[0];
+    expect(entity.compareDocumentPosition(model) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByText('gpt-4o-mini')).toBeNull();
+  });
+
+  it("does not show a sub-agent's model, even when it ran first", () => {
+    render(<TraceDataPanelView {...baseProps} spans={agentWithModelFixture} />);
+
+    expect(screen.queryByText('claude-sonnet-4-20250514')).toBeNull();
+  });
+
+  it('shows no model when the trace has no model generation', () => {
+    render(<TraceDataPanelView {...baseProps} spans={rootSpanFixture} />);
+
+    expect(screen.queryByText('gpt-4o')).toBeNull();
   });
 });
 

@@ -1,3 +1,4 @@
+import { SpanType } from '@mastra/core/observability';
 import type { SpanRecord } from '../types';
 import { toDate } from '@/utils/date-format';
 
@@ -11,6 +12,52 @@ export function getSpanDurationMs(
   const endedAtMs = toDate(endedAt)?.getTime();
   if (startedAtMs === undefined || endedAtMs === undefined || endedAtMs < startedAtMs) return undefined;
   return endedAtMs - startedAtMs;
+}
+
+type TraceTreeSpan = {
+  spanId: string;
+  parentSpanId?: string | null;
+  spanType: string;
+  startedAt: Date | string;
+};
+
+export type TraceModel = { model: string; provider?: string };
+
+/**
+ * The model an agent run used. The `agent_run` span carries no model, so this reads the
+ * earliest `model_generation` span of its subtree, without descending into sub-agents.
+ * `attributes` is only present on full span payloads; light spans yield `undefined`.
+ */
+export function getTraceModel(spans: readonly TraceTreeSpan[], rootSpanId: string): TraceModel | undefined {
+  const root = spans.find(span => span.spanId === rootSpanId);
+  if (root?.spanType !== SpanType.AGENT_RUN) return undefined;
+
+  const childrenByParent = new Map<string, TraceTreeSpan[]>();
+  for (const span of spans) {
+    if (!span.parentSpanId) continue;
+    const siblings = childrenByParent.get(span.parentSpanId);
+    if (siblings) siblings.push(span);
+    else childrenByParent.set(span.parentSpanId, [span]);
+  }
+
+  let earliest: (TraceModel & { startedAtMs: number }) | undefined;
+  const stack = [...(childrenByParent.get(rootSpanId) ?? [])];
+  for (let span = stack.pop(); span; span = stack.pop()) {
+    if (span.spanType === SpanType.AGENT_RUN) continue;
+    stack.push(...(childrenByParent.get(span.spanId) ?? []));
+    if (span.spanType !== SpanType.MODEL_GENERATION) continue;
+
+    const attributes = 'attributes' in span ? span.attributes : undefined;
+    if (!attributes || typeof attributes !== 'object') continue;
+    const { model, provider } = attributes as Record<string, unknown>;
+    if (typeof model !== 'string' || !model) continue;
+
+    const startedAtMs = toDate(span.startedAt)?.getTime() ?? Number.POSITIVE_INFINITY;
+    if (earliest && earliest.startedAtMs <= startedAtMs) continue;
+    earliest = { model, provider: typeof provider === 'string' && provider ? provider : undefined, startedAtMs };
+  }
+
+  return earliest && { model: earliest.model, provider: earliest.provider };
 }
 
 /**

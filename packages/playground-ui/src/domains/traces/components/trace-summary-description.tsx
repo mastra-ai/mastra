@@ -3,12 +3,15 @@ import {
   ArrowUpFromLineIcon,
   CalendarClockIcon,
   CircleDollarSignIcon,
+  CpuIcon,
   TimerIcon,
 } from 'lucide-react';
 import type { TraceUsageSummary } from '../trace-list-columns';
 import { getSpanDurationMs } from '../utils/span-utils';
+import type { TraceModel } from '../utils/span-utils';
 import { TraceStatusValue } from './trace-status-value';
 import type { TraceStatusValueStatus } from './trace-status-value';
+import { ProviderLogo } from '@/domains/llm';
 import { DataPanel } from '@/ds/components/DataPanel';
 import { Txt } from '@/ds/components/Txt/Txt';
 import { AgentIcon, WorkflowIcon } from '@/ds/icons';
@@ -68,6 +71,20 @@ export function TraceEntityMeta({ rootSpan, entityHref, LinkComponent }: TraceEn
   ) : (
     <DataPanel.Meta icon={<EntityIcon />} tooltip={formattedEntityType}>
       {entityName}
+    </DataPanel.Meta>
+  );
+}
+
+export type TraceModelMetaProps = TraceModel;
+
+/** The model the trace's agent ran on, with its provider's logo, as a `DataPanel.Meta` pill. */
+export function TraceModelMeta({ model, provider }: TraceModelMetaProps) {
+  return (
+    <DataPanel.Meta
+      icon={provider ? <ProviderLogo providerId={provider} size="xs" /> : <CpuIcon />}
+      tooltip={provider ? `Model · ${provider}` : 'Model'}
+    >
+      {model}
     </DataPanel.Meta>
   );
 }
