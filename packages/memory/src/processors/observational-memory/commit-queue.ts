@@ -1,5 +1,7 @@
 import { AsyncLocalStorage, AsyncResource } from 'node:async_hooks';
 
+import { waitWithAbort } from './background-operation';
+
 /**
  * Process-wide queue for observational memory storage commits, keyed per thread or resource
  * (the `BufferingCoordinator.getLockKey` scheme).
@@ -86,7 +88,7 @@ function runNext(key: string, queue: KeyQueue): void {
 export function runOMCommit<T>(
   key: string,
   op: () => Promise<T>,
-  { priority = 'normal' }: { priority?: OMCommitPriority } = {},
+  { priority = 'normal', abortSignal }: { priority?: OMCommitPriority; abortSignal?: AbortSignal } = {},
 ): Promise<T> {
   if (holdsKey(key)) {
     return Promise.reject(
@@ -94,7 +96,8 @@ export function runOMCommit<T>(
     );
   }
 
-  return new Promise<T>((resolve, reject) => {
+  if (abortSignal?.aborted) return Promise.reject(abortSignal.reason);
+  const work = new Promise<T>((resolve, reject) => {
     let queue = queues.get(key);
     if (!queue) {
       queue = { running: null, reflection: [], normal: [] };
@@ -126,7 +129,12 @@ export function runOMCommit<T>(
       stallTimer.unref?.();
       // Release the key before settling the caller, so the caller observes it free.
       heldKeys
-        .run(held, () => Promise.resolve().then(op))
+        .run(held, () =>
+          Promise.resolve().then(() => {
+            abortSignal?.throwIfAborted();
+            return op();
+          }),
+        )
         .then(
           value => {
             release();
@@ -142,6 +150,7 @@ export function runOMCommit<T>(
     (priority === 'reflection' ? owner.reflection : owner.normal).push(start);
     if (owner.running === null) runNext(key, owner);
   });
+  return waitWithAbort(work, abortSignal);
 }
 
 /** Whether the current async context runs inside an op holding `key`. Test-only. */

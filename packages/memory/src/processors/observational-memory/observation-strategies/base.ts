@@ -527,10 +527,14 @@ export abstract class ObservationStrategy {
   /** Runs one storage commit in this thread's (or resource's) slot of the process-wide commit queue. */
   protected runCommit<T>(op: () => Promise<T>): Promise<T> {
     const { threadId, resourceId, record } = this.opts;
-    return runOMCommit(getOMLockKey(this.scope, record.threadId ?? threadId, record.resourceId ?? resourceId), () => {
-      this.opts.abortSignal?.throwIfAborted();
-      return op();
-    });
+    return runOMCommit(
+      getOMLockKey(this.scope, record.threadId ?? threadId, record.resourceId ?? resourceId),
+      () => {
+        this.opts.abortSignal?.throwIfAborted();
+        return op();
+      },
+      { abortSignal: this.opts.abortSignal },
+    );
   }
 
   protected async indexObservationGroups(

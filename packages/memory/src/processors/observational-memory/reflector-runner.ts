@@ -249,6 +249,7 @@ export class ReflectorRunner {
     messageList: MessageList | undefined,
     threadId: string,
     resourceId?: string,
+    abortSignal?: AbortSignal,
   ) => Promise<boolean>;
   private readonly getCompressionStartLevel: (requestContext?: RequestContext) => Promise<CompressionLevel>;
   private readonly memory?: Memory;
@@ -293,6 +294,7 @@ export class ReflectorRunner {
       messageList: MessageList | undefined,
       threadId: string,
       resourceId?: string,
+      abortSignal?: AbortSignal,
     ) => Promise<boolean>;
     getCompressionStartLevel: (requestContext?: RequestContext) => Promise<CompressionLevel>;
     resolveModel: ReflectionModelResolver;
@@ -959,6 +961,7 @@ export class ReflectorRunner {
         });
         return true;
       },
+      { abortSignal },
     );
     if (!saved) {
       omDebug(
@@ -1127,7 +1130,7 @@ export class ReflectorRunner {
           newRecordId,
         });
       },
-      { priority: 'reflection' },
+      { priority: 'reflection', abortSignal: committedContext?.abortSignal },
     );
     if (!isReflectionApplied(swapped, newRecordId, freshRecord.id)) {
       // The record was retired by another reflection, or its observations were rewritten
@@ -1184,6 +1187,7 @@ export class ReflectorRunner {
         messageList,
         freshRecord.threadId ?? '',
         freshRecord.resourceId ?? undefined,
+        committedContext?.abortSignal,
       );
     }
 
@@ -1521,7 +1525,7 @@ export class ReflectorRunner {
             newRecordId,
           });
         },
-        { priority: 'reflection' },
+        { priority: 'reflection', abortSignal },
       );
       if (!isReflectionApplied(committedRecord, newRecordId, record.id)) {
         // Another reflection retired this record, or its observations were rewritten while the
@@ -1618,6 +1622,7 @@ export class ReflectorRunner {
           messageList,
           threadId,
           record.resourceId ?? undefined,
+          abortSignal,
         );
       } catch {
         persistedToList = false;

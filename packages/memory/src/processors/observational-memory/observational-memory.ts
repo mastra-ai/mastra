@@ -869,7 +869,7 @@ export class ObservationalMemory {
       buffering: this.buffering,
       emitDebugEvent: e => this.emitDebugEvent(e),
       persistMarkerToStorage: (m, t, r, signal) => this.persistMarkerToStorage(m, t, r, { abortSignal: signal }),
-      persistMarkerToMessage: (m, ml, t, r) => this.persistMarkerToMessage(m, ml, t, r),
+      persistMarkerToMessage: (m, ml, t, r, signal) => this.persistMarkerToMessage(m, ml, t, r, signal),
       getCompressionStartLevel: rc => this.getCompressionStartLevel(rc),
       resolveModel: (inputTokens, options) => this.resolveReflectionModel(inputTokens, options),
       mastra: config.mastra,
@@ -1571,7 +1571,9 @@ export class ObservationalMemory {
     messageList: MessageList | undefined,
     threadId: string,
     resourceId?: string,
+    abortSignal?: AbortSignal,
   ): Promise<boolean> {
+    if (abortSignal?.aborted) return false;
     if (!messageList) return false;
     const allMsgs = messageList.get.all.db();
     const markerData = marker.data as { cycleId?: string; operationType?: string } | undefined;
@@ -3836,12 +3838,18 @@ ${formattedMessages}
       // Only clear the flag if the success path didn't already clear it (with token count)
       if (!flagCleared) {
         setBufferingState(false);
-        await runOMCommit(lockKey, () => {
-          const resetBoundary =
-            abortSignal.aborted && BufferingCoordinator.ownsObservationBoundary(bufferKey, boundaryOwner);
-          if (resetBoundary) BufferingCoordinator.setObservationBoundary(bufferKey, 0);
-          return this.storage.setBufferingObservationFlag(record.id, false, resetBoundary ? 0 : undefined);
-        }).catch(() => {});
+        const flagCleanup = this.trackBackgroundWork(
+          runOMCommit(lockKey, () => {
+            const newerOp = BufferingCoordinator.asyncBufferingOps.get(bufferKey);
+            if (newerOp && newerOp !== opPromise) return Promise.resolve();
+            const resetBoundary =
+              abortSignal.aborted && BufferingCoordinator.ownsObservationBoundary(bufferKey, boundaryOwner);
+            if (resetBoundary) BufferingCoordinator.setObservationBoundary(bufferKey, 0);
+            return this.storage.setBufferingObservationFlag(record.id, false, resetBoundary ? 0 : undefined);
+          }).catch(() => {}),
+          lockKey,
+        );
+        await waitWithAbort(flagCleanup, abortSignal).catch(() => {});
       }
     }
   }
@@ -4020,45 +4028,49 @@ ${formattedMessages}
     let freshChunks: BufferedObservationChunk[] = [];
     let activationResult: SwapBufferedToActiveResult | undefined;
     for (let attempt = 0; attempt <= MAX_ACTIVATION_RETIRED_RETRIES; attempt++) {
-      const swapped = await runOMCommit(commitKey, async () => {
-        const head = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
-        if (!head) return null;
-        const chunks = getBufferedChunks(head);
-        if (!chunks.length) return null;
+      const swapped = await runOMCommit(
+        commitKey,
+        async () => {
+          const head = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
+          if (!head) return null;
+          const chunks = getBufferedChunks(head);
+          if (!chunks.length) return null;
 
-        // Calculate activation parameters (use per-record override if set)
-        const messageTokensThreshold = getMaxThreshold(this.getEffectiveMessageTokens(head));
-        const bufferActivation = this.observationConfig.bufferActivation ?? 0.7;
-        const activationRatio = resolveActivationRatio(bufferActivation, messageTokensThreshold);
+          // Calculate activation parameters (use per-record override if set)
+          const messageTokensThreshold = getMaxThreshold(this.getEffectiveMessageTokens(head));
+          const bufferActivation = this.observationConfig.bufferActivation ?? 0.7;
+          const activationRatio = resolveActivationRatio(bufferActivation, messageTokensThreshold);
 
-        // Prefer the live pending count; the persisted one is written at the end of the
-        // previous step and misses anything added since (e.g. a large tool-result batch).
-        const totalChunkMessageTokens = chunks.reduce((sum, c) => sum + (c.messageTokens ?? 0), 0);
-        const currentPendingTokens = livePendingTokens ?? (head.pendingMessageTokens || totalChunkMessageTokens);
+          // Prefer the live pending count; the persisted one is written at the end of the
+          // previous step and misses anything added since (e.g. a large tool-result batch).
+          const totalChunkMessageTokens = chunks.reduce((sum, c) => sum + (c.messageTokens ?? 0), 0);
+          const currentPendingTokens = livePendingTokens ?? (head.pendingMessageTokens || totalChunkMessageTokens);
 
-        const blockAfter = this.getEffectiveObservationBlockAfter(head);
-        const forceMaxActivation = !!(blockAfter && currentPendingTokens >= blockAfter);
+          const blockAfter = this.getEffectiveObservationBlockAfter(head);
+          const forceMaxActivation = !!(blockAfter && currentPendingTokens >= blockAfter);
 
-        opts.abortSignal?.throwIfAborted();
-        // Storage adapters decrement the persisted pending count during the swap. Keep
-        // that base aligned with the live count used to select chunks so the returned
-        // record reflects the unactivated tail rather than the previous step's count.
-        if (head.pendingMessageTokens !== currentPendingTokens) {
-          await this.storage.setPendingMessageTokens(head.id, currentPendingTokens);
-        }
+          opts.abortSignal?.throwIfAborted();
+          // Storage adapters decrement the persisted pending count during the swap. Keep
+          // that base aligned with the live count used to select chunks so the returned
+          // record reflects the unactivated tail rather than the previous step's count.
+          if (head.pendingMessageTokens !== currentPendingTokens) {
+            await this.storage.setPendingMessageTokens(head.id, currentPendingTokens);
+          }
 
-        // Perform the swap
-        opts.abortSignal?.throwIfAborted();
-        const result = await this.storage.swapBufferedToActive({
-          id: head.id,
-          activationRatio,
-          messageTokensThreshold,
-          currentPendingTokens,
-          forceMaxActivation,
-          bufferedChunks: chunks,
-        });
-        return { head, chunks, result };
-      });
+          // Perform the swap
+          opts.abortSignal?.throwIfAborted();
+          const result = await this.storage.swapBufferedToActive({
+            id: head.id,
+            activationRatio,
+            messageTokensThreshold,
+            currentPendingTokens,
+            forceMaxActivation,
+            bufferedChunks: chunks,
+          });
+          return { head, chunks, result };
+        },
+        { abortSignal: opts.abortSignal },
+      );
       if (!swapped) {
         return { activated: false, record };
       }
@@ -4074,14 +4086,17 @@ ${formattedMessages}
 
     // Clear buffering flag
     const swappedRecordId = freshRecord.id;
-    await runOMCommit(commitKey, () => this.storage.setBufferingObservationFlag(swappedRecordId, false)).catch(
-      () => {},
+    const flagCleanup = this.trackBackgroundWork(
+      runOMCommit(commitKey, () => this.storage.setBufferingObservationFlag(swappedRecordId, false)).catch(() => {}),
+      commitKey,
     );
+    await waitWithAbort(flagCleanup, opts.abortSignal).catch(() => {});
     unregisterOp(freshRecord.id, 'bufferingObservation');
 
     // Fetch updated record for marker emission
     const postSwapRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
 
+    opts.abortSignal?.throwIfAborted();
     // Emit activation markers for UI feedback — one per activated cycleId
     if (opts.writer && postSwapRecord && activationResult.activatedCycleIds.length > 0) {
       const perChunkMap = new Map(activationResult.perChunk?.map(c => [c.cycleId, c]));
@@ -4116,12 +4131,14 @@ ${formattedMessages}
           opts.messageList,
           record.threadId ?? '',
           record.resourceId ?? undefined,
+          opts.abortSignal,
         );
       }
     }
 
     // Update thread metadata with continuation hints from activated chunks
     const thread = await this.storage.getThreadById({ threadId });
+    opts.abortSignal?.throwIfAborted();
     if (thread) {
       // Get hints from the most recent activated chunk
       const activatedChunks = freshChunks.filter(c => activationResult.activatedCycleIds.includes(c.cycleId));

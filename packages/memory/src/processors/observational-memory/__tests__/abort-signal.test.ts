@@ -14,6 +14,7 @@ import { InMemoryStore, InMemoryMemory, InMemoryDB } from '@mastra/core/storage'
 import { describe, it, expect } from 'vitest';
 
 import { Memory } from '../../../index';
+import { runOMCommit, waitingOMCommits } from '../commit-queue';
 
 // =============================================================================
 // Slow model that takes a long time to respond (simulates real LLM latency)
@@ -661,4 +662,197 @@ describe('Cancellation during marker reads (#27792)', () => {
       }
     },
   );
+});
+
+describe('Cancellation in the commit queue (#27792)', () => {
+  it.each(['activation', 'observation', 'buffer', 'reflection'] as const)(
+    'settles cancelled %s without overtaking a held commit',
+    async mode => {
+      const provider = createLatchedModel('<observations>\n- Accepted observation\n</observations>');
+      const store = new InMemoryStore();
+      const memory = new Memory({
+        storage: store,
+        options: {
+          observationalMemory: {
+            enabled: true,
+            observation: {
+              model: provider.model,
+              messageTokens: 1000,
+              bufferTokens: mode === 'observation' || mode === 'reflection' ? false : 10,
+            },
+            reflection: { model: provider.model, observationTokens: mode === 'reflection' ? 100 : 100_000 },
+          },
+        },
+      });
+      const engine = (await memory.omEngine)!;
+      const storage = (await store.getStore('memory'))!;
+      const threadId = `commit-wait-${mode}`;
+      const resourceId = 'commit-resource';
+      const record = await engine.getOrCreateRecord(threadId, resourceId);
+      const message: MastraDBMessage = {
+        id: `request-${mode}`,
+        threadId,
+        resourceId,
+        role: 'user',
+        createdAt: new Date(),
+        content: { format: 2, parts: [{ type: 'text', text: 'Keep this request.' }] },
+      };
+      await engine.persistMessages([message], threadId, resourceId);
+      if (mode === 'activation')
+        await storage.updateBufferedObservations({
+          id: record.id,
+          chunk: {
+            cycleId: 'queued-activation',
+            observations: '- Existing buffer',
+            tokenCount: 3,
+            messageTokens: 10,
+            messageIds: ['prior-message'],
+            lastObservedAt: new Date(0),
+          },
+        });
+      if (mode === 'reflection')
+        await storage.updateActiveObservations({
+          id: record.id,
+          observations: '- Existing observation.\n'.repeat(30),
+          tokenCount: 1000,
+        });
+      const controller = new AbortController();
+      const turn = engine.beginTurn({
+        threadId,
+        resourceId,
+        messageList: new MessageList({ threadId, resourceId }),
+        abortSignal: controller.signal,
+      });
+      if (mode === 'reflection') await turn.start();
+      const entered = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      const key = engine.buffering.getLockKey(threadId, resourceId);
+      const blocker = runOMCommit(key, async () => {
+        entered.resolve();
+        await release.promise;
+      });
+      await entered.promise;
+      const operation =
+        mode === 'activation'
+          ? engine.activate({ threadId, resourceId, abortSignal: controller.signal })
+          : mode === 'observation'
+            ? engine.observe({ threadId, resourceId, messages: [message], force: true, abortSignal: controller.signal })
+            : mode === 'reflection'
+              ? turn.step(0).prepare()
+              : engine.buffer({
+                  threadId,
+                  resourceId,
+                  messages: [message],
+                  skipMinimumTokenCheck: true,
+                  abortSignal: controller.signal,
+                });
+      let settled = false;
+      const result = operation.then(
+        () => {
+          settled = true;
+        },
+        () => {
+          settled = true;
+        },
+      );
+      try {
+        if (mode !== 'activation') {
+          await provider.started;
+          provider.release();
+        }
+        await new Promise<void>(resolve => setImmediate(resolve));
+        const waiting = waitingOMCommits(key);
+        expect(waiting.normal + waiting.reflection).toBeGreaterThan(0);
+        controller.abort();
+        await new Promise<void>(resolve => setImmediate(resolve));
+        expect(settled).toBe(true);
+        expect((await engine.getRecord(threadId, resourceId))?.activeObservations ?? '').toBe(
+          mode === 'reflection' ? '- Existing observation.\n'.repeat(30) : '',
+        );
+      } finally {
+        controller.abort();
+        release.resolve();
+        provider.release();
+        await Promise.all([blocker, result]);
+        if (mode === 'reflection' && !turn.ended) await turn.end();
+        await engine.settled();
+      }
+    },
+  );
+});
+
+class PausedThreadStorage extends InMemoryMemory {
+  pause = false;
+  readonly readStarted = Promise.withResolvers<void>();
+  readonly releaseRead = Promise.withResolvers<void>();
+  override async getThreadById(args: Parameters<InMemoryMemory['getThreadById']>[0]) {
+    const result = await super.getThreadById(args);
+    if (!this.pause) return result;
+    this.pause = false;
+    const snapshot = structuredClone(result);
+    this.readStarted.resolve();
+    await this.releaseRead.promise;
+    return snapshot;
+  }
+}
+
+it('does not apply activation hints after an aborted thread read (#27792)', async () => {
+  const storage = new PausedThreadStorage({ db: new InMemoryDB() });
+  const store = new InMemoryStore();
+  store.stores.memory = storage;
+  const model = createLatchedModel('Unused', false);
+  const memory = new Memory({
+    storage: store,
+    options: {
+      observationalMemory: {
+        enabled: true,
+        model: model.model,
+        observation: { messageTokens: 1000, bufferTokens: 10 },
+        reflection: { observationTokens: 100_000 },
+      },
+    },
+  });
+  const engine = (await memory.omEngine)!;
+  const threadId = 'activation-metadata';
+  const resourceId = 'activation-resource';
+  await storage.saveThread({
+    thread: {
+      id: threadId,
+      resourceId,
+      title: 'Original title',
+      metadata: {},
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+  });
+  const record = await engine.getOrCreateRecord(threadId, resourceId);
+  await storage.updateBufferedObservations({
+    id: record.id,
+    chunk: {
+      cycleId: 'activation-metadata',
+      observations: '- Prior observation',
+      tokenCount: 5,
+      messageTokens: 100,
+      messageIds: ['prior'],
+      lastObservedAt: new Date(),
+      suggestedContinuation: 'Late continuation',
+      threadTitle: 'Late title',
+    },
+  });
+  const controller = new AbortController();
+  storage.pause = true;
+  const activation = engine.activate({ threadId, resourceId, abortSignal: controller.signal }).catch(() => undefined);
+  try {
+    await storage.readStarted.promise;
+    controller.abort();
+    await storage.patchThread({ id: threadId, metadata: { abortedByApplication: true } });
+    storage.releaseRead.resolve();
+    await activation;
+    const thread = await storage.getThreadById({ threadId });
+    expect(thread?.title).toBe('Original title');
+    expect(thread?.metadata).toEqual({ abortedByApplication: true });
+  } finally {
+    storage.releaseRead.resolve();
+    await activation;
+  }
 });
