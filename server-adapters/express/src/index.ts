@@ -566,12 +566,18 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         // Check route permission requirement (EE feature)
         // Uses convention-based permission derivation: permissions are auto-derived
         // from route path/method unless explicitly set or route is public
-        const authConfig = this.mastra.getServer()?.auth;
-        if (authConfig) {
+        // Check if any auth is configured (studio or server) for RBAC
+        const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
+        if (hasAuth) {
           const hasPermission = await loadHasPermission();
           if (hasPermission) {
             const userPermissions = res.locals.requestContext.get('mastra__userPermissions') as string[] | undefined;
-            const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
+            const permissionError = this.checkRoutePermission(
+              route,
+              userPermissions,
+              hasPermission,
+              res.locals.requestContext,
+            );
 
             if (permissionError) {
               return res.status(permissionError.status).json({
@@ -688,12 +694,18 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
             }
           }
 
-          const authConfig = this.mastra.getServer()?.auth;
-          if (authConfig) {
+          // Check if any auth is configured (studio or server) for RBAC
+          const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
+          if (hasAuth) {
             const hasPermission = await loadHasPermission();
             if (hasPermission) {
               const userPermissions = res.locals.requestContext.get('mastra__userPermissions') as string[] | undefined;
-              const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
+              const permissionError = this.checkRoutePermission(
+                serverRoute,
+                userPermissions,
+                hasPermission,
+                res.locals.requestContext,
+              );
               if (permissionError) {
                 return res.status(permissionError.status).json({
                   error: permissionError.error,
