@@ -717,7 +717,7 @@ How a supplied `id` is treated depends on the storage adapter. Some adapters ups
 | `PATCH` | `/api/saved-views/:savedViewId` | Change a saved view's name or state |
 | `DELETE` | `/api/saved-views/:savedViewId` | Delete a saved view |
 
-A saved view's `state` stores how a Studio page looks, such as its filters, time range, sort, and columns. Everyone who can open Studio sees every view, and `authorId` only records who created it. The list isn't paginated: its `page` query parameter is the Studio page, not a page number.
+A saved view's `state` stores how a Studio page looks, such as its filters, time range, sort, and columns. Everyone who can open Studio sees every view, and `authorId` only records who created it. The `page` query parameter selects a Studio page and doesn't paginate the list.
 
 Every route answers `501` when the storage has no `savedViews` domain, and get, update, and delete answer `404` for an unknown ID. On authenticated servers, the read routes require the `saved-views:read` permission, create and update require `saved-views:write`, and delete requires `saved-views:delete`.
 

@@ -6,7 +6,7 @@
 '@mastra/spanner': minor
 ---
 
-Added saved views storage, so Studio can save trace views (filters, time range, sort and columns) to your database. The `mastra_saved_views` table is created on init, like the other tables. Requires `@mastra/core` 1.79.0 or later.
+Added saved views storage, so Studio can save trace views (filters, time range, sort and columns) to your database. The `mastra_saved_views` table is created on init, like the other tables. Requires `@mastra/core` 1.80.0 or later.
 
 ```ts
 const storage = new PostgresStore({ id: 'storage', connectionString: process.env.DATABASE_URL });
