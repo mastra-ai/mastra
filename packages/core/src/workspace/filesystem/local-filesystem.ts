@@ -5,7 +5,7 @@
  * This is the default filesystem for development and local agents.
  */
 
-import { constants as fsConstants, realpathSync } from 'node:fs';
+import { constants as fsConstants, lstatSync, readlinkSync, realpathSync } from 'node:fs';
 import type { Stats } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
@@ -236,7 +236,7 @@ export class LocalFilesystem extends MastraFilesystem {
     return !relative.startsWith('..') && !nodePath.isAbsolute(relative);
   }
 
-  private _resolvePathForContainment(absolutePath: string): string | undefined {
+  private _resolvePathForContainment(absolutePath: string, symlinkDepth = 0): string | undefined {
     let currentPath = absolutePath;
 
     while (true) {
@@ -250,6 +250,19 @@ export class LocalFilesystem extends MastraFilesystem {
         return nodePath.join(realPath, remainder);
       } catch (error: unknown) {
         if (!isEnoentError(error)) throw error;
+
+        // ENOENT can mean a dangling symlink rather than a missing entry.
+        // Resolve its destination before walking past it to an existing parent.
+        try {
+          if (lstatSync(currentPath).isSymbolicLink()) {
+            if (symlinkDepth >= 40) return undefined;
+            const target = nodePath.resolve(nodePath.dirname(currentPath), readlinkSync(currentPath));
+            const remainder = nodePath.relative(currentPath, absolutePath);
+            return this._resolvePathForContainment(nodePath.join(target, remainder), symlinkDepth + 1);
+          }
+        } catch (linkError: unknown) {
+          if (!isEnoentError(linkError)) throw linkError;
+        }
       }
 
       const parentPath = nodePath.dirname(currentPath);
