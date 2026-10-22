@@ -26,7 +26,7 @@
     "tinyexec": "^1.2.4",
     "tsc-files": "^1.1.4",
     "tsx": "catalog:",
-    "turbo": "^2.10.5",
+    "turbo": "^2.11.9",
     "typescript": "catalog:",
     "typescript-classic": "npm:typescript@^6.0.3",
     "vite": "^8.0.0",
