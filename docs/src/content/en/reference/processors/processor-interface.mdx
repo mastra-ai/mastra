@@ -1633,7 +1633,7 @@ export class DynamicModelProcessor implements Processor {
   }: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
     // Use a fast model for initial response
     if (stepNumber === 0) {
-      return { model: '__GATEWAY_OPENAI_MODEL_MINI__' }
+      return { model: '__GATEWAY_OPENAI_MODEL_LUNA__' }
     }
 
     // Switch to powerful model after tool calls

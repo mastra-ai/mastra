@@ -7,6 +7,7 @@ import { CachingPubSub } from '../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { PubSub } from '../../events/pubsub';
 import { isRunLocalTopic } from '../../events/topics';
+import { validateModelTimeoutSettings } from '../../llm/model/model-settings';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
 import { getRunStreamSlot, getScopeStreamSlot } from '../../loop/shared/stream-until-idle-helpers';
 import { createTimeoutAbortSignal } from '../../loop/timeout';
@@ -892,6 +893,9 @@ export class DurableAgent<
     this.#cleanupTimeoutMs = cleanupTimeoutMs ?? 30_000;
     this.#shouldCache = shouldCache;
     this.userShouldPersistSnapshot = shouldPersistSnapshot;
+
+    // Keep processor access on the wrapped agent, but dispatch through this wrapper.
+    this.#wrappedAgent.getChannels()?.__setDispatchAgent(this);
   }
 
   /** @internal Read one request-context value captured in a suspended durable run snapshot. */
@@ -2054,6 +2058,7 @@ export class DurableAgent<
 
   override setChannels(agentChannels: any) {
     this.#wrappedAgent.setChannels(agentChannels);
+    agentChannels.__setDispatchAgent(this);
   }
 
   // --- PubSub (base Agent fields — DurableAgent has its own pubsub) ---
@@ -2145,6 +2150,7 @@ export class DurableAgent<
    * @internal
    */
   override __fork(): Agent<TAgentId, TTools, TOutput> {
+    const sharedChannels = this.#wrappedAgent.getChannels();
     const innerFork = this.#wrappedAgent.__fork();
 
     const Ctor = this.constructor as new (
@@ -2162,6 +2168,12 @@ export class DurableAgent<
       shouldCache: this.#shouldCache,
       shouldPersistSnapshot: this.userShouldPersistSnapshot,
     });
+
+    // A transient version fork must not take over the singleton's channel ingress.
+    if (sharedChannels && sharedChannels === innerFork.getChannels()) {
+      sharedChannels.__setAgent(this.#wrappedAgent);
+      sharedChannels.__setDispatchAgent(this);
+    }
 
     // Preserve runtime state set after construction (mastra registration and the
     // wired inner pubsub, e.g. mastra.pubsub) without re-triggering registration
@@ -2920,6 +2932,8 @@ export class DurableAgent<
       actor: options?.actor,
     });
 
+    validateModelTimeoutSettings(options?.modelSettings?.timeout);
+
     // 1. Claim the run before preparing it, so a run that is already executing
     // fails before any span or memory write is made for this call.
     const runId = options?.runId ?? crypto.randomUUID();
@@ -3303,38 +3317,38 @@ export class DurableAgent<
         typeof persisted.snapshot === 'string'
           ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
           : persisted.snapshot;
-      if (snapshot?.status === 'running' && workflowsStore) {
-        snapshot = await this.#takeOverResumeClaim(runId, workflowsStore);
-      }
-      coldSnapshot = snapshot;
-      if (snapshot?.status !== 'suspended') {
-        throw new MastraError({
-          id: 'AGENT_RESUME_RUN_NOT_SUSPENDED',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          text: `DurableAgent "${this.name}" resume(${runId}) cannot resume the run because it is not waiting to be resumed (status: ${snapshot?.status}).`,
-          details: { agentName: this.name, runId, status: snapshot?.status },
-        });
-      }
-      const workflowInput = snapshot?.context?.input as DurableAgenticWorkflowInput | undefined;
-      if (!workflowInput || workflowInput.__workflowKind !== 'durable-agent') {
-        throw new MastraError({
-          id: 'DURABLE_AGENT_RESUME_INVALID_SNAPSHOT',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.SYSTEM,
-          text: `DurableAgent "${this.name}" resume(${runId}): persisted snapshot does not contain a durable-agent workflow input.`,
-          details: { agentName: this.name, runId },
-        });
-      }
-      if (workflowInput.agentId !== this.id) {
-        throw new MastraError({
-          id: 'DURABLE_AGENT_RESUME_AGENT_MISMATCH',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          text: `DurableAgent "${this.name}" resume(${runId}): persisted run belongs to agent "${workflowInput.agentId}", not "${this.id}".`,
-          details: { agentName: this.name, runId, ownerAgentId: workflowInput.agentId },
-        });
-      }
+      const readWorkflowInput = (snapshot: WorkflowRunState, allowRunning = false) => {
+        if (snapshot?.status !== 'suspended' && !(allowRunning && snapshot?.status === 'running')) {
+          throw new MastraError({
+            id: 'AGENT_RESUME_RUN_NOT_SUSPENDED',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            text: `DurableAgent "${this.name}" resume(${runId}) cannot resume the run because it is not waiting to be resumed (status: ${snapshot?.status}).`,
+            details: { agentName: this.name, runId, status: snapshot?.status },
+          });
+        }
+        const input = snapshot?.context?.input as DurableAgenticWorkflowInput | undefined;
+        if (!input || input.__workflowKind !== 'durable-agent') {
+          throw new MastraError({
+            id: 'DURABLE_AGENT_RESUME_INVALID_SNAPSHOT',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.SYSTEM,
+            text: `DurableAgent "${this.name}" resume(${runId}): persisted snapshot does not contain a durable-agent workflow input.`,
+            details: { agentName: this.name, runId },
+          });
+        }
+        if (input.agentId !== this.id) {
+          throw new MastraError({
+            id: 'DURABLE_AGENT_RESUME_AGENT_MISMATCH',
+            domain: ErrorDomain.AGENT,
+            category: ErrorCategory.USER,
+            text: `DurableAgent "${this.name}" resume(${runId}): persisted run belongs to agent "${input.agentId}", not "${this.id}".`,
+            details: { agentName: this.name, runId, ownerAgentId: input.agentId },
+          });
+        }
+        return input;
+      };
+      let workflowInput = readWorkflowInput(snapshot, true);
 
       // A run that suspended while executing a stored version must resume on
       // *that* version. Cold rehydration rebuilds tools/model/instructions
@@ -3374,6 +3388,15 @@ export class DurableAgent<
           }
         }
       }
+
+      if (snapshot?.status === 'running' && workflowsStore) {
+        // Recovery can execute the run. Dynamic defaults still require the rehydrated context below.
+        this.#wrappedAgent.__validateStaticModelTimeoutSettings(options?.modelSettings);
+        validateModelTimeoutSettings((options?.modelSettings ?? workflowInput.options?.modelSettings)?.timeout);
+        snapshot = await this.#takeOverResumeClaim(runId, workflowsStore);
+        workflowInput = readWorkflowInput(snapshot);
+      }
+      coldSnapshot = snapshot;
 
       const messageListMemoryInfo = (
         workflowInput.messageListState as { memoryInfo?: { threadId?: string; resourceId?: string } } | undefined
@@ -3485,6 +3508,7 @@ export class DurableAgent<
       },
       resumeScopesSnapshot,
     )) as DurableAgentResumeOptions<TOutput>;
+    validateModelTimeoutSettings(resolvedOptions.modelSettings?.timeout);
     // Scoped runs execute on a run-scoped copy of the request context.
     resumeRequestContext = (resolvedOptions.requestContext as typeof resumeRequestContext) ?? resumeRequestContext;
 
@@ -4501,6 +4525,8 @@ export class DurableAgent<
       runId: options?.runId,
       actor: options?.actor,
     });
+
+    validateModelTimeoutSettings(options?.modelSettings?.timeout);
 
     // 1. Claim the run before preparing it — see stream().
     const runId = options?.runId ?? crypto.randomUUID();

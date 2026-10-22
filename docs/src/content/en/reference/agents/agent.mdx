@@ -116,7 +116,7 @@ Popular provider strings and credentials:
 
 - **OpenAI**: `__GATEWAY_OPENAI_MODEL__` uses `OPENAI_API_KEY`.
 - **Anthropic**: `__GATEWAY_ANTHROPIC_MODEL_SONNET__` uses `ANTHROPIC_API_KEY`.
-- **Google**: `__GATEWAY_GOOGLE_MODEL__` uses `GOOGLE_API_KEY` or `GOOGLE_GENERATIVE_AI_API_KEY`.
+- **Google**: `__GATEWAY_GOOGLE_MODEL_FLASH__` uses `GOOGLE_API_KEY` or `GOOGLE_GENERATIVE_AI_API_KEY`.
 
 See [models](/models) for supported model IDs and [environment variables](/models/environment-variables) for the complete provider list.
 
@@ -1186,7 +1186,7 @@ The hook context `metadata` includes `agentId` and `agentName`. Per-execution ho
 
 ## Editor overrides
 
-When you register the [`MastraEditor`](/reference/editor/mastra-editor), the `editor` field controls which parts of a code-defined agent can be changed through the editor. Fields owned by code are read-only in Studio and are stripped from saved overrides.
+When you register the [`MastraEditor`](/reference/editor/mastra-editor), the `editor` field controls which parts of an agent are defined in code and which are owned by Studio. Fields owned by code are read-only in Studio and are stripped from saved overrides. Fields owned by Studio must be omitted from code; the agent reads them from stored overrides and fails closed when they're missing.
 
 <PropertiesTable
   content={[
@@ -1195,10 +1195,12 @@ When you register the [`MastraEditor`](/reference/editor/mastra-editor), the `ed
     type: 'false | { instructions?: boolean; tools?: boolean | { description?: boolean } }',
     isOptional: true,
     description:
-      'Omit to allow editing instructions and tools. Set to `false` to lock the agent. Set `instructions: true` to allow instruction edits. Set `tools: true` to allow tool membership and description edits, or `tools: { description: true }` to allow only description edits.',
+      'Omit to allow editing instructions and tools, using values in code as defaults. Set to `false` to lock the agent. Set `instructions: true` to make Studio own the instructions; omit `instructions` from code. Set `tools: true` to make Studio own tool membership and descriptions; omit `tools` from code. Set `tools: { description: true }` to keep tool membership in code and allow only description edits.',
   },
 ]}
 />
+
+When a field is owned by Studio, TypeScript rejects it in code: `instructions` with `editor: { instructions: true }` and `tools` with `editor: { tools: true }` are type errors. An agent whose instructions are owned by Studio fails closed until a stored version with instructions is published.
 
 The agent's `id`, `name`, and `model` always come from code and can't be overridden through Editor. See [Editor](/docs/studio/editor) for usage.
 

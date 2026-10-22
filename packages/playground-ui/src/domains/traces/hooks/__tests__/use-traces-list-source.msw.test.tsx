@@ -84,20 +84,23 @@ describe('useTracesListSource', () => {
   });
 
   describe('when auto refresh is enabled', () => {
-    it('advances the time window and stops requests when paused', async () => {
+    it('advances the time window and stops requests when turned off', async () => {
       const requests = handlers();
-      const { result } = renderHook(() => useTracesListSource({ query }), { wrapper: Wrapper });
+      const { result, rerender } = renderHook(({ autoRefetch }) => useTracesListSource({ query, autoRefetch }), {
+        wrapper: Wrapper,
+        initialProps: { autoRefetch: true },
+      });
       await waitFor(() => expect(result.current.rows).toHaveLength(1));
-      act(() => result.current.setAutoRefetch(false));
+      rerender({ autoRefetch: false });
       vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
-      act(() => result.current.setAutoRefetch(true));
+      rerender({ autoRefetch: true });
       await act(async () => {
         await vi.advanceTimersByTimeAsync(10_000);
       });
       expect(requests.post).toHaveBeenCalledTimes(2);
       const [[firstBody], [secondBody]] = requests.post.mock.calls;
       expect(secondBody.timeRange.to).not.toBe(firstBody.timeRange.to);
-      act(() => result.current.setAutoRefetch(false));
+      rerender({ autoRefetch: false });
       await act(async () => {
         await vi.advanceTimersByTimeAsync(20_000);
       });
@@ -115,12 +118,15 @@ describe('useTracesListSource', () => {
   describe('when a rolling tick returns the same data', () => {
     it('keeps the rows reference', async () => {
       const requests = handlers();
-      const { result } = renderHook(() => useTracesListSource({ query }), { wrapper: Wrapper });
+      const { result, rerender } = renderHook(({ autoRefetch }) => useTracesListSource({ query, autoRefetch }), {
+        wrapper: Wrapper,
+        initialProps: { autoRefetch: true },
+      });
       await waitFor(() => expect(result.current.rows).toHaveLength(1));
       const rowsBefore = result.current.rows;
       vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'Date'] });
-      act(() => result.current.setAutoRefetch(false));
-      act(() => result.current.setAutoRefetch(true));
+      rerender({ autoRefetch: false });
+      rerender({ autoRefetch: true });
       await act(async () => {
         await vi.advanceTimersByTimeAsync(10_000);
       });
@@ -132,7 +138,7 @@ describe('useTracesListSource', () => {
   describe('when automatic refresh starts disabled', () => {
     it.each([true, false])('does not poll or refetch on focus with rolling=%s', async rolling => {
       const requests = handlers();
-      const { result } = renderHook(() => useTracesListSource({ query, rolling, initialAutoRefetch: false }), {
+      const { result } = renderHook(() => useTracesListSource({ query, rolling, autoRefetch: false }), {
         wrapper: Wrapper,
       });
       await waitFor(() => expect(result.current.rows).toHaveLength(1));
@@ -269,13 +275,16 @@ describe('useTracesListSource', () => {
       expect(requests.listRequests).toHaveLength(1);
     });
 
-    it('stops polling and ignores focus once auto refresh is paused', async () => {
+    it('stops polling and ignores focus once auto refresh is turned off', async () => {
       const requests = deltaHandlers();
       vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'], shouldAdvanceTime: true });
-      const { result } = renderHook(() => useTracesListSource({ query, withDeltaPolling: true }), { wrapper: Wrapper });
+      const { rerender } = renderHook(
+        ({ autoRefetch }) => useTracesListSource({ query, withDeltaPolling: true, autoRefetch }),
+        { wrapper: Wrapper, initialProps: { autoRefetch: true } },
+      );
       await waitFor(() => expect(requests.deltaRequests).toHaveLength(1));
 
-      act(() => result.current.setAutoRefetch(false));
+      rerender({ autoRefetch: false });
       await nextTick();
       await nextTick();
       await refocus();

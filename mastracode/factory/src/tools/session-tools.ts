@@ -172,11 +172,11 @@ export function createFactorySessionTools(
   const switchModel = createTool({
     id: 'factory_switch_session_model',
     description:
-      'Switch the model of a session you own in this Factory (side, work item, or review session) without recreating it. A running session switches immediately; a stopped one uses the model on its next run. The model must be one the session credentials can run: the owner credentials for a user-scoped session, the Factory credentials for a Factory-scoped one. Use a session ID from the Factory session or work item tools.',
+      'Look up or switch the model of a session you own in this Factory (side, work item, or review session). When someone describes a model by purpose, family, or preference rather than an exact ID, call with sessionId alone first to list models the target session can actually use. Interpret their intent against that list, then call with the chosen exact modelId to switch; do not use their words as a guessed model ID. A running session switches immediately; a stopped one uses the model on its next run. User-scoped sessions use their owner credentials; Factory-scoped sessions use Factory credentials. Use a session ID from the Factory session or work item tools.',
     inputSchema: z
       .object({
         sessionId: z.string().trim().min(1).max(200),
-        modelId: z.string().trim().min(1).max(200),
+        modelId: z.string().trim().min(1).max(200).optional().describe('Omit to list usable models without switching.'),
       })
       .strict(),
     execute: async ({ sessionId, modelId }) => {
@@ -207,6 +207,7 @@ export function createFactorySessionTools(
       // The thread's resource, not the session id: sessions share their Factory's or owner's resource.
       const resourceId = (await messaging.controller.queryThreadById({ threadId }))?.resourceId ?? sessionId;
       const catalog = await sessionModelCatalog(messaging.controller, sessionId, threadId, resourceId);
+      if (modelId === undefined) return { sessionId, models: catalog.usable };
       if (!catalog.usable.includes(modelId)) throw unrunnableModelError(modelId, catalog);
       const { live } = await messaging.controller.setThreadModel({ resourceId, threadId, modelId });
       return { sessionId, threadId, modelId, live };

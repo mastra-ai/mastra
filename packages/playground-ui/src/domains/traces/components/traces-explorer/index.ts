@@ -1,4 +1,3 @@
-import { TracesExplorerAutoRefresh } from './traces-explorer-auto-refresh';
 import { TracesExplorerColumnsMenu } from './traces-explorer-columns-menu';
 import {
   TracesExplorerFilterBar,
@@ -16,7 +15,6 @@ export const TracesExplorer = Object.assign(TracesExplorerRoot, {
   FilterChips: TracesExplorerFilterChips,
   TimeRangeChip: TracesExplorerTimeRangeChip,
   ColumnsMenu: TracesExplorerColumnsMenu,
-  AutoRefresh: TracesExplorerAutoRefresh,
   List: TracesExplorerList,
   Panel: TracesExplorerPanel,
 });

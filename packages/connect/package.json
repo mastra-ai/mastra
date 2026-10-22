@@ -70,7 +70,7 @@
     "hono": "^4.13.7",
     "prettier": "3.9.5",
     "ts-morph": "^27.0.2",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:",

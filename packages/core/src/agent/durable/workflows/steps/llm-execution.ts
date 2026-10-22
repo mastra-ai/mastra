@@ -2059,7 +2059,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       toolCallId: payload.toolCallId,
                       toolName: payload.toolName,
                       args: payload.args || {},
-                      providerMetadata: payload.providerMetadata as Record<string, unknown> | undefined,
+                      providerMetadata: payload.providerMetadata,
                       providerExecuted: payload.providerExecuted,
                       output: payload.output,
                       activeTools: currentActiveTools ?? null,
@@ -2676,7 +2676,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // 15. Build output
             const output: DurableLLMStepOutput = {
               ...(await storeMessageListState(params, messageList.serialize())),
-              text: textDeltas.join(''),
+              // Serialized steps feed onFinish; rejected attempts must not contribute text.
+              text: processOutputStepTripwire ? '' : textDeltas.join(''),
               // A rejected response's tool calls never run.
               toolCalls: processOutputStepTripwire ? [] : toolCalls,
               stepResult: {

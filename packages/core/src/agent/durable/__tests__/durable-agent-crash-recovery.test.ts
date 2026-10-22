@@ -13,6 +13,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { createScorer } from '../../../evals';
+import type { SerializedWorkflowRow } from '../../../storage/domains/workflows/serializing-store.test-utils';
 import type { WorkflowRunState } from '../../../workflows/types';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../constants';
 import { MAP_FINAL_OUTPUT_STEP_ID } from '../workflows/durable-loop-builder';
@@ -201,10 +202,17 @@ function createModel(usages: TestUsage[] = [completeUsage, completeUsage, comple
 // `evented-fallback` is an EventedAgent on a store without atomic concurrent
 // updates, which runs the loop on the default engine instead.
 type AgentKind = 'durable' | 'evented-fallback';
+type StorageMode = 'in-memory' | 'serializing';
 
 // A fresh module graph per process keeps module-level state (run registry,
 // local recovery claims) from leaking between the original run and recovery.
-async function startProcess(kind: AgentKind, usages?: TestUsage[], observability?: SpanRecorder) {
+async function startProcess(
+  kind: AgentKind,
+  usages?: TestUsage[],
+  observability?: SpanRecorder,
+  storageMode: StorageMode = 'in-memory',
+  onWrite?: (rows: SerializedWorkflowRow[]) => void,
+) {
   disposeAsyncStores();
   vi.resetModules();
   const [
@@ -238,7 +246,12 @@ async function startProcess(kind: AgentKind, usages?: TestUsage[], observability
     },
   });
   const durableAgent = kind === 'durable' ? createDurableAgent({ agent }) : createEventedAgent({ agent });
-  const storage = new InMemoryStore();
+  const storage =
+    storageMode === 'serializing'
+      ? (await import('../../../storage/domains/workflows/serializing-store.test-utils')).createSerializingStore(
+          onWrite,
+        ).store
+      : new InMemoryStore();
   // Before `new Mastra(...)`: the engine resolves during agent registration.
   if (kind === 'evented-fallback') {
     vi.spyOn(storage.stores.workflows!, 'supportsConcurrentUpdates').mockReturnValue(false);
@@ -293,22 +306,42 @@ function outerTargetId({ outer }: Checkpoint) {
 
 // Runs a two-round tool-calling turn to completion, copying the workflow store
 // after every write.
-async function captureCheckpoints(kind: AgentKind, usages?: TestUsage[], observability?: SpanRecorder) {
-  const original = await startProcess(kind, usages, observability);
-  const rows = new Map<string, SnapshotRow>();
+async function captureCheckpoints(
+  kind: AgentKind,
+  usages?: TestUsage[],
+  observability?: SpanRecorder,
+  storageMode: StorageMode = 'in-memory',
+) {
   const checkpoints: Checkpoint[] = [];
-  const persist = original.workflows.persistWorkflowSnapshot.bind(original.workflows);
-  original.workflows.persistWorkflowSnapshot = async args => {
-    rows.set(`${args.workflowName}:${args.runId}`, structuredClone(args));
-    const copy = [...rows.values()].map(row => structuredClone(row));
+  const capture = (rows: SnapshotRow[]) => {
     checkpoints.push({
-      outer: copy.find(row => row.workflowName === DurableStepIds.AGENTIC_LOOP)?.snapshot,
-      inner: copy.find(row => row.workflowName !== DurableStepIds.AGENTIC_LOOP)?.snapshot,
-      rows: copy,
+      outer: rows.find(row => row.workflowName === DurableStepIds.AGENTIC_LOOP)?.snapshot,
+      inner: rows.find(row => row.workflowName !== DurableStepIds.AGENTIC_LOOP)?.snapshot,
+      rows,
       endedSpanCount: observability?.ended.length ?? 0,
     });
-    return persist(args);
   };
+  const original = await startProcess(kind, usages, observability, storageMode, rows => {
+    // The observer runs synchronously after a successful write, including partial
+    // updates. Recover only from JSON actually committed at this boundary.
+    capture(
+      rows.map(({ workflowName, runId, resourceId, snapshot }) => ({
+        workflowName,
+        runId,
+        resourceId,
+        snapshot: JSON.parse(snapshot),
+      })),
+    );
+  });
+  if (storageMode === 'in-memory') {
+    const rows = new Map<string, SnapshotRow>();
+    const persist = original.workflows.persistWorkflowSnapshot.bind(original.workflows);
+    original.workflows.persistWorkflowSnapshot = async args => {
+      rows.set(`${args.workflowName}:${args.runId}`, structuredClone(args));
+      capture([...rows.values()].map(row => structuredClone(row)));
+      return persist(args);
+    };
+  }
 
   const result = await original.durableAgent.stream('Look two things up');
   let text = '';
@@ -337,8 +370,14 @@ async function recoverFrom(
   expectedUsage: TestUsage = { inputTokens: 30, outputTokens: 60, totalTokens: 90 },
   usages?: TestUsage[],
   observability?: SpanRecorder,
+  storageMode: StorageMode = 'in-memory',
 ): Promise<string> {
-  const { durableAgent, workflows, globalRunRegistry, pubsub } = await startProcess(kind, usages, observability);
+  const { durableAgent, workflows, globalRunRegistry, pubsub } = await startProcess(
+    kind,
+    usages,
+    observability,
+    storageMode,
+  );
   for (const row of checkpoint.rows) await workflows.persistWorkflowSnapshot(row);
 
   let finishEvents = 0;
@@ -498,30 +537,34 @@ describe('DurableAgent crash recovery', () => {
     30_000,
   );
 
-  it('recovers from every checkpoint of a tool-calling run', async () => {
-    const { checkpoints, runId } = await captureCheckpoints('durable');
+  it.each<StorageMode>(['in-memory', 'serializing'])(
+    'recovers from every checkpoint of a tool-calling run (%s)',
+    async storageMode => {
+      const { checkpoints, runId } = await captureCheckpoints('durable', undefined, undefined, storageMode);
 
-    const recoverable = checkpoints.filter(checkpoint => !knownUnrecoverable(checkpoint));
-    // Each case the trimming used to break must be among the recovered checkpoints.
-    const inner = (c: Checkpoint) => c.inner?.status === 'running';
-    expect(recoverable.some(c => inner(c) && activeStepIds(c.inner).includes(DurableStepIds.TOOL_CALL))).toBe(true);
-    expect(recoverable.some(c => inner(c) && activeStepIds(c.inner).length === 0)).toBe(true);
-    expect(recoverable.some(c => inner(c) && activeStepIds(c.outer).length === 0)).toBe(true);
-    // FINISH already went out: once with map-final-output as the step to resume
-    // from, once with scorer execution running.
-    const targets = (id: string) => recoverable.some(c => finishedBeforeCrash(c) && outerTargetId(c) === id);
-    expect(targets(MAP_FINAL_OUTPUT_STEP_ID)).toBe(true);
-    expect(targets('execute-scorers')).toBe(true);
+      const recoverable = checkpoints.filter(checkpoint => !knownUnrecoverable(checkpoint));
+      // Each case the trimming used to break must be among the recovered checkpoints.
+      const inner = (c: Checkpoint) => c.inner?.status === 'running';
+      expect(recoverable.some(c => inner(c) && activeStepIds(c.inner).includes(DurableStepIds.TOOL_CALL))).toBe(true);
+      expect(recoverable.some(c => inner(c) && activeStepIds(c.inner).length === 0)).toBe(true);
+      expect(recoverable.some(c => inner(c) && activeStepIds(c.outer).length === 0)).toBe(true);
+      // FINISH already went out: once with map-final-output as the step to resume
+      // from, once with scorer execution running.
+      const targets = (id: string) => recoverable.some(c => finishedBeforeCrash(c) && outerTargetId(c) === id);
+      expect(targets(MAP_FINAL_OUTPUT_STEP_ID)).toBe(true);
+      expect(targets('execute-scorers')).toBe(true);
 
-    const failures: string[] = [];
-    for (const [index, checkpoint] of checkpoints.entries()) {
-      if (knownUnrecoverable(checkpoint)) continue;
-      const outcome = await recoverFrom(checkpoint, runId, 'durable');
-      if (outcome !== 'ok') failures.push(`#${index} ${describeCheckpoint(checkpoint)}: ${outcome}`);
-    }
-    expect(failures).toEqual([]);
-    expect(checkpoints.length - recoverable.length).toBeLessThanOrEqual(3);
-  }, 120_000);
+      const failures: string[] = [];
+      for (const [index, checkpoint] of checkpoints.entries()) {
+        if (knownUnrecoverable(checkpoint)) continue;
+        const outcome = await recoverFrom(checkpoint, runId, 'durable', undefined, undefined, undefined, storageMode);
+        if (outcome !== 'ok') failures.push(`#${index} ${describeCheckpoint(checkpoint)}: ${outcome}`);
+      }
+      expect(failures).toEqual([]);
+      expect(checkpoints.length - recoverable.length).toBeLessThanOrEqual(3);
+    },
+    120_000,
+  );
 
   it('preserves unknown usage from before recovery', async () => {
     const unknownUsage: TestUsage = { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined };

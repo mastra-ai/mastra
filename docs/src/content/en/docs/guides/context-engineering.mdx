@@ -42,7 +42,6 @@ export const supportAgent = new Agent({
   id: 'support-agent',
   name: 'Support Agent',
   instructions: `You help customers understand their account.
-    Today is ${new Date().toDateString()}.
     Use plain language and don't invent account details.`,
   model: '__GATEWAY_OPENAI_MODEL__',
 })
@@ -60,7 +59,15 @@ instructions: ({ requestContext }) => {
 }
 ```
 
-Use `RequestContext` when instructions depend on data that changes with each request, such as the current user, tenant, locale, role, or feature flags. Values that don't come from the request, such as the current date, can be interpolated directly as shown in the first example.
+Use `RequestContext` when instructions depend on data that changes with each request, such as the current user, tenant, locale, role, or feature flags. Anything evaluated when the agent is constructed, including an interpolated `new Date()`, is fixed for the life of the process, so compute time-dependent values inside a callback and pass an explicit timezone:
+
+```typescript title="src/mastra/agents/support-agent.ts"
+instructions: () =>
+  `You help customers understand their account.
+  Today is ${new Date().toLocaleDateString('en-US', { timeZone: 'America/New_York' })}.`
+```
+
+Resolving the date in the callback means a long-running server picks up the new day after midnight, and the explicit `timeZone` keeps the date stable regardless of the host's timezone. If the date must refresh across tool continuations or coexist with Studio instruction overrides, use a [`processInputStep`](/reference/processors/processor-interface#processinputstep) processor instead.
 
 :::tip
 
