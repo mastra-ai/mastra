@@ -120,17 +120,15 @@ export function MessageBubble({
       <TooltipContent>{modelId}</TooltipContent>
     </Tooltip>
   );
-  const replyFooter = entry.streaming
-    ? undefined
-    : (text: string) => ({
-        model: modelLabel,
-        actions: (
-          <MessageActions>
-            <MessageCopyButton text={text} />
-            <MessageTimestamp value={entry.message.createdAt} />
-          </MessageActions>
-        ),
-      });
+  const replyFooter = (text: string) => ({
+    model: modelLabel,
+    actions: (
+      <MessageActions>
+        <MessageCopyButton text={text} />
+        <MessageTimestamp value={entry.message.createdAt} />
+      </MessageActions>
+    ),
+  });
   const messageActions = meta ? (
     <MessageActions>
       <MessageCopyButton text={meta} />

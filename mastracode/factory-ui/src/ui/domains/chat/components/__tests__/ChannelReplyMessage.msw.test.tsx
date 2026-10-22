@@ -128,6 +128,19 @@ describe('reply_in_thread in the transcript', () => {
     expect(await navigator.clipboard.readText()).toBe('Hello world');
   });
 
+  it('gives a post its footer as soon as it is sent, while the turn keeps going', async () => {
+    renderEntries([
+      {
+        ...replyEntry({ state: 'result', args: { text: 'Starting the build now.' }, result: { posted: true } }),
+        streaming: true,
+      },
+    ]);
+
+    const post = await screen.findByRole('group', { name: 'Reply in Slack thread' });
+    expect(within(post).getByText('Sent to Slack')).toBeInTheDocument();
+    expect(within(post).getByRole('button', { name: 'Copy message' })).toBeInTheDocument();
+  });
+
   it('marks a reply still being written, and one that failed, on the post itself', () => {
     renderEntries([replyEntry({ state: 'call', args: { text: 'Hello wor' } })]);
     expect(screen.getByText('Sending to Slack…')).toBeInTheDocument();
