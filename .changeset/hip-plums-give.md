@@ -27,4 +27,16 @@ try {
 }
 ```
 
+To handle many codes in one place, use `matchRouteError` (or `matchServerError` for the whole catalog). Each handler gets the error with its typed `metadata`. Without `default`, every code the route can return must be handled; with it, unhandled codes and non-server errors such as network failures go to `default`. Errors nothing handles are rethrown.
+
+```ts
+import { matchRouteError } from '@mastra/client-js';
+
+const message = matchRouteError(error, 'GET /agents/:agentId', {
+  AGENT_NOT_FOUND: e => `Unknown agent ${e.metadata.agentId}`,
+  AUTHENTICATION_REQUIRED: () => 'Please sign in',
+  default: () => 'Something went wrong',
+});
+```
+
 `isServerError` narrows to every code in the server catalog. The `ServerError`, `ServerErrorCode`, `ServerErrorMetadataMap`, `RouteError` and `RouteErrorCode` types are also exported. Routes added with `registerApiRoute` can return their own codes, so keep a `default` branch.

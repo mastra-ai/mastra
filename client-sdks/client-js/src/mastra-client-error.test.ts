@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isRouteError, isServerError, MastraClientError } from './types';
+import { isRouteError, isServerError, MastraClientError, matchRouteError, matchServerError } from './types';
 
 describe('MastraClientError code and metadata', () => {
   it('reads the code and metadata from the response body', () => {
@@ -67,5 +67,35 @@ describe('isServerError / isRouteError', () => {
   ])('rejects %s', (_label, value) => {
     expect(isServerError(value)).toBe(false);
     expect(isRouteError(value, 'GET /agents/:agentId')).toBe(false);
+  });
+});
+
+describe('matchServerError / matchRouteError', () => {
+  const notFound = new MastraClientError(404, 'Not Found', 'HTTP error! status: 404', {
+    error: 'Agent not found',
+    code: 'AGENT_NOT_FOUND',
+    metadata: { agentId: 'missing' },
+  });
+
+  it('calls the handler for the error code with the error', () => {
+    const result = matchRouteError(notFound, 'GET /agents/:agentId', {
+      AGENT_NOT_FOUND: e => `unknown ${e.metadata.agentId}`,
+      default: () => 'default',
+    });
+    expect(result).toBe('unknown missing');
+  });
+
+  it('falls back to default for unhandled codes and non-server errors', () => {
+    const network = new TypeError('fetch failed');
+    expect(matchServerError(notFound, { WORKFLOW_NOT_FOUND: () => 'workflow', default: () => 'default' })).toBe(
+      'default',
+    );
+    expect(matchServerError(network, { AGENT_NOT_FOUND: () => 'agent', default: e => e })).toBe(network);
+  });
+
+  it('rethrows when nothing matches and there is no default', () => {
+    const network = new TypeError('fetch failed');
+    const handlers = { AGENT_NOT_FOUND: () => 'agent' } as Parameters<typeof matchServerError<string>>[1];
+    expect(() => matchServerError(network, handlers)).toThrow(network);
   });
 });

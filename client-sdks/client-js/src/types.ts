@@ -2078,6 +2078,63 @@ export function isRouteError<K extends RouteKey>(
   return isServerError(error);
 }
 
+/**
+ * One handler per error code, each receiving the error with its typed `metadata`.
+ *
+ * Either handle every code (exhaustive, `default` optional) or some codes plus `default`.
+ * `default` also receives errors that aren't server errors, such as network failures.
+ */
+export type ServerErrorHandlers<C extends ServerErrorCode, R> =
+  | ({ [K in C]: (error: TypedMastraClientError<K>) => R } & { default?: (error: unknown) => R })
+  | ({ [K in C]?: (error: TypedMastraClientError<K>) => R } & { default: (error: unknown) => R });
+
+/**
+ * Calls the handler matching the error's code, or `default`. Rethrows `error` when nothing matches.
+ *
+ * @example
+ * ```ts
+ * const message = matchServerError(error, {
+ *   AGENT_NOT_FOUND: e => `Unknown agent ${e.metadata.agentId}`,
+ *   default: () => 'Something went wrong',
+ * });
+ * ```
+ */
+export function matchServerError<R>(error: unknown, handlers: ServerErrorHandlers<ServerErrorCode, R>): R {
+  return dispatchServerError(error, handlers);
+}
+
+/**
+ * Like `matchServerError`, limited to the codes `route` can return. Without `default`, every code
+ * the route can return must be handled.
+ *
+ * @example
+ * ```ts
+ * try {
+ *   await client.getAgent('weather').details();
+ * } catch (error) {
+ *   matchRouteError(error, 'GET /agents/:agentId', {
+ *     AGENT_NOT_FOUND: e => toast(`Unknown agent ${e.metadata.agentId}`),
+ *     AUTHENTICATION_REQUIRED: () => redirectToLogin(),
+ *     default: () => toast('Something went wrong'),
+ *   });
+ * }
+ * ```
+ */
+export function matchRouteError<K extends RouteKey, R>(
+  error: unknown,
+  _route: K,
+  handlers: ServerErrorHandlers<RouteErrorCode<K>, R>,
+): R {
+  return dispatchServerError(error, handlers);
+}
+
+function dispatchServerError<R>(error: unknown, handlers: Record<string, ((error: any) => R) | undefined>): R {
+  const handler = isServerError(error) ? handlers[error.code] : undefined;
+  if (handler) return handler(error);
+  if (handlers.default) return handlers.default(error);
+  throw error;
+}
+
 // ============================================
 // Dataset Types
 // ============================================
