@@ -35,7 +35,7 @@ export function ChannelReplyMessage({
       <MarkdownRenderer streaming={status === 'running'}>{text}</MarkdownRenderer>
       <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-2">
         {footer?.model}
-        <span className="flex items-center gap-1">
+        <span role="status" className="flex items-center gap-1">
           <SlackIcon className="size-3" aria-hidden="true" />
           <Txt as="span" variant="meta" className={status === 'error' ? 'text-destructive-foreground' : undefined}>
             {label}
