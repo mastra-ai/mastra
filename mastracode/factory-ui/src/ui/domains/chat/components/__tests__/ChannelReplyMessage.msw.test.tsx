@@ -144,7 +144,8 @@ describe('reply_in_thread in the transcript', () => {
 
   it('marks a reply still being written, and one that failed, on the post itself', () => {
     renderEntries([replyEntry({ state: 'call', args: { text: 'Hello wor' } })]);
-    expect(screen.getByText('Sending to Slack…')).toBeInTheDocument();
+    // A status region, so screen readers hear it change to sent or failed.
+    expect(screen.getByRole('status')).toHaveTextContent('Sending to Slack…');
     expect(screen.queryByText('Sent to Slack')).not.toBeInTheDocument();
   });
 
