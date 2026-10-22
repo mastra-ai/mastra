@@ -106,6 +106,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
   /** Records the last status persisted for a given run in this process. */
   setLastPersistedStatus(runId: string, status: WorkflowRunStatus): void {
+    if (status !== 'canceled') {
+      // The replay has replaced the stored `canceled`, so a later one is a real cancel.
+      this.replayedCanceledRuns.delete(runId);
+    }
     this.lastPersistedStatusByRun.set(runId, status);
   }
 

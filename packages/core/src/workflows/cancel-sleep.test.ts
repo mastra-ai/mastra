@@ -235,6 +235,64 @@ describe('workflow sleep cancellation', () => {
     expect(snapshot?.status).toBe('success');
   });
 
+  it('honors a remote cancellation once a time-travel replay of a canceled run has written its own status', async () => {
+    const workflowId = 'time-travel-canceled-then-remote-cancel-workflow';
+    const storage = new MockStore();
+    const lastStep = vi.fn().mockResolvedValue({});
+    const gates = { first: Promise.withResolvers<void>(), middle: Promise.withResolvers<void>() };
+    const started = { first: Promise.withResolvers<void>(), middle: Promise.withResolvers<void>() };
+    const buildWorkflow = () =>
+      createWorkflow({
+        id: workflowId,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        options: { validateInputs: false },
+      })
+        .then(
+          noopStep('first-step', async () => {
+            started.first.resolve();
+            await gates.first.promise;
+            return {};
+          }),
+        )
+        .then(
+          noopStep('middle-step', async () => {
+            started.middle.resolve();
+            await gates.middle.promise;
+            return {};
+          }),
+        )
+        .then(noopStep('last-step', lastStep))
+        .commit();
+
+    const activeWorkflow = buildWorkflow();
+    const remoteWorkflow = buildWorkflow();
+    new Mastra({ logger: false, storage, workflows: { [workflowId]: activeWorkflow } });
+    new Mastra({ logger: false, storage, workflows: { [workflowId]: remoteWorkflow } });
+
+    const run = await activeWorkflow.createRun();
+    const firstResult = run.start({ inputData: {} });
+    await started.first.promise;
+    await run.cancel();
+    gates.first.resolve();
+    expect((await firstResult).status).toBe('canceled');
+
+    // A store without concurrent updates cannot claim the replay, so it starts from `canceled`.
+    const store = (await storage.getStore('workflows'))!;
+    vi.spyOn(store, 'supportsConcurrentUpdates').mockReturnValue(false);
+    const replay = await activeWorkflow.createRun({ runId: run.runId });
+    const replayResult = replay.timeTravel({ step: 'middle-step', inputData: {} });
+    await started.middle.promise;
+    const remoteRun = await remoteWorkflow.createRun({ runId: run.runId });
+    await remoteRun.cancel();
+    gates.middle.resolve();
+
+    expect((await replayResult).status).toBe('canceled');
+    expect(lastStep).not.toHaveBeenCalled();
+    const snapshot = await store.loadWorkflowSnapshot({ workflowName: workflowId, runId: run.runId });
+    expect(snapshot?.status).toBe('canceled');
+  });
+
   it('completes a sleep normally when the run is not canceled', async () => {
     const afterSleep = vi.fn().mockResolvedValue({});
     const workflow = createWorkflow({
