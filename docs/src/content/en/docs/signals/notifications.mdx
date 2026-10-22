@@ -8,17 +8,19 @@ packages:
 
 # Notifications
 
-A notification is an external event that should reach an agent but shouldn't disappear if the agent is busy. A build doesn't stop failing because the agent was halfway through an answer, and a review comment doesn't wait politely for the next turn. Use [`agent.sendNotificationSignal()`](/reference/agents/agent#sendnotificationsignalnotification-options) to store the event as a durable inbox record, apply a delivery policy, and deliver it now or later. The agent can read pending records with [`createNotificationInboxTool()`](/reference/signals/create-notification-inbox-tool).
+A notification is an external event that should reach an agent, held until the agent can act on it. A build fails, a reviewer comments on a pull request, or a background job finishes on its own schedule, whether or not the agent is mid-answer.
 
-Unlike a chat message, a notification has its own lifecycle: it can be coalesced, summarized, deferred, retried, read, dismissed, or archived. The [Notifications reference](/reference/signals/notifications) documents the record and policy types.
+That's what separates a notification from a chat message. A message is input, and it joins the conversation in order. A notification is an event that happened somewhere else: it becomes a durable inbox record with its own lifecycle, so it can be coalesced, summarized, deferred, retried, read, dismissed, or archived without depending on the agent being free. The [Notifications reference](/reference/signals/notifications) documents the record and policy types.
 
-Use a notification when an external event must survive until the agent acts on it, such as a failed build, a review comment, an email or Slack mention, an incident, or a background job finishing. A durable record lets the agent triage the event later, keeps an active run from losing it, and gives Mastra a place to deduplicate and retry.
+Use a notification when that event must survive until the agent acts on it, as with an email or Slack mention, an incident, or a job that only needs a summary. A durable record lets the agent triage it later, keeps an active run from losing it, and gives Mastra a place to deduplicate and retry.
 
 For other lifecycles, use a different path. User input belongs in [`sendMessage()`](/reference/agents/agent#sendmessagemessage-options) so it becomes part of the conversation. Changing application context belongs in a [state signal](/docs/signals/state-signals), and context for one model call belongs in a transient reactive signal. Notification-shaped context that needs no inbox, policy, or retries can use [`sendSignal({ type: 'notification' })`](/reference/agents/agent#sendsignalsignal-options) directly.
 
 ## Quickstart
 
-Notification records need a storage adapter with the `notifications` domain. This example uses libSQL, subscribes to the thread first, then sends a high-priority CI failure:
+Call [`agent.sendNotificationSignal()`](/reference/agents/agent#sendnotificationsignalnotification-options) to create the record. It applies the delivery policy and either delivers the notification or defers it. The agent reads pending records through [`createNotificationInboxTool()`](/reference/signals/create-notification-inbox-tool).
+
+Records need a storage adapter with the `notifications` domain. This example uses libSQL, subscribes to the thread first, then sends a high-priority CI failure:
 
 ```typescript title="src/mastra/notifications.ts"
 import { Mastra } from '@mastra/core'
