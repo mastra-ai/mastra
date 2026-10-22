@@ -166,6 +166,26 @@ describe('createScorer', () => {
   });
 
   describe('Steps as functions scorer', () => {
+    it('keeps a categorical label returned next to the score and still hands the number to generateReason', async () => {
+      const scorer = createScorer({ id: 'grade', description: 'Grades the answer' })
+        .analyze(() => ({ grade: 'failing' }))
+        .generateScore(({ results }) => ({ score: 0, label: results.analyzeStepResult.grade }))
+        .generateReason(({ score }) => `scored ${score}`);
+
+      const result = await scorer.run(testData.scoringInput);
+
+      expect(result.score).toBe(0);
+      expect(result.label).toBe('failing');
+      expect(result.reason).toBe('scored 0');
+    });
+
+    it('has no label when generateScore returns a plain number', async () => {
+      const result = await FunctionBasedScorerBuilders.basic.run(testData.scoringInput);
+
+      expect(result.score).toEqual(expect.any(Number));
+      expect(result).not.toHaveProperty('label');
+    });
+
     it('should create a basic scorer with functions', async () => {
       const scorer = FunctionBasedScorerBuilders.basic;
       const { runId, ...result } = await scorer.run(testData.scoringInput);

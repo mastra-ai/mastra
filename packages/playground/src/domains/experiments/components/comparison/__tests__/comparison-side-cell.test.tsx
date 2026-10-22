@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, within } from '@testing-library/rea
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import type { ComparisonColumn } from '../build-comparison-rows';
 import { ComparisonSideCell } from '../comparison-side-cell';
+import { expectComputedTag } from '@/test/computed-tag';
 import { TestLinkProvider } from '@/test/link-provider';
 
 const makeColumn = (overrides: Partial<ComparisonColumn>): ComparisonColumn => ({
@@ -144,8 +145,8 @@ describe('ComparisonSideCell', () => {
     const scored = {
       ...pricedTiming,
       scores: [
-        { scorerId: 'accuracy', value: 0.5, reason: null },
-        { scorerId: 'relevancy', value: 0.9, reason: null },
+        { scorerId: 'accuracy', value: 0.5, reason: null, label: null },
+        { scorerId: 'relevancy', value: 0.9, reason: null, label: null },
       ],
     };
 
@@ -162,13 +163,23 @@ describe('ComparisonSideCell', () => {
     });
   });
 
+  describe('when a scorer labelled its score', () => {
+    it('shows the label as a tag next to the number', () => {
+      renderCell(makeColumn({ scores: [{ scorerId: 'safety-grade', value: 0.9, reason: null, label: 'exemplary' }] }));
+
+      const tag = within(metricsRegion()).getByText('exemplary');
+      expectComputedTag(tag, 'exemplary');
+      expect(metricValue('safety-grade')).toBe('0.90exemplary');
+    });
+  });
+
   describe('when a scorer returned no value', () => {
     it('averages the scores that have one', () => {
       renderCell(
         makeColumn({
           scores: [
-            { scorerId: 'accuracy', value: null, reason: null },
-            { scorerId: 'relevancy', value: 0.6, reason: null },
+            { scorerId: 'accuracy', value: null, reason: null, label: null },
+            { scorerId: 'relevancy', value: 0.6, reason: null, label: null },
           ],
         }),
       );
@@ -183,7 +194,7 @@ describe('ComparisonSideCell', () => {
         makeColumn({
           role: 'contender',
           averageScoreDelta: 0.2,
-          scores: [{ scorerId: 'accuracy', value: 0.9, reason: null }],
+          scores: [{ scorerId: 'accuracy', value: 0.9, reason: null, label: null }],
         }),
       );
 

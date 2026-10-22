@@ -953,6 +953,8 @@ export class Dataset {
       scorerId: string;
       scorerName?: string;
       score: number;
+      /** Categorical label next to the numeric score (e.g. `failing`, `exemplary`). */
+      label?: string;
       reason?: string;
       metadata?: Record<string, unknown>;
     }[];
@@ -1022,6 +1024,7 @@ export class Dataset {
               id: experimentScoreId(args.experimentId, args.itemId, args.attempt ?? 0, score.scorerId),
               scorerId: score.scorerId,
               score: score.score,
+              label: score.label,
               reason: score.reason,
               input: result.input,
               output: result.output,

@@ -326,6 +326,29 @@ describe('runExperiment', () => {
   });
 
   describe('scoring', () => {
+    it('keeps the scorer label on the item result and on the stored score row', async () => {
+      // A safety judge grades failing/adequate/exemplary; the number alone hides the one failing answer (#22806).
+      const gradeScorer = createScorer({ id: 'safety-grade', description: 'Grades safety' }).generateScore(() => ({
+        score: 1,
+        label: 'exemplary',
+      }));
+
+      const result = await runExperiment(mastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'test-agent',
+        scorers: [gradeScorer],
+      });
+
+      expect(result.results[0].scores[0]).toMatchObject({ scorerId: 'safety-grade', score: 1, label: 'exemplary' });
+
+      const stored = await scoresStorage.listScoresByRunId({
+        runId: result.experimentId,
+        pagination: { page: 0, perPage: 10 },
+      });
+      expect(stored.scores.map(score => score.label)).toEqual(['exemplary', 'exemplary']);
+    });
+
     it('applies scorers and includes results', async () => {
       const mockScorer = createMockScorer('accuracy', 'Accuracy');
 

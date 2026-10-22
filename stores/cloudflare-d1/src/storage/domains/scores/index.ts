@@ -52,7 +52,7 @@ export class ScoresStorageD1 extends ScoresStorage {
     await this.#db.alterTable({
       tableName: TABLE_SCORERS,
       schema: TABLE_SCHEMAS[TABLE_SCORERS],
-      ifNotExists: ['organizationId', 'projectId', 'batchId', 'datasetId', 'datasetItemId'],
+      ifNotExists: ['label', 'organizationId', 'projectId', 'batchId', 'datasetId', 'datasetItemId'],
     });
   }
 

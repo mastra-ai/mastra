@@ -77,7 +77,7 @@ function ExperimentScorePanelBody({
       <DataPanel.Content>
         <div className="grid gap-3">
           <DataPanel.CodeSection
-            title={`Score: ${score.score}`}
+            title={score.label ? `Score: ${score.score} · ${score.label}` : `Score: ${score.score}`}
             icon={<GaugeIcon />}
             codeStr={score.reason || naText}
             simplified

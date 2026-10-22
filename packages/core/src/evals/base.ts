@@ -379,6 +379,8 @@ type ScorerRunResultFields<
 > = ScorerRun<TInput, TRunOutput> & {
   scoreTraceId?: string;
   reason?: TAccumulatedResults extends Record<'generateReasonStepResult', infer TReason> ? TReason : undefined;
+  /** Categorical label returned by `generateScore` next to the numeric score, when the scorer provides one. */
+  label?: string;
 
   // Prompts
   preprocessPrompt?: string;
@@ -707,9 +709,20 @@ type GenerateReasonFunctionStep<TAccumulated extends Record<string, any>, TInput
   | ((context: GenerateReasonContext<TAccumulated, TInput, TRunOutput>) => any)
   | ((context: GenerateReasonContext<TAccumulated, TInput, TRunOutput>) => Promise<any>);
 
+/**
+ * `generateScore` may return the number alone, or the number with a categorical
+ * `label` (for example `'failing'`, `'adequate'`, `'exemplary'`). The label is
+ * persisted next to the score so consumers can count outcomes instead of only
+ * averaging them.
+ */
+export interface ScoreWithLabel {
+  score: number;
+  label?: string;
+}
+
 type GenerateScoreFunctionStep<TAccumulated extends Record<string, any>, TInput, TRunOutput> =
-  | ((context: StepContext<TAccumulated, TInput, TRunOutput>) => number | NotScorable)
-  | ((context: StepContext<TAccumulated, TInput, TRunOutput>) => Promise<number | NotScorable>);
+  | ((context: StepContext<TAccumulated, TInput, TRunOutput>) => number | ScoreWithLabel | NotScorable)
+  | ((context: StepContext<TAccumulated, TInput, TRunOutput>) => Promise<number | ScoreWithLabel | NotScorable>);
 
 // Special prompt object type for generateScore that always returns a number
 interface GenerateScorePromptObject<TAccumulated extends Record<string, any>, TInput, TRunOutput> {
@@ -1166,6 +1179,7 @@ class MastraScorer<
       output: {
         success: true,
         score: typeof scorerResult.score === 'number' ? scorerResult.score : null,
+        ...(typeof scorerResult.label === 'string' ? { label: scorerResult.label } : {}),
         reason: typeof scorerResult.reason === 'string' ? scorerResult.reason : null,
         ...(scorerResult.notScorable ? { notScorable: scorerResult.notScorable } : {}),
       },
@@ -1285,6 +1299,7 @@ class MastraScorer<
           };
 
           let stepResult: unknown;
+          let label: string | undefined;
           let prompt: string | undefined;
           let judgeModel: string | undefined;
           let judgeExecution: ScorerJudgeExecution | undefined;
@@ -1305,6 +1320,10 @@ class MastraScorer<
                   judgeExecution = promptStepResult.execution;
                 } else {
                   stepResult = await this.executeFunctionStep(scorerStep, executionContext);
+                  if (scorerStep.name === 'generateScore' && isScoreWithLabel(stepResult)) {
+                    label = stepResult.label;
+                    stepResult = stepResult.score;
+                  }
                 }
               },
             });
@@ -1363,6 +1382,7 @@ class MastraScorer<
           const newAccumulatedResults = {
             ...accumulatedResults,
             [`${scorerStep.name}StepResult`]: stepResult,
+            ...(label !== undefined ? { label } : {}),
           };
 
           return {
@@ -1384,6 +1404,7 @@ class MastraScorer<
       outputSchema: z.object({
         run: z.any(),
         score: z.number().optional(),
+        label: z.string().optional(),
         notScorable: z.object({ step: z.string(), reason: z.string().optional() }).optional(),
         reason: z.string().optional(),
         preprocessResult: z.any().optional(),
@@ -1917,6 +1938,7 @@ class MastraScorer<
     const judge = finalStepResult?.judge as ScorerJudgeResults | undefined;
     const notScorable = finalStepResult?.notScorable as NotScorableOutcome | undefined;
     const score = accumulatedResults.generateScoreStepResult;
+    const label = typeof accumulatedResults.label === 'string' ? accumulatedResults.label : undefined;
     const reason = accumulatedResults.generateReasonStepResult;
     const preprocessStepResult = accumulatedResults.preprocessStepResult;
     const analyzeStepResult = accumulatedResults.analyzeStepResult;
@@ -1931,6 +1953,7 @@ class MastraScorer<
       return {
         ...originalInput,
         ...(notScorable ? { notScorable } : { score }),
+        ...(label !== undefined ? { label } : {}),
         generateScorePrompt,
         reason,
         generateReasonPrompt,
@@ -1945,6 +1968,7 @@ class MastraScorer<
     return {
       ...originalInput,
       ...(notScorable ? { notScorable } : score !== undefined ? { score } : {}),
+      ...(label !== undefined ? { label } : {}),
       ...(generateScorePrompt !== undefined ? { generateScorePrompt } : {}),
       ...(reason !== undefined ? { reason } : {}),
       ...(generateReasonPrompt !== undefined ? { generateReasonPrompt } : {}),
@@ -2276,3 +2300,13 @@ function filterMessages(messages: MastraDBMessage[], options: FilterRunOptions):
 export type { ScorerConfig, ScorerRun, ScorerTypeShortcuts, StepContext, PromptObject };
 
 export { MastraScorer };
+
+function isScoreWithLabel(value: unknown): value is ScoreWithLabel {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !isNotScorable(value) &&
+    typeof (value as ScoreWithLabel).score === 'number' &&
+    (typeof (value as ScoreWithLabel).label === 'string' || (value as ScoreWithLabel).label === undefined)
+  );
+}

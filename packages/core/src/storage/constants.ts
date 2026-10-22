@@ -158,6 +158,7 @@ export const SCORERS_SCHEMA: Record<string, StorageColumn> = {
   extractStepResult: { type: 'jsonb', nullable: true },
   analyzeStepResult: { type: 'jsonb', nullable: true },
   score: { type: 'float' },
+  label: { type: 'text', nullable: true },
   reason: { type: 'text', nullable: true },
   metadata: { type: 'jsonb', nullable: true },
   preprocessPrompt: { type: 'text', nullable: true },

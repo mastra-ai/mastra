@@ -507,6 +507,7 @@ export const submitExperimentResultBodySchema = z.object({
         scorerId: z.string(),
         scorerName: z.string().optional(),
         score: z.number(),
+        label: z.string().optional().describe('Categorical label next to the numeric score'),
         reason: z.string().optional(),
         metadata: z.record(z.string(), z.unknown()).optional(),
       }),
@@ -723,6 +724,7 @@ export const runExperimentItemResponseSchema = z.object({
       scorerId: z.string(),
       scorerName: z.string(),
       score: z.number().nullable(),
+      label: z.string().optional(),
       reason: z.string().nullable(),
       error: z.string().nullable(),
       // Set when the scorer declared the item not scorable; `score` and `error` are null.
@@ -794,6 +796,7 @@ export const experimentSummaryResponseSchema = z.object({
           scorerId: z.string(),
           scorerName: z.string(),
           score: z.number().nullable(),
+          label: z.string().optional(),
           reason: z.string().nullable(),
           error: z.string().nullable(),
         }),

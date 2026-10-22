@@ -73,7 +73,7 @@ export class ScoresDSQL extends ScoresStorage {
     await this.#db.alterTable({
       tableName: TABLE_SCORERS,
       schema: TABLE_SCHEMAS[TABLE_SCORERS],
-      ifNotExists: ['organizationId', 'projectId', 'batchId', 'datasetId', 'datasetItemId'],
+      ifNotExists: ['organizationId', 'projectId', 'batchId', 'datasetId', 'datasetItemId', 'label'],
     });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();

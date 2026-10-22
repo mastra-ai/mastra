@@ -250,5 +250,23 @@ describe('ExperimentResultsList', () => {
         expect(screen.queryByTestId('score-reason-answer-relevancy')).toBeNull();
       });
     });
+
+    describe('when the score carries a categorical label', () => {
+      it('renders the label as a tag next to the number', () => {
+        renderWithScores({ 'item-r-1': [{ scorerId: 'answer-relevancy', score: 0.5, label: 'exemplary' }] });
+
+        expect(screen.getByText('0.500')).toBeDefined();
+        expectComputedTag(screen.getByText('exemplary'), 'exemplary');
+      });
+    });
+
+    describe('when the score has no label', () => {
+      it('renders no tag', () => {
+        renderWithScores({ 'item-r-1': [{ scorerId: 'answer-relevancy', score: 0.5, label: null }] });
+
+        expect(screen.getByText('0.500')).toBeDefined();
+        expect(screen.queryByTestId('computed-tag')).toBeNull();
+      });
+    });
   });
 });

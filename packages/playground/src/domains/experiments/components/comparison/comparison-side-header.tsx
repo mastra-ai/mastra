@@ -26,7 +26,9 @@ import {
   StarIcon,
 } from 'lucide-react';
 import { useState } from 'react';
+import type { LabelCounts } from '../../utils/score-labels';
 import { RenameExperimentDialog } from '../rename-experiment-dialog';
+import { ScoreLabelCounts } from '../score-label-counts';
 import type { ComparisonRole } from './build-comparison-rows';
 import { ComparisonDatasetVersion } from './comparison-dataset-version';
 import {
@@ -48,6 +50,8 @@ export interface ScorerSummary {
   average: number | null;
   /** Difference against the baseline average. Null on the baseline. */
   delta: number | null;
+  /** How many items got each categorical label. Omitted for numeric-only scorers. */
+  labelCounts?: LabelCounts;
 }
 
 /** Run-level figures of one column, computed from the compared items. */
@@ -300,11 +304,19 @@ export function ComparisonSideSummary({
           },
         ]
       : []),
-    ...(summary ?? []).map(({ scorerId, average, delta }) => ({
+    ...(summary ?? []).map(({ scorerId, average, delta, labelCounts }) => ({
       id: `scorer:${scorerId}`,
       icon: <ScorersIcon />,
       label: <ScorerLabel scorerId={scorerId} />,
-      value: formatScore(average),
+      value:
+        labelCounts && Object.keys(labelCounts).length > 0 ? (
+          <span className="flex flex-col items-end">
+            {formatScore(average)}
+            <ScoreLabelCounts counts={labelCounts} className="text-muted-foreground" />
+          </span>
+        ) : (
+          formatScore(average)
+        ),
       rawValue: average,
       delta: isContender ? delta : null,
     })),

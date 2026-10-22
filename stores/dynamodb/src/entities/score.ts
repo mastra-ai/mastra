@@ -133,6 +133,10 @@ export const scoreEntity = new Entity({
       type: 'string',
       required: false,
     },
+    label: {
+      type: 'string',
+      required: false,
+    },
     extractPrompt: {
       type: 'string',
       required: false,

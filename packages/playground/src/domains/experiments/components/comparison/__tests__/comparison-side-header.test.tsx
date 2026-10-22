@@ -48,9 +48,9 @@ describe('ComparisonSideSummary', () => {
     });
   });
 
-  describe('scorer summary', () => {
-    const summary = [{ scorerId: 'relevancy', average: 0.75, delta: 0.25 }];
+  const summary = [{ scorerId: 'relevancy', average: 0.75, delta: 0.25 }];
 
+  describe('scorer summary', () => {
     it('shows the average per scorer', () => {
       renderColumn(<ComparisonSideSummary role="baseline" experiment={namedExperiment} summary={summary} />);
 
@@ -86,6 +86,25 @@ describe('ComparisonSideSummary', () => {
 
       // 0.75 is 0.25 above a 0.50 baseline.
       expect(screen.getByText('+50.0%')).toBeDefined();
+    });
+  });
+
+  describe('when a scorer labels its scores', () => {
+    const labelled = [
+      { scorerId: 'safety-grade', average: 0.8, delta: null, labelCounts: { exemplary: 4, failing: 1 } },
+    ];
+
+    it('lists how many items got each label under the scorer average, most frequent first', () => {
+      renderColumn(<ComparisonSideSummary role="baseline" experiment={namedExperiment} summary={labelled} />);
+
+      const value = within(summaryRegion()).getByText('0.80').closest('dd');
+      expect(value?.textContent).toBe('0.80exemplary 4 · failing 1');
+    });
+
+    it('shows only the average for a scorer without labels', () => {
+      renderColumn(<ComparisonSideSummary role="baseline" experiment={namedExperiment} summary={summary} />);
+
+      expect(within(summaryRegion()).getByText('0.75').closest('dd')?.textContent).toBe('0.75');
     });
   });
 

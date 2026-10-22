@@ -180,6 +180,8 @@ export const scoreRowDataSchema = z.object({
   extractStepResult: optionalRecordSchema,
   extractPrompt: z.string().optional(),
   score: z.number(),
+  /** Categorical label emitted next to the numeric score (e.g. `failing`, `exemplary`). */
+  label: z.string().nullish(),
   analyzeStepResult: optionalRecordSchema,
   analyzePrompt: z.string().optional(),
   reason: z.string().optional(),

@@ -59,6 +59,11 @@ export class ScoresSpanner extends ScoresStorage {
 
   async init(): Promise<void> {
     await this.db.createTable({ tableName: TABLE_SCORERS, schema: TABLE_SCHEMAS[TABLE_SCORERS] });
+    await this.db.alterTable({
+      tableName: TABLE_SCORERS,
+      schema: TABLE_SCHEMAS[TABLE_SCORERS],
+      ifNotExists: ['label'],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }

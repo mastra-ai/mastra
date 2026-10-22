@@ -10432,6 +10432,7 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Response = {
       | undefined;
     extractPrompt?: string | undefined;
     score: number;
+    label?: (string | null) | undefined;
     analyzeStepResult?:
       | {
           [key: string]: unknown;
@@ -20911,6 +20912,7 @@ export type PostDatasetsDatasetIdExperiments_Response = {
       scorerId: string;
       scorerName: string;
       score: number | null;
+      label?: string | undefined;
       reason: string | null;
       error: string | null;
     }[];
@@ -20967,6 +20969,7 @@ export type PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_Response 
     scorerId: string;
     scorerName: string;
     score: number | null;
+    label?: string | undefined;
     reason: string | null;
     error: string | null;
     notScorable?:
@@ -21041,6 +21044,8 @@ export type PostDatasetsDatasetIdExperimentsExperimentIdResults_Body = {
         scorerId: string;
         scorerName?: string | undefined;
         score: number;
+        /** Categorical label next to the numeric score */
+        label?: string | undefined;
         reason?: string | undefined;
         metadata?:
           | {

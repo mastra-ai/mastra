@@ -76,6 +76,8 @@ describe('createClassifierScorer', () => {
     const result = await scorer.run({ input: 'question', output: 'answer' });
 
     expect(result.score).toBe(0.5);
+    // The chosen key is the categorical label, so Studio can count choices instead of only averaging them.
+    expect(result.label).toBe('partial');
     expect(result.reason).toBe("Classifier question 'route' selected 'partial' (score: 0.5).");
     expect(result.analyzeStepResult).toEqual({
       question: 'route',
@@ -113,8 +115,13 @@ describe('createClassifierScorer', () => {
       state: ({ run }) => run.output,
     });
 
-    await expect(scoreScorer.run({ output: 'answer' })).resolves.toMatchObject({ score: 0.75 });
-    await expect(booleanScorer.run({ output: 'answer' })).resolves.toMatchObject({ score: 0.37 });
+    const scoreResult = await scoreScorer.run({ output: 'answer' });
+    const booleanResult = await booleanScorer.run({ output: 'answer' });
+    expect(scoreResult).toMatchObject({ score: 0.75 });
+    expect(booleanResult).toMatchObject({ score: 0.37 });
+    // Only choice answers are categorical; score and boolean answers carry no label.
+    expect(scoreResult.label).toBeUndefined();
+    expect(booleanResult.label).toBeUndefined();
   });
 
   it('fails with a question-specific error when the classifier refuses the question', async () => {

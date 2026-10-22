@@ -6,6 +6,8 @@ export interface ComparisonScore {
   scorerId: string;
   value: number | null;
   reason: string | null;
+  /** Categorical label the scorer gave next to the number, e.g. `failing`. */
+  label: string | null;
 }
 
 export interface ComparisonSide {
@@ -56,7 +58,7 @@ export interface ComparisonRow {
  * Scorer runs grouped by dataset item id, as `useScoresByExperimentId` returns them.
  * Structurally narrowed to what the join needs, so `ClientScoreRowData[]` fits.
  */
-export type ScoresByItemId = Record<string, Array<Pick<ClientScoreRowData, 'scorerId' | 'reason'>>>;
+export type ScoresByItemId = Record<string, Array<Pick<ClientScoreRowData, 'scorerId' | 'reason' | 'label'>>>;
 
 interface BuildComparisonRowsParams {
   comparison: CompareExperimentsResponse | undefined;
@@ -100,10 +102,10 @@ const buildSide = (
 ): ComparisonSide => {
   if (!comparisonResult) return absentSide;
 
-  // Reasons are not part of the result row: they live in the scores store.
-  const reasonByScorerId = new Map<string, string | null>();
+  // Reasons and labels are not part of the result row: they live in the scores store.
+  const scoreByScorerId = new Map<string, ScoresByItemId[string][number]>();
   for (const score of itemScores ?? []) {
-    reasonByScorerId.set(score.scorerId, score.reason ?? null);
+    scoreByScorerId.set(score.scorerId, score);
   }
 
   return {
@@ -116,7 +118,12 @@ const buildSide = (
     startedAt: toIsoString(detail?.startedAt),
     completedAt: toIsoString(detail?.completedAt),
     scores: Object.entries(comparisonResult.scores)
-      .map(([scorerId, value]) => ({ scorerId, value, reason: reasonByScorerId.get(scorerId) ?? null }))
+      .map(([scorerId, value]) => ({
+        scorerId,
+        value,
+        reason: scoreByScorerId.get(scorerId)?.reason ?? null,
+        label: scoreByScorerId.get(scorerId)?.label ?? null,
+      }))
       .sort((a, b) => a.scorerId.localeCompare(b.scorerId)),
     traceId: detail?.traceId ?? undefined,
     usage: detail?.traceId ? usageByTraceId?.[detail.traceId] : undefined,
