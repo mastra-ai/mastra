@@ -7,6 +7,7 @@ import type {
   MastraToolInvocationPart,
 } from '@mastra/core/agent/message-list';
 import type { AgentChunkType, ChunkType, NetworkChunkType } from '@mastra/core/stream';
+import { isUserMessagePendingChunk, isUserMessageCancelledChunk } from '@mastra/core/stream';
 import type { StepResult, WorkflowStreamResult } from '@mastra/core/workflows';
 import { uint8ArrayToBase64, encodeFilePartDataForStorage } from '../../agent/signal-data';
 import { formatCompletionFeedback, formatStreamCompletionFeedback } from './formatCompletionFeedback';
@@ -137,7 +138,12 @@ const withMetadata = (message: MastraDBMessage, metadata: MastraDBMessageMetadat
 // key from an optimistic user message once its server echo confirms it, leaving
 // the rest of the metadata intact.
 const clearPendingStatus = (message: MastraDBMessage): MastraDBMessage => {
-  const { status: _status, [CLIENT_MESSAGE_ID_KEY]: _clientMessageId, ...rest } = message.content.metadata ?? {};
+  const {
+    status: _status,
+    queued: _queued,
+    [CLIENT_MESSAGE_ID_KEY]: _clientMessageId,
+    ...rest
+  } = message.content.metadata ?? {};
   return withMetadata(message, rest);
 };
 
@@ -147,7 +153,7 @@ const clearPendingStatus = (message: MastraDBMessage): MastraDBMessage => {
 // React unmount/remount and the resulting layout shift. `clientMessageId` is
 // still stripped from persisted threads by `resolveInitialMessages`.
 const clearPendingStatusKeepClientId = (message: MastraDBMessage): MastraDBMessage => {
-  const { status: _status, ...rest } = message.content.metadata ?? {};
+  const { status: _status, queued: _queued, ...rest } = message.content.metadata ?? {};
   return withMetadata(message, rest);
 };
 
@@ -561,8 +567,77 @@ export interface AccumulateChunkArgs {
  * React SDK; consumers downstream (e.g. `toAISdkV5Messages` in the playground)
  * translate the result into AI SDK / assistant-ui shapes as needed.
  */
+const isQueuedUserBubble = (message: MastraDBMessage): boolean =>
+  message.role === 'user' && message.content.metadata?.queued === true;
+
 export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChunkArgs): MastraDBMessage[] => {
   const result = [...conversation];
+
+  // ----- Queued follow-ups: user messages waiting for their own run -----
+  // A follow-up queued behind the active run is shown as a pending bubble the
+  // moment it is queued. It has to stay below everything the active run still
+  // streams, so run chunks are applied to the conversation without the queued
+  // tail, which is put back afterwards.
+  if (isUserMessageCancelledChunk(chunk)) {
+    return result.filter(message => !(message.id === chunk.data.id && message.content.metadata?.status === 'pending'));
+  }
+  const isQueuedChunk = isUserMessagePendingChunk(chunk) && chunk.data.metadata.status === 'queued';
+  const queuedTailLength = (() => {
+    let count = 0;
+    while (count < result.length && isQueuedUserBubble(result[result.length - 1 - count]!)) count++;
+    return count;
+  })();
+  if (!isQueuedChunk && queuedTailLength > 0) {
+    // The echo of a queued follow-up (its run started) settles it: it leaves the
+    // queue and is appended as a delivered message below the finished run output.
+    const echoedId = isDataChunk(chunk) && chunk.type === 'data-user-message' ? (chunk as any).data?.id : undefined;
+    const tailStart = result.length - queuedTailLength;
+    const queuedTail = result.slice(tailStart).filter(message => message.id !== echoedId);
+    // Queued bubbles that are not at the tail (the user sent something after them) stay where they are.
+    return [...accumulateChunk({ chunk, conversation: result.slice(0, tailStart), metadata }), ...queuedTail];
+  }
+
+  if (isUserMessagePendingChunk(chunk)) {
+    const { id, contents, metadata: signalMetadata } = chunk.data;
+    const clientId = signalMetadata[CLIENT_MESSAGE_ID_KEY];
+    const existing = result.find(
+      message =>
+        message.id === id ||
+        (typeof clientId === 'string' && message.content.metadata?.[CLIENT_MESSAGE_ID_KEY] === clientId),
+    );
+    if (existing) {
+      if (existing.content.metadata?.status !== 'pending') return result;
+      return result.map(message =>
+        message === existing
+          ? {
+              ...message,
+              id,
+              content: {
+                ...message.content,
+                metadata: {
+                  ...message.content.metadata,
+                  ...(signalMetadata.status === 'queued' ? { queued: true } : {}),
+                },
+              },
+            }
+          : message,
+      );
+    }
+    const pendingMessages = signalContentsToUserMessages(contents, {
+      ...metadata,
+      status: 'pending',
+      ...(typeof clientId === 'string' ? { [CLIENT_MESSAGE_ID_KEY]: clientId } : {}),
+      ...(signalMetadata.status === 'queued' ? { queued: true } : {}),
+    });
+    // Presentation must not close the active assistant or steal its tool results.
+    return [
+      ...result,
+      ...pendingMessages.map((message, index) => ({
+        ...message,
+        id: index === 0 ? id : `${id}-${index}`,
+      })),
+    ];
+  }
 
   // ----- Template-literal passthrough chunk types from NetworkChunkType -----
   // `agent-execution-event-*` and `workflow-execution-event-*` carry nested
@@ -1336,8 +1411,7 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
       // Workflow stream output: accumulate into watch-result state
       if (payloadOutput?.type?.startsWith('workflow-')) {
         const existingWorkflowState = (toolPart.toolInvocation as any).result as
-          | WorkflowStreamResult<any, any, any, any>
-          | undefined;
+          WorkflowStreamResult<any, any, any, any> | undefined;
         const updated = mapWorkflowStreamChunkToWatchResult(existingWorkflowState, payloadOutput);
 
         parts[toolPartIndex] = {

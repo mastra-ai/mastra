@@ -11,7 +11,12 @@ import { getChunkProducedAt } from '../stream/base/produced-at';
 import { isSignalChunkExcluded } from '../stream/signal-exclusions';
 import { stripModelSnapshots } from '../stream/strip-model-snapshots';
 import { ChunkFrom } from '../stream/types';
-import type { ChunkType, ThreadHistoryChunk } from '../stream/types';
+import type {
+  ChunkType,
+  ThreadHistoryChunk,
+  UserMessagePendingChunk,
+  UserMessageCancelledChunk,
+} from '../stream/types';
 import { readPositiveIntEnv } from '../utils';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
@@ -63,6 +68,12 @@ function toModelOutput<OUTPUT>(result: unknown): MastraModelOutput<OUTPUT> {
     return inner as MastraModelOutput<OUTPUT>;
   }
   return result as MastraModelOutput<OUTPUT>;
+}
+
+function userMessageSignalId(part: unknown): string | undefined {
+  if (!part || typeof part !== 'object' || !('type' in part) || part.type !== 'data-user-message') return;
+  if (!('data' in part) || !part.data || typeof part.data !== 'object') return;
+  return 'id' in part.data && typeof part.data.id === 'string' ? part.data.id : undefined;
 }
 
 const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
@@ -395,8 +406,7 @@ type PendingContinuation<OUTPUT = unknown> = {
 };
 
 type ClaimedThreadOwnerStreamOptions =
-  | AgentExecutionOptions<any>
-  | (() => AgentExecutionOptions<any> | Promise<AgentExecutionOptions<any>>);
+  AgentExecutionOptions<any> | (() => AgentExecutionOptions<any> | Promise<AgentExecutionOptions<any>>);
 
 type ClaimedThreadOwner<OUTPUT = unknown> = {
   agent: Agent<any, any, any, any>;
@@ -646,6 +656,8 @@ type AgentThreadStreamRuntimeEvent =
   | { type: 'run-discarded'; runId: string; streamId: string }
   | { type: 'run-abort-requested'; runId: string; streamId: string; clearPendingSignals?: boolean }
   | { type: 'signals-cancelled'; signalIds: string[] }
+  | { type: 'user-message-presentation'; chunk: UserMessagePendingChunk | UserMessageCancelledChunk }
+  | { type: 'user-message-delivered'; signalId: string }
   | { type: 'run-aborted'; runId: string; streamId?: string }
   | { type: 'run-failed'; runId: string; streamId?: string; error: string }
   | { type: 'signal-enqueued'; runId: string; signal: SerializableAgentSignal; sourceId: string; preRun?: boolean }
@@ -1143,14 +1155,16 @@ export class AgentThreadStreamRuntime {
         )
           return;
         const queue = queues.get(key) ?? [];
-        queue.push(createSignal(data.signal));
+        const signal = createSignal(data.signal);
+        queue.push(signal);
         queues.set(key, queue);
         subscription.admittedSignalIds.add(data.signal.id);
+        this.#publishPendingUserMessage(pubsub, key, data.runId, signal, 'pending');
         this.#notifyPendingSignals(state, key);
       } else if (data?.type === 'signals-cancelled') {
         // A backend retry can deliver the original enqueue after its cancellation.
         for (const id of data.signalIds) subscription.admittedSignalIds.add(id);
-        this.#cancelPendingSignals(state, key, new Set(data.signalIds));
+        this.#cancelPendingSignals(state, key, new Set(data.signalIds), pubsub);
         this.#notifyThreadEvents(state);
       } else if (data?.type === 'run-abort-requested') {
         const ownsRun = () =>
@@ -1165,7 +1179,7 @@ export class AgentThreadStreamRuntime {
         const clearPendingSignals =
           ownsRun() && data.clearPendingSignals && (await this.#hasLiveThreadLease(resolvedPubSub, key, data.runId));
         if (ownsRun()) {
-          if (clearPendingSignals) this.#cancelPendingSignals(state, key);
+          if (clearPendingSignals) this.#cancelPendingSignals(state, key, undefined, pubsub);
           if (state.preparedRunsById.has(data.runId) || this.#isParkedRun(state, data.runId)) {
             // A parked (suspended) run has no prepared run left, but abortRun's
             // parked branch releases it so the thread stops blocking on it.
@@ -2078,6 +2092,7 @@ export class AgentThreadStreamRuntime {
           streamOptions,
         });
         state.pendingIdleSignalsByThread.set(key, idleQueue);
+        this.#publishPendingUserMessage(pubsub, key, activeRunId, signal, 'queued');
         if (activeRecord) {
           this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
         }
@@ -2486,6 +2501,10 @@ export class AgentThreadStreamRuntime {
       parts.push(part);
       if ((part as { type?: string } | null | undefined)?.type === 'start') startPart = part;
       const partType = (part as { type?: string } | null | undefined)?.type;
+      const deliveredSignalId = userMessageSignalId(part);
+      if (deliveredSignalId) {
+        await runtime.#publishAndWait(pubsub, key, { type: 'user-message-delivered', signalId: deliveredSignalId });
+      }
       await runtime.#publishAndWait(pubsub, key, {
         type: 'stream-part',
         runId: output.runId,
@@ -2535,8 +2554,7 @@ export class AgentThreadStreamRuntime {
         try {
           if (cancelled) return;
           const source = (output.__getUnfilteredFullStream?.() ?? output.fullStream) as
-            | ReadableStream<unknown>
-            | undefined;
+            ReadableStream<unknown> | undefined;
           if (!source) return;
 
           if (typeof source.getReader === 'function') {
@@ -2637,7 +2655,8 @@ export class AgentThreadStreamRuntime {
       }
       if (cutoffAt === undefined || cutoff <= trimmedThrough) return;
       trimmedThrough = cutoff;
-      void runtime.#getPubSub(pubsub)
+      void runtime
+        .#getPubSub(pubsub)
         .trimTopic(runtime.#threadTopic(key), { runId: output.runId, producedBefore: cutoffAt })
         .catch(() => {});
       let keep = cutoff + 1;
@@ -3088,7 +3107,7 @@ export class AgentThreadStreamRuntime {
     // A stale request conditioned on a run that is no longer active must not
     // stop the successor run or clear input queued for it.
     if (options.expectedRunId !== undefined && options.expectedRunId !== runId) return false;
-    if (options.clearPendingSignals) this.#cancelPendingSignals(state, key);
+    if (options.clearPendingSignals) this.#cancelPendingSignals(state, key, undefined, pubsub);
     try {
       if (!runId) return false;
       if (options.localOnly && this.#isParkedRun(state, runId) && !state.preparedRunsById.has(runId)) {
@@ -3213,6 +3232,42 @@ export class AgentThreadStreamRuntime {
         },
         () => {},
       );
+    }
+  }
+
+  #pendingUserMessageChunk(
+    runId: string,
+    signal: CreatedAgentSignal,
+    status: 'pending' | 'queued',
+  ): UserMessagePendingChunk | undefined {
+    if (signal.type !== 'user' || signal.transient) return;
+    const { data } = signal.toDataPart();
+    return {
+      type: 'data-user-message-pending',
+      runId,
+      from: ChunkFrom.AGENT,
+      transient: true,
+      data: { ...data, metadata: { ...data.metadata, status } },
+    };
+  }
+
+  #publishPendingUserMessage(
+    pubsub: PubSub | undefined,
+    key: string,
+    runId: string,
+    signal: CreatedAgentSignal,
+    status: 'pending' | 'queued',
+  ) {
+    const chunk = this.#pendingUserMessageChunk(runId, signal, status);
+    if (chunk) this.#publish(pubsub, key, { type: 'user-message-presentation', chunk });
+  }
+
+  #publishCancelledUserMessages(pubsub: PubSub | undefined, key: string, signalIds: string[]) {
+    for (const id of signalIds) {
+      this.#publish(pubsub, key, {
+        type: 'user-message-presentation',
+        chunk: { type: 'data-user-message-cancelled', runId: '', from: ChunkFrom.AGENT, transient: true, data: { id } },
+      });
     }
   }
 
@@ -4843,6 +4898,9 @@ export class AgentThreadStreamRuntime {
     const topic = this.#threadTopic(key);
     const seenStreamIds = new Set<string>();
     const pendingRuns: AgentThreadRunRecord<any>[] = [];
+    const presentations: Array<UserMessagePendingChunk | UserMessageCancelledChunk> = [];
+    const presentedSignalIds = new Set<string>();
+    const settledSignalIds = new Set<string>();
     const waiters: Array<() => void> = [];
     const remoteRuns = new Map<
       string,
@@ -4869,6 +4927,19 @@ export class AgentThreadStreamRuntime {
       // in flight from the subscriber's perspective; treat them as active.
       if (!record) return runId;
       return this.#isThreadBlockingRun(state, record) ? runId : null;
+    };
+
+    const enqueuePresentation = (chunk: UserMessagePendingChunk | UserMessageCancelledChunk) => {
+      const id = chunk.data.id;
+      if (chunk.type === 'data-user-message-cancelled') {
+        if (settledSignalIds.has(id)) return;
+        settledSignalIds.add(id);
+      } else {
+        if (settledSignalIds.has(id) || presentedSignalIds.has(id)) return;
+        presentedSignalIds.add(id);
+      }
+      presentations.push(chunk);
+      wake();
     };
 
     const enqueueRun = (record: AgentThreadRunRecord<any>) => {
@@ -5207,6 +5278,14 @@ export class AgentThreadStreamRuntime {
       if (done) return;
       const data = event.data as AgentThreadStreamRuntimeEvent | undefined;
       if (!data) return;
+      if (data.type === 'user-message-presentation') {
+        enqueuePresentation(data.chunk);
+        return;
+      }
+      if (data.type === 'user-message-delivered') {
+        settledSignalIds.add(data.signalId);
+        return;
+      }
       if ('streamId' in data && data.streamId !== undefined && supersededStreamIds.has(data.streamId)) return;
       if (data.type === 'run-registered') {
         if (isSuperseded(data.runId, data.generation)) return;
@@ -5591,6 +5670,7 @@ export class AgentThreadStreamRuntime {
           payload: history,
         };
         historyFilter = createThreadHistoryFilter(history.messages);
+        for (const message of history.messages) settledSignalIds.add(message.id);
       } catch (error) {
         control.references--;
         control.observers--;
@@ -5601,6 +5681,17 @@ export class AgentThreadStreamRuntime {
     }
 
     const currentRunId = activeRunId();
+    // Pending input is not in saved history or a finished-step stream buffer.
+    for (const queue of [state.preRunSignalsByThread.get(key), state.pendingSignalsByThread.get(key)]) {
+      for (const signal of queue ?? []) {
+        const chunk = this.#pendingUserMessageChunk(currentRunId ?? '', signal, 'pending');
+        if (chunk) enqueuePresentation(chunk);
+      }
+    }
+    for (const pending of state.pendingIdleSignalsByThread.get(key) ?? []) {
+      const chunk = this.#pendingUserMessageChunk(currentRunId ?? pending.runId, pending.signal, 'queued');
+      if (chunk) enqueuePresentation(chunk);
+    }
     // An aborted run stays active until it terminalizes, but its lifecycle already
     // ended for earlier subscribers. Seeding it here would replay that run.
     const currentRecord =
@@ -5637,6 +5728,14 @@ export class AgentThreadStreamRuntime {
       wake();
     };
 
+    function* takePresentations() {
+      while (presentations.length) {
+        const chunk = presentations.shift()!;
+        if (chunk.type === 'data-user-message-pending' && settledSignalIds.has(chunk.data.id)) continue;
+        if (!isSignalChunkExcluded(chunk, options.hideSignals)) yield chunk;
+      }
+    }
+
     return {
       activeRunId,
       __getCurrentRunRequestContext: () => {
@@ -5648,7 +5747,8 @@ export class AgentThreadStreamRuntime {
       stream: (async function* () {
         try {
           if (historyChunk) yield historyChunk;
-          while (!done || pendingRuns.length > 0) {
+          while (!done || pendingRuns.length > 0 || presentations.length > 0) {
+            yield* takePresentations();
             const parkedAbortRunId = parkedAbortRunIds.shift();
             if (parkedAbortRunId !== undefined) {
               yield { type: 'abort', runId: parkedAbortRunId } as any;
@@ -5695,9 +5795,28 @@ export class AgentThreadStreamRuntime {
             // A `start` covered by stored history is held back and sent before the
             // first live part of this stream, so a mid-run joiner sees the run begin.
             let heldStart: unknown;
+            let pendingRead: ReturnType<typeof reader.read> | undefined;
             try {
               while (true) {
-                const { value: part, done: streamDone } = await reader.read();
+                yield* takePresentations();
+                if (done) break;
+                pendingRead ??= reader.read();
+                let notify!: () => void;
+                const awakened = new Promise<void>(resolve => {
+                  notify = resolve;
+                  waiters.push(notify);
+                });
+                const next = await Promise.race([
+                  pendingRead.then(value => ({ kind: 'part' as const, value })),
+                  awakened.then(() => ({ kind: 'wake' as const })),
+                ]);
+                const waiterIndex = waiters.indexOf(notify);
+                if (waiterIndex !== -1) waiters.splice(waiterIndex, 1);
+                if (next.kind === 'wake') continue;
+                pendingRead = undefined;
+                const { value: part, done: streamDone } = next.value;
+                const deliveredSignalId = userMessageSignalId(part);
+                if (deliveredSignalId) settledSignalIds.add(deliveredSignalId);
                 if (streamDone) {
                   break;
                 }
@@ -5828,7 +5947,7 @@ export class AgentThreadStreamRuntime {
     }
     if (hasSignalIds) {
       const signalIds = new Set(target.signalIds);
-      const result = this.#cancelPendingSignals(state, key, signalIds);
+      const result = this.#cancelPendingSignals(state, key, signalIds, pubsub);
       this.#publish(pubsub, key, { type: 'signals-cancelled', signalIds: [...signalIds] });
       if (result.cancelledSignalIds.length) {
         this.#notifyThreadEvents(state);
@@ -5838,6 +5957,7 @@ export class AgentThreadStreamRuntime {
     const matches = (pending: PendingIdleSignal<any>) =>
       pending.agent === agent && pending.queueOwnerId === target.queueOwnerId;
     const cancelledSignalIds = this.#cancelIdleSignals(state, key, matches);
+    this.#publishCancelledUserMessages(pubsub, key, cancelledSignalIds);
     if (cancelledSignalIds.length > 0) this.#notifyThreadEvents(state);
     return { cancelledSignalIds };
   }
@@ -5873,6 +5993,7 @@ export class AgentThreadStreamRuntime {
     state: AgentThreadRuntimeState,
     key: string,
     signalIds?: ReadonlySet<string>,
+    pubsub?: PubSub,
   ): CancelQueuedAgentMessagesResult {
     const matches = (signal: CreatedAgentSignal) => signalIds === undefined || signalIds.has(signal.id);
     const cancelled = new Set<string>();
@@ -5900,6 +6021,7 @@ export class AgentThreadStreamRuntime {
     for (const id of this.#cancelIdleSignals(state, key, pending => matches(pending.signal))) cancelled.add(id);
     const control = state.threadControlSubscriptions.get(key);
     for (const id of cancelled) control?.admittedSignalIds.add(id);
+    this.#publishCancelledUserMessages(pubsub, key, [...cancelled]);
     return { cancelledSignalIds: [...cancelled] };
   }
 
@@ -5991,6 +6113,7 @@ export class AgentThreadStreamRuntime {
       });
       state.pendingIdleSignalsByThread.set(key, idleQueue);
       const control = this.#ensureThreadControlSubscription(state, pubsub, key);
+      this.#publishPendingUserMessage(pubsub, key, runId ?? queuedRunId, queuedSignal, 'queued');
       this.#notifyThreadEvents(state);
       if (activeRecord) {
         this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
@@ -6204,6 +6327,7 @@ export class AgentThreadStreamRuntime {
           queue.push(signal);
           state.pendingSignalsByThread.set(key, queue);
           this.#recordLocallyQueuedSignal(state, key, signal.id);
+          this.#publishPendingUserMessage(pubsub, key, runId, signal, 'pending');
           this.#notifyPendingSignals(state, key);
           this.#publish(pubsub, key, {
             type: 'signal-enqueued',
@@ -6252,6 +6376,7 @@ export class AgentThreadStreamRuntime {
           queue.push(signal);
           state.preRunSignalsByThread.set(key, queue);
           this.#recordLocallyQueuedSignal(state, key, signal.id);
+          this.#publishPendingUserMessage(pubsub, key, runId, signal, 'pending');
           this.#notifyPendingSignals(state, key);
         }
         this.#publish(pubsub, key, {

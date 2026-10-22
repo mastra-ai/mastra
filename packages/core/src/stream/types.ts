@@ -17,7 +17,7 @@ import type { CallSettings, ModelMessage, StepResult, ToolSet, TypedToolCall, UI
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { StoredMessageLoader } from '../agent/message-list/memory-message-refs';
 import type { AIV5Type, MastraDBMessage } from '../agent/message-list/types';
-import type { AgentSignalType } from '../agent/signals';
+import type { AgentSignalDataPart, AgentSignalType } from '../agent/signals';
 import type { StructuredOutputOptions } from '../agent/types';
 import type { ModelConfigModelSettings } from '../llm/model/model-settings';
 import type { MastraLanguageModel, SharedProviderOptions } from '../llm/model/shared.types';
@@ -855,6 +855,49 @@ interface ToolCallResumedPayload {
   resumeSchema?: string;
 }
 
+/** Subscription-only presentation of admitted input, not the step-boundary delivery echo. */
+export type UserMessagePendingChunk = BaseChunkType & {
+  type: 'data-user-message-pending';
+  transient: true;
+  data: AgentSignalDataPart['data'] & { metadata: Record<string, unknown> & { status: 'pending' | 'queued' } };
+};
+
+/** Emitted only for input actually removed before delivery, never for a cancellation request. */
+export type UserMessageCancelledChunk = BaseChunkType & {
+  type: 'data-user-message-cancelled';
+  transient: true;
+  data: { id: string };
+};
+
+export function isUserMessagePendingChunk(value: unknown): value is UserMessagePendingChunk {
+  if (!value || typeof value !== 'object' || !('type' in value) || value.type !== 'data-user-message-pending')
+    return false;
+  if (!('data' in value) || !value.data || typeof value.data !== 'object') return false;
+  const data = value.data;
+  return (
+    'id' in data &&
+    typeof data.id === 'string' &&
+    'contents' in data &&
+    'metadata' in data &&
+    !!data.metadata &&
+    typeof data.metadata === 'object' &&
+    'status' in data.metadata &&
+    (data.metadata.status === 'pending' || data.metadata.status === 'queued')
+  );
+}
+
+export function isUserMessageCancelledChunk(value: unknown): value is UserMessageCancelledChunk {
+  if (!value || typeof value !== 'object' || !('type' in value) || value.type !== 'data-user-message-cancelled')
+    return false;
+  return (
+    'data' in value &&
+    !!value.data &&
+    typeof value.data === 'object' &&
+    'id' in value.data &&
+    typeof value.data.id === 'string'
+  );
+}
+
 export type DataChunkType = {
   type: `data-${string}`;
   data: any;
@@ -1093,6 +1136,8 @@ export type TypedChunkType<OUTPUT = undefined> =
   | AgentChunkType<OUTPUT>
   | WorkflowStreamEvent
   | NetworkChunkType<OUTPUT>
+  | UserMessagePendingChunk
+  | UserMessageCancelledChunk
   | (DataChunkType & {
       from: never;
       runId: never;
@@ -1236,8 +1281,7 @@ export type MastraStreamTransform<OUTPUT = undefined> = () => TransformStream<Ch
 
 /** @experimental This API may change in a future release. */
 export type MastraStreamTransformOptions<OUTPUT = undefined> =
-  | MastraStreamTransform<OUTPUT>
-  | readonly MastraStreamTransform<OUTPUT>[];
+  MastraStreamTransform<OUTPUT> | readonly MastraStreamTransform<OUTPUT>[];
 
 export type MastraModelOutputOptions<OUTPUT = undefined> = {
   runId: string;

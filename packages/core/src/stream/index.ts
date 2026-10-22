@@ -15,6 +15,8 @@ export type {
   ThreadHistoryChunk,
   ThreadHistoryPayload,
   DataChunkType,
+  UserMessagePendingChunk,
+  UserMessageCancelledChunk,
   NetworkChunkType,
   WorkflowStreamEvent,
   FileChunk,
@@ -70,7 +72,7 @@ export type { FullOutput } from './base/output';
 // ============================================================================
 // Enums & Classes
 // ============================================================================
-export { ChunkFrom } from './types';
+export { ChunkFrom, isUserMessagePendingChunk, isUserMessageCancelledChunk } from './types';
 export { MastraAgentNetworkStream } from './MastraAgentNetworkStream';
 export { MastraModelOutput } from './base/output';
 export { WorkflowRunOutput } from './RunOutput';
