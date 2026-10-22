@@ -53,8 +53,25 @@ describe.each(['plain', 'durable', 'evented'] as const)('Conversation windows on
             expect(await output.text).toBe(`t${n}`);
             const requests = llm.getRequests();
             expect(requests).toHaveLength(1);
-            const messages = (requests[0]!.body as { messages: { role: string }[] }).messages;
-            sizes.push(messages.filter(message => message.role !== 'system').length);
+            const messages = (requests[0]!.body as { messages: { role: string; content: string }[] }).messages;
+            const conversation = messages
+              .filter(message => message.role !== 'system')
+              .map(({ role, content }) => ({ role, content }));
+            sizes.push(conversation.length);
+            const priorMessages =
+              readOnly || n === 1
+                ? []
+                : n === 2
+                  ? [
+                      { role: 'user', content: 'turn 1' },
+                      { role: 'assistant', content: 't1' },
+                    ]
+                  : [
+                      { role: 'assistant', content: `t${n - 2}` },
+                      { role: 'user', content: `turn ${n - 1}` },
+                      { role: 'assistant', content: `t${n - 1}` },
+                    ];
+            expect(conversation).toEqual([...priorMessages, { role: 'user', content: `turn ${n}` }]);
             if ('cleanup' in result) result.cleanup();
           }
           // lastMessages caps prior messages at three; the current user input adds one.
