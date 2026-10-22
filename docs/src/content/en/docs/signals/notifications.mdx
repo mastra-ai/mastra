@@ -218,7 +218,6 @@ import { createNotificationInboxTool } from '@mastra/core/notifications'
 const notificationsStorage = await storage.getStore('notifications')
 
 export const ciAgent = new Agent({
-  // ...
   tools: {
     notificationInbox: createNotificationInboxTool({ storage: notificationsStorage }),
   },

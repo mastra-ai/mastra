@@ -19,6 +19,8 @@ Mastra tracks the current `cacheKey` and mode for each state ID. If both match a
 
 State signals are durable, so they survive later turns and, with shared storage, process restarts. Because every accepted update becomes context, batch or summarize frequent changes before sending.
 
+For user input, use [`sendMessage()`](/reference/agents/agent#sendmessagemessage-options). If context only matters for one model request, send a [transient reactive signal](/docs/signals/sending-signals#send-context-from-a-system) instead. External events that need a durable inbox record and delivery policy belong in [notifications](/docs/signals/notifications).
+
 ## Send a state signal
 
 Before calling `sendStateSignal()`, configure [Memory](/docs/memory/overview) on the agent and ensure the target thread exists. Unlike a user message, this call can't create a missing thread.
@@ -96,13 +98,6 @@ Mastra uses state signals for long-lived context, and the same patterns apply to
 - [Goals](/docs/harness/goals) keep the current objective under the `goal` id.
 - [Task tracking](/docs/agents/tools#task-tracking) stores task state through [`TaskStateProcessor`](/reference/signals/task-signal-provider).
 - [Working memory](/docs/memory/working-memory#opt-in-to-state-signals-experimental) can move out of the system prompt and into a `working-memory` state signal with `useStateSignals: true`.
-
-## Choose another input path
-
-- **User input:** use [`sendMessage()`](/reference/agents/agent#sendmessagemessage-options).
-- **Context for one model request:** use a [transient reactive signal](/docs/signals/sending-signals#send-context-from-a-system).
-- **External events to act on later:** use a [notification](/docs/signals/notifications) with a durable inbox record and delivery policy.
-- **Named current context:** use a state signal.
 
 ## Persistence and truncation
 
