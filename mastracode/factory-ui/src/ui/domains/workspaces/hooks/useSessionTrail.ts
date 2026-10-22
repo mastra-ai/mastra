@@ -2,9 +2,11 @@ import { skipToken, useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
+import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useFeedRoster } from '../../factory/components/activity/feed/useFeedRoster';
 import { fetchAuditEvents } from '../../factory/services/audit';
 import type { FactoryMentionMember } from '../../factory/services/members';
+import type { SessionViewerProfile } from '../services/sessionPresentation';
 import { auditOwnerChanges, auditRunIntervals } from '../services/sessionTrack';
 import type { OwnerChange, RunInterval } from '../services/sessionTrack';
 
@@ -42,10 +44,25 @@ export function useSessionTrail({
       fetchAuditEvents(baseUrl, factoryId, { namespaces: ['session'], limit: MAX_AUDIT_PAGE_SIZE, signal }),
     staleTime: TRAIL_STALE_TIME,
   });
-  const people = useFeedRoster(factoryId, transfers.data ? [transfers.data] : []);
+  const roster = useFeedRoster(factoryId, transfers.data ? [transfers.data] : []);
+  const viewer = useFactoryAuth().data?.user;
   return {
     runs: auditRunIntervals(runs.data?.events ?? []),
     ownerChanges: auditOwnerChanges(transfers.data?.events ?? [], sessionRowId),
-    people,
+    people: withViewer(roster, viewer),
   };
+}
+
+/** A host without an org roster lists nobody, yet the viewer is the person most likely on their own sessions' track. */
+function withViewer(
+  roster: Map<string, FactoryMentionMember>,
+  viewer: SessionViewerProfile | undefined,
+): Map<string, FactoryMentionMember> {
+  if (!viewer?.userId || roster.has(viewer.userId)) return roster;
+  const name = viewer.name?.trim() || viewer.email?.trim();
+  return new Map(roster).set(viewer.userId, {
+    id: viewer.userId,
+    ...(name ? { name } : {}),
+    ...(viewer.avatarUrl ? { avatarUrl: viewer.avatarUrl } : {}),
+  });
 }

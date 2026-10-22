@@ -141,6 +141,25 @@ describe('Workspace session hover details', () => {
       ).toBeInTheDocument();
     });
 
+    it('names the viewer on the track when the host lists no members', async () => {
+      stubSessionDetails(new Date().toISOString());
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/mention-roster`, () =>
+          HttpResponse.json({ members: [] }),
+        ),
+        http.get('*/auth/me', () =>
+          HttpResponse.json({ authenticated: true, user: { userId: 'user-1', name: 'Ada Lovelace' } }),
+        ),
+      );
+      const user = userEvent.setup();
+      renderSection();
+
+      await user.hover(await screen.findByRole('link', { name: workName }));
+
+      const card = await screen.findByLabelText(`${workName} session details`);
+      expect(await within(card).findByRole('img', { name: /Ada Lovelace took over/ })).toBeInTheDocument();
+    });
+
     it('closes the details when the pointer leaves', async () => {
       const { user, workRow } = await setupSessionRows();
       await user.hover(workRow);
