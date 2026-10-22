@@ -11,6 +11,7 @@ import { Hono } from 'hono';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
+import { IMPORTED_LINKS_PREFETCH_CONCURRENCY } from './knowledge-imported-links.js';
 import type {
   KnowledgeNodePayload,
   KnowledgeGraphPayload,
@@ -255,6 +256,7 @@ describe('KnowledgeRoutes', () => {
     ]);
     expect(response.body.records.find(value => value.id === backing.id)?.nodeIds).toEqual([origin.id, target.id]);
     expect(response.body.nodes.map(value => value.id)).toContain(target.id);
+    expect(response.body.importedLinks).toEqual({ complete: true, suppressed: {} });
   });
 
   it.each(['account', 'destination', 'scope', 'unclaimed', 'ambiguous'])(
@@ -301,6 +303,11 @@ describe('KnowledgeRoutes', () => {
       expect(response.status).toBe(200);
       expect(response.body.edges).toEqual([]);
       expect(response.body.records.find(value => value.id === backing.id)?.nodeIds).toEqual([origin.id]);
+      expect(response.body.importedLinks).toEqual(
+        boundary === 'ambiguous'
+          ? { complete: false, suppressed: { ambiguous: 1 } }
+          : { complete: true, suppressed: {} },
+      );
     },
   );
 
@@ -435,8 +442,14 @@ describe('KnowledgeRoutes', () => {
         expect(response.body.edges).toEqual([]);
         expect(response.body.records.find(value => value.id === backing.id)?.nodeIds).toEqual([parent.id]);
         expect(await h.knowledge.getRecord({ id: backing.id })).toEqual(backing);
-        expect(await h.knowledge.getNode(retained.id)).toEqual(retained);
+        // The stored copy is re-stamped on write; compare everything but the store-issued timestamp.
+        const storedRetained = await h.knowledge.getNode(retained.id);
+        expect(storedRetained).toEqual({ ...retained, updatedAt: storedRetained?.updatedAt });
         expect(response.body.nodes.map(value => value.id)).toContain(target.id);
+        // Provenance is intact before release, so the withheld link is not yet reported as retired.
+        expect(response.body.importedLinks).toEqual(
+          iteration === 0 ? { complete: true, suppressed: {} } : { complete: false, suppressed: { retired: 1 } },
+        );
         await h.knowledge.releaseImportClaims({ importerId: claimant.importerId, binding: claimant.binding });
       }
     });
@@ -596,6 +609,7 @@ describe('KnowledgeRoutes', () => {
       if (failure === 'unsupported') {
         expect(response.body.edges).toEqual([expect.objectContaining({ target: target.id })]);
         expect(response.body.records.find(value => value.id === backing.id)?.nodeIds).toEqual([origin.id, target.id]);
+        expect(response.body.importedLinks).toEqual({ complete: false, suppressed: { unsupported: 1 } });
       }
     });
 
@@ -620,6 +634,7 @@ describe('KnowledgeRoutes', () => {
       const response = await graph(h);
       expect(response.body.edges).toEqual([]);
       expect(response.body.records.find(value => value.id === backing.id)?.nodeIds).toEqual([origin.id]);
+      expect(response.body.importedLinks).toEqual({ complete: false, suppressed: { ambiguous: 1 } });
     });
 
     it.each(['node', 'record'])('fails closed at the %s claim budget without partial resolution', async kind => {
@@ -673,6 +688,10 @@ describe('KnowledgeRoutes', () => {
           ? []
           : [expect.objectContaining({ source: origin.id, target: secondTarget.id, recordId: other.id })],
       );
+      expect(response.body.importedLinks).toEqual({
+        complete: false,
+        suppressed: { budget: kind === 'node' ? 2 : 1 },
+      });
     });
 
     it('omits all metadata projections when the complete identity index exceeds its budget', async () => {
@@ -696,6 +715,7 @@ describe('KnowledgeRoutes', () => {
       const response = await graph(h);
       expect(response.body.edges).toEqual([]);
       expect(response.body.records.find(value => value.id === backing.id)?.nodeIds).toEqual([origin.id]);
+      expect(response.body.importedLinks).toEqual({ complete: false, suppressed: { budget: 1 } });
     });
 
     it.each(['aliases', 'links'])('does not resolve from a partial %s budget', async budget => {
@@ -724,6 +744,74 @@ describe('KnowledgeRoutes', () => {
       expect(response.body.edges).toEqual([]);
       expect(response.body.records.find(value => value.id === backing.id)?.nodeIds).toEqual([origin.id]);
       expect(response.body.outOfWindow).toEqual([]);
+      expect(response.body.importedLinks).toEqual({
+        complete: false,
+        suppressed: { budget: budget === 'aliases' ? 1 : 101 },
+      });
+    });
+
+    it('reports the budget suppression while ordinary text links still render', async () => {
+      const { h, scopeIds, claimant, origin, target } = await fixture();
+      await h.knowledge.updateNode({
+        id: target.id,
+        version: target.version,
+        claimant,
+        metadata: {
+          address: 'provider:target',
+          addressAliases: Array.from({ length: 101 }, (_, index) => `alias:${index}`),
+        },
+      });
+      const backing = await h.knowledge.createRecord({
+        node: origin,
+        text: '[[Target]]',
+        scopeIds,
+        resolutionScopeIds: scopeIds,
+        source: claimant.source,
+        claimant,
+        metadata: { links: [{ address: 'provider:target' }] },
+      });
+      const response = await graph(h);
+      expect(response.status).toBe(200);
+      expect(response.body.importedLinks).toEqual({ complete: false, suppressed: { budget: 1 } });
+      expect(response.body.edges).toEqual([
+        expect.objectContaining({ source: origin.id, target: target.id, recordId: backing.id }),
+      ]);
+      expect(response.body.records.find(value => value.id === backing.id)?.nodeIds).toEqual([origin.id, target.id]);
+    });
+
+    it('prefetches provenance reads in bounded parallel batches', async () => {
+      const { h, scopeIds, claimant, origin, target } = await fixture();
+      const backing = await h.knowledge.createRecord({
+        node: origin,
+        text: 'relationship',
+        scopeIds,
+        source: claimant.source,
+        claimant,
+        metadata: { links: [{ address: 'provider:target' }] },
+      });
+      let inFlight = 0;
+      let peak = 0;
+      const wrapCounts = async <T>(read: () => Promise<T>): Promise<T> => {
+        inFlight += 1;
+        peak = Math.max(peak, inFlight);
+        try {
+          return await read();
+        } finally {
+          inFlight -= 1;
+        }
+      };
+      const originalClaims = h.knowledge.listImportClaims.bind(h.knowledge);
+      const originalNodeScopes = h.knowledge.getNodeScopeIds.bind(h.knowledge);
+      const originalRecordScopes = h.knowledge.getRecordScopeIds.bind(h.knowledge);
+      h.knowledge.listImportClaims = input => wrapCounts(() => originalClaims(input));
+      h.knowledge.getNodeScopeIds = input => wrapCounts(() => originalNodeScopes(input));
+      h.knowledge.getRecordScopeIds = input => wrapCounts(() => originalRecordScopes(input));
+      const response = await graph(h);
+      expect(response.status).toBe(200);
+      expect(response.body.importedLinks).toEqual({ complete: true, suppressed: {} });
+      expect(response.body.records.find(value => value.id === backing.id)?.nodeIds).toEqual([origin.id, target.id]);
+      expect(peak).toBeGreaterThan(1);
+      expect(peak).toBeLessThanOrEqual(IMPORTED_LINKS_PREFETCH_CONCURRENCY);
     });
   });
 
