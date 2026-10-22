@@ -56,7 +56,8 @@ const ESCAPES: Record<string, string> = { '"': '"', '\\': '\\', '/': '/', b: '\b
 export function replyText(args: unknown, argsText: string | undefined): string | undefined {
   if (args && typeof args === 'object' && 'text' in args && typeof args.text === 'string') return args.text;
   if (!argsText) return undefined;
-  const start = /"text"\s*:\s*"/.exec(argsText);
+  // The tool takes only `text`, so it is the object's first key; a "text" nested deeper is not the reply.
+  const start = /^\s*\{\s*"text"\s*:\s*"/.exec(argsText);
   if (!start) return undefined;
   let out = '';
   for (let i = start.index + start[0].length; i < argsText.length; i++) {

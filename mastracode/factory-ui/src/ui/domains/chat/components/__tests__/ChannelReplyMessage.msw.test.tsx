@@ -176,4 +176,8 @@ describe('replyText', () => {
     expect(replyText(undefined, '{"text": "cut \\')).toBe('cut ');
     expect(replyText(undefined, '{"te')).toBeUndefined();
   });
+
+  it('reads only a top-level text field from streaming args', () => {
+    expect(replyText(undefined, '{"other": {"text": "secret"}}')).toBeUndefined();
+  });
 });
