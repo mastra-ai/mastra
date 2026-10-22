@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed evented foreach steps retaining a suspension timestamp after successfully resuming. Added sequential suspend/resume parity coverage for [#27939](https://github.com/mastra-ai/mastra/issues/27939).
+Fixed evented foreach steps keeping a `suspendedAt` timestamp after the step successfully resumed and finished. The evented engine now matches the default engine.
