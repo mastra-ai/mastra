@@ -1100,7 +1100,7 @@ The client doesn't receive notifications when the server's event list changes ye
 
 #### `events.subscribe(serverName, eventName, args?, options?)`
 
-Starts a subscription and resolves once the server confirms it. Errors such as an unknown event, invalid arguments, or a forbidden subscription reject the returned promise. A new subscription starts from now, so occurrences emitted before the promise resolves are not delivered unless `options.cursor` resumes from an earlier position.
+Starts a subscription and resolves once the server confirms it. Errors such as an unknown event, invalid arguments, or a forbidden subscription reject the returned promise. A new subscription starts at the point the server accepts it, so occurrences from before that point are not delivered unless `options.cursor` resumes from an earlier position. Under webhook delivery the promise can resolve after that point: the client answers `503` for a delivery it can't route yet, and the server retries it.
 
 ```typescript oxfmt:false
 async subscribe(

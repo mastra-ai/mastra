@@ -432,7 +432,7 @@ MCP events implement [SEP-3415](https://github.com/modelcontextprotocol/modelcon
 
 - **Subscription:** one client request for one event type with arguments, such as `{ project: 'web' }`. The server delivers only matching occurrences.
 - **Occurrence:** one delivered event with an `eventId`, `name`, `timestamp`, and `data`. Delivery is at least once, and the client drops duplicates by `eventId` within a `dedupWindow` of recent ids. Handlers should still tolerate a repeat.
-- **Cursor:** an opaque position in the event sequence. Save it to resume after a restart without missing occurrences.
+- **Cursor:** an opaque position in the event sequence. Save it to resume from a later subscription. Replay covers only history the source retains. An `emit()` source buffers in one process, so a restart or another instance serving the subscription can miss occurrences, and durable replay needs a `poll` source backed by shared storage.
 
 ### Publish events
 
@@ -467,6 +467,8 @@ const server: MCPServer = new MCPServer({
   },
 })
 ```
+
+The examples serve this server over HTTP at `http://localhost:4111/mcp` with [`startHTTP()`](/reference/tools/mcp-server#starthttp).
 
 `match` decides which subscriptions receive an occurrence. It filters on arguments the client chooses, so it doesn't control who can subscribe; add `authorize` to restrict callers, since it runs on every poll and every subscription open and rejects the request when it returns `false`. An event type takes its occurrences from either `server.events.emit()`, which serves push and poll from an in-process buffer, or a `poll` function that reads an external system and supports poll only.
 
