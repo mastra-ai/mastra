@@ -132,6 +132,8 @@ describe('NestJS Adapter - per-route RBAC, FGA, and studio auth', () => {
     expect(denied.status).toBe(403);
     expect(denied.body.error).toBe('FGA authorization denied: cannot docs:read on doc:locked');
     expect((await get('/docs/open', { authorization: 'Bearer admin' })).status).toBe(200);
+    // A query value must not replace the matched path param the handler actually reads.
+    expect((await get('/docs/locked?docId=open', { authorization: 'Bearer admin' })).status).toBe(403);
     expect(check).toHaveBeenCalledWith(
       expect.objectContaining({ id: 'user_admin' }),
       expect.objectContaining({ resource: { type: 'doc', id: 'locked' } }),

@@ -86,10 +86,12 @@ export class MastraController {
           await this.routeHandler.enforceRoutePermission(serverRoute, requestContext);
         }
         if (customRoute.fga) {
+          // Path params last: the custom handler reads them from the URL, so query/body
+          // values must not be able to change which resource FGA checks.
           await this.routeHandler.enforceRouteFGA(serverRoute, requestContext, {
-            ...pathParams,
-            ...(req.query as Record<string, unknown>),
             ...(typeof req.body === 'object' && req.body !== null ? req.body : {}),
+            ...(req.query as Record<string, unknown>),
+            ...pathParams,
           });
         }
       };
