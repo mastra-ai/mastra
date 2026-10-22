@@ -43,7 +43,10 @@ describeForAllEngines('AIMock loop scenario: throwing stopWhen', engine => {
         throw new Error('stopWhen exploded');
       }) as any,
       fixtures: llm => {
-        llm.on({ endpoint: 'chat', hasToolResult: false }, { toolCalls: [{ id: 'call-1', name: 'step', arguments: { n: 1 } }] });
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          { toolCalls: [{ id: 'call-1', name: 'step', arguments: { n: 1 } }] },
+        );
         llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'done' });
       },
     });
