@@ -10,11 +10,15 @@ import { Memory } from '@mastra/memory';
 import { describe, expect, it } from 'vitest';
 
 describe.each(['plain', 'durable', 'evented'] as const)('Conversation windows on %s (COR-1409)', engine => {
-  for (const readOnly of [false, true]) {
+  for (const mode of ['write', 'read-only', 'seeded-read-only']) {
+    const readOnly = mode !== 'write';
+    const seeded = mode === 'seeded-read-only';
     it(
-      readOnly
-        ? 'read-only turns neither load nor persist history'
-        : 'caps prior messages without losing persisted turns',
+      seeded
+        ? 'read-only turns load seeded history without persisting new messages'
+        : readOnly
+          ? 'fresh read-only turns do not persist history'
+          : 'caps prior messages without losing persisted turns',
       async () => {
         const llm = new LLMock({ port: 0 });
         await llm.start();
@@ -46,7 +50,7 @@ describe.each(['plain', 'durable', 'evented'] as const)('Conversation windows on
             llm.clearRequests();
             llm.on({ endpoint: 'chat' }, { content: `t${n}` });
             const result = await agent.stream(`turn ${n}`, {
-              memory: { thread, resource, options: { readOnly } },
+              memory: { thread, resource, options: { readOnly: readOnly && !(seeded && n === 1) } },
             });
             const output = 'output' in result ? result.output : result;
             await output.consumeStream();
@@ -59,9 +63,9 @@ describe.each(['plain', 'durable', 'evented'] as const)('Conversation windows on
               .map(({ role, content }) => ({ role, content }));
             sizes.push(conversation.length);
             const priorMessages =
-              readOnly || n === 1
+              n === 1 || (readOnly && !seeded)
                 ? []
-                : n === 2
+                : seeded || n === 2
                   ? [
                       { role: 'user', content: 'turn 1' },
                       { role: 'assistant', content: 't1' },
@@ -75,10 +79,16 @@ describe.each(['plain', 'durable', 'evented'] as const)('Conversation windows on
             if ('cleanup' in result) result.cleanup();
           }
           // lastMessages caps prior messages at three; the current user input adds one.
-          expect(sizes).toEqual(readOnly ? [1, 1, 1, 1, 1, 1] : [1, 3, 4, 4, 4, 4]);
+          expect(sizes).toEqual(seeded ? [1, 3, 3, 3, 3, 3] : readOnly ? [1, 1, 1, 1, 1, 1] : [1, 3, 4, 4, 4, 4]);
           const store = await storage.getStore('memory');
           const { messages } = await store!.listMessages({ threadId: thread, perPage: false });
-          expect(messages).toHaveLength(readOnly ? 0 : 12);
+          expect(messages).toHaveLength(seeded ? 2 : readOnly ? 0 : 12);
+          if (seeded) {
+            expect(messages.map(message => ({ role: message.role, parts: message.content.parts }))).toMatchObject([
+              { role: 'user', parts: [{ type: 'text', text: 'turn 1' }] },
+              { role: 'assistant', parts: [{ type: 'text', text: 't1' }] },
+            ]);
+          }
           if (!readOnly) {
             expect(
               messages
