@@ -1473,6 +1473,22 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         ? `${messageIdPassed}-${currentIteration}`
         : inputData.messageId || messageIdPassed;
 
+      // A processor's held `sendSignal` can fire after the previous step returned
+      // (e.g. while a tool ran). It seals that step's message and rotates the loop's
+      // response id, but the id carried in `inputData` was captured before, so it
+      // still points at the sealed message. Streaming into it would put this reply
+      // ahead of the signal it answers (#27458), so move to a fresh message instead.
+      if (
+        !inputData.isTaskCompleteCheckFailed &&
+        (
+          messageList.get.response.db().find(message => message.id === currentMessageId)?.content.metadata?.mastra as
+            | { responseBoundary?: boolean }
+            | undefined
+        )?.responseBoundary
+      ) {
+        currentMessageId = rotateLoopResponseMessageId(currentMessageId);
+      }
+
       // The abort reason from a processor-requested retry goes at the end of the conversation,
       // verbatim, as a reminder signal, so the retry reuses the cached prompt prefix. A system message would
       // sit ahead of the whole conversation and invalidate it. The response message id is

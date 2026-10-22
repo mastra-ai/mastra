@@ -18,6 +18,7 @@ import { MockMemory } from '../../../../memory/mock';
 import type { InputProcessor } from '../../../../processors';
 import { createTool } from '../../../../tools';
 import {
+  createSharedAgent,
   runLoopScenario,
   useLoopScenarioAimock,
   describeForAllEngines,
@@ -39,9 +40,13 @@ function toolInvocationsFor(messages: any[], toolCallId: string) {
   );
 }
 
-async function runDeployWithReminder(engine: EngineVariant, llm: ReturnType<ReturnType<typeof useLoopScenarioAimock>>) {
-  const threadId = 'signal-during-tool-thread';
-  const resourceId = 'signal-during-tool-user';
+async function runDeployWithReminder(
+  engine: EngineVariant,
+  llm: ReturnType<ReturnType<typeof useLoopScenarioAimock>>,
+  options: { threadId?: string; resourceId?: string; followUp?: string } = {},
+) {
+  const threadId = options.threadId ?? 'signal-during-tool-thread';
+  const resourceId = options.resourceId ?? 'signal-during-tool-user';
 
   let heldSendSignal: ((signal: AgentSignalInput) => Promise<unknown>) | undefined;
   const reminderProcessor: InputProcessor = {
@@ -66,6 +71,9 @@ async function runDeployWithReminder(engine: EngineVariant, llm: ReturnType<Retu
   });
 
   const memory = new MockMemory();
+  const sharedAgent = options.followUp
+    ? await createSharedAgent(llm, { engine, tools: { deploy }, inputProcessors: [reminderProcessor], memory })
+    : undefined;
   const { output, requests } = await runLoopScenario({
     engine,
     llm,
@@ -75,6 +83,7 @@ async function runDeployWithReminder(engine: EngineVariant, llm: ReturnType<Retu
     memory,
     threadId,
     resourceId,
+    sharedAgent,
     stopWhen: stepCountIs(5),
     fixtures: mock => {
       mock.on(
@@ -85,6 +94,25 @@ async function runDeployWithReminder(engine: EngineVariant, llm: ReturnType<Retu
     },
   });
   const text = await output.text;
+  if (options.followUp) {
+    const followUp = options.followUp;
+    await runLoopScenario({
+      engine,
+      llm,
+      prompt: followUp,
+      memory,
+      threadId,
+      resourceId,
+      sharedAgent,
+      stopWhen: stepCountIs(5),
+      fixtures: mock => {
+        mock.prependFixture({
+          match: { endpoint: 'chat', userMessage: followUp },
+          response: { content: 'Nothing else.' },
+        });
+      },
+    });
+  }
   const { messages } = await memory.recall({ threadId, resourceId });
   return { text, requests, messages, signalSent };
 }
@@ -135,5 +163,46 @@ describeForAllEngines('AIMock scenario: signal arrives while a tool is running',
     const { requests } = await runDeployWithReminder(engine, getMock());
     expect(requests).toHaveLength(2);
     expect(JSON.stringify(requestMessages(requests[1]))).toContain(REMINDER);
+  });
+
+  // #27458: the reply written after the signal belongs to the fresh message the
+  // boundary opened, not to the sealed one holding the tool call.
+  deliversReminder('stores the reply after the reminder and replays it after the reminder next turn', async () => {
+    const llm = getMock();
+    const threadId = 'signal-during-tool-reply-thread';
+    const resourceId = 'signal-during-tool-reply-user';
+    const { messages } = await runDeployWithReminder(engine, llm, { threadId, resourceId, followUp: 'Anything else?' });
+
+    const owners = toolInvocationsFor(messages, 'call_deploy');
+    expect(owners).toHaveLength(1);
+    expect(owners[0]!.message.content.parts.some((p: any) => p.type === 'text')).toBe(false);
+
+    // The reply is its own row, between the sealed tool-call row and the follow-up.
+    const ownerIndex = messages.indexOf(owners[0]!.message);
+    const replyIndex = messages.findIndex((m: any) =>
+      (m.content?.parts ?? []).some((p: any) => p.type === 'text' && p.text === 'The api service is deployed.'),
+    );
+    const followUpIndex = messages.findIndex(
+      (m: any) => m.role === 'user' && m.content.parts[0]?.text === 'Anything else?',
+    );
+    expect(replyIndex).toBeGreaterThan(ownerIndex);
+    expect(followUpIndex).toBeGreaterThan(replyIndex);
+
+    // The OpenAI Responses provider replays earlier assistant output as
+    // `item_reference`s, which AIMock journals with empty content, so the
+    // replayed reply is checked by position: it must follow the reminder.
+    const followUpRequest = requestMessages(llm.getRequests().at(-1)).filter((m: any) => m.role !== 'system');
+    expect(
+      followUpRequest.map((m: any) =>
+        m.role === 'user' ? ['user', m.content] : [m.role, m.tool_calls ? 'tool-call' : ''],
+      ),
+    ).toEqual([
+      ['user', 'Deploy the api service.'],
+      ['assistant', 'tool-call'],
+      ['tool', ''],
+      ['user', `<system-reminder>${REMINDER}</system-reminder>`],
+      ['assistant', ''],
+      ['user', 'Anything else?'],
+    ]);
   });
 });
