@@ -91,10 +91,12 @@ export function TracesExplorerPanel({
   const isFullThreadOpen = !!traceId && fullThreadTraceId === traceId;
   const depth = isFullThreadOpen ? 3 : 2;
 
-  // Only agent traces carry the Messages column, so only they need the wide drawer. The listed
-  // row knows the entity on click; the root span covers deep-linked traces outside the list.
+  // Only agent traces carry the Messages column, so other traces open the drawer one size
+  // smaller, with or without a span open. The listed row knows the entity on click; the root
+  // span covers deep-linked traces outside the list.
   const entityType = rows.find(row => row.traceId === traceId)?.entityType ?? anchorSpan?.entityType;
-  const panelSize = spanId ? 'full' : entityType === EntityType.AGENT ? 'wide' : 'half';
+  const isAgent = entityType === EntityType.AGENT;
+  const panelSize = spanId ? (isAgent ? 'full' : 'wide') : isAgent ? 'wide' : 'half';
 
   return (
     <>

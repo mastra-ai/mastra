@@ -420,6 +420,27 @@ describe('TracesExplorer', () => {
     });
   });
 
+  describe('when a span opens, the drawer grows one size from its entity width', () => {
+    const openSpanDrawerSize = async (tracesPage: typeof twoTracesPage) => {
+      setExplorerHandlers(traceQueryCapabilities, tracesPage);
+      const { queryClient } = renderExplorer({
+        initialSelection: { ...EMPTY_TRACES_SELECTION, traceId: 'trace-weather', spanId: 'span-weather' },
+      });
+      await settle(queryClient);
+
+      const dialog = await screen.findByRole('dialog', { name: 'Trace details' });
+      return dialog.closest('[data-slot="data-panel-popup"]')?.getAttribute('data-size');
+    };
+
+    it('opens an agent trace full width', async () => {
+      expect(await openSpanDrawerSize(twoTracesPage)).toBe('full');
+    });
+
+    it('opens a workflow trace wide', async () => {
+      expect(await openSpanDrawerSize(workflowTracesPage)).toBe('wide');
+    });
+  });
+
   describe('when a filter changes while a trace is open', () => {
     const editDatePreset = async () => {
       setExplorerHandlers();
