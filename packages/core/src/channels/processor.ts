@@ -76,7 +76,9 @@ export class ChatChannelProcessor {
 }
 
 function channelLines(ctx: ChannelContext, textHidden: boolean, tools: Record<string, unknown> | undefined): string[] {
-  const lines = [`You are communicating via ${ctx.platform}.`];
+  const lines = [
+    `This conversation is connected to a ${ctx.platform} ${ctx.isDM ? 'direct message' : 'thread'}. Messages marked platform="${ctx.platform}" were sent there; other messages came from elsewhere.`,
+  ];
 
   // Tell the LLM its own identity so it can recognise self-mentions in raw message text
   if (ctx.botUserName || ctx.botDisplayName || ctx.botMention) {
