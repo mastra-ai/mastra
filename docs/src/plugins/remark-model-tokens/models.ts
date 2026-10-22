@@ -12,8 +12,7 @@
 export const MODEL_TOKENS: Record<string, string> = {
   // OpenAI
   __GATEWAY_OPENAI_MODEL__: 'openai/gpt-6.1-sol',
-  __GATEWAY_OPENAI_MODEL_MINI__: 'openai/gpt-5.4-mini',
-  __GATEWAY_OPENAI_MODEL_NANO__: 'openai/gpt-5.4-nano',
+  __GATEWAY_OPENAI_MODEL_LUNA__: 'openai/gpt-6-luna',
   __GATEWAY_OPENAI_MODEL_BASE__: 'openai/gpt-5.6',
   __AI_SDK_OPENAI_MODEL_BASE__: 'gpt-5.6',
   __GATEWAY_OPENAI_EMBEDDING_MODEL__: 'openai/text-embedding-3-small',

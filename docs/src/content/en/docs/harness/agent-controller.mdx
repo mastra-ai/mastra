@@ -232,8 +232,8 @@ const controller = new AgentController({
   omConfig: {
     observerModel: 'auto',
     reflectorModel: 'auto',
-    defaultObserverModelId: '__GATEWAY_OPENAI_MODEL_MINI__',
-    defaultReflectorModelId: '__GATEWAY_OPENAI_MODEL_MINI__',
+    defaultObserverModelId: '__GATEWAY_OPENAI_MODEL_LUNA__',
+    defaultReflectorModelId: '__GATEWAY_OPENAI_MODEL_LUNA__',
     resolveAutoModelId: ({ currentModelId }) => currentModelId,
   },
 })
@@ -347,7 +347,7 @@ const controller = new AgentController({
       instructions: 'Inspect the change and report actionable findings.',
       allowedControllerTools: ['searchDocs'],
       allowedWorkspaceTools: ['view', 'find_files'],
-      defaultModelId: '__GATEWAY_OPENAI_MODEL_MINI__',
+      defaultModelId: '__GATEWAY_OPENAI_MODEL_LUNA__',
     },
   ],
 })
@@ -359,7 +359,7 @@ Use [`session.subagents.model.set()`](/reference/agent-controller/session#sessio
 
 ```typescript
 await session.subagents.model.set({
-  modelId: '__GATEWAY_OPENAI_MODEL_MINI__',
+  modelId: '__GATEWAY_OPENAI_MODEL_LUNA__',
 })
 
 await session.subagents.model.set({
