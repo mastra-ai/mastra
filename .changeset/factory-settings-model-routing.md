@@ -8,6 +8,6 @@ Factory settings are grouped by topic: **Account** (My account, Preferences, Con
 
 **Memory** shows personal memory (used by chats) and Factory memory (used by work-item runs) on one page, each laid out top to bottom from messages to the observer and the reflector.
 
-`/login`, `/connect` and the missing-credential screen open the defaults your session runs on: Factory defaults in a Factory-routed Factory, otherwise your personal defaults.
+`/login`, `/connect` and the new-chat setup screens open the defaults your session runs on: Factory defaults in a Factory-routed Factory, otherwise your personal defaults. A new chat checks the model it will actually start on, so under Personal or Hybrid routing a personal default is enough, with no Factory default set.
 
 Old links to **Your models** and **Factory memory** open the new Models and Memory pages.

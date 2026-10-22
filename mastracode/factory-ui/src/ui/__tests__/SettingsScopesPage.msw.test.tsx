@@ -150,17 +150,18 @@ describe('Settings ownership', () => {
     expect(screen.getByRole('link', { name: 'Memory' })).toHaveAttribute('aria-current', 'page');
   });
 
-  it('lets a Personal-routed Factory with no Factory default finish setup from the new-chat guard when the user holds their own key', async () => {
-    let project: FactoryProjectPayload = { ...settingsFactory, modelScope: 'user', defaultModelId: null };
+  it('lets a Personal-routed Factory with no Factory default start chats once the user picks a personal default', async () => {
+    const project: FactoryProjectPayload = { ...settingsFactory, modelScope: 'user', defaultModelId: null };
+    let personalDefaultModelId: string | null = null;
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () => HttpResponse.json({ project })),
-      http.patch<never, Partial<FactoryProjectPayload>>(
-        `${TEST_BASE_URL}/web/factory/projects/fp-1`,
-        async ({ request }) => {
-          project = { ...project, ...(await request.json()) };
-          return HttpResponse.json({ project });
-        },
+      http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+        HttpResponse.json({ modelId: personalDefaultModelId }),
       ),
+      http.put<never, { modelId: string }>(`${TEST_BASE_URL}/web/config/default-model`, async ({ request }) => {
+        personalDefaultModelId = (await request.json()).modelId;
+        return HttpResponse.json({ ok: true, modelId: personalDefaultModelId });
+      }),
       http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items`, () => HttpResponse.json({ workItems: [] })),
       http.get(PROVIDERS_URL, () =>
         HttpResponse.json({
@@ -179,13 +180,11 @@ describe('Settings ownership', () => {
     renderWithProviders(<RouterProvider router={router} />);
 
     await user.click(await screen.findByRole('link', { name: 'Open Models settings' }));
-    await pickModel(user, 'Factory default model', 'openai/gpt-5');
-    await waitFor(() => expect(project.defaultModelId).toBe('openai/gpt-5'));
+    expect(router.state.location.hash).toBe('#personal-defaults');
+    await pickModel(user, 'Personal default model', 'openai/gpt-5');
+    await waitFor(() => expect(personalDefaultModelId).toBe('openai/gpt-5'));
     await act(() => router.navigate(-1));
 
     expect(await screen.findByLabelText('Message')).toBeInTheDocument();
-    expect(
-      screen.queryByRole('heading', { name: 'No default model configured for this Factory' }),
-    ).not.toBeInTheDocument();
   });
 });

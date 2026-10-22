@@ -22,6 +22,7 @@ function stubFactoryShell() {
       HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Mastra' }] }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items`, () => HttpResponse.json({ workItems: [] })),
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: null })),
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/fp-1/permissions`, () =>
       HttpResponse.json({ categories: {}, tools: {} }),
     ),
@@ -41,7 +42,7 @@ function stubFactory(project: Record<string, unknown> | null) {
 
 describe('NewPage default-model guard', () => {
   it('replaces the composer with an empty state linking to Model settings when no default model is set', async () => {
-    stubFactory({ id: 'fp-1', name: 'Mastra', defaultModelId: null });
+    stubFactory({ id: 'fp-1', name: 'Mastra', modelScope: 'factory', defaultModelId: null });
 
     renderNewPage();
 
@@ -118,7 +119,7 @@ describe('NewPage credential guard', () => {
     expect(await screen.findByRole('heading', { name: "You don't have access to Anthropic" })).toBeInTheDocument();
     expect(
       screen.getByText(
-        'The Factory default model (anthropic/claude-sonnet-4-5) needs a credential for Anthropic. Add your own key for Anthropic under Personal defaults in Models settings.',
+        'The default model (anthropic/claude-sonnet-4-5) needs a credential for Anthropic. Add your own key for Anthropic under Personal defaults in Models settings.',
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/org admin/)).not.toBeInTheDocument();
@@ -145,7 +146,7 @@ describe('NewPage credential guard', () => {
     );
     expect(
       screen.getByText(
-        'The Factory default model (anthropic/claude-sonnet-4-5) needs a credential for Anthropic. Ask an org admin to add one under Factory defaults in Models settings.',
+        'The default model (anthropic/claude-sonnet-4-5) needs a credential for Anthropic. Ask an org admin to add one under Factory defaults in Models settings.',
       ),
     ).toBeInTheDocument();
     expect(screen.queryByText(/Add your own key/)).not.toBeInTheDocument();

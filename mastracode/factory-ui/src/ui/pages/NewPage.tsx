@@ -8,6 +8,7 @@ import { Link, useLocation, useParams } from 'react-router';
 import { FolderIcon } from '../ui/icons';
 import { useFactoryQuery } from '../../hooks/useFactories';
 import { useFactoryProjectQuery } from '../../hooks/useFactoryDefaultModel';
+import { useDefaultModelQuery } from '../../hooks/use-default-model';
 import { useProvidersQuery } from '../../hooks/use-providers';
 import { useUserSessionQuery } from '../../hooks/useWorkspaces';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
@@ -22,6 +23,7 @@ import type { FactoryProject } from '../domains/workspaces/services/github';
 import { ChatPageLayout } from '../domains/chat/components/ChatPageLayout';
 import { ComposerPanel } from '../domains/chat/components/ComposerPanel';
 import { TranscriptEntries } from '../domains/chat/components/Transcript';
+import { chatStartModelId } from '../domains/chat/context/chatDefaultModel';
 import { ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
 import { useChatTranscript } from '../domains/chat/context/useChatTranscript';
 import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
@@ -34,15 +36,20 @@ export function NewPage() {
   const factoryQuery = useFactoryQuery(factoryId);
   const activeFactory = factoryQuery.data;
   const projectQuery = useFactoryProjectQuery(activeFactory?.id);
+  const personalDefaultQuery = useDefaultModelQuery();
   const providersQuery = useProvidersQuery();
-  const defaultModelId = projectQuery.data?.defaultModelId ?? undefined;
-  const missingDefaultModel = Boolean(activeFactory) && projectQuery.isSuccess && !defaultModelId;
-  const defaultModelProvider = defaultModelId
-    ? providersQuery.data?.find(entry => entry.provider === defaultModelId.split('/')[0])
+  const chatModelId = chatStartModelId(projectQuery.data?.modelScope, {
+    factory: projectQuery.data?.defaultModelId,
+    personal: personalDefaultQuery.data?.modelId,
+  });
+  const chatModelSettled = Boolean(activeFactory) && projectQuery.isSuccess && !personalDefaultQuery.isPending;
+  const missingDefaultModel = chatModelSettled && !chatModelId;
+  const chatModelProvider = chatModelId
+    ? providersQuery.data?.find(entry => entry.provider === chatModelId.split('/')[0])
     : undefined;
   const missingCredential =
-    Boolean(activeFactory) && defaultModelId && defaultModelProvider?.source === 'none'
-      ? { modelId: defaultModelId, provider: defaultModelProvider.provider }
+    chatModelSettled && chatModelId && chatModelProvider?.source === 'none'
+      ? { modelId: chatModelId, provider: chatModelProvider.provider }
       : undefined;
   const configurationError = projectQuery.error ?? providersQuery.error ?? undefined;
 
@@ -165,7 +172,7 @@ function DraftStart({
 
 function missingCredentialDescription(guard: MissingCredentialGuard, anchor: ModelDefaultsAnchor): string {
   const providerName = providerDisplayName(guard.provider);
-  const requirement = `The Factory default model (${guard.modelId}) needs a credential for ${providerName}.`;
+  const requirement = `The default model (${guard.modelId}) needs a credential for ${providerName}.`;
   if (anchor === MODEL_DEFAULTS_ANCHORS.factory) {
     return `${requirement} Ask an org admin to add one under ${MODEL_DEFAULTS_LABELS.factory} in Models settings.`;
   }
@@ -191,6 +198,8 @@ function MissingCredentialState({ factoryId, guard }: { factoryId: string; guard
 }
 
 function MissingDefaultModelState({ factoryId }: { factoryId: string }) {
+  const projectQuery = useFactoryProjectQuery(factoryId);
+  const anchor = sessionDefaultsAnchor(projectQuery.data?.modelScope);
   return (
     <EmptyState
       as="h2"
@@ -198,10 +207,7 @@ function MissingDefaultModelState({ factoryId }: { factoryId: string }) {
       titleSlot="No default model configured for this Factory"
       descriptionSlot="Connect a model provider and choose a default model in Models settings before starting a chat."
       actionSlot={
-        <Link
-          to={settingsSectionPath(factoryId, 'models', MODEL_DEFAULTS_ANCHORS.factory)}
-          className={buttonVariants({ variant: 'primary' })}
-        >
+        <Link to={settingsSectionPath(factoryId, 'models', anchor)} className={buttonVariants({ variant: 'primary' })}>
           Open Models settings
         </Link>
       }
