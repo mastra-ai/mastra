@@ -111,8 +111,8 @@ describe('user session attribution', () => {
     await showAllOwners();
     const user = userEvent.setup();
 
-    const mine = await screen.findByRole('button', { name: 'mine' });
-    const other = screen.getByRole('button', { name: 'alpha' });
+    const mine = await screen.findByRole('link', { name: 'mine' });
+    const other = screen.getByRole('link', { name: 'alpha' });
     expect(screen.queryByText('Ada Lovelace')).not.toBeInTheDocument();
     expect(screen.queryByText('Grace Hopper')).not.toBeInTheDocument();
 
@@ -147,7 +147,7 @@ describe('user session attribution', () => {
     await showAllOwners();
     const user = userEvent.setup();
 
-    const other = await screen.findByRole('button', { name: 'alpha' });
+    const other = await screen.findByRole('link', { name: 'alpha' });
     await user.hover(other);
     const card = await screen.findByLabelText('alpha session details');
     expect(within(card).getByText('user-owner-1')).toBeInTheDocument();
