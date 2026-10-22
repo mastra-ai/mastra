@@ -22,6 +22,7 @@ import {
 import { toReqRes, toFetchResponse } from 'fetch-to-node';
 import type { Context, ExecutionContext, HonoRequest, MiddlewareHandler } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
+import { matchedRoutes } from 'hono/route';
 import { stream } from 'hono/streaming';
 import { propagateClientDisconnect } from './mcp-disconnect';
 export { createAuthMiddleware } from './auth-middleware';
@@ -101,6 +102,47 @@ const MASTRA_PRISTINE_REQUEST_KEY = '__mastraPristineRequest';
 
 const BODY_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
+/** Max size enforced by each route-level bodyLimit middleware, keyed by the middleware itself. */
+const bodyLimitMiddlewareSizes = new WeakMap<Function, number>();
+
+/**
+ * Parse a JSON body from a clone of `request`, reading at most `maxSize` bytes.
+ * Returns undefined without reading when the declared Content-Length is over the
+ * limit, and cancels the clone's stream once the read passes the limit, so the
+ * original request is left for the route's bodyLimit to reject.
+ */
+async function readJsonWithinLimit(request: Request, maxSize: number): Promise<unknown> {
+  const declaredLength = Number(request.headers.get('content-length'));
+  if (declaredLength > maxSize) return undefined;
+
+  const body = request.clone().body;
+  if (!body) return undefined;
+
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    size += value.byteLength;
+    if (size > maxSize) {
+      // Cancelling one tee branch only settles once the other branch is cancelled too,
+      // so don't await it; the original request stays readable for bodyLimit.
+      void reader.cancel().catch(() => {});
+      return undefined;
+    }
+    chunks.push(value);
+  }
+
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return JSON.parse(new TextDecoder().decode(bytes));
+}
+
 export type HonoBindings = {};
 
 /**
@@ -163,8 +205,14 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         // Only parse if content-type is JSON and body is not empty
         if (contentType?.includes('application/json') && contentLength !== '0') {
           try {
-            const body = (await c.req.raw.clone().json()) as { requestContext?: Record<string, any> };
-            if (body.requestContext) {
+            // This runs before the route's bodyLimit and before auth, so the read must
+            // be capped at the route's effective limit. Oversized bodies skip the
+            // requestContext lookup and are rejected by the route's bodyLimit.
+            const maxSize = this.getEffectiveBodyLimit(c);
+            const body = (
+              maxSize === undefined ? await c.req.raw.clone().json() : await readJsonWithinLimit(c.req.raw, maxSize)
+            ) as { requestContext?: Record<string, any> } | undefined;
+            if (body?.requestContext) {
               bodyRequestContext = body.requestContext;
             }
           } catch {
@@ -212,6 +260,22 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
 
       return next();
     };
+  }
+
+  /**
+   * Body limit that the route matched by this request will enforce, falling back to
+   * the server-wide limit for routes without one (e.g. custom API routes).
+   */
+  private getEffectiveBodyLimit(c: Context): number | undefined {
+    try {
+      for (const route of matchedRoutes(c)) {
+        const limit = bodyLimitMiddlewareSizes.get(route.handler);
+        if (limit !== undefined) return limit;
+      }
+    } catch {
+      // Match result unavailable (e.g. mounted via a wrapping app); use the global limit.
+    }
+    return this.bodyLimitOptions?.maxSize;
   }
   async stream(route: ServerRoute, res: Context, result: { fullStream: ReadableStream }): Promise<any> {
     const streamFormat = route.streamFormat || 'stream';
@@ -481,22 +545,22 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     const middlewares: MiddlewareHandler[] = [];
 
     if (isBodyMethod && maxSize !== undefined) {
-      middlewares.push(
-        bodyLimit({
-          maxSize,
-          onError: (c: Context) => {
-            let errorResponse: unknown = { error: 'Request body too large' };
-            if (route.maxBodySize === undefined && this.bodyLimitOptions) {
-              try {
-                errorResponse = this.bodyLimitOptions.onError(errorResponse);
-              } catch {
-                // Fall back to the default response.
-              }
+      const limitMiddleware = bodyLimit({
+        maxSize,
+        onError: (c: Context) => {
+          let errorResponse: unknown = { error: 'Request body too large' };
+          if (route.maxBodySize === undefined && this.bodyLimitOptions) {
+            try {
+              errorResponse = this.bodyLimitOptions.onError(errorResponse);
+            } catch {
+              // Fall back to the default response.
             }
-            return c.json(errorResponse, 413);
-          },
-        }),
-      );
+          }
+          return c.json(errorResponse, 413);
+        },
+      });
+      bodyLimitMiddlewareSizes.set(limitMiddleware, maxSize);
+      middlewares.push(limitMiddleware);
     }
 
     app[route.method.toLowerCase() as 'get' | 'post' | 'put' | 'delete' | 'patch' | 'all'](
