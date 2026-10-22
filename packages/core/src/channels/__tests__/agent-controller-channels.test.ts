@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import z from 'zod';
 
 import { Agent } from '../../agent';
+import { MessageList } from '../../agent/message-list';
 import { AgentController } from '../../agent-controller/agent-controller';
 import { createMockWorkspace } from '../../agent-controller/test-utils';
 import type { AgentControllerEvent } from '../../agent-controller/types';
@@ -1128,6 +1129,38 @@ describe('AgentControllerChannels', () => {
 
       const renderContext = await channels.buildRenderContextForThread(mapped!.id);
       expect(renderContext).not.toBeNull();
+    }, 30_000);
+
+    it('tells a run on that thread that did not start from a message where its replies go', async () => {
+      const { adapter, mastra, channels } = await createSetup({});
+      const chatThread = createChatThread(adapter, 'discord:t-linked');
+      await (channels as any).processChatMessage(
+        chatThread,
+        createMessage('m-1', 'hello'),
+        mastra,
+        new RequestContext(),
+      );
+      const memoryStore = await mastra.getStorage()!.getStore('memory');
+      const { threads } = await memoryStore!.listThreads({
+        filter: { metadata: { channel_externalThreadId: 'discord:t-linked' } },
+        perPage: 1,
+      });
+
+      // A schedule, a Studio prompt or a signal: the memory thread, but no `channel`.
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', { thread: { id: threads[0]!.id } });
+      const messageList = new MessageList({});
+      const processor = channels.getInputProcessors().find(p => p.id === 'chat-channel-context')!;
+      await processor.processInputStep!({ messageList, requestContext, state: {}, tools: {} } as any);
+
+      const prompt = messageList
+        .getSystemMessages('chat-channel-context')
+        .map(m => m.content)
+        .join('\n');
+      expect(prompt).toContain('linked to a discord thread, but this run did not start from a message there');
+      expect(prompt).toContain('Your identity on discord is "TestBot"');
+      expect(prompt).toContain('Your text replies are also posted there');
+      expect(prompt).not.toContain('Not every message is directed at you');
     }, 30_000);
   });
 });
