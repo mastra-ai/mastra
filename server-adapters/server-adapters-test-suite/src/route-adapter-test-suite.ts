@@ -943,7 +943,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       });
     });
 
-    describe.skipIf(config.supportsRBAC === false)('Studio-only RBAC', () => {
+    describe('Studio-only RBAC', () => {
       // RBAC lives only under `studio`; `server.rbac` is unset. Studio requests must
       // still be checked against `studio.rbac` on both built-in and custom API routes.
       const rolePermissions: Record<string, string[]> = {
