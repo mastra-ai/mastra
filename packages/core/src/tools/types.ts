@@ -162,6 +162,8 @@ export interface ToolHooks<
    * and its `needsApprovalFn` do not already require human approval. `allow` runs the tool,
    * `deny` returns the reason to the model as a declined call, and `ask` raises the regular
    * approval suspension. A throwing guard is treated as `ask`.
+   *
+   * Client-side tools (no `execute`) and provider-executed tools are not guarded.
    */
   guardToolCall?: ToolCallGuard;
   /** Options for {@link ToolHooks.guardToolCall}. */
