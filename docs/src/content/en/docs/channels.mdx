@@ -214,7 +214,11 @@ The channel instructions Mastra adds to the agent's prompt follow this setting: 
 
 ## Runs that don't start from a message
 
-A thread that started in a channel can also run from elsewhere, such as a schedule, a Studio prompt, or a signal waking the agent. On those runs, Mastra tells the agent the thread is linked to the channel conversation, what its identity is there, and whether its text replies are posted there. That way it knows to post a result the people there asked for.
+A thread that started in a channel can also run from elsewhere, such as a schedule, a Studio prompt, or a signal waking the agent. Those runs get the same channel instructions as a run started by a message, so the agent still knows its identity there and whether its text replies are posted there. The system prompt doesn't change between the two, which keeps it cached.
+
+Messages that come in over a channel carry a `platform` attribute (for example `platform="slack"`), so the agent can tell them apart from a prompt sent from somewhere else.
+
+Replies on those runs go through the same adapter path as replies to a message. Mastra remembers the last person who wrote in the thread, so adapters that need a recipient, like Slack's native streaming, work the same way.
 
 ## Multi-user awareness
 

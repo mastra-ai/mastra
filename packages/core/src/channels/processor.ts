@@ -7,19 +7,24 @@ import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from './output-processor';
 import type { ChatChannelRenderContext } from './output-processor';
 import type { ChannelContext } from './types';
 
-/** Rebuilds a channel-backed thread's render context; `AgentChannels` provides it. */
+/** Rebuilds a channel-backed thread's channel context; `AgentChannels` provides it. */
 interface ChannelThreadResolver {
-  buildRenderContextForThread(threadId: string): Promise<ChatChannelRenderContext | null>;
+  buildChannelContextForThread(
+    threadId: string,
+  ): Promise<{ channel: ChannelContext; render: ChatChannelRenderContext } | null>;
 }
+
+type ResolvedChannel = { channel: ChannelContext; textHidden: boolean };
 
 /**
  * Input processor that injects channel context (platform, bot identity, DM vs.
  * public-channel guidance) into the agent's system prompt on every step.
  *
- * A run that came in over a channel gets the full guidance. A run on a
- * channel-backed thread that did not (a schedule, a Studio prompt, a signal
- * waking the agent) gets a short note that the thread exists and whether its
- * replies reach it, resolved from the thread's metadata.
+ * Every run on a channel-backed thread gets the same system message, whether
+ * it came in over the channel or not (a schedule, a Studio prompt, a signal
+ * waking the agent). Messages that came in over the channel carry a `platform`
+ * attribute, which is how the model tells them apart, so the prompt never has
+ * to change and stays cached when a thread switches between the two.
  *
  * Added automatically by `AgentChannels` unless you provide your own input
  * processor with `id === 'chat-channel-context'`. Output rendering (tool cards,
@@ -40,34 +45,37 @@ export class ChatChannelProcessor {
     tools,
     state,
   }: ProcessInputStepArgs): Promise<{ messageList: MessageList } | undefined> {
-    const ctx = requestContext?.get('channel') as ChannelContext | undefined;
-    const render = requestContext?.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as ChatChannelRenderContext | undefined;
-    const lines = ctx
-      ? inboundLines(ctx, render?.textDisplay === 'hidden', tools)
-      : await this.#linkedLines(requestContext, state);
-    if (!lines) return undefined;
+    const resolved = await this.#resolve(requestContext, state);
+    if (!resolved) return undefined;
 
-    // Stable system message — same across all steps of a run, so it is prompt-cacheable.
+    // Stable system message — same across all steps and runs of a thread, so it is prompt-cacheable.
+    const lines = channelLines(resolved.channel, resolved.textHidden, tools);
     const systemMessage: CoreMessageV4 = { role: 'system', content: lines.join('\n') };
     messageList.addSystem(systemMessage, this.id);
     return { messageList };
   }
 
-  async #linkedLines(
+  async #resolve(
     requestContext: ProcessInputStepArgs['requestContext'],
     state: Record<string, unknown> | undefined,
-  ): Promise<string[] | undefined> {
+  ): Promise<ResolvedChannel | undefined> {
+    const channel = requestContext?.get('channel') as ChannelContext | undefined;
+    if (channel) {
+      const render = requestContext?.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as ChatChannelRenderContext | undefined;
+      return { channel, textHidden: render?.textDisplay === 'hidden' };
+    }
+
     // Resolved once per run; `null` remembers a thread that isn't channel-backed.
-    if (state && 'linked' in state) return (state.linked as string[] | null) ?? undefined;
+    if (state && 'thread' in state) return (state.thread as ResolvedChannel | null) ?? undefined;
     const threadId = parseMemoryRequestContext(requestContext)?.thread?.id;
-    const render = threadId && this.#channels ? await this.#channels.buildRenderContextForThread(threadId) : null;
-    const lines = render ? linkedLines(render) : null;
-    if (state) state.linked = lines;
-    return lines ?? undefined;
+    const found = threadId && this.#channels ? await this.#channels.buildChannelContextForThread(threadId) : null;
+    const resolved = found ? { channel: found.channel, textHidden: found.render.textDisplay === 'hidden' } : null;
+    if (state) state.thread = resolved;
+    return resolved ?? undefined;
   }
 }
 
-function inboundLines(ctx: ChannelContext, textHidden: boolean, tools: Record<string, unknown> | undefined): string[] {
+function channelLines(ctx: ChannelContext, textHidden: boolean, tools: Record<string, unknown> | undefined): string[] {
   const lines = [`You are communicating via ${ctx.platform}.`];
 
   // Tell the LLM its own identity so it can recognise self-mentions in raw message text
@@ -115,21 +123,5 @@ function inboundLines(ctx: ChannelContext, textHidden: boolean, tools: Record<st
       `If you want to acknowledge a message without ${textHidden ? 'posting' : 'speaking'}, use the \`add_reaction\` tool to react with an emoji instead of replying with text.`,
     );
   }
-  return lines;
-}
-
-function linkedLines(render: ChatChannelRenderContext): string[] {
-  const { adapter, chatThread, platform } = render;
-  const lines = [
-    `This conversation is linked to a ${platform} ${chatThread.isDM ? 'direct message' : 'thread'}, but this run did not start from a message there.`,
-  ];
-  const mention = adapter.botUserId ? chatThread.mentionUser(adapter.botUserId) : undefined;
-  const identity = [adapter.userName && `"${adapter.userName}"`, mention].filter(Boolean);
-  if (identity.length) lines.push(`Your identity on ${platform} is ${identity.join(' / ')}.`);
-  lines.push(
-    render.textDisplay === 'hidden'
-      ? `Your text replies are not posted there. People in that ${platform} conversation only see what you post with the tools you are given, so post when they would want to know, like the result of work they asked for.`
-      : `Your text replies are also posted there, so write them for the people in that ${platform} conversation.`,
-  );
   return lines;
 }

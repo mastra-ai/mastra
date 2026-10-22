@@ -161,33 +161,31 @@ describe('ChatChannelProcessor', () => {
       args.requestContext!.set('MastraMemory', { thread: { id: 'thread-1' } });
       return { ...args, state } as ProcessInputStepArgs;
     }
-    const render = (textDisplay: 'show' | 'hidden') =>
-      ({
-        platform: 'slack',
-        textDisplay,
-        adapter: { userName: 'shipyard', botUserId: 'UBOT' },
-        chatThread: { isDM: false, mentionUser: (id: string) => `<@${id}>` },
-      }) as never;
+    const channel = {
+      platform: 'slack',
+      isDM: false,
+      botUserName: 'shipyard',
+      botMention: '<@UBOT>',
+    } as ChannelContext;
 
-    it('says where its replies go when they are hidden', async () => {
-      const args = linkedArgs();
-      await new ChatChannelProcessor({ buildRenderContextForThread: async () => render('hidden') }).processInputStep(
-        args,
-      );
-      const prompt = String(args.messageList.getSystemMessages('chat-channel-context')[0]!.content);
+    it('gets the same system message an inbound run on that thread gets', async () => {
+      const inbound = createArgs({ channel });
+      inbound.requestContext!.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, { textDisplay: 'hidden' });
+      await new ChatChannelProcessor().processInputStep(inbound);
 
-      expect(prompt).toBe(
-        [
-          'This conversation is linked to a slack thread, but this run did not start from a message there.',
-          'Your identity on slack is "shipyard" / <@UBOT>.',
-          'Your text replies are not posted there. People in that slack conversation only see what you post with the tools you are given, so post when they would want to know, like the result of work they asked for.',
-        ].join('\n'),
-      );
+      const linked = linkedArgs();
+      await new ChatChannelProcessor({
+        buildChannelContextForThread: async () => ({ channel, render: { textDisplay: 'hidden' } as never }),
+      }).processInputStep(linked);
+
+      const prompt = (args: ProcessInputStepArgs) =>
+        String(args.messageList.getSystemMessages('chat-channel-context')[0]!.content);
+      expect(prompt(linked)).toBe(prompt(inbound));
     });
 
     it('looks the thread up once per run, and adds nothing for a thread with no channel', async () => {
       const lookup = vi.fn(async () => null);
-      const processor = new ChatChannelProcessor({ buildRenderContextForThread: lookup });
+      const processor = new ChatChannelProcessor({ buildChannelContextForThread: lookup });
       const state = {};
 
       expect(await processor.processInputStep(linkedArgs(state))).toBeUndefined();
