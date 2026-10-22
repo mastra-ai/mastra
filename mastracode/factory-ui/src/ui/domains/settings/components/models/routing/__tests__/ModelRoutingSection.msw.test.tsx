@@ -7,6 +7,7 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../../../e2e/ui/render';
 import type { FactoryModelScope } from '../../../../../workspaces/services/github';
+import { pickModel } from '../../defaults/__tests__/default-model-test-utils';
 import { ModelRoutingSection } from '../ModelRoutingSection';
 
 const FACTORY_URL = `${TEST_BASE_URL}/web/factory/projects/fp-1`;
@@ -17,6 +18,11 @@ function stubFactory(modelScope: FactoryModelScope, patchStatus = 200) {
   server.use(
     http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: null })),
     http.get(FACTORY_URL, () => HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra', modelScope: saved } })),
+    http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+      HttpResponse.json({
+        models: [{ id: 'openai/gpt-5', provider: 'openai', modelName: 'gpt-5', hasApiKey: true }],
+      }),
+    ),
     http.patch<never, { modelScope?: FactoryModelScope }>(FACTORY_URL, async ({ request }) => {
       const body = await request.json();
       patchedBodies.push(body);
@@ -28,9 +34,9 @@ function stubFactory(modelScope: FactoryModelScope, patchStatus = 200) {
   return patchedBodies;
 }
 
-const renderRoutingSection = () =>
+const renderRoutingSection = (entry = '/factories/fp-1/settings/models') =>
   renderWithProviders(
-    <MemoryRouter initialEntries={['/factories/fp-1/settings/models']}>
+    <MemoryRouter initialEntries={[entry]}>
       <ModelRoutingSection factoryId="fp-1" />
     </MemoryRouter>,
   );
@@ -60,7 +66,9 @@ describe('ModelRoutingSection', () => {
     const { client } = renderRoutingSection();
 
     await waitFor(() => expect(routing('Personal')).toBeChecked());
-    expect(within(region('Factory defaults')).getByText('Not used in this scope')).toBeInTheDocument();
+    expect(
+      within(region('Factory defaults')).getByText('Used only when someone has no personal default'),
+    ).toBeInTheDocument();
     expect(screen.queryByRole('combobox', { name: 'Factory default model' })).not.toBeInTheDocument();
 
     await user.click(routing('Factory'));
@@ -72,6 +80,31 @@ describe('ModelRoutingSection', () => {
     expect(within(region('Personal defaults')).getByText('Not used in this scope')).toBeInTheDocument();
     expect(screen.queryByRole('combobox', { name: 'Personal default model' })).not.toBeInTheDocument();
     expect(within(region('Factory defaults')).getByRole('button', { name: 'Add provider' })).toBeInTheDocument();
+    expect(within(region('Factory defaults')).queryByRole('button', { name: 'Settings' })).not.toBeInTheDocument();
+  });
+
+  it('lets an admin change the Factory default from the unused Factory card in Personal routing', async () => {
+    const patchedBodies = stubFactory('user');
+    const user = userEvent.setup();
+    const { client } = renderRoutingSection();
+
+    await waitFor(() => expect(routing('Personal')).toBeChecked());
+    await user.click(within(region('Factory defaults')).getByRole('button', { name: 'Settings' }));
+    await pickModel(user, 'Factory default model', 'openai/gpt-5');
+    await waitForMutationsIdle(client);
+
+    expect(patchedBodies).toEqual([{ defaultModelId: 'openai/gpt-5' }]);
+  });
+
+  it('opens the unused Factory card when a link targets it', async () => {
+    stubFactory('user');
+    renderRoutingSection('/factories/fp-1/settings/models#factory-defaults');
+
+    expect(
+      await within(await screen.findByRole('region', { name: 'Factory defaults' })).findByRole('combobox', {
+        name: 'Factory default model',
+      }),
+    ).toBeInTheDocument();
   });
 
   it('keeps the saved routing when a change is rejected', async () => {

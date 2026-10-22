@@ -9,10 +9,15 @@ import { FolderIcon } from '../ui/icons';
 import { useFactoryQuery } from '../../hooks/useFactories';
 import { useFactoryProjectQuery } from '../../hooks/useFactoryDefaultModel';
 import { useProvidersQuery } from '../../hooks/use-providers';
-import { useFactoryAuth } from '../../hooks/useFactoryAuth';
 import { useUserSessionQuery } from '../../hooks/useWorkspaces';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
-import { sessionDefaultsAnchor, settingsSectionPath } from '../domains/settings/settingsSections';
+import { MODEL_DEFAULTS_LABELS } from '../domains/settings/components/models/routing/model-routes';
+import {
+  MODEL_DEFAULTS_ANCHORS,
+  sessionDefaultsAnchor,
+  settingsSectionPath,
+} from '../domains/settings/settingsSections';
+import type { ModelDefaultsAnchor } from '../domains/settings/settingsSections';
 import type { FactoryProject } from '../domains/workspaces/services/github';
 import { ChatPageLayout } from '../domains/chat/components/ChatPageLayout';
 import { ComposerPanel } from '../domains/chat/components/ComposerPanel';
@@ -158,23 +163,26 @@ function DraftStart({
   );
 }
 
-function MissingCredentialState({ factoryId, guard }: { factoryId: string; guard: MissingCredentialGuard }) {
-  const authQuery = useFactoryAuth();
-  const projectQuery = useFactoryProjectQuery(factoryId);
+function missingCredentialDescription(guard: MissingCredentialGuard, anchor: ModelDefaultsAnchor): string {
   const providerName = providerDisplayName(guard.provider);
-  const orgHint =
-    authQuery.data?.authEnabled === true ? ', or ask an org admin to share an org-wide key with your team' : '';
+  const requirement = `The Factory default model (${guard.modelId}) needs a credential for ${providerName}.`;
+  if (anchor === MODEL_DEFAULTS_ANCHORS.factory) {
+    return `${requirement} Ask an org admin to add one under ${MODEL_DEFAULTS_LABELS.factory} in Models settings.`;
+  }
+  return `${requirement} Add your own key in Models settings, or ask an org admin to share an org-wide key with your team.`;
+}
+
+function MissingCredentialState({ factoryId, guard }: { factoryId: string; guard: MissingCredentialGuard }) {
+  const projectQuery = useFactoryProjectQuery(factoryId);
+  const anchor = sessionDefaultsAnchor(projectQuery.data?.modelScope);
   return (
     <EmptyState
       as="h2"
       iconSlot={<Bot />}
-      titleSlot={`You don't have access to ${providerName}`}
-      descriptionSlot={`The Factory default model (${guard.modelId}) needs a ${providerName} credential. Add your own key in Models settings${orgHint}.`}
+      titleSlot={`You don't have access to ${providerDisplayName(guard.provider)}`}
+      descriptionSlot={missingCredentialDescription(guard, anchor)}
       actionSlot={
-        <Link
-          to={settingsSectionPath(factoryId, 'models', sessionDefaultsAnchor(projectQuery.data?.modelScope))}
-          className={buttonVariants({ variant: 'primary' })}
-        >
+        <Link to={settingsSectionPath(factoryId, 'models', anchor)} className={buttonVariants({ variant: 'primary' })}>
           Open Models settings
         </Link>
       }
@@ -190,7 +198,10 @@ function MissingDefaultModelState({ factoryId }: { factoryId: string }) {
       titleSlot="No default model configured for this Factory"
       descriptionSlot="Connect a model provider and choose a default model in Models settings before starting a chat."
       actionSlot={
-        <Link to={settingsSectionPath(factoryId, 'models')} className={buttonVariants({ variant: 'primary' })}>
+        <Link
+          to={settingsSectionPath(factoryId, 'models', MODEL_DEFAULTS_ANCHORS.factory)}
+          className={buttonVariants({ variant: 'primary' })}
+        >
           Open Models settings
         </Link>
       }

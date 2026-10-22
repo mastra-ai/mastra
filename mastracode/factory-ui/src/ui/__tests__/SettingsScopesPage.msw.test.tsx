@@ -1,11 +1,13 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { beforeEach, describe, expect, it, onTestFinished } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
+import type { FactoryProjectPayload } from '../domains/workspaces/services/github';
+import { pickModel } from '../domains/settings/components/models/defaults/__tests__/default-model-test-utils';
 import { createAppRoutes } from '../router';
 import {
   settingsFactory,
@@ -148,18 +150,36 @@ describe('Settings ownership', () => {
     expect(screen.getByRole('link', { name: 'Memory' })).toHaveAttribute('aria-current', 'page');
   });
 
-  it('scrolls a cold-loaded defaults link to its card once the card renders', async () => {
-    const scrolledIds: string[] = [];
-    const scrollIntoView = Element.prototype.scrollIntoView;
-    Element.prototype.scrollIntoView = function (this: Element) {
-      scrolledIds.push(this.id);
-    };
-    onTestFinished(() => {
-      Element.prototype.scrollIntoView = scrollIntoView;
-    });
-    renderSettings('models', { hash: '#factory-defaults' });
+  it('lets a Personal-routed Factory with no Factory default finish setup from the new-chat guard', async () => {
+    let project: FactoryProjectPayload = { ...settingsFactory, modelScope: 'user', defaultModelId: null };
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () => HttpResponse.json({ project })),
+      http.patch<never, Partial<FactoryProjectPayload>>(
+        `${TEST_BASE_URL}/web/factory/projects/fp-1`,
+        async ({ request }) => {
+          project = { ...project, ...(await request.json()) };
+          return HttpResponse.json({ project });
+        },
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items`, () => HttpResponse.json({ workItems: [] })),
+      http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+        HttpResponse.json({
+          models: [{ id: 'openai/gpt-5', provider: 'openai', modelName: 'gpt-5', hasApiKey: true }],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    const router = createMemoryRouter(createAppRoutes(), { initialEntries: ['/factories/fp-1/new'] });
+    renderWithProviders(<RouterProvider router={router} />);
 
-    expect(await screen.findByRole('region', { name: 'Factory defaults' })).toBeInTheDocument();
-    await waitFor(() => expect(scrolledIds).toEqual(['factory-defaults']));
+    await user.click(await screen.findByRole('link', { name: 'Open Models settings' }));
+    await pickModel(user, 'Factory default model', 'openai/gpt-5');
+    await waitFor(() => expect(project.defaultModelId).toBe('openai/gpt-5'));
+    await act(() => router.navigate(-1));
+
+    expect(await screen.findByLabelText('Message')).toBeInTheDocument();
+    expect(
+      screen.queryByRole('heading', { name: 'No default model configured for this Factory' }),
+    ).not.toBeInTheDocument();
   });
 });

@@ -29,7 +29,7 @@ export function ModelRoutingSection({ factoryId }: { factoryId: string }) {
     <SettingsSubsection
       scope="factory"
       title="Model routing"
-      description="Which defaults chats and work-item runs use."
+      description="Which defaults chats and work-item runs use. Running threads keep the model they already picked."
       action={
         modelScope && (
           <ModelRoutingSwitch value={modelScope} pending={setModelScope.isPending} onValueChange={pickScope} />

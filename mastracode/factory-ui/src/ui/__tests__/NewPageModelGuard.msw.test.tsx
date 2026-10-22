@@ -50,7 +50,7 @@ describe('NewPage default-model guard', () => {
     ).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open Models settings' })).toHaveAttribute(
       'href',
-      '/factories/fp-1/settings/models',
+      '/factories/fp-1/settings/models#factory-defaults',
     );
     expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'What do you want to work on?' })).not.toBeInTheDocument();
@@ -124,7 +124,7 @@ describe('NewPage credential guard', () => {
     expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
   });
 
-  it('points a Factory-routed Factory at the Factory defaults that hold its credentials', async () => {
+  it('asks an org admin for a Factory-defaults key when chats in a Factory-routed Factory are missing a credential', async () => {
     stubFactory({ id: 'fp-1', name: 'Mastra', modelScope: 'factory', defaultModelId: 'anthropic/claude-sonnet-4-5' });
     server.use(
       http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
@@ -138,6 +138,12 @@ describe('NewPage credential guard', () => {
       'href',
       '/factories/fp-1/settings/models#factory-defaults',
     );
+    expect(
+      screen.getByText(
+        'The Factory default model (anthropic/claude-sonnet-4-5) needs a credential for Anthropic. Ask an org admin to add one under Factory defaults in Models settings.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/Add your own key/)).not.toBeInTheDocument();
   });
 
   it('renders the composer when the caller has a shared org credential for the default model provider', async () => {
