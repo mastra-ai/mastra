@@ -180,11 +180,11 @@ const ContextMenuSubTrigger = React.forwardRef<HTMLDivElement, ContextMenuSubTri
   ({ className, inset, children, ...props }, ref) => (
     <ContextMenuPrimitive.SubmenuTrigger
       ref={useFluidMenuItemRef(ref)}
-      className={cn(menuItemClass, 'data-[popup-open]:text-foreground', inset && menuItemInsetClass, className)}
+      className={cn(menuItemClass, inset && menuItemInsetClass, className)}
       {...props}
     >
       {children}
-      <span className={cn(menuItemTrailingIconClass, 'opacity-50')}>
+      <span className={menuItemTrailingIconClass}>
         <ChevronDown className="-rotate-90" />
       </span>
     </ContextMenuPrimitive.SubmenuTrigger>
