@@ -989,7 +989,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         currentRequestContext = this.deserializeRequestContext(lastOutput.requestContext);
       }
 
-      if (await isWorkflowRunCanceled(this, workflowId, runId)) {
+      // Checked before the next entry is dispatched, so a run canceled from another
+      // process stops here. A step write the store rejected already recorded it.
+      if (this.getLastPersistedStatus(runId) === 'canceled' || (await isWorkflowRunCanceled(this, workflowId, runId))) {
         lastOutput.result = { status: 'canceled' };
       }
 
@@ -1021,7 +1023,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           lastOutput.result.status = 'success';
         }
 
-        const result = (await this.fmtReturnValue(
+        let result = (await this.fmtReturnValue(
           params.pubsub,
           stepResults,
           lastOutput.result,
@@ -1062,6 +1064,18 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           tracingContext: persistTracingContext,
           phase: 'terminal',
         });
+
+        if (result.status !== 'canceled' && this.getLastPersistedStatus(runId) === 'canceled') {
+          // The store rejected the write because the run was canceled meanwhile.
+          lastOutput.result = { status: 'canceled' };
+          result = await this.fmtReturnValue(
+            params.pubsub,
+            stepResults,
+            lastOutput.result,
+            undefined,
+            stepExecutionPath,
+          );
+        }
 
         if (result.error) {
           workflowSpan?.error({
@@ -1200,7 +1214,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     }
 
     // after all steps are successful, return result
-    const result = (await this.fmtReturnValue(
+    let result = (await this.fmtReturnValue(
       params.pubsub,
       stepResults,
       lastOutput.result,
@@ -1220,6 +1234,17 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       requestContext: currentRequestContext,
       phase: 'workflow-end',
     });
+
+    if (result.status !== 'canceled' && this.getLastPersistedStatus(runId) === 'canceled') {
+      // The store rejected the final write because the run was canceled meanwhile.
+      result = await this.fmtReturnValue(
+        params.pubsub,
+        stepResults,
+        { status: 'canceled' },
+        undefined,
+        stepExecutionPath,
+      );
+    }
 
     workflowSpan?.end({
       output: result.result,

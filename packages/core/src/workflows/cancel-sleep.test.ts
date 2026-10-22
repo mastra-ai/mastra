@@ -110,6 +110,43 @@ describe('workflow sleep cancellation', () => {
     expect(snapshot?.status).toBe('canceled');
   });
 
+  it('preserves a remote cancellation that commits just before the final snapshot write', async () => {
+    const workflowId = 'remote-cancel-before-write-workflow';
+    const storage = new MockStore();
+    const buildWorkflow = () =>
+      createWorkflow({
+        id: workflowId,
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        options: { validateInputs: false },
+      })
+        .then(noopStep('only-step'))
+        .commit();
+
+    const activeWorkflow = buildWorkflow();
+    const remoteWorkflow = buildWorkflow();
+    new Mastra({ logger: false, storage, workflows: { [workflowId]: activeWorkflow } });
+    new Mastra({ logger: false, storage, workflows: { [workflowId]: remoteWorkflow } });
+
+    const activeRun = await activeWorkflow.createRun();
+    const store = (await storage.getStore('workflows'))!;
+    const persist = store.persistWorkflowSnapshot.bind(store);
+    // Land the cancel after every check the engine makes and right before the write itself.
+    vi.spyOn(store, 'persistWorkflowSnapshot').mockImplementation(async args => {
+      if (args.snapshot.status === 'success') {
+        const remoteRun = await remoteWorkflow.createRun({ runId: activeRun.runId });
+        await remoteRun.cancel();
+      }
+      return persist(args);
+    });
+
+    const result = await activeRun.start({ inputData: {} });
+
+    const snapshot = await store.loadWorkflowSnapshot({ workflowName: workflowId, runId: activeRun.runId });
+    expect(snapshot?.status).toBe('canceled');
+    expect(result.status).toBe('canceled');
+  });
+
   it('completes a sleep normally when the run is not canceled', async () => {
     const afterSleep = vi.fn().mockResolvedValue({});
     const workflow = createWorkflow({

@@ -166,6 +166,25 @@ export interface PersistStepUpdateParams {
   recordResumedStepStart?: boolean;
 }
 
+// Every status but `canceled`, so only a persisted cancellation rejects the write.
+// Terminal statuses stay writable because restart and time travel re-run finished runs.
+const RUN_STATUSES = {
+  running: true,
+  success: true,
+  failed: true,
+  tripwire: true,
+  suspended: true,
+  waiting: true,
+  pending: true,
+  canceled: true,
+  bailed: true,
+  paused: true,
+  skipped: true,
+} satisfies Record<WorkflowRunStatus, true>;
+const NOT_CANCELED_STATUSES = (Object.keys(RUN_STATUSES) as WorkflowRunStatus[]).filter(
+  status => status !== 'canceled',
+);
+
 export async function isWorkflowRunCanceled(
   engine: DefaultExecutionEngine,
   workflowId: string,
@@ -173,8 +192,8 @@ export async function isWorkflowRunCanceled(
 ): Promise<boolean> {
   try {
     const workflowsStore = await engine.mastra?.getStorage()?.getStore('workflows');
-    const snapshot = await workflowsStore?.loadWorkflowSnapshot({ workflowName: workflowId, runId });
-    return snapshot?.status === 'canceled';
+    const status = await workflowsStore?.loadWorkflowRunStatus({ workflowName: workflowId, runId });
+    return status === 'canceled';
   } catch {
     return false;
   }
@@ -232,10 +251,6 @@ export async function persistStepUpdate(
       }
     }
 
-    if (workflowStatus !== 'canceled' && (await isWorkflowRunCanceled(engine, workflowId, runId))) {
-      return;
-    }
-
     const requestContextObj = engine.serializeRequestContext(requestContext);
 
     const snapshot: WorkflowRunState = {
@@ -260,12 +275,26 @@ export async function persistStepUpdate(
     };
 
     const workflowsStore = await engine.mastra?.getStorage()?.getStore('workflows');
-    await workflowsStore?.persistWorkflowSnapshot({
+    // A run canceled from another process must not be overwritten. Stores that
+    // support it reject the write atomically; others get a status read first.
+    const guardCancellation = workflowStatus !== 'canceled';
+    const atomicGuard = guardCancellation && !!workflowsStore?.supportsGuardedSnapshotWrites?.();
+    if (guardCancellation && !atomicGuard && (await isWorkflowRunCanceled(engine, workflowId, runId))) {
+      engine.setLastPersistedStatus(runId, 'canceled');
+      return;
+    }
+
+    const written = await workflowsStore?.persistWorkflowSnapshot({
       workflowName: workflowId,
       runId,
       resourceId,
       snapshot: engine.options?.pruneSnapshot ? engine.options.pruneSnapshot({ snapshot, workflowStatus }) : snapshot,
+      ...(atomicGuard ? { expectedStatus: NOT_CANCELED_STATUSES } : {}),
     });
+    if (atomicGuard && written === false) {
+      engine.setLastPersistedStatus(runId, 'canceled');
+      return;
+    }
     engine.setLastPersistedStatus(runId, workflowStatus);
   });
 }
