@@ -40,6 +40,29 @@ const restrictedMonoSelectors = [
   },
 ];
 
+const ERROR_COPY_MESSAGE = 'Error copy follows the error-message standard.';
+const GENERIC_ERROR_COPY = '/something went wrong|an? (unexpected )?error (has )?occurred|unknown error|\\boops\\b/i';
+const RAW_ERROR_MESSAGE = `MemberExpression[property.name='message']:matches([object.name=/^(e|err|error|\\w+Error)$/], [object.property.name=/^(error|\\w+Error)$/])`;
+const restrictedErrorCopySelectors = [
+  {
+    selector: "CallExpression[callee.object.name='toast'][callee.property.name='error']",
+    message: `${ERROR_COPY_MESSAGE} Use errorToast from @mastra/playground-ui/utils/error-message.`,
+  },
+  ...['Literal[value', 'TemplateElement[value.raw', 'JSXText[value'].map(node => ({
+    selector: `${node}=${GENERIC_ERROR_COPY}]`,
+    message: `${ERROR_COPY_MESSAGE} Name the action that failed instead of generic copy.`,
+  })),
+  {
+    selector: `JSXExpressionContainer ${RAW_ERROR_MESSAGE}:not(JSXAttribute > JSXExpressionContainer > :function *)`,
+    message: `${ERROR_COPY_MESSAGE} Map the cause to written copy in ErrorNotice or errorToast instead of showing error.message.`,
+  },
+  {
+    selector:
+      "ObjectExpression:has(> Property[key.name='title']):has(> Property[key.name='why']):has(> Property[key.name='fix']):not(:has(> Property[key.name='wayOut']))",
+    message: 'No way out. Is there a docs page or support link we can offer the user? Add it as wayOut.',
+  },
+];
+
 export default defineConfig({
   extends: [rootConfig],
   jsPlugins: ['oxlint-tailwindcss', 'eslint-plugin-storybook'],
@@ -90,8 +113,16 @@ export default defineConfig({
       rules: { 'mastra/restricted-syntax': ['error', ...restrictedTypographySelectors, ...restrictedTxtToneSelectors] },
     },
     {
+      files: ['src/**/*.{ts,tsx}'],
+      rules: { 'mastra/restricted-error-copy': ['warn', ...restrictedErrorCopySelectors] },
+    },
+    {
       files: ['src/**/*.test.*', 'src/**/*.stories.*'],
-      rules: { 'mastra/restricted-syntax': 'off' },
+      rules: { 'mastra/restricted-syntax': 'off', 'mastra/restricted-error-copy': 'off' },
+    },
+    {
+      files: ['src/lib/error-message.ts'],
+      rules: { 'mastra/restricted-error-copy': 'off' },
     },
     {
       files: ['**/*.stories.tsx'],

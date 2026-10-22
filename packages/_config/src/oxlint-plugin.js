@@ -319,6 +319,11 @@ function importOrder(context) {
   };
 }
 
+const restrictedSyntaxRule = {
+  meta: { type: 'suggestion', schema: false },
+  create: restrictedSyntax,
+};
+
 const plugin = {
   meta: { name: 'mastra' },
   rules: {
@@ -326,10 +331,8 @@ const plugin = {
       meta: { type: 'suggestion', fixable: 'code', schema: false },
       create: importOrder,
     },
-    'restricted-syntax': {
-      meta: { type: 'suggestion', schema: false },
-      create: restrictedSyntax,
-    },
+    'restricted-syntax': restrictedSyntaxRule,
+    'restricted-error-copy': restrictedSyntaxRule,
     'test-needs-when-describe': {
       meta: { type: 'problem', schema: false },
       create(context) {
