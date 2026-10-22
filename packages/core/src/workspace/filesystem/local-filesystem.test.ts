@@ -67,15 +67,21 @@ describe('LocalFilesystem', () => {
       return { workspace, outside };
     }
 
-    describe.each(['link/new.txt', 'link/missing/nested/new.txt'])('destination %s', destination => {
-      it.each(operations)('rejects %s before creating anything outside the workspace', async operation => {
-        const { workspace, outside } = await setupDestination();
-        const filesystem = new LocalFilesystem({ basePath: workspace });
+    describe.each(['workspace', 'allowed root'])('%s', rootKind => {
+      describe.each(['link/new.txt', 'link/missing/nested/new.txt'])('destination %s', destination => {
+        it.each(operations)('rejects %s before creating anything outside the roots', async operation => {
+          const { workspace, outside } = await setupDestination();
+          const allowed = path.join(tempDir, 'allowed');
+          await fs.mkdir(allowed);
+          await fs.symlink(outside, path.join(allowed, 'link'), 'dir');
+          const filesystem = new LocalFilesystem({ basePath: workspace, allowedPaths: [allowed] });
+          const target = rootKind === 'allowed root' ? path.join(allowed, destination) : destination;
 
-        await expect(runOperation(operation, filesystem, destination)).rejects.toThrow(PermissionError);
+          await expect(runOperation(operation, filesystem, target)).rejects.toThrow(PermissionError);
 
-        expect(await fs.readdir(outside)).toEqual([]);
-        expect(await fs.readFile(path.join(workspace, 'source.txt'), 'utf-8')).toBe('content');
+          expect(await fs.readdir(outside)).toEqual([]);
+          expect(await fs.readFile(path.join(workspace, 'source.txt'), 'utf-8')).toBe('content');
+        });
       });
     });
 
@@ -105,15 +111,21 @@ describe('LocalFilesystem', () => {
               : rootKind === 'missing allowed root'
                 ? path.join(missingRoot, 'nested/new.txt')
                 : 'link/missing/new.txt';
-          const targetRoot = rootKind === 'in-root symlink' ? inside : rootKind === 'missing allowed root' ? missingRoot : outside;
-          const target = path.join(targetRoot, rootKind === 'missing allowed root' ? 'nested/new.txt' : 'missing/new.txt');
+          const targetRoot =
+            rootKind === 'in-root symlink' ? inside : rootKind === 'missing allowed root' ? missingRoot : outside;
+          const target = path.join(
+            targetRoot,
+            rootKind === 'missing allowed root' ? 'nested/new.txt' : 'missing/new.txt',
+          );
 
           await runOperation(operation, filesystem, destination);
 
           if (operation === 'mkdir') {
             expect((await fs.stat(target)).isDirectory()).toBe(true);
           } else {
-            expect(await fs.readFile(operation === 'copyDirectory' ? path.join(target, 'child.txt') : target, 'utf-8')).toBe('content');
+            expect(
+              await fs.readFile(operation === 'copyDirectory' ? path.join(target, 'child.txt') : target, 'utf-8'),
+            ).toBe('content');
           }
         });
       },

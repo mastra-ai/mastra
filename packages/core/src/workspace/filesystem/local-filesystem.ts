@@ -262,10 +262,6 @@ export class LocalFilesystem extends MastraFilesystem {
 
   private _isWithinAnyRoot(absolutePath: string): boolean {
     const roots = [this._basePath, ...this._allowedPaths];
-    if (roots.some(root => this._isWithinRoot(absolutePath, root))) {
-      return true;
-    }
-
     const resolvedPath = this._resolvePathForContainment(absolutePath);
     if (!resolvedPath) {
       return false;
@@ -354,43 +350,11 @@ export class LocalFilesystem extends MastraFilesystem {
   }
 
   /**
-   * Verify that the resolved path doesn't escape basePath via symlinks.
-   * Uses realpath to resolve symlinks and check the actual target.
+   * Check canonical roots even when the target does not exist yet: the nearest
+   * existing ancestor may be a symlink outside the workspace.
    */
   private async assertPathContained(absolutePath: string): Promise<void> {
-    if (!this._contained) return;
-
-    if (this._allowedPaths.some(root => this._isWithinRoot(absolutePath, root))) {
-      return;
-    }
-
-    // Resolve symlinks for the target path. If it doesn't exist,
-    // there are no symlinks to escape through — nothing to check.
-    let targetReal: string;
-    try {
-      targetReal = await fs.realpath(absolutePath);
-    } catch (error: unknown) {
-      if (isEnoentError(error)) return; // path doesn't exist yet — safe
-      throw error;
-    }
-
-    // Resolve real paths for roots, skipping any that don't exist
-    const roots = [this._basePath, ...this._allowedPaths];
-    const rootReals: string[] = [];
-    for (const root of roots) {
-      try {
-        rootReals.push(await fs.realpath(root));
-      } catch (error: unknown) {
-        if (isEnoentError(error)) continue;
-        throw error;
-      }
-    }
-
-    const isWithinRoot = rootReals.some(
-      rootReal => targetReal === rootReal || targetReal.startsWith(rootReal + nodePath.sep),
-    );
-
-    if (!isWithinRoot) {
+    if (this._contained && !this._isWithinAnyRoot(absolutePath)) {
       throw new PermissionError(absolutePath, 'access');
     }
   }
