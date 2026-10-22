@@ -1179,6 +1179,38 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           phase: 'per-step',
         });
 
+        if (this.getLastPersistedStatus(runId) === 'canceled') {
+          // The store rejected the pause because the run was canceled meanwhile.
+          const canceledResult = await this.fmtReturnValue<any>(
+            params.pubsub,
+            stepResults,
+            { status: 'canceled' },
+            undefined,
+            stepExecutionPath,
+          );
+          workflowSpan?.end({ attributes: { status: 'canceled' } });
+          await this.invokeLifecycleCallbacks({
+            status: canceledResult.status,
+            result: canceledResult.result,
+            error: canceledResult.error,
+            steps: canceledResult.steps,
+            tripwire: canceledResult.tripwire,
+            runId,
+            workflowId,
+            resourceId,
+            input,
+            requestContext: currentRequestContext,
+            state: lastState,
+            stepExecutionPath,
+          });
+          this.clearLastPersistedStatus(runId);
+          return {
+            ...canceledResult,
+            runId,
+            ...(params.outputOptions?.includeState ? { state: lastState } : {}),
+          };
+        }
+
         await params.pubsub.publish(`workflow.events.v2.${runId}`, {
           type: 'watch',
           runId,
