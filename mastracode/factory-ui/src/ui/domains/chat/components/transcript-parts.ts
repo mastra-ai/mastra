@@ -17,6 +17,23 @@ export function messageText(parts: MessagePart[]): string {
     .trim();
 }
 
+/**
+ * What the agent posted to a chat thread with `reply_in_thread` in these parts.
+ * On a run that hides reply text this, not the prose, is the reply people read.
+ */
+export function channelReplyText(parts: MessagePart[]): string {
+  return parts
+    .flatMap(part => {
+      if (!isRecord(part) || part.type !== 'tool-invocation') return [];
+      const call = part.toolInvocation;
+      if (call.toolName !== 'reply_in_thread' || call.state !== 'result') return [];
+      const args: unknown = call.args;
+      return isRecord(args) && typeof args.text === 'string' ? [args.text] : [];
+    })
+    .join('\n\n')
+    .trim();
+}
+
 export function terminalInvocationStatus(
   invocation: ToolInvocationPart['toolInvocation'],
 ): 'done' | 'error' | undefined {

@@ -30,7 +30,7 @@ import {
   MessageMetadata,
   MessageTimestamp,
 } from '@mastra/playground-ui/components/Message';
-import { ChannelOriginBadge, SenderAvatar } from './MessageSender';
+import { ChannelOriginBadge, SenderAvatar, SentToChannel } from './MessageSender';
 import { ProviderLoginAction } from './ProviderLoginAction';
 import { ToolCard } from './tool/ToolCard';
 import { ToolGroup } from './tool/ToolGroup';
@@ -68,6 +68,7 @@ export function MessageBubble({
   entry,
   suspensions,
   reply,
+  replySentTo,
   isSubmitting,
   onRespond,
   viewerId,
@@ -76,6 +77,7 @@ export function MessageBubble({
   entry: MessageEntry;
   suspensions: ReadonlyMap<string, SuspensionPrompt>;
   reply?: string;
+  replySentTo?: string;
   isSubmitting: boolean;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
   viewerId?: string;
@@ -153,6 +155,7 @@ export function MessageBubble({
                   <TooltipContent>{replyModelId}</TooltipContent>
                 </Tooltip>
               )}
+              {replySentTo && <SentToChannel platform={replySentTo} />}
               {messageActions}
             </div>
           )

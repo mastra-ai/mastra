@@ -20,7 +20,7 @@ import { replySteps } from '../services/turns';
 import { ArrivalScope, useArriving } from '@mastra/playground-ui/components/Arrival';
 import { MessageBubble } from './MessageBubble';
 import { ProviderLoginAction } from './ProviderLoginAction';
-import { draws, messageText, renderableParts } from './transcript-parts';
+import { channelReplyText, draws, messageText, renderableParts } from './transcript-parts';
 import { isRecord } from './transcript-shared';
 import { NotificationCard, NotificationSummaryCard } from './TranscriptNotifications';
 import { ApprovalCard, SubagentCard, SuspensionCard } from './TranscriptPromptCards';
@@ -143,12 +143,20 @@ export function TranscriptEntries({
         // ending, so no stamp lands mid-turn.
         const steps = replySteps(group);
         const replyEnd = steps.at(-1);
+        // A turn that answered in a chat thread replied with what it posted there;
+        // its own prose never reached anyone.
+        const posted = steps
+          .map(step => channelReplyText(renderableParts(step)))
+          .filter(Boolean)
+          .join('\n\n');
         const reply = runningTurn
           ? undefined
-          : steps
+          : posted ||
+            steps
               .map(step => messageText(renderableParts(step)))
               .filter(Boolean)
               .join('\n\n');
+        const replySentTo = !runningTurn && posted ? 'slack' : undefined;
 
         return (
           <ChatShell.Turn
@@ -163,6 +171,7 @@ export function TranscriptEntries({
                   entry={entry}
                   suspensions={suspensions}
                   reply={entry === replyEnd ? reply : undefined}
+                  replySentTo={entry === replyEnd ? replySentTo : undefined}
                   redundantSuspension={
                     entry.kind === 'suspension' &&
                     entry.toolName !== 'request_access' &&
@@ -198,6 +207,7 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
   entry,
   suspensions,
   reply,
+  replySentTo,
   redundantSuspension,
   isSubmitting,
   viewerId,
@@ -208,6 +218,8 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
   entry: TimelineEntry;
   suspensions: ReadonlyMap<string, SuspensionPrompt>;
   reply?: string;
+  /** The chat platform the reply was posted to, when it went out through `reply_in_thread`. */
+  replySentTo?: string;
   redundantSuspension: boolean;
   isSubmitting: boolean;
   viewerId?: string;
@@ -222,6 +234,7 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
           entry={entry}
           suspensions={suspensions}
           reply={reply}
+          replySentTo={replySentTo}
           isSubmitting={isSubmitting}
           viewerId={viewerId}
           owner={owner}
