@@ -1,0 +1,28 @@
+{
+  "name": "template-insurance-policy-checking",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Reconcile agreed insurance terms with issued policy documents and prepare evidence-backed policy checking reports for broker review.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": "^22.19.0 || >=24.11.0"
+  },
+  "scripts": {
+    "dev": "mastra dev",
+    "build": "mastra build",
+    "start": "mastra start",
+    "typecheck": "tsc --noEmit",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check ."
+  },
+  "dependencies": {
+    "@mastra/core": "latest"
+  },
+  "devDependencies": {
+    "@types/node": "^24.10.9",
+    "mastra": "latest",
+    "oxfmt": "0.59.0",
+    "typescript": "^5.9.3"
+  }
+}
