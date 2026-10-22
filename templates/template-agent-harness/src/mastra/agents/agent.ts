@@ -61,7 +61,7 @@ For local file changes, end with a plain-text URL using ${pathToFileURL(`${works
     options: {
       generateTitle: true,
       observationalMemory: {
-        model: 'openai/gpt-5.4-mini',
+        model: 'openai/gpt-6-luna',
       },
     },
   }),
