@@ -478,6 +478,30 @@ The caption reads “$4.37 paid from credits” only when usage exceeds the allo
 
 See DataDisplay/Meter in Storybook for the billing states. Feedback/Dialog’s Resize while open story covers a full-size dialog and a form dialog crossing the 640px drawer breakpoint in either direction. Keep form drafts in caller-owned state when they must survive the popup remount.
 
+### Lint rules
+
+The package ships its design-system lint rules as an [oxlint](https://oxc.rs/docs/guide/usage/linter) JS plugin, so every app on the design system checks the same things. Load the plugin and spread the recommended rules into your `oxlint.config.ts`:
+
+```ts
+import { recommended as playgroundUiRules } from '@mastra/playground-ui/oxlint';
+import { defineConfig } from 'oxlint';
+
+export default defineConfig({
+  jsPlugins: ['@mastra/playground-ui/oxlint'],
+  rules: { ...playgroundUiRules },
+});
+```
+
+| Rule                              | Flags                                                                                            |
+| --------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `playground-ui/icon-button-size`  | A `<Button>` holding only an icon without an `icon-*` size                                       |
+| `playground-ui/text-role`         | Tailwind text sizes (`text-sm`, `text-[13px]`) instead of a text role                            |
+| `playground-ui/txt-tone`          | A `text-foreground` / `text-muted-foreground` / `text-placeholder` class on `<Txt>`              |
+| `playground-ui/font-mono`         | `font-mono` on `<Txt>`; `{ anywhere: true, allowIn: ['Input'] }` checks every class string       |
+| `playground-ui/no-barrel-imports` | Imports, re-exports and `vi.mock()` of the package root or a `components`/`hooks`/`utils` barrel |
+
+Turn rules off per glob in `overrides`, for example for tests and stories.
+
 ## Documentation
 
 This README is the package guide. Import the global stylesheet once, then use the package's explicit `components/*`, `domains/*`, `hooks/*`, `icons/*`, `primitives/*`, `store/*`, `tokens`, and `utils/*` entry points rather than a package-root import.
