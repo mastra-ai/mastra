@@ -63,6 +63,10 @@ describe('empty final step with observational memory (#27920)', () => {
           finishReason,
         }: {
           messageList: {
+            add: (
+              message: { role: string; content: { parts: Array<{ type: string; text?: string }> } },
+              source: 'response',
+            ) => unknown;
             get: {
               response: {
                 db: () => Array<{ role: string; content: { parts: Array<{ type: string; text?: string }> } }>;
@@ -81,6 +85,7 @@ describe('empty final step with observational memory (#27920)', () => {
           await writer?.custom({ type: 'text-delta', payload: { id: 'closing', text: 'Saved.' } });
           await writer?.custom({ type: 'text-end', payload: { id: 'closing' } });
           target.content.parts.push({ type: 'text', text: 'Saved.' });
+          messageList.add(target, 'response');
           return messageList;
         },
       };
