@@ -10,6 +10,7 @@ import { getErrorFromUnknown } from '../error/utils';
 import type { IMastraLogger } from '../logger/logger';
 import type { Mastra } from '../mastra';
 import type { MastraMemory } from '../memory/memory';
+import { parseMemoryRequestContext } from '../memory/types';
 import type { StorageThreadType } from '../memory/types';
 import type {
   InputProcessor,
@@ -1139,18 +1140,31 @@ export class AgentChannels {
   // ---------------------------------------------------------------------------
 
   /**
-   * Resolve the adapter for the current conversation from request context.
+   * Resolve the adapter and chat thread for the current conversation. A run
+   * started by an inbound message carries them on request context. Any other
+   * run (a schedule, Studio, a woken run) finds them through its memory
+   * thread's persisted channel coordinates, the same way
+   * `ChatChannelOutputProcessor` posts its reply.
    */
-  private getAdapterFromContext(context: { requestContext?: RequestContext }): { adapter: Adapter; threadId: string } {
+  private async getAdapterFromContext(context: {
+    requestContext?: RequestContext;
+    agent?: { threadId?: string };
+  }): Promise<{ adapter: Adapter; threadId: string }> {
     const channel = context.requestContext?.get('channel') as ChannelContext | undefined;
-    if (!channel?.platform || !channel?.threadId) {
+    if (channel?.platform && channel.threadId) {
+      const adapter = this.adapters[channel.platform];
+      if (!adapter) {
+        throw new Error(`No adapter registered for platform "${channel.platform}"`);
+      }
+      return { adapter, threadId: channel.threadId };
+    }
+    const memoryThreadId =
+      context.agent?.threadId ?? parseMemoryRequestContext(context.requestContext)?.thread?.id ?? undefined;
+    const render = memoryThreadId ? await this.buildRenderContextForThread(memoryThreadId) : null;
+    if (!render) {
       throw new Error('No channel context — cannot determine platform or thread');
     }
-    const adapter = this.adapters[channel.platform];
-    if (!adapter) {
-      throw new Error(`No adapter registered for platform "${channel.platform}"`);
-    }
-    return { adapter, threadId: channel.threadId };
+    return { adapter: render.adapter, threadId: render.chatThread.id };
   }
 
   /**
@@ -2306,7 +2320,7 @@ export class AgentChannels {
           emoji: z.string().describe('The emoji to react with (e.g. "thumbsup")'),
         }),
         execute: async ({ messageId, emoji }, context) => {
-          const { adapter, threadId } = this.getAdapterFromContext(context);
+          const { adapter, threadId } = await this.getAdapterFromContext(context);
           await adapter.addReaction(threadId, messageId, emoji);
           return { ok: true };
         },
@@ -2320,7 +2334,7 @@ export class AgentChannels {
           emoji: z.string().describe('The emoji to remove'),
         }),
         execute: async ({ messageId, emoji }, context) => {
-          const { adapter, threadId } = this.getAdapterFromContext(context);
+          const { adapter, threadId } = await this.getAdapterFromContext(context);
           await adapter.removeReaction(threadId, messageId, emoji);
           return { ok: true };
         },
