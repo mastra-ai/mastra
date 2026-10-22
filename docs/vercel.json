@@ -2246,6 +2246,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/guides/mcp-events",
+      "destination": "/docs/connections/mcp#mcp-events",
+      "permanent": true
+    },
+    {
       "source": "/docs/harness/signals",
       "destination": "/docs/signals/overview",
       "permanent": true
@@ -4093,6 +4098,11 @@
     {
       "source": "/reference/observability/tracing/trace-query/llms.txt",
       "destination": "/reference/observability/tracing/advanced-queries/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/guides/mcp-events/llms.txt",
+      "destination": "/docs/connections/mcp/llms.txt",
       "permanent": true
     },
     {

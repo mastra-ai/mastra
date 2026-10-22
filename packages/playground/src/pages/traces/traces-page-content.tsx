@@ -1,11 +1,14 @@
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
 import { TracesExplorer, useTracesConfig } from '@mastra/playground-ui/domains/traces/components/traces-explorer';
+import {
+  TracesSpansSwitch,
+  TracesSpansSwitchSkeleton,
+} from '@mastra/playground-ui/domains/traces/components/traces-spans-switch';
 import { memo } from 'react';
 import { useNavigate } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { CreateDatasetDialog } from '@/domains/datasets/components/create-dataset-dialog';
 import { navCrumb } from '@/domains/navigation/crumbs';
-import { TracesSpansSwitch, TracesSpansSwitchSkeleton } from '@/domains/traces/components/traces-spans-switch';
 import { LiveKitRecordingReview } from '@/domains/voice/components/livekit-recording-review';
 import { traceScoreLink } from '@/lib/app-routing';
 
@@ -21,7 +24,7 @@ export const TracesPageContent = memo(function TracesPageContent({ isScoped }: {
   let tabs;
   if (!isScoped) {
     if (isCapabilitiesLoading) tabs = <TracesSpansSwitchSkeleton />;
-    else if (withSpanQuery) tabs = <TracesSpansSwitch current="traces" />;
+    else if (withSpanQuery) tabs = <TracesSpansSwitch current="traces" onViewChange={view => navigate(`/${view}`)} />;
   }
 
   return (

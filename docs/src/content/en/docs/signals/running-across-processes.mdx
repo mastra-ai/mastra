@@ -110,16 +110,23 @@ A shared Redis Streams backend handles both signal delivery and thread leases:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
+import { PostgresStore } from '@mastra/pg'
 import { RedisStreamsPubSub } from '@mastra/redis-streams'
 
 export const mastra = new Mastra({
   agents: { agent },
+  storage: new PostgresStore({
+    id: 'mastra-storage',
+    connectionString: process.env.DATABASE_URL,
+  }),
   pubsub: new RedisStreamsPubSub({
     url: process.env.REDIS_URL,
     keyPrefix: 'mastra:my-app',
   }),
 })
 ```
+
+Every instance points `storage` at the same database, so persisted signals, state signals, and notification records survive a restart and are visible to whichever process owns the thread.
 
 Use the same `keyPrefix` on every coordinating instance, and a different prefix for environments sharing one Redis server. Vercel's managed Redis and Upstash Redis both work with `RedisStreamsPubSub`.
 

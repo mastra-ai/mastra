@@ -2231,6 +2231,11 @@
       "permanent": true
     },
     {
+      "source": "/docs/guides/mcp-events",
+      "destination": "/docs/connections/mcp#mcp-events",
+      "permanent": true
+    },
+    {
       "source": "/docs/harness/signals",
       "destination": "/docs/signals/overview",
       "permanent": true
