@@ -122,7 +122,7 @@ import { hydrateSessionMemorySettings, layerPersonalMemorySettings } from './ses
 import { hasResolvedOrg } from './session/org-seed.js';
 import { FactoryReplyCredentialProcessor } from './session/reply-credential-processor.js';
 import { FactoryReplyReminderProcessor } from './session/reply-reminder-processor.js';
-import { createReplyTool } from './session/reply-tool.js';
+import { createReplyTool, FactoryReplyStreamProcessor } from './session/reply-tool.js';
 import { migrateSessionResources, privatizeOwnerResourceSessions } from './session/resource-migration.js';
 import { observeSessionRunEnd } from './session/run-audit.js';
 import { sessionMemoryResourceId, sessionStampCounts } from './session/session-threads.js';
@@ -1474,7 +1474,11 @@ export class MastraFactory {
           }
           return [channelReplyProcessor, replyReminderProcessor, environmentProcessor, ...sessionsProcessor];
         },
-        outputProcessors: [new FactoryChannelSessionLinkProcessor(), new FactoryReplyCredentialProcessor()],
+        outputProcessors: [
+          new FactoryChannelSessionLinkProcessor(),
+          new FactoryReplyStreamProcessor(),
+          new FactoryReplyCredentialProcessor(),
+        ],
         ...(vector ? { vector } : {}),
         extraTools: async ({ requestContext }: { requestContext: RequestContext }) => {
           const tools: IntegrationTools = {};

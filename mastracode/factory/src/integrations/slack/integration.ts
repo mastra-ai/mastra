@@ -22,9 +22,10 @@ import type { TypingStatusFn } from '@mastra/core/channels';
 import type { ApiRoute } from '@mastra/core/server';
 import type { SlackAdapterChannelConfig } from '@mastra/slack';
 
+import { REPLY_TOOL_NAME } from '../../session/reply-tool.js';
 import type { WorkItemFeedPublisher } from '../../storage/domains/comments/feed-sync.js';
-import type { FactoryChannelsConfig, FactoryIntegration, IntegrationContext } from '../base.js';
 
+import type { FactoryChannelsConfig, FactoryIntegration, IntegrationContext } from '../base.js';
 import { createSlackConnectRoutes } from './connect-route.js';
 import { SlackFeedPublisher } from './feed-publisher.js';
 import { createSlackChannelsConfig } from './slack.js';
@@ -107,6 +108,9 @@ const factoryTypingStatus =
       return 'is thinking...';
     case 'text-delta':
       return textDisplay === 'hidden' ? undefined : 'is typing...';
+    // The reply tool's text streams into the thread as the model writes it.
+    case 'tool-call-input-streaming-start':
+      return chunk.payload.toolName === REPLY_TOOL_NAME ? 'is typing...' : undefined;
     case 'tool-call':
       return describeToolCall(chunk.payload.args) ?? 'is working...';
     default:

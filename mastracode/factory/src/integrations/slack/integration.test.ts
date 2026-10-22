@@ -44,6 +44,13 @@ describe('SlackIntegration.channels', () => {
     expect(typingStatus({ type: 'reasoning-delta' } as any, context('is thinking...'))).toBe('is thinking...');
     // Reply text is hidden by default, so streamed text sets no status.
     expect(typingStatus({ type: 'text-delta' } as any, context())).toBeUndefined();
+    // ...but the reply tool's text, which streams into the thread, does.
+    expect(
+      typingStatus({ type: 'tool-call-input-streaming-start', payload: { toolName: 'reply_in_thread' } } as any, context()),
+    ).toBe('is typing...');
+    expect(
+      typingStatus({ type: 'tool-call-input-streaming-start', payload: { toolName: 'search' } } as any, context()),
+    ).toBeUndefined();
     expect(typingStatus({ type: 'tool-call', payload: { toolName: 'search' } } as any, context())).toBe(
       'is working...',
     );
