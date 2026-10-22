@@ -2,6 +2,6 @@
 '@mastra/core': patch
 ---
 
-Keep durable and evented agents running when an active `untilIdle` reader disconnects, including resumed streams. Background tasks can still complete and produce a saved final answer.
+Allow server-owned HTTP observers of durable and evented `untilIdle` runs to detach without aborting execution, including resumed streams. Detached loops continue processing background tasks and saving the final answer, while explicit run and thread cancellation remain effective.
 
-Reconnect with `observe(runId)`. To cancel execution, use `abortRunStream(runId)`, `abortThreadStream()`, or an execution `abortSignal`. Ordinary agents keep their existing cancellation behavior.
+Direct in-process reader cancellation still aborts active execution by default. The server opts into observer-only cancellation internally; ordinary agents retain their existing cancellation behavior.

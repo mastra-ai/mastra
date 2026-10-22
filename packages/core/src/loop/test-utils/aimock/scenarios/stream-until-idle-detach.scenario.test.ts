@@ -45,7 +45,11 @@ describeForAllEngines('AIMock loop scenario: durable untilIdle observer detach (
         llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Research dispatched.' });
         llm.on({ endpoint: 'chat', sequenceIndex: 2 }, { content: 'Replacement accepted.' });
         llm.on({ endpoint: 'chat', sequenceIndex: 3 }, { content: 'Final research answer.' });
-        const first = await agent.stream('Start', { memory: thread, untilIdle: { maxIdleMs: 5_000 } });
+        const first = await agent.stream('Start', {
+          _detachObserverOnCancel: true,
+          memory: thread,
+          untilIdle: { maxIdleMs: 5_000 },
+        });
         const reader = first.fullStream.getReader();
         try {
           while (true) {
@@ -55,6 +59,7 @@ describeForAllEngines('AIMock loop scenario: durable untilIdle observer detach (
           }
           if (detached) await reader.cancel();
           const replacement = await agent.stream('Continue on the same thread', {
+            _detachObserverOnCancel: true,
             memory: thread,
             untilIdle: { maxIdleMs: 5_000 },
           });
@@ -112,6 +117,7 @@ describeForAllEngines('AIMock loop scenario: durable untilIdle observer detach (
         const thread = { thread: `continuation-abort-${engine}-${abortBy}`, resource: 'detach-user' };
         const signal = new AbortController();
         const output = await agent.streamUntilIdle('Start', {
+          _detachObserverOnCancel: true,
           memory: thread,
           maxSteps: 8,
           maxIdleMs: 5_000,
@@ -222,10 +228,20 @@ describeForAllEngines('AIMock loop scenario: durable untilIdle observer detach (
         llm.on({ endpoint: 'chat', sequenceIndex: offset + 1 }, { content: 'Research dispatched.' });
         llm.on({ endpoint: 'chat', sequenceIndex: offset + 2 }, { content: 'Final research answer.' });
         const signal = new AbortController();
-        const options = { memory: thread, maxSteps: 8, abortSignal: signal.signal, maxIdleMs: 5_000 };
+        const options = {
+          _detachObserverOnCancel: true,
+          memory: thread,
+          maxSteps: 8,
+          abortSignal: signal.signal,
+          maxIdleMs: 5_000,
+        };
         let output;
         if (resumed) {
-          const parked = await agent.streamUntilIdle('Start', { memory: thread, maxSteps: 8 });
+          const parked = await agent.streamUntilIdle('Start', {
+            _detachObserverOnCancel: true,
+            memory: thread,
+            maxSteps: 8,
+          });
           for await (const chunk of parked.fullStream) {
             if (chunk.type === 'tool-call-approval') break;
           }
@@ -371,12 +387,17 @@ describeForAllEngines('AIMock loop scenario: durable untilIdle observer detach (
         const signal = new AbortController();
         let result;
         if (resumed) {
-          const parked = await agent.streamUntilIdle('Start', { memory: thread, maxSteps: 8 });
+          const parked = await agent.streamUntilIdle('Start', {
+            _detachObserverOnCancel: true,
+            memory: thread,
+            maxSteps: 8,
+          });
           for await (const chunk of parked.fullStream) {
             if (chunk.type === 'tool-call-approval') break;
           }
           const options = {
             untilIdle: true,
+            _detachObserverOnCancel: true,
             runId: parked.runId,
             toolCallId: 'authorize-1',
             memory: thread,
@@ -388,7 +409,12 @@ describeForAllEngines('AIMock loop scenario: durable untilIdle observer detach (
               ? await agent.resumeStreamUntilIdle({ approved: true }, options)
               : await agent.resumeStream({ approved: true }, options);
         } else {
-          result = await agent.streamUntilIdle('Start', { memory: thread, maxSteps: 8, abortSignal: signal.signal });
+          result = await agent.streamUntilIdle('Start', {
+            _detachObserverOnCancel: true,
+            memory: thread,
+            maxSteps: 8,
+            abortSignal: signal.signal,
+          });
         }
         const reader = result.fullStream.getReader();
         try {

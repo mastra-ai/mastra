@@ -1959,6 +1959,7 @@ export const STREAM_GENERATE_ROUTE = createRoute({
         memory: authorizedMemoryOption,
         // A disconnected HTTP observer must not cancel durable execution.
         abortSignal: isDurableAgentLike(agent) ? undefined : abortSignal,
+        _detachObserverOnCancel: isDurableAgentLike(agent),
       };
 
       // Support `untilIdle` option on the /stream endpoint — delegates to
@@ -2680,6 +2681,7 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
         memory: authorizedMemoryOption,
         // A disconnected HTTP observer must not cancel durable execution.
         abortSignal: isDurableAgentLike(agent) ? undefined : abortSignal,
+        _detachObserverOnCancel: isDurableAgentLike(agent),
       };
 
       const streamResult = structuredOutput
@@ -2893,6 +2895,7 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
         ...params,
         requestContext,
         abortSignal: isDurableAgentLike(agent) ? undefined : abortSignal,
+        _detachObserverOnCancel: isDurableAgentLike(agent),
       });
 
       return streamResult.fullStream;
@@ -3097,6 +3100,7 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
         ...params,
         requestContext,
         abortSignal: isDurableAgentLike(agent) ? undefined : abortSignal,
+        _detachObserverOnCancel: isDurableAgentLike(agent),
       });
 
       return streamResult.fullStream;
@@ -3212,6 +3216,7 @@ export const RESUME_STREAM_ROUTE = createRoute({
         memory: authorizedMemoryOption,
         // A disconnected HTTP observer must not cancel durable execution.
         abortSignal: isDurableAgentLike(agent) ? undefined : abortSignal,
+        _detachObserverOnCancel: isDurableAgentLike(agent),
       };
 
       // Support `untilIdle` option on the /resume-stream endpoint — delegates
@@ -3418,6 +3423,7 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
         memory: authorizedMemoryOption,
         // A disconnected HTTP observer must not cancel durable execution.
         abortSignal: isDurableAgentLike(agent) ? undefined : abortSignal,
+        _detachObserverOnCancel: isDurableAgentLike(agent),
       };
 
       const streamResult = structuredOutput
