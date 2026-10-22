@@ -85,41 +85,54 @@ describe('LocalFilesystem', () => {
       });
     });
 
-    describe.each(['absolute', 'relative', 'chain'])('dangling %s symlink', linkKind => {
+    describe.each(['absolute', 'relative', 'chain', 'parent traversal'])('dangling %s symlink', linkKind => {
       it.each(['writeFile', 'appendFile', 'copyFile'] as const)(
         'rejects %s without creating the outside target',
         async operation => {
           const { workspace, outside } = await setupDestination();
           const target = path.join(outside, 'new.txt');
+          if (linkKind === 'parent traversal') {
+            await fs.mkdir(path.join(outside, 'deep'));
+            await fs.symlink(path.join(outside, 'deep'), path.join(workspace, 'pivot'), 'dir');
+          }
           if (linkKind === 'chain') {
             await fs.symlink('../outside/new.txt', path.join(workspace, 'alias.txt'));
           }
           await fs.symlink(
-            linkKind === 'absolute' ? target : linkKind === 'relative' ? '../outside/new.txt' : 'alias.txt',
+            linkKind === 'absolute'
+              ? target
+              : linkKind === 'relative'
+                ? '../outside/new.txt'
+                : linkKind === 'parent traversal'
+                  ? 'pivot/../new.txt'
+                  : 'alias.txt',
             path.join(workspace, 'dangling.txt'),
           );
           const filesystem = new LocalFilesystem({ basePath: workspace });
 
           await expect(runOperation(operation, filesystem, 'dangling.txt')).rejects.toThrow(PermissionError);
 
-          expect(await fs.readdir(outside)).toEqual([]);
+          expect(await fs.readdir(outside)).toEqual(linkKind === 'parent traversal' ? ['deep'] : []);
         },
       );
     });
 
-    it.each(['writeFile', 'appendFile', 'copyFile'] as const)(
-      'allows %s through a dangling symlink to an in-root file',
-      async operation => {
-        const { workspace } = await setupDestination();
-        await fs.mkdir(path.join(workspace, 'inside'));
-        await fs.symlink('inside/new.txt', path.join(workspace, 'dangling.txt'));
-        const filesystem = new LocalFilesystem({ basePath: workspace });
+    describe.each(['inside/new.txt', 'internal-pivot/../new.txt'])('in-root dangling target %s', target => {
+      it.each(['writeFile', 'appendFile', 'copyFile'] as const)(
+        'allows %s through a dangling symlink to an in-root file',
+        async operation => {
+          const { workspace } = await setupDestination();
+          await fs.mkdir(path.join(workspace, 'inside/deep'), { recursive: true });
+          await fs.symlink('inside/deep', path.join(workspace, 'internal-pivot'), 'dir');
+          await fs.symlink(target, path.join(workspace, 'dangling.txt'));
+          const filesystem = new LocalFilesystem({ basePath: workspace });
 
-        await runOperation(operation, filesystem, 'dangling.txt');
+          await runOperation(operation, filesystem, 'dangling.txt');
 
-        expect(await fs.readFile(path.join(workspace, 'inside/new.txt'), 'utf-8')).toBe('content');
-      },
-    );
+          expect(await fs.readFile(path.join(workspace, 'inside/new.txt'), 'utf-8')).toBe('content');
+        },
+      );
+    });
 
     describe.each(['in-root symlink', 'allowed root', 'symlinked allowed root', 'missing allowed root'])(
       '%s',

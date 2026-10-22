@@ -236,41 +236,55 @@ export class LocalFilesystem extends MastraFilesystem {
     return !relative.startsWith('..') && !nodePath.isAbsolute(relative);
   }
 
-  private _resolvePathForContainment(absolutePath: string, symlinkDepth = 0): string | undefined {
-    let currentPath = absolutePath;
+  private _resolvePathForContainment(absolutePath: string): string | undefined {
+    try {
+      return realpathSync(absolutePath);
+    } catch (error: unknown) {
+      if (!isEnoentError(error)) throw error;
+    }
 
-    while (true) {
+    // Missing targets need component-wise resolution: normalizing a symlink's
+    // target before following its links would give `..` the wrong parent.
+    let currentPath = nodePath.parse(absolutePath).root;
+    const pending = absolutePath.slice(currentPath.length).split(nodePath.sep);
+    let symlinkDepth = 0;
+    let currentIsDirectory: boolean | undefined = true;
+
+    while (pending.length > 0) {
+      const component = pending.shift();
+      if (!component) continue;
+      if (currentIsDirectory === false) {
+        // Preserve the native ENOTDIR error, including for `file/..`.
+        realpathSync(`${currentPath}${nodePath.sep}${component}`);
+      }
+      if (component === '.') continue;
+      if (component === '..') {
+        currentPath = nodePath.dirname(currentPath);
+        currentIsDirectory = undefined;
+        continue;
+      }
+
+      const candidate = nodePath.join(currentPath, component);
       try {
-        const realPath = realpathSync(currentPath);
-        if (currentPath === absolutePath) {
-          return realPath;
+        const stat = lstatSync(candidate);
+        if (stat.isSymbolicLink()) {
+          if (++symlinkDepth > 40) return undefined;
+          const target = readlinkSync(candidate);
+          const root = nodePath.parse(target).root;
+          if (root) currentPath = root;
+          pending.unshift(...target.slice(root.length).split(nodePath.sep));
+          currentIsDirectory = undefined;
+          continue;
         }
-
-        const remainder = nodePath.relative(currentPath, absolutePath);
-        return nodePath.join(realPath, remainder);
+        currentIsDirectory = stat.isDirectory();
       } catch (error: unknown) {
         if (!isEnoentError(error)) throw error;
-
-        // ENOENT can mean a dangling symlink rather than a missing entry.
-        // Resolve its destination before walking past it to an existing parent.
-        try {
-          if (lstatSync(currentPath).isSymbolicLink()) {
-            if (symlinkDepth >= 40) return undefined;
-            const target = nodePath.resolve(nodePath.dirname(currentPath), readlinkSync(currentPath));
-            const remainder = nodePath.relative(currentPath, absolutePath);
-            return this._resolvePathForContainment(nodePath.join(target, remainder), symlinkDepth + 1);
-          }
-        } catch (linkError: unknown) {
-          if (!isEnoentError(linkError)) throw linkError;
-        }
+        currentIsDirectory = undefined;
       }
-
-      const parentPath = nodePath.dirname(currentPath);
-      if (parentPath === currentPath) {
-        return undefined;
-      }
-      currentPath = parentPath;
+      currentPath = candidate;
     }
+
+    return currentPath;
   }
 
   private _isWithinAnyRoot(absolutePath: string): boolean {
