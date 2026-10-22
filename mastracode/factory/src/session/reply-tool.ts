@@ -158,11 +158,15 @@ function openReplyStream(chatThread: ChatChannelRenderContext['chatThread']): Re
 export class FactoryReplyStreamProcessor implements Processor {
   readonly id = 'factory-reply-stream';
 
+  constructor(private readonly deps: ShareFileToolDeps = {}) {}
+
   async processOutputStream({ part, state, requestContext }: ProcessOutputStreamArgs): Promise<ChunkType> {
     if (!requestContext) return part;
     const args = (state.args ??= {}) as Record<string, string>;
     if (part.type === 'tool-call-input-streaming-start' && part.payload.toolName === REPLY_TOOL_NAME) {
-      const render = requestContext.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as ChatChannelRenderContext | undefined;
+      // Resolve the thread the same way the tool does, so a run started from
+      // the web UI or woken by a signal streams too, not only a Slack-started one.
+      const render = await resolveRenderContext(requestContext, this.deps);
       // A static adapter (`streaming: false`) posts each reply whole, so the tool does too.
       if (render?.textDisplay !== 'hidden' || !render.streaming?.enabled) return part;
       args[part.payload.toolCallId] = '';

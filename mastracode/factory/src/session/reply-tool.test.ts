@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { markNewChannelSession } from './channel-session-link-processor.js';
 import { createReplyTool, FactoryReplyStreamProcessor, partialStringField, REPLY_TOOL_NAME } from './reply-tool.js';
+import type { ShareFileToolDeps } from './share-file-tool.js';
 
 type ReplyTool = {
   inputSchema: { safeParse: (input: unknown) => { success: boolean } };
@@ -172,8 +173,8 @@ describe('streaming reply_in_thread into the thread', () => {
     ({ type, runId: 'r', from: 'AGENT', payload }) as any;
   const tick = () => new Promise(resolve => setTimeout(resolve, 0));
 
-  async function feed(requestContext: RequestContext, argsDeltas: string[]) {
-    const processor = new FactoryReplyStreamProcessor();
+  async function feed(requestContext: RequestContext, argsDeltas: string[], deps: ShareFileToolDeps = {}) {
+    const processor = new FactoryReplyStreamProcessor(deps);
     const state: Record<string, unknown> = {};
     const run = (part: unknown) => processor.processOutputStream({ part, state, requestContext } as any);
     await run(chunk('tool-call-input-streaming-start', { toolCallId: 'call-1', toolName: REPLY_TOOL_NAME }));
@@ -200,6 +201,26 @@ describe('streaming reply_in_thread into the thread', () => {
     expect(thread.streamed.join('')).toBe(
       'Hello there, Caleb!\n\n[Open session ↗](https://mc.example.com/factories/factory-1/workspaces/session-1/threads/thread-1)',
     );
+  });
+
+  it('streams on a run with no inbound message, like a web prompt or a woken run', async () => {
+    const thread = streamingThread();
+    const requestContext = new RequestContext();
+    requestContext.set('controller', { threadId: 'thread-1', sessionId: 'session-1', resourceId: 'resource-1' });
+    const buildRenderContextForThread = vi.fn(async (threadId: string) =>
+      threadId === 'thread-1'
+        ? { platform: 'slack', textDisplay: 'hidden', streaming: { enabled: true }, chatThread: { post: thread.post } }
+        : null,
+    );
+    const deps: ShareFileToolDeps = { channels: () => ({ buildRenderContextForThread }) as never };
+    const tool = (await createReplyTool(requestContext, deps))[REPLY_TOOL_NAME] as unknown as ReplyTool;
+
+    await feed(requestContext, ['{"text": "Build', ' is green"}'], deps);
+    expect(thread.streamed.join('')).toBe('Build is green');
+
+    await tool.execute({ text: 'Build is green' }, { agent: { toolCallId: 'call-1' } });
+    expect(thread.post).toHaveBeenCalledTimes(1);
+    expect(thread.whole).toEqual([]);
   });
 
   it('posts the reply whole when the streamed post fails', async () => {
