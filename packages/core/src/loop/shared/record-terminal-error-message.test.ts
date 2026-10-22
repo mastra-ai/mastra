@@ -33,6 +33,7 @@ describe('toPersistedErrorIdentity', () => {
     const error = Object.assign(new TypeError('boom'), {
       statusCode: 429,
       responseBody: '{"error":{"code":"insufficient_quota"}}',
+      requestBodyValues: { messages: [{ role: 'user', content: 'my secret prompt' }] },
       cause: new Error('inner'),
     });
 
@@ -51,6 +52,14 @@ describe('toPersistedErrorIdentity', () => {
         }),
       ),
     ).toEqual({ name: 'Error', message: 'Bad Request', statusCode: 400, reason: 'prompt is too long' });
+    expect(
+      toPersistedErrorIdentity(
+        Object.assign(new Error('Bad Gateway'), {
+          statusCode: 502,
+          responseBody: '<html><body>proxy page</body></html>',
+        }),
+      ),
+    ).toEqual({ name: 'Error', message: 'Bad Gateway', statusCode: 502 });
   });
 
   it('does not mutate the supplied error or invoke toJSON', () => {
