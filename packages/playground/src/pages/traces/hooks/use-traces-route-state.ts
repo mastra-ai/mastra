@@ -1,4 +1,7 @@
-import { DEFAULT_TRACES_FILTERS } from '@mastra/playground-ui/domains/traces/components/traces-explorer';
+import {
+  DEFAULT_TRACES_FILTERS,
+  EMPTY_TRACES_SELECTION,
+} from '@mastra/playground-ui/domains/traces/components/traces-explorer';
 import type {
   TracesExplorerState,
   TracesFilters,
@@ -28,6 +31,8 @@ const SPAN_VIEW_PARAM = 'spanView';
 const SCORE_ID_PARAM = 'scoreId';
 const HIGHLIGHT_SPAN_IDS_PARAM = 'highlightSpanIds';
 const PAGE_PARAM = 'page';
+/** The active saved view. The URL keeps the filters chosen without a view, for "All traces". */
+export const TRACE_VIEW_PARAM = 'view';
 
 const TRACES_SORT_KEYS = ['startedAt'] as const;
 const DEFAULT_TRACES_SORT = { key: 'startedAt', direction: 'desc' } as const;
@@ -41,7 +46,7 @@ const SELECTION_PARAMS = [
   SCORE_ID_PARAM,
   HIGHLIGHT_SPAN_IDS_PARAM,
 ];
-const NON_FILTER_PARAMS = new Set([...SELECTION_PARAMS, SORT_KEY_PARAM, SORT_DIR_PARAM, PAGE_PARAM]);
+const NON_FILTER_PARAMS = new Set([...SELECTION_PARAMS, SORT_KEY_PARAM, SORT_DIR_PARAM, PAGE_PARAM, TRACE_VIEW_PARAM]);
 
 function pickParams(params: URLSearchParams, keep: (key: string) => boolean): string {
   const picked = new URLSearchParams();
@@ -133,7 +138,7 @@ function encodeSortDirection(base: URLSearchParams, direction: TracesSortDirecti
  * new filters and vice versa. The explorer emits its full state once per action, and each write
  * rewrites every filter and selection param, so when it emits twice in a tick the last write wins.
  *
- * `setState` goes through `setPersistedSearchParams`; sort is not persisted.
+ * `setActiveViewId` changes no filter, so it skips `setPersistedSearchParams` like the sort does.
  */
 export function useTracesRouteState(
   searchParams: URLSearchParams,
@@ -154,6 +159,28 @@ export function useTracesRouteState(
     });
   const setSortDirection = (next: TracesSortDirection) =>
     setSearchParams(encodeSortDirection(searchParams, next), { replace: true });
+  const activeViewId = searchParams.get(TRACE_VIEW_PARAM) || undefined;
+  // Another view lists other traces, so the open trace closes like on a filter change; the span
+  // view is a display preference and stays.
+  const setActiveViewId = (viewId: string | undefined) =>
+    setSearchParams(
+      prev => {
+        const selection = { ...EMPTY_TRACES_SELECTION, spanView: decodeSelection(prev).spanView };
+        const next = encodeSelection(prev, selection);
+        setOrDelete(next, TRACE_VIEW_PARAM, viewId);
+        next.delete(PAGE_PARAM);
+        return next;
+      },
+      { replace: true },
+    );
 
-  return { selection, filters, setState, sortDirection, setSortDirection };
+  return {
+    selection,
+    filters,
+    setState,
+    sortDirection,
+    setSortDirection,
+    activeViewId,
+    setActiveViewId,
+  };
 }

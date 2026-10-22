@@ -85,7 +85,11 @@ export type TracesListContextValue = Pick<
   onSortChange: (direction: DataListSort) => void;
 };
 
-export type TracesColumnsContextValue = ReturnType<typeof useTraceColumnPreferences>;
+export type TracesColumnsContextValue = ReturnType<typeof useTraceColumnPreferences> & {
+  /** Set when the host controls the columns: their order, which the list then doesn't persist itself. */
+  order?: string[];
+  onOrderChange?: (order: string[]) => void;
+};
 
 export const TracesConfigContext = createContext<TracesConfigContextValue | null>(null);
 export const TracesFiltersContext = createContext<TracesFiltersContextValue | null>(null);

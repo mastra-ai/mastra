@@ -19,8 +19,11 @@ import {
   selectTrace,
   setSpanTab,
   setSpanView,
+  TRACE_FILTER_NOT_ON_THIS_STORAGE,
+  unsupportedTraceFilterReason,
 } from '../traces-explorer-actions';
 import type { TracesFilters, TracesSelection } from '../traces-explorer-actions';
+import type { FilterBarGroup } from '@/ds/components/FilterBar';
 
 const openTrace: TracesSelection = {
   traceId: 'trace-a',
@@ -228,7 +231,9 @@ describe('applyDateRange', () => {
 });
 
 describe('sanitizeTracesFilters', () => {
-  describe('when the filters hold entries the query cannot run', () => {
+  const traceQuery = { withQueryTrace: true, withRootDuration: false };
+
+  describe('when the filters hold entries the trace query cannot run', () => {
     it('drops a running status, unsupported fields and root duration without support', () => {
       const filters: TracesFilters = {
         ...baseFilters,
@@ -240,14 +245,50 @@ describe('sanitizeTracesFilters', () => {
         ],
       };
 
-      expect(sanitizeTracesFilters(filters, false).tokens).toEqual([{ fieldId: 'threadId', value: 'thread-1' }]);
+      expect(sanitizeTracesFilters(filters, traceQuery).tokens).toEqual([{ fieldId: 'threadId', value: 'thread-1' }]);
     });
   });
 
   describe('when the server supports root duration', () => {
     it('keeps the duration token', () => {
       const filters: TracesFilters = { ...baseFilters, tokens: [{ fieldId: 'durationMs', value: '100' }] };
-      expect(sanitizeTracesFilters(filters, true)).toBe(filters);
+      expect(sanitizeTracesFilters(filters, { ...traceQuery, withRootDuration: true })).toBe(filters);
+    });
+  });
+
+  describe('when the server lists traces through the legacy endpoint', () => {
+    const legacy = { withQueryTrace: false, withRootDuration: false };
+
+    it('keeps the fields that endpoint filters on, with is, and tags with any of', () => {
+      const filters: TracesFilters = {
+        ...baseFilters,
+        tokens: [
+          { fieldId: 'runId', value: 'run-1' },
+          { fieldId: 'status', value: 'running' },
+          { fieldId: 'tags', value: ['a', 'b'] },
+        ],
+      };
+
+      expect(sanitizeTracesFilters(filters, legacy)).toBe(filters);
+    });
+
+    it('drops other fields, other operators and every group', () => {
+      const filters: TracesFilters = {
+        ...baseFilters,
+        tokens: [
+          { fieldId: 'environment', value: ['development'], operatorId: 'in' },
+          { fieldId: 'environment', value: 'staging', operatorId: 'isNot' },
+          { fieldId: 'spans.name', value: 'llm' },
+          { fieldId: 'traceId', value: 'trace-a' },
+        ],
+        groups: [{ id: 'g', logic: 'or', nodes: [{ id: 'n', fieldId: 'status', value: 'error' }] }],
+      };
+
+      expect(sanitizeTracesFilters(filters, legacy)).toEqual({
+        ...baseFilters,
+        tokens: [{ fieldId: 'traceId', value: 'trace-a' }],
+        groups: [],
+      });
     });
   });
 });
@@ -375,6 +416,37 @@ describe('buildTracesLegacyFilters', () => {
         startedAt: { start: dateFrom },
         endedAt: { end: dateTo },
       });
+    });
+  });
+});
+
+describe('unsupportedTraceFilterReason', () => {
+  const group: FilterBarGroup = {
+    kind: 'group',
+    id: 'g',
+    logic: 'or',
+    nodes: [{ id: 'n', fieldId: 'status', operatorId: 'is', value: 'error' }],
+  };
+
+  describe('when the server lists traces through the legacy endpoint', () => {
+    const legacy = { withQueryTrace: false, withRootDuration: false };
+
+    it('marks an AND/OR group, which that endpoint cannot run', () => {
+      expect(unsupportedTraceFilterReason(group, legacy)).toBe(TRACE_FILTER_NOT_ON_THIS_STORAGE);
+    });
+
+    it('marks a field that endpoint does not filter on, and not one it does', () => {
+      const item = { id: 'x', operatorId: 'is', value: 'llm' };
+      expect(unsupportedTraceFilterReason({ ...item, fieldId: 'spans.name' }, legacy)).toBe(
+        TRACE_FILTER_NOT_ON_THIS_STORAGE,
+      );
+      expect(unsupportedTraceFilterReason({ ...item, fieldId: 'runId' }, legacy)).toBeUndefined();
+    });
+  });
+
+  describe('when the server has the trace query API', () => {
+    it('runs AND/OR groups', () => {
+      expect(unsupportedTraceFilterReason(group, { withQueryTrace: true, withRootDuration: false })).toBeUndefined();
     });
   });
 });

@@ -283,4 +283,35 @@ describe('useTracesRouteState', () => {
       expect(persistedWrites).not.toHaveBeenCalled();
     });
   });
+
+  describe('when another saved view is picked', () => {
+    it('keeps the filters for All traces, closes the open trace and keeps the span view', () => {
+      const { result, params, navigations, persistedWrites } = renderRouteState(
+        '/traces?status=error&traceId=trace-a&spanView=timeline&page=2',
+      );
+      const filters = result.current.route.filters;
+
+      act(() => result.current.route.setActiveViewId('view-new'));
+
+      expect(result.current.route.activeViewId).toBe('view-new');
+      expect(params().get('view')).toBe('view-new');
+      expect(params().get('status')).toBe('error');
+      expect(result.current.route.filters).toBe(filters);
+      expect(params().get('traceId')).toBeNull();
+      expect(params().get('spanView')).toBe('timeline');
+      expect(params().get('page')).toBeNull();
+      expect(navigations).toEqual([{ replace: true }]);
+      expect(persistedWrites).not.toHaveBeenCalled();
+    });
+
+    it('drops the view param for All traces', () => {
+      const { result, params } = renderRouteState('/traces?view=view-errors&status=error');
+
+      act(() => result.current.route.setActiveViewId(undefined));
+
+      expect(result.current.route.activeViewId).toBeUndefined();
+      expect(params().get('view')).toBeNull();
+      expect(params().get('status')).toBe('error');
+    });
+  });
 });
