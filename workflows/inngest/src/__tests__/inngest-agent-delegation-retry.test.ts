@@ -2,8 +2,8 @@
  * Ported from validation harness case T10 (inngest).
  * The kill-* variants drop the analyst's HTTP request in the same process, not
  * SIGKILL. Ordinary tool throws become tool results, not Inngest function retries.
- * Completed delegations are memoized; the delegation in flight is at-least-once:
- * its original attempt can commit even after the supervisor run has failed.
+ * Completed delegations are memoized. The first interrupted analyst attempt
+ * simulates a worker that died before committing and is rejected only in teardown.
  * This tests transport retry and delegation memoization, not process-death recovery.
  */
 import { randomUUID } from 'node:crypto';
@@ -104,6 +104,7 @@ it.each([
     expect(process.env.INNGEST_DEV_EXTERNAL).not.toBe('true');
     const controller = new AbortController();
     const analystAttempts = new Set<Promise<{ code: typeof OMEGA }>>();
+    let rejectDeadAttempt: ((reason: Error) => void) | undefined;
     const counts = { alphaStarts: 0, alphaCommits: 0, omegaStarts: 0, omegaCommits: 0 };
     const reports: { alpha: string; omega: string }[] = [];
     const id = generateTestId();
@@ -181,8 +182,10 @@ it.each([
                     failures.push(error);
                     throw error;
                   }
-                  // Match function-retries.test.ts: socket loss does not stop in-flight side effects.
-                  await new Promise(resolve => setTimeout(resolve, 1500));
+                  // A dead worker cannot commit or return a tool error to its model.
+                  await new Promise<never>((_, reject) => {
+                    rejectDeadAttempt = reject;
+                  });
                 }
                 counts.omegaCommits++;
                 return { code: OMEGA } as const;
@@ -288,7 +291,8 @@ it.each([
 
         expect(terminalRun?.status, 'Correlated supervisor terminal status').toBe(variant.expectedStatus);
         await vi.waitFor(
-          () => expect(analystAttempts.size, 'All analyst attempts must finish before counting commits').toBe(0),
+          () =>
+            expect(analystAttempts.size, 'Only the simulated dead attempt may remain').toBe(variant.interrupt ? 1 : 0),
           {
             timeout: 5000,
           },
@@ -297,7 +301,7 @@ it.each([
           alphaStarts: 1,
           alphaCommits: 1,
           omegaStarts: variant.omegaStarts,
-          omegaCommits: counts.omegaStarts,
+          omegaCommits: variant.expectedStatus === 'FAILED' ? 0 : 1,
         });
         expect(reports).toEqual(variant.expectedStatus === 'FAILED' ? [] : [{ alpha: ALPHA, omega: OMEGA }]);
         if (variant.expectedStatus === 'COMPLETED') {
@@ -310,9 +314,14 @@ it.each([
     } catch (error) {
       failures.push(error);
     } finally {
-      await cleanup('settle in-flight analyst attempts', () => Promise.allSettled([...analystAttempts]));
+      const attemptsToSettle = [...analystAttempts];
       controller.abort();
-      await cleanup('stop the owned Inngest scheduler', stopSharedInngestDevServer);
+      try {
+        await cleanup('stop the owned Inngest scheduler', stopSharedInngestDevServer);
+      } finally {
+        rejectDeadAttempt?.(new Error('Release simulated dead worker during teardown'));
+      }
+      await cleanup('settle in-flight analyst attempts', () => Promise.allSettled(attemptsToSettle));
       if (disposeStream) await cleanup('dispose the stream subscription', disposeStream);
       await cleanup('close shared HTTP infrastructure', () => teardownSharedTestInfrastructure({ forceClose: true }));
       await cleanup('verify both listening ports were released', async () => {
