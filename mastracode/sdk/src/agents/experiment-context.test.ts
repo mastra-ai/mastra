@@ -2,9 +2,12 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { RequestContext } from '@mastra/core/request-context';
-import { afterAll, describe, expect, it } from 'vitest';
+import { afterAll, describe, expect, it, vi } from 'vitest';
 import type { MastraCodeState } from '../schema.js';
-import { createExperimentControllerContext } from './experiment-context.js';
+import {
+  createExperimentControllerContext,
+  createExperimentControllerContextMiddleware,
+} from './experiment-context.js';
 import { getDynamicInstructionSections } from './instructions.js';
 import { getDynamicModel } from './model.js';
 
@@ -69,5 +72,50 @@ describe('dataset experiment over HTTP against the Code Agent', () => {
     expect(second.getState().yolo).toBeUndefined();
     expect(server.initialState).not.toHaveProperty('yolo');
     expect(first.sessionId).not.toBe(second.sessionId);
+  });
+});
+
+describe('experiment controller middleware', () => {
+  /** Minimal Hono-style context: the adapter already stored the parsed `requestContext`. */
+  function request(controller: unknown) {
+    const requestContext = new RequestContext();
+    requestContext.set('controller', controller);
+    return { c: { get: (key: string) => (key === 'requestContext' ? requestContext : undefined) }, requestContext };
+  }
+
+  it('mounts under the configured api prefix', () => {
+    expect(createExperimentControllerContextMiddleware(server).path).toBe('/api/datasets/*');
+    expect(createExperimentControllerContextMiddleware({ ...server, apiPrefix: '/custom' }).path).toBe(
+      '/custom/datasets/*',
+    );
+    expect(createExperimentControllerContextMiddleware({ ...server, apiPrefix: 'custom/' }).path).toBe(
+      '/custom/datasets/*',
+    );
+    expect(createExperimentControllerContextMiddleware({ ...server, apiPrefix: '/' }).path).toBe('/datasets/*');
+  });
+
+  it('replaces a JSON snapshot with a live context and continues the request', async () => {
+    const { handler } = createExperimentControllerContextMiddleware(server);
+    const { c, requestContext } = request(JSON.parse('{"session":{"modelId":"openai/gpt-5.6"}}'));
+    const next = vi.fn(async () => {});
+
+    await handler(c as never, next);
+
+    expect(next).toHaveBeenCalledOnce();
+    const live = requestContext.get('controller') as { getState: () => MastraCodeState; session: { modelId: string } };
+    expect(live.getState().projectPath).toBe(projectPath);
+    expect(live.session.modelId).toBe('openai/gpt-5.6');
+  });
+
+  it('leaves a live context and a request without a controller alone', async () => {
+    const { handler } = createExperimentControllerContextMiddleware(server);
+    const liveSession = { getState: () => ({ projectPath: '/live' }), session: { modelId: 'openai/gpt-5.6' } };
+    const { c, requestContext } = request(liveSession);
+    await handler(c as never, async () => {});
+    expect(requestContext.get('controller')).toBe(liveSession);
+
+    const empty = new RequestContext();
+    await handler({ get: () => empty } as never, async () => {});
+    expect(empty.get('controller')).toBeUndefined();
   });
 });

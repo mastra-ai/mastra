@@ -90,6 +90,13 @@ export function createExperimentControllerContext(
   };
 }
 
+/** Same shape the server gives `apiPrefix`: leading slash, no trailing slash, `''` for the root. */
+function normalizeApiPrefix(prefix = '/api'): string {
+  const normalized = prefix.trim().replace(/\/+/g, '/').replace(/\/$/, '');
+  if (normalized === '') return '';
+  return normalized.startsWith('/') ? normalized : `/${normalized}`;
+}
+
 /**
  * Server middleware for the dataset experiment routes. When the request's
  * `controller` is a JSON snapshot, replace it with an experiment-local live
@@ -100,9 +107,11 @@ export function createExperimentControllerContextMiddleware(options: {
   controllerId: string;
   initialState: Partial<MastraCodeState>;
   defaultModeId: string;
+  /** The server's `apiPrefix` the dataset routes are mounted under. Defaults to `/api`. */
+  apiPrefix?: string;
 }): Middleware {
   return {
-    path: '/api/datasets/*',
+    path: `${normalizeApiPrefix(options.apiPrefix)}/datasets/*`,
     handler: async (c, next) => {
       const requestContext = c.get('requestContext') as RequestContext | undefined;
       const snapshot = requestContext?.get('controller');

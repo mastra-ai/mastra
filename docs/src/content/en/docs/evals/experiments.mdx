@@ -117,7 +117,7 @@ The Mastra Code `code-agent` reads its model, mode, and project folder from the 
 }
 ```
 
-Mastra Code turns this snapshot into a session that lives for that item only. The agent works in the folder the server was started in, so a request can't choose a different project. When `session.modelId` is missing, the run fails with the usual "No model selected" error instead of using a guessed model.
+Mastra Code turns this snapshot into a session that lives for that item only. The agent works in the folder the server was started in, so a request can't choose a different project. When `session.modelId` is missing, the run fails with the usual "No model selected" error instead of using a guessed model. The snapshot is handled by server middleware, so it works on the default Hono server under any `apiPrefix`, but not on server adapters that don't run Mastra middleware.
 
 #### Memory-enabled agents
 

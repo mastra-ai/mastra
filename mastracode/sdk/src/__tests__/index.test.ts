@@ -184,6 +184,7 @@ function createMockSettings() {
 let registeredKnowledge: Record<string, unknown> = {};
 const mastraStub = {
   getStorage: vi.fn(() => undefined),
+  getLogger: vi.fn(() => undefined),
   listKnowledge: vi.fn(() => ({ ...registeredKnowledge })),
   addKnowledge: vi.fn((knowledge: unknown, key: string) => {
     registeredKnowledge[key] = knowledge;
@@ -203,6 +204,7 @@ vi.mock('@mastra/core/agent-controller', async importOriginal => ({
       controllerConstructorMock(config);
     }
     async init() {}
+    __registerMastra() {}
     getMastra() {
       return mastraStub;
     }
@@ -728,6 +730,44 @@ describe('createMastraCode', () => {
         onTaskCancelled: expect.any(Function),
       }),
     );
+  });
+
+  it('mounts the dataset experiment middleware under the configured api prefix', async () => {
+    const { prepareAgentControllerMount } = await import('../index.js');
+
+    const defaultPrefix = await prepareAgentControllerMount();
+    expect(defaultPrefix.mastraArgs.server?.middleware).toEqual([
+      expect.objectContaining({ path: '/api/datasets/*', handler: expect.any(Function) }),
+    ]);
+
+    const hostMiddleware = { path: '/api/*', handler: async (_c: unknown, next: () => Promise<void>) => next() };
+    const custom = await prepareAgentControllerMount({
+      buildServerConfig: () => ({ apiPrefix: '/custom', middleware: hostMiddleware }),
+    });
+    expect(custom.mastraArgs.server?.middleware).toEqual([
+      hostMiddleware,
+      expect.objectContaining({ path: '/custom/datasets/*', handler: expect.any(Function) }),
+    ]);
+  });
+
+  it('adds the dataset experiment middleware to a caller-owned Mastra', async () => {
+    const { mountAgentControllerOnMastra } = await import('../index.js');
+    const existing = { path: '/custom/*', handler: async (_c: unknown, next: () => Promise<void>) => next() };
+    const setServerMiddleware = vi.fn();
+    const mastra = {
+      ...mastraStub,
+      getServer: () => ({ apiPrefix: '/custom' }),
+      getServerMiddleware: () => [existing],
+      setServerMiddleware,
+    } as unknown as import('@mastra/core/mastra').Mastra;
+
+    const mounted = await mountAgentControllerOnMastra({ mastra });
+
+    expect(mounted.mastra).toBe(mastra);
+    expect(setServerMiddleware).toHaveBeenCalledWith([
+      existing,
+      expect.objectContaining({ path: '/custom/datasets/*', handler: expect.any(Function) }),
+    ]);
   });
 
   it('registers the MastraCode gateway and app-provided model hooks on AgentController', async () => {

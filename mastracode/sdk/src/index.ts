@@ -2166,7 +2166,9 @@ export async function mountAgentControllerOnMastra(
      * the assembled `apiRoutes` (e.g. `middleware`, `cors`). Used by the
      * platform entry (`src/mastra/index.ts`) to own the WorkOS gate + tenant
      * dispatcher + CORS on the instance the deployer generates its server from.
-     * Ignored when `mastra` is provided (mounting onto a caller-owned instance).
+     * Ignored when `mastra` is provided (mounting onto a caller-owned instance);
+     * the dataset experiment middleware is still added to that instance via
+     * `setServerMiddleware` so experiments can reach the Code Agent over HTTP.
      */
     buildServerConfig?: (deps: {
       controller: MountedMastraCode['controller'];
@@ -2180,6 +2182,17 @@ export async function mountAgentControllerOnMastra(
     // back-reference points at it (idempotent — only sets #externalMastra).
     prepared.base.controller.__registerMastra(config.mastra);
     registerSelectedKnowledge(config.mastra, prepared.base.knowledgeKey, prepared.base.knowledge);
+    // The caller's `server` config is theirs; only add the dataset experiment
+    // adapter, under whatever `apiPrefix` their routes are mounted at.
+    config.mastra.setServerMiddleware([
+      ...config.mastra.getServerMiddleware(),
+      createExperimentControllerContextMiddleware({
+        controllerId: prepared.base.controller.id,
+        initialState: prepared.base.initialState,
+        defaultModeId: prepared.base.defaultModeId,
+        apiPrefix: config.mastra.getServer()?.apiPrefix,
+      }),
+    ]);
     await prepared.finalize();
     return { ...prepared.base, mastra: config.mastra };
   }
@@ -2236,7 +2249,8 @@ export async function prepareAgentControllerMount(
   // Dataset experiments reach the Code Agent over HTTP with a JSON `controller`
   // snapshot. Turn it into a live, request-local context after the host's own
   // middleware so the agent's dynamic model/instructions/workspace can read it.
-  const hostMiddleware = (extraServerConfig as { middleware?: Middleware | Middleware[] } | undefined)?.middleware;
+  const host = extraServerConfig as { middleware?: Middleware | Middleware[]; apiPrefix?: string } | undefined;
+  const hostMiddleware = host?.middleware;
   const serverConfig = {
     ...extraServerConfig,
     middleware: [
@@ -2245,6 +2259,7 @@ export async function prepareAgentControllerMount(
         controllerId: controller.id,
         initialState: base.initialState,
         defaultModeId: base.defaultModeId,
+        apiPrefix: host?.apiPrefix,
       }),
     ],
     ...(apiRoutes?.length ? { apiRoutes } : {}),
