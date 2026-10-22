@@ -1,10 +1,11 @@
-import { createDeepSeek } from '@ai-sdk/deepseek-v7';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v6';
 import { stepCountIs } from '@internal/ai-sdk-v5';
 import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { MockMemory } from '../../../../memory';
 import { createTool } from '../../../../tools';
 import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
+import { SCENARIO_MODEL_ID } from '../types';
 
 /**
  * Scenario: the model sends a tool call whose arguments are not valid JSON.
@@ -21,10 +22,17 @@ import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '.
 
 const TRUNCATED_ARGS = '{"note": "half a sent';
 
-// DeepSeek speaks the OpenAI chat-completions wire format and rejects an assistant tool call
-// without `arguments`; point its real provider at the mock server.
-function deepseek(llm: { url: string }) {
-  return createDeepSeek({ apiKey: 'aimock-test-key', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` })('deepseek-chat');
+// Pinned to a chat-completions provider that sends a replayed call's input as-is. The generic
+// OpenAI-compatible provider (as DeepSeek's) writes `arguments: JSON.stringify(input)`, which drops the key
+// when the input is undefined. @ai-sdk/openai v5 chat, v6 and v7 substitute `{}` and would pass without the
+// fix, so a dependency bump could silently stop this test from checking anything. The scenario default (an
+// OpenAI Responses model) sends no `messages[].tool_calls` for `replayedCall` to read.
+function chatModel(llm: { url: string }) {
+  return createOpenAICompatible({
+    name: 'openai-compatible',
+    apiKey: 'aimock-test-key',
+    baseURL: `${llm.url.replace(/\/+$/, '')}/v1`,
+  }).chatModel(SCENARIO_MODEL_ID);
 }
 
 function replayedCall(body: any) {
@@ -56,7 +64,7 @@ describeForAllEngines('AIMock scenario: tool call with arguments that are not va
     const first = await runLoopScenario({
       engine,
       llm: getMock(),
-      model: deepseek(getMock()),
+      model: chatModel(getMock()),
       prompt: 'Update your status',
       ...thread,
       stopWhen: stepCountIs(5),
@@ -89,7 +97,7 @@ describeForAllEngines('AIMock scenario: tool call with arguments that are not va
     const second = await runLoopScenario({
       engine,
       llm: getMock(),
-      model: deepseek(getMock()),
+      model: chatModel(getMock()),
       prompt: 'Try once more',
       ...thread,
       stopWhen: stepCountIs(5),
