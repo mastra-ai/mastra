@@ -9,6 +9,9 @@ import { useTracesScopeParams } from './hooks/use-traces-scope-params';
 import { TracesPageContent } from './traces-page-content';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 
+// Studio always offers the spans view; the server capability still decides whether it shows.
+const FEATURES = { spanQuery: true };
+
 type TracesPageProps = {
   scopedEntityId?: string;
   scopedEntityType?: EntityType;
@@ -48,6 +51,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       sortDirection={route.sortDirection}
       onSortDirectionChange={route.setSortDirection}
       scope={scope}
+      features={FEATURES}
     >
       <TracesPageContent isScoped={isScoped} />
     </TracesExplorer>

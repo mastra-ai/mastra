@@ -2517,7 +2517,7 @@ export class Workflow<
       >;
     }
 
-    const newMappingConfig: Record<string, any> = Object.entries(mappingConfig).reduce(
+    const newMappingConfig: Record<string, any> = Object.entries(mappingConfig).reduce<Record<string, any>>(
       (a, [key, mapping]) => {
         const m: any = mapping;
         if (m.value !== undefined) {
@@ -2561,7 +2561,7 @@ export class Workflow<
         }
         return a;
       },
-      {} as Record<string, any>,
+      {},
     );
 
     type MappedOutputSchema = any;

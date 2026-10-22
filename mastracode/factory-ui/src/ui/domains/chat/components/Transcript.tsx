@@ -19,7 +19,7 @@ import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { replySteps } from '../services/turns';
 import { ArrivalScope, useArriving } from '@mastra/playground-ui/components/Arrival';
 import { MessageBubble } from './MessageBubble';
-import { ProviderLoginAction } from './ProviderLoginAction';
+import { ProviderReconnectAction } from './ProviderReconnectAction';
 import { channelReplyText, draws, messageText, renderableParts } from './transcript-parts';
 import { isRecord } from './transcript-shared';
 import { NotificationCard, NotificationSummaryCard } from './TranscriptNotifications';
@@ -288,7 +288,7 @@ function NoticeCard({ entry }: { entry: NoticeEntry }) {
     <Notice
       className="my-2"
       variant={entry.level === 'error' ? 'destructive' : 'info'}
-      action={entry.action === 'provider-login' ? <ProviderLoginAction /> : undefined}
+      action={entry.action === 'provider-login' ? <ProviderReconnectAction /> : undefined}
     >
       <MarkdownRenderer className="text-current">{entry.text}</MarkdownRenderer>
     </Notice>

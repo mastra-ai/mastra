@@ -46,7 +46,7 @@
     "@mastra/deployer": "workspace:^",
     "@rollup/plugin-virtual": "3.0.2",
     "cloudflare": "^5.2.0",
-    "rollup": "^4.61.1",
+    "rollup": "^4.64.10",
     "rollup-plugin-esbuild": "^6.2.1"
   },
   "devDependencies": {
@@ -54,13 +54,13 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.20.5",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
-    "wrangler": "^4.147.0",
+    "wrangler": "^4.151.2",
     "zod": "^3.25.76"
   },
   "homepage": "https://mastra.ai",

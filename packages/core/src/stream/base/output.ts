@@ -658,6 +658,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
    * serialized so a resumed tool that suspends again still reports it, and cleared on step-finish.
    */
   #suspendedStepUsage: LanguageModelUsage | undefined = undefined;
+  #suspendedUsageIsProvisional = false;
   /**
    * Cumulative usage the MODEL_GENERATION spans of earlier suspended legs of this run already
    * recorded. Resumed legs report cumulative totals, so their generation span subtracts this to
@@ -1084,6 +1085,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 self.#finishCallbackSent = true;
                 await options?.onFinish?.(self.#createSuspendedOnFinishPayload(chunk));
               }
+              // A plain stream ends here, so flush settles usage. A durable stream stays open
+              // across the suspension, so settle the same numbers now. The next finish replaces them.
+              self.#settleSuspendedUsage();
               break;
             case 'abort':
               self.#status = 'canceled';
@@ -2115,6 +2119,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   }
 
   private resolvePromise<KEY extends keyof PromiseResults<OUTPUT>>(key: KEY, value: PromiseResults<OUTPUT>[KEY]) {
+    if (this.#suspendedUsageIsProvisional && (key === 'usage' || key === 'totalUsage' || key === 'finishReason')) {
+      this.#suspendedUsageIsProvisional = false;
+    }
     if (!(key in this.#delayedPromises)) {
       throw new MastraError({
         id: 'MASTRA_MODEL_OUTPUT_INVALID_PROMISE_KEY',
@@ -2131,6 +2138,16 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       const key = keyString as keyof PromiseResults<OUTPUT>;
       this.resolvePromise(key, data[key]);
     }
+  }
+
+  // Same numbers flush would settle when a plain stream ends on suspension. A durable
+  // stream stays open, so callers waiting on usage would otherwise hang until resume.
+  #settleSuspendedUsage() {
+    const usage = this.#getUsageCountWithSuspendedStep();
+    this.#delayedPromises.usage.resolve(usage);
+    this.#delayedPromises.totalUsage.resolve(this.#getTotalUsage(usage));
+    this.#delayedPromises.finishReason.resolve('suspended');
+    this.#suspendedUsageIsProvisional = true;
   }
 
   #closeTransportIfNeeded() {

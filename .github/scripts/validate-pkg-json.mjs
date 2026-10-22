@@ -17,6 +17,7 @@ const ROOT_DIR = process.cwd();
 const REPOSITORY_URL = 'git+https://github.com/mastra-ai/mastra.git';
 const HOMEPAGE = 'https://mastra.ai';
 const ISSUES_URL = 'https://github.com/mastra-ai/mastra/issues';
+const LICENSE = 'Apache-2.0';
 
 /**
  * Recursively finds all package.json files in a directory.
@@ -129,6 +130,15 @@ async function main() {
       hasError = true;
     } else if (pkg.bugs.url !== ISSUES_URL) {
       console.log(`❌ ${file}: bugs.url should be "${ISSUES_URL}"`);
+      hasError = true;
+    }
+
+    // Check license
+    if (!pkg.license) {
+      console.log(`❌ ${file}: missing license field`);
+      hasError = true;
+    } else if (pkg.license !== LICENSE) {
+      console.log(`❌ ${file}: license should be "${LICENSE}"`);
       hasError = true;
     }
 

@@ -210,8 +210,8 @@ minimumReleaseAgeExclude:
   - svgo@3.3.4
   - svgo@3.3.5
   # Renovate security update: @hono/node-server@2.0.10 || 2.0.5
-  - "@hono/node-server@2.0.10 || 2.0.5"
-  - "@hono/node-server@1.19.17"
+  - '@hono/node-server@2.0.10 || 2.0.5'
+  - '@hono/node-server@1.19.17'
   # Security bump: hono 4.13.7 (query-parser / toSSG / parseBody / XSS advisories)
   - hono@4.13.5
   - hono@4.13.7
@@ -291,6 +291,10 @@ minimumReleaseAgeExclude:
   - simple-git@4.0.1
   # Renovate security update: vite@8.2.4
   - vite@8.2.4
+  # Renovate security update: @modelcontextprotocol/client@2.3.0
+  - '@modelcontextprotocol/client@2.3.0'
+  # Renovate security update: launch-editor@2.14.2
+  - launch-editor@2.14.2
 trustPolicyExclude:
   # Vanta 2026-10-02: 7.4.6 fixes GHSA-g84c-rxfj-3j2c; earlier 7.4.x had trusted publisher
   # but 7.4.6 lacks that evidence (pnpm trustPolicy no-downgrade).

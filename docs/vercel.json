@@ -232,12 +232,12 @@
     },
     {
       "source": "/docs/agents/signal-providers",
-      "destination": "/docs/harness/signal-providers",
+      "destination": "/docs/signals/signal-providers",
       "permanent": true
     },
     {
       "source": "/docs/agents/signals",
-      "destination": "/docs/harness/signals",
+      "destination": "/docs/signals/overview",
       "permanent": true
     },
     {
@@ -2107,12 +2107,12 @@
     },
     {
       "source": "/docs/long-running-agents/signals",
-      "destination": "/docs/harness/signals",
+      "destination": "/docs/signals/overview",
       "permanent": true
     },
     {
       "source": "/docs/long-running-agents/signal-providers",
-      "destination": "/docs/harness/signal-providers",
+      "destination": "/docs/signals/signal-providers",
       "permanent": true
     },
     {
@@ -2243,6 +2243,21 @@
     {
       "source": "/reference/observability/tracing/trace-query",
       "destination": "/reference/observability/tracing/advanced-queries",
+      "permanent": true
+    },
+    {
+      "source": "/docs/guides/mcp-events",
+      "destination": "/docs/connections/mcp#mcp-events",
+      "permanent": true
+    },
+    {
+      "source": "/docs/harness/signals",
+      "destination": "/docs/signals/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/harness/signal-providers",
+      "destination": "/docs/signals/signal-providers",
       "permanent": true
     },
     {
@@ -2442,12 +2457,12 @@
     },
     {
       "source": "/docs/agents/signal-providers/llms.txt",
-      "destination": "/docs/harness/signal-providers/llms.txt",
+      "destination": "/docs/signals/signal-providers/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/agents/signals/llms.txt",
-      "destination": "/docs/harness/signals/llms.txt",
+      "destination": "/docs/signals/overview/llms.txt",
       "permanent": true
     },
     {
@@ -3947,12 +3962,12 @@
     },
     {
       "source": "/docs/long-running-agents/signals/llms.txt",
-      "destination": "/docs/harness/signals/llms.txt",
+      "destination": "/docs/signals/overview/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/long-running-agents/signal-providers/llms.txt",
-      "destination": "/docs/harness/signal-providers/llms.txt",
+      "destination": "/docs/signals/signal-providers/llms.txt",
       "permanent": true
     },
     {
@@ -4083,6 +4098,21 @@
     {
       "source": "/reference/observability/tracing/trace-query/llms.txt",
       "destination": "/reference/observability/tracing/advanced-queries/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/guides/mcp-events/llms.txt",
+      "destination": "/docs/connections/mcp/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/harness/signals/llms.txt",
+      "destination": "/docs/signals/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/harness/signal-providers/llms.txt",
+      "destination": "/docs/signals/signal-providers/llms.txt",
       "permanent": true
     }
   ]
