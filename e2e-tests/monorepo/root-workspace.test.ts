@@ -142,11 +142,19 @@ export const mastra = new Mastra({
       );
       expect(await readFile(join(outputDir, 'workspace-module', 'inner-subpath-only-1.0.0.tgz'))).toBeTruthy();
 
-      const importResult = await execa('node', ['--input-type=module', '-e', "import('@inner/subpath-only')"], {
-        cwd: outputDir,
-        reject: false,
-      });
-      expect(importResult.exitCode, `${importResult.stdout}\n${importResult.stderr}`).toBe(0);
+      // Copy the output outside the workspace so the import cannot resolve the
+      // dependency through the fixture's ancestor node_modules.
+      const isolatedOutputDir = await mkdtemp(join(tmpdir(), 'mastra-root-workspace-output-'));
+      try {
+        await cp(outputDir, isolatedOutputDir, { recursive: true });
+        const importResult = await execa('node', ['--input-type=module', '-e', "import('@inner/subpath-only')"], {
+          cwd: isolatedOutputDir,
+          reject: false,
+        });
+        expect(importResult.exitCode, `${importResult.stdout}\n${importResult.stderr}`).toBe(0);
+      } finally {
+        await rm(isolatedOutputDir, { recursive: true, force: true });
+      }
     },
     15 * 60 * 1000,
   );
