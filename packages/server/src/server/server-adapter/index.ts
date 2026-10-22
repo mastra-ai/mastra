@@ -67,16 +67,18 @@ export function getCustomHTTPExceptionResponse(error: unknown): Response | undef
 export function getCustomRouteHTTPExceptionResponse(error: unknown): Response | undefined {
   if (!(error instanceof Error)) return undefined;
   const httpError = error as Error & { status?: unknown; res?: unknown; getResponse?: unknown };
+  const status = httpError.status;
   if (
     typeof httpError.getResponse !== 'function' ||
-    typeof httpError.status !== 'number' ||
-    httpError.status < 400 ||
-    httpError.status > 599
+    typeof status !== 'number' ||
+    !Number.isInteger(status) ||
+    status < 400 ||
+    status > 599
   ) {
     return undefined;
   }
   if (httpError.res) return (httpError.getResponse as () => Response).call(httpError);
-  return Response.json({ error: httpError.message }, { status: httpError.status });
+  return Response.json({ error: httpError.message }, { status });
 }
 
 export interface HTTPErrorResponseBody {

@@ -1275,6 +1275,12 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
               throw new Error('db password=do-not-leak');
             },
           }),
+          registerApiRoute('/custom-errors/invalid-status', {
+            method: 'GET',
+            handler: async () => {
+              throw new ForeignHTTPException(Number.NaN, { message: 'bad status do-not-leak' });
+            },
+          }),
         ];
         ctx.mastra.getServer = () => ({ ...originalGetServer(), apiRoutes: routes }) as any;
         return (await setupAdapter(ctx)).app;
@@ -1323,6 +1329,15 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       it('still hides unexpected errors behind a generic 500', async () => {
         const customApp = await setupCustomRouteErrors();
         const response = await executeHttpRequest(customApp, { method: 'GET', path: '/custom-errors/unexpected' });
+        expect(response.status).toBe(500);
+        const text = await bodyText(response);
+        expect(text).toContain('Internal Server Error');
+        expect(text).not.toContain('do-not-leak');
+      });
+
+      it('treats an HTTPException with a non-integer status as unexpected', async () => {
+        const customApp = await setupCustomRouteErrors();
+        const response = await executeHttpRequest(customApp, { method: 'GET', path: '/custom-errors/invalid-status' });
         expect(response.status).toBe(500);
         const text = await bodyText(response);
         expect(text).toContain('Internal Server Error');
