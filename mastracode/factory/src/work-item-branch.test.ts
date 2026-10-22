@@ -22,15 +22,39 @@ describe('workItemBranchSource', () => {
 describe('workItemBranch', () => {
   const id = '9f1c3b2a-0000-4000-8000-000000000001';
 
-  it('names github issue and pull request branches from their metadata number', () => {
+  it('names github issue and pull request branches from their metadata number and the item', () => {
     expect(workItemBranch({ id, source: 'github-issue', metadata: { githubIssueNumber: 49 } })).toBe(
-      'factory/issue-49',
+      'factory/issue-49-000000000001',
     );
-    expect(workItemBranch({ id, source: 'github-pr', metadata: { githubPullRequestNumber: 7 } })).toBe('factory/pr-7');
+    expect(workItemBranch({ id, source: 'github-pr', metadata: { githubPullRequestNumber: 7 } })).toBe(
+      'factory/pr-7-000000000001',
+    );
+  });
+
+  it('keeps the same github number apart across the repositories of one factory', () => {
+    const inApi = workItemBranch({
+      id: 'aaaaaaaa-0000-4000-8000-00000000000a',
+      source: 'github-issue',
+      metadata: { githubIssueNumber: 13, githubRepositoryId: 'repo-api' },
+    });
+    const inWeb = workItemBranch({
+      id: 'bbbbbbbb-0000-4000-8000-00000000000b',
+      source: 'github-issue',
+      metadata: { githubIssueNumber: 13, githubRepositoryId: 'repo-web' },
+    });
+    expect(inApi).not.toBe(inWeb);
+    expect(inApi).toMatch(/^factory\/issue-13-[a-z0-9]{1,12}$/);
+  });
+
+  it.each(['github-issue', 'github-pr'] as const)('keeps %s branches stable for the same card', source => {
+    const card = { id, source, metadata: { number: 13 } };
+    expect(workItemBranch(card)).toBe(workItemBranch({ ...card, metadata: { number: 13, repository: 'renamed/repo' } }));
   });
 
   it('accepts the intake fallback `number` key for github cards', () => {
-    expect(workItemBranch({ id, source: 'github-issue', metadata: { number: 12 } })).toBe('factory/issue-12');
+    expect(workItemBranch({ id, source: 'github-issue', metadata: { number: 12 } })).toBe(
+      'factory/issue-12-000000000001',
+    );
   });
 
   it('rejects numbers that are not positive integers', () => {
@@ -89,11 +113,23 @@ describe('workItemBranch', () => {
 
 describe('pullRequestNumberFromBranch', () => {
   it('reads the number back from a pull request branch only', () => {
+    expect(pullRequestNumberFromBranch('factory/pr-7-000000000001')).toBe(7);
     expect(pullRequestNumberFromBranch('factory/pr-7')).toBe(7);
     expect(pullRequestNumberFromBranch('factory/issue-7')).toBeUndefined();
+    expect(pullRequestNumberFromBranch('factory/issue-7-000000000001')).toBeUndefined();
     expect(pullRequestNumberFromBranch('factory/pr-0')).toBeUndefined();
     expect(pullRequestNumberFromBranch('factory/pr-7x')).toBeUndefined();
+    expect(pullRequestNumberFromBranch('factory/pr-7-unsafe!')).toBeUndefined();
     expect(pullRequestNumberFromBranch('feat/pr-7')).toBeUndefined();
+  });
+
+  it('round-trips the branch workItemBranch names a pull request card', () => {
+    const branch = workItemBranch({
+      id: '9f1c3b2a-0000-4000-8000-000000000001',
+      source: 'github-pr',
+      metadata: { githubPullRequestNumber: 310 },
+    });
+    expect(pullRequestNumberFromBranch(branch)).toBe(310);
   });
 });
 

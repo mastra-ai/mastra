@@ -114,9 +114,9 @@ describe('reviewBoard', () => {
   it('tells the reviewer the head is checked out and how to refresh a session the PR outran', async () => {
     const argumentsText = await reviewArguments('feat/review-board');
 
-    expect(argumentsText).toContain('checked out on branch `factory/pr-23029`');
+    expect(argumentsText).toContain('checked out on branch `factory/pr-23029-item1`');
     expect(argumentsText).toContain(
-      'if git rev-parse --is-shallow-repository | grep -qx true; then git fetch --unshallow --filter=blob:none origin; fi && git fetch --filter=blob:none origin refs/pull/23029/head && git checkout -B factory/pr-23029 FETCH_HEAD',
+      'if git rev-parse --is-shallow-repository | grep -qx true; then git fetch --unshallow --filter=blob:none origin; fi && git fetch --filter=blob:none origin refs/pull/23029/head && git checkout -B factory/pr-23029-item1 FETCH_HEAD',
     );
   });
 
