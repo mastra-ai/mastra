@@ -881,7 +881,11 @@ export class MCPServer extends MCPServerBase {
             resumeSchema: execution.resumeSchema,
           });
         }
-        const result = this.toCallToolResult(name, tool, execution.output);
+        // 2025-era clients need non-object structured results wrapped as `{ result }`; the codec decides per era.
+        const result = server.projectCallToolResult(
+          this.toCallToolResult(name, tool, execution.output),
+          this.toolInfo(name, tool).outputSchema,
+        );
         this.logger.info(`Tool '${name}' finished in ${Date.now() - startedAt}ms.`);
         return result;
       } catch (error) {

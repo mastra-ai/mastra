@@ -425,6 +425,14 @@ describe('MCPServer over Streamable HTTP (2026-07-28)', () => {
           expect(tools.map(tool => tool.name)).toContain('echoTool');
           const result = await client.callTool({ name: 'echoTool', arguments: { text: 'hi' } });
           expect(textOf(result)).toBe('echo: hi');
+
+          // 2025-era structuredContent must be an object, so non-object results come back wrapped.
+          const nullResult = await client.callTool({ name: 'nullTool', arguments: {} });
+          expect(nullResult.isError).not.toBe(true);
+          expect(nullResult.structuredContent).toEqual({ result: null });
+          const tupleResult = await client.callTool({ name: 'tupleTool', arguments: {} });
+          expect(tupleResult.isError).not.toBe(true);
+          expect(tupleResult.structuredContent).toEqual({ result: ['pair', 2] });
         } finally {
           await client.close();
         }
