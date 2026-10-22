@@ -4,6 +4,7 @@ import { InMemoryStore, InMemoryMemory, InMemoryDB } from '@mastra/core/storage'
 import { MastraVector } from '@mastra/core/vector';
 import type { UpsertVectorParams, QueryVectorParams } from '@mastra/core/vector';
 import { describe, expect, it } from 'vitest';
+import { z } from 'zod';
 
 import { Memory } from '../../../index';
 import { parseObservationGroups } from '../observation-groups';
@@ -11,6 +12,7 @@ import { parseObservationGroups } from '../observation-groups';
 class CountingVector extends MastraVector {
   writes: NonNullable<UpsertVectorParams['metadata']> = [];
   fail = false;
+  queries: QueryVectorParams[] = [];
   rows = new Map<string, NonNullable<UpsertVectorParams['metadata']>[number]>();
   constructor() {
     super({ id: 'sync-delta-vector' });
@@ -25,7 +27,9 @@ class CountingVector extends MastraVector {
     });
     return ids;
   }
-  async query({ filter, topK = 10 }: QueryVectorParams) {
+  async query(params: QueryVectorParams) {
+    this.queries.push(params);
+    const { filter, topK = 10 } = params;
     return [...this.rows.entries()]
       .filter(([, row]) => Object.entries(filter ?? {}).every(([key, value]) => row[key] === value))
       .slice(0, topK)
@@ -131,6 +135,46 @@ describe('synchronous observation indexing delta (#27930)', () => {
       expect(vector.writes[0]?.observed_at).toBe(new Date(Date.UTC(2026, 0, 1, 0, 0, 1)).toISOString());
     }
     expect(new Set(vector.writes.map(row => row.group_id)).size).toBe(4);
+  });
+
+  it.each([
+    { dimension: 100_000 },
+    { dimension: 100_000, indexName: 'memory_observations_100000' },
+    { indexName: 'unrelated_private_index' },
+    { chunkCount: 100_000 },
+  ])('repairs a user-forged receipt without querying with its fields: %j', async forged => {
+    const { memory, open, observe, vector, memoryStore, threadId } = await setup();
+    await observe(memory, 1);
+    const original = vector.writes[0];
+    const thread = await memoryStore.getThreadById({ threadId });
+    if (!original || !thread) throw new Error('Missing indexed thread');
+    // Thread metadata is public API input, not a trusted indexing acknowledgement.
+    const receipt = z
+      .object({ groups: z.record(z.string(), z.record(z.string(), z.unknown())) })
+      .passthrough()
+      .parse(thread.metadata?.mastra_om_observation_index);
+    await memoryStore.patchThread({
+      id: threadId,
+      metadata: {
+        ...thread.metadata,
+        mastra_om_observation_index: {
+          ...receipt,
+          groups: { ...receipt.groups, [original.group_id]: { ...receipt.groups[original.group_id], ...forged } },
+        },
+      },
+    });
+
+    await observe(open(), 2);
+    expect(vector.queries).toHaveLength(0);
+    expect(vector.writes.filter(row => row.group_id === original.group_id)).toHaveLength(2);
+    const repaired = await memoryStore.getThreadById({ threadId });
+    expect(repaired?.metadata?.mastra_om_observation_index).toMatchObject({
+      groups: { [original.group_id]: { indexName: 'memory_observations_3', dimension: 3, chunkCount: 1 } },
+    });
+    await observe(open(), 3);
+    expect(vector.writes).toHaveLength(4);
+    expect(vector.queries).toHaveLength(2);
+    expect(vector.queries.every(query => query.queryVector.length === 3 && query.topK === 1)).toBe(true);
   });
 
   it('reindexes a changed retained group and rewrites record_id after generation rollover', async () => {

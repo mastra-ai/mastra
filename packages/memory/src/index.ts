@@ -2792,22 +2792,33 @@ Notes:
         receipt.success && receipt.data.recordId === recordId && receipt.data.namespace === namespace
           ? receipt.data.groups[groupId]
           : undefined;
-      if (indexed?.fingerprint === fingerprint) {
+      // Metadata can be patched by callers. Derive the destination and query limit locally,
+      // and validate the dimension against the real index before allocating a query vector.
+      const indexName = this.getObservationEmbeddingIndexName(indexed?.dimension);
+      const chunkCount = this.chunkText(text).length;
+      if (
+        indexed?.fingerprint === fingerprint &&
+        indexed.indexName === indexName &&
+        indexed.chunkCount === chunkCount
+      ) {
         // Receipts and vectors cannot be committed atomically. Check the destination before
         // skipping: an overlapping writer may have replaced the vector after this receipt.
         // Use a unit vector only to satisfy stores that require a vector for filtered reads.
         try {
-          const rows = await this.vector!.query({
-            indexName: indexed.indexName,
-            queryVector: Array.from({ length: indexed.dimension }, (_, i) => (i === 0 ? 1 : 0)),
-            topK: indexed.chunkCount,
-            filter: { resource_id: resourceId, thread_id: threadId, group_id: groupId },
-          });
-          if (
-            rows.length === indexed.chunkCount &&
-            rows.every(row => row.metadata?.record_id === recordId && row.metadata?.index_revision === fingerprint)
-          )
-            return;
+          const index = await this.vector!.describeIndex({ indexName });
+          if (index.dimension === indexed.dimension) {
+            const rows = await this.vector!.query({
+              indexName: this.getObservationEmbeddingIndexName(index.dimension),
+              queryVector: Array.from({ length: index.dimension }, (_, i) => (i === 0 ? 1 : 0)),
+              topK: chunkCount,
+              filter: { resource_id: resourceId, thread_id: threadId, group_id: groupId },
+            });
+            if (
+              rows.length === chunkCount &&
+              rows.every(row => row.metadata?.record_id === recordId && row.metadata?.index_revision === fingerprint)
+            )
+              return;
+          }
         } catch (error) {
           // Missing indexes and adapters with limited filtered reads conservatively reindex.
           this.logger.debug('Could not verify observation index receipt; retrying the write', { groupId, error });
