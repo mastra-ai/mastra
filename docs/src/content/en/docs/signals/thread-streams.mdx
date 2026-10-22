@@ -51,6 +51,8 @@ Pass `withInitialHistory: true` to begin with a `thread-history` chunk, which ca
 
 Subscribers receive model output, tool calls and results, approvals, aborts, errors, and `thread-history` chunks. [ChunkType](/reference/streaming/ChunkType) lists their shapes. Each chunk carries the `runId` of the run that produced it, so group output per run. The subscription's `activeRunId()` returns the active run or `null`.
 
+The public stream is typed as `AgentChunkType`, and `thread-history` is a `ThreadHistoryChunk`. Thread lifecycle events such as queue counts come from [`subscribeThreadEvents()`](/reference/signals/thread-events) instead. The internal runtime event union isn't public and isn't documented.
+
 ### Approve tool calls
 
 When a subscribed run pauses for tool approval, approve or decline the tool call with the subscription-native methods. The resumed chunks arrive through the existing thread subscription. Visit [`client.getAgent().sendToolApproval()` reference](/reference/client-js/agents#sendtoolapproval) and [server agent routes](/reference/server/routes#subscription-tool-approval-routes) for request and response shapes.
@@ -71,6 +73,8 @@ Use `reconnect: true` for long-lived subscriptions. `processDataStream()` then r
 
 A reconnect continues from retained stream data when the shared PubSub backend still holds it. Events held only in another process's in-memory cache can't be recovered. Stored thread history remains the durable record, and `withInitialHistory` reloads its newest page.
 
+History is stored messages rather than model deltas, so reconnecting can't reconstruct text that was never retained.
+
 ### SSE heartbeats for custom endpoints
 
 If you expose your own Server-Sent Events (SSE) endpoint for thread subscriptions, send periodic heartbeat frames while the stream is idle. This keeps browsers, proxies, and load balancers from closing the connection before the next signal or model chunk arrives.
@@ -88,11 +92,3 @@ request.signal.addEventListener('abort', () => {
 ```
 
 Use heartbeats together with client-side reconnect logic. Heartbeats reduce idle disconnects, while reconnects recover when the network or runtime still closes the stream.
-
-## What's replayed and what isn't
-
-Completed runs aren't replayed, even when stored history is loaded. Pending tool approvals and suspensions are emitted when you subscribe again. History is stored messages, not model deltas, so reconnecting doesn't reconstruct text that was never retained.
-
-## Public chunks and internal events
-
-The public stream is typed as `AgentChunkType`, and `thread-history` is a `ThreadHistoryChunk`. The [ChunkType reference](/reference/streaming/ChunkType) documents both. `subscribeThreadEvents()` has its own [Thread events reference](/reference/signals/thread-events). The internal runtime event union isn't public and isn't documented.
