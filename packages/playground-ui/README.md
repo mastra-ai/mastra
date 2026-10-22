@@ -482,7 +482,7 @@ See DataDisplay/Meter in Storybook for the billing states. Feedback/Dialog’s R
 
 ### Lint rules
 
-The package ships its design-system lint rules as an [oxlint](https://oxc.rs/docs/guide/usage/linter) JS plugin, so every app on the design system checks the same things. Load the plugin and spread the recommended rules into your `oxlint.config.ts`:
+The package ships its design-system lint rules as an [oxlint](https://oxc.rs/docs/guide/usage/linter) JS plugin that apps on the design system can enable. Load the plugin and spread the recommended rules into your `oxlint.config.ts`:
 
 ```ts
 import { recommended as playgroundUiRules } from '@mastra/playground-ui/oxlint';
