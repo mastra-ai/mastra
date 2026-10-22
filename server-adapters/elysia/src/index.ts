@@ -59,11 +59,10 @@ function createBodyLimitParser(maxSize: number) {
   return async (ctx: any) => {
     const request: Request = ctx.request;
     const contentLength = request.headers.get('content-length');
-    if (contentLength !== null) {
-      // The HTTP server frames the body by Content-Length, so a declared size
-      // within the limit can be left to Elysia's default parsers.
-      return parseInt(contentLength, 10) > maxSize ? BODY_TOO_LARGE : undefined;
-    }
+    // Reject a declared oversized body without reading it. A declared size within
+    // the limit is still read with the cap, since app.handle() accepts a Request
+    // whose stream need not match its Content-Length header.
+    if (contentLength !== null && parseInt(contentLength, 10) > maxSize) return BODY_TOO_LARGE;
     if (!request.body) return undefined;
 
     const bytes = await readBodyWithLimit(request.body, maxSize);

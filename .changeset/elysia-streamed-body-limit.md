@@ -2,4 +2,8 @@
 '@mastra/elysia': patch
 ---
 
-Fixed the Elysia adapter's body size limit so it now covers streamed requests. Before, a body sent without a `Content-Length` header (chunked transfer) could skip the limit for `text/plain`, `application/octet-stream` and other non-JSON types: the route handler ran no matter how large the body was. Every body was also read in full before the limit was checked, including on unauthenticated requests. The limit is now enforced while the body is read, for every content type. Oversized requests get a `413` after reading at most the limit, and that check runs before authentication, matching the Hono adapter.
+Fixed the Elysia adapter's body size limit for streamed requests.
+
+- The limit now applies to every content type, including `text/plain` and `application/octet-stream`, when a request has no `Content-Length` header.
+- Bodies are read only up to the limit before being rejected, instead of in full.
+- Oversized requests get `413` before authentication, so an oversized unauthenticated request now gets `413` instead of `401`. This matches the Hono adapter.

@@ -27,22 +27,25 @@ function createMastra(withAuth: boolean) {
 /** Streams `total` bytes in fixed chunks and records how many the server pulled. */
 function streamBody(total: number, pulled: { bytes: number }) {
   let sent = 0;
-  return new ReadableStream<Uint8Array>({
-    pull(controller) {
-      if (sent >= total) return controller.close();
-      const chunk = new Uint8Array(Math.min(CHUNK_SIZE, total - sent)).fill(120);
-      sent += chunk.byteLength;
-      pulled.bytes += chunk.byteLength;
-      controller.enqueue(chunk);
+  return new ReadableStream<Uint8Array>(
+    {
+      pull(controller) {
+        if (sent >= total) return controller.close();
+        const chunk = new Uint8Array(Math.min(CHUNK_SIZE, total - sent)).fill(120);
+        sent += chunk.byteLength;
+        pulled.bytes += chunk.byteLength;
+        controller.enqueue(chunk);
+      },
     },
-  });
+    { highWaterMark: 0 },
+  );
 }
 
 async function sendStreamedRequest(options: {
   withAuth: boolean;
   contentType: string;
   total: number;
-  contentLength?: boolean;
+  contentLength?: boolean | number;
   headers?: Record<string, string>;
 }) {
   const app = new Elysia();
@@ -68,7 +71,9 @@ async function sendStreamedRequest(options: {
 
   const pulled = { bytes: 0 };
   const headers: Record<string, string> = { 'content-type': options.contentType, ...options.headers };
-  if (options.contentLength) headers['content-length'] = String(options.total);
+  if (options.contentLength !== undefined && options.contentLength !== false) {
+    headers['content-length'] = String(options.contentLength === true ? options.total : options.contentLength);
+  }
 
   const response = await app.handle(
     new Request('http://localhost/api/body-limit', {
@@ -104,7 +109,20 @@ describe('Elysia body limit with streamed request bodies', () => {
 
     expect(result.status).toBe(413);
     expect(result.handlerCalled).toBe(false);
-    expect(result.bytesPulled).toBeLessThanOrEqual(2 * CHUNK_SIZE);
+    expect(result.bytesPulled).toBe(0);
+  });
+
+  it('rejects a body that streams past the limit when Content-Length understates its size', async () => {
+    const result = await sendStreamedRequest({
+      withAuth: false,
+      contentType: 'text/plain',
+      total: OVERSIZED_TOTAL,
+      contentLength: 16,
+    });
+
+    expect(result.status).toBe(413);
+    expect(result.handlerCalled).toBe(false);
+    expect(result.bytesPulled).toBeLessThanOrEqual(MAX_SIZE + 2 * CHUNK_SIZE);
   });
 
   it('enforces auth on the protected route for small bodies', async () => {
