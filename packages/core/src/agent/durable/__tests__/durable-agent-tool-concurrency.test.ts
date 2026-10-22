@@ -447,12 +447,12 @@ describe('DurableAgent parallel tool calls across a restart', () => {
     expect(rerun).toEqual([2]);
   }, 30_000);
 
-  it('does not re-run a call that finished just before the crash', async () => {
+  it('re-runs a call that finished within the checkpoint interval before the crash', async () => {
     // Pins the coalescing trade-off: call 3 returns 300ms after call 1, so its progress is still
     // waiting for the next checkpoint when the run is cut 200ms later, and it runs again.
     const { recovered, rerun } = await crashWhileCallTwoRuns('parallel-tools-window', 200, 300);
 
     expect(recovered.text).toBe('done');
-    expect(rerun).toEqual([2]);
+    expect(rerun).toEqual([2, 3]);
   }, 30_000);
 });

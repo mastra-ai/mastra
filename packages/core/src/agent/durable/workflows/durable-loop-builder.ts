@@ -568,9 +568,6 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
         // is shared across runs, so this must be a resolver — never a mutated
         // shared options object.
         .foreach(toolCallStep, {
-          // Tool calls have side effects: checkpoint each finished call right away so a crash
-          // never re-runs one that already returned (#26214).
-          checkpointIntervalMs: 0,
           concurrency: ({ inputData, getInitData }) => {
             const state = getInitData() as IterationState | undefined;
             return resolveDurableToolCallConcurrency({

@@ -312,6 +312,105 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
       expect(recorded.size).toBeGreaterThan(0);
     });
 
+    it('keeps checkpointed items on the foreach result while a finished item reports progress', async () => {
+      const storage = new MockStore();
+      let item0Persisted!: () => void;
+      const item0Checkpoint = new Promise<void>(resolve => (item0Persisted = resolve));
+      const item = step('item', async ({ inputData }) => {
+        if (inputData === 1) await item0Checkpoint;
+        return { doubled: inputData * 2 };
+      });
+      const workflow = createWorkflow({ id: 'foreach-progress', inputSchema: anySchema, outputSchema: anySchema })
+        .foreach(item.step, { concurrency: 3 })
+        .commit();
+      new Mastra({ logger: false, storage, workflows: { wf: workflow } });
+      const store = (await storage.getStore('workflows'))!;
+
+      const persist = store.persistWorkflowSnapshot.bind(store);
+      const applied: WorkflowRunState[] = [];
+      vi.spyOn(store, 'persistWorkflowSnapshot').mockImplementation(async (args: any) => {
+        const snapshot = JSON.parse(JSON.stringify(args.snapshot));
+        applied.push(snapshot);
+        if (snapshot.context.item?.metadata?.foreachProgress?.['0']) item0Persisted();
+        return persist({ ...args, snapshot });
+      });
+      // Item 2 starts while item 1, finished, is still reporting its progress. Its start write
+      // copies the foreach result as it is at that moment, so the progress must already be on it.
+      let item1Reporting!: () => void;
+      const item1Report = new Promise<void>(resolve => (item1Reporting = resolve));
+      const publish = EventEmitterPubSub.prototype.publish;
+      vi.spyOn(EventEmitterPubSub.prototype, 'publish').mockImplementation(async function (
+        this: EventEmitterPubSub,
+        topic,
+        event: any,
+        options,
+      ) {
+        if (event?.data?.type === 'workflow-step-progress' && event.data.payload?.currentIndex === 1) {
+          item1Reporting();
+          await sleep(30);
+        }
+        return publish.call(this, topic, event, options);
+      });
+      const onStart = DefaultExecutionEngine.prototype.onStepExecutionStart;
+      vi.spyOn(DefaultExecutionEngine.prototype, 'onStepExecutionStart').mockImplementation(
+        async function (this: DefaultExecutionEngine, params) {
+          if (params.executionContext.foreachIndex === 2) await item1Report;
+          return onStart.call(this, params);
+        },
+      );
+
+      const result = await (await workflow.createRun()).start({ inputData: [0, 1, 2] });
+      expect(result.status).toBe('success');
+
+      const recorded = new Set<string>();
+      for (const snapshot of applied) {
+        const foreach = snapshot.context.item;
+        if (snapshot.status !== 'running' || foreach?.status !== 'running') continue;
+        const keys = Object.keys((foreach.metadata?.foreachProgress as object | undefined) ?? {});
+        expect(keys, 'a later write dropped checkpointed items').toEqual(expect.arrayContaining([...recorded]));
+        keys.forEach(key => recorded.add(key));
+      }
+      expect(recorded.has('0')).toBe(true);
+    });
+
+    it('never lets a sibling arm start write overwrite a finished parallel arm', async () => {
+      const storage = new MockStore();
+      const fast = step('fast', async () => ({ fast: 1 }));
+      const slow = step('slow', async () => {
+        await sleep(100);
+        return { slow: 2 };
+      });
+      const workflow = createWorkflow({ id: 'parallel-checkpoints', inputSchema: anySchema, outputSchema: anySchema })
+        .parallel([fast.step, slow.step])
+        .commit();
+      new Mastra({ logger: false, storage, workflows: { wf: workflow } });
+      const store = (await storage.getStore('workflows'))!;
+
+      // Storage that is slow to apply the slow arm's start write. That write carries a copy of the
+      // results taken before the fast arm finished, so without ordering it lands after the fast
+      // arm's end write and erases it.
+      const persist = store.persistWorkflowSnapshot.bind(store);
+      const applied: WorkflowRunState[] = [];
+      vi.spyOn(store, 'persistWorkflowSnapshot').mockImplementation(async (args: any) => {
+        const snapshot = JSON.parse(JSON.stringify(args.snapshot));
+        if (snapshot.context.slow?.status === 'running' && snapshot.context.fast?.status !== 'success') await sleep(60);
+        applied.push(snapshot);
+        return persist({ ...args, snapshot });
+      });
+
+      const result = await (await workflow.createRun()).start({ inputData: {} });
+      expect(result.status).toBe('success');
+
+      let fastRecorded = false;
+      for (const snapshot of applied) {
+        if (snapshot.status !== 'running') continue;
+        const finished = snapshot.context.fast?.status === 'success';
+        if (fastRecorded) expect(finished, 'a later write dropped the finished arm').toBe(true);
+        fastRecorded ||= finished;
+      }
+      expect(fastRecorded).toBe(true);
+    });
+
     it('waits for every checkpoint write and clears the active path when one fails', async () => {
       const { workflow } = await setup(2);
       const errorChildSpan = vi.spyOn(DefaultExecutionEngine.prototype, 'errorChildSpan');

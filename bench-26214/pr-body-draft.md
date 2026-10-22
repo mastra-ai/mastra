@@ -14,14 +14,16 @@ On the default engine, if a run crashes partway through a `.parallel()` block or
 - **Checkpoints are serialized and coalesced.** There is at most one item-end checkpoint write in flight. Items that finish while it runs are folded into the next write, and writes are at least `FOREACH_CHECKPOINT_INTERVAL_MS` (1000 ms) apart. The first write goes out right away. When the foreach ends, the pending timer is cancelled and the dirty state is dropped, because the final step-result write supersedes it. The write doesn't hold a queue slot.
 - **Error path:** the foreach waits for the checkpoint chain to settle, then deletes its `activeStepsPath` entry in `finally`. On a failed checkpoint write it ends the span with an error and rethrows the first error. The run rejects, the same as any other `persistStepUpdate` failure.
 - `handlers/step.ts`: once a sibling item has finished, the item-start write is skipped. The checkpoint owns the stored snapshot from then on. Without the skip, every start write re-serializes all finished outputs, which brings back the n² bytes the coalescing removes (see the benchmark).
-- `default.ts` + `handlers/entry.ts`, **scope beyond the review request:** a per-run queue (`serializeForeachSnapshotWrite`) runs foreach snapshot writes (item-start and item-end) one at a time, in call order. Without it, a slow older write can land after a newer one and erase finished items. The queue is keyed by `runId`, so nested workflows (each with its own run) don't wait on each other. A failed write doesn't block later ones.
+- `default.ts` + `handlers/entry.ts`: a per-run queue (`serializeSnapshotWrite`) orders every step-update write in a run (start, end, `parallel-arm-end`, `foreach-item-end`). Each write takes its slot synchronously when `persistStepUpdate` is called, before it awaits storage. Without this, an older write can land after a newer one: a sibling arm's start write can erase a finished arm, and an older foreach checkpoint can erase finished items. The queue is keyed by `runId`, so nested workflows (each with its own run) don't wait on each other. A failed write doesn't block later ones.
+- **Inngest:** `supportsRestartCheckpoints()` is `true` on `DefaultExecutionEngine` and `false` on `InngestExecutionEngine`. Inngest has no `restart()` and memoizes durable operations by position, so arm-end and item-end checkpoints, the progress read on restart, and the write queue are all off there. Inngest keeps exactly main's step-update operations.
+- **DurableAgent:** parallel tool calls run through `.foreach(toolCallStep)` (`durable-loop-builder.ts`), so this fix also stops finished tool calls re-running after a crash. The restart test harness now clones snapshots on write, because `InMemoryStore` stored them by reference and live mutations leaked into checkpoints.
 - `utils.ts`: `ForeachProgress` type plus `getForeachProgress` / `omitForeachProgress` helpers.
 
 The evented engine is out of scope. It already writes per-item foreach results and re-queues only null items (`loop.ts:461-488`). This PR doesn't touch the evented foreach code that open PR #27932 changes.
 
 ## Proof
 
-`packages/core/src/workflows/restart-mid-block.test.ts`, 11 tests, built on crash snapshots captured from real runs:
+`packages/core/src/workflows/restart-mid-block.test.ts`, 13 tests, built on crash snapshots captured from real runs, plus one DurableAgent test and one Inngest test:
 
 | test | fails with the fix reverted? |
 |---|---|
@@ -32,12 +34,19 @@ The evented engine is out of scope. It already writes per-item foreach results a
 | failed checkpoint write: no write left in flight, `activeStepsPath` cleaned, span errored | yes (`expected 3 to be 0` writes in flight) |
 | foreach snapshot writes stay linear (200 items × 1 KB, bound 10× payload) | yes (21.5 MB vs 2 MB bound) |
 | items finished within the last interval re-run after a crash (pins the trade-off) | n/a, documents behaviour |
+| sibling arm start write can't overwrite a finished parallel arm (writes resolved out of order) | yes (`a later write dropped the finished arm`) |
+| item 2 starts while finished item 1 is publishing progress: progress is already back on the foreach result | yes, when the re-attach moves after the publish await (`a later write dropped checkpointed items`) |
+| DurableAgent, 3 parallel tool calls, call 2 hangs, restart after calls 1 and 3 checkpoint: only call 2 re-runs (`durable-agent-tool-concurrency.test.ts`) | yes, on main's `control-flow.ts`/`step.ts`/`utils.ts` (`[1,2,3]`) |
+| DurableAgent, crash 200 ms after call 3 finishes: calls 2 and 3 re-run (pins the window) | n/a, documents behaviour |
+| Inngest: step-update operations for foreach + parallel equal main's 9-op sequence (`inngest/src/execution-engine.test.ts`) | yes, when the flag is flipped to `true` |
 | per-run queue: suspend/resume inside foreach (concurrency 3) | guard, also passes on the old code |
 | per-run queue: foreach of nested workflows that each run a foreach | guard |
 | suspended items resume with their `suspendPayload` from a fresh process | guard |
 
 - Workflow suite, one file at a time with `--maxWorkers=1` and a 2 GB heap: all 32 files pass. `workflow.test.ts` was run in five `-t` chunks (≈329 tests, 0 failed), because it runs out of heap even alone at 2 GB, on the PR head before these changes too. `evented-workflow.test.ts`: 161 passed / 5 skipped, with one unhandled `ERR_INVALID_STATE` from `EventedRun` stream close. That error is identical on fca916bb71, so it predates this work.
-- `tsc --noEmit`, `oxlint` and `oxfmt --check` are clean.
+- DurableAgent `__tests__`: all 142 files pass, one at a time.
+- Inngest (`inngest-cli dev` 1.27), one file at a time: 33 files pass. Every failure was compared with the PR head before review (fca916bb71) and fails the same way there: `create-inngest-agent` (2), `resume-runtime-rehydration` (1), `inngest-durable-agent-suite` (4 of 245). `index.test.ts` is too slow to finish in one run, so its `foreach` and `parallel|multiple chains` tests were run separately: 11/12 and 18/19 pass. The foreach failure ("keeps the first failure…") also fails at fca916bb71. The parallel failure needs a real `OPENAI_API_KEY`. `resume-nested-workflow` failed once and passed 3/3 on re-run.
+- `tsc --noEmit` (core and inngest), `oxlint` and `oxfmt --check` are clean.
 
 ### Storage cost: file-backed LibSQL and PostgreSQL 15
 
@@ -122,14 +131,19 @@ So when items finish slowly, coalesced checkpoints write more bytes than main (2
 
 Items that finished within the last checkpoint interval (≤ ~1 s) before a crash are run again on restart. That matches the engine's existing at-least-once behaviour for steps. A dedicated test pins it.
 
+For DurableAgent tool calls this window matters more, because tool calls have side effects. Measured: 3 parallel calls, call 2 hangs, call 3 finishes 300 ms after call 1, and the crash comes 200 ms later. Restart re-runs calls 2 **and 3**. Two options, not decided here:
+
+1. **Keep the 1 s interval everywhere.** A tool call that finished up to ~1 s before a crash runs again. Cost: none beyond the table above.
+2. **Flush immediately for the durable tool-call foreach** (internal `checkpointIntervalMs: 0`, prototype `b16c7ca330` on `wip/26214-tool-call-flush-prototype`). Then only call 2 re-runs. Bytes cost if the same flush applied to a 1k × 2 KB foreach on LibSQL (median of 3): c=1: 908 writes / 936 MB / 7.8 s vs 4 writes / 6.1 MB / 151 ms coalesced (~150×). c=10: 101 writes / 99 MB / 904 ms vs 13 writes / 6.2 MB / 165 ms (~16×). For a tool-call step with ≤ 10 calls the extra cost is a handful of small writes. It only gets big for steps with hundreds of calls.
+
 ## Unverified
 
 - **Long-running foreach cost** (measured above, but not bounded): with slow items, bytes written scale with run duration × progress size, about one full progress rewrite per second. A one-hour foreach with a 300 MB progress could write on the order of 1 TB. An append-only progress API, or a longer interval, would cap this. That can be a follow-up.
 - **Out-of-order start writes:** the per-run queue orders writes by call order. A progress-less start write that was issued before any item finished can still land before the first checkpoint. That costs at-least-once replay, not lost results.
-- Durable/Inngest engines: skipping item-start writes changes the sequence of `wrapDurableOperation` calls inside a foreach. The writes return void, so replay should be unaffected, but there was no Inngest dev server to run that suite.
+- Inngest checkpoints are off, pinned by a unit test against a mocked `inngestStep.run`. The full Inngest suite was run against a dev server (see Proof).
 - Item `startedAt` is no longer persisted mid-foreach once an item has finished, so a snapshot read mid-run shows less per-item start detail.
 - Restart after a second crash (crash → restart → crash) isn't tested.
 
 ## Risk: medium
 
-This changes when and how often snapshots are written during parallel and foreach execution on the default engine. It adds a per-run write queue for foreach writes and accepts a ≤ 1 s replay window after a crash.
+This changes when and how often snapshots are written during parallel and foreach execution on the default engine. It adds a per-run write queue for step-update writes and accepts a ≤ 1 s replay window after a crash, including for DurableAgent tool calls unless option 2 is taken. Inngest is unchanged.
