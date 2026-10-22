@@ -112,13 +112,7 @@ describe('durable agent version pinning across suspend/resume', () => {
       model: createTextModel('Resumed!') as LanguageModelV2,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub, id });
-    // Run frames live on the Mastra-level bus, so the test's bus is also Mastra's.
-    const mastra = new Mastra({
-      agents: { versionedDurableAgent: durableAgent },
-      storage: store,
-      logger: false,
-      pubsub,
-    });
+    const mastra = new Mastra({ agents: { versionedDurableAgent: durableAgent }, storage: store, logger: false });
 
     // Simulates the editor's `applyStoredOverrides`: fork, stamp the resolved
     // version id (via the DurableAgent rawConfig delegation), and mark the
@@ -400,13 +394,7 @@ describe('durable agent version pinning across crash/recover', () => {
       model: createTextModel('Recovered!') as LanguageModelV2,
     });
     const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-    // Run frames live on the Mastra-level bus, so the test's bus is also Mastra's.
-    const mastra = new Mastra({
-      agents: { versionedDurableAgent: durableAgent },
-      storage: store,
-      logger: false,
-      pubsub,
-    });
+    const mastra = new Mastra({ agents: { versionedDurableAgent: durableAgent }, storage: store, logger: false });
     stubWorkflow(durableAgent as DurableAgent);
 
     // Same shape as the resume harness's resolveVersionedAgent mock, but also

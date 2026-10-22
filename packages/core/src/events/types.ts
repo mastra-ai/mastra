@@ -16,12 +16,11 @@ export type Event = {
   /**
    * Position of this event in its topic's log.
    *
-   * Allocated atomically with the append to the shared cache (see
-   * `MastraServerCache.listPushIndexed`), so list position and index always
-   * agree: a subscriber can resume from an index and, on seeing a higher one,
-   * read the gap back from the log. Absent when the cache cannot append
-   * atomically — such events are delivered live-only and cannot be resumed by
-   * offset.
+   * Allocated when the event is appended to the shared cache (see
+   * `MastraServerCache.listPushIndexed`), so a subscriber can resume from an
+   * index and, on seeing a higher one, read the gap back from the log. Absent
+   * when the event could not be cached — such events are delivered live-only
+   * and cannot be resumed by offset.
    */
   index?: number;
   /**

@@ -1678,9 +1678,9 @@ export class DurableAgent<
     if (this.#cachingPubsub) return;
 
     if (this.#cacheConfig === false) {
-      // Caching explicitly disabled. Run frames still have to travel on the run
-      // bus, not the agent's own pubsub: every worker and observer watches the
-      // Mastra transport, so caching off must not also change the route.
+      // Caching explicitly disabled. Run frames still travel on the run bus
+      // (the Mastra transport on the evented engine, where steps publish from
+      // any worker), so caching off must not also change the route.
       this.#cachingPubsub = this.#runStreamBus();
       this.#resolvedCache = null;
       return;
