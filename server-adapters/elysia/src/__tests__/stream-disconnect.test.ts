@@ -58,10 +58,14 @@ describe('Elysia stream client disconnect', () => {
     llm = new LLMock({ port: 0 });
     await llm.start();
     // ~40 small chunks spaced 50ms apart, so the client can disconnect mid-stream.
-    llm.on({ userMessage: 'slow' }, { content: 'one two three four five six seven eight nine ten '.repeat(4) }, {
-      latency: 50,
-      chunkSize: 5,
-    });
+    llm.on(
+      { userMessage: 'slow' },
+      { content: 'one two three four five six seven eight nine ten '.repeat(4) },
+      {
+        latency: 50,
+        chunkSize: 5,
+      },
+    );
 
     const agent = new Agent({
       id: 'streamer',
