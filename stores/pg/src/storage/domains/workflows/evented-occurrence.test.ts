@@ -1,11 +1,12 @@
 import { randomUUID } from 'node:crypto';
+import { Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { PostgresStore } from '../..';
 import { Mastra } from '../../../../../../packages/core/src/mastra';
 import { createStep, createWorkflow } from '../../../../../../packages/core/src/workflows/evented';
 import { RedeliveryDriver } from '../../../../../../packages/core/src/workflows/evented/test-utils/redelivery-driver';
-import { TEST_CONFIG } from '../../test-utils';
+import { connectionString, TEST_CONFIG } from '../../test-utils';
 
 describe('Postgres evented occurrence replay', () => {
   const schemaName = `evented_guard_${Date.now()}`;
@@ -319,6 +320,11 @@ describe('Postgres evented occurrence replay', () => {
         }
         releaseSecond();
         expect(await result).toMatchObject({ status: 'success', result: { n: 2 } });
+        const owner = await driver.pubsub.getLeaseOwner(leaseKey);
+        if (owner) await driver.pubsub.releaseLease(leaseKey, owner);
+        const deliveries = driver.deliveryCount({ spec: '1', runId: run.runId });
+        await driver.redeliverEvent(original);
+        expect(driver.deliveryCount({ spec: '1', runId: run.runId })).toBe(deliveries);
         expect(calls).toEqual(['first', 'second']);
       } finally {
         releaseSecond();
@@ -330,18 +336,22 @@ describe('Postgres evented occurrence replay', () => {
     8_000,
   );
 
-  it.each([
-    ['terminal', false],
-    ['terminal', true],
-    ['foreach', false],
-    ['parallel', false],
-    ['conditional', false],
-    ['foreach', true],
-    ['parallel', true],
-    ['conditional', true],
-  ] as const)(
-    'prunes completed results at a %s boundary with continuation replay %s',
-    async (boundary, replay) => {
+  it.each(
+    (
+      [
+        ['terminal', false],
+        ['terminal', true],
+        ['foreach', false],
+        ['parallel', false],
+        ['conditional', false],
+        ['foreach', true],
+        ['parallel', true],
+        ['conditional', true],
+      ] as const
+    ).flatMap(([boundary, replay]) => [[boundary, replay, true] as const, [boundary, replay, false] as const]),
+  )(
+    'retires results at a %s boundary with continuation replay %s and pruning %s',
+    async (boundary, replay, prune) => {
       const driver = new RedeliveryDriver();
       const item = z.object({ n: z.number() });
       const items = z.array(item);
@@ -385,17 +395,19 @@ describe('Postgres evented occurrence replay', () => {
         id: `prune-${boundary}-${randomUUID()}`,
         inputSchema: items,
         outputSchema: z.any(),
-        options: {
-          pruneSnapshot: ({ snapshot }) => ({
-            ...snapshot,
-            context: Object.fromEntries(
-              Object.entries(snapshot.context).map(([id, result]) => [
-                id,
-                result?.status === 'success' ? { ...result, output: { pruned: true } } : result,
-              ]),
-            ),
-          }),
-        },
+        options: prune
+          ? {
+              pruneSnapshot: ({ snapshot }) => ({
+                ...snapshot,
+                context: Object.fromEntries(
+                  Object.entries(snapshot.context).map(([id, result]) => [
+                    id,
+                    result?.status === 'success' ? { ...result, output: { pruned: true } } : result,
+                  ]),
+                ),
+              }),
+            }
+          : undefined,
       }).then(first);
       const workflow =
         boundary === 'foreach'
@@ -445,9 +457,16 @@ describe('Postgres evented occurrence replay', () => {
         await expect
           .poll(async () => {
             const snapshot = await store.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
-            return snapshot?.context.first?.output;
+            return snapshot?.context.first;
           })
-          .toEqual({ pruned: true });
+          .toMatchObject({
+            output: prune ? { pruned: true } : [{ n: 1 }],
+            metadata: { __continuationStarted: true },
+          });
+        const predecessor = await driver.waitForStepEnd({ spec: '0', runId: run.runId });
+        const continuations = driver.deliveryCount({ spec: '1', runId: run.runId });
+        await driver.redeliverEvent(predecessor);
+        expect(driver.deliveryCount({ spec: '1', runId: run.runId })).toBe(continuations);
         release();
         if (failedPrune) {
           await expect.poll(() => terminalWriteFailed).toBe(true);
@@ -465,7 +484,12 @@ describe('Postgres evented occurrence replay', () => {
             const snapshot = await store.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
             return snapshot?.context[finalId];
           })
-          .toMatchObject({ status: 'success', output: { pruned: true } });
+          .toMatchObject({
+            status: 'success',
+            output: prune ? { pruned: true } : boundary === 'terminal' ? [{ n: 3 }] : [{ n: 2 }],
+          });
+        await driver.redeliverEvent(predecessor);
+        expect(driver.deliveryCount({ spec: '1', runId: run.runId })).toBe(continuations);
         if (boundary === 'terminal') {
           const terminalEnds = driver.events.filter(event => event.type === 'workflow.end').length;
           const terminalRun = driver.stepRuns({ spec: '2', runId: run.runId })[0]!;
@@ -489,6 +513,84 @@ describe('Postgres evented occurrence replay', () => {
     },
     8_000,
   );
+
+  it('keeps the committed terminal result when the read replica still sees a running step', async () => {
+    const readPool = new Pool({ connectionString, max: 1 });
+    const replicaStorage = new PostgresStore({ ...TEST_CONFIG, id: 'lagging-reader', schemaName, readPool });
+    await replicaStorage.init();
+    const driver = new RedeliveryDriver();
+    const schema = z.object({ n: z.number() });
+    const step = createStep({
+      id: 'finish',
+      inputSchema: schema,
+      outputSchema: schema,
+      execute: async ({ runId }) => {
+        // Keep a real PostgreSQL read view behind the primary's terminal commit.
+        await readPool.query('BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY');
+        const stale = await readPool.query(
+          `SELECT snapshot FROM "${schemaName}".mastra_workflow_snapshot WHERE run_id = $1`,
+          [runId],
+        );
+        expect(stale.rows[0].snapshot.status).toBe('running');
+        return { n: 1 };
+      },
+    });
+    const workflow = createWorkflow({
+      id: `replica-prune-${randomUUID()}`,
+      inputSchema: schema,
+      outputSchema: schema,
+      options: {
+        pruneSnapshot: ({ snapshot }) => ({
+          ...snapshot,
+          context: Object.fromEntries(
+            Object.entries(snapshot.context).map(([id, result]) => [
+              id,
+              result?.status === 'success' ? { ...result, output: {} } : result,
+            ]),
+          ),
+        }),
+      },
+    })
+      .then(step)
+      .commit();
+    const mastra = new Mastra({
+      storage: replicaStorage,
+      pubsub: driver.pubsub,
+      workflows: { [workflow.id]: workflow },
+    });
+    await mastra.startWorkers();
+    try {
+      const run = await workflow.createRun({ resourceId: 'replica-owner' });
+      expect(await run.start({ inputData: { n: 0 } })).toMatchObject({ status: 'success', result: { n: 1 } });
+      await expect
+        .poll(() => driver.events.some(event => event.type === 'workflow.end' && event.runId === run.runId))
+        .toBe(true);
+      const end = driver.events.find(event => event.type === 'workflow.end' && event.runId === run.runId)!;
+      await driver.redeliverEvent(end);
+      const store = (await replicaStorage.getStore('workflows'))!;
+      const completed = await store.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
+      expect(completed).toMatchObject({
+        status: 'success',
+        result: { output: { n: 1 } },
+        context: { finish: { output: {}, metadata: { __continuationStarted: true } } },
+      });
+      const stale = await readPool.query(
+        `SELECT snapshot FROM "${schemaName}".mastra_workflow_snapshot WHERE run_id = $1`,
+        [run.runId],
+      );
+      expect(stale.rows[0].snapshot.status).toBe('running');
+      await readPool.query('ROLLBACK');
+      expect(await store.getWorkflowRunById({ workflowName: workflow.id, runId: run.runId })).toMatchObject({
+        resourceId: 'replica-owner',
+      });
+    } finally {
+      await readPool.query('ROLLBACK');
+      await mastra.stopWorkers();
+      driver.dispose();
+      await replicaStorage.close();
+      await readPool.end();
+    }
+  }, 8_000);
 
   it('restarts a completed boundary whose successor reuses the step ID on Postgres', async () => {
     const driver = new RedeliveryDriver();

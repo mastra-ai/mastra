@@ -396,16 +396,19 @@ export class WorkflowEventProcessor extends EventProcessor {
     terminalHandoff?: boolean;
   }): Promise<void> {
     const pruneSnapshot = workflow?.options?.pruneSnapshot;
-    if (!pruneSnapshot) return;
+    if (!pruneSnapshot && !terminalHandoff) return;
     try {
       const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
-      if (!workflowsStore) return;
-      const run = await workflowsStore.getWorkflowRunById({ runId, workflowName: workflowId });
-      const snapshot = run?.snapshot;
+      if (!workflowsStore || (!pruneSnapshot && !workflowsStore.supportsWorkflowStepGuards())) return;
+      const guarded = workflowsStore.supportsWorkflowStepGuards();
+      const run = guarded ? undefined : await workflowsStore.getWorkflowRunById({ runId, workflowName: workflowId });
+      const snapshot = guarded
+        ? await workflowsStore.loadWorkflowSnapshot({ runId, workflowName: workflowId })
+        : run?.snapshot;
       if (!snapshot || typeof snapshot === 'string') return;
       let pruned: WorkflowRunState;
       try {
-        pruned = pruneSnapshot({ snapshot, workflowStatus: snapshot.status });
+        pruned = pruneSnapshot ? pruneSnapshot({ snapshot, workflowStatus: snapshot.status }) : snapshot;
       } catch (error) {
         this.mastra.getLogger()?.warn?.(`Failed to prune workflow snapshot for run ${runId}: ${error}`);
         return;
@@ -1052,7 +1055,8 @@ export class WorkflowEventProcessor extends EventProcessor {
         workflow,
         workflowId,
         runId,
-        terminalHandoff: true,
+        // Nested completion still has to transfer ownership to its parent loop.
+        terminalHandoff: !parentWorkflow,
       });
     }
 
@@ -1496,11 +1500,10 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     // Control entries have no guarded leaf start. Their durable step.run event
-    // already holds the full input, so prune the predecessor without changing state.
+    // already holds the full input, so retire the predecessor without changing state.
     if (
       executionPath.length === 1 &&
       (!isExecutableStep(rawStep) || rawStep.type === 'foreach') &&
-      workflow.options?.pruneSnapshot &&
       !restart &&
       !timeTravel &&
       !resumeSteps?.length
@@ -1877,7 +1880,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         }
         const previousEventId = prevResult.metadata?.startedBy;
         const previousStep =
-          guardStart && workflow?.options?.pruneSnapshot && executionPath.length === 1 && previousEventId
+          guardStart && executionPath.length === 1 && previousEventId
             ? Object.entries(stepResults ?? {}).find(
                 ([id, result]) =>
                   id !== leafId && result?.status === 'success' && result.metadata?.startedBy === previousEventId,
