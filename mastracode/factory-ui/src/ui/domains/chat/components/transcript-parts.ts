@@ -98,7 +98,8 @@ function awaitsPrompt(
   return tool.toolName === 'ask_user' && tool.status === 'running' && !suspensions.has(tool.toolCallId);
 }
 
-const UNGROUPABLE_TOOLS = new Set(['ask_user', 'submit_plan', 'skill']);
+// Drawn as their own messages, so never folded into a group of tool cards.
+const UNGROUPABLE_TOOLS = new Set(['ask_user', 'submit_plan', 'skill', 'reply_in_thread']);
 
 export function collectToolGroups(
   parts: readonly MessagePart[],

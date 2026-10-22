@@ -46,6 +46,33 @@ describe('reply_in_thread in the transcript', () => {
     expect(container.textContent).not.toContain('\u200b');
   });
 
+  it('shows each post on its own when the agent calls tools back to back', () => {
+    renderEntries([
+      replyEntry({ state: 'result', args: { text: 'Starting the build now.' }, result: { posted: true } }, [
+        {
+          type: 'tool-invocation',
+          toolInvocation: { state: 'result', toolCallId: 'call-2', toolName: 'execute_command', args: {}, result: {} },
+        },
+        {
+          type: 'tool-invocation',
+          toolInvocation: {
+            state: 'result',
+            toolCallId: 'call-3',
+            toolName: 'reply_in_thread',
+            args: { text: 'Build passed.' },
+            result: { posted: true },
+          },
+        },
+      ]),
+    ]);
+
+    const posts = screen.getAllByRole('group', { name: 'Reply in Slack thread' });
+    expect(posts.map(post => post.querySelector('p')?.textContent)).toEqual([
+      'Starting the build now.',
+      'Build passed.',
+    ]);
+  });
+
   it('shows the posted reply as rendered markdown, not a JSON tool card', () => {
     renderEntries([
       replyEntry({
