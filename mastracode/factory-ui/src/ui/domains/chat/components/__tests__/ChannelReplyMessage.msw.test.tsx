@@ -35,6 +35,17 @@ function renderEntries(entries: TimelineEntry[]) {
 }
 
 describe('reply_in_thread in the transcript', () => {
+  it('draws nothing for a zero-width-space closing message after the reply', () => {
+    const { container } = renderEntries([
+      replyEntry({ state: 'result', args: { text: 'hello world' }, result: { posted: true } }, [
+        { type: 'text', text: '\u200b' },
+      ]),
+    ]);
+
+    expect(screen.getByText('hello world')).toBeTruthy();
+    expect(container.textContent).not.toContain('\u200b');
+  });
+
   it('shows the posted reply as rendered markdown, not a JSON tool card', () => {
     renderEntries([
       replyEntry({

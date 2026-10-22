@@ -35,7 +35,14 @@ import { ProviderReconnectAction } from './ProviderReconnectAction';
 import { ToolCard } from './tool/ToolCard';
 import { ToolGroup } from './tool/ToolGroup';
 import { ToolFactory } from './ToolFactory';
-import { collectToolGroups, draws, messageText, renderableParts, toolFromInvocationPart } from './transcript-parts';
+import {
+  collectToolGroups,
+  draws,
+  hasVisibleText,
+  messageText,
+  renderableParts,
+  toolFromInvocationPart,
+} from './transcript-parts';
 import {
   isSkillNotificationSignal,
   notificationMetadata,
@@ -179,7 +186,7 @@ export function MessageBubble({
       </Notice>
     ),
     Text: (part: TextPart) => {
-      if (!part.text.trim()) return null;
+      if (!hasVisibleText(part.text)) return null;
       if (entry.message.role === 'user') {
         const activation = parseSkillActivation(part.text);
         return activation ? <SkillMessage activation={activation} /> : <MarkdownRenderer>{part.text}</MarkdownRenderer>;
