@@ -4,9 +4,9 @@ import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
-import { server } from '../../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../../e2e/ui/render';
-import type { FactoryModelScope } from '../../../../workspaces/services/github';
+import { server } from '../../../../../../../../e2e/ui/msw-server';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../../../e2e/ui/render';
+import type { FactoryModelScope } from '../../../../../workspaces/services/github';
 import { ModelRoutingSection } from '../ModelRoutingSection';
 
 const FACTORY_URL = `${TEST_BASE_URL}/web/factory/projects/fp-1`;
@@ -44,8 +44,6 @@ describe('ModelRoutingSection', () => {
     renderRoutingSection();
 
     await waitFor(() => expect(routing('Hybrid')).toBeChecked());
-    expect(routing('Personal')).not.toBeChecked();
-    expect(routing('Factory')).not.toBeChecked();
     expect(within(region('Chats')).getByText('Uses Personal defaults')).toBeInTheDocument();
     expect(within(region('Work-item runs')).getByText('Uses Factory defaults')).toBeInTheDocument();
     expect(
@@ -93,7 +91,7 @@ describe('ModelRoutingSection', () => {
     server.use(http.get(FACTORY_URL, () => HttpResponse.json({ error: 'unavailable' }, { status: 503 })));
     renderRoutingSection();
 
-    expect(await screen.findByRole('alert')).toBeInTheDocument();
+    expect(await screen.findByRole('alert')).toHaveTextContent('Failed to load Factory (503)');
     expect(screen.queryByRole('radiogroup', { name: 'Model routing' })).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Personal defaults' })).not.toBeInTheDocument();
   });

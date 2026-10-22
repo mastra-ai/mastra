@@ -1,3 +1,4 @@
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -7,11 +8,13 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
+import type { FactoryProjectPayload } from '../../../workspaces/services/github';
 import { FactoryThinkingControl } from '../FactoryThinkingControl';
 
 const FACTORY_URL = `${TEST_BASE_URL}/web/factory/projects/fp-1`;
-const factory = { id: 'fp-1', name: 'Mastra', defaultThinkingLevel: 'off' };
-const saved = (defaultThinkingLevel: string) => HttpResponse.json({ project: { ...factory, defaultThinkingLevel } });
+const factory: FactoryProjectPayload = { id: 'fp-1', name: 'Mastra', defaultThinkingLevel: 'off' };
+const saved = (defaultThinkingLevel: ThinkingLevelSetting) =>
+  HttpResponse.json({ project: { ...factory, defaultThinkingLevel } });
 
 function renderControl() {
   return renderWithProviders(
@@ -47,22 +50,32 @@ describe('FactoryThinkingControl', () => {
   });
 
   it('offers every level and shows the stored one, whatever the default model runs', async () => {
-    const patches: unknown[] = [];
     server.use(
       http.get(FACTORY_URL, () =>
         HttpResponse.json({ project: { ...factory, defaultModelId: 'openai/gpt-5', defaultThinkingLevel: 'max' } }),
       ),
+    );
+    const user = userEvent.setup();
+    renderControl();
+
+    const ramp = await openRamp(user, 'Thinking: Max');
+    expect(ramp).toHaveAttribute('aria-valuetext', 'Max');
+    expect(ramp).toHaveAttribute('max', '5');
+  });
+
+  it('does not save when the ramp closes unchanged', async () => {
+    const patches: unknown[] = [];
+    server.use(
+      http.get(FACTORY_URL, () => HttpResponse.json({ project: factory })),
       http.patch(FACTORY_URL, async ({ request }) => {
         patches.push(await request.json());
-        return saved('max');
+        return saved('off');
       }),
     );
     const user = userEvent.setup();
     const { client } = renderControl();
 
-    const ramp = await openRamp(user, 'Thinking: Max');
-    expect(ramp).toHaveAttribute('aria-valuetext', 'Max');
-    expect(ramp).toHaveAttribute('max', '5');
+    const ramp = await openRamp(user, 'Thinking: Off');
     fireEvent.blur(ramp);
 
     await waitForMutationsIdle(client);

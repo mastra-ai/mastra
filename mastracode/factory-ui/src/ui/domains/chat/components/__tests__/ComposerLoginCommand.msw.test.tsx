@@ -4,7 +4,7 @@ import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { Composer } from '../Composer';
 import { OverlayTestProviders, useOverlayControllerHandlers } from './overlay-test-utils';
 
@@ -20,7 +20,7 @@ async function runCommand(command: string) {
 
   const input = await screen.findByRole('textbox', { name: 'Message' });
   await waitFor(() => expect(input).toBeEnabled());
-  await waitFor(() => expect(client.isFetching()).toBe(0));
+  await waitForMutationsIdle(client);
   await user.type(input, `${command}{Enter}`);
   return screen.findByTestId('navigated-path');
 }

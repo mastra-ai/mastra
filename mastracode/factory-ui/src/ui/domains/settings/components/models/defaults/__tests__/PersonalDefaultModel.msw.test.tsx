@@ -1,14 +1,15 @@
 import { Field } from '@mastra/playground-ui/components/Field';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import type { UserEvent } from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
-import { server } from '../../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../../e2e/ui/render';
-import type { AvailableModelOption } from '../../../../../../hooks/useAvailableModels';
+import { server } from '../../../../../../../../e2e/ui/msw-server';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../../../e2e/ui/render';
+import type { DefaultModelResponse } from '../../../../../../../api/types';
+import type { AvailableModelOption } from '../../../../../../../hooks/useAvailableModels';
 import { PersonalDefaultModel } from '../PersonalDefaultModel';
+import { pickModel } from './default-model-test-utils';
 
 const renderInField = () =>
   renderWithProviders(
@@ -16,10 +17,6 @@ const renderInField = () =>
       <PersonalDefaultModel />
     </Field>,
   );
-
-if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
-  Element.prototype.scrollIntoView = () => {};
-}
 
 const DEFAULT_MODEL_URL = `${TEST_BASE_URL}/web/config/default-model`;
 const MODELS_URL = `${TEST_BASE_URL}/web/config/models`;
@@ -39,18 +36,9 @@ function stubPersonalCatalog(catalog: AvailableModelOption[]) {
   );
 }
 
-async function pickModel(user: UserEvent, modelId: string) {
-  const picker = await screen.findByRole('combobox', { name: 'Personal default model' });
-  await waitFor(() => expect(picker).toBeEnabled());
-  await user.click(picker);
-  const option = await screen.findByRole('option', { name: new RegExp(modelId.replace('/', '\\/')) });
-  fireEvent.pointerDown(option, { pointerType: 'mouse' });
-  fireEvent.click(option, { detail: 1 });
-}
-
 describe('PersonalDefaultModel', () => {
   it('saves a picked model as the personal default', async () => {
-    let modelId: string | null = null;
+    let modelId: DefaultModelResponse['modelId'] = null;
     let putBody: unknown;
     stubPersonalCatalog(models);
     server.use(
@@ -64,7 +52,7 @@ describe('PersonalDefaultModel', () => {
     const user = userEvent.setup();
     const { client } = renderInField();
 
-    await pickModel(user, 'anthropic/claude-sonnet-4-5');
+    await pickModel(user, 'Personal default model', 'anthropic/claude-sonnet-4-5');
     await waitForMutationsIdle(client);
 
     expect(putBody).toEqual({ modelId: 'anthropic/claude-sonnet-4-5' });
@@ -93,7 +81,7 @@ describe('PersonalDefaultModel', () => {
   });
 
   it('clears the personal default', async () => {
-    let modelId: string | null = 'openai/gpt-5';
+    let modelId: DefaultModelResponse['modelId'] = 'openai/gpt-5';
     stubPersonalCatalog(models);
     server.use(
       http.get(DEFAULT_MODEL_URL, () => HttpResponse.json({ modelId })),
@@ -137,11 +125,11 @@ describe('PersonalDefaultModel', () => {
   it('does not flag a default the personal catalog offers', async () => {
     stubPersonalCatalog(models);
     server.use(http.get(DEFAULT_MODEL_URL, () => HttpResponse.json({ modelId: 'openai/gpt-5' })));
-    const { client } = renderInField();
+    const user = userEvent.setup();
+    renderInField();
 
-    await screen.findByRole('combobox', { name: 'Personal default model' });
-    await waitForMutationsIdle(client);
-
+    await user.click(await screen.findByRole('combobox', { name: 'Personal default model' }));
+    expect(await screen.findByRole('option', { name: /openai\/gpt-5/ })).toBeInTheDocument();
     expect(screen.queryByText(UNAVAILABLE_WARNING)).not.toBeInTheDocument();
   });
 });

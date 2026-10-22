@@ -4,16 +4,16 @@ import type { UserEvent } from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { expect } from 'vitest';
 
-import { server } from '../../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL } from '../../../../../../../e2e/ui/render';
-import type { ProviderInfo } from '../../../../../../api/types';
+import { server } from '../../../../../../../../e2e/ui/msw-server';
+import { TEST_BASE_URL } from '../../../../../../../../e2e/ui/render';
+import type { OAuthStartResponse, ProviderInfo } from '../../../../../../../api/types';
 
 export const PROVIDERS_URL = `${TEST_BASE_URL}/web/config/providers`;
 export const keyUrl = (provider: string) => `${PROVIDERS_URL}/${encodeURIComponent(provider)}/key`;
 export const oauthUrl = (provider: string, action: 'start' | 'complete' | 'poll') =>
   `${PROVIDERS_URL}/${encodeURIComponent(provider)}/oauth/${action}`;
 
-export const pasteCodeSession = (sessionId: string) => ({
+export const pasteCodeSession = (sessionId: string): OAuthStartResponse => ({
   sessionId,
   kind: 'paste-code',
   url: 'https://example.com/authorize',

@@ -1,24 +1,16 @@
-import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 
-import { useFactoryProjectQuery, useSetFactoryModelScopeMutation } from '../../../../../hooks/useFactoryDefaultModel';
-import { SkeletonRows } from '../../../../ui/SkeletonRows';
-import type { FactoryModelScope } from '../../../workspaces/services/github';
-import { FactoryThinkingControl } from '../FactoryThinkingControl';
-import { SettingsSubsection } from '../SettingsSubsection';
-import { MODEL_LANES, MODEL_ROUTES, connectorPath } from './model-routes';
-import type { ModelDefaults, ModelLane } from './model-routes';
+import {
+  useFactoryProjectQuery,
+  useSetFactoryModelScopeMutation,
+} from '../../../../../../hooks/useFactoryDefaultModel';
+import { SkeletonRows } from '../../../../../ui/SkeletonRows';
+import type { FactoryModelScope } from '../../../../workspaces/services/github';
+import { FactoryThinkingControl } from '../../FactoryThinkingControl';
+import { SettingsSubsection } from '../../SettingsSubsection';
 import { ModelRoutingMap } from './ModelRoutingMap';
-
-const SCOPE_OPTIONS: Array<{ scope: FactoryModelScope; label: string }> = [
-  { scope: 'user', label: 'Personal' },
-  { scope: 'hybrid', label: 'Hybrid' },
-  { scope: 'factory', label: 'Factory' },
-];
-
-const GLYPH_LANE_Y: Record<ModelLane, number> = { chats: 4, runs: 12 };
-const GLYPH_DEFAULTS_Y: Record<ModelDefaults, number> = { personal: 4, factory: 12 };
+import { ModelRoutingSwitch } from './ModelRoutingSwitch';
 
 export function ModelRoutingSection({ factoryId }: { factoryId: string }) {
   const projectQuery = useFactoryProjectQuery(factoryId);
@@ -40,19 +32,7 @@ export function ModelRoutingSection({ factoryId }: { factoryId: string }) {
       description="Which defaults chats and work-item runs use."
       action={
         modelScope && (
-          <SegmentedControl
-            aria-label="Model routing"
-            aria-busy={setModelScope.isPending}
-            value={modelScope}
-            onValueChange={pickScope}
-          >
-            {SCOPE_OPTIONS.map(({ scope, label }) => (
-              <SegmentedControlItem key={scope} value={scope}>
-                <RouteGlyph scope={scope} />
-                {label}
-              </SegmentedControlItem>
-            ))}
-          </SegmentedControl>
+          <ModelRoutingSwitch value={modelScope} pending={setModelScope.isPending} onValueChange={pickScope} />
         )
       }
     >
@@ -74,15 +54,5 @@ export function ModelRoutingSection({ factoryId }: { factoryId: string }) {
         </SettingsContainer>
       </div>
     </SettingsSubsection>
-  );
-}
-
-function RouteGlyph({ scope }: { scope: FactoryModelScope }) {
-  return (
-    <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth={1.5} strokeLinecap="round" aria-hidden>
-      {MODEL_LANES.map(lane => (
-        <path key={lane} d={connectorPath(1, GLYPH_LANE_Y[lane], 15, GLYPH_DEFAULTS_Y[MODEL_ROUTES[scope][lane]])} />
-      ))}
-    </svg>
   );
 }

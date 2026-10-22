@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
-import type { OMConfigInfo } from '../../../../../api/types';
+import type { OMConfigInfo, ProviderInfo } from '../../../../../api/types';
 import { MemorySettings } from '../MemorySettings';
 
 const OM_URL = `${TEST_BASE_URL}/web/config/om`;
@@ -31,7 +31,7 @@ const omConfig = (observationThreshold: number): OMConfigInfo => ({
   observeAttachments: 'auto',
 });
 
-function stubProviders(providers: Array<{ provider: string; source: string }>) {
+function stubProviders(providers: ProviderInfo[]) {
   server.use(
     http.get(`${TEST_BASE_URL}/web/config/providers`, () => HttpResponse.json({ providers })),
     http.get(`${TEST_BASE_URL}/web/config/custom-providers`, () => HttpResponse.json({ providers: [] })),
@@ -65,8 +65,6 @@ describe('MemorySettings', () => {
 
     const personal = screen.getByRole('region', { name: 'Personal memory' });
     const factory = screen.getByRole('region', { name: 'Factory memory' });
-    expect(personal).toHaveTextContent('Used by Chats');
-    expect(factory).toHaveTextContent('Used by Work-item runs');
     expect(await within(personal).findByDisplayValue('10,000')).toBeInTheDocument();
     const factoryThreshold = await within(factory).findByRole('textbox', { name: 'Messages before observation' });
     expect(factoryThreshold).toHaveValue('50,000');

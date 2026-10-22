@@ -1,4 +1,6 @@
 import type { FactoryModelScope } from '../workspaces/services/github';
+import { MODEL_ROUTES } from './components/models/routing/model-routes';
+import type { ModelDefaults } from './components/models/routing/model-routes';
 
 export type SettingsSection =
   | 'account'
@@ -30,12 +32,13 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
 export const MODEL_DEFAULTS_ANCHORS = {
   personal: 'personal-defaults',
   factory: 'factory-defaults',
-} as const;
+} as const satisfies Record<ModelDefaults, string>;
 
 export type ModelDefaultsAnchor = (typeof MODEL_DEFAULTS_ANCHORS)[keyof typeof MODEL_DEFAULTS_ANCHORS];
 
 export function sessionDefaultsAnchor(modelScope: FactoryModelScope | undefined): ModelDefaultsAnchor {
-  return modelScope === 'factory' ? MODEL_DEFAULTS_ANCHORS.factory : MODEL_DEFAULTS_ANCHORS.personal;
+  if (!modelScope) return MODEL_DEFAULTS_ANCHORS.personal;
+  return MODEL_DEFAULTS_ANCHORS[MODEL_ROUTES[modelScope].chats];
 }
 
 type SettingsTarget = { section: SettingsSection; anchor?: ModelDefaultsAnchor };

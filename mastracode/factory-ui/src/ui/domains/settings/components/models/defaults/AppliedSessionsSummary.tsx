@@ -6,15 +6,19 @@ function skippedReasonSummary(reasons: Array<{ reason: string }>) {
   return [...counts.entries()].map(([reason, count]) => `${reason.replaceAll('-', ' ')} (${count})`).join(', ');
 }
 
+function switchedSessionsText(switched: number): string {
+  if (switched === 0) return 'No running sessions to switch';
+  return `Switched ${switched} ${switched === 1 ? 'session' : 'sessions'}`;
+}
+
 export function AppliedSessionsSummary({
   result,
 }: {
   result: { applied: string[]; skipped: Array<{ reason: string }> };
 }) {
-  const switched = result.applied.length;
   return (
     <Txt variant="meta">
-      {switched > 0 ? `Switched ${switched} session${switched === 1 ? '' : 's'}` : 'No running sessions to switch'}
+      {switchedSessionsText(result.applied.length)}
       {result.skipped.length > 0 && (
         <>
           . {result.skipped.length} skipped: {skippedReasonSummary(result.skipped)}

@@ -122,9 +122,6 @@ export function OMSection({
   const thresholdsMutation = useUpdateOMThresholds(sessionId, factoryId);
   const attachmentsMutation = useUpdateOMObserveAttachments(sessionId, factoryId);
 
-  const config = omQuery.data?.config;
-  const modelsAvailable =
-    config?.observer.providerStatus === 'available' && config.reflector.providerStatus === 'available';
   const busy =
     observerMutation.isPending ||
     reflectorMutation.isPending ||
@@ -148,7 +145,19 @@ export function OMSection({
     return <SkeletonRows label="Loading observational-memory settings" rows={2} rowClassName="h-14 w-full" />;
   }
 
-  const attachmentChoice = attachmentToChoice(config?.observeAttachments ?? 'auto');
+  if (omQuery.data === undefined) {
+    return (
+      <Txt as="p" variant="caption" className="text-destructive-foreground">
+        {omQuery.error.message}
+      </Txt>
+    );
+  }
+
+  const { config } = omQuery.data;
+  const modelsAvailable =
+    config.observer.providerStatus === 'available' && config.reflector.providerStatus === 'available';
+
+  const attachmentChoice = attachmentToChoice(config.observeAttachments);
   return (
     <div className="flex flex-col gap-4">
       {error && (
@@ -157,7 +166,7 @@ export function OMSection({
         </Txt>
       )}
 
-      {config && !modelsAvailable && (
+      {!modelsAvailable && (
         <div className="flex items-center gap-2">
           <Badge size="md" variant="warning">
             Model credentials required
@@ -168,62 +177,60 @@ export function OMSection({
         </div>
       )}
 
-      {config && (
-        <div className="@container">
-          <ol className="flex flex-col items-stretch gap-1 @min-[46rem]:flex-row @min-[46rem]:items-center">
-            <PipelineStep>
-              <span className="bg-fill-subtle text-muted-foreground h-control-sm inline-flex items-center gap-1.5 rounded-full px-3">
-                <MessageSquare className="size-3.5" aria-hidden="true" />
-                <Txt as="span" variant="caption">
-                  Messages
-                </Txt>
-              </span>
-            </PipelineStep>
-            <PipelineStep>
-              <TokenThresholdInput
-                label="Messages before observation"
-                value={config.observationThreshold}
-                onCommit={observationThreshold => thresholdsMutation.mutate({ observationThreshold })}
+      <div className="@container">
+        <ol className="flex flex-col items-stretch gap-1 @min-[46rem]:flex-row @min-[46rem]:items-center">
+          <PipelineStep>
+            <span className="bg-fill-subtle text-muted-foreground h-control-sm inline-flex items-center gap-1.5 rounded-full px-3">
+              <MessageSquare className="size-3.5" aria-hidden="true" />
+              <Txt as="span" variant="caption">
+                Messages
+              </Txt>
+            </span>
+          </PipelineStep>
+          <PipelineStep>
+            <TokenThresholdInput
+              label="Messages before observation"
+              value={config.observationThreshold}
+              onCommit={observationThreshold => thresholdsMutation.mutate({ observationThreshold })}
+            />
+          </PipelineStep>
+          <PipelineStep>
+            <ModelStage label="Observer">
+              <ModelCombobox
+                models={models}
+                value={config.observer.model}
+                auto={{ effectiveModelId: config.observer.effectiveModelId }}
+                placeholder="Select observer model…"
+                aria-label="Observer model"
+                size="sm"
+                disabled={busy}
+                onValueChange={modelId => switchModel('observer', modelId)}
               />
-            </PipelineStep>
-            <PipelineStep>
-              <ModelStage label="Observer">
-                <ModelCombobox
-                  models={models}
-                  value={config.observer.model}
-                  auto={{ effectiveModelId: config.observer.effectiveModelId }}
-                  placeholder="Select observer model…"
-                  aria-label="Observer model"
-                  size="sm"
-                  disabled={busy}
-                  onValueChange={modelId => switchModel('observer', modelId)}
-                />
-              </ModelStage>
-            </PipelineStep>
-            <PipelineStep>
-              <TokenThresholdInput
-                label="Observations before reflection"
-                value={config.reflectionThreshold}
-                onCommit={reflectionThreshold => thresholdsMutation.mutate({ reflectionThreshold })}
+            </ModelStage>
+          </PipelineStep>
+          <PipelineStep>
+            <TokenThresholdInput
+              label="Observations before reflection"
+              value={config.reflectionThreshold}
+              onCommit={reflectionThreshold => thresholdsMutation.mutate({ reflectionThreshold })}
+            />
+          </PipelineStep>
+          <PipelineStep>
+            <ModelStage label="Reflector">
+              <ModelCombobox
+                models={models}
+                value={config.reflector.model}
+                auto={{ effectiveModelId: config.reflector.effectiveModelId }}
+                placeholder="Select reflector model…"
+                aria-label="Reflector model"
+                size="sm"
+                disabled={busy}
+                onValueChange={modelId => switchModel('reflector', modelId)}
               />
-            </PipelineStep>
-            <PipelineStep>
-              <ModelStage label="Reflector">
-                <ModelCombobox
-                  models={models}
-                  value={config.reflector.model}
-                  auto={{ effectiveModelId: config.reflector.effectiveModelId }}
-                  placeholder="Select reflector model…"
-                  aria-label="Reflector model"
-                  size="sm"
-                  disabled={busy}
-                  onValueChange={modelId => switchModel('reflector', modelId)}
-                />
-              </ModelStage>
-            </PipelineStep>
-          </ol>
-        </div>
-      )}
+            </ModelStage>
+          </PipelineStep>
+        </ol>
+      </div>
 
       <div className="border-border flex flex-wrap items-center justify-between gap-3 border-t pt-4">
         <Txt as="span" variant="caption" tone="muted">
@@ -233,7 +240,7 @@ export function OMSection({
           aria-label="Observe attachments"
           size="sm"
           value={attachmentChoice}
-          disabled={busy || !config}
+          disabled={busy}
           onValueChange={choice => attachmentsMutation.mutate({ value: choiceToAttachment(choice) })}
         >
           <SegmentedControlItem value="auto">Auto</SegmentedControlItem>

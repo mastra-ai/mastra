@@ -1,11 +1,11 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { server } from '../../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../../e2e/ui/render';
-import type { ProviderInfo } from '../../../../../../api/types';
+import { server } from '../../../../../../../../e2e/ui/msw-server';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../../../e2e/ui/render';
+import type { ProviderInfo } from '../../../../../../../api/types';
 import { ProviderList } from '../ProviderList';
 import {
   PROVIDERS_URL,
@@ -51,8 +51,9 @@ afterEach(() => {
 
 describe('ProviderList credential scopes', () => {
   describe('with auth enabled', () => {
+    beforeEach(enableAuth);
+
     it('lists shared deployment credentials only in the Factory list, without actions', async () => {
-      enableAuth();
       stubProviders([
         { provider: 'amazon-bedrock', source: 'deployment' },
         { provider: 'openai', source: 'none' },
@@ -66,7 +67,6 @@ describe('ProviderList credential scopes', () => {
     });
 
     it('saves an org key from the Factory list and keeps it out of the personal list', async () => {
-      enableAuth();
       const providers: ProviderInfo[] = [{ provider: 'openai', source: 'none' }];
       let putBody: unknown;
       server.use(
@@ -93,7 +93,6 @@ describe('ProviderList credential scopes', () => {
     });
 
     it('starts a personal sign-in at user scope while the org is already signed in', async () => {
-      enableAuth();
       let startBody: unknown;
       server.use(
         http.get(PROVIDERS_URL, () =>
@@ -127,7 +126,6 @@ describe('ProviderList credential scopes', () => {
     });
 
     it('shows members the Factory list read-only with the reason', async () => {
-      enableAuth();
       stubProviders(
         [
           {

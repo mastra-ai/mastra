@@ -1,27 +1,17 @@
-import {
-  Dialog,
-  DialogAction,
-  DialogCancel,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@mastra/playground-ui/components/Dialog';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { formatModelName } from '@mastra/playground-ui/utils/model';
 import { useState } from 'react';
 
-import { useAvailableModelsQuery } from '../../../../../hooks/useAvailableModels';
+import { useAvailableModelsQuery } from '../../../../../../hooks/useAvailableModels';
 import {
   useApplyFactoryDefaultModelMutation,
   useFactoryProjectQuery,
   useSetFactoryDefaultModelMutation,
-} from '../../../../../hooks/useFactoryDefaultModel';
-import { ModelCombobox } from '../ModelCombobox';
-import { SharedCredentialNotice } from '../SharedCredentialNotice';
+} from '../../../../../../hooks/useFactoryDefaultModel';
+import { ModelCombobox } from '../../ModelCombobox';
+import { SharedCredentialNotice } from '../../SharedCredentialNotice';
 import { AppliedSessionsSummary } from './AppliedSessionsSummary';
+import { SwitchRunningSessionsDialog } from './SwitchRunningSessionsDialog';
 
 export function FactoryDefaultModel({ factoryId }: { factoryId: string }) {
   const projectQuery = useFactoryProjectQuery(factoryId);
@@ -71,24 +61,12 @@ export function FactoryDefaultModel({ factoryId }: { factoryId: string }) {
       </div>
 
       {confirmModelId && (
-        <Dialog open onOpenChange={open => !open && setConfirmModelId(undefined)} pending={applyToSessions.isPending}>
-          <DialogContent size="sm">
-            <DialogHeader>
-              <DialogTitle>Also switch running sessions to {formatModelName(confirmModelId)}?</DialogTitle>
-              <DialogDescription>
-                New activity using the Factory defaults will use this model. Running work and review sessions keep their
-                current model unless you switch them. Switched sessions keep their work and pick up the new model on
-                their next step.
-              </DialogDescription>
-            </DialogHeader>
-            <DialogFooter>
-              <DialogCancel>Keep them as-is</DialogCancel>
-              <DialogAction onConfirm={switchRunningSessions}>
-                {applyToSessions.isPending ? 'Switching…' : 'Switch running sessions'}
-              </DialogAction>
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
+        <SwitchRunningSessionsDialog
+          modelId={confirmModelId}
+          pending={applyToSessions.isPending}
+          onConfirm={switchRunningSessions}
+          onClose={() => setConfirmModelId(undefined)}
+        />
       )}
     </>
   );

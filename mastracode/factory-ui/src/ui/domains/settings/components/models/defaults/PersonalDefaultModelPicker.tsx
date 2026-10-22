@@ -2,44 +2,33 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { formatModelName } from '@mastra/playground-ui/utils/model';
 
+import type { AvailableModelOption } from '../../../../../../hooks/useAvailableModels';
 import {
   useApplyDefaultModel,
   useClearDefaultModel,
-  useDefaultModelQuery,
   useSetDefaultModel,
-} from '../../../../../hooks/use-default-model';
-import { usePersonalAvailableModelsQuery } from '../../../../../hooks/useAvailableModels';
-import { SkeletonRows } from '../../../../ui/SkeletonRows';
-import { ModelCombobox } from '../ModelCombobox';
+} from '../../../../../../hooks/use-default-model';
+import { ModelCombobox } from '../../ModelCombobox';
 import { AppliedSessionsSummary } from './AppliedSessionsSummary';
 
-export function PersonalDefaultModel() {
-  const defaultModelQuery = useDefaultModelQuery();
-  const modelsQuery = usePersonalAvailableModelsQuery();
+export function PersonalDefaultModelPicker({
+  savedModelId,
+  models,
+}: {
+  savedModelId: string | undefined;
+  models: AvailableModelOption[] | undefined;
+}) {
   const setDefaultModel = useSetDefaultModel();
   const clearDefaultModel = useClearDefaultModel();
   const applyDefaultModel = useApplyDefaultModel();
 
-  if (defaultModelQuery.isPending) {
-    return <SkeletonRows label="Loading your default model" rows={1} rowClassName="h-7 w-full" />;
-  }
-  if (defaultModelQuery.error) {
-    return (
-      <Txt as="p" variant="caption" className="text-destructive-foreground" role="alert">
-        {defaultModelQuery.error.message}
-      </Txt>
-    );
-  }
-
-  const models = modelsQuery.data ?? [];
-  const defaultModelId = defaultModelQuery.data.modelId ?? '';
   const busy = setDefaultModel.isPending || clearDefaultModel.isPending || applyDefaultModel.isPending;
-  const defaultUnavailable =
-    defaultModelId !== '' && modelsQuery.isSuccess && !models.some(model => model.id === defaultModelId);
+  const unavailableModelId =
+    savedModelId && models && !models.some(model => model.id === savedModelId) ? savedModelId : undefined;
   const errorText = (setDefaultModel.error ?? clearDefaultModel.error ?? applyDefaultModel.error)?.message;
 
   const saveDefaultModel = (modelId: string) => {
-    if (!modelId || modelId === defaultModelId) return;
+    if (!modelId || modelId === savedModelId) return;
     applyDefaultModel.reset();
     setDefaultModel.mutate(modelId);
   };
@@ -52,8 +41,8 @@ export function PersonalDefaultModel() {
   return (
     <div className="flex min-w-0 flex-col gap-2">
       <ModelCombobox
-        models={models}
-        value={defaultModelId}
+        models={models ?? []}
+        value={savedModelId ?? ''}
         onValueChange={saveDefaultModel}
         placeholder="Select a model"
         aria-label="Personal default model"
@@ -61,17 +50,17 @@ export function PersonalDefaultModel() {
         disabled={busy}
       />
       <div className="flex flex-wrap items-center gap-2">
-        <Button size="sm" disabled={busy || !defaultModelId} onClick={() => applyDefaultModel.mutate()}>
+        <Button size="sm" disabled={busy || !savedModelId} onClick={() => applyDefaultModel.mutate()}>
           Apply to running sessions
         </Button>
-        <Button size="sm" variant="ghost" disabled={busy || !defaultModelId} onClick={clearDefault}>
+        <Button size="sm" variant="ghost" disabled={busy || !savedModelId} onClick={clearDefault}>
           Clear
         </Button>
       </div>
-      {defaultUnavailable && (
+      {unavailableModelId && (
         <Txt as="p" variant="caption" className="text-destructive-foreground">
-          None of your connected accounts can run {formatModelName(defaultModelId)}. Choose another model or connect its
-          provider.
+          None of your connected accounts can run {formatModelName(unavailableModelId)}. Choose another model or connect
+          its provider.
         </Txt>
       )}
       {errorText && (

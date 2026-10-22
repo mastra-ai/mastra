@@ -1,4 +1,7 @@
-import type { FactoryModelScope } from '../../../workspaces/services/github';
+import { Building2, CircleUserRound, MessagesSquare, SquareKanban } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+
+import type { FactoryModelScope } from '../../../../workspaces/services/github';
 
 export type ModelLane = 'chats' | 'runs';
 export type ModelDefaults = 'personal' | 'factory';
@@ -16,9 +19,24 @@ export const MODEL_DEFAULTS_LABELS: Record<ModelDefaults, string> = {
   factory: 'Factory defaults',
 };
 
+export const MODEL_DEFAULTS_ICONS: Record<ModelDefaults, LucideIcon> = {
+  personal: CircleUserRound,
+  factory: Building2,
+};
+
+export const MODEL_DEFAULTS_TONES: Record<ModelDefaults, string> = {
+  personal: 'text-chart-purple',
+  factory: 'text-chart-blue',
+};
+
 export const MODEL_LANE_LABELS: Record<ModelLane, string> = {
   chats: 'Chats',
   runs: 'Work-item runs',
+};
+
+export const MODEL_LANE_ICONS: Record<ModelLane, LucideIcon> = {
+  chats: MessagesSquare,
+  runs: SquareKanban,
 };
 
 export function defaultsInUse(scope: FactoryModelScope, defaults: ModelDefaults): boolean {

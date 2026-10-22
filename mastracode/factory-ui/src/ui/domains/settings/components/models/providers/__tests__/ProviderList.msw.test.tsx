@@ -3,11 +3,11 @@ import userEvent from '@testing-library/user-event';
 import { delay, http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
-import { server } from '../../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../e2e/ui/render';
-import type { ProviderInfo } from '../../../../../../api/types';
-import { useAvailableModelsQuery } from '../../../../../../hooks/useAvailableModels';
-import type { AvailableModelOption } from '../../../../../../hooks/useAvailableModels';
+import { server } from '../../../../../../../../e2e/ui/msw-server';
+import { TEST_BASE_URL, renderWithProviders } from '../../../../../../../../e2e/ui/render';
+import type { OAuthStartResponse, ProviderInfo } from '../../../../../../../api/types';
+import { useAvailableModelsQuery } from '../../../../../../../hooks/useAvailableModels';
+import type { AvailableModelOption } from '../../../../../../../hooks/useAvailableModels';
 import { ProviderList } from '../ProviderList';
 import {
   PROVIDERS_URL,
@@ -21,7 +21,7 @@ import {
   stubProviders,
 } from './provider-list-test-utils';
 
-const deviceCodeSession = (sessionId: string, userCode: string, nextPollMs: number) => ({
+const deviceCodeSession = (sessionId: string, userCode: string, nextPollMs: number): OAuthStartResponse => ({
   sessionId,
   kind: 'device-code',
   url: 'https://example.com/device',

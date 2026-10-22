@@ -2,7 +2,7 @@ import { SettingsContainer } from '@mastra/playground-ui/new/settings';
 
 import { CustomProvidersSection } from '../CustomProvidersSection';
 import { SettingsSubsection } from '../SettingsSubsection';
-import { ModelRoutingSection } from './ModelRoutingSection';
+import { ModelRoutingSection } from './routing/ModelRoutingSection';
 
 export function ModelsSettings({ factoryId }: { factoryId: string }) {
   return (
