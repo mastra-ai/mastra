@@ -100,6 +100,7 @@ export class DefaultExporter extends BaseExporter {
   #storage?: MastraCompositeStore;
   #observabilityStorage?: ObservabilityStorage;
   #resolvedStrategy?: TracingStorageStrategy;
+  #spanReadsUnsupported = false;
   #flushTimer?: NodeJS.Timeout;
   /** Storage writes (timer, size trigger, or flush()) that haven't finished yet */
   #inFlightFlushes = new Set<Promise<void>>();
@@ -352,6 +353,7 @@ export class DefaultExporter extends BaseExporter {
     events: (TracingEvent & RetryCount)[],
     deferredUpdates: BufferedEvent[],
     isEnd: boolean,
+    persistedSpans: Map<string, boolean>,
   ): Promise<FlushResult> {
     const deferredCountAtEntry = deferredUpdates.length;
     if (events.length === 0) return FLUSH_SUCCEEDED;
@@ -360,23 +362,49 @@ export class DefaultExporter extends BaseExporter {
       return { failed: true };
     }
 
-    const partials: UpdateSpanPartial[] = [];
-    for (const event of events) {
-      const span = event.exportedSpan;
-      if (this.#eventBuffer.spanExists(span)) {
-        partials.push({
-          traceId: span.traceId,
-          spanId: span.id,
-          updates: buildUpdateSpanRecord(span),
-        });
-      } else {
-        deferredUpdates.push(event);
-      }
-    }
-
-    if (partials.length === 0) return FLUSH_SUCCEEDED;
-
     try {
+      const partials: UpdateSpanPartial[] = [];
+      for (const event of events) {
+        const span = event.exportedSpan;
+        let spanExists = this.#eventBuffer.spanExists(span);
+        if (!spanExists && !this.#spanReadsUnsupported) {
+          // Cache only for this flush: a missing span may be created before a retry.
+          const key = `${span.traceId}:${span.id}`;
+          const cached = persistedSpans.get(key);
+          if (cached !== undefined) {
+            spanExists = cached;
+          } else if (typeof this.#observabilityStorage!.getSpan !== 'function') {
+            this.#spanReadsUnsupported = true;
+          } else {
+            try {
+              spanExists = !!(await this.#observabilityStorage!.getSpan({ traceId: span.traceId, spanId: span.id }));
+              persistedSpans.set(key, spanExists);
+            } catch (error) {
+              // Write-only providers retain the existing create-before-update behavior.
+              if (
+                !(error instanceof MastraError) ||
+                error.domain !== ErrorDomain.MASTRA_OBSERVABILITY ||
+                error.id !== 'OBSERVABILITY_STORAGE_GET_SPAN_NOT_IMPLEMENTED'
+              ) {
+                throw error;
+              }
+              this.#spanReadsUnsupported = true;
+            }
+          }
+        }
+        if (spanExists) {
+          partials.push({
+            traceId: span.traceId,
+            spanId: span.id,
+            updates: buildUpdateSpanRecord(span),
+          });
+        } else {
+          deferredUpdates.push(event);
+        }
+      }
+
+      if (partials.length === 0) return FLUSH_SUCCEEDED;
+
       await this.#observabilityStorage!.batchUpdateSpans({ records: partials });
       if (isEnd) {
         this.#eventBuffer.endFinishedSpans({ records: partials });
@@ -425,8 +453,8 @@ export class DefaultExporter extends BaseExporter {
    * Flushes the current buffer to storage.
    *
    * Creates are flushed first, then their span keys are added to allCreatedSpans.
-   * Updates are checked against allCreatedSpans — those whose span hasn't been
-   * created yet are re-inserted into the live buffer for the next flush.
+   * Updates are checked against allCreatedSpans and, on a cache miss, storage.
+   * Those whose span has not been created are retried on the next flush.
    * Completed spans (SPAN_ENDED) are cleaned up from allCreatedSpans after success.
    */
   private async flushBuffer(): Promise<void> {
@@ -521,8 +549,9 @@ export class DefaultExporter extends BaseExporter {
     // Flush span updates and ends — check span existence, defer if not yet created
     const deferredUpdates: BufferedEvent[] = [];
 
-    flushResults.push(await this.flushSpanUpdates(updateSpanEvents, deferredUpdates, false));
-    flushResults.push(await this.flushSpanUpdates(endSpanEvents, deferredUpdates, true));
+    const persistedSpans = new Map<string, boolean>();
+    flushResults.push(await this.flushSpanUpdates(updateSpanEvents, deferredUpdates, false, persistedSpans));
+    flushResults.push(await this.flushSpanUpdates(endSpanEvents, deferredUpdates, true, persistedSpans));
 
     let deferredDropCount = 0;
     if (deferredUpdates.length > 0) {
