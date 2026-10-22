@@ -8,8 +8,9 @@
 
 import type { LanguageModelV2StreamPart } from '@internal/ai-sdk-v5';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import type { MastraDBMessage } from '@mastra/core/agent';
 import { Agent, MessageList } from '@mastra/core/agent';
-import { InMemoryStore } from '@mastra/core/storage';
+import { InMemoryStore, InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect } from 'vitest';
 
 import { Memory } from '../../../index';
@@ -353,6 +354,7 @@ describe('Cancellation of in-flight Observational Memory (#27792)', () => {
       expect(after?.generationCount ?? 0).toBe(before?.generationCount ?? 0);
       expect(after?.bufferedObservationChunks ?? []).toEqual([]);
       expect(after?.bufferedReflection).toBeFalsy();
+      if (mode === 'async observation') expect(after?.lastBufferedAtTokens).toBe(0);
       expect((await storage.getThreadById({ threadId }))?.title).not.toBe('Late title');
       const { messages } = await storage.listMessages({ threadId, perPage: false });
       expect(
@@ -446,4 +448,217 @@ describe('Shared background operation ownership (#27792)', () => {
       await engine.waitForBuffering(threadId, resourceId);
     }
   });
+});
+
+describe('Cancellation while waiting for other OM work (#27792)', () => {
+  it.each(['activation', 'observation lock', 'buffer predecessor'] as const)(
+    'settles a cancelled %s while its predecessor stays live',
+    async mode => {
+      const provider = createLatchedModel('<observations>\n- Accepted observation\n</observations>');
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          observationalMemory: {
+            enabled: true,
+            observation: {
+              model: provider.model,
+              messageTokens: 1000,
+              bufferTokens: mode === 'observation lock' ? false : 10,
+            },
+            reflection: { model: provider.model, observationTokens: 100_000 },
+          },
+        },
+      });
+      const engine = (await memory.omEngine)!;
+      const threadId = `waiting-${mode}`;
+      const resourceId = 'waiting-resource';
+      const message: MastraDBMessage = {
+        id: `message-${mode}`,
+        threadId,
+        resourceId,
+        role: 'user',
+        createdAt: new Date(),
+        content: { format: 2, parts: [{ type: 'text', text: 'Remember this request. '.repeat(20) }] },
+      };
+      await engine.persistMessages([message], threadId, resourceId);
+      const record = { ...(await engine.getOrCreateRecord(threadId, resourceId)) };
+      if (mode === 'activation') {
+        const storage = (await memory.storage.getStore('memory'))!;
+        await storage.updateBufferedObservations({
+          id: record.id,
+          chunk: {
+            cycleId: 'prior-buffer',
+            observations: '- Prior observation',
+            tokenCount: 3,
+            messageTokens: 10,
+            messageIds: ['prior-message'],
+            lastObservedAt: new Date(0),
+          },
+        });
+      }
+      const owner = new AbortController();
+      const cancelled = new AbortController();
+      const first =
+        mode === 'observation lock'
+          ? engine.observe({ threadId, resourceId, messages: [message], force: true, abortSignal: owner.signal })
+          : engine.buffer({
+              threadId,
+              resourceId,
+              messages: [message],
+              record: { ...record },
+              abortSignal: owner.signal,
+              skipMinimumTokenCheck: true,
+            });
+      let waiter: Promise<unknown> | undefined;
+      try {
+        await provider.started;
+        waiter =
+          mode === 'observation lock'
+            ? engine.observe({ threadId, resourceId, messages: [message], force: true, abortSignal: cancelled.signal })
+            : mode === 'activation'
+              ? engine.activate({ threadId, resourceId, pendingTokens: 2000, abortSignal: cancelled.signal })
+              : engine.buffer({
+                  threadId,
+                  resourceId,
+                  messages: [message],
+                  record: { ...record },
+                  abortSignal: cancelled.signal,
+                });
+        let settled = false;
+        const settlement = waiter.then(
+          () => {
+            settled = true;
+          },
+          () => {
+            settled = true;
+          },
+        );
+        cancelled.abort();
+        // Advance one event-loop turn, without releasing the provider's event latch.
+        await new Promise<void>(resolve => setImmediate(resolve));
+        expect(settled).toBe(true);
+        expect(provider.cancelled).toBe(false);
+        expect(provider.calls).toBe(1);
+        await settlement;
+      } finally {
+        owner.abort();
+        provider.release();
+        await Promise.allSettled([first, ...(waiter ? [waiter] : [])]);
+        await engine.waitForBuffering(threadId, resourceId);
+      }
+    },
+  );
+});
+
+// Keep the real in-memory adapter, but return a held snapshot as a remote DB would.
+class PausedMarkerStorage extends InMemoryMemory {
+  pause = false;
+  readonly readStarted = Promise.withResolvers<void>();
+  readonly releaseRead = Promise.withResolvers<void>();
+
+  private async snapshot<T>(value: T): Promise<T> {
+    if (!this.pause) return value;
+    this.pause = false;
+    const snapshot = structuredClone(value);
+    this.readStarted.resolve();
+    await this.releaseRead.promise;
+    return snapshot;
+  }
+
+  override async listMessages(args: Parameters<InMemoryMemory['listMessages']>[0]) {
+    const result = await super.listMessages(args);
+    return args.perPage === 20 ? this.snapshot(result) : result;
+  }
+
+  override async listMessagesById(args: Parameters<InMemoryMemory['listMessagesById']>[0]) {
+    return this.snapshot(await super.listMessagesById(args));
+  }
+}
+
+describe('Cancellation during marker reads (#27792)', () => {
+  it.each(['buffer', 'sync reflection', 'async reflection'] as const)(
+    'does not let %s overwrite application abort metadata',
+    async mode => {
+      const storage = new PausedMarkerStorage({ db: new InMemoryDB() });
+      const store = new InMemoryStore();
+      store.stores.memory = storage;
+      const provider = createLatchedModel('<observations>\n- Too late\n</observations>');
+      const actor = createLatchedModel('Actor');
+      const memory = new Memory({
+        storage: store,
+        options: {
+          generateTitle: false,
+          observationalMemory: {
+            enabled: true,
+            observation: {
+              model: provider.model,
+              messageTokens: mode === 'buffer' ? 1000 : 100_000,
+              bufferTokens: mode === 'buffer' ? 1 : mode === 'async reflection' ? 10_000 : false,
+            },
+            reflection: {
+              model: provider.model,
+              observationTokens: mode === 'sync reflection' ? 100 : mode === 'async reflection' ? 2000 : 100_000,
+              bufferActivation: mode === 'async reflection' ? 0.2 : undefined,
+            },
+          },
+        },
+      });
+      const engine = (await memory.omEngine)!;
+      const threadId = `marker-read-${mode}`;
+      const resourceId = 'marker-resource';
+      const target: MastraDBMessage = {
+        id: `prior-${mode}`,
+        threadId,
+        resourceId,
+        role: mode === 'buffer' ? 'assistant' : 'user',
+        createdAt: new Date('2020-01-01'),
+        content: { format: 2, parts: [{ type: 'text', text: 'Previously accepted content.' }] },
+      };
+      await engine.persistMessages([target], threadId, resourceId);
+      if (mode !== 'buffer') {
+        const record = await engine.getOrCreateRecord(threadId, resourceId);
+        await storage.updateActiveObservations({
+          id: record.id,
+          observations: '- Existing observation.\n'.repeat(30),
+          tokenCount: 1000,
+        });
+      }
+      const controller = new AbortController();
+      const agent = new Agent({ id: threadId, name: threadId, model: actor.model, instructions: 'Help.', memory });
+      storage.pause = true;
+      const run = agent
+        .stream('Remember this request. '.repeat(20), {
+          abortSignal: controller.signal,
+          memory: { thread: threadId, resource: resourceId },
+        })
+        .then(result => result.consumeStream())
+        .catch(() => undefined);
+      try {
+        await storage.readStarted.promise;
+        controller.abort();
+        const {
+          messages: [saved],
+        } = await storage.listMessagesById({ messageIds: [target.id] });
+        if (!saved) throw new Error('Expected the accepted message in storage');
+        await storage.saveMessages({
+          messages: [{ ...saved, content: { ...saved.content, metadata: { abortedByApplication: true } } }],
+        });
+        storage.releaseRead.resolve();
+        await run;
+        await engine.waitForBuffering(threadId, resourceId);
+        const {
+          messages: [after],
+        } = await storage.listMessagesById({ messageIds: [target.id] });
+        expect(after?.content.metadata).toMatchObject({ abortedByApplication: true });
+        expect(provider.calls).toBe(0);
+      } finally {
+        controller.abort();
+        storage.releaseRead.resolve();
+        provider.release();
+        actor.release();
+        await run;
+        await engine.waitForBuffering(threadId, resourceId);
+      }
+    },
+  );
 });

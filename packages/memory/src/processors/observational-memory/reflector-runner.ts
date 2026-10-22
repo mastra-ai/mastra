@@ -242,6 +242,7 @@ export class ReflectorRunner {
     marker: { type: string; data: unknown },
     threadId: string,
     resourceId?: string,
+    abortSignal?: AbortSignal,
   ) => Promise<void>;
   private readonly persistMarkerToMessage: (
     marker: { type: string; data: unknown },
@@ -285,6 +286,7 @@ export class ReflectorRunner {
       marker: { type: string; data: unknown },
       threadId: string,
       resourceId?: string,
+      abortSignal?: AbortSignal,
     ) => Promise<void>;
     persistMarkerToMessage: (
       marker: { type: string; data: unknown },
@@ -626,7 +628,7 @@ export class ReflectorRunner {
         });
         // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
         await streamContext.writer.custom({ ...failedMarker, transient: true }).catch(() => {});
-        await this.persistMarkerToStorage(failedMarker, streamContext.threadId, streamContext.resourceId);
+        await this.persistMarkerToStorage(failedMarker, streamContext.threadId, streamContext.resourceId, abortSignal);
 
         const retryCycleId = crypto.randomUUID();
         streamContext.cycleId = retryCycleId;
@@ -643,7 +645,7 @@ export class ReflectorRunner {
         streamContext.startedAt = startMarker.data.startedAt;
         // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
         await streamContext.writer.custom({ ...startMarker, transient: true }).catch(() => {});
-        await this.persistMarkerToStorage(startMarker, streamContext.threadId, streamContext.resourceId);
+        await this.persistMarkerToStorage(startMarker, streamContext.threadId, streamContext.resourceId, abortSignal);
       }
 
       currentLevel = Math.min(currentLevel + 1, maxLevel) as CompressionLevel;
@@ -774,7 +776,12 @@ export class ReflectorRunner {
             });
             // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
             void writer.custom({ ...failedMarker, transient: true }).catch(() => {});
-            await this.persistMarkerToStorage(failedMarker, record.threadId ?? '', record.resourceId ?? undefined);
+            await this.persistMarkerToStorage(
+              failedMarker,
+              record.threadId ?? '',
+              record.resourceId ?? undefined,
+              operation.signal,
+            );
           } catch (markerError) {
             omError(
               '[OM] Failed to persist buffering-failed marker after async buffered reflection failure',
@@ -893,6 +900,7 @@ export class ReflectorRunner {
         startMarker,
         currentRecord.threadId ?? '',
         currentRecord.resourceId ?? undefined,
+        abortSignal,
       );
     }
 
@@ -978,7 +986,12 @@ export class ReflectorRunner {
       });
       // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
       void writer.custom({ ...endMarker, transient: true }).catch(() => {});
-      await this.persistMarkerToStorage(endMarker, currentRecord.threadId ?? '', currentRecord.resourceId ?? undefined);
+      await this.persistMarkerToStorage(
+        endMarker,
+        currentRecord.threadId ?? '',
+        currentRecord.resourceId ?? undefined,
+        abortSignal,
+      );
     }
 
     return { usage: reflectResult.usage, providerMetadata: reflectResult.providerMetadata };
@@ -1427,7 +1440,7 @@ export class ReflectorRunner {
       });
       // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
       await writer.custom({ ...startMarker, transient: true }).catch(() => {});
-      await this.persistMarkerToStorage(startMarker, threadId, record.resourceId ?? undefined);
+      await this.persistMarkerToStorage(startMarker, threadId, record.resourceId ?? undefined, abortSignal);
     }
 
     this.emitDebugEvent({
@@ -1565,7 +1578,7 @@ export class ReflectorRunner {
         });
         // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
         await writer.custom({ ...endMarker, transient: true }).catch(() => {});
-        await this.persistMarkerToStorage(endMarker, threadId, record.resourceId ?? undefined);
+        await this.persistMarkerToStorage(endMarker, threadId, record.resourceId ?? undefined, abortSignal);
       }
 
       this.emitDebugEvent({
@@ -1612,7 +1625,7 @@ export class ReflectorRunner {
       if (!persistedToList) {
         // Best-effort: a marker storage failure must not replace the reflector error.
         try {
-          await this.persistMarkerToStorage(failedMarker, threadId, record.resourceId ?? undefined);
+          await this.persistMarkerToStorage(failedMarker, threadId, record.resourceId ?? undefined, abortSignal);
         } catch (markerError) {
           omError('[OM] Failed to persist reflection-failed marker', markerError);
         }
