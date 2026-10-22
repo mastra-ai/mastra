@@ -121,7 +121,7 @@ describe('reviewBoard', () => {
 
     expect(argumentsText).toContain('checked out on the session branch');
     expect(argumentsText).toContain(
-      'if git rev-parse --is-shallow-repository | grep -qx true; then git fetch --unshallow --filter=blob:none origin; fi && git fetch --filter=blob:none origin refs/pull/23029/head && git checkout -B "$(git symbolic-ref --short HEAD)" FETCH_HEAD',
+      'if git rev-parse --is-shallow-repository | grep -qx true; then git fetch --unshallow --filter=blob:none origin; fi && git fetch --filter=blob:none origin refs/pull/23029/head && git checkout -B "$session_branch" FETCH_HEAD',
     );
   });
 
@@ -143,6 +143,7 @@ describe('reviewBoard', () => {
         await git('update-ref', 'refs/pull/23029/head', head);
         await git('remote', 'add', 'origin', cwd);
         await git('checkout', '-b', branch, previous);
+        await git('branch', '-f', 'main', previous);
         const context = reviewContext('feat/review-board', 'review');
         context.item.metadata = {
           ...context.item.metadata,
@@ -155,9 +156,17 @@ describe('reviewBoard', () => {
         expect(decision.skillName).toBe('factory-rereview');
         const command = /refresh with `([^`]+)`/.exec(decision.arguments)?.[1];
         if (!command) throw new Error('Expected runnable PR refresh hint.');
+        // Refresh after comparing against main must not reset that branch (#28048).
+        await git('checkout', 'main');
+        await expect(exec('sh', ['-c', command], { cwd })).rejects.toThrow();
+        expect(await git('branch', '--show-current')).toBe('main');
+        expect(await git('rev-parse', 'main')).toBe(previous);
+        expect(await git('rev-parse', branch)).toBe(previous);
+        await git('checkout', branch);
         await exec('sh', ['-c', command], { cwd });
         expect(await git('branch', '--show-current')).toBe(branch);
         expect(await git('rev-parse', 'HEAD')).toBe(head);
+        expect(await git('rev-parse', 'main')).toBe(previous);
         // A later workspace setup checks the persisted session branch out again.
         await git('checkout', branch);
         expect(await git('rev-parse', 'HEAD')).toBe(head);
