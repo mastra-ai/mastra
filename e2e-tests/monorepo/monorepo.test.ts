@@ -777,6 +777,21 @@ export const transitiveOnlyRoute = registerApiRoute('/transitive-only', {
 `,
         );
         await writeFile(
+          join(fixturePath, 'apps', 'custom', 'src', 'mastra', 'api', 'route', 'optimized-dependencies.ts'),
+          `import { registerApiRoute } from '@mastra/core/server';
+import { camelCase } from 'lodash';
+import { getDaysInMonth } from 'date-fns';
+
+export const optimizedDependenciesRoute = registerApiRoute('/optimized-dependencies', {
+  method: 'GET',
+  handler: async c => c.json({
+    label: camelCase('virtual dependency entries'),
+    days: getDaysInMonth(new Date('2026-02-10T12:00:00Z')),
+  }),
+});
+`,
+        );
+        await writeFile(
           mastraConfigPath,
           originalMastraConfig
             .replace(
@@ -785,9 +800,12 @@ export const transitiveOnlyRoute = registerApiRoute('/transitive-only', {
             )
             .replace(
               "import { testRoute } from '@/api/route/test';",
-              "import { testRoute } from '@/api/route/test';\nimport { versionlessRoute } from '@/api/route/versionless';\nimport { transitiveOnlyRoute } from '@/api/route/transitive-only';",
+              "import { testRoute } from '@/api/route/test';\nimport { versionlessRoute } from '@/api/route/versionless';\nimport { transitiveOnlyRoute } from '@/api/route/transitive-only';\nimport { optimizedDependenciesRoute } from '@/api/route/optimized-dependencies';",
             )
-            .replace(/apiRoutes: \[\s*testRoute,/, 'apiRoutes: [testRoute, versionlessRoute, transitiveOnlyRoute,'),
+            .replace(
+              /apiRoutes: \[\s*testRoute,/,
+              'apiRoutes: [testRoute, versionlessRoute, transitiveOnlyRoute, optimizedDependenciesRoute,',
+            ),
         );
         for (const [index, packageJsonPath] of packageJsonPaths.entries()) {
           const packageJson = JSON.parse(originalPackageJsons[index]!);
@@ -870,6 +888,12 @@ export const transitiveOnlyRoute = registerApiRoute('/transitive-only', {
       const hasWorkspaceMappedPath = content.includes('~/utils');
 
       expect(hasWorkspaceMappedPath).toBeFalsy();
+    });
+
+    it('should preserve exports from multiple optimized dependency entries', async () => {
+      const response = await fetch(`http://localhost:${port}/optimized-dependencies`);
+      expect(response.status).toBe(200);
+      expect(await response.json()).toEqual({ label: 'virtualDependencyEntries', days: 28 });
     });
 
     it('should keep deprecated externals out of optimized dependency bundles', async () => {

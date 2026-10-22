@@ -17,7 +17,7 @@ export const opsAgent = new Agent({
   id: 'ops',
   name: 'ops',
   instructions: 'You help the team track work in Linear and GitHub.',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: tools(),
 })
 ```
@@ -72,20 +72,6 @@ See [Connect](/docs/mastra-platform/connect/overview) to get started and [Tools]
             type: 'boolean | string[]',
             description:
               'Default tool-approval policy applied to every provider without its own requireApproval. true gates every provider tool except the synthetic <provider>__list_connections helper; an array of keys or * globs gates matching provider tools, with the same exception. A provider opts out with requireApproval: false.',
-            isOptional: true,
-          },
-          {
-            name: 'resourceId',
-            type: 'string | ((ctx?) => string | undefined | Promise<string | undefined>)',
-            description:
-              "End-user resource ID to resolve for: the agent gets global connections plus that user's own end-user connections, and every platform call asserts the ID. Pass a string (the per-request pattern tools: ctx => tools({ resourceId: ... }) stays cheap because identical options share one internal state) or a callback derived per resolution from the invocation context. A callback returning undefined resolves global-only. See End-user connections.",
-            isOptional: true,
-          },
-          {
-            name: 'connectPrompt',
-            type: 'boolean',
-            description:
-              "Whether resource-scoped resolutions include the built-in request_connection tool, which lets the agent prompt the user to connect a provider account mid-conversation. Defaults to true; never added to global-only resolutions. The tool's connectable set follows the providers allowlist when one is set. Otherwise it uses the project's provider configuration in Mastra Platform: an unset configuration exposes the full catalog, a list restricts providers, and an empty list disables new connections. See End-user connections.",
             isOptional: true,
           },
           {

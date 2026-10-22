@@ -12,17 +12,17 @@
         "values": ["high", "max"]
       }
     ],
+    "moonshotai/kimi-k2.6": [
+      {
+        "type": "toggle"
+      }
+    ],
     "minimaxai/minimax-m3": [
       {
         "type": "toggle"
       }
     ],
     "google/gemma-4-31b-it": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "moonshotai/kimi-k2.6": [
       {
         "type": "toggle"
       }

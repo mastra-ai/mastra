@@ -30,7 +30,7 @@ export function SidebarNavStackRoot({
       <div
         data-slot="sidebar-nav-stack"
         data-value={value}
-        className={cn('relative grid min-w-0 overflow-hidden', className)}
+        className={cn('relative -m-0.5 grid min-w-0 overflow-hidden p-0.5', className)}
         {...props}
       >
         {children}

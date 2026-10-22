@@ -122,6 +122,34 @@ function isRetakeLeaseOwner(owner: string | undefined): boolean {
   return owner?.includes(RETAKE_LEASE_MARKER) ?? false;
 }
 
+// How much longer than its window a discovery may wait for a caller whose event loop was busy.
+const AGENT_THREAD_PEER_DISCOVERY_MAX_EXTRA_MS = 1_000;
+
+/**
+ * Calls `close` once the caller has had `windowMs` in which it could read replies, or after
+ * `windowMs + maxExtraMs` of wall time. Time the event loop spent busy doesn't count: replies that
+ * arrived meanwhile are still unread when the loop frees up, so closing on a plain timer then
+ * would drop every answer and report live peers as absent. Elapsed time is read from the monotonic
+ * clock, so a wall-clock step can't keep the window open. Returns a cancel function.
+ */
+function startListeningWindow(windowMs: number, maxExtraMs: number, close: () => void): () => void {
+  const tickMs = Math.max(1, Math.min(10, Math.floor(windowMs / 10)));
+  const startedAt = performance.now();
+  let lastTickAt = startedAt;
+  let listenedMs = 0;
+  let timer: ReturnType<typeof setTimeout>;
+  const tick = () => {
+    const now = performance.now();
+    // A tick far later than scheduled means the loop was busy; credit only a normal tick for it.
+    listenedMs += Math.min(now - lastTickAt, tickMs * 2);
+    lastTickAt = now;
+    if (listenedMs >= windowMs || now - startedAt >= windowMs + maxExtraMs) close();
+    else timer = setTimeout(tick, tickMs);
+  };
+  timer = setTimeout(tick, tickMs);
+  return () => clearTimeout(timer);
+}
+
 /**
  * Slack added to a request's carried `expiresAt` before a responder drops it
  * as stale. Requests cross processes, so the check compares two machines'
@@ -2067,7 +2095,7 @@ export class AgentThreadStreamRuntime {
       const finish = () => {
         if (settled) return;
         settled = true;
-        clearTimeout(timeout);
+        cancelWindow();
         resolve();
         releaseReplyTopic(resolvedPubSub, replyTopic, onReply);
       };
@@ -2081,7 +2109,7 @@ export class AgentThreadStreamRuntime {
       // it late (backlog replay, redelivery) can drop it instead of replying
       // into the released reply topic.
       const expiresAt = Date.now() + timeoutMs;
-      const timeout = setTimeout(finish, timeoutMs);
+      const cancelWindow = startListeningWindow(timeoutMs, AGENT_THREAD_PEER_DISCOVERY_MAX_EXTRA_MS, finish);
 
       void resolvedPubSub
         .subscribe(replyTopic, onReply)

@@ -484,16 +484,13 @@ export class DODB extends MastraBase {
               return this.serializeValue(value);
             });
 
-            const recordToUpsert = columns.reduce(
-              (acc, col) => {
-                // Don't update conflict keys or createdAt on conflict
-                if (col !== 'createdAt' && !conflictKeys.includes(col)) {
-                  acc[col] = `excluded.${col}`;
-                }
-                return acc;
-              },
-              {} as Record<string, string>,
-            );
+            const recordToUpsert = columns.reduce<Record<string, string>>((acc, col) => {
+              // Don't update conflict keys or createdAt on conflict
+              if (col !== 'createdAt' && !conflictKeys.includes(col)) {
+                acc[col] = `excluded.${col}`;
+              }
+              return acc;
+            }, {});
 
             const query = createSqlBuilder().insert(
               fullTableName,

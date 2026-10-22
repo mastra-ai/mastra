@@ -10,6 +10,7 @@ import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
   getCustomHTTPExceptionResponse,
+  getHTTPErrorResponse,
   isSafeObjectKey,
   isZodError,
   normalizeQueryParams,
@@ -566,12 +567,18 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         // Check route permission requirement (EE feature)
         // Uses convention-based permission derivation: permissions are auto-derived
         // from route path/method unless explicitly set or route is public
-        const authConfig = this.mastra.getServer()?.auth;
-        if (authConfig) {
+        // Check if any auth is configured (studio or server) for RBAC
+        const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
+        if (hasAuth) {
           const hasPermission = await loadHasPermission();
           if (hasPermission) {
             const userPermissions = res.locals.requestContext.get('mastra__userPermissions') as string[] | undefined;
-            const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
+            const permissionError = this.checkRoutePermission(
+              route,
+              userPermissions,
+              hasPermission,
+              res.locals.requestContext,
+            );
 
             if (permissionError) {
               return res.status(permissionError.status).json({
@@ -615,24 +622,8 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
             return;
           }
 
-          // Check if it's an HTTPException or MastraError with a status code
-          let status = 500;
-          if (error && typeof error === 'object') {
-            // Check for direct status property (HTTPException)
-            if ('status' in error) {
-              status = (error as any).status;
-            }
-            // Check for MastraError with status in details
-            else if (
-              'details' in error &&
-              error.details &&
-              typeof error.details === 'object' &&
-              'status' in error.details
-            ) {
-              status = (error.details as any).status;
-            }
-          }
-          res.status(status).json({ error: error instanceof Error ? error.message : 'Unknown error' });
+          const { status, body } = getHTTPErrorResponse(error);
+          res.status(status).json(body);
         }
       },
     );
@@ -688,12 +679,18 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
             }
           }
 
-          const authConfig = this.mastra.getServer()?.auth;
-          if (authConfig) {
+          // Check if any auth is configured (studio or server) for RBAC
+          const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
+          if (hasAuth) {
             const hasPermission = await loadHasPermission();
             if (hasPermission) {
               const userPermissions = res.locals.requestContext.get('mastra__userPermissions') as string[] | undefined;
-              const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
+              const permissionError = this.checkRoutePermission(
+                serverRoute,
+                userPermissions,
+                hasPermission,
+                res.locals.requestContext,
+              );
               if (permissionError) {
                 return res.status(permissionError.status).json({
                   error: permissionError.error,
@@ -705,10 +702,12 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
         }
 
         // Check FGA authorization (EE feature)
+        // Path params last: the custom handler reads them from the URL, so query/body
+        // values must not be able to change which resource FGA checks.
         const fgaError = await checkRouteFGA(this.mastra, serverRoute, res.locals.requestContext, {
-          ...(matchedRoute?.params ?? {}),
           ...(req.query as Record<string, string>),
           ...(typeof req.body === 'object' && req.body !== null ? req.body : {}),
+          ...(matchedRoute?.params ?? {}),
         });
         if (fgaError) {
           return res.status(fgaError.status).json({ error: fgaError.error, message: fgaError.message });

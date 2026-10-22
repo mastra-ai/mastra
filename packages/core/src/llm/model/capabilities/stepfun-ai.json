@@ -16,12 +16,6 @@
         "values": ["low", "high"]
       }
     ],
-    "step-5-preview": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "step-3.7-flash": [
       {
         "type": "effort",
@@ -32,6 +26,12 @@
       {
         "type": "effort",
         "values": ["low", "high"]
+      }
+    ],
+    "step-5-preview": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ]
   }

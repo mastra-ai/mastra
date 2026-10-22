@@ -43,12 +43,6 @@
     "zai-org/GLM-5.2-FP8"
   ],
   "reasoning": {
-    "z-ai/glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
     "zai-org/GLM-5.2-FP8": [
       {
         "type": "effort",
@@ -60,10 +54,24 @@
         "type": "toggle"
       }
     ],
-    "stepfun/step-3.7-flash": [
+    "qwen/qwen3.8-27b": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "qwen/qwen3.6-27b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "z-ai/glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
       }
     ],
     "minimax/minimax-m3": [
@@ -71,10 +79,13 @@
         "type": "toggle"
       }
     ],
-    "deepseek/deepseek-v4-flash-0731": [
+    "stepfun/step-3.7-flash": [
       {
-        "type": "toggle"
-      },
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "ambient/large": [
       {
         "type": "effort",
         "values": ["high", "max"]
@@ -89,21 +100,10 @@
         "values": ["high", "max"]
       }
     ],
-    "qwen/qwen3.6-27b": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen/qwen3.8-27b": [
+    "deepseek/deepseek-v4-flash-0731": [
       {
         "type": "toggle"
       },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      }
-    ],
-    "ambient/large": [
       {
         "type": "effort",
         "values": ["high", "max"]

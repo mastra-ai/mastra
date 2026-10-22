@@ -2463,6 +2463,28 @@ describe('Agent signals: claimed thread ownership', () => {
     ).resolves.toEqual([]);
   });
 
+  it('closes peer discovery on time when the wall clock steps back while it listens', async () => {
+    const agent = new Agent({
+      id: 'clock-step-agent',
+      name: 'Clock Step Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('unused'),
+      pubsub: new EventEmitterPubSub(),
+    });
+    const realNow = Date.now.bind(Date);
+    let shift = 0;
+    const now = vi.spyOn(Date, 'now').mockImplementation(() => realNow() + shift);
+    // While discovery listens, the wall clock steps back an hour, as after an NTP correction.
+    setTimeout(() => (shift = -3_600_000), 20);
+    try {
+      await expect(
+        withTimeout(agent.discoverThreadPeers({ timeoutMs: 50 }), 'Peer discovery outlived its window', 2_000),
+      ).resolves.toEqual([]);
+    } finally {
+      now.mockRestore();
+    }
+  });
+
   it('rejects an idle wake that requires an unavailable claimed owner', async () => {
     const pubsub = new EventEmitterPubSub();
     const agent = new Agent({
