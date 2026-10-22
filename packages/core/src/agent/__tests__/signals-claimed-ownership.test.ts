@@ -1799,6 +1799,130 @@ describe('Agent signals: claimed thread ownership', () => {
     }
   });
 
+  it.each(['remote-newer', 'error-newer', 'error-own'] as const)(
+    'overlapping reservations keep only the newer input when the losing attempt settles %s',
+    async mode => {
+      const pubsub = new ControlledLeasePubSub();
+      const runtime = agentThreadStreamRuntime;
+      const target = { resourceId: 'claim-overlap-user', threadId: 'claim-overlap-thread' };
+      const key = `${target.resourceId}\u0000${target.threadId}`;
+      const agent = new Agent({
+        id: 'claim-overlap-agent',
+        name: 'Claim Overlap Agent',
+        instructions: 'Test',
+        model: createTextStreamModel('ok'),
+        pubsub,
+      });
+      const claim = await runtime.claimThreadOwnership(agent, target, pubsub);
+      let releaseAcquire!: () => void;
+      const acquireStarted = new Promise<void>(resolve => {
+        pubsub.onAcquireLease = resolve;
+      });
+      pubsub.acquireLeaseWait = new Promise<void>(resolve => (releaseAcquire = resolve));
+      const acquire = vi.spyOn(pubsub, 'acquireLease').mockImplementationOnce(async () => {
+        pubsub.onAcquireLease?.();
+        await pubsub.acquireLeaseWait;
+        if (mode === 'remote-newer') return { acquired: false, owner: 'foreign-owner' };
+        throw new Error('injected backend rejection');
+      });
+      try {
+        const first = runtime.sendSignal(
+          agent,
+          { type: 'user-message', contents: 'old wake' },
+          { ...target, ifIdle: { behavior: 'wake' } },
+          pubsub,
+        );
+        const firstOutcome = first.accepted.then(
+          (value: unknown) => ({ value }),
+          (error: unknown) => ({ error }),
+        );
+        await acquireStarted;
+        const oldRunId = runtime.getActiveThreadRunId(target, pubsub)!;
+
+        let oldConcurrent: ReturnType<AgentThreadStreamRuntime['sendSignal']> | undefined;
+        let newer: ReturnType<AgentThreadStreamRuntime['sendSignal']> | undefined;
+        if (mode !== 'error-own') {
+          oldConcurrent = runtime.sendSignal(
+            agent,
+            { type: 'user-message', contents: 'old input must not replay' },
+            target,
+            pubsub,
+          );
+          // A newer reservation replaces the old one before the old attempt
+          // settles, so the old rollback's slot guard must not clean the queue.
+          runtime.releaseThreadRunReservation(oldRunId, pubsub);
+          await runtime.waitForCrossAgentThreadRun(
+            agent,
+            { runId: 'newer-run', memory: { resource: target.resourceId, thread: target.threadId } },
+            pubsub,
+          );
+          newer = runtime.sendSignal(
+            agent,
+            { type: 'user-message', contents: 'newer input must survive' },
+            target,
+            pubsub,
+          );
+          await expect(newer.accepted).resolves.toMatchObject({ action: 'deliver', runId: 'newer-run' });
+        } else {
+          oldConcurrent = runtime.sendSignal(
+            agent,
+            { type: 'user-message', contents: 'rejected attempt input' },
+            target,
+            pubsub,
+          );
+        }
+
+        if (mode === 'remote-newer') pubsub.owners.set(key, 'foreign-owner');
+        releaseAcquire();
+
+        const settled = await firstOutcome;
+        if (mode === 'remote-newer') {
+          expect(settled).toMatchObject({ value: { action: 'deliver', runId: 'foreign-owner' } });
+        } else {
+          expect(settled.error).toBeDefined();
+        }
+        await expect(oldConcurrent!.accepted).resolves.toMatchObject({
+          action: mode === 'remote-newer' ? 'deliver' : 'blocked',
+        });
+        if (mode === 'remote-newer') {
+          expect(
+            pubsub.publishedData.filter(
+              data =>
+                data?.type === 'signal-enqueued' &&
+                data.signal?.id === oldConcurrent!.signal.id &&
+                data.runId === 'foreign-owner',
+            ),
+          ).toHaveLength(1);
+        }
+
+        if (mode !== 'error-own') {
+          // Only the newer reservation's own input may reach the newer run; the
+          // old attempt's input was acknowledged (forwarded or blocked) and must
+          // not replay here.
+          expect(runtime.getActiveThreadRunId(target, pubsub)).toBe('newer-run');
+          expect(runtime.drainPendingSignals('newer-run', pubsub, 'pre-run').map(signal => signal.id)).toEqual([
+            newer!.signal.id,
+          ]);
+          runtime.releaseThreadRunReservation('newer-run', pubsub);
+        } else {
+          expect(runtime.getActiveThreadRunId(target, pubsub)).toBeUndefined();
+          await runtime.waitForCrossAgentThreadRun(
+            agent,
+            { runId: 'recovery-run', memory: { resource: target.resourceId, thread: target.threadId } },
+            pubsub,
+          );
+          expect(runtime.drainPendingSignals('recovery-run', pubsub, 'pre-run')).toEqual([]);
+          runtime.releaseThreadRunReservation('recovery-run', pubsub);
+        }
+      } finally {
+        releaseAcquire();
+        acquire.mockRestore();
+        claim.unsubscribe();
+        runtime.resetForTests();
+      }
+    },
+  );
+
   it('does not start a claimed-owner run when lease acquisition completes after the admission deadline', async () => {
     const now = vi.spyOn(Date, 'now').mockReturnValue(1_000);
     try {
