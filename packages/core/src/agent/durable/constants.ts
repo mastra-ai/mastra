@@ -16,18 +16,6 @@ export const RUN_REGISTRY_SYMBOL = Symbol('run_registry');
 export const AGENT_STREAM_TOPIC = (runId: string): string => `agent.stream.${runId}`;
 
 /**
- * How long a run's retained stream log is kept once the run parks.
- *
- * Retention is measured from the suspend, not from the last frame, because a
- * tool approval can legitimately wait hours. Terminal cleanup deletes the log,
- * so this only bounds a run that is abandoned while suspended. It has to be
- * comfortably longer than the approval wait: once the log expires, a resumed
- * run restarts numbering at 0 and an attached subscriber holding the old
- * cursor drops every new frame.
- */
-export const SUSPENDED_RUN_LOG_RETENTION_MS = 24 * 60 * 60 * 1000;
-
-/**
  * Generate the pubsub topic name for agent control messages.
  *
  * Separate from {@link AGENT_STREAM_TOPIC} because control messages travel the

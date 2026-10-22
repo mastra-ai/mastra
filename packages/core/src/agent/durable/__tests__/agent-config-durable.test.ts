@@ -96,13 +96,7 @@ describe('AgentConfig.durable', () => {
       name: 'B',
       instructions: 'test',
       model: makeMockModel(),
-      durable: {
-        cache,
-        maxSteps: 3,
-        cleanupTimeoutMs: 5_000,
-        suspendedRunLogRetentionMs: 90 * 60_000,
-        shouldPersistSnapshot,
-      },
+      durable: { cache, maxSteps: 3, cleanupTimeoutMs: 5_000, shouldPersistSnapshot },
     });
 
     const mastra = new Mastra({ agents: { b: raw as any } });
@@ -112,7 +106,6 @@ describe('AgentConfig.durable', () => {
     expect(registered.cache).toBe(cache);
     expect(registered.maxSteps).toBe(3);
     expect(registered.cleanupTimeoutMs).toBe(5_000);
-    expect(registered.suspendedRunLogRetentionMs).toBe(90 * 60_000);
     // Non-serializable code-side option: the predicate must arrive by
     // reference on the wrapper.
     expect((registered as any).userShouldPersistSnapshot).toBe(shouldPersistSnapshot);

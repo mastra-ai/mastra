@@ -57,11 +57,6 @@ describe('ValkeyServerCache', () => {
     const args = command.mock.calls[0]?.[0] as string[];
     expect(args[0]).toBe('EVAL');
     expect(args[1]).toContain("redis.call('INCR', KEYS[2])");
-    // Deadlines are read before the writes so an append cannot stamp the cache
-    // default over a window extended for a parked run. Lua can't execute here,
-    // so the real behavior is covered against a live Valkey in CI.
-    expect(args[1]!.indexOf("redis.call('TTL', KEYS[1])")).toBeLessThan(args[1]!.indexOf("redis.call('INCR'"));
-    expect(args[1]).toContain('current ~= -1 and current < ttl');
     expect(args.slice(2)).toEqual([
       '2',
       'mastra:cache:events',
@@ -71,45 +66,12 @@ describe('ValkeyServerCache', () => {
     ]);
   });
 
-  it('expire extends the key TTL in seconds with one atomic script', async () => {
-    command.mockResolvedValueOnce(1);
+  it('listPushIndexed raises the TTL of both keys to a requested longer TTL', async () => {
+    command.mockResolvedValue(1);
 
-    await cache.expire('events', 91_000);
+    await cache.listPushIndexed('events', 'events:counter', { type: 'chunk' }, 24 * 60 * 60 * 1000);
+    await cache.listPushIndexed('events', 'events:counter', { type: 'chunk' }, 1_000);
 
-    // The TTL check and the EXPIRE share one script, so an append stamping its
-    // own deadline cannot interleave between them.
-    const args = command.mock.calls[0]?.[0] as string[];
-    expect(args[0]).toBe('EVAL');
-    expect(args[1]).toContain("redis.call('TTL', KEYS[1])");
-    expect(args.slice(2)).toEqual(['1', 'mastra:cache:events', '91']);
-
-    await cache.expire('events', 0);
-    // A non-positive TTL means "no extension", not "delete".
-    expect(command).toHaveBeenCalledTimes(1);
-  });
-
-  it('expire only ever lengthens the deadline', async () => {
-    // Lua cannot run here, so assert the script reads TTL itself, returns
-    // without writing for persistent (-1) or missing (-2) keys, and compares
-    // before it extends. Behaviour is covered against real Valkey by CI.
-    command.mockResolvedValueOnce(1);
-    await cache.expire('events', 24 * 60 * 60 * 1000);
-
-    const args = command.mock.calls[0]?.[0] as string[];
-    const script = args[1]!;
-    expect(script.indexOf("redis.call('TTL', KEYS[1])")).toBeGreaterThan(-1);
-    expect(script).toContain('if current == -1 or current == -2 then return 0 end');
-    expect(script.indexOf('if current >= want then return 0 end')).toBeLessThan(script.indexOf("redis.call('EXPIRE'"));
-    expect(args.slice(2)).toEqual(['1', 'mastra:cache:events', String(24 * 60 * 60)]);
-  });
-
-  it('expire leaves a cache configured without expiry persistent', async () => {
-    // The cache itself never grants deadlines, so a parked-run retention bump
-    // must not turn its keys into expiring ones.
-    const immortal = new ValkeyServerCache({ client }, { ttlSeconds: 0 });
-
-    await immortal.expire('events', 91_000);
-
-    expect(command).not.toHaveBeenCalled();
+    expect(command.mock.calls.map(call => (call[0] as string[]).at(-1))).toEqual(['86400', '300']);
   });
 });

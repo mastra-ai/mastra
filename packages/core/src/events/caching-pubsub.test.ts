@@ -4,6 +4,7 @@ import type { IMastraLogger } from '../logger';
 import { CachingPubSub, withCaching } from './caching-pubsub';
 import { EventEmitterPubSub } from './event-emitter';
 import { isLeaseProvider, PubSub } from './pubsub';
+import { RUN_LOG_TTL_MS } from './topics';
 import type { Event, EventCallback, SubscribeOptions } from './types';
 
 describe('CachingPubSub', () => {
@@ -1560,37 +1561,30 @@ describe('CachingPubSub', () => {
       expect(await shared.get(`pubsub:{${topic}}:counter`)).toBe(1);
     });
 
-    it('extends the retention of the log and its counter together', async () => {
+    it('retains a durable run log for the run-log TTL on every append', async () => {
       const shared = new InMemoryServerCache();
-      const expire = vi.spyOn(shared, 'expire');
+      const append = vi.spyOn(shared, 'listPushIndexed');
       const pubsub = new CachingPubSub(new EventEmitterPubSub(), shared);
 
-      await pubsub.extendRetention(topic, 86_400_000);
+      await pubsub.publish('agent.stream.run-parked', { type: 'chunk', runId: 'run-parked', data: {} });
+      await pubsub.publish('other-topic', { type: 'chunk', runId: 'run-1', data: {} });
 
-      // The counter has to outlive the list by exactly nothing, so both keys
-      // get the new deadline; extending one alone would restart numbering at 0
-      // under a subscriber that still holds its cursor.
-      expect(expire.mock.calls).toEqual([
-        [`pubsub:{${topic}}`, 86_400_000],
-        [`pubsub:{${topic}}:counter`, 86_400_000],
-      ]);
+      // A run parked on an approval outlives the cache default; its log has to
+      // as well. Other topics keep the cache's own TTL.
+      expect(append.mock.calls.map(call => call[3])).toEqual([RUN_LOG_TTL_MS, undefined]);
     });
 
     it('keeps a parked run observable past the cache default retention', async () => {
-      vi.useFakeTimers();
-      try {
-        const shared = new InMemoryServerCache({ ttlMs: 1_000 });
-        const pubsub = new CachingPubSub(new EventEmitterPubSub(), shared);
-        await pubsub.publish(topic, { type: 'chunk', runId: 'run-1', data: { n: 0 } });
+      const runTopic = 'agent.stream.run-parked';
+      const shared = new InMemoryServerCache({ ttlMs: 20 });
+      const pubsub = new CachingPubSub(new EventEmitterPubSub(), shared);
+      await pubsub.publish(runTopic, { type: 'chunk', runId: 'run-parked', data: { n: 0 } });
 
-        await pubsub.extendRetention(topic, 60_000);
-        await vi.advanceTimersByTimeAsync(30_000);
+      // Real timers: the in-memory cache's TTL clock is not faked by vitest.
+      await new Promise(resolve => setTimeout(resolve, 60));
 
-        expect(await shared.listFromTo(`pubsub:{${topic}}`, 0)).toHaveLength(1);
-        expect(await shared.get(`pubsub:{${topic}}:counter`)).toBe(1);
-      } finally {
-        vi.useRealTimers();
-      }
+      expect(await shared.listFromTo(`pubsub:{${runTopic}}`, 0)).toHaveLength(1);
+      expect(await shared.get(`pubsub:{${runTopic}}:counter`)).toBe(1);
     });
   });
 });

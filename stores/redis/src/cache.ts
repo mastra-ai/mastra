@@ -8,13 +8,6 @@ export interface RedisClient {
   lrange(key: string, start: number, stop: number): Promise<unknown[]>;
   del(...keys: string[]): Promise<number>;
   expire(key: string, seconds: number): Promise<number | boolean>;
-  /**
-   * Remaining lifetime of `key` in seconds: `-1` when it has no expiry, `-2`
-   * when it does not exist. Required because {@link RedisServerCache.expire}
-   * has to compare deadlines: without it a retention refresh could shorten a
-   * longer configured TTL, expiring a parked run's replay log early.
-   */
-  ttl(key: string): Promise<number>;
   scan(cursor: string | number, ...args: unknown[]): Promise<[string | number, string[]]>;
   incr(key: string): Promise<number>;
   /**
@@ -101,8 +94,6 @@ const defaultEvalScript = (client: RedisClient, script: string, keys: string[], 
  * so `{...}` → `{"index":N,...}` and `{}` → `{"index":N}`.
  */
 export const LIST_PUSH_INDEXED_SCRIPT = `
-local listTtl = redis.call('TTL', KEYS[1])
-local counterTtl = redis.call('TTL', KEYS[2])
 local i = redis.call('INCR', KEYS[2]) - 1
 local body = ARGV[1]
 local doc
@@ -114,38 +105,10 @@ end
 redis.call('RPUSH', KEYS[1], doc)
 local ttl = tonumber(ARGV[2])
 if ttl > 0 then
-  -- Extend-only. A run that parked on an approval has a log and counter with a
-  -- longer deadline than the cache default; stamping the default back on the
-  -- next append would discard that window. -2 means this call created the key,
-  -- -1 means it is persistent on purpose; both cases leave the deadline alone
-  -- except for the key this append just created.
-  local function refresh(key, current)
-    if current == -2 or (current ~= -1 and current < ttl) then
-      redis.call('EXPIRE', key, ttl)
-    end
-  end
-  refresh(KEYS[1], listTtl)
-  refresh(KEYS[2], counterTtl)
+  redis.call('EXPIRE', KEYS[1], ttl)
+  redis.call('EXPIRE', KEYS[2], ttl)
 end
 return i
-`.trim();
-
-/**
- * Extend-only expiry for a single key: raise its deadline to ARGV[1] seconds
- * only when it currently has a shorter one.
- *
- * KEYS[1] = key, ARGV[1] = deadline in seconds
- *
- * Runs as one script so a check-then-set cannot race an append that is stamping
- * its own TTL: the cache never shortens a retention window it just extended.
- */
-export const EXTEND_EXPIRY_SCRIPT = `
-local current = redis.call('TTL', KEYS[1])
-if current == -1 or current == -2 then return 0 end
-local want = tonumber(ARGV[1])
-if current >= want then return 0 end
-redis.call('EXPIRE', KEYS[1], want)
-return 1
 `.trim();
 
 export class RedisServerCache extends MastraServerCache {
@@ -282,40 +245,16 @@ export class RedisServerCache extends MastraServerCache {
     return value;
   }
 
-  async expire(key: string, ttlMs: number): Promise<void> {
-    // A cache configured without expiry keeps that policy: granting a deadline
-    // here would silently shorten keys (including a persistent run log) that
-    // every writer treats as immortal.
-    if (ttlMs <= 0 || this.ttlSeconds <= 0) return;
-    const fullKey = this.getKey(key);
-    const seconds = Math.max(1, Math.ceil(ttlMs / 1000));
-    if (!this.scriptingDisabled) {
-      // One script so the comparison and the write cannot interleave with an
-      // append stamping its own deadline on the same key. The script reads TTL
-      // itself, leaves persistent (-1) and missing (-2) keys alone and only
-      // ever lengthens.
-      await this.evalScript(this.client, EXTEND_EXPIRY_SCRIPT, [fullKey], [String(seconds)]);
-      return;
-    }
-    if (typeof this.client.ttl !== 'function') {
-      // `ttl` is part of the client contract, but an untyped client can still
-      // omit it. Without the current deadline we cannot tell a longer configured
-      // TTL from a shorter one, and applying ours anyway would shorten the very
-      // log this call exists to protect, so skip instead of guessing.
-      return;
-    }
-    const remainingSeconds = await this.client.ttl(fullKey);
-    // `-1` is a key without expiry and `-2` one that is already gone: neither
-    // should be given a (possibly shorter) deadline.
-    if (remainingSeconds < 0 || remainingSeconds * 1000 >= ttlMs) return;
-    await this.client.expire(fullKey, seconds);
-  }
-
   /**
    * Single round-trip index allocation + list append + TTL refresh via Lua.
    * This is the durable stream per-chunk hot path (issue #22477).
    */
-  async listPushIndexed(listKey: string, counterKey: string, value: Record<string, unknown>): Promise<number> {
+  async listPushIndexed(
+    listKey: string,
+    counterKey: string,
+    value: Record<string, unknown>,
+    ttlMs?: number,
+  ): Promise<number> {
     if (this.scriptingDisabled) {
       // `supportsAtomicAppend` is false here, so a caller reaching this point is
       // bypassing the capability check. Failing loudly beats a non-atomic append
@@ -328,7 +267,12 @@ export class RedisServerCache extends MastraServerCache {
       this.client,
       LIST_PUSH_INDEXED_SCRIPT,
       [this.getKey(listKey), this.getKey(counterKey)],
-      [this.serialize(body), String(this.ttlSeconds)],
+      [
+        this.serialize(body),
+        // A cache without expiry stays that way; otherwise `ttlMs` can only
+        // raise the default.
+        String(this.ttlSeconds > 0 ? Math.max(this.ttlSeconds, Math.ceil((ttlMs ?? 0) / 1000)) : 0),
+      ],
     );
     return Number(result);
   }

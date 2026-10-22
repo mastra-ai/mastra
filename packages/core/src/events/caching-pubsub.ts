@@ -2,6 +2,7 @@ import type { MastraServerCache } from '../cache/base';
 import type { IMastraLogger } from '../logger';
 import { isLeaseProvider, PubSub } from './pubsub';
 import type { LeaseProvider } from './pubsub';
+import { cachedLogTtlMs } from './topics';
 import type { Event, EventCallback, SubscribeOptions } from './types';
 
 /**
@@ -173,7 +174,12 @@ export class CachingPubSub extends PubSub {
     let index: number | undefined;
     if (this.cache.supportsAtomicAppend) {
       try {
-        index = await this.cache.listPushIndexed(this.getCacheKey(topic), this.getCounterKey(topic), fullEvent);
+        index = await this.cache.listPushIndexed(
+          this.getCacheKey(topic),
+          this.getCounterKey(topic),
+          fullEvent,
+          cachedLogTtlMs(topic),
+        );
       } catch (error) {
         this.logError(`[CachingPubSub] Failed to cache event for ${topic}`, error);
       }
@@ -444,34 +450,6 @@ export class CachingPubSub extends PubSub {
    */
   getLeaseProvider(): LeaseProvider | undefined {
     return isLeaseProvider(this.inner) ? this.inner : undefined;
-  }
-
-  /**
-   * Keep a topic's retained log alive for `ttlMs` from now, refreshing the list
-   * and its counter together.
-   *
-   * Call this at the point a run parks rather than on every append: a durable
-   * run suspended on a tool approval can wait far longer than the cache's
-   * default retention, and if the log expires mid-suspend the resumed run
-   * restarts numbering at 0 while an attached subscriber still holds the old
-   * cursor. Terminal cleanup still deletes the log (`clearTopic`), so the
-   * extension only covers the parked window.
-   *
-   * Only ever lengthens: a log already configured to live longer than `ttlMs`,
-   * or with no expiry at all, keeps its own deadline.
-   *
-   * Best-effort: a cache that cannot expire a single key keeps its configured
-   * TTL, and failures are logged rather than thrown.
-   */
-  async extendRetention(topic: string, ttlMs: number): Promise<void> {
-    try {
-      await Promise.all([
-        this.cache.expire(this.getCacheKey(topic), ttlMs),
-        this.cache.expire(this.getCounterKey(topic), ttlMs),
-      ]);
-    } catch (error) {
-      this.logError(`[CachingPubSub] Failed to extend retention for topic ${topic}`, error);
-    }
   }
 
   /**

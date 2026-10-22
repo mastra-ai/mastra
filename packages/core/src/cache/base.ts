@@ -30,29 +30,6 @@ export abstract class MastraServerCache extends MastraBase {
   abstract clear(): Promise<void>;
 
   /**
-   * Ensure `key` lives for at least `ttlMs` from now, without changing its
-   * value.
-   *
-   * A retained stream log has to outlive the run that writes it: a durable run
-   * parked on a tool approval can sit far longer than a cache's default
-   * retention, and once its log expires the numbering restarts at 0 while an
-   * attached subscriber still holds the old cursor. Callers refresh both the
-   * list and its counter together, for the same reason they share one TTL.
-   *
-   * This only ever lengthens. A key whose remaining lifetime is already longer
-   * is left alone, and so is a key with no expiry at all: shortening a log the
-   * operator configured for a week (or forever) would lose the same frames this
-   * call exists to protect.
-   *
-   * Best-effort. The default is a no-op, so a cache that cannot expire a
-   * single key keeps its configured TTL instead of failing the call.
-   *
-   * @param ttlMs - Minimum milliseconds from now. Non-positive values are
-   *   ignored; use the implementation's TTL configuration for "never expires".
-   */
-  async expire(_key: string, _ttlMs: number): Promise<void> {}
-
-  /**
    * Atomically increment a counter and return the new value.
    * Used for generating sequential indices for events.
    * Returns 1 on first call (counter starts at 0, increments to 1).
@@ -85,13 +62,23 @@ export abstract class MastraServerCache extends MastraBase {
    * The list and its counter must expire together: a counter that outlives its
    * list restarts at 0 while subscribers still expect the old numbering, and a
    * counter that expires first would start reusing indices already in the list.
+   * Every append refreshes both keys to the same deadline.
+   *
+   * @param ttlMs - Minimum lifetime for both keys, in milliseconds. A cache
+   *   whose own TTL is longer, or that never expires, keeps that instead. When
+   *   omitted, the cache's default TTL applies.
    *
    * The default implementation composes `increment()` + `listPush()` (two
    * round-trips) and is therefore NOT atomic, which is why
    * {@link supportsAtomicAppend} defaults to `false`. Overrides should perform
    * both steps in one server-side operation.
    */
-  async listPushIndexed(listKey: string, counterKey: string, value: Record<string, unknown>): Promise<number> {
+  async listPushIndexed(
+    listKey: string,
+    counterKey: string,
+    value: Record<string, unknown>,
+    _ttlMs?: number,
+  ): Promise<number> {
     const index = (await this.increment(counterKey)) - 1;
     await this.listPush(listKey, { ...value, index });
     return index;

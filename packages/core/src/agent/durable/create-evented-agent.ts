@@ -87,13 +87,6 @@ export interface CreateEventedAgentOptions<
    * multi-worker coordination build on.
    */
   shouldPersistSnapshot?: ShouldPersistSnapshotFn;
-
-  /**
-   * How long a suspended run's stream log is retained, measured from the
-   * suspension. Defaults to 24 hours; see
-   * {@link DurableAgentConfig.suspendedRunLogRetentionMs}.
-   */
-  suspendedRunLogRetentionMs?: number;
 }
 
 /**
@@ -127,7 +120,7 @@ export function createEventedAgent<
   TTools extends Record<string, any> = Record<string, any>,
   TOutput = undefined,
 >(options: CreateEventedAgentOptions<TAgentId, TTools, TOutput>): EventedAgent<TAgentId, TTools, TOutput> {
-  const { agent, pubsub, cache, maxSteps, shouldCache, shouldPersistSnapshot, suspendedRunLogRetentionMs } = options;
+  const { agent, pubsub, cache, maxSteps, shouldCache, shouldPersistSnapshot } = options;
 
   return new EventedAgent({
     agent,
@@ -136,7 +129,6 @@ export function createEventedAgent<
     maxSteps,
     shouldCache,
     shouldPersistSnapshot,
-    suspendedRunLogRetentionMs,
   } as EventedAgentConfig<TAgentId, TTools, TOutput>);
 }
 

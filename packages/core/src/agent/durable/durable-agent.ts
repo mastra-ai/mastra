@@ -53,7 +53,6 @@ import {
   DurableStepIds,
   markErrorForStreamRejection,
   shouldRejectStream,
-  SUSPENDED_RUN_LOG_RETENTION_MS,
 } from './constants';
 import { runDurableStreamUntilIdle, runResumeDurableStreamUntilIdle } from './durable-stream-until-idle';
 import {
@@ -582,24 +581,6 @@ export interface DurableAgentConfig<
   shouldPersistSnapshot?: ShouldPersistSnapshotFn;
 
   /**
-   * How long a run's retained stream log is kept once the run parks on a tool
-   * approval or other suspension, in milliseconds.
-   *
-   * Retention is reset at each suspension and measured from that point, not
-   * from the last frame, because an approval can legitimately wait hours.
-   * Terminal cleanup still deletes the log, so this only bounds a run that is
-   * abandoned while suspended. Keep it comfortably longer than the longest
-   * approval wait you expect: once the log expires, a resumed run restarts
-   * numbering at 0 and an observer holding the old cursor drops every new
-   * frame.
-   *
-   * Only applies when the run's frames are cached (see `cache` and
-   * `shouldCache`). Defaults to 24 hours. A non-positive value leaves the
-   * cache's own TTL in place.
-   */
-  suspendedRunLogRetentionMs?: number;
-
-  /**
    * Per-topic opt-out of the replay cache.
    *
    * Return `false` to publish a topic straight through to the underlying
@@ -860,9 +841,6 @@ export class DurableAgent<
   /** Timeout for auto-cleanup after stream finishes (0 = disabled) */
   readonly #cleanupTimeoutMs: number;
 
-  /** Retention applied to a parked run's stream log (see DurableAgentConfig.suspendedRunLogRetentionMs) */
-  readonly #suspendedRunLogRetentionMs: number;
-
   /** User-supplied per-topic cache policy (see DurableAgentConfig.shouldCache) */
   readonly #shouldCache: ((topic: string) => boolean) | undefined;
 
@@ -888,7 +866,6 @@ export class DurableAgent<
       cache,
       maxSteps,
       cleanupTimeoutMs,
-      suspendedRunLogRetentionMs,
       shouldCache,
       shouldPersistSnapshot,
     } = config;
@@ -914,7 +891,6 @@ export class DurableAgent<
     this.#innerPubsub = pubsub ?? new EventEmitterPubSub();
     this.#cacheConfig = cache;
     this.#cleanupTimeoutMs = cleanupTimeoutMs ?? 30_000;
-    this.#suspendedRunLogRetentionMs = suspendedRunLogRetentionMs ?? SUSPENDED_RUN_LOG_RETENTION_MS;
     this.#shouldCache = shouldCache;
     this.userShouldPersistSnapshot = shouldPersistSnapshot;
 
@@ -1841,14 +1817,6 @@ export class DurableAgent<
     return this.#cleanupTimeoutMs;
   }
 
-  /**
-   * How long a parked run's cached stream log is kept, measured from the
-   * suspension. See {@link DurableAgentConfig.suspendedRunLogRetentionMs}.
-   */
-  get suspendedRunLogRetentionMs(): number {
-    return this.#suspendedRunLogRetentionMs;
-  }
-
   // ===========================================================================
   // Delegate Agent methods to wrapped agent
   //
@@ -2235,7 +2203,6 @@ export class DurableAgent<
       cache: this.#cacheConfig,
       maxSteps: this.#maxSteps,
       cleanupTimeoutMs: this.#cleanupTimeoutMs,
-      suspendedRunLogRetentionMs: this.#suspendedRunLogRetentionMs,
       shouldCache: this.#shouldCache,
       shouldPersistSnapshot: this.userShouldPersistSnapshot,
     });
@@ -2485,23 +2452,6 @@ export class DurableAgent<
   }
 
   /**
-   * Best-effort retention refresh for a parked run's stream log: the run can
-   * wait for a human longer than a cache's default retention, and an expired
-   * log makes a resumed run start numbering at 0 under an attached observer.
-   * Terminal cleanup deletes the log, so a suspension is the only point that
-   * has to extend it.
-   */
-  async #extendRunLogRetention(runId: string): Promise<void> {
-    try {
-      const pubsub = this.pubsub;
-      if (!(pubsub instanceof CachingPubSub)) return;
-      await pubsub.extendRetention(AGENT_STREAM_TOPIC(runId), this.#suspendedRunLogRetentionMs);
-    } catch (error) {
-      this.logger.warn('Failed to extend the run stream log retention', { runId, error });
-    }
-  }
-
-  /**
    * Whether `executeWorkflow()` resolves only after a suspended snapshot has
    * been persisted, reporting `{ status: 'suspended' }`. When true,
    * `closeOnSuspend` streams close on that result instead of on the SUSPENDED
@@ -2742,10 +2692,6 @@ export class DurableAgent<
     outcome: { status?: string; error?: Error },
   ): Promise<void> {
     const { status, error } = outcome;
-    // A suspended run parks until someone answers it. Refresh the stream log's
-    // retention after the leg settled, so an approval wait longer than the
-    // cache's default does not expire the log under an attached observer.
-    if (status === 'suspended') await this.#extendRunLogRetention(runId);
     const reportError = async (reported: Error) => {
       try {
         await this.emitError(runId, reported, fence?.generation);
@@ -4420,12 +4366,6 @@ export class DurableAgent<
             executionFence,
           );
           executionFence.throwIfLost();
-          if (result?.status === 'suspended') {
-            // A recovered run can park too. This path never reaches
-            // settleExecution(), so refresh the log here or the freshly parked
-            // run keeps the cache's normal TTL and loses its replay window.
-            await this.#extendRunLogRetention(runId);
-          }
           if (finishPublishedBeforeCrash && result?.status === 'success') {
             // The run's result is map-final-output's saved output, passed through
             // execute-scorers unchanged: the same payload the lost FINISH carried.

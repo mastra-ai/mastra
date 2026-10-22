@@ -86,13 +86,6 @@ export interface CreateDurableAgentOptions<
   shouldPersistSnapshot?: ShouldPersistSnapshotFn;
 
   /**
-   * How long a parked run's cached stream log is kept (ms), measured from the
-   * suspension. Defaults to 24 hours; see
-   * {@link DurableAgentConfig.suspendedRunLogRetentionMs}.
-   */
-  suspendedRunLogRetentionMs?: number;
-
-  /**
    * Per-topic opt-out of the replay cache.
    *
    * Return `false` to publish a topic straight through to the underlying
@@ -150,18 +143,7 @@ export function createDurableAgent<
   TTools extends Record<string, any> = Record<string, any>,
   TOutput = undefined,
 >(options: CreateDurableAgentOptions<TAgentId, TTools, TOutput>): DurableAgent<TAgentId, TTools, TOutput> {
-  const {
-    agent,
-    id,
-    name,
-    cache,
-    pubsub,
-    maxSteps,
-    cleanupTimeoutMs,
-    suspendedRunLogRetentionMs,
-    shouldCache,
-    shouldPersistSnapshot,
-  } = options;
+  const { agent, id, name, cache, pubsub, maxSteps, cleanupTimeoutMs, shouldCache, shouldPersistSnapshot } = options;
 
   return new DurableAgent({
     agent,
@@ -171,7 +153,6 @@ export function createDurableAgent<
     pubsub,
     maxSteps,
     cleanupTimeoutMs,
-    suspendedRunLogRetentionMs,
     shouldCache,
     shouldPersistSnapshot,
   } as DurableAgentConfig<TAgentId, TTools, TOutput>);

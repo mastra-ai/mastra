@@ -14,18 +14,23 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
 import { expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
-import { SUSPENDED_RUN_LOG_RETENTION_MS } from '../../../../agent/durable/constants';
 import { InMemoryServerCache } from '../../../../cache/inmemory';
+import { RUN_LOG_TTL_MS } from '../../../../events/topics';
 import { createTool } from '../../../../tools';
 import { createSharedAgent, describeForAllEngines, useLoopScenarioAimock } from '../aimock-scenario';
 
-/** Records every retention refresh so a parked run's log lifetime is assertable. */
+/** Records the TTL each run-log append asks for, so a parked run's log lifetime is assertable. */
 class RecordingCache extends InMemoryServerCache {
-  expirations: Array<[string, number]> = [];
+  appends: Array<[string, number | undefined]> = [];
 
-  async expire(key: string, ttlMs: number): Promise<void> {
-    this.expirations.push([key, ttlMs]);
-    await super.expire(key, ttlMs);
+  async listPushIndexed(
+    listKey: string,
+    counterKey: string,
+    value: Record<string, unknown>,
+    ttlMs?: number,
+  ): Promise<number> {
+    this.appends.push([listKey, ttlMs]);
+    return super.listPushIndexed(listKey, counterKey, value, ttlMs);
   }
 }
 
@@ -279,8 +284,7 @@ describeForAllEngines(
       }
     }, 30_000);
 
-    /** Drives a run to a tool-approval suspension and returns it. */
-    async function suspendOnApproval(cache: RecordingCache, durableOptions?: Record<string, any>) {
+    it('keeps the run log for the run-log TTL while the run waits for approval', async () => {
       const llm = getMock();
       llm.on(
         { endpoint: 'chat', hasToolResult: false },
@@ -292,60 +296,24 @@ describeForAllEngines(
         inputSchema: z.object({ query: z.string() }),
         execute: async ({ query }) => ({ status: `OK:${query}` }),
       });
-      const { agent } = await createSharedAgent(llm, {
-        engine,
-        cache,
-        tools: { lookup_status: lookup },
-        durableOptions,
-      });
+      const cache = new RecordingCache();
+      const { agent } = await createSharedAgent(llm, { engine, cache, tools: { lookup_status: lookup } });
 
       const run = await agent.stream('Look up alpha', { requireToolApproval: true, maxSteps: 5 });
-      let toolCallId: string | undefined;
-      for await (const chunk of run.fullStream) {
-        if (chunk.type === 'tool-call-approval') {
-          toolCallId = chunk.payload.toolCallId;
-          break;
-        }
-      }
-      expect(toolCallId).toBe('call_retain');
-      return run;
-    }
-
-    /**
-     * Asserts the run's log and its counter both carry `ttlMs`. The retention bump
-     * lands once the leg has settled as suspended, which is after the approval
-     * chunk reached the stream.
-     */
-    async function expectRetention(run: { runId: string }, cache: RecordingCache, ttlMs: number) {
-      await vi.waitFor(
-        () => {
-          const keys = cache.expirations.filter(([, ttl]) => ttl === ttlMs).map(([key]) => key);
-          expect(keys.some(key => key.includes(run.runId) && !key.endsWith(':counter'))).toBe(true);
-          // The counter has to outlive the list, so both carry the new deadline.
-          expect(keys.some(key => key.includes(run.runId) && key.endsWith(':counter'))).toBe(true);
-        },
-        { timeout: 5_000 },
-      );
-    }
-
-    it('extends the run log retention while the run waits for approval', async () => {
-      const cache = new RecordingCache();
-      const run = await suspendOnApproval(cache);
       try {
-        await expectRetention(run, cache, SUSPENDED_RUN_LOG_RETENTION_MS);
-      } finally {
-        run.cleanup?.();
-      }
-    }, 30_000);
+        for await (const chunk of run.fullStream) if (chunk.type === 'tool-call-approval') break;
 
-    it('honours a configured suspended run log retention', async () => {
-      const retentionMs = 90_000;
-      const cache = new RecordingCache();
-      const run = await suspendOnApproval(cache, { suspendedRunLogRetentionMs: retentionMs });
-      try {
-        await expectRetention(run, cache, retentionMs);
-        // The configured value replaces the default rather than adding to it.
-        expect(cache.expirations.some(([, ttl]) => ttl === SUSPENDED_RUN_LOG_RETENTION_MS)).toBe(false);
+        // The suspension frame is the run's last append before it parks, so every
+        // append (that one included) must ask for the long run-log TTL; the cache's
+        // 300s default is shorter than an approval wait.
+        await vi.waitFor(
+          () => {
+            const runAppends = cache.appends.filter(([key]) => key.includes(run.runId));
+            expect(runAppends.length).toBeGreaterThan(0);
+            expect(runAppends.every(([, ttl]) => ttl === RUN_LOG_TTL_MS)).toBe(true);
+          },
+          { timeout: 5_000 },
+        );
       } finally {
         run.cleanup?.();
       }

@@ -9,5 +9,4 @@ export {
   upstashPreset,
   nodeRedisPreset,
   LIST_PUSH_INDEXED_SCRIPT,
-  EXTEND_EXPIRY_SCRIPT,
 } from './cache';

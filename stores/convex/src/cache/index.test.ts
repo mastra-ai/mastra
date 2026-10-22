@@ -88,6 +88,18 @@ describe('ConvexServerCache', () => {
     ]);
   });
 
+  it('stamps a requested longer TTL on the indexed append', async () => {
+    client.rawResponses = [{ result: 0 }, { result: 1 }];
+
+    await cache.listPushIndexed('events', 'events:counter', { type: 'chunk' }, 24 * 60 * 60 * 1000);
+    await cache.listPushIndexed('events', 'events:counter', { type: 'chunk' }, 1_000);
+
+    expect(client.calls.map(call => ('expiresAt' in call ? call.expiresAt : undefined))).toEqual([
+      Date.now() + 24 * 60 * 60 * 1000,
+      Date.now() + 300_000,
+    ]);
+  });
+
   it('uses Redis-compatible inclusive list ranges', async () => {
     await cache.listFromTo('events', 5, 10);
 

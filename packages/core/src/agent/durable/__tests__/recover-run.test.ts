@@ -15,7 +15,6 @@
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { InMemoryServerCache } from '../../../cache/inmemory';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { PubSub } from '../../../events/pubsub';
 import { Mastra } from '../../../mastra';
@@ -1008,47 +1007,6 @@ describe('DurableAgent.recover(runId)', () => {
 
     expect(deleteWorkflowRunById).not.toHaveBeenCalled();
     expect(await readSnapshot(store, DurableStepIds.AGENTIC_EXECUTION, 'run-suspend')).not.toBeNull();
-  });
-
-  it('keeps the run log alive for the parked window when recovery suspends again', async () => {
-    const runId = 'run-recover-suspends';
-    const recoverStore = new InMemoryStore();
-    const cache = new InMemoryServerCache();
-    const expire = vi.spyOn(cache, 'expire');
-    const transport = new EventEmitterPubSub();
-    const baseAgent = new Agent({
-      id: 'agent-R',
-      name: 'agent-R',
-      instructions: 'x',
-      model: makeMockModel(),
-    });
-    const durable = createDurableAgent({
-      agent: baseAgent,
-      pubsub: transport,
-      suspendedRunLogRetentionMs: 90_000,
-    });
-    void new Mastra({
-      agents: { 'agent-R': durable as any },
-      storage: recoverStore,
-      pubsub: transport,
-      cache,
-    });
-
-    await seed(recoverStore, runId, 'running', 'agent-R');
-    stubWorkflow(durable, 'suspended');
-
-    const { cleanup } = await durable.recover(runId);
-    await globalRunRegistry.get(runId)?.workflowExecution;
-    cleanup();
-
-    // recover() never reaches settleExecution(), so it has to refresh the log
-    // itself or the run that just parked keeps the cache's normal TTL and loses
-    // its replay window before the approval ever arrives.
-    const topic = AGENT_STREAM_TOPIC(runId);
-    const keys = expire.mock.calls.map(([key]) => key);
-    expect(keys).toContain(`pubsub:{${topic}}`);
-    expect(keys).toContain(`pubsub:{${topic}}:counter`);
-    expect(expire.mock.calls.every(([, ttlMs]) => ttlMs === 90_000)).toBe(true);
   });
 
   it('throws when no persisted snapshot exists for the runId', async () => {

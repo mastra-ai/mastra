@@ -212,22 +212,24 @@ describe('InMemoryServerCache', () => {
         expect(await cache.increment('events:counter')).toBe(4);
       });
 
-      it('keeps a log and counter that were extended for a parked run', async () => {
+      it('keeps the log and counter for the requested TTL when it outlasts the cache default', async () => {
         const ttlCache = new InMemoryServerCache({ ttlMs: 20 });
-        await ttlCache.listPushIndexed('events', 'events:counter', { type: 'a' });
-        await ttlCache.expire('events', 5_000);
-        await ttlCache.expire('events:counter', 5_000);
-
-        // Resuming the run appends again, which would normally re-stamp the
-        // cache's 20ms default and throw away the suspended-run window.
-        expect(await ttlCache.listPushIndexed('events', 'events:counter', { type: 'b' })).toBe(1);
+        await ttlCache.listPushIndexed('events', 'events:counter', { type: 'a' }, 5_000);
         await new Promise(resolve => setTimeout(resolve, 60));
 
-        expect(await ttlCache.listFromTo('events', 0)).toEqual([
-          { type: 'a', index: 0 },
-          { type: 'b', index: 1 },
-        ]);
-        expect(await ttlCache.increment('events:counter')).toBe(3);
+        // Both keys must survive together, or numbering would restart under an
+        // observer that still holds the old cursor.
+        expect(await ttlCache.listFromTo('events', 0)).toEqual([{ type: 'a', index: 0 }]);
+        expect(await ttlCache.listPushIndexed('events', 'events:counter', { type: 'b' }, 5_000)).toBe(1);
+      });
+
+      it('expires the log and counter on the cache default without a requested TTL', async () => {
+        const ttlCache = new InMemoryServerCache({ ttlMs: 20 });
+        await ttlCache.listPushIndexed('events', 'events:counter', { type: 'a' });
+        await new Promise(resolve => setTimeout(resolve, 60));
+
+        expect(await ttlCache.listFromTo('events', 0)).toEqual([]);
+        expect(await ttlCache.listPushIndexed('events', 'events:counter', { type: 'b' })).toBe(0);
       });
     });
 
@@ -264,54 +266,6 @@ describe('InMemoryServerCache', () => {
         // All results should be unique numbers 1-10
         const sorted = [...results].sort((a, b) => a - b);
         expect(sorted).toEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-      });
-    });
-
-    describe('expire', () => {
-      it('should keep a key alive past its cache TTL', async () => {
-        const ttlCache = new InMemoryServerCache({ ttlMs: 20 });
-        await ttlCache.set('key', 'value');
-
-        await ttlCache.expire('key', 5_000);
-        await new Promise(resolve => setTimeout(resolve, 60));
-
-        expect(await ttlCache.get('key')).toBe('value');
-      });
-
-      it('should never shorten a key that already lives longer', async () => {
-        const ttlCache = new InMemoryServerCache({ ttlMs: 60_000 });
-        await ttlCache.set('key', 'value');
-
-        // Refreshing to a shorter window would expire the log early, which is
-        // the failure the refresh exists to prevent.
-        await ttlCache.expire('key', 10);
-        await new Promise(resolve => setTimeout(resolve, 40));
-
-        expect(await ttlCache.get('key')).toBe('value');
-      });
-
-      it('should leave a key without expiry persistent', async () => {
-        const ttlCache = new InMemoryServerCache({ ttlMs: 0 });
-        await ttlCache.set('key', 'value');
-
-        await ttlCache.expire('key', 10);
-        await new Promise(resolve => setTimeout(resolve, 40));
-
-        expect(await ttlCache.get('key')).toBe('value');
-      });
-
-      it('should not create a key and should ignore a non-positive TTL', async () => {
-        const ttlCache = new InMemoryServerCache({ ttlMs: 20 });
-
-        await ttlCache.expire('missing', 5_000);
-        expect(await ttlCache.get('missing')).toBeUndefined();
-
-        // A non-positive TTL means "no extension", not "delete": the key keeps
-        // running on its own deadline.
-        await ttlCache.set('key', 'value');
-        await ttlCache.expire('key', 0);
-        await new Promise(resolve => setTimeout(resolve, 60));
-        expect(await ttlCache.get('key')).toBeUndefined();
       });
     });
   });

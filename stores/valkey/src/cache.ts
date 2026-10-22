@@ -27,8 +27,6 @@ const stringValue = (value: unknown): string => (Buffer.isBuffer(value) ? value.
  * so `{...}` → `{"index":N,...}` and `{}` → `{"index":N}`.
  */
 const LIST_PUSH_INDEXED_SCRIPT = `
-local listTtl = redis.call('TTL', KEYS[1])
-local counterTtl = redis.call('TTL', KEYS[2])
 local i = redis.call('INCR', KEYS[2]) - 1
 local body = ARGV[1]
 local doc
@@ -40,27 +38,10 @@ end
 redis.call('RPUSH', KEYS[1], doc)
 local ttl = tonumber(ARGV[2])
 if ttl > 0 then
-  -- Extend-only: a log extended for a parked run keeps its longer deadline
-  -- when the run resumes and appends again. -2 means this call created the key
-  -- and -1 that it is persistent on purpose.
-  local function refresh(key, current)
-    if current == -2 or (current ~= -1 and current < ttl) then
-      redis.call('EXPIRE', key, ttl)
-    end
-  end
-  refresh(KEYS[1], listTtl)
-  refresh(KEYS[2], counterTtl)
+  redis.call('EXPIRE', KEYS[1], ttl)
+  redis.call('EXPIRE', KEYS[2], ttl)
 end
 return i
-`.trim();
-
-const EXTEND_EXPIRY_SCRIPT = `
-local current = redis.call('TTL', KEYS[1])
-if current == -1 or current == -2 then return 0 end
-local want = tonumber(ARGV[1])
-if current >= want then return 0 end
-redis.call('EXPIRE', KEYS[1], want)
-return 1
 `.trim();
 
 /** GLIDE-backed Valkey cache for Mastra server state. */
@@ -148,17 +129,6 @@ export class ValkeyServerCache extends MastraServerCache {
     return value;
   }
 
-  async expire(key: string, ttlMs: number): Promise<void> {
-    // A cache configured without expiry keeps that policy: granting a deadline
-    // here would silently shorten keys (including a persistent run log) that
-    // every writer treats as immortal.
-    if (ttlMs <= 0 || this.ttlSeconds <= 0) return;
-    const fullKey = this.getKey(key);
-    // One script so the comparison and the write cannot interleave with an
-    // append stamping its own deadline on the same key.
-    await this.command(['EVAL', EXTEND_EXPIRY_SCRIPT, '1', fullKey, String(Math.max(1, Math.ceil(ttlMs / 1000)))]);
-  }
-
   /**
    * GLIDE always runs the append through Lua, so allocation and append are one
    * atomic operation.
@@ -172,7 +142,12 @@ export class ValkeyServerCache extends MastraServerCache {
    * The list and counter keys share one TTL; see
    * {@link ValkeyServerCacheOptions.ttlSeconds}.
    */
-  async listPushIndexed(listKey: string, counterKey: string, value: Record<string, unknown>): Promise<number> {
+  async listPushIndexed(
+    listKey: string,
+    counterKey: string,
+    value: Record<string, unknown>,
+    ttlMs?: number,
+  ): Promise<number> {
     const { index: _ignored, ...body } = value;
     const result = await this.command([
       'EVAL',
@@ -181,7 +156,9 @@ export class ValkeyServerCache extends MastraServerCache {
       this.getKey(listKey),
       this.getKey(counterKey),
       JSON.stringify(body),
-      String(this.ttlSeconds),
+      // A cache without expiry stays that way; otherwise `ttlMs` can only
+      // raise the default.
+      String(this.ttlSeconds > 0 ? Math.max(this.ttlSeconds, Math.ceil((ttlMs ?? 0) / 1000)) : 0),
     ]);
     return Number(result);
   }
