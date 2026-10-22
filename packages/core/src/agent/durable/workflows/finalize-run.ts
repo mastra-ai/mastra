@@ -238,8 +238,7 @@ export async function runDurableFinishSideEffects({
   // Output processors persist messages too (MessageHistory saves the response
   // in processOutputResult), so a superseded execution must stop here, before
   // either memory write path, and never reach the finish event (#23734). This
-  // check sits outside the processor try/catch, which swallows errors. It uses
-  // the live `requestContext`: the snapshot entries never carry the
+  // check uses the live `requestContext`: the snapshot entries never carry the
   // execution id.
   const assertOwned = () => assertExecutionOwned({ runId, agentId: initData.agentId, requestContext, mastra });
   await assertOwned();
@@ -299,6 +298,7 @@ export async function runDurableFinishSideEffects({
         };
       }
       effectiveLogger.warn('[DurableAgent] Error running output processors', { runId, error });
+      throw error;
     }
   }
 
