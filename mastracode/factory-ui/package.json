@@ -43,7 +43,7 @@
     "@testing-library/react": "^16.3.2",
     "@testing-library/user-event": "^14.5.2",
     "@types/d3-force": "^3.0.10",
-    "@types/node": "22.20.1",
+    "@types/node": "22.20.5",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.2.0",

@@ -111,8 +111,8 @@
     "@livekit/agents-plugin-silero": "^1.7.1",
     "@mastra/client-js": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.20.1",
-    "tsdown": "0.22.9",
+    "@types/node": "22.20.5",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
     "zod": "catalog:"
