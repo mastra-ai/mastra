@@ -112,12 +112,12 @@ The Mastra Code `code-agent` reads its model, mode, and project folder from the 
 ```json
 {
   "requestContext": {
-    "controller": { "session": { "modelId": "openai/gpt-5.6" } }
+    "controller": { "session": { "modelId": "__GATEWAY_OPENAI_MODEL_BASE__" } }
   }
 }
 ```
 
-Mastra Code turns this snapshot into a session that lives for that item only. The agent works in the folder the server was started in, so a request can't choose a different project. When `session.modelId` is missing, the run fails with the usual "No model selected" error instead of using a guessed model. The snapshot is handled by server middleware, so it works on the default Hono server under any `apiPrefix`, but not on server adapters that don't run Mastra middleware.
+Send it in the experiment request (on create, or on each run-item call), not on dataset items: an item's stored `requestContext` is plain JSON and overrides the request value at run time. Mastra Code turns this snapshot into a session that lives for that item only. The agent works in the folder the server was started in, so a request can't choose a different project. When `session.modelId` is missing, the run fails with the usual "No model selected" error instead of using a guessed model. The snapshot is handled by server middleware, so it works on the default Hono server under any `apiPrefix`, but not on server adapters that don't run Mastra middleware.
 
 #### Memory-enabled agents
 

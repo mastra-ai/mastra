@@ -737,7 +737,7 @@ describe('createMastraCode', () => {
 
     const defaultPrefix = await prepareAgentControllerMount();
     expect(defaultPrefix.mastraArgs.server?.middleware).toEqual([
-      expect.objectContaining({ path: '/api/datasets/*', handler: expect.any(Function) }),
+      expect.objectContaining({ path: '/api/datasets/:datasetId/experiments/*', handler: expect.any(Function) }),
     ]);
 
     const hostMiddleware = { path: '/api/*', handler: async (_c: unknown, next: () => Promise<void>) => next() };
@@ -746,7 +746,7 @@ describe('createMastraCode', () => {
     });
     expect(custom.mastraArgs.server?.middleware).toEqual([
       hostMiddleware,
-      expect.objectContaining({ path: '/custom/datasets/*', handler: expect.any(Function) }),
+      expect.objectContaining({ path: '/custom/datasets/:datasetId/experiments/*', handler: expect.any(Function) }),
     ]);
   });
 
@@ -766,7 +766,7 @@ describe('createMastraCode', () => {
     expect(mounted.mastra).toBe(mastra);
     expect(setServerMiddleware).toHaveBeenCalledWith([
       existing,
-      expect.objectContaining({ path: '/custom/datasets/*', handler: expect.any(Function) }),
+      expect.objectContaining({ path: '/custom/datasets/:datasetId/experiments/*', handler: expect.any(Function) }),
     ]);
   });
 

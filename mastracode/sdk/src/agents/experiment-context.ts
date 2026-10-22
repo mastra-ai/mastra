@@ -98,10 +98,13 @@ function normalizeApiPrefix(prefix = '/api'): string {
 }
 
 /**
- * Server middleware for the dataset experiment routes. When the request's
- * `controller` is a JSON snapshot, replace it with an experiment-local live
- * context so the Code Agent can run. Live contexts and requests without a
- * `controller` are left as they are.
+ * Server middleware for the dataset experiment routes (create and run-item).
+ * When the request's `controller` is a JSON snapshot, replace it with an
+ * experiment-local live context so the Code Agent can run. Live contexts and
+ * requests without a `controller` are left as they are.
+ *
+ * Only the request-level `requestContext` is hydrated. A `controller` stored on
+ * a dataset item stays JSON and overrides the request value at run time.
  */
 export function createExperimentControllerContextMiddleware(options: {
   controllerId: string;
@@ -111,7 +114,9 @@ export function createExperimentControllerContextMiddleware(options: {
   apiPrefix?: string;
 }): Middleware {
   return {
-    path: `${normalizeApiPrefix(options.apiPrefix)}/datasets/*`,
+    // Experiment create/run routes only. Item routes store `requestContext` as
+    // JSON, so a hydrated object there would be rejected as non-serializable.
+    path: `${normalizeApiPrefix(options.apiPrefix)}/datasets/:datasetId/experiments/*`,
     handler: async (c, next) => {
       const requestContext = c.get('requestContext') as RequestContext | undefined;
       const snapshot = requestContext?.get('controller');

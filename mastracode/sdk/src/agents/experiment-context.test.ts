@@ -84,14 +84,16 @@ describe('experiment controller middleware', () => {
   }
 
   it('mounts under the configured api prefix', () => {
-    expect(createExperimentControllerContextMiddleware(server).path).toBe('/api/datasets/*');
+    expect(createExperimentControllerContextMiddleware(server).path).toBe('/api/datasets/:datasetId/experiments/*');
     expect(createExperimentControllerContextMiddleware({ ...server, apiPrefix: '/custom' }).path).toBe(
-      '/custom/datasets/*',
+      '/custom/datasets/:datasetId/experiments/*',
     );
     expect(createExperimentControllerContextMiddleware({ ...server, apiPrefix: 'custom/' }).path).toBe(
-      '/custom/datasets/*',
+      '/custom/datasets/:datasetId/experiments/*',
     );
-    expect(createExperimentControllerContextMiddleware({ ...server, apiPrefix: '/' }).path).toBe('/datasets/*');
+    expect(createExperimentControllerContextMiddleware({ ...server, apiPrefix: '/' }).path).toBe(
+      '/datasets/:datasetId/experiments/*',
+    );
   });
 
   it('replaces a JSON snapshot with a live context and continues the request', async () => {
