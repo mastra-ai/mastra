@@ -95,11 +95,17 @@ describe('rebuildSpan trace state', () => {
       serviceName: 's',
       name: 'i',
       sampling: { type: SamplingStrategyType.ALWAYS },
-      requestContextKeys: ['tenant', 'job'],
+      requestContextKeys: ['tenant'],
       exporters: [],
     });
     const agentContext = new RequestContext([['tenant', 'acme']]);
-    const agent = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent', requestContext: agentContext });
+    // `job` is a per-request key, so only the exported traceState knows about it
+    const agent = tracing.startSpan({
+      type: SpanType.AGENT_RUN,
+      name: 'agent',
+      requestContext: agentContext,
+      tracingOptions: { requestContextKeys: ['job'] },
+    });
     const step = agent.createChildSpan({ type: SpanType.MODEL_STEP, name: 'step', requestContext: agentContext });
 
     // A workflow started by a tool sets its own key only in its request context
