@@ -109,6 +109,9 @@ export interface AdapterTestSuiteConfig {
   /** Whether the adapter decodes requestContext from POST query parameters. */
   supportsPostQueryRequestContext?: boolean;
 
+  /** Whether the adapter enforces route `requiresPermission` via RBAC. Defaults to true. */
+  supportsRBAC?: boolean;
+
   /**
    * Setup adapter and app for testing
    * Called once before all tests

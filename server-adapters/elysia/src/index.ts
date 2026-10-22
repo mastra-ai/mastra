@@ -533,12 +533,13 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
         });
       }
 
-      const authConfig = this.mastra.getServer()?.auth;
-      if (authConfig) {
+      // Check if any auth is configured (studio or server) for RBAC
+      const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
+      if (hasAuth) {
         const hasPermission = await loadHasPermission();
         if (hasPermission) {
           const userPermissions = ctx.requestContext.get('userPermissions') as string[] | undefined;
-          const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission);
+          const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission, ctx.requestContext);
           if (permissionError) {
             return new Response(JSON.stringify({ error: permissionError.error, message: permissionError.message }), {
               status: permissionError.status,
@@ -824,12 +825,18 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
               });
             }
 
-            const authConfig = this.mastra.getServer()?.auth;
-            if (authConfig) {
+            // Check if any auth is configured (studio or server) for RBAC
+            const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
+            if (hasAuth) {
               const hasPermission = await loadHasPermission();
               if (hasPermission) {
                 const userPermissions = ctx.requestContext.get('userPermissions') as string[] | undefined;
-                const permissionError = this.checkRoutePermission(serverRoute, userPermissions, hasPermission);
+                const permissionError = this.checkRoutePermission(
+                  serverRoute,
+                  userPermissions,
+                  hasPermission,
+                  ctx.requestContext,
+                );
                 if (permissionError) {
                   return new Response(
                     JSON.stringify({ error: permissionError.error, message: permissionError.message }),

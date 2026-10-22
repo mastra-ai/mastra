@@ -1,4 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { registerApiRoute } from '@mastra/core/server';
 import { handleError } from '@mastra/server/handlers/error';
 import { createRoute, HTTPException, SERVER_ROUTES } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
@@ -939,6 +940,87 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
             }
           }
         });
+      });
+    });
+
+    describe.skipIf(config.supportsRBAC === false)('Studio-only RBAC', () => {
+      // RBAC lives only under `studio`; `server.rbac` is unset. Studio requests must
+      // still be checked against `studio.rbac` on both built-in and custom API routes.
+      const rolePermissions: Record<string, string[]> = {
+        viewer: ['agents:read'],
+        member: ['agents:read', 'tools:execute'],
+      };
+      const studioAuth = {
+        authenticateToken: async (token: string) =>
+          rolePermissions[token] ? { id: `user_${token}`, role: token } : null,
+        authorize: async () => true,
+      };
+      const studioRbac = {
+        getPermissions: async (user: { role: string }) => rolePermissions[user.role] ?? [],
+        getRoles: async (user: { role: string }) => [user.role],
+      };
+
+      async function setupStudioRbac(options: { withServerAuth: boolean }) {
+        const ctx = await createDefaultTestContext();
+        const originalGetServer = ctx.mastra.getServer.bind(ctx.mastra);
+        const customRoute = registerApiRoute('/studio-rbac/custom', {
+          method: 'GET',
+          requiresPermission: 'tools:execute',
+          handler: async c => c.json({ ok: true }),
+        });
+        ctx.mastra.getServer = () =>
+          ({
+            ...originalGetServer(),
+            apiRoutes: [customRoute],
+            ...(options.withServerAuth ? { auth: studioAuth } : {}),
+          }) as any;
+        (ctx.mastra as any).getStudio = () => ({ auth: studioAuth, rbac: studioRbac });
+        ctx.customRouteAuthConfig = new Map([['GET:/studio-rbac/custom', true]]);
+
+        const route: ServerRoute = {
+          method: 'GET',
+          path: '/test/studio-rbac',
+          responseType: 'json',
+          requiresPermission: 'tools:execute',
+          handler: async () => ({ ok: true }),
+        };
+        const mutableServerRoutes = SERVER_ROUTES as ServerRoute[];
+        const originalLength = mutableServerRoutes.length;
+        mutableServerRoutes.push(route);
+        try {
+          return (await setupAdapter(ctx)).app;
+        } finally {
+          mutableServerRoutes.splice(originalLength);
+        }
+      }
+
+      const studioRequest = (path: string, role: string): HttpRequest => ({
+        method: 'GET',
+        path,
+        headers: { Authorization: `Bearer ${role}`, 'x-mastra-client-type': 'studio' },
+      });
+
+      describe.each([
+        { label: 'studio auth only', withServerAuth: false },
+        { label: 'studio auth + server auth without server RBAC', withServerAuth: true },
+      ])('$label', ({ withServerAuth }) => {
+        it.each(['/api/test/studio-rbac', '/studio-rbac/custom'])(
+          'denies a studio user without the required permission on %s',
+          async path => {
+            const studioApp = await setupStudioRbac({ withServerAuth });
+            const response = await executeHttpRequest(studioApp, studioRequest(path, 'viewer'));
+            expect(response.status).toBe(403);
+          },
+        );
+
+        it.each(['/api/test/studio-rbac', '/studio-rbac/custom'])(
+          'allows a studio user with the required permission on %s',
+          async path => {
+            const studioApp = await setupStudioRbac({ withServerAuth });
+            const response = await executeHttpRequest(studioApp, studioRequest(path, 'member'));
+            expect(response.status).toBe(200);
+          },
+        );
       });
     });
 

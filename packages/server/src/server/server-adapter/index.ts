@@ -817,11 +817,11 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     route: ServerRoute,
     userPermissions: string[] | undefined,
     hasPermissionFn: (userPerms: string[], required: string) => boolean,
-    requestContext?: RequestContext,
+    requestContext: RequestContext,
   ): { status: number; error: string; message: string } | null {
     // If RBAC is not configured, skip permission checks entirely
     // Auth-only mode = authenticated users get full access
-    const rbacProvider = requestContext ? this.getEffectiveRBACProvider(requestContext) : this.mastra.getServer()?.rbac;
+    const rbacProvider = this.getEffectiveRBACProvider(requestContext);
 
     if (!rbacProvider) {
       return null;
