@@ -116,6 +116,11 @@ const AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS = 5_000;
 const FAILED_RUN_TRIM_DELAY_MS = 30_000;
 const AGENT_THREAD_PEER_DISCOVERY_TOPIC = 'agent.thread-peer-discovery';
 const AGENT_THREAD_PEER_DISCOVERY_TIMEOUT_MS = 100;
+const RETAKE_LEASE_MARKER = '\u0000retake\u0000';
+
+function isRetakeLeaseOwner(owner: string | undefined): boolean {
+  return owner?.includes(RETAKE_LEASE_MARKER) ?? false;
+}
 
 /**
  * Slack added to a request's carried `expiresAt` before a responder drops it
@@ -1032,7 +1037,7 @@ export class AgentThreadStreamRuntime {
     if (inFlight) return inFlight;
     const sentAt = Date.now();
     const leaseProvider = this.#getLeaseProvider(pubsub);
-    const token = `${runId}\u0000retake\u0000${globalThis.crypto.randomUUID()}`;
+    const token = `${runId}${RETAKE_LEASE_MARKER}${globalThis.crypto.randomUUID()}`;
     const releaseToken = () => {
       void leaseProvider.releaseLease(key, token).catch(() => {});
     };
@@ -1163,6 +1168,37 @@ export class AgentThreadStreamRuntime {
     return held;
   }
 
+  async #waitForRetakeOwner(
+    provider: LeaseProvider,
+    key: string,
+    lease: { acquired: boolean; owner?: string },
+  ): Promise<{ acquired: boolean; owner?: string }> {
+    if (lease.acquired || !isRetakeLeaseOwner(lease.owner)) return lease;
+    // The token is not a run. Wait briefly for its handover, without acquiring a
+    // new lease that could arrive after this caller has already given up.
+    let stopped = false;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        (async () => {
+          while (!stopped) {
+            await new Promise(resolve => setTimeout(resolve, 10));
+            if (stopped) break;
+            const owner = await provider.getLeaseOwner(key);
+            if (!stopped && owner && !isRetakeLeaseOwner(owner)) return { acquired: false, owner };
+          }
+          return lease;
+        })().catch(() => lease),
+        new Promise<typeof lease>(resolve => {
+          timeout = setTimeout(() => resolve(lease), AGENT_THREAD_LEASE_RENEW_INTERVAL_MS);
+        }),
+      ]);
+    } finally {
+      stopped = true;
+      clearTimeout(timeout);
+    }
+  }
+
   /**
    * Ensure this process owns the cross-process lease for `toRunId` before it
    * starts a run, regardless of whether it already held the lease.
@@ -1197,7 +1233,7 @@ export class AgentThreadStreamRuntime {
       this.#startLeaseRenewal(resolved, key, toRunId);
       return { acquired: true, owner: toRunId };
     }
-    return { acquired: false, owner: result.owner };
+    return this.#waitForRetakeOwner(leaseProvider, key, result);
   }
 
   /**
@@ -4179,7 +4215,7 @@ export class AgentThreadStreamRuntime {
           // Early follow-ups were already published as retained signal-enqueued
           // events, so only discard this runtime's local pre-run copies.
           state.preRunSignalsByThread.delete(key);
-          if (owns.owner) {
+          if (owns.owner && !isRetakeLeaseOwner(owns.owner)) {
             // Forwarding is a handoff: the signal is no longer locally cancellable.
             // Echoes of the original enqueue stay suppressed, but the forwarded event must be
             // queued if this runtime later takes over the owner run.
@@ -4525,6 +4561,13 @@ export class AgentThreadStreamRuntime {
       state.threadKeysByRunId.delete(pendingIdle.runId);
       state.preRunSignalsByThread.delete(key);
       this.#notifyThreadEvents(state);
+      if (isRetakeLeaseOwner(owns.owner)) {
+        // Keep the accepted input for the next natural drain trigger, rather
+        // than forwarding to a token that no run can consume.
+        const queue = state.pendingIdleSignalsByThread.get(key) ?? [];
+        state.pendingIdleSignalsByThread.set(key, [pendingIdle, ...queue]);
+        return true;
+      }
       if (owns.owner) {
         await this.#publishAndWait(pubsub, key, {
           type: 'signal-enqueued',
@@ -6541,9 +6584,13 @@ export class AgentThreadStreamRuntime {
       // but failing closed would silently drop user messages on any Redis blip which
       // is the worse failure mode. Lease TTL + renewal still bound the duplicate
       // window to a single run, and the next clean acquireLease re-serializes callers.
-      const lease = await leaseProvider
-        .acquireLease(reservedKey, reservedRunId, AGENT_THREAD_LEASE_TTL_MS)
-        .catch(() => ({ acquired: true as boolean, owner: reservedRunId as string | undefined }));
+      const lease = await this.#waitForRetakeOwner(
+        leaseProvider,
+        reservedKey,
+        await leaseProvider
+          .acquireLease(reservedKey, reservedRunId, AGENT_THREAD_LEASE_TTL_MS)
+          .catch(() => ({ acquired: true as boolean, owner: reservedRunId as string | undefined })),
+      );
 
       if (!lease.acquired) {
         // Lost the wake race to another process. Roll back our optimistic local reservation
@@ -6555,6 +6602,13 @@ export class AgentThreadStreamRuntime {
         state.preRunSignalsByThread.delete(reservedKey);
 
         const winnerRunId = lease.owner;
+        if (winnerRunId && isRetakeLeaseOwner(winnerRunId)) {
+          return {
+            action: 'blocked' as const,
+            reason: 'thread-blocked' as const,
+            runId: winnerRunId.split(RETAKE_LEASE_MARKER)[0]!,
+          };
+        }
         if (winnerRunId && this.#isSweptLeaseOwner(state, winnerRunId)) {
           // The lease still belongs to a suspended run the TTL sweep evicted. Nothing
           // consumes a signal forwarded to it, so report the thread blocked rather
