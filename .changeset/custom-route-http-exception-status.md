@@ -1,6 +1,11 @@
 ---
 '@mastra/server': patch
 '@mastra/nestjs': patch
+'@mastra/hono': patch
+'@mastra/express': patch
+'@mastra/fastify': patch
+'@mastra/koa': patch
+'@mastra/elysia': patch
 ---
 
 Custom routes registered with `registerApiRoute` now keep the status and message of an `HTTPException` they throw, on every server adapter (Hono, Express, Fastify, Koa, Elysia and NestJS). Before this fix, the client got a generic `500 Internal Server Error` instead.
