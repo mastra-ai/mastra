@@ -51,7 +51,7 @@ These steps take you from an empty project to a voice agent you can talk to. A v
       id: 'support',
       name: 'Support',
       instructions: 'You are a friendly phone support agent. Keep replies short and conversational.',
-      model: '__GATEWAY_OPENAI_MODEL_MINI__',
+      model: '__GATEWAY_OPENAI_MODEL_LUNA__',
     })
 
     export const mastra = new Mastra({
@@ -1628,7 +1628,7 @@ const supportAgent = new Agent({
   name: 'Support',
   instructions:
     'Help the caller. When everything is wrapped up, say goodbye and call endCall as your final action.',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: { endCall: createEndCallTool() },
 })
 ```

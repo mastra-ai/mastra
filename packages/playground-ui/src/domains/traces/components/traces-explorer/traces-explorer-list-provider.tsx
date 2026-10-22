@@ -48,7 +48,6 @@ export const TracesListProvider = memo(function TracesListProvider({
     refetch,
     isFetching,
     autoRefetch,
-    setAutoRefetch,
   } = list;
   const value = useMemo<TracesListContextValue>(
     () => ({
@@ -60,7 +59,6 @@ export const TracesListProvider = memo(function TracesListProvider({
       error,
       refetch,
       autoRefetch,
-      setAutoRefetch,
       sortDirection,
       onSortChange,
     }),
@@ -73,7 +71,6 @@ export const TracesListProvider = memo(function TracesListProvider({
       error,
       refetch,
       autoRefetch,
-      setAutoRefetch,
       sortDirection,
       onSortChange,
     ],

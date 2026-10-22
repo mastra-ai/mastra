@@ -3,10 +3,10 @@
   "temperature": ["step-3.5-flash", "step-3.5-flash-2603", "step-3.7-flash", "step-5-preview", "step-router-v1"],
   "structuredOutput": ["step-3.5-flash", "step-3.5-flash-2603", "step-3.7-flash", "step-5-preview"],
   "reasoning": {
-    "step-3.5-flash-2603": [
+    "step-3.7-flash": [
       {
         "type": "effort",
-        "values": ["low", "high"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "step-5-preview": [
@@ -21,10 +21,10 @@
         "values": ["low", "high"]
       }
     ],
-    "step-3.7-flash": [
+    "step-3.5-flash-2603": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["low", "high"]
       }
     ]
   }
