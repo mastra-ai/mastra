@@ -82,6 +82,13 @@ See [Connect](/docs/mastra-platform/connect/overview) to get started and [Tools]
             isOptional: true,
           },
           {
+            name: 'connectPrompt',
+            type: 'boolean',
+            description:
+              "Whether resource-scoped resolutions include the built-in request_connection tool, which lets the agent prompt the user to connect a provider account mid-conversation. Defaults to true; never added to global-only resolutions. The tool's connectable set follows the providers allowlist when one is set. Otherwise it uses the project's provider configuration in Mastra Platform: an unset configuration exposes the full catalog, a list restricts providers, and an empty list disables new connections. See End-user connections.",
+            isOptional: true,
+          },
+          {
             name: 'client',
             type: 'ConnectClientOptions',
             description: 'Platform client overrides. See ConnectClientOptions below.',

@@ -7,6 +7,7 @@ import { resolveCustomProviders } from '@mastra/code-sdk/agents/custom-provider-
 import { getDynamicInstructions } from '@mastra/code-sdk/agents/instructions';
 import { Agent } from '@mastra/core/agent';
 import { AgentController } from '@mastra/core/agent-controller';
+import type { MastraBrowser } from '@mastra/core/browser';
 import { AgentControllerChannels } from '@mastra/core/channels';
 import { Knowledge } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
@@ -75,6 +76,7 @@ const controllerMock = {
   queryThreadById: vi.fn(),
   getSession: vi.fn(),
   createSession: vi.fn(),
+  getChannels: vi.fn(() => null),
 };
 
 // Run-end reports the factory's session reporter is asked to send.
@@ -353,6 +355,13 @@ describe('MastraFactory constructor', () => {
 });
 
 describe('MastraFactory.prepare', () => {
+  it('passes the configured MastraBrowser to the agent controller', async () => {
+    const browser = { getTools: vi.fn() } as unknown as MastraBrowser;
+    const config = await prepareFactory({ storage: fakeStorage(), auth: null, browser });
+
+    expect(config.browser).toBe(browser);
+  });
+
   it('given a Factory deployment, when the controller mounts, then sessions run without modes', async () => {
     const config = await prepareFactory({ storage: fakeStorage(), auth: null });
 
@@ -1242,6 +1251,7 @@ describe('MastraFactory.prepare', () => {
       'factory_list_side_sessions',
       'factory_subscribe_session',
       'factory_unsubscribe_session',
+      'factory_recreate_sandbox',
     ];
 
     it('gives a user session every tool on every turn, and other sessions none', async () => {
@@ -1265,6 +1275,33 @@ describe('MastraFactory.prepare', () => {
       stranger.set('controller', { resourceId: 'session-1', threadId: 'thread-1', getState: () => ({}) });
       const none = await extraTools({ requestContext: stranger });
       for (const name of [...READ_TOOLS, ...MANAGEMENT_TOOLS]) expect(none).not.toHaveProperty(name);
+    });
+
+    it('offers a session its own sandbox recreate only on Platform sandboxes', async () => {
+      class Sandbox extends FactorySandbox {
+        constructor(readonly provider: string) {
+          super();
+        }
+        create = vi.fn(() => ({ id: 'sb' }) as never);
+      }
+      const toolsWith = async (provider: string | undefined) => {
+        prepareMock.mockClear();
+        const storage = fakeStorage();
+        const config = await prepareFactory({
+          storage,
+          ...(provider ? { sandbox: new Sandbox(provider) } : {}),
+        });
+        await seedUserSession(storage);
+        const extraTools = config.extraTools as (args: {
+          requestContext: RequestContext;
+        }) => Promise<Record<string, unknown>>;
+        return extraTools({ requestContext: sessionContext(false) });
+      };
+
+      expect(await toolsWith('platform')).toHaveProperty('factory_recreate_sandbox');
+      expect(await toolsWith('e2b')).not.toHaveProperty('factory_recreate_sandbox');
+      expect(await toolsWith('local')).not.toHaveProperty('factory_recreate_sandbox');
+      expect(await toolsWith(undefined)).not.toHaveProperty('factory_recreate_sandbox');
     });
 
     it('refuses an approval answer on a woken turn, which a person in the same session could give', async () => {
@@ -2233,7 +2270,7 @@ describe('MastraFactory.prepare integrations', () => {
     });
     const config = await prepareFactory({ storage: fakeStorage(), integrations: [custom] });
     const extraTools = config.extraTools as (args: { requestContext: object }) => Promise<Record<string, unknown>>;
-    const tools = await extraTools({ requestContext: {} });
+    const tools = await extraTools({ requestContext: new RequestContext() });
     expect(tools.customAgentTool).toBe(agentTool);
     expect(tools.customSessionTool).toBe(sessionTool);
   });
@@ -2249,7 +2286,7 @@ describe('MastraFactory.prepare integrations', () => {
     });
     const config = await prepareFactory({ storage: fakeStorage(), integrations: [first, second] });
     const extraTools = config.extraTools as (args: { requestContext: object }) => Promise<Record<string, unknown>>;
-    await expect(extraTools({ requestContext: {} })).rejects.toThrow(
+    await expect(extraTools({ requestContext: new RequestContext() })).rejects.toThrow(
       "integration tool 'sharedTool' from 'second' conflicts with 'first'",
     );
   });

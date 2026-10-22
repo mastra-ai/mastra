@@ -54,36 +54,25 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "openai/gpt-oss-120b": [
+    "zai-org/GLM-5.3-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "zai-org/GLM-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "zai-org/GLM-5.2": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "Qwen/Qwen3.5-397B-A17B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Qwen/Qwen3.8-27B": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
-    "meta-models/muse-spark-open": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
     "deepseek-ai/DeepSeek-V4.1-Flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4-Pro": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
@@ -95,16 +84,16 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Flash-0731": [
+    "deepseek-ai/DeepSeek-V4-Pro": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "moonshotai/Kimi-K3": [
+    "deepseek-ai/DeepSeek-V4-Flash-0731": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "nvidia/Nemotron-3_5-Lightning": [
@@ -125,28 +114,39 @@
         "values": ["none", "high"]
       }
     ],
-    "zai-org/GLM-5.3-Flash": [
+    "meta-models/muse-spark-open": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
-    "zai-org/GLM-5.3": [
+    "Qwen/Qwen3.8-27B": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "medium", "xhigh"]
       }
     ],
-    "zai-org/GLM-5.2": [
+    "Qwen/Qwen3.5-397B-A17B": [
       {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "type": "toggle"
       }
     ],
     "reflection/beam": [
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "moonshotai/Kimi-K3": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
       }
     ]
   }

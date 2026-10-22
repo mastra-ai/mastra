@@ -7,7 +7,7 @@ import { useContext } from 'react';
 import { ChatSessionContext } from '../context/ChatSessionContext';
 import { ChatThreadMessagesContext } from '../context/ChatThreadMessagesContext';
 import { describeRunError } from '../services/run-error';
-import { ProviderLoginAction } from './ProviderLoginAction';
+import { ProviderReconnectAction } from './ProviderReconnectAction';
 
 export function RunErrorNotice({ error, entryId }: { error: MastraErrorPart['error']; entryId: string }) {
   const session = useContext(ChatSessionContext);
@@ -28,7 +28,7 @@ export function RunErrorNotice({ error, entryId }: { error: MastraErrorPart['err
     <Notice
       variant="destructive"
       title={title}
-      action={recovery === 'credentials' ? <ProviderLoginAction /> : undefined}
+      action={recovery === 'credentials' ? <ProviderReconnectAction /> : undefined}
     >
       <Notice.Message>{message}</Notice.Message>
       <Collapsible>
