@@ -24,3 +24,5 @@ if (error.code === SERVER_ERROR_CODES.PERMISSION_DENIED) {
 ```
 
 In `@mastra/nestjs`, `code` previously held a value derived from the HTTP status (for example `BAD_REQUEST` or `INTERNAL_ERROR`). It now holds the business code; use the response status for the HTTP category.
+
+Truncated `multipart/form-data` uploads no longer raise an uncaught exception on Express, Koa and Fastify. They now return a 400 with `REQUEST_MULTIPART_INVALID`.

@@ -716,6 +716,8 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           reject(new Error(`File size limit exceeded${maxFileSize ? ` (max: ${maxFileSize} bytes)` : ''}`));
         });
 
+        // A truncated body errors the file stream; without a listener Node throws it as uncaught.
+        file.on('error', reject);
         file.on('end', () => {
           if (!limitExceeded && isSafeObjectKey(fieldname)) {
             result[fieldname] = Buffer.concat(chunks);
