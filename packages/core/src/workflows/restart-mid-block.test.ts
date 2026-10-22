@@ -325,14 +325,14 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
       new Mastra({ logger: false, storage, workflows: { wf: workflow } });
       const store = (await storage.getStore('workflows'))!;
 
-      // Storage that resolves later writes first: both arms' start writes are issued before the
-      // fast arm's end write, so without ordering the slow arm's stale start write lands last.
+      // Storage that is slow to apply the slow arm's start write. That write carries a copy of the
+      // results taken before the fast arm finished, so without ordering it lands after the fast
+      // arm's end write and erases it.
       const persist = store.persistWorkflowSnapshot.bind(store);
       const applied: WorkflowRunState[] = [];
-      let calls = 0;
       vi.spyOn(store, 'persistWorkflowSnapshot').mockImplementation(async (args: any) => {
         const snapshot = JSON.parse(JSON.stringify(args.snapshot));
-        await sleep(Math.max(0, 40 - 10 * calls++));
+        if (snapshot.context.slow?.status === 'running' && snapshot.context.fast?.status !== 'success') await sleep(60);
         applied.push(snapshot);
         return persist({ ...args, snapshot });
       });
