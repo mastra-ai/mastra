@@ -28,7 +28,8 @@ export function ChannelReplyMessage({
 }) {
   // Each post says where it went, so it stays apart from the agent's own text
   // in the same turn, which only the web UI sees.
-  const label = status === 'running' ? 'Sending to Slack…' : status === 'error' ? 'Not sent to Slack' : 'Sent to Slack';
+  const label =
+    status === 'running' ? 'Sending to Slack…' : status === 'error' ? 'Error sending to Slack' : 'Sent to Slack';
   return (
     <div role="group" aria-label="Reply in Slack thread" className="my-3">
       <MarkdownRenderer streaming={status === 'running'}>{text}</MarkdownRenderer>
