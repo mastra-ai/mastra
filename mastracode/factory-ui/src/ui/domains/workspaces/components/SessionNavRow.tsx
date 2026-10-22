@@ -1,18 +1,20 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { ContextMenu } from '@mastra/playground-ui/components/ContextMenu';
 import { HoverCard, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
 import { Sidebar, useMaybeSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Lock, MoreHorizontal, Pin, PinOff, RefreshCw, Trash2, User, Users } from 'lucide-react';
+import { Pin, User } from 'lucide-react';
 import { useRef } from 'react';
-import type { RefObject } from 'react';
+import { Link } from 'react-router';
+import type { Location } from 'react-router';
 
 import { SourceIcon } from '../../factory/components/BoardIcons';
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
 import type { SessionSource } from '../services/sessionPresentation';
 import type { SessionRowStatus } from '../services/sessionStatus';
 import { ActivityBelt } from '@mastra/playground-ui/components/Activity';
+import { SessionActionsMenu } from './SessionActionsMenu';
+import { SessionMenuItems } from './SessionMenuItems';
 import { SessionPreviewCard } from './SessionPreviewCard';
 import type { SessionPreviewDetails } from './SessionPreviewCard';
 import { SessionSharingPopover } from './SessionSharingPopover';
@@ -40,7 +42,7 @@ export function SessionNavRow({
   changeRequestProvider = 'github',
   preview: previewDetails,
   pinned = false,
-  onSelect,
+  from,
   onPinChange,
   onDelete,
   onRegenerateTitle,
@@ -66,7 +68,8 @@ export function SessionNavRow({
   status?: SessionRowStatus;
   preview?: SessionPreviewDetails;
   pinned?: boolean;
-  onSelect: () => void;
+  /** Retain the board location when opening a factory workspace in this tab. */
+  from?: Location;
   onPinChange: (pinned: boolean) => void;
   /** Omit on sessions the viewer does not own: the server only lets owners delete. */
   onDelete?: () => void;
@@ -85,15 +88,25 @@ export function SessionNavRow({
   const sidebar = useMaybeSidebar();
   // Touch has no hover: the card would only open behind the tap that already navigated away.
   const preview = sidebar?.isMobile ? undefined : previewDetails;
-  const button = (
-    <button
-      type="button"
+  const link = (
+    <Link
+      to={url}
+      state={from ? { from } : undefined}
       aria-current={active ? 'page' : undefined}
       aria-label={name}
-      disabled={disabled || loading}
-      onClick={() => {
-        sidebar?.setOpenMobile(false);
-        onSelect();
+      aria-disabled={disabled || loading || undefined}
+      tabIndex={disabled || loading ? -1 : undefined}
+      onClick={event => {
+        if (disabled || loading) {
+          event.preventDefault();
+          return;
+        }
+        if (!event.metaKey && !event.ctrlKey && !event.shiftKey && !event.altKey && event.button === 0) {
+          sidebar?.setOpenMobile(false);
+        }
+      }}
+      onAuxClick={event => {
+        if (disabled || loading) event.preventDefault();
       }}
       title={preview ? undefined : title}
     >
@@ -102,8 +115,19 @@ export function SessionNavRow({
       {pinned && !loading ? (
         <Pin aria-label={`${name} pinned`} className="text-muted-foreground/70 size-2 shrink-0 rotate-45" />
       ) : null}
-    </button>
+    </Link>
   );
+  const menuProps = {
+    url,
+    pinned,
+    onPinChange,
+    onDelete,
+    onRegenerateTitle,
+    regeneratingTitle,
+    visibility,
+    onVisibilityChange,
+    changingVisibility,
+  };
   const belt = loading ? undefined : status;
   const trailing = trailingKind({ loading, status, merged });
   const mergedLabel = changeRequestProvider === 'gitlab' ? 'Merge request merged' : 'Pull request merged';
@@ -133,33 +157,38 @@ export function SessionNavRow({
           </span>
         ) : null}
         {trailing === 'loading' ? null : (
-          <SessionActionsMenu
-            name={name}
-            anchor={anchor}
-            disabled={disabled}
-            pinned={pinned}
-            onPinChange={onPinChange}
-            onDelete={onDelete}
-            onRegenerateTitle={onRegenerateTitle}
-            regeneratingTitle={regeneratingTitle}
-            visibility={visibility}
-            onVisibilityChange={onVisibilityChange}
-            changingVisibility={changingVisibility}
-          />
+          <SessionActionsMenu name={name} anchor={anchor} disabled={disabled}>
+            <SessionMenuItems menu="dropdown" {...menuProps} />
+          </SessionActionsMenu>
         )}
       </span>
     </>
   );
   const row = (
-    <Sidebar.NavLink
-      ref={anchor}
-      link={{ name, url }}
-      isActive={active}
-      className="group/session"
-      // 0ms both ways — each row owns its card, so a close delay leaves the previous one up while the next opens
-      render={preview ? <HoverCardTrigger delay={0} closeDelay={0} render={button} /> : button}
-      action={action}
-    />
+    <ContextMenu
+      onOpenChange={(open, details) => {
+        if (open && (disabled || loading)) details.cancel();
+      }}
+    >
+      <ContextMenu.Trigger
+        render={
+          <Sidebar.NavLink
+            ref={anchor}
+            link={{ name, url }}
+            isActive={active}
+            className="group/session"
+            // 0ms both ways — each row owns its card, so a close delay leaves the previous one up while the next opens
+            render={preview ? <HoverCardTrigger delay={0} closeDelay={0} render={link} /> : link}
+            action={action}
+          />
+        }
+      />
+      {!disabled && !loading ? (
+        <ContextMenu.Content>
+          <SessionMenuItems menu="context" {...menuProps} />
+        </ContextMenu.Content>
+      ) : null}
+    </ContextMenu>
   );
 
   if (!preview) return row;
@@ -195,78 +224,6 @@ function beltLabel(status: SessionRowStatus, name: string) {
 function trailingKind({ loading, status, merged }: { loading?: boolean; status?: SessionRowStatus; merged?: boolean }) {
   if (loading) return 'loading';
   return merged && !status ? 'merged' : undefined;
-}
-
-function SessionActionsMenu({
-  name,
-  anchor,
-  disabled,
-  pinned,
-  onPinChange,
-  onDelete,
-  onRegenerateTitle,
-  regeneratingTitle,
-  visibility,
-  onVisibilityChange,
-  changingVisibility,
-}: {
-  name: string;
-  anchor: RefObject<HTMLElement | null>;
-  disabled: boolean;
-  pinned: boolean;
-  onPinChange: (pinned: boolean) => void;
-  onDelete?: () => void;
-  onRegenerateTitle?: () => void;
-  regeneratingTitle?: boolean;
-  visibility?: 'org' | 'private';
-  onVisibilityChange?: (visibility: 'org' | 'private') => void;
-  changingVisibility?: boolean;
-}) {
-  return (
-    <DropdownMenu>
-      <DropdownMenu.Trigger
-        render={
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={`Session actions for ${name}`}
-            disabled={disabled}
-            className="hidden group-focus-within/session:flex group-hover/session:flex data-[popup-open]:flex"
-          >
-            <MoreHorizontal />
-          </Button>
-        }
-      />
-      <DropdownMenu.Content anchor={anchor} align="end">
-        <DropdownMenu.Item onClick={() => onPinChange(!pinned)}>
-          {pinned ? <PinOff /> : <Pin />}
-          {pinned ? 'Unpin' : 'Pin session'}
-        </DropdownMenu.Item>
-        {onRegenerateTitle ? (
-          <DropdownMenu.Item disabled={regeneratingTitle} onClick={onRegenerateTitle}>
-            <RefreshCw className={cn(regeneratingTitle && 'animate-spin')} />
-            Regenerate title
-          </DropdownMenu.Item>
-        ) : null}
-        {onVisibilityChange && visibility ? (
-          <DropdownMenu.Item
-            disabled={changingVisibility}
-            onClick={() => onVisibilityChange(visibility === 'private' ? 'org' : 'private')}
-          >
-            {visibility === 'private' ? <Users /> : <Lock />}
-            {visibility === 'private' ? 'Share with organization' : 'Make private'}
-          </DropdownMenu.Item>
-        ) : null}
-        {onDelete ? (
-          <DropdownMenu.Item variant="destructive" onClick={onDelete}>
-            <Trash2 />
-            Delete
-          </DropdownMenu.Item>
-        ) : null}
-      </DropdownMenu.Content>
-    </DropdownMenu>
-  );
 }
 
 // The actions menu owns the slot as soon as the row is hovered, focused, or its menu is open.

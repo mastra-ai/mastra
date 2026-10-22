@@ -123,14 +123,13 @@ test.describe('Traces explorer', () => {
     });
   });
 
-  test.describe('when auto refresh is on and a new trace is recorded', () => {
+  test.describe('when a new trace is recorded', () => {
     test('shows the new trace without a reload', async ({ page, request }) => {
       const agentId = await findAgentId(request);
       test.skip(!agentId, 'Needs a recorded agent trace to know which agent to call.');
       test.setTimeout(120_000);
 
       await openTracesPage(page);
-      await expect(page.getByRole('checkbox', { name: 'Auto refresh' })).toBeChecked();
 
       const prompt = `Reply with the single word ok (e2e ${Date.now()})`;
       const generated = await request.post(`/api/agents/${agentId}/generate`, {
