@@ -55,6 +55,7 @@ export const LIST_AGENT_BUILDER_ACTIONS_ROUTE = createRoute({
   description: 'Returns a list of all available agent-builder actions',
   tags: ['Agent Builder'],
   requiresAuth: true,
+  errors: ['AGENT_BUILDER_ACTIONS_LIST_FAILED'],
   handler: async ctx => {
     const { mastra } = ctx;
     const logger = mastra.getLogger();
@@ -86,6 +87,7 @@ export const GET_AGENT_BUILDER_ACTION_BY_ID_ROUTE = createRoute({
   description: 'Returns details for a specific agent-builder action',
   tags: ['Agent Builder'],
   requiresAuth: true,
+  errors: ['AGENT_BUILDER_ACTION_GET_FAILED', 'AGENT_BUILDER_ACTION_INVALID'],
   handler: async ctx => {
     const { mastra, actionId } = ctx;
     const logger = mastra.getLogger();
@@ -126,6 +128,7 @@ export const LIST_AGENT_BUILDER_ACTION_RUNS_ROUTE = createRoute({
   description: 'Returns a paginated list of execution runs for the specified action',
   tags: ['Agent Builder'],
   requiresAuth: true,
+  errors: ['AGENT_BUILDER_ACTION_INVALID', 'AGENT_BUILDER_ACTION_RUNS_LIST_FAILED'],
   handler: async ctx => {
     const { mastra, actionId } = ctx;
     const logger = mastra.getLogger();
@@ -170,6 +173,7 @@ export const GET_AGENT_BUILDER_ACTION_RUN_BY_ID_ROUTE = createRoute({
     'Returns details for a specific action run with metadata and processed execution state. Use the fields query parameter to reduce payload size.',
   tags: ['Agent Builder'],
   requiresAuth: true,
+  errors: ['AGENT_BUILDER_ACTION_INVALID', 'AGENT_BUILDER_ACTION_RUN_GET_FAILED'],
   handler: async ctx => {
     const { mastra, actionId, runId } = ctx;
     const logger = mastra.getLogger();
@@ -213,6 +217,7 @@ export const CREATE_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
   description: 'Creates a new action execution instance with an optional custom run ID',
   tags: ['Agent Builder'],
   requiresAuth: true,
+  errors: ['AGENT_BUILDER_ACTION_INVALID', 'AGENT_BUILDER_ACTION_RUN_CREATE_FAILED'],
   handler: async ctx => {
     const { mastra, actionId, runId } = ctx;
     const logger = mastra.getLogger();
@@ -257,6 +262,7 @@ export const STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   description: 'Executes an action and streams the results in real-time',
   tags: ['Agent Builder'],
   requiresAuth: true,
+  errors: ['AGENT_BUILDER_ACTION_INVALID', 'AGENT_BUILDER_ACTION_STREAM_FAILED'],
   handler: async ctx => {
     const { mastra, actionId, runId, requestContext } = ctx;
     const logger = mastra.getLogger();
@@ -302,6 +308,7 @@ export const START_ASYNC_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   description: 'Starts an action execution asynchronously without streaming results',
   tags: ['Agent Builder'],
   requiresAuth: true,
+  errors: ['AGENT_BUILDER_ACTION_INVALID', 'AGENT_BUILDER_ACTION_START_FAILED'],
   handler: async ctx => {
     const { mastra, actionId, runId, requestContext } = ctx;
     const logger = mastra.getLogger();
@@ -347,6 +354,7 @@ export const START_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
   description: 'Starts execution of a specific action run by ID',
   tags: ['Agent Builder'],
   requiresAuth: true,
+  errors: ['AGENT_BUILDER_ACTION_INVALID', 'AGENT_BUILDER_ACTION_RUN_START_FAILED'],
   handler: async ctx => {
     const { mastra, actionId, runId, requestContext } = ctx;
     const logger = mastra.getLogger();
@@ -391,6 +399,7 @@ export const OBSERVE_STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   description: 'Observes and streams updates from an already running action execution',
   tags: ['Agent Builder'],
   requiresAuth: true,
+  errors: ['AGENT_BUILDER_ACTION_INVALID', 'AGENT_BUILDER_ACTION_STREAM_OBSERVE_FAILED'],
   handler: async ctx => {
     const { mastra, actionId, runId } = ctx;
     const logger = mastra.getLogger();
@@ -435,6 +444,7 @@ export const RESUME_ASYNC_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   description: 'Resumes a suspended action execution asynchronously without streaming',
   tags: ['Agent Builder'],
   requiresAuth: true,
+  errors: ['AGENT_BUILDER_ACTION_INVALID', 'AGENT_BUILDER_ACTION_RESUME_FAILED'],
   handler: async ctx => {
     const { mastra, actionId, runId, step, requestContext } = ctx;
     const logger = mastra.getLogger();
@@ -488,6 +498,7 @@ export const RESUME_NO_WAIT_AGENT_BUILDER_ACTION_ROUTE = createRoute({
     'Resumes a suspended action execution without waiting (fire-and-forget) and returns immediately with the runId. The action continues executing in the background.',
   tags: ['Agent Builder'],
   requiresAuth: true,
+  errors: ['AGENT_BUILDER_ACTION_INVALID', 'AGENT_BUILDER_ACTION_RESUME_FAILED'],
   handler: async ctx => {
     const { mastra, actionId, runId, step, requestContext } = ctx;
     const logger = mastra.getLogger();
@@ -533,6 +544,7 @@ export const RESUME_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   description: 'Resumes a suspended action execution from a specific step',
   tags: ['Agent Builder'],
   requiresAuth: true,
+  errors: ['AGENT_BUILDER_ACTION_INVALID', 'AGENT_BUILDER_ACTION_RESUME_FAILED'],
   handler: async ctx => {
     const { mastra, actionId, runId, step, requestContext } = ctx;
     const logger = mastra.getLogger();
@@ -578,6 +590,7 @@ export const RESUME_STREAM_AGENT_BUILDER_ACTION_ROUTE = createRoute({
   description: 'Resumes a suspended action execution and continues streaming results',
   tags: ['Agent Builder'],
   requiresAuth: true,
+  errors: ['AGENT_BUILDER_ACTION_INVALID', 'AGENT_BUILDER_ACTION_RESUME_STREAM_FAILED'],
   handler: async ctx => {
     const { mastra, actionId, runId, step, requestContext } = ctx;
     const logger = mastra.getLogger();
@@ -621,6 +634,7 @@ export const CANCEL_AGENT_BUILDER_ACTION_RUN_ROUTE = createRoute({
   description: 'Cancels an in-progress action execution',
   tags: ['Agent Builder'],
   requiresAuth: true,
+  errors: ['AGENT_BUILDER_ACTION_INVALID', 'AGENT_BUILDER_ACTION_RUN_CANCEL_FAILED'],
   handler: async ctx => {
     const { mastra, actionId, runId } = ctx;
     const logger = mastra.getLogger();
@@ -667,6 +681,7 @@ export const STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE = createRoute({
     'Legacy endpoint for streaming agent-builder action execution. Use /agent-builder/:actionId/stream instead.',
   tags: ['Agent Builder', 'Legacy'],
   requiresAuth: true,
+  errors: ['AGENT_BUILDER_ACTION_INVALID', 'AGENT_BUILDER_ACTION_STREAM_FAILED'],
   handler: async ctx => {
     const { mastra, actionId, runId, requestContext } = ctx;
     const logger = mastra.getLogger();
@@ -712,6 +727,7 @@ export const OBSERVE_STREAM_LEGACY_AGENT_BUILDER_ACTION_ROUTE = createRoute({
     'Legacy endpoint for observing agent-builder action stream. Use /agent-builder/:actionId/observe instead.',
   tags: ['Agent Builder', 'Legacy'],
   requiresAuth: true,
+  errors: ['AGENT_BUILDER_ACTION_INVALID', 'AGENT_BUILDER_ACTION_STREAM_OBSERVE_FAILED'],
   handler: async ctx => {
     const { mastra, actionId, runId } = ctx;
     const logger = mastra.getLogger();

@@ -277,6 +277,13 @@ export const UPSERT_VECTORS_ROUTE = createRoute({
   description: 'Inserts or updates vectors in the specified index',
   tags: ['Vectors'],
   requiresAuth: true,
+  errors: [
+    'VECTORS_UPSERT_FAILED',
+    'VECTOR_INDEX_NAME_REQUIRED',
+    'VECTOR_STORE_NAME_REQUIRED',
+    'VECTOR_STORE_NOT_FOUND',
+    'VECTOR_VECTORS_REQUIRED',
+  ],
   handler: async ({ mastra, vectorName, ...params }) => {
     try {
       const { indexName, vectors, metadata, ids } = params;
@@ -315,6 +322,14 @@ export const CREATE_INDEX_ROUTE = createRoute({
   description: 'Creates a new vector index with the specified dimension and metric',
   tags: ['Vectors'],
   requiresAuth: true,
+  errors: [
+    'VECTOR_INDEX_CREATE_FAILED',
+    'VECTOR_INDEX_DIMENSION_INVALID',
+    'VECTOR_INDEX_METRIC_INVALID',
+    'VECTOR_INDEX_NAME_REQUIRED',
+    'VECTOR_STORE_NAME_REQUIRED',
+    'VECTOR_STORE_NOT_FOUND',
+  ],
   handler: async ({ mastra, vectorName, ...params }) => {
     try {
       const { indexName, dimension, metric } = params;
@@ -363,6 +378,13 @@ export const QUERY_VECTORS_ROUTE = createRoute({
   description: 'Performs a similarity search on the vector index',
   tags: ['Vectors'],
   requiresAuth: true,
+  errors: [
+    'VECTORS_QUERY_FAILED',
+    'VECTOR_INDEX_NAME_REQUIRED',
+    'VECTOR_QUERY_VECTOR_REQUIRED',
+    'VECTOR_STORE_NAME_REQUIRED',
+    'VECTOR_STORE_NOT_FOUND',
+  ],
   handler: async ({ mastra, vectorName, ...params }) => {
     try {
       const { indexName, queryVector, topK, filter, includeVector } = params;
@@ -407,6 +429,7 @@ export const LIST_INDEXES_ROUTE = createRoute({
   description: 'Returns a list of all indexes in the vector store',
   tags: ['Vectors'],
   requiresAuth: true,
+  errors: ['VECTOR_INDEXES_LIST_FAILED', 'VECTOR_STORE_NAME_REQUIRED', 'VECTOR_STORE_NOT_FOUND'],
   handler: async ({ mastra, vectorName }) => {
     try {
       const vector = getVector(mastra, vectorName);
@@ -431,6 +454,12 @@ export const DESCRIBE_INDEX_ROUTE = createRoute({
   description: 'Returns statistics and metadata for a specific index',
   tags: ['Vectors'],
   requiresAuth: true,
+  errors: [
+    'VECTOR_INDEX_DESCRIBE_FAILED',
+    'VECTOR_INDEX_NAME_REQUIRED',
+    'VECTOR_STORE_NAME_REQUIRED',
+    'VECTOR_STORE_NOT_FOUND',
+  ],
   handler: async ({ mastra, vectorName, indexName }) => {
     try {
       if (!indexName) {
@@ -467,6 +496,12 @@ export const DELETE_INDEX_ROUTE = createRoute({
   description: 'Deletes a vector index and all its data',
   tags: ['Vectors'],
   requiresAuth: true,
+  errors: [
+    'VECTOR_INDEX_DELETE_FAILED',
+    'VECTOR_INDEX_NAME_REQUIRED',
+    'VECTOR_STORE_NAME_REQUIRED',
+    'VECTOR_STORE_NOT_FOUND',
+  ],
   handler: async ({ mastra, vectorName, indexName }) => {
     try {
       if (!indexName) {
@@ -497,6 +532,7 @@ export const LIST_VECTORS_ROUTE = createRoute({
   description: 'Returns a list of all configured vector stores',
   tags: ['Vectors'],
   requiresAuth: true,
+  errors: ['VECTOR_STORES_LIST_FAILED'],
   handler: async ({ mastra }) => {
     try {
       const vectors = mastra.listVectors();
@@ -530,6 +566,7 @@ export const LIST_EMBEDDERS_ROUTE = createRoute({
   description: 'Returns a list of all available embedding models',
   tags: ['Vectors'],
   requiresAuth: true,
+  errors: ['EMBEDDERS_LIST_FAILED'],
   handler: async () => {
     try {
       const embeddersList = EMBEDDING_MODELS.map(model => ({

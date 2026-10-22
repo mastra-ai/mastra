@@ -32,6 +32,7 @@ export const LIST_DYNAMIC_WORKFLOWS_ROUTE = createRoute({
   tags: ['Dynamic Workflows'],
   requiresAuth: true,
   requiresPermission: 'stored-workflows:read',
+  errors: ['DYNAMIC_WORKFLOWS_LIST_FAILED', 'DYNAMIC_WORKFLOWS_STORAGE_DOMAIN_UNAVAILABLE', 'STORAGE_NOT_CONFIGURED'],
   handler: async ({ mastra, status, authorId }) => {
     try {
       const storage = mastra.getStorage();
@@ -73,6 +74,12 @@ export const GET_DYNAMIC_WORKFLOW_ROUTE = createRoute({
   tags: ['Dynamic Workflows'],
   requiresAuth: true,
   requiresPermission: 'stored-workflows:read',
+  errors: [
+    'DYNAMIC_WORKFLOWS_STORAGE_DOMAIN_UNAVAILABLE',
+    'DYNAMIC_WORKFLOW_GET_FAILED',
+    'DYNAMIC_WORKFLOW_NOT_FOUND',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra, dynamicWorkflowId }) => {
     try {
       const storage = mastra.getStorage();
@@ -127,6 +134,7 @@ export const UPSERT_DYNAMIC_WORKFLOW_ROUTE = createRoute({
   tags: ['Dynamic Workflows'],
   requiresAuth: true,
   requiresPermission: 'stored-workflows:write',
+  errors: ['DYNAMIC_WORKFLOW_UPSERT_FAILED'],
   handler: async ({
     mastra,
     id,
@@ -198,6 +206,7 @@ export const DELETE_DYNAMIC_WORKFLOW_ROUTE = createRoute({
   tags: ['Dynamic Workflows'],
   requiresAuth: true,
   requiresPermission: 'stored-workflows:write',
+  errors: ['DYNAMIC_WORKFLOWS_STORAGE_DOMAIN_UNAVAILABLE', 'DYNAMIC_WORKFLOW_DELETE_FAILED', 'STORAGE_NOT_CONFIGURED'],
   handler: async ({ mastra, dynamicWorkflowId }) => {
     try {
       const storage = mastra.getStorage();

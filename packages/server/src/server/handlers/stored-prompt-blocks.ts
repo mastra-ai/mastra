@@ -52,6 +52,12 @@ export const LIST_STORED_PROMPT_BLOCKS_ROUTE = createRoute({
   description: 'Returns a paginated list of all prompt blocks stored in the database',
   tags: ['Stored Prompt Blocks'],
   requiresAuth: true,
+  errors: [
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_PROMPT_BLOCKS_LIST_FAILED',
+    'STORED_PROMPT_BLOCK_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+  ],
   handler: async ({ mastra, page, perPage, orderBy, status, authorId, metadata, requestContext }) => {
     try {
       const storage = mastra.getStorage();
@@ -116,6 +122,14 @@ export const GET_STORED_PROMPT_BLOCK_ROUTE = createRoute({
     'Returns a specific prompt block from storage by its unique identifier. Use ?status=draft to resolve with the latest (draft) version, or ?status=published (default) for the active published version.',
   tags: ['Stored Prompt Blocks'],
   requiresAuth: true,
+  errors: [
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_PROMPT_BLOCK_GET_FAILED',
+    'STORED_PROMPT_BLOCK_NOT_FOUND',
+    'STORED_PROMPT_BLOCK_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+  ],
   handler: async ({ mastra, storedPromptBlockId, status, requestContext }) => {
     try {
       const storage = mastra.getStorage();
@@ -171,6 +185,15 @@ export const CREATE_STORED_PROMPT_BLOCK_ROUTE = createRoute({
   description: 'Creates a new prompt block in storage with the provided configuration',
   tags: ['Stored Prompt Blocks'],
   requiresAuth: true,
+  errors: [
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_PROMPT_BLOCK_ALREADY_EXISTS',
+    'STORED_PROMPT_BLOCK_CREATED_RESOLVE_FAILED',
+    'STORED_PROMPT_BLOCK_CREATE_FAILED',
+    'STORED_PROMPT_BLOCK_ID_DERIVATION_FAILED',
+    'STORED_PROMPT_BLOCK_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+  ],
   handler: async ({
     mastra,
     id: providedId,
@@ -274,6 +297,15 @@ export const UPDATE_STORED_PROMPT_BLOCK_ROUTE = createRoute({
   description: 'Updates an existing prompt block in storage with the provided fields',
   tags: ['Stored Prompt Blocks'],
   requiresAuth: true,
+  errors: [
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_PROMPT_BLOCK_NOT_FOUND',
+    'STORED_PROMPT_BLOCK_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORED_PROMPT_BLOCK_UPDATED_RESOLVE_FAILED',
+    'STORED_PROMPT_BLOCK_UPDATE_FAILED',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+  ],
   handler: async ({
     mastra,
     storedPromptBlockId,
@@ -391,6 +423,14 @@ export const DELETE_STORED_PROMPT_BLOCK_ROUTE = createRoute({
   description: 'Deletes a prompt block from storage by its unique identifier',
   tags: ['Stored Prompt Blocks'],
   requiresAuth: true,
+  errors: [
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_PROMPT_BLOCK_DELETE_FAILED',
+    'STORED_PROMPT_BLOCK_NOT_FOUND',
+    'STORED_PROMPT_BLOCK_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+  ],
   handler: async ({ mastra, storedPromptBlockId, requestContext }) => {
     try {
       const storage = mastra.getStorage();

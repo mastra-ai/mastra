@@ -71,6 +71,14 @@ export const LIST_AGENT_VERSIONS_ROUTE = createRoute({
   summary: 'List agent versions',
   description: 'Returns a paginated list of all versions for a stored agent',
   tags: ['Agent Versions'],
+  errors: [
+    'AGENT_VERSIONS_LIST_FAILED',
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_AGENT_NOT_FOUND',
+    'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+  ],
   handler: async ({ mastra, agentId, page, perPage, orderBy, requestContext }) => {
     try {
       const storage = mastra.getStorage();
@@ -104,7 +112,7 @@ export const LIST_AGENT_VERSIONS_ROUTE = createRoute({
         throw new HTTPException(404, {
           message: `Agent with id ${agentId} not found`,
           code: SERVER_ERROR_CODES.STORED_AGENT_NOT_FOUND,
-          metadata: { agentId },
+          metadata: { storedAgentId: agentId },
         });
       }
       assertStoredResourceScope(storedAgent, await getStoredResourceScope(mastra, requestContext));
@@ -140,6 +148,15 @@ export const CREATE_AGENT_VERSION_ROUTE = createRoute({
   summary: 'Create agent version',
   description: 'Creates a new version snapshot of the current agent configuration',
   tags: ['Agent Versions'],
+  errors: [
+    'AGENT_VERSION_CREATED_RESOLVE_FAILED',
+    'AGENT_VERSION_CREATE_FAILED',
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_AGENT_NOT_FOUND',
+    'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+  ],
   handler: async ({ mastra, agentId, changeMessage, requestContext }) => {
     try {
       const storage = mastra.getStorage();
@@ -165,7 +182,7 @@ export const CREATE_AGENT_VERSION_ROUTE = createRoute({
         throw new HTTPException(404, {
           message: `Agent with id ${agentId} not found`,
           code: SERVER_ERROR_CODES.STORED_AGENT_NOT_FOUND,
-          metadata: { agentId },
+          metadata: { storedAgentId: agentId },
         });
       }
       assertStoredResourceScope(agent, await getStoredResourceScope(mastra, requestContext));
@@ -249,6 +266,14 @@ export const GET_AGENT_VERSION_ROUTE = createRoute({
   summary: 'Get agent version',
   description: 'Returns a specific version of an agent by its version ID',
   tags: ['Agent Versions'],
+  errors: [
+    'AGENT_VERSION_GET_FAILED',
+    'AGENT_VERSION_NOT_FOUND',
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+  ],
   handler: async ({ mastra, agentId, versionId, requestContext }) => {
     try {
       const storage = mastra.getStorage();
@@ -274,7 +299,7 @@ export const GET_AGENT_VERSION_ROUTE = createRoute({
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found`,
           code: SERVER_ERROR_CODES.AGENT_VERSION_NOT_FOUND,
-          metadata: { versionId },
+          metadata: { versionId, agentId },
         });
       }
 
@@ -312,6 +337,17 @@ export const ACTIVATE_AGENT_VERSION_ROUTE = createRoute({
   summary: 'Activate agent version',
   description: 'Sets a specific version as the active version for the agent',
   tags: ['Agent Versions'],
+  errors: [
+    'AGENT_VERSION_ACTIVATE_FAILED',
+    'AGENT_VERSION_NOT_FOUND',
+    'PROMPT_BLOCK_REFERENCE_UNPUBLISHED',
+    'PROMPT_BLOCK_REFERENCE_UNRESOLVED',
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_AGENT_NOT_FOUND',
+    'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+  ],
   handler: async ({ mastra, agentId, versionId, requestContext }) => {
     try {
       const storage = mastra.getStorage();
@@ -337,7 +373,7 @@ export const ACTIVATE_AGENT_VERSION_ROUTE = createRoute({
         throw new HTTPException(404, {
           message: `Agent with id ${agentId} not found`,
           code: SERVER_ERROR_CODES.STORED_AGENT_NOT_FOUND,
-          metadata: { agentId },
+          metadata: { storedAgentId: agentId },
         });
       }
       assertStoredResourceScope(agent, await getStoredResourceScope(mastra, requestContext));
@@ -348,7 +384,7 @@ export const ACTIVATE_AGENT_VERSION_ROUTE = createRoute({
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found`,
           code: SERVER_ERROR_CODES.AGENT_VERSION_NOT_FOUND,
-          metadata: { versionId },
+          metadata: { versionId, agentId },
         });
       }
       if (version.agentId !== agentId) {
@@ -402,6 +438,16 @@ export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
   summary: 'Restore agent version',
   description: 'Restores the agent configuration from a version, creating a new version',
   tags: ['Agent Versions'],
+  errors: [
+    'AGENT_VERSION_CREATED_RESOLVE_FAILED',
+    'AGENT_VERSION_NOT_FOUND',
+    'AGENT_VERSION_RESTORE_FAILED',
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_AGENT_NOT_FOUND',
+    'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+  ],
   handler: async ({ mastra, agentId, versionId, requestContext }) => {
     try {
       const storage = mastra.getStorage();
@@ -427,7 +473,7 @@ export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
         throw new HTTPException(404, {
           message: `Agent with id ${agentId} not found`,
           code: SERVER_ERROR_CODES.STORED_AGENT_NOT_FOUND,
-          metadata: { agentId },
+          metadata: { storedAgentId: agentId },
         });
       }
       assertStoredResourceScope(agent, await getStoredResourceScope(mastra, requestContext));
@@ -438,7 +484,7 @@ export const RESTORE_AGENT_VERSION_ROUTE = createRoute({
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found`,
           code: SERVER_ERROR_CODES.AGENT_VERSION_NOT_FOUND,
-          metadata: { versionId },
+          metadata: { versionId, agentId },
         });
       }
       if (versionToRestore.agentId !== agentId) {
@@ -528,6 +574,16 @@ export const DELETE_AGENT_VERSION_ROUTE = createRoute({
   summary: 'Delete agent version',
   description: 'Deletes a specific version (cannot delete the active version)',
   tags: ['Agent Versions'],
+  errors: [
+    'AGENT_VERSION_ACTIVE_DELETE_FORBIDDEN',
+    'AGENT_VERSION_DELETE_FAILED',
+    'AGENT_VERSION_NOT_FOUND',
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_AGENT_NOT_FOUND',
+    'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+  ],
   handler: async ({ mastra, agentId, versionId, requestContext }) => {
     try {
       const storage = mastra.getStorage();
@@ -553,7 +609,7 @@ export const DELETE_AGENT_VERSION_ROUTE = createRoute({
         throw new HTTPException(404, {
           message: `Agent with id ${agentId} not found`,
           code: SERVER_ERROR_CODES.STORED_AGENT_NOT_FOUND,
-          metadata: { agentId },
+          metadata: { storedAgentId: agentId },
         });
       }
       assertStoredResourceScope(agent, await getStoredResourceScope(mastra, requestContext));
@@ -564,7 +620,7 @@ export const DELETE_AGENT_VERSION_ROUTE = createRoute({
         throw new HTTPException(404, {
           message: `Version with id ${versionId} not found`,
           code: SERVER_ERROR_CODES.AGENT_VERSION_NOT_FOUND,
-          metadata: { versionId },
+          metadata: { versionId, agentId },
         });
       }
       if (version.agentId !== agentId) {
@@ -627,6 +683,14 @@ export const COMPARE_AGENT_VERSIONS_ROUTE: ServerRoute<
   summary: 'Compare agent versions',
   description: 'Compares two versions and returns the differences between them',
   tags: ['Agent Versions'],
+  errors: [
+    'AGENT_VERSIONS_COMPARE_FAILED',
+    'AGENT_VERSION_NOT_FOUND',
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+  ],
   handler: async ({ mastra, agentId, from, to, requestContext }) => {
     try {
       const storage = mastra.getStorage();
@@ -654,14 +718,14 @@ export const COMPARE_AGENT_VERSIONS_ROUTE: ServerRoute<
         throw new HTTPException(404, {
           message: `Version with id ${from} not found`,
           code: SERVER_ERROR_CODES.AGENT_VERSION_NOT_FOUND,
-          metadata: { fromVersionId: from },
+          metadata: { versionId: from, agentId },
         });
       }
       if (fromVersion.agentId !== agentId) {
         throw new HTTPException(404, {
           message: `Version with id ${from} not found for agent ${agentId}`,
           code: SERVER_ERROR_CODES.AGENT_VERSION_NOT_FOUND,
-          metadata: { fromVersionId: from, agentId },
+          metadata: { versionId: from, agentId },
         });
       }
 
@@ -670,14 +734,14 @@ export const COMPARE_AGENT_VERSIONS_ROUTE: ServerRoute<
         throw new HTTPException(404, {
           message: `Version with id ${to} not found`,
           code: SERVER_ERROR_CODES.AGENT_VERSION_NOT_FOUND,
-          metadata: { toVersionId: to },
+          metadata: { versionId: to, agentId },
         });
       }
       if (toVersion.agentId !== agentId) {
         throw new HTTPException(404, {
           message: `Version with id ${to} not found for agent ${agentId}`,
           code: SERVER_ERROR_CODES.AGENT_VERSION_NOT_FOUND,
-          metadata: { toVersionId: to, agentId },
+          metadata: { versionId: to, agentId },
         });
       }
 

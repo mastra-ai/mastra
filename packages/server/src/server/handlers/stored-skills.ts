@@ -119,6 +119,13 @@ export const LIST_STORED_SKILLS_ROUTE = createRoute({
   description: 'Returns a paginated list of all skill configurations stored in the database',
   tags: ['Stored Skills'],
   requiresAuth: true,
+  errors: [
+    'FAVORITES_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+    'STORED_SKILLS_LIST_FAILED',
+    'STORED_SKILL_STORAGE_DOMAIN_UNAVAILABLE',
+  ],
   handler: async ({
     mastra,
     requestContext,
@@ -264,6 +271,14 @@ export const GET_STORED_SKILL_ROUTE = createRoute({
   description: 'Returns a specific skill from storage by its unique identifier (resolved with active version config)',
   tags: ['Stored Skills'],
   requiresAuth: true,
+  errors: [
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+    'STORED_SKILL_GET_FAILED',
+    'STORED_SKILL_NOT_FOUND',
+    'STORED_SKILL_STORAGE_DOMAIN_UNAVAILABLE',
+  ],
   handler: async ({ mastra, requestContext, storedSkillId }) => {
     try {
       const storage = mastra.getStorage();
@@ -319,6 +334,15 @@ export const CREATE_STORED_SKILL_ROUTE = createRoute({
   description: 'Creates a new skill configuration in storage with the provided details',
   tags: ['Stored Skills'],
   requiresAuth: true,
+  errors: [
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+    'STORED_SKILL_ALREADY_EXISTS',
+    'STORED_SKILL_CREATED_RESOLVE_FAILED',
+    'STORED_SKILL_CREATE_FAILED',
+    'STORED_SKILL_ID_DERIVATION_FAILED',
+    'STORED_SKILL_STORAGE_DOMAIN_UNAVAILABLE',
+  ],
   handler: async ({
     mastra,
     requestContext,
@@ -436,6 +460,15 @@ export const UPDATE_STORED_SKILL_ROUTE = createRoute({
   description: 'Updates an existing skill in storage with the provided fields',
   tags: ['Stored Skills'],
   requiresAuth: true,
+  errors: [
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+    'STORED_SKILL_NOT_FOUND',
+    'STORED_SKILL_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORED_SKILL_UPDATED_RESOLVE_FAILED',
+    'STORED_SKILL_UPDATE_FAILED',
+  ],
   handler: async ({
     mastra,
     requestContext,
@@ -562,6 +595,14 @@ export const DELETE_STORED_SKILL_ROUTE = createRoute({
   description: 'Deletes a skill from storage by its unique identifier',
   tags: ['Stored Skills'],
   requiresAuth: true,
+  errors: [
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+    'STORED_SKILL_DELETE_FAILED',
+    'STORED_SKILL_NOT_FOUND',
+    'STORED_SKILL_STORAGE_DOMAIN_UNAVAILABLE',
+  ],
   handler: async ({ mastra, requestContext, storedSkillId }) => {
     try {
       const storage = mastra.getStorage();
@@ -644,6 +685,19 @@ export const PUBLISH_STORED_SKILL_ROUTE = createRoute({
     'Snapshots the skill directory from the filesystem into content-addressable blob storage, creates a new version with a tree manifest, and marks the skill as published',
   tags: ['Stored Skills'],
   requiresAuth: true,
+  errors: [
+    'BLOB_STORAGE_DOMAIN_UNAVAILABLE',
+    'SKILL_PATH_MISSING_SKILL_FILE',
+    'SKILL_PATH_NOT_DIRECTORY',
+    'SKILL_PATH_NOT_FOUND',
+    'SKILL_PATH_OUTSIDE_ALLOWED_DIRECTORY',
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+    'STORED_SKILL_NOT_FOUND',
+    'STORED_SKILL_PUBLISH_FAILED',
+    'STORED_SKILL_STORAGE_DOMAIN_UNAVAILABLE',
+  ],
   handler: async ({ mastra, requestContext, storedSkillId, skillPath }) => {
     try {
       const storage = mastra.getStorage();

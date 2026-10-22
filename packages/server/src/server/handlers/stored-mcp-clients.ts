@@ -36,6 +36,12 @@ export const LIST_STORED_MCP_CLIENTS_ROUTE = createRoute({
   description: 'Returns a paginated list of all MCP client configurations stored in the database',
   tags: ['Stored MCP Clients'],
   requiresAuth: true,
+  errors: [
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_MCP_CLIENTS_LIST_FAILED',
+    'STORED_MCP_CLIENT_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+  ],
   handler: async ({ mastra, page, perPage, orderBy, status, authorId, metadata, requestContext }) => {
     try {
       const storage = mastra.getStorage();
@@ -90,6 +96,14 @@ export const GET_STORED_MCP_CLIENT_ROUTE = createRoute({
     'Returns a specific MCP client from storage by its unique identifier. Use ?status=draft to resolve with the latest (draft) version, or ?status=published (default) for the active published version.',
   tags: ['Stored MCP Clients'],
   requiresAuth: true,
+  errors: [
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_MCP_CLIENT_GET_FAILED',
+    'STORED_MCP_CLIENT_NOT_FOUND',
+    'STORED_MCP_CLIENT_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+  ],
   handler: async ({ mastra, storedMCPClientId, status, requestContext }) => {
     try {
       const storage = mastra.getStorage();
@@ -143,6 +157,15 @@ export const CREATE_STORED_MCP_CLIENT_ROUTE = createRoute({
   description: 'Creates a new MCP client configuration in storage with the provided servers',
   tags: ['Stored MCP Clients'],
   requiresAuth: true,
+  errors: [
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_MCP_CLIENT_ALREADY_EXISTS',
+    'STORED_MCP_CLIENT_CREATED_RESOLVE_FAILED',
+    'STORED_MCP_CLIENT_CREATE_FAILED',
+    'STORED_MCP_CLIENT_ID_DERIVATION_FAILED',
+    'STORED_MCP_CLIENT_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+  ],
   handler: async ({ mastra, id: providedId, authorId, metadata, name, description, servers, requestContext }) => {
     try {
       const storage = mastra.getStorage();
@@ -227,6 +250,15 @@ export const UPDATE_STORED_MCP_CLIENT_ROUTE = createRoute({
   description: 'Updates an existing MCP client in storage with the provided fields',
   tags: ['Stored MCP Clients'],
   requiresAuth: true,
+  errors: [
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_MCP_CLIENT_NOT_FOUND',
+    'STORED_MCP_CLIENT_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORED_MCP_CLIENT_UPDATED_RESOLVE_FAILED',
+    'STORED_MCP_CLIENT_UPDATE_FAILED',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+  ],
   handler: async ({
     mastra,
     storedMCPClientId,
@@ -334,6 +366,14 @@ export const DELETE_STORED_MCP_CLIENT_ROUTE = createRoute({
   description: 'Deletes an MCP client from storage by its unique identifier',
   tags: ['Stored MCP Clients'],
   requiresAuth: true,
+  errors: [
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_MCP_CLIENT_DELETE_FAILED',
+    'STORED_MCP_CLIENT_NOT_FOUND',
+    'STORED_MCP_CLIENT_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+  ],
   handler: async ({ mastra, storedMCPClientId, requestContext }) => {
     try {
       const storage = mastra.getStorage();

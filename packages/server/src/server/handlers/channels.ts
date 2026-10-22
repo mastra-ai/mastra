@@ -136,6 +136,7 @@ export const LIST_CHANNEL_PLATFORMS_ROUTE = createRoute({
   description: 'Returns available channel platforms and their configuration status',
   tags: ['Channels'],
   requiresAuth: true,
+  errors: ['CHANNEL_PLATFORMS_LIST_FAILED', 'MASTRA_CORE_VERSION_UNSUPPORTED'],
   handler: async ({ mastra }) => {
     assertChannelsAvailable();
     try {
@@ -172,6 +173,7 @@ export const LIST_CHANNEL_INSTALLATIONS_ROUTE = createRoute({
   description: 'Returns all active and pending installations for a channel platform',
   tags: ['Channels'],
   requiresAuth: true,
+  errors: ['CHANNEL_INSTALLATIONS_LIST_FAILED', 'CHANNEL_PLATFORM_NOT_REGISTERED', 'MASTRA_CORE_VERSION_UNSUPPORTED'],
   handler: async ({ mastra, platform }) => {
     assertChannelsAvailable();
     try {
@@ -205,6 +207,15 @@ export const CONNECT_CHANNEL_ROUTE = createRoute({
   description: 'Creates a platform app for the agent and returns an OAuth authorization URL',
   tags: ['Channels'],
   requiresAuth: true,
+  errors: [
+    'AGENT_NOT_FOUND',
+    'CHANNEL_CONNECT_FAILED',
+    'CHANNEL_INSTALLATION_NOT_FOUND',
+    'CHANNEL_PLATFORM_NOT_REGISTERED',
+    'CHANNEL_PROGRAMMATIC_CONNECTION_UNSUPPORTED',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'STORED_RESOURCE_NOT_FOUND',
+  ],
   handler: async ({ mastra, requestContext, platform, agentId, options }) => {
     assertChannelsAvailable();
     try {
@@ -250,6 +261,14 @@ export const RECONCILE_CHANNEL_ROUTE = createRoute({
     'Checks a pending installation against platform state and activates it if its connect flow has completed. Returns the installation, or null when the agent has none or the platform does not support reconciliation.',
   tags: ['Channels'],
   requiresAuth: true,
+  errors: [
+    'AGENT_NOT_FOUND',
+    'CHANNEL_INSTALLATION_NOT_FOUND',
+    'CHANNEL_INSTALLATION_RECONCILE_FAILED',
+    'CHANNEL_PLATFORM_NOT_REGISTERED',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'STORED_RESOURCE_NOT_FOUND',
+  ],
   handler: async ({ mastra, requestContext, platform, agentId }) => {
     assertChannelsAvailable();
     try {
@@ -286,6 +305,15 @@ export const DISCONNECT_CHANNEL_ROUTE = createRoute({
   description: 'Deletes the platform app and cleans up the installation',
   tags: ['Channels'],
   requiresAuth: true,
+  errors: [
+    'AGENT_NOT_FOUND',
+    'CHANNEL_DISCONNECT_FAILED',
+    'CHANNEL_INSTALLATION_NOT_FOUND',
+    'CHANNEL_PLATFORM_NOT_REGISTERED',
+    'CHANNEL_PROGRAMMATIC_CONNECTION_UNSUPPORTED',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'STORED_RESOURCE_NOT_FOUND',
+  ],
   handler: async ({ mastra, requestContext, platform, agentId }) => {
     assertChannelsAvailable();
     try {

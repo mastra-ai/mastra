@@ -69,6 +69,7 @@ export const GET_EDITOR_BUILDER_SETTINGS_ROUTE = createRoute({
   tags: ['Editor'],
   requiresAuth: true,
   requiresPermission: 'stored-agents:read',
+  errors: ['BUILDER_SETTINGS_GET_FAILED'],
   handler: async ({ mastra }) => {
     try {
       const editor = mastra.getEditor();
@@ -207,6 +208,7 @@ export const GET_EDITOR_BUILDER_AVAILABLE_MODELS_ROUTE = createRoute({
   tags: ['Editor'],
   requiresAuth: true,
   requiresPermission: 'stored-agents:read',
+  errors: ['BUILDER_MODELS_FETCH_FAILED'],
   handler: async ({ mastra }) => {
     try {
       // Only surface providers whose API key is configured (`connected`). The
@@ -259,6 +261,7 @@ export const GET_INFRASTRUCTURE_STATUS_ROUTE = createRoute({
   tags: ['Editor'],
   requiresAuth: true,
   requiresPermission: 'infrastructure:read',
+  errors: ['BUILDER_INFRASTRUCTURE_STATUS_GET_FAILED'],
   handler: async ({ mastra }) => {
     try {
       const formatConfigValue = (value: unknown): string => {

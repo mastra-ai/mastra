@@ -8,6 +8,33 @@ function renderFixtureRoutes(routes: readonly RouteDefinition[]): string {
 }
 
 describe('renderRouteTypesFileContent', () => {
+  it('renders the error codes each route can return, with auth codes only on authenticated routes', () => {
+    const rendered = renderFixtureRoutes([
+      {
+        method: 'GET',
+        path: '/private/:agentId',
+        responseType: 'json',
+        errors: ['AGENT_NOT_FOUND', 'AGENT_GET_FAILED'],
+        handler: async () => ({}),
+      },
+      {
+        method: 'GET',
+        path: '/public',
+        responseType: 'json',
+        requiresAuth: false,
+        handler: async () => ({}),
+      },
+    ]);
+
+    expect(rendered).toContain(`errorCode: "AGENT_GET_FAILED" | "AGENT_NOT_FOUND" | CommonErrorCode | AuthErrorCode;`);
+    expect(rendered).toContain(`errorCode: CommonErrorCode;`);
+    expect(rendered).toContain(`AGENT_NOT_FOUND: {
+    agentId: string;
+};`);
+    expect(rendered).toContain('AGENT_GET_FAILED: undefined;');
+    expect(rendered).toContain('export type RouteError<K extends RouteKey> = ServerError<RouteErrorCode<K>>;');
+  });
+
   it('renders request schemas with input semantics and responses with output semantics', () => {
     const schema = z.object({
       limit: z.coerce.number().optional().default(10),

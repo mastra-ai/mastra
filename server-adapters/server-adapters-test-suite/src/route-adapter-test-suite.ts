@@ -387,15 +387,12 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
     const deprecatedRoutes = SERVER_ROUTES.filter(r => r.deprecated);
 
     // Group deprecated routes by first path segment
-    const deprecatedByCategory = deprecatedRoutes.reduce(
-      (acc, route) => {
-        const category = route.path.split('/')[1] || 'root';
-        if (!acc[category]) acc[category] = [];
-        acc[category].push(route);
-        return acc;
-      },
-      {} as Record<string, typeof deprecatedRoutes>,
-    );
+    const deprecatedByCategory = deprecatedRoutes.reduce<Record<string, typeof deprecatedRoutes>>((acc, route) => {
+      const category = route.path.split('/')[1] || 'root';
+      if (!acc[category]) acc[category] = [];
+      acc[category].push(route);
+      return acc;
+    }, {});
 
     Object.entries(deprecatedByCategory).forEach(([category, routes]) => {
       describe(category, () => {
@@ -529,15 +526,12 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
     const devOnlyRoutes = ['/mcp/:serverId/events/:eventName/emit'];
 
     // Group routes by first path segment (e.g., /agents/:id/tools -> 'agents')
-    const routesByCategory = activeRoutes.reduce(
-      (acc, route) => {
-        const category = route.path.split('/')[1] || 'root';
-        if (!acc[category]) acc[category] = [];
-        acc[category].push(route);
-        return acc;
-      },
-      {} as Record<string, typeof activeRoutes>,
-    );
+    const routesByCategory = activeRoutes.reduce<Record<string, typeof activeRoutes>>((acc, route) => {
+      const category = route.path.split('/')[1] || 'root';
+      if (!acc[category]) acc[category] = [];
+      acc[category].push(route);
+      return acc;
+    }, {});
 
     Object.entries(routesByCategory).forEach(([category, routes]) => {
       describe(category, () => {
@@ -992,7 +986,11 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
             responseType: 'json',
             handler: async () => {
               handlerCalls++;
-              throw new HTTPException(404, { message: 'Legacy fallback', code: 'AGENT_NOT_FOUND' });
+              throw new HTTPException(404, {
+                message: 'Legacy fallback',
+                code: 'AGENT_NOT_FOUND',
+                metadata: { agentId: 'missing-agent' },
+              });
             },
           },
         ];
@@ -1049,7 +1047,11 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
         });
 
         expect(response.status).toBe(404);
-        expect(response.data).toEqual({ error: 'Legacy fallback', code: 'AGENT_NOT_FOUND' });
+        expect(response.data).toEqual({
+          error: 'Legacy fallback',
+          code: 'AGENT_NOT_FOUND',
+          metadata: { agentId: 'missing-agent' },
+        });
         expect(custom.getHandlerCalls()).toBe(1);
       });
     });

@@ -199,6 +199,7 @@ export const GET_SPEAKERS_ROUTE = createRoute({
   requiresAuth: true,
   pathParamSchema: agentIdPathParams,
   responseSchema: voiceSpeakersResponseSchema,
+  errors: ['AGENT_ID_REQUIRED', 'AGENT_NOT_FOUND', 'AGENT_SPEAKERS_LIST_FAILED'] satisfies VoiceErrorCode[],
   handler: async ({ mastra, agentId, requestContext }) => {
     try {
       if (!agentId) {
@@ -235,6 +236,7 @@ export const GET_SPEAKERS_DEPRECATED_ROUTE = createRoute({
   deprecated: true,
   pathParamSchema: agentIdPathParams,
   responseSchema: voiceSpeakersResponseSchema,
+  errors: ['AGENT_ID_REQUIRED', 'AGENT_NOT_FOUND', 'AGENT_SPEAKERS_LIST_FAILED'] satisfies VoiceErrorCode[],
   handler: GET_SPEAKERS_ROUTE.handler,
 });
 
@@ -249,6 +251,13 @@ export const GENERATE_SPEECH_ROUTE = createRoute({
   pathParamSchema: agentIdPathParams,
   bodySchema: generateSpeechBodySchema,
   responseSchema: speakResponseSchema,
+  errors: [
+    'AGENT_ID_REQUIRED',
+    'AGENT_NOT_FOUND',
+    'AGENT_SPEAK_FAILED',
+    'AGENT_VOICE_NOT_CONFIGURED',
+    'REQUEST_ARGUMENT_REQUIRED',
+  ] satisfies VoiceErrorCode[],
   handler: async ({ mastra, agentId, text, speakerId, options, requestContext }) => {
     try {
       if (!agentId) {
@@ -315,6 +324,13 @@ export const GENERATE_SPEECH_DEPRECATED_ROUTE = createRoute({
   pathParamSchema: agentIdPathParams,
   bodySchema: generateSpeechBodySchema,
   responseSchema: speakResponseSchema,
+  errors: [
+    'AGENT_ID_REQUIRED',
+    'AGENT_NOT_FOUND',
+    'AGENT_SPEAK_FAILED',
+    'AGENT_VOICE_NOT_CONFIGURED',
+    'REQUEST_ARGUMENT_REQUIRED',
+  ] satisfies VoiceErrorCode[],
   handler: GENERATE_SPEECH_ROUTE.handler,
 });
 
@@ -329,6 +345,13 @@ export const TRANSCRIBE_SPEECH_ROUTE = createRoute({
   pathParamSchema: agentIdPathParams,
   bodySchema: transcribeSpeechBodySchema,
   responseSchema: transcribeSpeechResponseSchema,
+  errors: [
+    'AGENT_ID_REQUIRED',
+    'AGENT_LISTEN_FAILED',
+    'AGENT_NOT_FOUND',
+    'AGENT_VOICE_NOT_CONFIGURED',
+    'REQUEST_ARGUMENT_REQUIRED',
+  ] satisfies VoiceErrorCode[],
   handler: async ({ mastra, agentId, audio, options, requestContext }) => {
     try {
       if (!agentId) {
@@ -379,6 +402,13 @@ export const TRANSCRIBE_SPEECH_DEPRECATED_ROUTE = createRoute({
   pathParamSchema: agentIdPathParams,
   bodySchema: transcribeSpeechBodySchema,
   responseSchema: transcribeSpeechResponseSchema,
+  errors: [
+    'AGENT_ID_REQUIRED',
+    'AGENT_LISTEN_FAILED',
+    'AGENT_NOT_FOUND',
+    'AGENT_VOICE_NOT_CONFIGURED',
+    'REQUEST_ARGUMENT_REQUIRED',
+  ] satisfies VoiceErrorCode[],
   handler: TRANSCRIBE_SPEECH_ROUTE.handler,
 });
 
@@ -392,6 +422,7 @@ export const GET_LISTENER_ROUTE = createRoute({
   requiresAuth: true,
   pathParamSchema: agentIdPathParams,
   responseSchema: getListenerResponseSchema,
+  errors: ['AGENT_ID_REQUIRED', 'AGENT_LISTENER_GET_FAILED', 'AGENT_NOT_FOUND'] satisfies VoiceErrorCode[],
   handler: async ({ mastra, agentId, requestContext }) => {
     try {
       if (!agentId) {

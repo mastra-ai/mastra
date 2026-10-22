@@ -32,6 +32,15 @@ export const READ_AGENT_PLAN_ROUTE = createRoute({
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_READ,
+  errors: [
+    'AGENT_ID_REQUIRED',
+    'AGENT_NOT_FOUND',
+    'PLAN_CAPABILITY_NOT_FOUND',
+    'PLAN_NOT_FOUND',
+    'PLAN_PATH_INVALID',
+    'PLAN_READ_FAILED',
+    'WORKSPACE_FILESYSTEM_NOT_CONFIGURED',
+  ],
   handler: async ({ agentId, mastra, path, requestContext, status, versionId }) => {
     try {
       const versionOptions = versionId ? { versionId } : status ? { status } : undefined;

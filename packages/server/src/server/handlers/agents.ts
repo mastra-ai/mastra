@@ -1289,6 +1289,7 @@ export const LIST_AGENTS_ROUTE = createRoute({
   tags: ['Agents'],
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_READ,
+  errors: ['AGENTS_LIST_FAILED'],
   handler: async ({ mastra, requestContext, partial }) => {
     try {
       const codeAgents = mastra.listAgents();
@@ -1424,6 +1425,7 @@ export const GET_AGENT_BY_ID_ROUTE = createRoute({
   tags: ['Agents'],
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_READ,
+  errors: ['AGENT_GET_FAILED', 'AGENT_ID_REQUIRED', 'AGENT_NOT_FOUND'],
   handler: async ({ agentId, mastra, requestContext, status, versionId }) => {
     try {
       const versionOptions = versionId ? { versionId } : status ? { status } : undefined;
@@ -1461,6 +1463,7 @@ export const CLONE_AGENT_ROUTE = createRoute({
   description: 'Clones a code-defined or stored agent to a new stored agent in the database',
   tags: ['Agents'],
   requiresAuth: true,
+  errors: ['AGENT_CLONE_FAILED', 'AGENT_ID_REQUIRED', 'AGENT_NOT_FOUND', 'EDITOR_NOT_CONFIGURED'],
   handler: async ({ agentId, mastra, newId, newName, metadata, authorId, requestContext }) => {
     try {
       const editor = mastra.getEditor();
@@ -1506,6 +1509,16 @@ export const GENERATE_AGENT_ROUTE = createRoute({
   tags: ['Agents'],
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_EXECUTE,
+  errors: [
+    'AGENT_GENERATE_FAILED',
+    'AGENT_ID_REQUIRED',
+    'AGENT_NOT_FOUND',
+    'DURABLE_AGENT_EXECUTION_CONFLICT',
+    'DURABLE_AGENT_RUN_ACTIVE',
+    'REQUEST_ARGUMENT_REQUIRED',
+    'RESOURCE_ID_REQUIRED',
+    'THREAD_ACCESS_DENIED',
+  ],
   handler: async ({ agentId, mastra, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
       // UI Frameworks may send "client tools" in the body,
@@ -1611,6 +1624,14 @@ export const GENERATE_LEGACY_ROUTE = createRoute({
   description: 'Legacy endpoint for generating agent responses. Use /agents/:agentId/generate instead.',
   tags: ['Agents', 'Legacy'],
   requiresAuth: true,
+  errors: [
+    'AGENT_GENERATE_FAILED',
+    'AGENT_ID_REQUIRED',
+    'AGENT_NOT_FOUND',
+    'AGENT_THREAD_OR_RESOURCE_ID_REQUIRED',
+    'REQUEST_ARGUMENT_REQUIRED',
+    'THREAD_ACCESS_DENIED',
+  ],
   handler: async ({ mastra, agentId, abortSignal, requestContext, ...params }) => {
     try {
       const agent = await getAgentFromSystem({
@@ -1688,6 +1709,14 @@ export const STREAM_GENERATE_LEGACY_ROUTE = createRoute({
   description: 'Legacy endpoint for streaming agent responses. Use /agents/:agentId/stream instead.',
   tags: ['Agents', 'Legacy'],
   requiresAuth: true,
+  errors: [
+    'AGENT_ID_REQUIRED',
+    'AGENT_NOT_FOUND',
+    'AGENT_STREAM_FAILED',
+    'AGENT_THREAD_OR_RESOURCE_ID_REQUIRED',
+    'REQUEST_ARGUMENT_REQUIRED',
+    'THREAD_ACCESS_DENIED',
+  ],
   handler: async ({ mastra, agentId, abortSignal, requestContext, ...params }) => {
     try {
       const agent = await getAgentFromSystem({
@@ -1885,6 +1914,7 @@ export const GET_PROVIDERS_ROUTE = createRoute({
   tags: ['Agents'],
   requiresAuth: true,
   requiresPermission: ['agents:read'],
+  errors: ['AGENT_PROVIDERS_LIST_FAILED'],
   handler: async ({ mastra }) => {
     try {
       const providers = await buildProvidersList(mastra);
@@ -1909,6 +1939,16 @@ export const GENERATE_AGENT_VNEXT_ROUTE = createRoute({
   description: 'Generate a response from an agent',
   tags: ['Agents'],
   requiresAuth: true,
+  errors: [
+    'AGENT_GENERATE_FAILED',
+    'AGENT_ID_REQUIRED',
+    'AGENT_NOT_FOUND',
+    'DURABLE_AGENT_EXECUTION_CONFLICT',
+    'DURABLE_AGENT_RUN_ACTIVE',
+    'REQUEST_ARGUMENT_REQUIRED',
+    'RESOURCE_ID_REQUIRED',
+    'THREAD_ACCESS_DENIED',
+  ],
   handler: GENERATE_AGENT_ROUTE.handler,
 });
 
@@ -1925,6 +1965,16 @@ export const STREAM_GENERATE_ROUTE = createRoute({
   tags: ['Agents'],
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_EXECUTE,
+  errors: [
+    'AGENT_ID_REQUIRED',
+    'AGENT_NOT_FOUND',
+    'AGENT_STREAM_FAILED',
+    'DURABLE_AGENT_EXECUTION_CONFLICT',
+    'DURABLE_AGENT_RUN_ACTIVE',
+    'REQUEST_ARGUMENT_REQUIRED',
+    'RESOURCE_ID_REQUIRED',
+    'THREAD_ACCESS_DENIED',
+  ],
   handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
       // UI Frameworks may send "client tools" in the body,
@@ -2080,6 +2130,14 @@ export const SEND_AGENT_SIGNAL_ROUTE: ServerRoute<
   tags: ['Agents', 'Streaming'],
   requiresAuth: true,
   requiresPermission: 'agents:execute',
+  errors: [
+    'AGENT_ID_REQUIRED',
+    'AGENT_NOT_FOUND',
+    'AGENT_SIGNAL_SEND_FAILED',
+    'AGENT_THREAD_OR_RESOURCE_ID_REQUIRED',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'THREAD_ACCESS_DENIED',
+  ],
   handler: async ({
     mastra,
     agentId,
@@ -2294,6 +2352,14 @@ export const SEND_AGENT_MESSAGE_ROUTE = createRoute({
   tags: ['Agents', 'Streaming'],
   requiresAuth: true,
   requiresPermission: 'agents:execute',
+  errors: [
+    'AGENT_ID_REQUIRED',
+    'AGENT_MESSAGE_SEND_FAILED',
+    'AGENT_NOT_FOUND',
+    'AGENT_THREAD_OR_RESOURCE_ID_REQUIRED',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'THREAD_ACCESS_DENIED',
+  ],
   handler: async params => {
     try {
       return await handleAgentMessageRoute({
@@ -2323,6 +2389,14 @@ export const QUEUE_AGENT_MESSAGE_ROUTE = createRoute({
   tags: ['Agents', 'Streaming'],
   requiresAuth: true,
   requiresPermission: 'agents:execute',
+  errors: [
+    'AGENT_ID_REQUIRED',
+    'AGENT_MESSAGE_QUEUE_FAILED',
+    'AGENT_NOT_FOUND',
+    'AGENT_THREAD_OR_RESOURCE_ID_REQUIRED',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'THREAD_ACCESS_DENIED',
+  ],
   handler: async params => {
     try {
       return await handleAgentMessageRoute({
@@ -2352,6 +2426,14 @@ export const QUEUE_AGENT_SIGNAL_ROUTE = createRoute({
   tags: ['Agents', 'Streaming'],
   requiresAuth: true,
   requiresPermission: 'agents:execute',
+  errors: [
+    'AGENT_ID_REQUIRED',
+    'AGENT_NOT_FOUND',
+    'AGENT_SIGNAL_QUEUE_FAILED',
+    'AGENT_THREAD_OR_RESOURCE_ID_REQUIRED',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'THREAD_ACCESS_DENIED',
+  ],
   handler: async params => {
     try {
       return await handleAgentMessageRoute({
@@ -2380,6 +2462,14 @@ export const ABORT_AGENT_THREAD_ROUTE = createRoute({
   tags: ['Agents', 'Streaming'],
   requiresAuth: true,
   requiresPermission: 'agents:execute',
+  errors: [
+    'AGENT_ID_REQUIRED',
+    'AGENT_NOT_FOUND',
+    'AGENT_THREAD_ABORT_FAILED',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'THREAD_ACCESS_DENIED',
+    'THREAD_ID_REQUIRED',
+  ],
   handler: async ({
     mastra,
     agentId,
@@ -2451,6 +2541,14 @@ export const CANCEL_AGENT_PENDING_SIGNALS_ROUTE = createRoute({
   tags: ['Agents', 'Streaming'],
   requiresAuth: true,
   requiresPermission: 'agents:execute',
+  errors: [
+    'AGENT_ID_REQUIRED',
+    'AGENT_NOT_FOUND',
+    'AGENT_PENDING_SIGNALS_CANCEL_FAILED',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'THREAD_ACCESS_DENIED',
+    'THREAD_ID_REQUIRED',
+  ],
   handler: async ({ mastra, agentId, resourceId, threadId, signalIds, requestContext }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
@@ -2502,6 +2600,14 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
   tags: ['Agents', 'Streaming'],
   requiresAuth: true,
   requiresPermission: 'agents:execute',
+  errors: [
+    'AGENT_ID_REQUIRED',
+    'AGENT_NOT_FOUND',
+    'AGENT_THREAD_SUBSCRIBE_FAILED',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'THREAD_ACCESS_DENIED',
+    'THREAD_ID_REQUIRED',
+  ],
   handler: async ({
     mastra,
     agentId,
@@ -2636,6 +2742,16 @@ export const STREAM_UNTIL_IDLE_GENERATE_ROUTE = createRoute({
   tags: ['Agents'],
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_EXECUTE,
+  errors: [
+    'AGENT_ID_REQUIRED',
+    'AGENT_NOT_FOUND',
+    'AGENT_STREAM_FAILED',
+    'DURABLE_AGENT_EXECUTION_CONFLICT',
+    'DURABLE_AGENT_RUN_ACTIVE',
+    'REQUEST_ARGUMENT_REQUIRED',
+    'RESOURCE_ID_REQUIRED',
+    'THREAD_ACCESS_DENIED',
+  ],
   handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
       // UI Frameworks may send "client tools" in the body,
@@ -2723,6 +2839,16 @@ export const STREAM_GENERATE_VNEXT_DEPRECATED_ROUTE = createRoute({
   tags: ['Agents'],
   requiresAuth: true,
   deprecated: true,
+  errors: [
+    'AGENT_ID_REQUIRED',
+    'AGENT_NOT_FOUND',
+    'AGENT_STREAM_FAILED',
+    'DURABLE_AGENT_EXECUTION_CONFLICT',
+    'DURABLE_AGENT_RUN_ACTIVE',
+    'REQUEST_ARGUMENT_REQUIRED',
+    'RESOURCE_ID_REQUIRED',
+    'THREAD_ACCESS_DENIED',
+  ],
   handler: STREAM_GENERATE_ROUTE.handler,
 });
 
@@ -2739,6 +2865,7 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
     'Reconnect to an existing agent stream to receive missed events. Supports position-based resume with offset for efficient reconnection.',
   tags: ['Agents', 'Streaming'],
   requiresAuth: true,
+  errors: ['AGENT_ID_REQUIRED', 'AGENT_NOT_FOUND', 'AGENT_STREAM_OBSERVE_FAILED'],
   handler: async ({ mastra, agentId, runId, offset, abortSignal }) => {
     try {
       // Verify agent exists and get its pubsub for stream subscription.
@@ -2880,6 +3007,22 @@ export const APPROVE_TOOL_CALL_ROUTE = createRoute({
   description: 'Approves a pending tool call and continues agent execution',
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
+  errors: [
+    'AGENT_ID_REQUIRED',
+    'AGENT_NOT_FOUND',
+    'AGENT_RESUME_ALREADY_CLAIMED',
+    'AGENT_RESUME_RUN_NOT_SUSPENDED',
+    'AGENT_RUN_ID_REQUIRED',
+    'AGENT_STREAM_FAILED',
+    'AGENT_TOOL_CALL_APPROVE_FAILED',
+    'AGENT_TOOL_CALL_ID_REQUIRED',
+    'DURABLE_AGENT_EXECUTION_CONFLICT',
+    'DURABLE_AGENT_RUN_ACTIVE',
+    'DURABLE_RUN_ACCESS_DENIED',
+    'DURABLE_RUN_TOOL_CALL_NOT_SUSPENDED',
+    'WORKFLOW_RUN_ACCESS_DENIED',
+    'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED',
+  ],
   handler: async ({ mastra, agentId, abortSignal, requestContext, ...params }) => {
     try {
       const agent = await getAgentFromSystem({
@@ -2970,6 +3113,14 @@ export const SEND_TOOL_APPROVAL_ROUTE = createRoute({
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
   requiresPermission: 'agents:execute',
+  errors: [
+    'AGENT_ID_REQUIRED',
+    'AGENT_NOT_FOUND',
+    'AGENT_TOOL_APPROVAL_SEND_FAILED',
+    'AGENT_TOOL_CALL_ID_REQUIRED',
+    'THREAD_ACCESS_DENIED',
+    'THREAD_ID_REQUIRED',
+  ],
   handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
       const bodyRequestContext = (params as { requestContext?: Record<string, unknown> }).requestContext;
@@ -3032,6 +3183,7 @@ export const LIST_SUSPENDED_RUNS_ROUTE = createRoute({
     'Lists suspended agent runs from storage — runs waiting on a tool-call approval or on a tool that suspended. Works after a server restart and across instances.',
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
+  errors: ['AGENT_ID_REQUIRED', 'AGENT_NOT_FOUND', 'AGENT_SUSPENDED_RUNS_LIST_FAILED', 'THREAD_ACCESS_DENIED'],
   handler: async ({ mastra, agentId, requestContext, ...query }) => {
     try {
       const agent = await getAgentFromSystem({
@@ -3103,6 +3255,22 @@ export const DECLINE_TOOL_CALL_ROUTE = createRoute({
   description: 'Declines a pending tool call and continues agent execution without executing the tool',
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
+  errors: [
+    'AGENT_ID_REQUIRED',
+    'AGENT_NOT_FOUND',
+    'AGENT_RESUME_ALREADY_CLAIMED',
+    'AGENT_RESUME_RUN_NOT_SUSPENDED',
+    'AGENT_RUN_ID_REQUIRED',
+    'AGENT_STREAM_FAILED',
+    'AGENT_TOOL_CALL_DECLINE_FAILED',
+    'AGENT_TOOL_CALL_ID_REQUIRED',
+    'DURABLE_AGENT_EXECUTION_CONFLICT',
+    'DURABLE_AGENT_RUN_ACTIVE',
+    'DURABLE_RUN_ACCESS_DENIED',
+    'DURABLE_RUN_TOOL_CALL_NOT_SUSPENDED',
+    'WORKFLOW_RUN_ACCESS_DENIED',
+    'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED',
+  ],
   handler: async ({ mastra, agentId, abortSignal, requestContext, ...params }) => {
     try {
       const agent = await getAgentFromSystem({
@@ -3165,6 +3333,23 @@ export const RESUME_STREAM_ROUTE = createRoute({
   tags: ['Agents'],
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_EXECUTE,
+  errors: [
+    'AGENT_ID_REQUIRED',
+    'AGENT_NOT_FOUND',
+    'AGENT_RESUME_ALREADY_CLAIMED',
+    'AGENT_RESUME_RUN_NOT_SUSPENDED',
+    'AGENT_RUN_ID_REQUIRED',
+    'AGENT_STREAM_FAILED',
+    'AGENT_STREAM_RESUME_FAILED',
+    'DURABLE_AGENT_EXECUTION_CONFLICT',
+    'DURABLE_AGENT_RUN_ACTIVE',
+    'DURABLE_RUN_ACCESS_DENIED',
+    'DURABLE_RUN_TOOL_CALL_NOT_SUSPENDED',
+    'RESOURCE_ID_REQUIRED',
+    'THREAD_ACCESS_DENIED',
+    'WORKFLOW_RUN_ACCESS_DENIED',
+    'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED',
+  ],
   handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
       if (!params.runId) {
@@ -3293,6 +3478,20 @@ export const RECOVER_ROUTE = createRoute({
   tags: ['Agents'],
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_EXECUTE,
+  errors: [
+    'AGENT_ID_REQUIRED',
+    'AGENT_NOT_FOUND',
+    'AGENT_RECOVER_UNSUPPORTED',
+    'AGENT_RUN_ID_REQUIRED',
+    'AGENT_RUN_RECOVER_FAILED',
+    'DURABLE_AGENT_EXECUTION_CONFLICT',
+    'DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS',
+    'DURABLE_AGENT_RECOVER_RUN_ACTIVE_LOCALLY',
+    'DURABLE_AGENT_RECOVER_RUN_SUSPENDED',
+    'DURABLE_AGENT_RUN_ACTIVE',
+    'WORKFLOW_RUN_ACCESS_DENIED',
+    'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED',
+  ],
   handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
       if (!params.runId) {
@@ -3371,6 +3570,23 @@ export const RESUME_STREAM_UNTIL_IDLE_ROUTE = createRoute({
   tags: ['Agents'],
   requiresAuth: true,
   requiresPermission: 'agents:execute',
+  errors: [
+    'AGENT_ID_REQUIRED',
+    'AGENT_NOT_FOUND',
+    'AGENT_RESUME_ALREADY_CLAIMED',
+    'AGENT_RESUME_RUN_NOT_SUSPENDED',
+    'AGENT_RUN_ID_REQUIRED',
+    'AGENT_STREAM_FAILED',
+    'AGENT_STREAM_RESUME_FAILED',
+    'DURABLE_AGENT_EXECUTION_CONFLICT',
+    'DURABLE_AGENT_RUN_ACTIVE',
+    'DURABLE_RUN_ACCESS_DENIED',
+    'DURABLE_RUN_TOOL_CALL_NOT_SUSPENDED',
+    'RESOURCE_ID_REQUIRED',
+    'THREAD_ACCESS_DENIED',
+    'WORKFLOW_RUN_ACCESS_DENIED',
+    'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED',
+  ],
   handler: async ({ mastra, agentId, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
       if (!params.runId) {
@@ -3498,6 +3714,22 @@ export const APPROVE_TOOL_CALL_GENERATE_ROUTE = createRoute({
   description: 'Approves a pending tool call and returns the complete response',
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
+  errors: [
+    'AGENT_GENERATE_FAILED',
+    'AGENT_ID_REQUIRED',
+    'AGENT_NOT_FOUND',
+    'AGENT_RESUME_ALREADY_CLAIMED',
+    'AGENT_RESUME_RUN_NOT_SUSPENDED',
+    'AGENT_RUN_ID_REQUIRED',
+    'AGENT_TOOL_CALL_APPROVE_FAILED',
+    'AGENT_TOOL_CALL_ID_REQUIRED',
+    'DURABLE_AGENT_EXECUTION_CONFLICT',
+    'DURABLE_AGENT_RUN_ACTIVE',
+    'DURABLE_RUN_ACCESS_DENIED',
+    'DURABLE_RUN_TOOL_CALL_NOT_SUSPENDED',
+    'WORKFLOW_RUN_ACCESS_DENIED',
+    'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED',
+  ],
   handler: async ({ mastra, agentId, abortSignal, requestContext, ...params }) => {
     try {
       const agent = await getAgentFromSystem({
@@ -3558,6 +3790,22 @@ export const DECLINE_TOOL_CALL_GENERATE_ROUTE = createRoute({
   description: 'Declines a pending tool call and returns the complete response',
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
+  errors: [
+    'AGENT_GENERATE_FAILED',
+    'AGENT_ID_REQUIRED',
+    'AGENT_NOT_FOUND',
+    'AGENT_RESUME_ALREADY_CLAIMED',
+    'AGENT_RESUME_RUN_NOT_SUSPENDED',
+    'AGENT_RUN_ID_REQUIRED',
+    'AGENT_TOOL_CALL_DECLINE_FAILED',
+    'AGENT_TOOL_CALL_ID_REQUIRED',
+    'DURABLE_AGENT_EXECUTION_CONFLICT',
+    'DURABLE_AGENT_RUN_ACTIVE',
+    'DURABLE_RUN_ACCESS_DENIED',
+    'DURABLE_RUN_TOOL_CALL_NOT_SUSPENDED',
+    'WORKFLOW_RUN_ACCESS_DENIED',
+    'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED',
+  ],
   handler: async ({ mastra, agentId, abortSignal, requestContext, ...params }) => {
     try {
       const agent = await getAgentFromSystem({
@@ -3619,6 +3867,13 @@ export const STREAM_NETWORK_ROUTE = createRoute({
   description: 'Executes an agent network with multiple agents and streams the response',
   tags: ['Agents'],
   requiresAuth: true,
+  errors: [
+    'AGENT_ID_REQUIRED',
+    'AGENT_LOOP_STREAM_FAILED',
+    'AGENT_NOT_FOUND',
+    'REQUEST_ARGUMENT_REQUIRED',
+    'RESOURCE_ID_REQUIRED',
+  ],
   handler: async ({ mastra, messages, agentId, requestContext, ...params }) => {
     try {
       const agent = await getAgentFromSystem({
@@ -3669,6 +3924,7 @@ export const APPROVE_NETWORK_TOOL_CALL_ROUTE = createRoute({
   description: 'Approves a pending network tool call and continues network agent execution',
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
+  errors: ['AGENT_ID_REQUIRED', 'AGENT_NETWORK_TOOL_CALL_APPROVE_FAILED', 'AGENT_NOT_FOUND', 'AGENT_RUN_ID_REQUIRED'],
   handler: async ({ mastra, agentId, requestContext, ...params }) => {
     try {
       const agent = await getAgentFromSystem({
@@ -3712,6 +3968,7 @@ export const DECLINE_NETWORK_TOOL_CALL_ROUTE = createRoute({
   description: 'Declines a pending network tool call and continues network agent execution without executing the tool',
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
+  errors: ['AGENT_ID_REQUIRED', 'AGENT_NETWORK_TOOL_CALL_DECLINE_FAILED', 'AGENT_NOT_FOUND', 'AGENT_RUN_ID_REQUIRED'],
   handler: async ({ mastra, agentId, requestContext, ...params }) => {
     try {
       const agent = await getAgentFromSystem({
@@ -3754,6 +4011,7 @@ export const UPDATE_AGENT_MODEL_ROUTE = createRoute({
   description: 'Updates the AI model used by the agent',
   tags: ['Agents', 'Models'],
   requiresAuth: true,
+  errors: ['AGENT_ID_REQUIRED', 'AGENT_MODEL_UPDATE_FAILED', 'AGENT_NOT_FOUND'],
   handler: async ({ mastra, agentId, modelId, provider }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -3786,6 +4044,7 @@ export const RESET_AGENT_MODEL_ROUTE = createRoute({
   description: 'Resets the agent model to its original configuration',
   tags: ['Agents', 'Models'],
   requiresAuth: true,
+  errors: ['AGENT_ID_REQUIRED', 'AGENT_MODEL_RESET_FAILED', 'AGENT_NOT_FOUND'],
   handler: async ({ mastra, agentId }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -3813,6 +4072,14 @@ export const REORDER_AGENT_MODEL_LIST_ROUTE = createRoute({
   description: 'Reorders the model list for agents with multiple model configurations',
   tags: ['Agents', 'Models'],
   requiresAuth: true,
+  errors: [
+    'AGENT_ID_REQUIRED',
+    'AGENT_MODEL_LIST_DYNAMIC',
+    'AGENT_MODEL_LIST_EMPTY',
+    'AGENT_MODEL_LIST_REORDER_FAILED',
+    'AGENT_MODEL_LIST_REORDER_INVALID',
+    'AGENT_NOT_FOUND',
+  ],
   handler: async ({ mastra, agentId, reorderedModelIds }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -3863,6 +4130,14 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
   description: 'Updates a specific model configuration in the agent model list',
   tags: ['Agents', 'Models'],
   requiresAuth: true,
+  errors: [
+    'AGENT_ID_REQUIRED',
+    'AGENT_MODEL_CONFIG_NOT_FOUND',
+    'AGENT_MODEL_LIST_DYNAMIC',
+    'AGENT_MODEL_LIST_EMPTY',
+    'AGENT_MODEL_LIST_ITEM_UPDATE_FAILED',
+    'AGENT_NOT_FOUND',
+  ],
   handler: async ({ mastra, agentId, modelConfigId, model: bodyModel, maxRetries, enabled }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -3888,7 +4163,7 @@ export const UPDATE_AGENT_MODEL_IN_MODEL_LIST_ROUTE = createRoute({
         throw new HTTPException(404, {
           message: `Model config with id ${modelConfigId} not found`,
           code: SERVER_ERROR_CODES.AGENT_MODEL_CONFIG_NOT_FOUND,
-          metadata: { modelConfigId },
+          metadata: { agentId, modelConfigId },
         });
       }
 
@@ -4008,6 +4283,12 @@ export const ENHANCE_INSTRUCTIONS_ROUTE = createRoute({
   description: 'Uses AI to enhance or modify agent instructions based on user feedback',
   tags: ['Agents'],
   requiresAuth: true,
+  errors: [
+    'AGENT_ID_REQUIRED',
+    'AGENT_INSTRUCTIONS_ENHANCE_FAILED',
+    'AGENT_MODEL_API_KEY_NOT_FOUND',
+    'AGENT_NOT_FOUND',
+  ],
   handler: async ({ mastra, agentId, instructions, comment }) => {
     try {
       const agent = await getAgentFromSystem({ mastra, agentId });
@@ -4062,6 +4343,12 @@ export const STREAM_VNEXT_DEPRECATED_ROUTE = createRoute({
   tags: ['Agents'],
   requiresAuth: true,
   deprecated: true,
+  errors: [
+    'AGENT_STREAM_FAILED',
+    'DURABLE_AGENT_EXECUTION_CONFLICT',
+    'DURABLE_AGENT_RUN_ACTIVE',
+    'ENDPOINT_DEPRECATED',
+  ],
   handler: async () => {
     throw new HTTPException(410, {
       message: 'This endpoint is deprecated. Please use /stream instead.',
@@ -4083,6 +4370,7 @@ export const STREAM_UI_MESSAGE_VNEXT_DEPRECATED_ROUTE = createRoute({
   tags: ['Agents'],
   requiresAuth: true,
   deprecated: true,
+  errors: ['AGENT_STREAM_FAILED', 'DURABLE_AGENT_EXECUTION_CONFLICT', 'DURABLE_AGENT_RUN_ACTIVE'],
   handler: async () => {
     try {
       throw new MastraError({
@@ -4113,6 +4401,7 @@ export const STREAM_UI_MESSAGE_DEPRECATED_ROUTE = createRoute({
   tags: ['Agents'],
   requiresAuth: true,
   deprecated: true,
+  errors: ['AGENT_STREAM_FAILED', 'DURABLE_AGENT_EXECUTION_CONFLICT', 'DURABLE_AGENT_RUN_ACTIVE'],
   handler: STREAM_UI_MESSAGE_VNEXT_DEPRECATED_ROUTE.handler,
 });
 
@@ -4130,11 +4419,16 @@ export const GET_AGENT_SKILL_ROUTE = createRoute({
   summary: 'Get agent skill',
   description: 'Returns details for a specific skill available to the agent (inline or workspace)',
   tags: ['Agents', 'Skills'],
+  errors: ['AGENT_NOT_FOUND', 'AGENT_SKILL_GET_FAILED', 'AGENT_SKILL_NOT_FOUND'],
   handler: async ({ mastra, agentId, skillName, path, requestContext }) => {
     try {
       const agent = agentId ? mastra.getAgentById(agentId) : null;
       if (!agent) {
-        throw new HTTPException(404, { message: 'Agent not found', code: SERVER_ERROR_CODES.AGENT_NOT_FOUND });
+        throw new HTTPException(404, {
+          message: 'Agent not found',
+          code: SERVER_ERROR_CODES.AGENT_NOT_FOUND,
+          metadata: { agentId },
+        });
       }
 
       // Use the optional ?path= query param for disambiguation, otherwise fall back to name

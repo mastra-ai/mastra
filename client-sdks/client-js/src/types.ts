@@ -42,7 +42,17 @@ import type { JSONSchema7 } from 'json-schema';
 import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4 } from 'zod/v4';
 
-import type { Body, PathParams, QueryParams, RouteKey, RouteResponse, Simplify } from './route-types.generated.js';
+import type {
+  Body,
+  PathParams,
+  QueryParams,
+  RouteErrorCode,
+  RouteKey,
+  RouteResponse,
+  ServerError,
+  ServerErrorCode,
+  Simplify,
+} from './route-types.generated.js';
 import type { JSONValue, ToolInvocationUIPart } from './utils/ai-sdk-v4';
 
 export type ZodSchema = ZodSchemaV3 | ZodTypeV4;
@@ -1998,7 +2008,7 @@ export class MastraClientError extends Error {
 
   /**
    * Business error code from the server's response body, if present.
-   * Compare it against `SERVER_ERROR_CODES` from `@mastra/server/error-codes`.
+   * Narrow the error with `isServerError` or `isRouteError` to type `code` and `metadata` together.
    */
   readonly code?: string;
 
@@ -2021,6 +2031,51 @@ export class MastraClientError extends Error {
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * A `MastraClientError` whose `code` is one of the codes `C`, with `metadata` typed for that code.
+ * It's a union over `C`, so `switch (error.code)` narrows `error.metadata` in each case.
+ */
+export type TypedMastraClientError<C extends ServerErrorCode = ServerErrorCode> = C extends ServerErrorCode
+  ? Simplify<Omit<MastraClientError, 'code' | 'metadata'> & Omit<ServerError<C>, 'error'>>
+  : never;
+
+/**
+ * Whether `error` is a `MastraClientError` carrying a business `code` from the Mastra server.
+ *
+ * Codes returned by custom routes (`registerApiRoute`) aren't part of the server's catalog, so keep a
+ * `default` branch when switching on `code`.
+ */
+export function isServerError(error: unknown): error is TypedMastraClientError {
+  return error instanceof MastraClientError && typeof error.code === 'string';
+}
+
+/**
+ * Whether `error` is a `MastraClientError` carrying a business `code`, typed as the codes `route` can return.
+ *
+ * `route` only selects the type: pass the route of the call that threw.
+ *
+ * @example
+ * ```ts
+ * try {
+ *   await client.getAgent('weather').details();
+ * } catch (error) {
+ *   if (isRouteError(error, 'GET /agents/:agentId')) {
+ *     switch (error.code) {
+ *       case 'AGENT_NOT_FOUND':
+ *         console.log(error.metadata.agentId);
+ *         break;
+ *     }
+ *   }
+ * }
+ * ```
+ */
+export function isRouteError<K extends RouteKey>(
+  error: unknown,
+  _route: K,
+): error is TypedMastraClientError<RouteErrorCode<K>> {
+  return isServerError(error);
 }
 
 // ============================================

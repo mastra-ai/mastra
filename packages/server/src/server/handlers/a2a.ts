@@ -2439,6 +2439,7 @@ export const GET_AGENT_CARD_ROUTE = createRoute({
   description: 'Returns the agent card information for A2A protocol discovery',
   tags: ['Agent-to-Agent'],
   requiresAuth: true,
+  errors: ['AGENT_ID_REQUIRED', 'AGENT_NOT_FOUND'],
   handler: async ctx => {
     const executionUrl = getA2AExecutionUrl({
       agentId: ctx.agentId,
@@ -2481,6 +2482,7 @@ export const AGENT_EXECUTION_ROUTE = createRoute({
   description: 'Executes an agent action via JSON-RPC 2.0 over A2A protocol',
   tags: ['Agent-to-Agent'],
   requiresAuth: true,
+  errors: ['AGENT_ID_REQUIRED', 'AGENT_NOT_FOUND'],
   handler: async ({ mastra, agentId, requestContext, taskStore, abortSignal, request, ...bodyParams }) => {
     const { id: requestId } = bodyParams;
     let { method } = bodyParams;

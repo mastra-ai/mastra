@@ -151,6 +151,7 @@ export const GET_SYSTEM_PACKAGES_ROUTE = createRoute({
   description: 'Returns installed Mastra packages and runtime capabilities used by Studio',
   tags: ['System'],
   requiresAuth: true,
+  errors: ['SYSTEM_PACKAGES_GET_FAILED'],
   handler: async ({ mastra }) => {
     try {
       const packagesFilePath = process.env.MASTRA_PACKAGES_FILE;

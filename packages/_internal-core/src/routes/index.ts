@@ -171,6 +171,8 @@ export type ServerRoute<
   requiresPermission?: any;
   fga?: any;
   onValidationError?: ValidationErrorHook;
+  /** Business error codes this route can return, on top of the framework-wide codes. */
+  errors?: readonly string[];
   readonly __schemas?: TSchemas;
 };
 
@@ -206,6 +208,8 @@ interface RouteConfig<
   requiresPermission?: any;
   fga?: any;
   onValidationError?: ValidationErrorHook;
+  /** Business error codes this route can return, on top of the framework-wide codes. */
+  errors?: readonly string[];
 }
 
 export function createRoute<

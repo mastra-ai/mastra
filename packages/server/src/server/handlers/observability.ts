@@ -131,6 +131,14 @@ export const LIST_TRACES_ROUTE: ServerRoute = createRoute({
     'Returns a paginated list of traces with optional filtering and sorting. In delta mode, returns only newly listed traces matching the filters.',
   tags: ['Observability'],
   requiresAuth: true,
+  errors: [
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'OBSERVABILITY_DELTA_POLLING_UNSUPPORTED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+    'TRACES_LIST_FAILED',
+  ],
   handler: async ({ mastra, mode, after, limit, ...params }) => {
     try {
       // Transform legacy params to new format before processing
@@ -169,6 +177,14 @@ export const LIST_TRACES_LIGHT_ROUTE = createRoute({
     'Returns a paginated list of lightweight traces with optional filtering and sorting. In delta mode, returns only newly listed traces matching the filters.',
   tags: ['Observability'],
   requiresAuth: true,
+  errors: [
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'OBSERVABILITY_DELTA_POLLING_UNSUPPORTED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+    'TRACES_LIGHT_LIST_FAILED',
+  ],
   handler: async ({ mastra, mode, after, limit, ...params }) => {
     try {
       const transformedParams = transformLegacyParams(params);
@@ -225,6 +241,14 @@ export const LIST_BRANCHES_ROUTE = createRoute({
     'Returns a paginated list of branch-anchor spans (e.g., AGENT_RUN, WORKFLOW_RUN, TOOL_CALL) across all traces. Unlike listTraces (one row per root-rooted trace), each row here is a single anchor span -- including ones nested under a different root entity. In delta mode, returns only newly listed branch rows matching the filters.',
   tags: ['Observability'],
   requiresAuth: true,
+  errors: [
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'OBSERVABILITY_DELTA_POLLING_UNSUPPORTED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+    'TRACE_BRANCHES_LIST_FAILED',
+  ],
   handler: async ({ mastra, mode, after, limit, ...params }) => {
     try {
       const filters = pickParams(branchesFilterSchema, params);
@@ -264,6 +288,13 @@ export const GET_BRANCH_ROUTE = createRoute({
     'Returns the subtree of spans rooted at the given span. The optional `depth` query param bounds descendant levels below the anchor (0 = anchor only; omitted = full subtree).',
   tags: ['Observability'],
   requiresAuth: true,
+  errors: [
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+    'TRACE_BRANCH_GET_FAILED',
+    'TRACE_BRANCH_NOT_FOUND',
+  ],
   handler: async ({ mastra, traceId, spanId, depth }) => {
     try {
       const observabilityStore = await getObservabilityStore(mastra);
@@ -294,6 +325,13 @@ export const GET_TRACE_ROUTE: ServerRoute = createRoute({
   description: 'Returns a complete AI trace with all spans by trace ID',
   tags: ['Observability'],
   requiresAuth: true,
+  errors: [
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+    'TRACE_GET_FAILED',
+    'TRACE_NOT_FOUND',
+  ],
   handler: async ({ mastra, traceId }) => {
     try {
       const observabilityStore = await getObservabilityStore(mastra);
@@ -328,6 +366,13 @@ export const GET_TRACE_LIGHT_ROUTE: ServerRoute = createRoute({
     'Returns a trace with lightweight span data (timeline fields only, excludes input/output/attributes/metadata/tags/links)',
   tags: ['Observability'],
   requiresAuth: true,
+  errors: [
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+    'TRACE_LIGHT_GET_FAILED',
+    'TRACE_NOT_FOUND',
+  ],
   handler: async ({ mastra, traceId }) => {
     try {
       const observabilityStore = await getObservabilityStore(mastra);
@@ -362,6 +407,13 @@ export const GET_SPAN_ROUTE: ServerRoute = createRoute({
   description: 'Returns a complete span record with all details by trace ID and span ID',
   tags: ['Observability'],
   requiresAuth: true,
+  errors: [
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'SPAN_GET_FAILED',
+    'SPAN_NOT_FOUND',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra, traceId, spanId }) => {
     try {
       const observabilityStore = await getObservabilityStore(mastra);
@@ -394,6 +446,13 @@ export const GET_TRACE_TRAJECTORY_ROUTE = createRoute({
   description: 'Extracts a structured trajectory (ordered steps) from a trace by analyzing its spans',
   tags: ['Observability'],
   requiresAuth: true,
+  errors: [
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+    'TRACE_NOT_FOUND',
+    'TRACE_TRAJECTORY_GET_FAILED',
+  ],
   handler: async ({ mastra, traceId }) => {
     try {
       const observabilityStore = await getObservabilityStore(mastra);
@@ -431,6 +490,12 @@ export const DELETE_TRACES_ROUTE: ServerRoute = createRoute({
     'Deletes traces by ID, cascading to all associated data: spans, trace roots/branches, and signal events (scores, feedback, metrics, logs) that reference the deleted traces. Signals without a trace ID are untouched. Experiment traces are deleted like any other trace. On ClickHouse-backed stores, deletes are lightweight and reads may briefly return deleted rows until the delete is fully applied.',
   tags: ['Observability'],
   requiresAuth: true,
+  errors: [
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+    'TRACES_DELETE_FAILED',
+  ],
   handler: async ({ mastra, traceIds }) => {
     try {
       const observabilityStore = await getObservabilityStore(mastra);
@@ -453,6 +518,12 @@ export const SCORE_TRACES_ROUTE = createRoute({
   description: 'Scores one or more traces using a specified scorer (fire-and-forget)',
   tags: ['Observability'],
   requiresAuth: true,
+  errors: [
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'SCORER_NOT_FOUND',
+    'STORAGE_NOT_CONFIGURED',
+    'TRACES_SCORE_FAILED',
+  ],
   handler: async ({ mastra, ...params }) => {
     try {
       // Validate storage exists before starting background task
@@ -504,6 +575,12 @@ export const LIST_SCORES_BY_SPAN_ROUTE = createRoute({
   description: 'Returns all scores for a specific span within a trace',
   tags: ['Observability'],
   requiresAuth: true,
+  errors: [
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'SCORES_STORAGE_UNAVAILABLE',
+    'SPAN_SCORES_LIST_FAILED',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra, ...params }) => {
     try {
       const pagination = pickParams(paginationArgsSchema, params);

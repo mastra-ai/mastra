@@ -239,6 +239,13 @@ export const LIST_STORED_AGENTS_ROUTE = createRoute({
   description: 'Returns a paginated list of all agents stored in the database',
   tags: ['Stored Agents'],
   requiresAuth: true,
+  errors: [
+    'FAVORITES_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_AGENTS_LIST_FAILED',
+    'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+  ],
   handler: async ({
     mastra,
     requestContext,
@@ -436,6 +443,12 @@ export const EXPORT_STORED_AGENT_ROUTE = createRoute({
   description: 'Returns deterministic JSON for an agent configuration or code-agent override without mutating storage',
   tags: ['Stored Agents'],
   requiresAuth: true,
+  errors: [
+    'STORED_AGENT_EXPORT_FAILED',
+    'STORED_AGENT_NOT_FOUND',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+  ],
   handler: async ({ mastra, requestContext, storedAgentId, ...body }) => {
     try {
       return await buildStoredAgentExport({ mastra, requestContext, storedAgentId, body });
@@ -459,6 +472,13 @@ export const OPEN_STORED_AGENT_CHANGE_REQUEST_ROUTE = createRoute({
   description: 'Opens a source-provider change request for deterministic agent override JSON without mutating storage',
   tags: ['Stored Agents'],
   requiresAuth: true,
+  errors: [
+    'SOURCE_CONTROL_CHANGE_REQUESTS_UNSUPPORTED',
+    'STORED_AGENT_CHANGE_REQUEST_OPEN_FAILED',
+    'STORED_AGENT_NOT_FOUND',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+  ],
   handler: async ({ mastra, requestContext, storedAgentId, ...body }) => {
     try {
       const provider = mastra.getEditor?.()?.getSourceControlProvider?.();
@@ -528,6 +548,14 @@ export const GET_STORED_AGENT_ROUTE = createRoute({
     'Returns a specific agent from storage by its unique identifier. Use ?status=draft to resolve with the latest (draft) version, or ?status=published (default) for the active published version.',
   tags: ['Stored Agents'],
   requiresAuth: true,
+  errors: [
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_AGENT_GET_FAILED',
+    'STORED_AGENT_NOT_FOUND',
+    'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+  ],
   handler: async ({ mastra, requestContext, storedAgentId, status }) => {
     try {
       const storage = mastra.getStorage();
@@ -594,6 +622,24 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
   description: 'Creates a new agent in storage with the provided configuration',
   tags: ['Stored Agents'],
   requiresAuth: true,
+  errors: [
+    'AVATAR_BASE64_INVALID',
+    'AVATAR_DATA_URL_INVALID',
+    'AVATAR_EMPTY',
+    'AVATAR_TOO_LARGE',
+    'AVATAR_URL_NOT_STRING',
+    'PROMPT_BLOCK_REFERENCE_UNPUBLISHED',
+    'PROMPT_BLOCK_REFERENCE_UNRESOLVED',
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_AGENT_ALREADY_EXISTS',
+    'STORED_AGENT_CREATED_RESOLVE_FAILED',
+    'STORED_AGENT_CREATE_FAILED',
+    'STORED_AGENT_ID_DERIVATION_FAILED',
+    'STORED_AGENT_INSTRUCTIONS_REQUIRED',
+    'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+  ],
   handler: async ({
     mastra,
     requestContext,
@@ -817,6 +863,23 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
   description: 'Updates an existing agent in storage with the provided fields',
   tags: ['Stored Agents'],
   requiresAuth: true,
+  errors: [
+    'AVATAR_BASE64_INVALID',
+    'AVATAR_DATA_URL_INVALID',
+    'AVATAR_EMPTY',
+    'AVATAR_TOO_LARGE',
+    'AVATAR_URL_NOT_STRING',
+    'PROMPT_BLOCK_REFERENCE_UNPUBLISHED',
+    'PROMPT_BLOCK_REFERENCE_UNRESOLVED',
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_AGENT_INSTRUCTIONS_REQUIRED',
+    'STORED_AGENT_NOT_FOUND',
+    'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORED_AGENT_UPDATED_RESOLVE_FAILED',
+    'STORED_AGENT_UPDATE_FAILED',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+  ],
   handler: async ({
     mastra,
     requestContext,
@@ -1084,6 +1147,14 @@ export const DELETE_STORED_AGENT_ROUTE = createRoute({
   description: 'Deletes an agent from storage by its unique identifier',
   tags: ['Stored Agents'],
   requiresAuth: true,
+  errors: [
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_AGENT_DELETE_FAILED',
+    'STORED_AGENT_NOT_FOUND',
+    'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+  ],
   handler: async ({ mastra, requestContext, storedAgentId }) => {
     try {
       const storage = mastra.getStorage();
@@ -1169,6 +1240,14 @@ export const GET_STORED_AGENT_DEPENDENTS_ROUTE = createRoute({
     'Returns agents that reference the target as a sub-agent. Used to warn before deleting or unsharing. Caller-readable references appear in `dependents` (id + name); cross-workspace references the caller cannot read are aggregated in `hiddenCount` and only surfaced when the target is public.',
   tags: ['Stored Agents'],
   requiresAuth: true,
+  errors: [
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_AGENT_DEPENDENTS_LIST_FAILED',
+    'STORED_AGENT_NOT_FOUND',
+    'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+  ],
   handler: async ({ mastra, requestContext, storedAgentId }) => {
     try {
       const storage = mastra.getStorage();
@@ -1278,6 +1357,7 @@ export const PREVIEW_INSTRUCTIONS_ROUTE = createRoute({
     'Resolves an array of instruction blocks against a request context, evaluating rules, fetching prompt block references, and rendering template variables. Returns the final concatenated instruction string.',
   tags: ['Stored Agents'],
   requiresAuth: true,
+  errors: ['EDITOR_NOT_CONFIGURED', 'STORED_AGENT_INSTRUCTIONS_PREVIEW_FAILED'],
   handler: async ({ mastra, blocks, context }) => {
     try {
       const editor = mastra.getEditor();

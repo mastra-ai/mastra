@@ -204,6 +204,7 @@ export const LIST_DATASETS_ROUTE = createRoute({
     'Returns a paginated list of all datasets. Optionally filter by target type and/or the target IDs the dataset is attached to',
   tags: ['Datasets'],
   requiresAuth: true,
+  errors: ['DATASETS_LIST_FAILED', 'MASTRA_CORE_VERSION_UNSUPPORTED'],
   handler: async ({ mastra, ...params }) => {
     assertDatasetsAvailable();
     try {
@@ -238,6 +239,12 @@ export const CREATE_DATASET_ROUTE = createRoute({
   description: 'Creates a new dataset with the specified name and optional metadata',
   tags: ['Datasets'],
   requiresAuth: true,
+  errors: [
+    'DATASET_CREATE_FAILED',
+    'DATASET_NOT_FOUND',
+    'DATASET_SCHEMA_PATTERN_UNSUPPORTED',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, ...params }) => {
     assertDatasetsAvailable();
     try {
@@ -295,6 +302,7 @@ export const GET_DATASET_ROUTE = createRoute({
   description: 'Returns details for a specific dataset',
   tags: ['Datasets'],
   requiresAuth: true,
+  errors: ['DATASET_GET_FAILED', 'DATASET_NOT_FOUND', 'MASTRA_CORE_VERSION_UNSUPPORTED'],
   handler: async ({ mastra, datasetId, ...params }) => {
     assertDatasetsAvailable();
     try {
@@ -322,6 +330,14 @@ export const UPDATE_DATASET_ROUTE = createRoute({
   description: 'Updates a dataset with the specified fields',
   tags: ['Datasets'],
   requiresAuth: true,
+  errors: [
+    'DATASET_ITEM_SCHEMA_VALIDATION_FAILED',
+    'DATASET_NOT_FOUND',
+    'DATASET_SCHEMA_PATTERN_UNSUPPORTED',
+    'DATASET_SCHEMA_UPDATE_VALIDATION_FAILED',
+    'DATASET_UPDATE_FAILED',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, datasetId, ...params }) => {
     assertDatasetsAvailable();
     try {
@@ -402,6 +418,7 @@ export const DELETE_DATASET_ROUTE = createRoute({
   description: 'Deletes a dataset and all its items',
   tags: ['Datasets'],
   requiresAuth: true,
+  errors: ['DATASET_DELETE_FAILED', 'DATASET_NOT_FOUND', 'MASTRA_CORE_VERSION_UNSUPPORTED'],
   handler: async ({ mastra, datasetId, ...params }) => {
     assertDatasetsAvailable();
     try {
@@ -439,6 +456,7 @@ export const LIST_ITEMS_ROUTE = createRoute({
   description: 'Returns a paginated list of items in the dataset',
   tags: ['Datasets'],
   requiresAuth: true,
+  errors: ['DATASET_ITEMS_LIST_FAILED', 'DATASET_NOT_FOUND', 'MASTRA_CORE_VERSION_UNSUPPORTED'],
   handler: async ({ mastra, datasetId, ...params }) => {
     assertDatasetsAvailable();
     try {
@@ -480,6 +498,16 @@ export const ADD_ITEM_ROUTE = createRoute({
   description: 'Adds a new item to the dataset (auto-increments dataset version)',
   tags: ['Datasets'],
   requiresAuth: true,
+  errors: [
+    'DATASET_ITEM_ADD_FAILED',
+    'DATASET_ITEM_EXTERNAL_ID_INVALID',
+    'DATASET_ITEM_IDENTITY_CONFLICT',
+    'DATASET_ITEM_PAYLOAD_NOT_SERIALIZABLE',
+    'DATASET_ITEM_SCHEMA_VALIDATION_FAILED',
+    'DATASET_NOT_FOUND',
+    'DATASET_SCHEMA_PATTERN_UNSUPPORTED',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, datasetId, ...params }) => {
     assertDatasetsAvailable();
     try {
@@ -530,7 +558,7 @@ export const ADD_ITEM_ROUTE = createRoute({
       }
       if (error instanceof MastraError) {
         if (error.id === SERVER_ERROR_CODES.DATASET_ITEM_IDENTITY_CONFLICT) {
-          const conflicts = 'conflicts' in error ? error.conflicts : [];
+          const conflicts = 'conflicts' in error && Array.isArray(error.conflicts) ? error.conflicts : [];
           throw new HTTPException(409, {
             message: error.message,
             cause: { conflicts },
@@ -566,6 +594,7 @@ export const GET_ITEM_ROUTE = createRoute({
   description: 'Returns details for a specific dataset item',
   tags: ['Datasets'],
   requiresAuth: true,
+  errors: ['DATASET_ITEM_GET_FAILED', 'DATASET_ITEM_NOT_FOUND', 'DATASET_NOT_FOUND', 'MASTRA_CORE_VERSION_UNSUPPORTED'],
   handler: async ({ mastra, datasetId, itemId }) => {
     assertDatasetsAvailable();
     try {
@@ -602,6 +631,17 @@ export const UPDATE_ITEM_ROUTE = createRoute({
   description: 'Updates a dataset item (auto-increments dataset version)',
   tags: ['Datasets'],
   requiresAuth: true,
+  errors: [
+    'DATASET_ITEM_EXTERNAL_ID_INVALID',
+    'DATASET_ITEM_IDENTITY_CONFLICT',
+    'DATASET_ITEM_NOT_FOUND',
+    'DATASET_ITEM_PAYLOAD_NOT_SERIALIZABLE',
+    'DATASET_ITEM_SCHEMA_VALIDATION_FAILED',
+    'DATASET_ITEM_UPDATE_FAILED',
+    'DATASET_NOT_FOUND',
+    'DATASET_SCHEMA_PATTERN_UNSUPPORTED',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, datasetId, itemId, ...params }) => {
     assertDatasetsAvailable();
     try {
@@ -676,6 +716,12 @@ export const PURGE_ITEM_ROUTE = createRoute({
   description: 'Permanently scrubs item data from all dataset versions and linked experiment results',
   tags: ['Datasets'],
   requiresAuth: true,
+  errors: [
+    'DATASET_ITEM_NOT_FOUND',
+    'DATASET_ITEM_PURGE_FAILED',
+    'DATASET_NOT_FOUND',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, datasetId, itemId, ...params }) => {
     assertDatasetsAvailable();
     if (!coreFeatures.has('dataset-item-purge')) {
@@ -719,6 +765,12 @@ export const DELETE_ITEM_ROUTE = createRoute({
   description: 'Deletes a dataset item',
   tags: ['Datasets'],
   requiresAuth: true,
+  errors: [
+    'DATASET_ITEM_DELETE_FAILED',
+    'DATASET_ITEM_NOT_FOUND',
+    'DATASET_NOT_FOUND',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, datasetId, itemId }) => {
     assertDatasetsAvailable();
     try {
@@ -759,6 +811,12 @@ export const LIST_ALL_EXPERIMENTS_ROUTE = createRoute({
   description: 'Returns a paginated list of all experiments across all datasets',
   tags: ['Experiments'],
   requiresAuth: true,
+  errors: [
+    'EXPERIMENTS_LIST_FAILED',
+    'EXPERIMENTS_STORAGE_UNAVAILABLE',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra, ...params }) => {
     assertDatasetsAvailable();
     try {
@@ -810,6 +868,12 @@ export const EXPERIMENT_REVIEW_SUMMARY_ROUTE = createRoute({
   description: 'Returns review status counts (needs-review, reviewed, complete) aggregated per experiment',
   tags: ['Experiments'],
   requiresAuth: true,
+  errors: [
+    'EXPERIMENTS_STORAGE_UNAVAILABLE',
+    'EXPERIMENT_REVIEW_SUMMARY_GET_FAILED',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra }) => {
     assertDatasetsAvailable();
     try {
@@ -853,6 +917,7 @@ export const GET_ANY_EXPERIMENT_ROUTE = createRoute({
     'Returns an experiment by ID regardless of dataset association, including its datasetId (null for experiments orphaned by dataset deletion).',
   tags: ['Experiments'],
   requiresAuth: true,
+  errors: ['EXPERIMENT_GET_FAILED', 'EXPERIMENT_NOT_FOUND', 'MASTRA_CORE_VERSION_UNSUPPORTED'],
   handler: async ({ mastra, experimentId, ...params }) => {
     assertDatasetsAvailable();
     try {
@@ -895,6 +960,7 @@ export const DELETE_ANY_EXPERIMENT_ROUTE = createRoute({
     'Deletes an experiment and its results regardless of dataset association (including experiments orphaned by dataset deletion). Also deletes the traces the experiment produced, cascading to their spans and trace-linked scores, feedback, metrics and logs.',
   tags: ['Experiments'],
   requiresAuth: true,
+  errors: ['EXPERIMENT_DELETE_FAILED', 'EXPERIMENT_NOT_FOUND', 'MASTRA_CORE_VERSION_UNSUPPORTED'],
   handler: async ({ mastra, experimentId, ...params }) => {
     assertDatasetsAvailable();
     assertExperimentDeletionAvailable();
@@ -944,6 +1010,7 @@ export const LIST_EXPERIMENTS_ROUTE = createRoute({
   description: 'Returns a paginated list of experiments for the dataset',
   tags: ['Datasets'],
   requiresAuth: true,
+  errors: ['DATASET_NOT_FOUND', 'EXPERIMENTS_LIST_FAILED', 'MASTRA_CORE_VERSION_UNSUPPORTED'],
   handler: async ({ mastra, datasetId, ...params }) => {
     assertDatasetsAvailable();
     try {
@@ -986,6 +1053,16 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
     'By default triggers a new experiment on the dataset against the specified target: returns immediately with pending status and execution happens in background. With start: false, creates the experiment without running it so the caller can drive the loop (run-item for targeted experiments, result submission for target-less ones). Create-only requests are idempotent on a caller-supplied id.',
   tags: ['Datasets'],
   requiresAuth: true,
+  errors: [
+    'DATASET_NOT_FOUND',
+    'EXPERIMENT_ID_CONFLICT',
+    'EXPERIMENT_INVALID_TARGET',
+    'EXPERIMENT_NO_ITEMS',
+    'EXPERIMENT_TARGET_NOT_FOUND',
+    'EXPERIMENT_TARGET_REQUIRED',
+    'EXPERIMENT_TRIGGER_FAILED',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, datasetId, ...params }) => {
     assertDatasetsAvailable();
     try {
@@ -1117,6 +1194,16 @@ export const RUN_EXPERIMENT_ITEM_ROUTE = createRoute({
     "Executes the experiment's target against one dataset item server-side, runs the resolved scorers, and upserts the result row keyed by (experimentId, itemId, attempt). Built for caller-driven loops: a retried call converges on the same row. Requires an experiment created with a target.",
   tags: ['Datasets'],
   requiresAuth: true,
+  errors: [
+    'DATASET_ITEM_NOT_FOUND',
+    'DATASET_NOT_FOUND',
+    'EXPERIMENT_ALREADY_FINALIZED',
+    'EXPERIMENT_HAS_NO_TARGET',
+    'EXPERIMENT_ITEM_RUN_FAILED',
+    'EXPERIMENT_NOT_FOUND',
+    'EXPERIMENT_TARGET_NOT_FOUND',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, datasetId, experimentId, itemId, ...params }) => {
     assertDatasetsAvailable();
     try {
@@ -1155,6 +1242,15 @@ export const SUBMIT_EXPERIMENT_RESULT_ROUTE = createRoute({
     'Submits (or re-submits) one item result for an external experiment. Upsert semantics on (experimentId, itemId, attempt): a retried submission converges on a single row.',
   tags: ['Datasets'],
   requiresAuth: true,
+  errors: [
+    'DATASET_ITEM_NOT_FOUND',
+    'DATASET_NOT_FOUND',
+    'EXPERIMENT_ALREADY_FINALIZED',
+    'EXPERIMENT_HAS_TARGET',
+    'EXPERIMENT_NOT_FOUND',
+    'EXPERIMENT_RESULT_SUBMIT_FAILED',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, datasetId, experimentId, ...params }) => {
     assertDatasetsAvailable();
     try {
@@ -1216,6 +1312,12 @@ export const FINALIZE_EXPERIMENT_ROUTE = createRoute({
     'Marks an external experiment completed. The server computes succeeded/failed/skipped counts from the persisted result rows. Idempotent: finalizing an already-completed experiment returns the stored record.',
   tags: ['Datasets'],
   requiresAuth: true,
+  errors: [
+    'DATASET_NOT_FOUND',
+    'EXPERIMENT_FINALIZE_FAILED',
+    'EXPERIMENT_NOT_FOUND',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, datasetId, experimentId }) => {
     assertDatasetsAvailable();
     try {
@@ -1243,6 +1345,7 @@ export const GET_EXPERIMENT_ROUTE = createRoute({
   description: 'Returns details for a specific experiment',
   tags: ['Datasets'],
   requiresAuth: true,
+  errors: ['DATASET_NOT_FOUND', 'EXPERIMENT_GET_FAILED', 'EXPERIMENT_NOT_FOUND', 'MASTRA_CORE_VERSION_UNSUPPORTED'],
   handler: async ({ mastra, datasetId, experimentId }) => {
     assertDatasetsAvailable();
     try {
@@ -1280,6 +1383,7 @@ export const DELETE_EXPERIMENT_ROUTE = createRoute({
     'Deletes an experiment and its results. Also deletes the traces the experiment produced, cascading to their spans and trace-linked scores, feedback, metrics and logs.',
   tags: ['Datasets'],
   requiresAuth: true,
+  errors: ['DATASET_NOT_FOUND', 'EXPERIMENT_DELETE_FAILED', 'EXPERIMENT_NOT_FOUND', 'MASTRA_CORE_VERSION_UNSUPPORTED'],
   handler: async ({ mastra, datasetId, experimentId, ...params }) => {
     assertDatasetsAvailable();
     // An older core still exposes Dataset.deleteExperiment, but it predates the
@@ -1316,6 +1420,7 @@ export const UPDATE_EXPERIMENT_ROUTE = createRoute({
   description: "Updates an experiment's name, description or metadata. Status and counts are managed by the server.",
   tags: ['Datasets'],
   requiresAuth: true,
+  errors: ['DATASET_NOT_FOUND', 'EXPERIMENT_NOT_FOUND', 'EXPERIMENT_UPDATE_FAILED', 'MASTRA_CORE_VERSION_UNSUPPORTED'],
   handler: async ({ mastra, datasetId, experimentId, name, description, metadata }) => {
     assertDatasetsAvailable();
     try {
@@ -1344,6 +1449,12 @@ export const LIST_EXPERIMENT_RESULTS_ROUTE = createRoute({
   description: 'Returns a paginated list of results for the experiment',
   tags: ['Datasets'],
   requiresAuth: true,
+  errors: [
+    'DATASET_NOT_FOUND',
+    'EXPERIMENT_NOT_FOUND',
+    'EXPERIMENT_RESULTS_LIST_FAILED',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, datasetId, experimentId, ...params }) => {
     assertDatasetsAvailable();
     try {
@@ -1394,6 +1505,14 @@ export const UPDATE_EXPERIMENT_RESULT_ROUTE = createRoute({
   description: 'Updates the status, tags, and/or comment on an experiment result',
   tags: ['Datasets'],
   requiresAuth: true,
+  errors: [
+    'DATASET_NOT_FOUND',
+    'EXPERIMENTS_STORAGE_UNAVAILABLE',
+    'EXPERIMENT_NOT_FOUND',
+    'EXPERIMENT_RESULT_UPDATE_FAILED',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra, resultId, experimentId, ...params }) => {
     assertDatasetsAvailable();
     try {
@@ -1449,6 +1568,12 @@ export const COMPARE_EXPERIMENTS_ROUTE = createRoute({
   description: 'Compares two to ten experiments item by item against a baseline experiment',
   tags: ['Datasets'],
   requiresAuth: true,
+  errors: [
+    'DATASET_NOT_FOUND',
+    'EXPERIMENTS_COMPARE_FAILED',
+    'EXPERIMENT_NOT_FOUND',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, datasetId, experimentIds, baselineId }) => {
     assertDatasetsAvailable();
     try {
@@ -1482,6 +1607,7 @@ export const LIST_DATASET_VERSIONS_ROUTE = createRoute({
   description: 'Returns a paginated list of all versions for the dataset',
   tags: ['Datasets'],
   requiresAuth: true,
+  errors: ['DATASET_NOT_FOUND', 'DATASET_VERSIONS_LIST_FAILED', 'MASTRA_CORE_VERSION_UNSUPPORTED'],
   handler: async ({ mastra, datasetId, ...params }) => {
     assertDatasetsAvailable();
     try {
@@ -1511,6 +1637,12 @@ export const LIST_ITEM_VERSIONS_ROUTE = createRoute({
   description: 'Returns the full SCD-2 history of the item across all dataset versions',
   tags: ['Datasets'],
   requiresAuth: true,
+  errors: [
+    'DATASET_ITEM_HISTORY_LIST_FAILED',
+    'DATASET_ITEM_NOT_FOUND',
+    'DATASET_NOT_FOUND',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, datasetId, itemId }) => {
     assertDatasetsAvailable();
     try {
@@ -1547,6 +1679,13 @@ export const GET_ITEM_VERSION_ROUTE = createRoute({
   description: 'Returns the item as it existed at a specific dataset version',
   tags: ['Datasets'],
   requiresAuth: true,
+  errors: [
+    'DATASET_ITEM_NOT_FOUND',
+    'DATASET_ITEM_VERSION_GET_FAILED',
+    'DATASET_ITEM_VERSION_NOT_FOUND',
+    'DATASET_NOT_FOUND',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, datasetId, itemId, datasetVersion }) => {
     assertDatasetsAvailable();
     try {
@@ -1594,6 +1733,16 @@ export const BATCH_INSERT_ITEMS_ROUTE = createRoute({
   description: 'Adds multiple items to the dataset in a single operation (single version entry)',
   tags: ['Datasets'],
   requiresAuth: true,
+  errors: [
+    'DATASET_ITEMS_BATCH_INSERT_FAILED',
+    'DATASET_ITEM_EXTERNAL_ID_INVALID',
+    'DATASET_ITEM_IDENTITY_CONFLICT',
+    'DATASET_ITEM_PAYLOAD_NOT_SERIALIZABLE',
+    'DATASET_ITEM_SCHEMA_VALIDATION_FAILED',
+    'DATASET_NOT_FOUND',
+    'DATASET_SCHEMA_PATTERN_UNSUPPORTED',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, datasetId, ...params }) => {
     assertDatasetsAvailable();
     try {
@@ -1626,7 +1775,7 @@ export const BATCH_INSERT_ITEMS_ROUTE = createRoute({
       }
       if (error instanceof MastraError) {
         if (error.id === SERVER_ERROR_CODES.DATASET_ITEM_IDENTITY_CONFLICT) {
-          const conflicts = 'conflicts' in error ? error.conflicts : [];
+          const conflicts = 'conflicts' in error && Array.isArray(error.conflicts) ? error.conflicts : [];
           throw new HTTPException(409, {
             message: error.message,
             cause: { conflicts },
@@ -1663,6 +1812,7 @@ export const BATCH_DELETE_ITEMS_ROUTE = createRoute({
   description: 'Deletes multiple items from the dataset in a single operation (single version entry)',
   tags: ['Datasets'],
   requiresAuth: true,
+  errors: ['DATASET_ITEMS_BATCH_DELETE_FAILED', 'DATASET_NOT_FOUND', 'MASTRA_CORE_VERSION_UNSUPPORTED'],
   handler: async ({ mastra, datasetId, ...params }) => {
     assertDatasetsAvailable();
     try {
@@ -1712,6 +1862,7 @@ export const GENERATE_ITEMS_ROUTE = createRoute({
     'Uses an LLM to generate synthetic dataset items based on the dataset schema and a user prompt. Returns generated items for review — they are NOT automatically added to the dataset.',
   tags: ['Datasets'],
   requiresAuth: true,
+  errors: ['DATASET_ITEMS_GENERATE_FAILED', 'DATASET_NOT_FOUND', 'MASTRA_CORE_VERSION_UNSUPPORTED'],
   handler: async ({ mastra, datasetId, modelId, prompt, count, agentContext }) => {
     assertDatasetsAvailable();
     try {
@@ -1850,6 +2001,7 @@ export const CLUSTER_FAILURES_ROUTE = createRoute({
     'Uses an LLM to analyze failure items from an experiment and group them into meaningful failure pattern clusters.',
   tags: ['Datasets'],
   requiresAuth: true,
+  errors: ['EXPERIMENT_FAILURES_CLUSTER_FAILED', 'MASTRA_CORE_VERSION_UNSUPPORTED'],
   handler: async ({ mastra, modelId, items, availableTags, prompt }) => {
     assertDatasetsAvailable();
     try {

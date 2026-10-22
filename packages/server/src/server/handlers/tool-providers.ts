@@ -150,6 +150,7 @@ export const LIST_TOOL_PROVIDERS_ROUTE = createRoute({
   description: 'Returns a list of all registered tool providers with their info and capabilities',
   tags: ['Tool Providers'],
   requiresAuth: true,
+  errors: ['EDITOR_NOT_CONFIGURED', 'TOOL_PROVIDERS_LIST_FAILED'],
   handler: async ({ mastra }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
@@ -183,6 +184,7 @@ export const LIST_TOOL_PROVIDER_TOOLKITS_ROUTE = createRoute({
   description: 'Returns the toolkits available from a specific tool provider',
   tags: ['Tool Providers'],
   requiresAuth: true,
+  errors: ['EDITOR_NOT_CONFIGURED', 'TOOL_PROVIDER_NOT_FOUND', 'TOOL_PROVIDER_TOOLKITS_LIST_FAILED'],
   handler: async ({ mastra, providerId }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
@@ -217,6 +219,7 @@ export const LIST_TOOL_PROVIDER_TOOLS_ROUTE = createRoute({
   description: 'Returns the tools available from a specific tool provider, with optional filtering',
   tags: ['Tool Providers'],
   requiresAuth: true,
+  errors: ['EDITOR_NOT_CONFIGURED', 'TOOL_PROVIDER_NOT_FOUND', 'TOOL_PROVIDER_TOOLS_LIST_FAILED'],
   handler: async ({ mastra, providerId, toolkit, search, page, perPage }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
@@ -252,6 +255,13 @@ export const GET_TOOL_PROVIDER_TOOL_SCHEMA_ROUTE = createRoute({
   description: 'Returns the schema for a specific tool from a tool provider',
   tags: ['Tool Providers'],
   requiresAuth: true,
+  errors: [
+    'EDITOR_NOT_CONFIGURED',
+    'TOOL_PROVIDER_NOT_FOUND',
+    'TOOL_PROVIDER_OPERATION_UNSUPPORTED',
+    'TOOL_PROVIDER_TOOL_SCHEMA_GET_FAILED',
+    'TOOL_PROVIDER_TOOL_SCHEMA_NOT_FOUND',
+  ],
   handler: async ({ mastra, providerId, toolSlug }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
@@ -296,6 +306,13 @@ export const AUTHORIZE_TOOL_PROVIDER_ROUTE = createRoute({
   description: 'Starts an OAuth flow and returns a redirect URL + opaque auth handle',
   tags: ['Tool Providers'],
   requiresAuth: true,
+  errors: [
+    'EDITOR_NOT_CONFIGURED',
+    'TOOL_PROVIDER_AUTHORIZE_FAILED',
+    'TOOL_PROVIDER_CONNECTION_RESOURCE_ID_REQUIRED',
+    'TOOL_PROVIDER_NOT_FOUND',
+    'TOOL_PROVIDER_OPERATION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, providerId, toolkit, connectionId, toolName, config, label, scope, requestContext }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
@@ -398,6 +415,12 @@ export const GET_TOOL_PROVIDER_AUTH_STATUS_ROUTE = createRoute({
   description: 'Polls the OAuth flow status for an outstanding authorize call',
   tags: ['Tool Providers'],
   requiresAuth: true,
+  errors: [
+    'EDITOR_NOT_CONFIGURED',
+    'TOOL_PROVIDER_AUTH_STATUS_GET_FAILED',
+    'TOOL_PROVIDER_NOT_FOUND',
+    'TOOL_PROVIDER_OPERATION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, providerId, authId }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
@@ -434,6 +457,12 @@ export const TOOL_PROVIDER_CONNECTION_STATUS_ROUTE = createRoute({
   description: 'Batch-checks whether a set of (connectionId, toolkit) tuples are still connected',
   tags: ['Tool Providers'],
   requiresAuth: true,
+  errors: [
+    'EDITOR_NOT_CONFIGURED',
+    'TOOL_PROVIDER_CONNECTION_STATUS_GET_FAILED',
+    'TOOL_PROVIDER_NOT_FOUND',
+    'TOOL_PROVIDER_OPERATION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, providerId, items }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
@@ -473,6 +502,12 @@ export const LIST_TOOL_PROVIDER_CONNECTIONS_ROUTE = createRoute({
     'Returns existing provider connections on a toolkit, so the picker can offer them for pinning without re-running OAuth',
   tags: ['Tool Providers'],
   requiresAuth: true,
+  errors: [
+    'EDITOR_NOT_CONFIGURED',
+    'TOOL_PROVIDER_CONNECTIONS_LIST_FAILED',
+    'TOOL_PROVIDER_NOT_FOUND',
+    'TOOL_PROVIDER_OPERATION_UNSUPPORTED',
+  ],
   handler: async ({
     mastra,
     providerId,
@@ -610,6 +645,7 @@ export const LIST_TOOL_PROVIDER_CONNECTION_FIELDS_ROUTE = createRoute({
   description: 'Returns a list of provider-specific fields the UI should collect before initiating an authorize call',
   tags: ['Tool Providers'],
   requiresAuth: true,
+  errors: ['EDITOR_NOT_CONFIGURED', 'TOOL_PROVIDER_CONNECTION_FIELDS_LIST_FAILED', 'TOOL_PROVIDER_NOT_FOUND'],
   handler: async ({ mastra, providerId, toolkit }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
@@ -646,6 +682,13 @@ export const DISCONNECT_TOOL_PROVIDER_CONNECTION_ROUTE = createRoute({
     'Revokes the provider-side connection (if supported) and removes the persisted tool_provider_connections row. Use `?force=true` to bypass usage checks.',
   tags: ['Tool Providers'],
   requiresAuth: true,
+  errors: [
+    'EDITOR_NOT_CONFIGURED',
+    'TOOL_PROVIDER_CONNECTION_DISCONNECT_FAILED',
+    'TOOL_PROVIDER_CONNECTION_PERMISSION_DENIED',
+    'TOOL_PROVIDER_CONNECTION_PINNED_BY_AGENTS',
+    'TOOL_PROVIDER_NOT_FOUND',
+  ],
   handler: async ({ mastra, providerId, connectionId, force, requestContext }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
@@ -745,6 +788,14 @@ export const UPDATE_TOOL_PROVIDER_CONNECTION_ROUTE = createRoute({
     'Updates the persisted display label on tool_provider_connections. Returns 403 when caller is neither the owner nor admin (and the row is not shared), 404 when the row does not exist.',
   tags: ['Tool Providers'],
   requiresAuth: true,
+  errors: [
+    'EDITOR_NOT_CONFIGURED',
+    'TOOL_PROVIDER_CONNECTIONS_STORAGE_UNAVAILABLE',
+    'TOOL_PROVIDER_CONNECTION_NOT_FOUND',
+    'TOOL_PROVIDER_CONNECTION_PERMISSION_DENIED',
+    'TOOL_PROVIDER_CONNECTION_UPDATE_FAILED',
+    'TOOL_PROVIDER_NOT_FOUND',
+  ],
   handler: async ({ mastra, providerId, connectionId, label, requestContext }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
@@ -816,6 +867,12 @@ export const GET_TOOL_PROVIDER_CONNECTION_USAGE_ROUTE = createRoute({
   description: 'Returns the agents that pin this connection in their toolProviders config',
   tags: ['Tool Providers'],
   requiresAuth: true,
+  errors: [
+    'EDITOR_NOT_CONFIGURED',
+    'TOOL_PROVIDER_CONNECTION_PERMISSION_DENIED',
+    'TOOL_PROVIDER_CONNECTION_USAGE_LIST_FAILED',
+    'TOOL_PROVIDER_NOT_FOUND',
+  ],
   handler: async ({ mastra, providerId, connectionId, toolkit, requestContext }) => {
     try {
       const editor = requireEditor(mastra.getEditor());
@@ -881,6 +938,7 @@ export const GET_TOOL_PROVIDER_HEALTH_ROUTE = createRoute({
   description: 'Returns provider-level health (config, reachability, etc.)',
   tags: ['Tool Providers'],
   requiresAuth: true,
+  errors: ['EDITOR_NOT_CONFIGURED', 'TOOL_PROVIDER_HEALTH_GET_FAILED', 'TOOL_PROVIDER_NOT_FOUND'],
   handler: async ({ mastra, providerId }) => {
     try {
       const editor = requireEditor(mastra.getEditor());

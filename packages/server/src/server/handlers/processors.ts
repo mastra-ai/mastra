@@ -95,6 +95,7 @@ export const LIST_PROCESSORS_ROUTE = createRoute({
   description: 'Returns a list of all available individual processors',
   tags: ['Processors'],
   requiresAuth: true,
+  errors: ['PROCESSORS_LIST_FAILED'],
   handler: async ({ mastra }) => {
     try {
       const processors = mastra.listProcessors() || {};
@@ -159,6 +160,7 @@ export const GET_PROCESSOR_BY_ID_ROUTE = createRoute({
   description: 'Returns details for a specific processor including its phases and configurations',
   tags: ['Processors'],
   requiresAuth: true,
+  errors: ['PROCESSOR_GET_FAILED', 'PROCESSOR_NOT_FOUND'],
   handler: async ({ mastra, processorId }) => {
     try {
       // Get the processor from Mastra's registered processors
@@ -215,6 +217,15 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
   description: 'Executes a specific processor with the provided input data',
   tags: ['Processors'],
   requiresAuth: true,
+  errors: [
+    'PROCESSOR_EXECUTE_FAILED',
+    'PROCESSOR_ID_REQUIRED',
+    'PROCESSOR_MESSAGES_REQUIRED',
+    'PROCESSOR_NOT_FOUND',
+    'PROCESSOR_PHASE_REQUIRED',
+    'PROCESSOR_PHASE_UNSUPPORTED',
+    'PROCESSOR_WORKFLOW_FAILED',
+  ],
   handler: async ({ mastra, processorId, ...bodyParams }) => {
     try {
       const { phase, messages } = bodyParams;
@@ -238,6 +249,7 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
         throw new HTTPException(400, {
           message: 'llmRequest phase cannot be executed directly. It runs on the provider prompt during an agent call.',
           code: SERVER_ERROR_CODES.PROCESSOR_PHASE_UNSUPPORTED,
+          metadata: { phase },
         });
       }
 
@@ -406,6 +418,7 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
           throw new HTTPException(500, {
             message: `Error executing processor workflow: ${error.message}`,
             code: SERVER_ERROR_CODES.PROCESSOR_WORKFLOW_FAILED,
+            metadata: { processorId: processor.id },
           });
         }
       }
@@ -442,6 +455,7 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
               throw new HTTPException(400, {
                 message: 'Processor does not support input phase',
                 code: SERVER_ERROR_CODES.PROCESSOR_PHASE_UNSUPPORTED,
+                metadata: { phase },
               });
             }
             result = await processor.processInput({
@@ -455,6 +469,7 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
               throw new HTTPException(400, {
                 message: 'Processor does not support inputStep phase',
                 code: SERVER_ERROR_CODES.PROCESSOR_PHASE_UNSUPPORTED,
+                metadata: { phase },
               });
             }
             result = await processor.processInputStep({
@@ -478,6 +493,7 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
               throw new HTTPException(400, {
                 message: 'Processor does not support outputResult phase',
                 code: SERVER_ERROR_CODES.PROCESSOR_PHASE_UNSUPPORTED,
+                metadata: { phase },
               });
             }
             result = await processor.processOutputResult({
@@ -497,6 +513,7 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
               throw new HTTPException(400, {
                 message: 'Processor does not support outputStep phase',
                 code: SERVER_ERROR_CODES.PROCESSOR_PHASE_UNSUPPORTED,
+                metadata: { phase },
               });
             }
             result = await processor.processOutputStep({
@@ -516,6 +533,7 @@ export const EXECUTE_PROCESSOR_ROUTE = createRoute({
             throw new HTTPException(400, {
               message: 'outputStream phase cannot be executed directly. Use streaming instead.',
               code: SERVER_ERROR_CODES.PROCESSOR_PHASE_UNSUPPORTED,
+              metadata: { phase },
             });
 
           default:

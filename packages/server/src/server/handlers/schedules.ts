@@ -101,6 +101,7 @@ export const LIST_SCHEDULES_ROUTE = createRoute({
     'Returns all schedules — agent schedules and workflow schedules — optionally filtered by agentId, workflowId, or status. Completed schedules are excluded unless requested with a status filter. Agent schedules can additionally be filtered by threadId, resourceId, or name.',
   tags: ['Schedules'],
   requiresAuth: true,
+  errors: ['SCHEDULES_LIST_FAILED'],
   handler: async ({ mastra, agentId, workflowId, status, threadId, resourceId, name }) => {
     try {
       const schedulesStore = await mastra.getStorage()?.getStore('schedules');
@@ -127,6 +128,7 @@ export const GET_SCHEDULE_ROUTE = createRoute({
   description: 'Returns a single schedule by its id.',
   tags: ['Schedules'],
   requiresAuth: true,
+  errors: ['SCHEDULE_GET_FAILED', 'SCHEDULE_NOT_FOUND'],
   handler: async ({ mastra, scheduleId }) => {
     try {
       const schedule = await loadSchedule(mastra, scheduleId);
@@ -148,6 +150,7 @@ export const CREATE_SCHEDULE_ROUTE = createRoute({
     'Creates a new schedule. Pass `agentId` (plus `prompt`) to schedule an agent, or `workflowId` (plus optional `inputData`) to schedule a workflow. Agent schedules get a random `agent_<uuid>` id, workflow schedules a random `schedule_<uuid>` id; pass `id` for a stable slug instead.',
   tags: ['Schedules'],
   requiresAuth: true,
+  errors: ['AGENT_NOT_FOUND', 'SCHEDULE_CREATE_FAILED', 'WORKFLOW_NOT_FOUND'],
   handler: async ({ mastra, ...body }) => {
     try {
       // getAgentById throws a MastraError (status 404) when the target is
@@ -231,6 +234,7 @@ export const UPDATE_SCHEDULE_ROUTE = createRoute({
     "Partial update of a schedule. Fields apply to the matching target type; agent-only fields on a workflow schedule are rejected. An agent schedule's `threadId` and `resourceId` are part of its identity and cannot be changed — to re-target, delete and recreate. A workflow schedule's `resourceId` is run-attribution metadata and may be updated. Editing `cron` (or `timezone`) recomputes `nextFireAt`. A recomputed cadence that can still fire reactivates a `completed` schedule, while a cadence with no future occurrence leaves the schedule `completed`.",
   tags: ['Schedules'],
   requiresAuth: true,
+  errors: ['SCHEDULE_NOT_FOUND', 'SCHEDULE_UPDATE_FAILED'],
   handler: async ({ mastra, scheduleId, ...body }) => {
     try {
       await loadSchedule(mastra, scheduleId);
@@ -271,6 +275,7 @@ export const DELETE_SCHEDULE_ROUTE = createRoute({
   description: 'Permanently deletes the schedule. 404 when the schedule does not exist.',
   tags: ['Schedules'],
   requiresAuth: true,
+  errors: ['SCHEDULE_DELETE_FAILED', 'SCHEDULE_NOT_FOUND'],
   handler: async ({ mastra, scheduleId }) => {
     try {
       await loadSchedule(mastra, scheduleId);
@@ -296,6 +301,7 @@ export const PAUSE_SCHEDULE_ROUTE = createRoute({
     'Marks the schedule as paused. The scheduler tick loop will skip paused schedules. Idempotent — pausing an already-paused schedule returns the current state unchanged. Pause status survives redeploys.',
   tags: ['Schedules'],
   requiresAuth: true,
+  errors: ['SCHEDULE_NOT_FOUND', 'SCHEDULE_PAUSE_FAILED'],
   handler: async ({ mastra, scheduleId }) => {
     try {
       await loadSchedule(mastra, scheduleId);
@@ -318,6 +324,7 @@ export const RESUME_SCHEDULE_ROUTE = createRoute({
     'Marks the schedule as active and recomputes nextFireAt from "now" so a long-paused schedule does not fire a backlog. Idempotent — resuming an already-active schedule returns the current state unchanged.',
   tags: ['Schedules'],
   requiresAuth: true,
+  errors: ['SCHEDULE_NOT_FOUND', 'SCHEDULE_RESUME_FAILED'],
   handler: async ({ mastra, scheduleId }) => {
     try {
       await loadSchedule(mastra, scheduleId);
@@ -343,6 +350,7 @@ export const RUN_SCHEDULE_ROUTE = createRoute({
     'Manually triggers a single schedule fire out-of-band from the cron schedule. Records a trigger row with `triggerKind: "manual"`. Does not advance `nextFireAt`.',
   tags: ['Schedules'],
   requiresAuth: true,
+  errors: ['SCHEDULE_NOT_FOUND', 'SCHEDULE_RUN_FAILED'],
   handler: async ({ mastra, scheduleId }) => {
     try {
       await loadSchedule(mastra, scheduleId);
@@ -364,6 +372,7 @@ export const LIST_SCHEDULE_TRIGGERS_ROUTE = createRoute({
   description: 'Returns the audit trail of trigger attempts for a schedule, ordered by actualFireAt descending.',
   tags: ['Schedules'],
   requiresAuth: true,
+  errors: ['SCHEDULE_TRIGGERS_LIST_FAILED'],
   handler: async ({ mastra, scheduleId, limit, fromActualFireAt, toActualFireAt }) => {
     try {
       const schedulesStore = await mastra.getStorage()?.getStore('schedules');

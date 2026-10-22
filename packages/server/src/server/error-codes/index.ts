@@ -742,6 +742,43 @@ export const SERVER_ERROR_CODES = {
 
 export type ServerErrorCode = keyof typeof SERVER_ERROR_CODES;
 
+/**
+ * Codes any route can return: request parsing and validation done by the server adapters,
+ * the generic fallbacks, and model policy violations raised wherever an agent runs.
+ * Routes don't list these in their `errors`.
+ */
+export const COMMON_ERROR_CODES = [
+  'UNCATEGORIZED_ERROR',
+  'UNEXPECTED_ERROR',
+  'SERVER_SHUTTING_DOWN',
+  'REQUEST_VALIDATION_FAILED',
+  'REQUEST_BODY_INVALID_JSON',
+  'REQUEST_BODY_TOO_LARGE',
+  'REQUEST_MULTIPART_INVALID',
+  'REQUEST_FILE_TOO_LARGE',
+  'REQUEST_FILE_TYPE_NOT_ALLOWED',
+  'REQUEST_RATE_LIMIT_EXCEEDED',
+  'MODEL_NOT_ALLOWED',
+] as const satisfies readonly ServerErrorCode[];
+
+/**
+ * Codes any authenticated route can return from authentication and permission checks.
+ * Routes don't list these in their `errors`; public routes never return them.
+ */
+export const AUTH_ERROR_CODES = [
+  'AUTHENTICATION_REQUIRED',
+  'AUTHENTICATION_FAILED',
+  'AUTHENTICATION_TOKEN_INVALID',
+  'AUTHENTICATED_USER_RESOURCE_MAPPING_FAILED',
+  'AUTHORIZATION_CHECK_FAILED',
+  'RESOURCE_ACCESS_DENIED',
+  'PERMISSION_DENIED',
+  'FGA_USER_REQUIRED',
+  'FGA_ROUTE_METADATA_REQUIRED',
+  'FGA_ROUTE_METADATA_INCOMPLETE',
+  'FGA_AUTHORIZATION_DENIED',
+] as const satisfies readonly ServerErrorCode[];
+
 /** Business fields every JSON error body carries next to its `error` message. */
 export type ServerErrorInfo = {
   code: ServerErrorCode;

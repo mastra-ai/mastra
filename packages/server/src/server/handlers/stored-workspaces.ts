@@ -40,6 +40,12 @@ export const LIST_STORED_WORKSPACES_ROUTE = createRoute({
   description: 'Returns a paginated list of all workspace configurations stored in the database',
   tags: ['Stored Workspaces'],
   requiresAuth: true,
+  errors: [
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+    'STORED_WORKSPACES_LIST_FAILED',
+    'STORED_WORKSPACE_STORAGE_DOMAIN_UNAVAILABLE',
+  ],
   handler: async ({ mastra, page, perPage, orderBy, authorId, metadata, requestContext }) => {
     try {
       const storage = mastra.getStorage();
@@ -115,6 +121,14 @@ export const GET_STORED_WORKSPACE_ROUTE = createRoute({
     'Returns a specific workspace from storage by its unique identifier (resolved with active version config)',
   tags: ['Stored Workspaces'],
   requiresAuth: true,
+  errors: [
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+    'STORED_WORKSPACE_GET_FAILED',
+    'STORED_WORKSPACE_NOT_FOUND',
+    'STORED_WORKSPACE_STORAGE_DOMAIN_UNAVAILABLE',
+  ],
   handler: async ({ mastra, storedWorkspaceId, requestContext }) => {
     try {
       const storage = mastra.getStorage();
@@ -176,6 +190,15 @@ export const CREATE_STORED_WORKSPACE_ROUTE = createRoute({
   description: 'Creates a new workspace configuration in storage with the provided settings',
   tags: ['Stored Workspaces'],
   requiresAuth: true,
+  errors: [
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+    'STORED_WORKSPACE_ALREADY_EXISTS',
+    'STORED_WORKSPACE_CREATED_RESOLVE_FAILED',
+    'STORED_WORKSPACE_CREATE_FAILED',
+    'STORED_WORKSPACE_ID_DERIVATION_FAILED',
+    'STORED_WORKSPACE_STORAGE_DOMAIN_UNAVAILABLE',
+  ],
   handler: async ({
     mastra,
     id: providedId,
@@ -286,6 +309,15 @@ export const UPDATE_STORED_WORKSPACE_ROUTE = createRoute({
   description: 'Updates an existing workspace in storage with the provided fields',
   tags: ['Stored Workspaces'],
   requiresAuth: true,
+  errors: [
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+    'STORED_WORKSPACE_NOT_FOUND',
+    'STORED_WORKSPACE_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORED_WORKSPACE_UPDATED_RESOLVE_FAILED',
+    'STORED_WORKSPACE_UPDATE_FAILED',
+  ],
   handler: async ({
     mastra,
     storedWorkspaceId,
@@ -406,6 +438,14 @@ export const DELETE_STORED_WORKSPACE_ROUTE = createRoute({
   description: 'Deletes a workspace from storage by its unique identifier',
   tags: ['Stored Workspaces'],
   requiresAuth: true,
+  errors: [
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+    'STORED_WORKSPACE_DELETE_FAILED',
+    'STORED_WORKSPACE_NOT_FOUND',
+    'STORED_WORKSPACE_STORAGE_DOMAIN_UNAVAILABLE',
+  ],
   handler: async ({ mastra, storedWorkspaceId, requestContext }) => {
     try {
       const storage = mastra.getStorage();

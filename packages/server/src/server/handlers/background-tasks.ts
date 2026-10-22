@@ -51,6 +51,7 @@ export const BACKGROUND_TASK_STREAM_ROUTE = createRoute({
   description: 'Real-time Server-Sent Events stream of background task completion/failure events.',
   tags: ['Background Tasks'],
   requiresAuth: true,
+  errors: ['THREAD_ACCESS_DENIED'],
   handler: async ({
     mastra,
     agentId,
@@ -95,6 +96,7 @@ export const LIST_BACKGROUND_TASKS_ROUTE = createRoute({
   description: 'Returns background tasks filtered by status, agent, run, etc.',
   tags: ['Background Tasks'],
   requiresAuth: true,
+  errors: ['BACKGROUND_TASKS_LIST_FAILED', 'THREAD_ACCESS_DENIED'],
   handler: async ({ mastra, requestContext, ...params }) => {
     try {
       const { resourceId } = resolveResourceScope(requestContext, params.resourceId);
@@ -124,6 +126,7 @@ export const GET_BACKGROUND_TASK_ROUTE = createRoute({
   description: 'Returns a background task by ID.',
   tags: ['Background Tasks'],
   requiresAuth: true,
+  errors: ['BACKGROUND_TASK_GET_FAILED', 'BACKGROUND_TASK_NOT_FOUND', 'THREAD_ACCESS_DENIED'],
   handler: async ({ mastra, backgroundTaskId, requestContext }) => {
     try {
       const { resourceId, scoped } = resolveResourceScope(requestContext, undefined);

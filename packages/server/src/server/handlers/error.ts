@@ -2,6 +2,7 @@ import type { ZodError } from 'zod';
 
 import { SERVER_ERROR_CODES, isServerErrorCode } from '../error-codes';
 import type { ServerErrorBody, ServerErrorCode } from '../error-codes';
+import type { ServerErrorMetadata, ServerErrorMetadataOption } from '../error-codes/metadata';
 import { HTTPException } from '../http-exception';
 import type { StatusCode } from '../http-exception';
 import type { ApiError } from '../types';
@@ -43,11 +44,12 @@ function getIssueErrorCode(error: ZodErrorLike): ServerErrorCode {
  */
 const MODEL_NOT_ALLOWED_CODE = 'MODEL_NOT_ALLOWED';
 
+/** Structural copy of core's `ModelNotAllowedError`, which lives behind the EE agent-builder entry. */
 interface ModelNotAllowedErrorLike extends Error {
   code: typeof MODEL_NOT_ALLOWED_CODE;
-  allowed?: unknown;
-  attempted?: unknown;
-  offendingLabel?: string;
+  allowed: ServerErrorMetadata<'MODEL_NOT_ALLOWED'>['allowed'];
+  attempted: ServerErrorMetadata<'MODEL_NOT_ALLOWED'>['attempted'];
+  offendingLabel: string;
 }
 
 function isModelNotAllowedError(error: unknown): error is ModelNotAllowedErrorLike {
@@ -156,13 +158,15 @@ export function formatZodError(
 /**
  * Fallback used by `handleError` when the thrown error doesn't carry a more
  * specific business code. `code` is the operation code of the endpoint
- * (e.g. `AGENT_GET_FAILED`).
+ * (e.g. `AGENT_GET_FAILED`); `metadata` follows that code's schema and is only
+ * sent when the response ends up with that code.
  */
-export type HandleErrorFallback = {
+export type HandleErrorFallback<C extends ServerErrorCode = ServerErrorCode> = {
   message: string;
-  code: ServerErrorCode;
-  metadata?: Record<string, unknown>;
-};
+  code: C;
+} & ServerErrorMetadataOption<C>;
+
+type ResolvedFallback = { message: string; code?: ServerErrorCode; metadata?: Record<string, unknown> };
 
 function getErrorId(error: unknown): string | undefined {
   const id = error && typeof error === 'object' && 'id' in error ? error.id : undefined;
@@ -191,8 +195,11 @@ function mergeMetadata(...parts: Array<Record<string, unknown> | undefined>): Re
  * A string fallback is only the message: the code then depends on the error,
  * `UNCATEGORIZED_ERROR` when it carries an HTTP status and `UNEXPECTED_ERROR` otherwise.
  */
-export function handleError(error: unknown, fallbackOrMessage: HandleErrorFallback | string): never {
-  const fallback: Omit<HandleErrorFallback, 'code'> & { code?: ServerErrorCode } =
+export function handleError<C extends ServerErrorCode>(
+  error: unknown,
+  fallbackOrMessage: HandleErrorFallback<C> | string,
+): never {
+  const fallback: ResolvedFallback =
     typeof fallbackOrMessage === 'string' ? { message: fallbackOrMessage } : fallbackOrMessage;
   const resolveCode = (hasStatus: boolean): ServerErrorCode => {
     const errorId = getErrorId(error);
@@ -212,7 +219,6 @@ export function handleError(error: unknown, fallbackOrMessage: HandleErrorFallba
       attempted: error.attempted,
       offendingLabel: error.offendingLabel,
     };
-    const metadata = mergeMetadata(fallback.metadata, modelPolicy);
     const body = {
       error: {
         code: error.code,
@@ -220,7 +226,7 @@ export function handleError(error: unknown, fallbackOrMessage: HandleErrorFallba
         ...modelPolicy,
       },
       code: SERVER_ERROR_CODES.MODEL_NOT_ALLOWED,
-      metadata,
+      metadata: modelPolicy,
     };
     const res = new Response(JSON.stringify(body), {
       status: 422,
@@ -231,7 +237,7 @@ export function handleError(error: unknown, fallbackOrMessage: HandleErrorFallba
       message: error.message,
       cause: error,
       code: SERVER_ERROR_CODES.MODEL_NOT_ALLOWED,
-      metadata,
+      metadata: modelPolicy,
     });
   }
 
@@ -282,7 +288,6 @@ export function handleError(error: unknown, fallbackOrMessage: HandleErrorFallba
       stack: error.stack,
       cause: error,
       code: SERVER_ERROR_CODES.OBSERVABILITY_OPERATION_NOT_SUPPORTED,
-      metadata: fallback.metadata,
     });
   }
 
@@ -290,12 +295,14 @@ export function handleError(error: unknown, fallbackOrMessage: HandleErrorFallba
 
   const explicitStatus = apiError.status || apiError.details?.status;
 
+  // An error whose id is already a catalog code keeps it; anything else gets the operation code.
+  const code = resolveCode(Boolean(explicitStatus));
   throw new HTTPException((explicitStatus || 500) as StatusCode, {
     message: apiError.message || fallback.message,
     stack: apiError.stack,
     cause: apiError.cause,
-    // An error whose id is already a catalog code keeps it; anything else gets the operation code.
-    code: resolveCode(Boolean(explicitStatus)),
-    metadata: fallback.metadata,
+    code,
+    // The fallback metadata is shaped for the fallback code, so it only goes out with that code.
+    metadata: code === fallback.code ? fallback.metadata : undefined,
   });
 }

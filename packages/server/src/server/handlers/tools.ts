@@ -121,6 +121,7 @@ export const LIST_TOOLS_ROUTE = createRoute({
   description: 'Returns a list of all available tools in the system',
   tags: ['Tools'],
   requiresAuth: true,
+  errors: ['TOOLS_LIST_FAILED'],
   handler: async ({ mastra, registeredTools, requestContext }) => {
     try {
       // Merge tools from two sources: mastra.listTools() includes dynamically created tools
@@ -186,6 +187,7 @@ export const GET_TOOL_BY_ID_ROUTE = createRoute({
   description: 'Returns details for a specific tool including its schema and configuration',
   tags: ['Tools'],
   requiresAuth: true,
+  errors: ['TOOL_GET_FAILED', 'TOOL_NOT_FOUND'],
   handler: async ({ mastra, registeredTools, toolId, requestContext }) => {
     try {
       let tool: any;
@@ -230,6 +232,13 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
   description: 'Executes a specific tool with the provided input data',
   tags: ['Tools'],
   requiresAuth: true,
+  errors: [
+    'REQUEST_ARGUMENT_REQUIRED',
+    'TOOL_EXECUTE_FAILED',
+    'TOOL_ID_REQUIRED',
+    'TOOL_NOT_EXECUTABLE',
+    'TOOL_NOT_FOUND',
+  ],
   handler: async ({ mastra, runId, toolId, registeredTools, requestContext, ...bodyParams }) => {
     try {
       if (!toolId) {
@@ -311,6 +320,7 @@ export const GET_AGENT_TOOL_ROUTE = createRoute({
   description: 'Returns details for a specific tool assigned to the agent',
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
+  errors: ['AGENT_ID_REQUIRED', 'AGENT_NOT_FOUND', 'AGENT_TOOL_GET_FAILED', 'TOOL_NOT_FOUND'],
   handler: async ({ mastra, agentId, toolId, requestContext }) => {
     try {
       if (!agentId) {
@@ -347,6 +357,13 @@ export const EXECUTE_AGENT_TOOL_ROUTE = createRoute({
   description: 'Executes a specific tool assigned to the agent with the provided input data',
   tags: ['Agents', 'Tools'],
   requiresAuth: true,
+  errors: [
+    'AGENT_ID_REQUIRED',
+    'AGENT_NOT_FOUND',
+    'AGENT_TOOL_EXECUTE_FAILED',
+    'TOOL_NOT_EXECUTABLE',
+    'TOOL_NOT_FOUND',
+  ],
   handler: async ({ mastra, agentId, toolId, data, requestContext }) => {
     try {
       if (!agentId) {

@@ -27,6 +27,7 @@ export const LIST_PROCESSOR_PROVIDERS_ROUTE = createRoute({
   description: 'Returns a list of all registered processor providers with their info and available phases',
   tags: ['Processor Providers'],
   requiresAuth: true,
+  errors: ['EDITOR_NOT_CONFIGURED', 'PROCESSOR_PROVIDERS_LIST_FAILED'],
   handler: async ({ mastra }) => {
     try {
       const editor = mastra.getEditor();
@@ -68,6 +69,7 @@ export const GET_PROCESSOR_PROVIDER_ROUTE = createRoute({
   description: 'Returns details about a specific processor provider, including its configuration schema',
   tags: ['Processor Providers'],
   requiresAuth: true,
+  errors: ['EDITOR_NOT_CONFIGURED', 'PROCESSOR_PROVIDER_GET_FAILED', 'PROCESSOR_PROVIDER_NOT_FOUND'],
   handler: async ({ mastra, providerId }) => {
     try {
       const editor = mastra.getEditor();

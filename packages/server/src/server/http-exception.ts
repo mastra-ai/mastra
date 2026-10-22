@@ -7,6 +7,7 @@
 
 import { SERVER_ERROR_CODES } from './error-codes';
 import type { ServerErrorCode } from './error-codes';
+import type { ServerErrorMetadataOption } from './error-codes/metadata';
 
 type InfoStatusCode = 100 | 101 | 102 | 103;
 type SuccessStatusCode = 200 | 201 | 202 | 203 | 204 | 205 | 206 | 207 | 208 | 226;
@@ -70,20 +71,19 @@ export type StatusCode =
 /**
  * Options for creating an `HTTPException`.
  * @property code - Business error code from `SERVER_ERROR_CODES`, serialized as the body's `code`. Defaults to `UNCATEGORIZED_ERROR`.
- * @property metadata - Optional JSON-serializable details serialized as the body's `metadata`. Never put stack traces, raw causes or secrets here.
+ * @property metadata - JSON-serializable details serialized as the body's `metadata`, shaped by `SERVER_ERROR_METADATA_SCHEMAS` for the `code`. Never put stack traces, raw causes or secrets here.
  * @property res - Optional response object to use.
  * @property message - Optional custom error message.
  * @property cause - Optional cause of the error.
  * @property stack - Optional stack trace for the error.
  */
-export type HTTPExceptionOptions = {
-  code?: ServerErrorCode;
-  metadata?: Record<string, unknown>;
+export type HTTPExceptionOptions<C extends ServerErrorCode = ServerErrorCode> = {
+  code?: C;
   res?: Response;
   message?: string;
   cause?: unknown;
   stack?: string;
-};
+} & ServerErrorMetadataOption<C>;
 
 /**
  * `HTTPException` must be used when a fatal error such as authentication failure occurs.
@@ -111,10 +111,10 @@ export type HTTPExceptionOptions = {
  * })
  * ```
  */
-export class HTTPException extends Error {
+export class HTTPException<C extends ServerErrorCode = ServerErrorCode> extends Error {
   readonly res?: Response;
   readonly status: StatusCode;
-  readonly code: ServerErrorCode;
+  readonly code: C | typeof SERVER_ERROR_CODES.UNCATEGORIZED_ERROR;
   readonly metadata?: Record<string, unknown>;
 
   /**
@@ -122,7 +122,7 @@ export class HTTPException extends Error {
    * @param status - HTTP status code for the exception. Defaults to 500.
    * @param options - Additional options for the exception.
    */
-  constructor(status: StatusCode = 500, options?: HTTPExceptionOptions) {
+  constructor(status: StatusCode = 500, options?: HTTPExceptionOptions<C>) {
     super(options?.message, { cause: options?.cause });
     this.res = options?.res;
     this.status = status;

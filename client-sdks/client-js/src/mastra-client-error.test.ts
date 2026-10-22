@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { MastraClientError } from './types';
+import { isRouteError, isServerError, MastraClientError } from './types';
 
 describe('MastraClientError code and metadata', () => {
   it('reads the code and metadata from the response body', () => {
@@ -44,5 +44,28 @@ describe('MastraClientError code and metadata', () => {
     const error = new MastraClientError(500, 'Internal Server Error', 'HTTP error! status: 500', body);
     expect(error.code).toBeUndefined();
     expect(error.metadata).toBeUndefined();
+  });
+});
+
+describe('isServerError / isRouteError', () => {
+  it('accepts a client error carrying a business code', () => {
+    const error = new MastraClientError(404, 'Not Found', 'HTTP error! status: 404', {
+      error: 'Agent not found',
+      code: 'AGENT_NOT_FOUND',
+      metadata: { agentId: 'missing' },
+    });
+
+    expect(isServerError(error)).toBe(true);
+    expect(isRouteError(error, 'GET /agents/:agentId')).toBe(true);
+  });
+
+  it.each([
+    ['a client error without a code', new MastraClientError(500, 'Internal Server Error', 'boom', 'boom')],
+    ['a plain Error', new Error('boom')],
+    ['a lookalike object', { code: 'AGENT_NOT_FOUND', metadata: { agentId: 'x' } }],
+    ['undefined', undefined],
+  ])('rejects %s', (_label, value) => {
+    expect(isServerError(value)).toBe(false);
+    expect(isRouteError(value, 'GET /agents/:agentId')).toBe(false);
   });
 });

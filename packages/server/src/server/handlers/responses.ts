@@ -202,6 +202,7 @@ async function resolveThreadExecutionContext({
       throw new HTTPException(400, {
         message: 'conversation_id requires the target agent to have memory configured',
         code: SERVER_ERROR_CODES.CONVERSATION_MEMORY_NOT_CONFIGURED,
+        metadata: { agentId: agent.id },
       });
     }
 
@@ -948,6 +949,21 @@ export const CREATE_RESPONSE_ROUTE = createRoute({
   tags: ['Responses'],
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_EXECUTE,
+  errors: [
+    'AGENT_ID_REQUIRED',
+    'AGENT_NOT_FOUND',
+    'CONVERSATION_MEMORY_NOT_CONFIGURED',
+    'CONVERSATION_NOT_FOUND',
+    'MASTRA_INSTANCE_REQUIRED',
+    'RESPONSES_MEMORY_NOT_CONFIGURED',
+    'RESPONSES_MEMORY_STORAGE_UNAVAILABLE',
+    'RESPONSE_AGENT_MISMATCH',
+    'RESPONSE_CONVERSATION_MISMATCH',
+    'RESPONSE_CREATE_FAILED',
+    'RESPONSE_MODEL_UNRESOLVED',
+    'RESPONSE_NOT_FOUND',
+    'THREAD_ACCESS_DENIED',
+  ],
   handler: async ({ mastra, requestContext, abortSignal, ...body }) => {
     try {
       const {
@@ -1053,6 +1069,7 @@ export const GET_RESPONSE_ROUTE = createRoute({
   tags: ['Responses'],
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_READ,
+  errors: ['RESPONSE_GET_FAILED', 'RESPONSE_NOT_FOUND', 'THREAD_ACCESS_DENIED'],
   handler: async ({ mastra, requestContext, responseId }) => {
     try {
       const responseTurnRecord = await findResponseTurnRecordAcrossAgents({ mastra, responseId, requestContext });
@@ -1082,6 +1099,7 @@ export const DELETE_RESPONSE_ROUTE = createRoute({
   tags: ['Responses'],
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_DELETE,
+  errors: ['RESPONSE_DELETE_FAILED', 'RESPONSE_NOT_FOUND', 'THREAD_ACCESS_DENIED'],
   handler: async ({ mastra, requestContext, responseId }) => {
     try {
       const responseTurnRecord = await findResponseTurnRecordAcrossAgents({ mastra, responseId, requestContext });

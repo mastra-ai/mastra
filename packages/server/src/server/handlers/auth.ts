@@ -209,6 +209,7 @@ export const GET_AUTH_CAPABILITIES_ROUTE = createPublicRoute({
   description:
     'Returns authentication capabilities and current user info. Used by Studio to determine available features and user state.',
   tags: ['Auth'],
+  errors: ['AUTH_CAPABILITIES_GET_FAILED'],
   handler: async ctx => {
     try {
       const { mastra, request, routePrefix } = ctx as any;
@@ -299,6 +300,7 @@ export const GET_CURRENT_USER_ROUTE = createPublicRoute({
   summary: 'Get current user',
   description: 'Returns the currently authenticated user, or null if not authenticated.',
   tags: ['Auth'],
+  errors: ['AUTH_CURRENT_USER_GET_FAILED'],
   handler: async ctx => {
     try {
       const { mastra, request } = ctx as any;
@@ -369,6 +371,7 @@ export const GET_SSO_LOGIN_ROUTE = createPublicRoute({
   summary: 'Initiate SSO login',
   description: 'Returns the SSO login URL and sets PKCE cookies if needed.',
   tags: ['Auth'],
+  errors: ['AUTH_SSO_LOGIN_FAILED', 'SSO_NOT_CONFIGURED'],
   handler: async ctx => {
     try {
       const { mastra, redirect_uri, request, routePrefix } = ctx as any;
@@ -566,6 +569,7 @@ export const POST_LOGOUT_ROUTE = createPublicRoute({
   summary: 'Logout',
   description: 'Destroys the current session and returns logout redirect URL if available.',
   tags: ['Auth'],
+  errors: ['AUTH_LOGOUT_FAILED', 'LOGOUT_NOT_CONFIGURED'],
   handler: async ctx => {
     const { mastra, request } = ctx as any;
     const isStudio = isStudioRequest(request);
@@ -641,6 +645,7 @@ export const POST_REFRESH_ROUTE = createPublicRoute({
   summary: 'Refresh session',
   description: 'Refreshes the current session, extending its expiry. Sets a new session cookie on success.',
   tags: ['Auth'],
+  errors: ['AUTH_SESSION_REFRESH_FAILED', 'SESSION_EXPIRED', 'SESSION_NOT_FOUND', 'SESSION_REFRESH_NOT_CONFIGURED'],
   handler: async ctx => {
     const { mastra, request } = ctx as any;
     const isStudio = isStudioRequest(request);
@@ -706,6 +711,7 @@ export const POST_CREDENTIALS_SIGN_IN_ROUTE = createPublicRoute({
   summary: 'Sign in with credentials',
   description: 'Authenticates a user with email and password.',
   tags: ['Auth'],
+  errors: ['CREDENTIALS_AUTH_NOT_CONFIGURED', 'CREDENTIALS_INVALID'],
   handler: async ctx => {
     const { mastra, request, email, password } = ctx as any;
     const isStudio = isStudioRequest(request);
@@ -769,6 +775,7 @@ export const POST_CREDENTIALS_SIGN_UP_ROUTE = createPublicRoute({
   summary: 'Sign up with credentials',
   description: 'Creates a new user account with email and password.',
   tags: ['Auth'],
+  errors: ['ACCOUNT_CREATE_FAILED', 'CREDENTIALS_AUTH_NOT_CONFIGURED'],
   handler: async ctx => {
     const { mastra, request, email, password, name } = ctx as any;
     const isStudio = isStudioRequest(request);
@@ -841,6 +848,7 @@ export const GET_ROLE_PERMISSIONS_ROUTE = createRoute({
   description:
     'Returns the resolved permissions for a specific role. Only accessible by admin users. Used by the "View as role" feature.',
   tags: ['Auth'],
+  errors: ['ADMIN_ACCESS_REQUIRED', 'AUTH_ROLE_PERMISSIONS_GET_FAILED', 'ROLE_PERMISSIONS_RESOLUTION_UNAVAILABLE'],
   handler: async ctx => {
     try {
       const { mastra, requestContext, roleId } = ctx as any;

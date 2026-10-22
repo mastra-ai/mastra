@@ -559,6 +559,7 @@ export const LIST_AGENT_CONTROLLERS_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:read',
+  errors: ['AGENT_CONTROLLER_LIST_FAILED'],
   handler: async ({ mastra }) => {
     try {
       const ids = new Set<string>();
@@ -589,6 +590,7 @@ export const CREATE_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
+  errors: ['AGENT_CONTROLLER_NOT_FOUND', 'AGENT_CONTROLLER_SESSION_CREATE_FAILED'],
   handler: async ({ mastra, controllerId, resourceId, sessionId, tags, threadId, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
@@ -666,6 +668,11 @@ export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   tags: ['AgentController', 'Streaming'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:read',
+  errors: [
+    'AGENT_CONTROLLER_NOT_FOUND',
+    'AGENT_CONTROLLER_SESSION_NOT_STARTED',
+    'AGENT_CONTROLLER_SESSION_STREAM_FAILED',
+  ],
   handler: async ({ mastra, controllerId, sessionId, abortSignal, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
@@ -769,6 +776,11 @@ export const SEND_AGENT_CONTROLLER_MESSAGE_ROUTE = createRoute({
   tags: ['AgentController', 'Streaming'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
+  errors: [
+    'AGENT_CONTROLLER_MESSAGE_SEND_FAILED',
+    'AGENT_CONTROLLER_NOT_FOUND',
+    'AGENT_CONTROLLER_SESSION_NOT_STARTED',
+  ],
   handler: async ({ mastra, controllerId, sessionId, message, files, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
@@ -810,6 +822,11 @@ export const ABORT_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
+  errors: [
+    'AGENT_CONTROLLER_NOT_FOUND',
+    'AGENT_CONTROLLER_SESSION_ABORT_FAILED',
+    'AGENT_CONTROLLER_SESSION_NOT_STARTED',
+  ],
   handler: async ({ mastra, controllerId, sessionId, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
@@ -838,6 +855,11 @@ export const AGENT_CONTROLLER_TOOL_APPROVAL_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
+  errors: [
+    'AGENT_CONTROLLER_NOT_FOUND',
+    'AGENT_CONTROLLER_SESSION_NOT_STARTED',
+    'AGENT_CONTROLLER_TOOL_APPROVAL_FAILED',
+  ],
   handler: async ({ mastra, controllerId, sessionId, toolCallId, approved, alwaysAllowCategory, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
@@ -900,6 +922,11 @@ export const AGENT_CONTROLLER_TOOL_SUSPENSION_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
+  errors: [
+    'AGENT_CONTROLLER_NOT_FOUND',
+    'AGENT_CONTROLLER_SESSION_NOT_STARTED',
+    'AGENT_CONTROLLER_TOOL_SUSPENSION_FAILED',
+  ],
   handler: async ({ mastra, controllerId, sessionId, toolCallId, runId, resumeData, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
@@ -942,6 +969,11 @@ export const STEER_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
+  errors: [
+    'AGENT_CONTROLLER_NOT_FOUND',
+    'AGENT_CONTROLLER_SESSION_NOT_STARTED',
+    'AGENT_CONTROLLER_SESSION_STEER_FAILED',
+  ],
   handler: async ({ mastra, controllerId, sessionId, message, files, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
@@ -976,6 +1008,7 @@ export const SWITCH_AGENT_CONTROLLER_MODE_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
+  errors: ['AGENT_CONTROLLER_MODE_SWITCH_FAILED', 'AGENT_CONTROLLER_NOT_FOUND', 'AGENT_CONTROLLER_SESSION_NOT_STARTED'],
   handler: async ({ mastra, controllerId, sessionId, modeId, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
@@ -1005,6 +1038,11 @@ export const SWITCH_AGENT_CONTROLLER_MODEL_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
+  errors: [
+    'AGENT_CONTROLLER_MODEL_SWITCH_FAILED',
+    'AGENT_CONTROLLER_NOT_FOUND',
+    'AGENT_CONTROLLER_SESSION_NOT_STARTED',
+  ],
   handler: async ({ mastra, controllerId, sessionId, modelId, thinkingLevel, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
@@ -1033,6 +1071,11 @@ export const SWITCH_AGENT_CONTROLLER_THREAD_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
+  errors: [
+    'AGENT_CONTROLLER_NOT_FOUND',
+    'AGENT_CONTROLLER_SESSION_NOT_STARTED',
+    'AGENT_CONTROLLER_THREAD_SWITCH_FAILED',
+  ],
   handler: async ({ mastra, controllerId, sessionId, threadId, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
@@ -1063,6 +1106,13 @@ export const TRANSFER_AGENT_CONTROLLER_THREAD_OWNERSHIP_ROUTE = createRoute({
   tags: ['AgentController', 'Threads'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
+  errors: [
+    'AGENT_CONTROLLER_NOT_FOUND',
+    'AGENT_CONTROLLER_SESSION_NOT_STARTED',
+    'AGENT_CONTROLLER_THREAD_NOT_FOUND',
+    'AGENT_CONTROLLER_THREAD_OWNERSHIP_TRANSFER_FAILED',
+    'THREAD_ACCESS_DENIED',
+  ],
   handler: async ({ mastra, controllerId, sessionId, threadId, requestContext }) => {
     try {
       const ownerId = getRequestMessageAuthor(requestContext)?.id;
@@ -1115,6 +1165,12 @@ export const GET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:read',
+  errors: [
+    'AGENT_CONTROLLER_NOT_FOUND',
+    'AGENT_CONTROLLER_SESSION_NOT_STARTED',
+    'AGENT_CONTROLLER_SESSION_STATE_GET_FAILED',
+    'AGENT_CONTROLLER_THREAD_NOT_FOUND',
+  ],
   handler: async ({ mastra, controllerId, sessionId, threadId: requestedThreadId, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
@@ -1195,6 +1251,7 @@ export const LIST_AGENT_CONTROLLER_MODES_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:read',
+  errors: ['AGENT_CONTROLLER_MODES_LIST_FAILED', 'AGENT_CONTROLLER_NOT_FOUND'],
   handler: async ({ mastra, controllerId }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
@@ -1232,6 +1289,7 @@ export const LIST_AGENT_CONTROLLER_ACTIVE_RUNS_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:read',
+  errors: ['AGENT_CONTROLLER_ACTIVE_RUNS_LIST_FAILED', 'AGENT_CONTROLLER_NOT_FOUND'],
   handler: async ({ mastra, controllerId }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
@@ -1258,6 +1316,7 @@ export const LIST_AGENT_CONTROLLER_THREADS_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:read',
+  errors: ['AGENT_CONTROLLER_NOT_FOUND', 'AGENT_CONTROLLER_THREADS_LIST_FAILED'],
   handler: async ({ mastra, controllerId, sessionId, limit, tags }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
@@ -1353,6 +1412,11 @@ export const SEND_AGENT_CONTROLLER_NOTIFICATION_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
+  errors: [
+    'AGENT_CONTROLLER_NOTIFICATION_SEND_FAILED',
+    'AGENT_CONTROLLER_NOT_FOUND',
+    'AGENT_CONTROLLER_SESSION_NOT_STARTED',
+  ],
   handler: async ({
     mastra,
     controllerId,
@@ -1419,6 +1483,11 @@ export const CREATE_AGENT_CONTROLLER_THREAD_ROUTE = createRoute({
   tags: ['AgentController', 'Threads'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
+  errors: [
+    'AGENT_CONTROLLER_NOT_FOUND',
+    'AGENT_CONTROLLER_SESSION_NOT_STARTED',
+    'AGENT_CONTROLLER_THREAD_CREATE_FAILED',
+  ],
   handler: async ({ mastra, controllerId, sessionId, title, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
@@ -1452,6 +1521,11 @@ export const DELETE_AGENT_CONTROLLER_THREAD_ROUTE = createRoute({
   tags: ['AgentController', 'Threads'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
+  errors: [
+    'AGENT_CONTROLLER_NOT_FOUND',
+    'AGENT_CONTROLLER_SESSION_NOT_STARTED',
+    'AGENT_CONTROLLER_THREAD_DELETE_FAILED',
+  ],
   handler: async ({ mastra, controllerId, sessionId, threadId, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
@@ -1480,6 +1554,11 @@ export const RENAME_AGENT_CONTROLLER_THREAD_ROUTE = createRoute({
   tags: ['AgentController', 'Threads'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
+  errors: [
+    'AGENT_CONTROLLER_NOT_FOUND',
+    'AGENT_CONTROLLER_SESSION_NOT_STARTED',
+    'AGENT_CONTROLLER_THREAD_RENAME_FAILED',
+  ],
   handler: async ({ mastra, controllerId, sessionId, threadId, title, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
@@ -1512,6 +1591,11 @@ export const CLONE_AGENT_CONTROLLER_THREAD_ROUTE = createRoute({
   tags: ['AgentController', 'Threads'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
+  errors: [
+    'AGENT_CONTROLLER_NOT_FOUND',
+    'AGENT_CONTROLLER_SESSION_NOT_STARTED',
+    'AGENT_CONTROLLER_THREAD_CLONE_FAILED',
+  ],
   handler: async ({ mastra, controllerId, sessionId, sourceThreadId, title, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
@@ -1546,6 +1630,13 @@ export const LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE = createRoute({
   tags: ['AgentController', 'Threads'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:read',
+  errors: [
+    'AGENT_CONTROLLER_LIMIT_REQUIRES_PAGE',
+    'AGENT_CONTROLLER_NOT_FOUND',
+    'AGENT_CONTROLLER_THREAD_MESSAGES_LIST_FAILED',
+    'AGENT_CONTROLLER_THREAD_NOT_FOUND',
+    'THREAD_ACCESS_DENIED',
+  ],
   handler: async ({
     mastra,
     controllerId,
@@ -1567,6 +1658,7 @@ export const LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE = createRoute({
         throw new HTTPException(404, {
           message: 'Thread not found',
           code: SERVER_ERROR_CODES.AGENT_CONTROLLER_THREAD_NOT_FOUND,
+          metadata: { threadId },
         });
       }
       await enforceThreadAccess({
@@ -1640,6 +1732,7 @@ export const FOLLOW_UP_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
+  errors: ['AGENT_CONTROLLER_FOLLOW_UP_FAILED', 'AGENT_CONTROLLER_NOT_FOUND', 'AGENT_CONTROLLER_SESSION_NOT_STARTED'],
   handler: async ({ mastra, controllerId, sessionId, message, files, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
@@ -1675,6 +1768,7 @@ export const LIST_AGENT_CONTROLLER_MODELS_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:read',
+  errors: ['AGENT_CONTROLLER_MODELS_LIST_FAILED', 'AGENT_CONTROLLER_NOT_FOUND'],
   handler: async ({ mastra, controllerId }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
@@ -1713,6 +1807,7 @@ export const GET_AGENT_CONTROLLER_WORKSPACE_STATUS_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:read',
+  errors: ['AGENT_CONTROLLER_NOT_FOUND', 'AGENT_CONTROLLER_WORKSPACE_STATUS_GET_FAILED'],
   handler: async ({ mastra, controllerId }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
@@ -1746,6 +1841,11 @@ export const GET_AGENT_CONTROLLER_OM_RECORD_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:read',
+  errors: [
+    'AGENT_CONTROLLER_NOT_FOUND',
+    'AGENT_CONTROLLER_OM_RECORD_GET_FAILED',
+    'AGENT_CONTROLLER_SESSION_NOT_STARTED',
+  ],
   handler: async ({ mastra, controllerId, sessionId, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
@@ -1778,6 +1878,11 @@ export const SET_AGENT_CONTROLLER_RESOURCE_ID_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
+  errors: [
+    'AGENT_CONTROLLER_NOT_FOUND',
+    'AGENT_CONTROLLER_RESOURCE_ID_SET_FAILED',
+    'AGENT_CONTROLLER_SESSION_NOT_STARTED',
+  ],
   handler: async ({ mastra, controllerId, sessionId, newResourceId, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
@@ -1805,6 +1910,11 @@ export const GET_AGENT_CONTROLLER_RESOURCE_IDS_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:read',
+  errors: [
+    'AGENT_CONTROLLER_NOT_FOUND',
+    'AGENT_CONTROLLER_RESOURCE_IDS_LIST_FAILED',
+    'AGENT_CONTROLLER_SESSION_NOT_STARTED',
+  ],
   handler: async ({ mastra, controllerId, sessionId, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
@@ -1863,6 +1973,7 @@ export const GET_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
   tags: ['AgentController', 'Goals'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:read',
+  errors: ['AGENT_CONTROLLER_GOAL_GET_FAILED', 'AGENT_CONTROLLER_NOT_FOUND', 'AGENT_CONTROLLER_SESSION_NOT_STARTED'],
   handler: async ({ mastra, controllerId, sessionId, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
@@ -1895,6 +2006,12 @@ export const SET_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
   tags: ['AgentController', 'Goals'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
+  errors: [
+    'AGENT_CONTROLLER_GOAL_SET_FAILED',
+    'AGENT_CONTROLLER_NOT_FOUND',
+    'AGENT_CONTROLLER_NO_ACTIVE_THREAD',
+    'AGENT_CONTROLLER_SESSION_NOT_STARTED',
+  ],
   handler: async ({ mastra, controllerId, sessionId, objective, judgeModelId, maxRuns, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
@@ -1935,6 +2052,12 @@ export const UPDATE_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
   tags: ['AgentController', 'Goals'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
+  errors: [
+    'AGENT_CONTROLLER_GOAL_UPDATE_FAILED',
+    'AGENT_CONTROLLER_NOT_FOUND',
+    'AGENT_CONTROLLER_NO_ACTIVE_THREAD',
+    'AGENT_CONTROLLER_SESSION_NOT_STARTED',
+  ],
   handler: async ({ mastra, controllerId, sessionId, judgeModelId, maxRuns, status, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
@@ -1974,6 +2097,12 @@ export const CLEAR_AGENT_CONTROLLER_GOAL_ROUTE = createRoute({
   tags: ['AgentController', 'Goals'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
+  errors: [
+    'AGENT_CONTROLLER_GOAL_CLEAR_FAILED',
+    'AGENT_CONTROLLER_NOT_FOUND',
+    'AGENT_CONTROLLER_NO_ACTIVE_THREAD',
+    'AGENT_CONTROLLER_SESSION_NOT_STARTED',
+  ],
   handler: async ({ mastra, controllerId, sessionId, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
@@ -2012,6 +2141,11 @@ export const GET_AGENT_CONTROLLER_PERMISSIONS_ROUTE = createRoute({
   tags: ['AgentController', 'Permissions'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:read',
+  errors: [
+    'AGENT_CONTROLLER_NOT_FOUND',
+    'AGENT_CONTROLLER_PERMISSIONS_GET_FAILED',
+    'AGENT_CONTROLLER_SESSION_NOT_STARTED',
+  ],
   handler: async ({ mastra, controllerId, sessionId, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
@@ -2043,6 +2177,11 @@ export const SET_AGENT_CONTROLLER_CATEGORY_PERMISSION_ROUTE = createRoute({
   tags: ['AgentController', 'Permissions'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
+  errors: [
+    'AGENT_CONTROLLER_CATEGORY_PERMISSION_SET_FAILED',
+    'AGENT_CONTROLLER_NOT_FOUND',
+    'AGENT_CONTROLLER_SESSION_NOT_STARTED',
+  ],
   handler: async ({ mastra, controllerId, sessionId, category, policy, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
@@ -2072,6 +2211,11 @@ export const SET_AGENT_CONTROLLER_TOOL_PERMISSION_ROUTE = createRoute({
   tags: ['AgentController', 'Permissions'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
+  errors: [
+    'AGENT_CONTROLLER_NOT_FOUND',
+    'AGENT_CONTROLLER_SESSION_NOT_STARTED',
+    'AGENT_CONTROLLER_TOOL_PERMISSION_SET_FAILED',
+  ],
   handler: async ({ mastra, controllerId, sessionId, toolName, policy, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
@@ -2107,6 +2251,11 @@ export const SET_AGENT_CONTROLLER_SESSION_STATE_ROUTE = createRoute({
   tags: ['AgentController'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
+  errors: [
+    'AGENT_CONTROLLER_NOT_FOUND',
+    'AGENT_CONTROLLER_SESSION_NOT_STARTED',
+    'AGENT_CONTROLLER_SESSION_STATE_SET_FAILED',
+  ],
   handler: async ({ mastra, controllerId, sessionId, state, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);

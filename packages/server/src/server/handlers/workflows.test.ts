@@ -550,7 +550,13 @@ describe('vNext Workflow Handlers', () => {
           ...createTestServerContext({ mastra: mockMastra }),
           workflowId: 'non-existent',
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' }));
+      ).rejects.toThrow(
+        new HTTPException(404, {
+          message: 'Workflow not found',
+          code: 'WORKFLOW_NOT_FOUND',
+          metadata: { workflowId: 'non-existent' },
+        }),
+      );
     });
 
     it('should get workflow by ID successfully', async () => {
@@ -580,7 +586,13 @@ describe('vNext Workflow Handlers', () => {
           workflowId: 'non-existent',
           runId: 'test-run',
         } as any),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' }));
+      ).rejects.toThrow(
+        new HTTPException(404, {
+          message: 'Workflow not found',
+          code: 'WORKFLOW_NOT_FOUND',
+          metadata: { workflowId: 'non-existent' },
+        }),
+      );
     });
 
     it('should start workflow run successfully when runId is not passed', async () => {
@@ -675,7 +687,13 @@ describe('vNext Workflow Handlers', () => {
           workflowId: 'non-existent',
           runId: 'test-run',
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' }));
+      ).rejects.toThrow(
+        new HTTPException(404, {
+          message: 'Workflow not found',
+          code: 'WORKFLOW_NOT_FOUND',
+          metadata: { workflowId: 'non-existent' },
+        }),
+      );
     });
 
     it('should throw error when workflow run is not found', async () => {
@@ -731,7 +749,13 @@ describe('vNext Workflow Handlers', () => {
           workflowId: 'non-existent',
           runId: 'test-run',
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' }));
+      ).rejects.toThrow(
+        new HTTPException(404, {
+          message: 'Workflow not found',
+          code: 'WORKFLOW_NOT_FOUND',
+          metadata: { workflowId: 'non-existent' },
+        }),
+      );
     });
 
     it('should delete workflow run successfully', async () => {
@@ -784,7 +808,13 @@ describe('vNext Workflow Handlers', () => {
           workflowId: 'non-existent',
           runId: 'test-run',
         } as any),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' }));
+      ).rejects.toThrow(
+        new HTTPException(404, {
+          message: 'Workflow not found',
+          code: 'WORKFLOW_NOT_FOUND',
+          metadata: { workflowId: 'non-existent' },
+        }),
+      );
     });
 
     it('should create workflow run successfully', async () => {

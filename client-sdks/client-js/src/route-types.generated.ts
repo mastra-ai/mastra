@@ -4831,6 +4831,7 @@ export interface GetAgents_RouteContract {
   request: GetAgents_Request;
   response: GetAgents_Response;
   responseType: 'json';
+  errorCode: 'AGENTS_LIST_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -4853,6 +4854,7 @@ export interface GetAgentsProviders_RouteContract {
   request: GetAgentsProviders_Request;
   response: GetAgentsProviders_Response;
   responseType: 'json';
+  errorCode: 'AGENT_PROVIDERS_LIST_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -4889,6 +4891,7 @@ export interface GetAgentsAgentId_RouteContract {
   request: GetAgentsAgentId_Request;
   response: GetAgentsAgentId_Response;
   responseType: 'json';
+  errorCode: 'AGENT_GET_FAILED' | 'AGENT_ID_REQUIRED' | 'AGENT_NOT_FOUND' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -4928,6 +4931,13 @@ export interface PostAgentsAgentIdClone_RouteContract {
   request: PostAgentsAgentIdClone_Request;
   response: PostAgentsAgentIdClone_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_CLONE_FAILED'
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_NOT_FOUND'
+    | 'EDITOR_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -4956,6 +4966,7 @@ export interface GetAgentsAgentIdVoiceSpeakers_RouteContract {
   request: GetAgentsAgentIdVoiceSpeakers_Request;
   response: GetAgentsAgentIdVoiceSpeakers_Response;
   responseType: 'json';
+  errorCode: 'AGENT_ID_REQUIRED' | 'AGENT_NOT_FOUND' | 'AGENT_SPEAKERS_LIST_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -4982,6 +4993,7 @@ export interface GetAgentsAgentIdSpeakers_RouteContract {
   request: GetAgentsAgentIdSpeakers_Request;
   response: GetAgentsAgentIdSpeakers_Response;
   responseType: 'json';
+  errorCode: 'AGENT_ID_REQUIRED' | 'AGENT_NOT_FOUND' | 'AGENT_SPEAKERS_LIST_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -5082,6 +5094,17 @@ export interface PostAgentsAgentIdGenerate_RouteContract {
   request: PostAgentsAgentIdGenerate_Request;
   response: PostAgentsAgentIdGenerate_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_GENERATE_FAILED'
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_NOT_FOUND'
+    | 'DURABLE_AGENT_EXECUTION_CONFLICT'
+    | 'DURABLE_AGENT_RUN_ACTIVE'
+    | 'REQUEST_ARGUMENT_REQUIRED'
+    | 'RESOURCE_ID_REQUIRED'
+    | 'THREAD_ACCESS_DENIED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -5112,6 +5135,17 @@ export interface PostAgentsAgentIdGenerateVnext_RouteContract {
   request: PostAgentsAgentIdGenerateVnext_Request;
   response: PostAgentsAgentIdGenerateVnext_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_GENERATE_FAILED'
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_NOT_FOUND'
+    | 'DURABLE_AGENT_EXECUTION_CONFLICT'
+    | 'DURABLE_AGENT_RUN_ACTIVE'
+    | 'REQUEST_ARGUMENT_REQUIRED'
+    | 'RESOURCE_ID_REQUIRED'
+    | 'THREAD_ACCESS_DENIED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -5140,6 +5174,17 @@ export interface PostAgentsAgentIdStream_RouteContract {
   request: PostAgentsAgentIdStream_Request;
   response: PostAgentsAgentIdStream_Response;
   responseType: 'stream';
+  errorCode:
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_NOT_FOUND'
+    | 'AGENT_STREAM_FAILED'
+    | 'DURABLE_AGENT_EXECUTION_CONFLICT'
+    | 'DURABLE_AGENT_RUN_ACTIVE'
+    | 'REQUEST_ARGUMENT_REQUIRED'
+    | 'RESOURCE_ID_REQUIRED'
+    | 'THREAD_ACCESS_DENIED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -5243,6 +5288,17 @@ export interface PostAgentsAgentIdStreamUntilIdle_RouteContract {
   request: PostAgentsAgentIdStreamUntilIdle_Request;
   response: PostAgentsAgentIdStreamUntilIdle_Response;
   responseType: 'stream';
+  errorCode:
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_NOT_FOUND'
+    | 'AGENT_STREAM_FAILED'
+    | 'DURABLE_AGENT_EXECUTION_CONFLICT'
+    | 'DURABLE_AGENT_RUN_ACTIVE'
+    | 'REQUEST_ARGUMENT_REQUIRED'
+    | 'RESOURCE_ID_REQUIRED'
+    | 'THREAD_ACCESS_DENIED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -5276,6 +5332,17 @@ export interface PostAgentsAgentIdStreamVnext_RouteContract {
   request: PostAgentsAgentIdStreamVnext_Request;
   response: PostAgentsAgentIdStreamVnext_Response;
   responseType: 'stream';
+  errorCode:
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_NOT_FOUND'
+    | 'AGENT_STREAM_FAILED'
+    | 'DURABLE_AGENT_EXECUTION_CONFLICT'
+    | 'DURABLE_AGENT_RUN_ACTIVE'
+    | 'REQUEST_ARGUMENT_REQUIRED'
+    | 'RESOURCE_ID_REQUIRED'
+    | 'THREAD_ACCESS_DENIED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -5309,6 +5376,7 @@ export interface PostAgentsAgentIdObserve_RouteContract {
   request: PostAgentsAgentIdObserve_Request;
   response: PostAgentsAgentIdObserve_Response;
   responseType: 'stream';
+  errorCode: 'AGENT_ID_REQUIRED' | 'AGENT_NOT_FOUND' | 'AGENT_STREAM_OBSERVE_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -5357,6 +5425,15 @@ export interface PostAgentsAgentIdSendMessage_RouteContract {
   request: PostAgentsAgentIdSendMessage_Request;
   response: PostAgentsAgentIdSendMessage_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_MESSAGE_SEND_FAILED'
+    | 'AGENT_NOT_FOUND'
+    | 'AGENT_THREAD_OR_RESOURCE_ID_REQUIRED'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'THREAD_ACCESS_DENIED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -5385,6 +5462,15 @@ export interface PostAgentsAgentIdQueueMessage_RouteContract {
   request: PostAgentsAgentIdQueueMessage_Request;
   response: PostAgentsAgentIdQueueMessage_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_MESSAGE_QUEUE_FAILED'
+    | 'AGENT_NOT_FOUND'
+    | 'AGENT_THREAD_OR_RESOURCE_ID_REQUIRED'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'THREAD_ACCESS_DENIED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -5429,6 +5515,15 @@ export interface PostAgentsAgentIdQueueSignal_RouteContract {
   request: PostAgentsAgentIdQueueSignal_Request;
   response: PostAgentsAgentIdQueueSignal_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_NOT_FOUND'
+    | 'AGENT_SIGNAL_QUEUE_FAILED'
+    | 'AGENT_THREAD_OR_RESOURCE_ID_REQUIRED'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'THREAD_ACCESS_DENIED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -5457,6 +5552,15 @@ export interface PostAgentsAgentIdSignals_RouteContract {
   request: PostAgentsAgentIdSignals_Request;
   response: PostAgentsAgentIdSignals_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_NOT_FOUND'
+    | 'AGENT_SIGNAL_SEND_FAILED'
+    | 'AGENT_THREAD_OR_RESOURCE_ID_REQUIRED'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'THREAD_ACCESS_DENIED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -5492,6 +5596,15 @@ export interface PostAgentsAgentIdThreadsAbort_RouteContract {
   request: PostAgentsAgentIdThreadsAbort_Request;
   response: PostAgentsAgentIdThreadsAbort_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_NOT_FOUND'
+    | 'AGENT_THREAD_ABORT_FAILED'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'THREAD_ACCESS_DENIED'
+    | 'THREAD_ID_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -5528,6 +5641,15 @@ export interface PostAgentsAgentIdThreadsSignalsCancel_RouteContract {
   request: PostAgentsAgentIdThreadsSignalsCancel_Request;
   response: PostAgentsAgentIdThreadsSignalsCancel_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_NOT_FOUND'
+    | 'AGENT_PENDING_SIGNALS_CANCEL_FAILED'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'THREAD_ACCESS_DENIED'
+    | 'THREAD_ID_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -5570,6 +5692,15 @@ export interface PostAgentsAgentIdThreadsSubscribe_RouteContract {
   request: PostAgentsAgentIdThreadsSubscribe_Request;
   response: PostAgentsAgentIdThreadsSubscribe_Response;
   responseType: 'stream';
+  errorCode:
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_NOT_FOUND'
+    | 'AGENT_THREAD_SUBSCRIBE_FAILED'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'THREAD_ACCESS_DENIED'
+    | 'THREAD_ID_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -5612,6 +5743,14 @@ export interface PostAgentsAgentIdToolsToolIdExecute_RouteContract {
   request: PostAgentsAgentIdToolsToolIdExecute_Request;
   response: PostAgentsAgentIdToolsToolIdExecute_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_NOT_FOUND'
+    | 'AGENT_TOOL_EXECUTE_FAILED'
+    | 'TOOL_NOT_EXECUTABLE'
+    | 'TOOL_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -5667,6 +5806,23 @@ export interface PostAgentsAgentIdApproveToolCall_RouteContract {
   request: PostAgentsAgentIdApproveToolCall_Request;
   response: PostAgentsAgentIdApproveToolCall_Response;
   responseType: 'stream';
+  errorCode:
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_NOT_FOUND'
+    | 'AGENT_RESUME_ALREADY_CLAIMED'
+    | 'AGENT_RESUME_RUN_NOT_SUSPENDED'
+    | 'AGENT_RUN_ID_REQUIRED'
+    | 'AGENT_STREAM_FAILED'
+    | 'AGENT_TOOL_CALL_APPROVE_FAILED'
+    | 'AGENT_TOOL_CALL_ID_REQUIRED'
+    | 'DURABLE_AGENT_EXECUTION_CONFLICT'
+    | 'DURABLE_AGENT_RUN_ACTIVE'
+    | 'DURABLE_RUN_ACCESS_DENIED'
+    | 'DURABLE_RUN_TOOL_CALL_NOT_SUSPENDED'
+    | 'WORKFLOW_RUN_ACCESS_DENIED'
+    | 'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -5715,6 +5871,15 @@ export interface PostAgentsAgentIdSendToolApproval_RouteContract {
   request: PostAgentsAgentIdSendToolApproval_Request;
   response: PostAgentsAgentIdSendToolApproval_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_NOT_FOUND'
+    | 'AGENT_TOOL_APPROVAL_SEND_FAILED'
+    | 'AGENT_TOOL_CALL_ID_REQUIRED'
+    | 'THREAD_ACCESS_DENIED'
+    | 'THREAD_ID_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -5766,6 +5931,13 @@ export interface GetAgentsAgentIdSuspendedRuns_RouteContract {
   request: GetAgentsAgentIdSuspendedRuns_Request;
   response: GetAgentsAgentIdSuspendedRuns_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_NOT_FOUND'
+    | 'AGENT_SUSPENDED_RUNS_LIST_FAILED'
+    | 'THREAD_ACCESS_DENIED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -5820,6 +5992,23 @@ export interface PostAgentsAgentIdDeclineToolCall_RouteContract {
   request: PostAgentsAgentIdDeclineToolCall_Request;
   response: PostAgentsAgentIdDeclineToolCall_Response;
   responseType: 'stream';
+  errorCode:
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_NOT_FOUND'
+    | 'AGENT_RESUME_ALREADY_CLAIMED'
+    | 'AGENT_RESUME_RUN_NOT_SUSPENDED'
+    | 'AGENT_RUN_ID_REQUIRED'
+    | 'AGENT_STREAM_FAILED'
+    | 'AGENT_TOOL_CALL_DECLINE_FAILED'
+    | 'AGENT_TOOL_CALL_ID_REQUIRED'
+    | 'DURABLE_AGENT_EXECUTION_CONFLICT'
+    | 'DURABLE_AGENT_RUN_ACTIVE'
+    | 'DURABLE_RUN_ACCESS_DENIED'
+    | 'DURABLE_RUN_TOOL_CALL_NOT_SUSPENDED'
+    | 'WORKFLOW_RUN_ACCESS_DENIED'
+    | 'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -5921,6 +6110,24 @@ export interface PostAgentsAgentIdResumeStream_RouteContract {
   request: PostAgentsAgentIdResumeStream_Request;
   response: PostAgentsAgentIdResumeStream_Response;
   responseType: 'stream';
+  errorCode:
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_NOT_FOUND'
+    | 'AGENT_RESUME_ALREADY_CLAIMED'
+    | 'AGENT_RESUME_RUN_NOT_SUSPENDED'
+    | 'AGENT_RUN_ID_REQUIRED'
+    | 'AGENT_STREAM_FAILED'
+    | 'AGENT_STREAM_RESUME_FAILED'
+    | 'DURABLE_AGENT_EXECUTION_CONFLICT'
+    | 'DURABLE_AGENT_RUN_ACTIVE'
+    | 'DURABLE_RUN_ACCESS_DENIED'
+    | 'DURABLE_RUN_TOOL_CALL_NOT_SUSPENDED'
+    | 'RESOURCE_ID_REQUIRED'
+    | 'THREAD_ACCESS_DENIED'
+    | 'WORKFLOW_RUN_ACCESS_DENIED'
+    | 'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -5972,6 +6179,21 @@ export interface PostAgentsAgentIdRecover_RouteContract {
   request: PostAgentsAgentIdRecover_Request;
   response: PostAgentsAgentIdRecover_Response;
   responseType: 'stream';
+  errorCode:
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_NOT_FOUND'
+    | 'AGENT_RECOVER_UNSUPPORTED'
+    | 'AGENT_RUN_ID_REQUIRED'
+    | 'AGENT_RUN_RECOVER_FAILED'
+    | 'DURABLE_AGENT_EXECUTION_CONFLICT'
+    | 'DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS'
+    | 'DURABLE_AGENT_RECOVER_RUN_ACTIVE_LOCALLY'
+    | 'DURABLE_AGENT_RECOVER_RUN_SUSPENDED'
+    | 'DURABLE_AGENT_RUN_ACTIVE'
+    | 'WORKFLOW_RUN_ACCESS_DENIED'
+    | 'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -6002,6 +6224,23 @@ export interface PostAgentsAgentIdApproveToolCallGenerate_RouteContract {
   request: PostAgentsAgentIdApproveToolCallGenerate_Request;
   response: PostAgentsAgentIdApproveToolCallGenerate_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_GENERATE_FAILED'
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_NOT_FOUND'
+    | 'AGENT_RESUME_ALREADY_CLAIMED'
+    | 'AGENT_RESUME_RUN_NOT_SUSPENDED'
+    | 'AGENT_RUN_ID_REQUIRED'
+    | 'AGENT_TOOL_CALL_APPROVE_FAILED'
+    | 'AGENT_TOOL_CALL_ID_REQUIRED'
+    | 'DURABLE_AGENT_EXECUTION_CONFLICT'
+    | 'DURABLE_AGENT_RUN_ACTIVE'
+    | 'DURABLE_RUN_ACCESS_DENIED'
+    | 'DURABLE_RUN_TOOL_CALL_NOT_SUSPENDED'
+    | 'WORKFLOW_RUN_ACCESS_DENIED'
+    | 'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -6032,6 +6271,23 @@ export interface PostAgentsAgentIdDeclineToolCallGenerate_RouteContract {
   request: PostAgentsAgentIdDeclineToolCallGenerate_Request;
   response: PostAgentsAgentIdDeclineToolCallGenerate_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_GENERATE_FAILED'
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_NOT_FOUND'
+    | 'AGENT_RESUME_ALREADY_CLAIMED'
+    | 'AGENT_RESUME_RUN_NOT_SUSPENDED'
+    | 'AGENT_RUN_ID_REQUIRED'
+    | 'AGENT_TOOL_CALL_DECLINE_FAILED'
+    | 'AGENT_TOOL_CALL_ID_REQUIRED'
+    | 'DURABLE_AGENT_EXECUTION_CONFLICT'
+    | 'DURABLE_AGENT_RUN_ACTIVE'
+    | 'DURABLE_RUN_ACCESS_DENIED'
+    | 'DURABLE_RUN_TOOL_CALL_NOT_SUSPENDED'
+    | 'WORKFLOW_RUN_ACCESS_DENIED'
+    | 'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -6071,6 +6327,13 @@ export interface PostAgentsAgentIdApproveNetworkToolCall_RouteContract {
   request: PostAgentsAgentIdApproveNetworkToolCall_Request;
   response: PostAgentsAgentIdApproveNetworkToolCall_Response;
   responseType: 'stream';
+  errorCode:
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_NETWORK_TOOL_CALL_APPROVE_FAILED'
+    | 'AGENT_NOT_FOUND'
+    | 'AGENT_RUN_ID_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -6111,6 +6374,13 @@ export interface PostAgentsAgentIdDeclineNetworkToolCall_RouteContract {
   request: PostAgentsAgentIdDeclineNetworkToolCall_Request;
   response: PostAgentsAgentIdDeclineNetworkToolCall_Response;
   responseType: 'stream';
+  errorCode:
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_NETWORK_TOOL_CALL_DECLINE_FAILED'
+    | 'AGENT_NOT_FOUND'
+    | 'AGENT_RUN_ID_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -6215,6 +6485,24 @@ export interface PostAgentsAgentIdResumeStreamUntilIdle_RouteContract {
   request: PostAgentsAgentIdResumeStreamUntilIdle_Request;
   response: PostAgentsAgentIdResumeStreamUntilIdle_Response;
   responseType: 'stream';
+  errorCode:
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_NOT_FOUND'
+    | 'AGENT_RESUME_ALREADY_CLAIMED'
+    | 'AGENT_RESUME_RUN_NOT_SUSPENDED'
+    | 'AGENT_RUN_ID_REQUIRED'
+    | 'AGENT_STREAM_FAILED'
+    | 'AGENT_STREAM_RESUME_FAILED'
+    | 'DURABLE_AGENT_EXECUTION_CONFLICT'
+    | 'DURABLE_AGENT_RUN_ACTIVE'
+    | 'DURABLE_RUN_ACCESS_DENIED'
+    | 'DURABLE_RUN_TOOL_CALL_NOT_SUSPENDED'
+    | 'RESOURCE_ID_REQUIRED'
+    | 'THREAD_ACCESS_DENIED'
+    | 'WORKFLOW_RUN_ACCESS_DENIED'
+    | 'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -6243,6 +6531,14 @@ export interface PostAgentsAgentIdNetwork_RouteContract {
   request: PostAgentsAgentIdNetwork_Request;
   response: PostAgentsAgentIdNetwork_Response;
   responseType: 'stream';
+  errorCode:
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_LOOP_STREAM_FAILED'
+    | 'AGENT_NOT_FOUND'
+    | 'REQUEST_ARGUMENT_REQUIRED'
+    | 'RESOURCE_ID_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -6276,6 +6572,7 @@ export interface PostAgentsAgentIdModel_RouteContract {
   request: PostAgentsAgentIdModel_Request;
   response: PostAgentsAgentIdModel_Response;
   responseType: 'json';
+  errorCode: 'AGENT_ID_REQUIRED' | 'AGENT_MODEL_UPDATE_FAILED' | 'AGENT_NOT_FOUND' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -6298,6 +6595,7 @@ export interface PostAgentsAgentIdModelReset_RouteContract {
   request: PostAgentsAgentIdModelReset_Request;
   response: PostAgentsAgentIdModelReset_Response;
   responseType: 'json';
+  errorCode: 'AGENT_ID_REQUIRED' | 'AGENT_MODEL_RESET_FAILED' | 'AGENT_NOT_FOUND' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -6330,6 +6628,15 @@ export interface PostAgentsAgentIdModelsReorder_RouteContract {
   request: PostAgentsAgentIdModelsReorder_Request;
   response: PostAgentsAgentIdModelsReorder_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_MODEL_LIST_DYNAMIC'
+    | 'AGENT_MODEL_LIST_EMPTY'
+    | 'AGENT_MODEL_LIST_REORDER_FAILED'
+    | 'AGENT_MODEL_LIST_REORDER_INVALID'
+    | 'AGENT_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -6374,6 +6681,15 @@ export interface PostAgentsAgentIdModelsModelConfigId_RouteContract {
   request: PostAgentsAgentIdModelsModelConfigId_Request;
   response: PostAgentsAgentIdModelsModelConfigId_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_MODEL_CONFIG_NOT_FOUND'
+    | 'AGENT_MODEL_LIST_DYNAMIC'
+    | 'AGENT_MODEL_LIST_EMPTY'
+    | 'AGENT_MODEL_LIST_ITEM_UPDATE_FAILED'
+    | 'AGENT_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -6414,6 +6730,13 @@ export interface PostAgentsAgentIdInstructionsEnhance_RouteContract {
   request: PostAgentsAgentIdInstructionsEnhance_Request;
   response: PostAgentsAgentIdInstructionsEnhance_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_INSTRUCTIONS_ENHANCE_FAILED'
+    | 'AGENT_MODEL_API_KEY_NOT_FOUND'
+    | 'AGENT_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -6436,6 +6759,13 @@ export interface GetAgentsAgentIdToolsToolId_RouteContract {
   request: GetAgentsAgentIdToolsToolId_Request;
   response: GetAgentsAgentIdToolsToolId_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_NOT_FOUND'
+    | 'AGENT_TOOL_GET_FAILED'
+    | 'TOOL_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -6474,6 +6804,16 @@ export interface GetAgentsAgentIdPlansFile_RouteContract {
   request: GetAgentsAgentIdPlansFile_Request;
   response: GetAgentsAgentIdPlansFile_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_NOT_FOUND'
+    | 'PLAN_CAPABILITY_NOT_FOUND'
+    | 'PLAN_NOT_FOUND'
+    | 'PLAN_PATH_INVALID'
+    | 'PLAN_READ_FAILED'
+    | 'WORKSPACE_FILESYSTEM_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -6543,6 +6883,7 @@ export interface GetAgentsAgentIdSkillsSkillName_RouteContract {
   request: GetAgentsAgentIdSkillsSkillName_Request;
   response: GetAgentsAgentIdSkillsSkillName_Response;
   responseType: 'json';
+  errorCode: 'AGENT_NOT_FOUND' | 'AGENT_SKILL_GET_FAILED' | 'AGENT_SKILL_NOT_FOUND' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -6580,6 +6921,14 @@ export interface PostAgentsAgentIdVoiceSpeak_RouteContract {
   request: PostAgentsAgentIdVoiceSpeak_Request;
   response: PostAgentsAgentIdVoiceSpeak_Response;
   responseType: 'datastream-response';
+  errorCode:
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_NOT_FOUND'
+    | 'AGENT_SPEAK_FAILED'
+    | 'AGENT_VOICE_NOT_CONFIGURED'
+    | 'REQUEST_ARGUMENT_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -6613,6 +6962,14 @@ export interface PostAgentsAgentIdSpeak_RouteContract {
   request: PostAgentsAgentIdSpeak_Request;
   response: PostAgentsAgentIdSpeak_Response;
   responseType: 'datastream-response';
+  errorCode:
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_NOT_FOUND'
+    | 'AGENT_SPEAK_FAILED'
+    | 'AGENT_VOICE_NOT_CONFIGURED'
+    | 'REQUEST_ARGUMENT_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -6650,6 +7007,14 @@ export interface PostAgentsAgentIdVoiceListen_RouteContract {
   request: PostAgentsAgentIdVoiceListen_Request;
   response: PostAgentsAgentIdVoiceListen_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_LISTEN_FAILED'
+    | 'AGENT_NOT_FOUND'
+    | 'AGENT_VOICE_NOT_CONFIGURED'
+    | 'REQUEST_ARGUMENT_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -6683,6 +7048,14 @@ export interface PostAgentsAgentIdListen_RouteContract {
   request: PostAgentsAgentIdListen_Request;
   response: PostAgentsAgentIdListen_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_LISTEN_FAILED'
+    | 'AGENT_NOT_FOUND'
+    | 'AGENT_VOICE_NOT_CONFIGURED'
+    | 'REQUEST_ARGUMENT_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -6705,6 +7078,7 @@ export interface GetAgentsAgentIdVoiceListener_RouteContract {
   request: GetAgentsAgentIdVoiceListener_Request;
   response: GetAgentsAgentIdVoiceListener_Response;
   responseType: 'json';
+  errorCode: 'AGENT_ID_REQUIRED' | 'AGENT_LISTENER_GET_FAILED' | 'AGENT_NOT_FOUND' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -6738,6 +7112,13 @@ export interface PostAgentsAgentIdStreamVNext_RouteContract {
   request: PostAgentsAgentIdStreamVNext_Request;
   response: PostAgentsAgentIdStreamVNext_Response;
   responseType: 'stream';
+  errorCode:
+    | 'AGENT_STREAM_FAILED'
+    | 'DURABLE_AGENT_EXECUTION_CONFLICT'
+    | 'DURABLE_AGENT_RUN_ACTIVE'
+    | 'ENDPOINT_DEPRECATED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -6773,6 +7154,12 @@ export interface PostAgentsAgentIdStreamVnextUi_RouteContract {
   request: PostAgentsAgentIdStreamVnextUi_Request;
   response: PostAgentsAgentIdStreamVnextUi_Response;
   responseType: 'stream';
+  errorCode:
+    | 'AGENT_STREAM_FAILED'
+    | 'DURABLE_AGENT_EXECUTION_CONFLICT'
+    | 'DURABLE_AGENT_RUN_ACTIVE'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -6806,6 +7193,12 @@ export interface PostAgentsAgentIdStreamUi_RouteContract {
   request: PostAgentsAgentIdStreamUi_Request;
   response: PostAgentsAgentIdStreamUi_Response;
   responseType: 'stream';
+  errorCode:
+    | 'AGENT_STREAM_FAILED'
+    | 'DURABLE_AGENT_EXECUTION_CONFLICT'
+    | 'DURABLE_AGENT_RUN_ACTIVE'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -6851,6 +7244,7 @@ export interface GetAuthCapabilities_RouteContract {
   request: GetAuthCapabilities_Request;
   response: GetAuthCapabilities_Response;
   responseType: 'json';
+  errorCode: 'AUTH_CAPABILITIES_GET_FAILED' | CommonErrorCode;
 }
 
 // ============================================================================
@@ -6878,6 +7272,7 @@ export interface GetAuthMe_RouteContract {
   request: GetAuthMe_Request;
   response: GetAuthMe_Response;
   responseType: 'json';
+  errorCode: 'AUTH_CURRENT_USER_GET_FAILED' | CommonErrorCode;
 }
 
 // ============================================================================
@@ -6904,6 +7299,7 @@ export interface GetAuthSsoLogin_RouteContract {
   request: GetAuthSsoLogin_Request;
   response: unknown;
   responseType: 'datastream-response';
+  errorCode: 'AUTH_SSO_LOGIN_FAILED' | 'SSO_NOT_CONFIGURED' | CommonErrorCode;
 }
 
 // ============================================================================
@@ -6931,6 +7327,7 @@ export interface GetAuthSsoCallback_RouteContract {
   request: GetAuthSsoCallback_Request;
   response: unknown;
   responseType: 'datastream-response';
+  errorCode: CommonErrorCode;
 }
 
 // ============================================================================
@@ -6949,6 +7346,7 @@ export interface PostAuthLogout_RouteContract {
   request: PostAuthLogout_Request;
   response: unknown;
   responseType: 'datastream-response';
+  errorCode: 'AUTH_LOGOUT_FAILED' | 'LOGOUT_NOT_CONFIGURED' | CommonErrorCode;
 }
 
 // ============================================================================
@@ -6971,6 +7369,12 @@ export interface PostAuthRefresh_RouteContract {
   request: PostAuthRefresh_Request;
   response: PostAuthRefresh_Response;
   responseType: 'datastream-response';
+  errorCode:
+    | 'AUTH_SESSION_REFRESH_FAILED'
+    | 'SESSION_EXPIRED'
+    | 'SESSION_NOT_FOUND'
+    | 'SESSION_REFRESH_NOT_CONFIGURED'
+    | CommonErrorCode;
 }
 
 // ============================================================================
@@ -6998,6 +7402,7 @@ export interface PostAuthCredentialsSignIn_RouteContract {
   request: PostAuthCredentialsSignIn_Request;
   response: unknown;
   responseType: 'datastream-response';
+  errorCode: 'CREDENTIALS_AUTH_NOT_CONFIGURED' | 'CREDENTIALS_INVALID' | CommonErrorCode;
 }
 
 // ============================================================================
@@ -7026,6 +7431,7 @@ export interface PostAuthCredentialsSignUp_RouteContract {
   request: PostAuthCredentialsSignUp_Request;
   response: unknown;
   responseType: 'datastream-response';
+  errorCode: 'ACCOUNT_CREATE_FAILED' | 'CREDENTIALS_AUTH_NOT_CONFIGURED' | CommonErrorCode;
 }
 
 // ============================================================================
@@ -7053,6 +7459,12 @@ export interface GetAuthRolesRoleIdPermissions_RouteContract {
   request: GetAuthRolesRoleIdPermissions_Request;
   response: GetAuthRolesRoleIdPermissions_Response;
   responseType: 'json';
+  errorCode:
+    | 'ADMIN_ACCESS_REQUIRED'
+    | 'AUTH_ROLE_PERMISSIONS_GET_FAILED'
+    | 'ROLE_PERMISSIONS_RESOLUTION_UNAVAILABLE'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -7075,6 +7487,7 @@ export interface GetAuthPermissionPatterns_RouteContract {
   request: GetAuthPermissionPatterns_Request;
   response: GetAuthPermissionPatterns_Response;
   responseType: 'json';
+  errorCode: CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -7103,6 +7516,7 @@ export interface GetWorkflows_RouteContract {
   request: GetWorkflows_Request;
   response: GetWorkflows_Response;
   responseType: 'json';
+  errorCode: 'WORKFLOWS_LIST_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -7128,6 +7542,7 @@ export interface GetWorkflowsRunCounts_RouteContract {
   request: GetWorkflowsRunCounts_Request;
   response: GetWorkflowsRunCounts_Response;
   responseType: 'json';
+  errorCode: 'WORKFLOW_RUN_COUNTS_LIST_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -7153,6 +7568,7 @@ export interface GetWorkflowsWorkflowId_RouteContract {
   request: GetWorkflowsWorkflowId_Request;
   response: GetWorkflowsWorkflowId_Response;
   responseType: 'json';
+  errorCode: 'WORKFLOW_GET_FAILED' | 'WORKFLOW_ID_REQUIRED' | 'WORKFLOW_NOT_FOUND' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -7220,6 +7636,13 @@ export interface GetWorkflowsWorkflowIdRuns_RouteContract {
   request: GetWorkflowsWorkflowIdRuns_Request;
   response: GetWorkflowsWorkflowIdRuns_Response;
   responseType: 'json';
+  errorCode:
+    | 'PAGINATION_PARAMS_INVALID'
+    | 'WORKFLOW_ID_REQUIRED'
+    | 'WORKFLOW_NOT_FOUND'
+    | 'WORKFLOW_RUNS_LIST_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -7297,6 +7720,16 @@ export interface GetWorkflowsWorkflowIdRunsRunId_RouteContract {
   request: GetWorkflowsWorkflowIdRunsRunId_Request;
   response: GetWorkflowsWorkflowIdRunsRunId_Response;
   responseType: 'json';
+  errorCode:
+    | 'WORKFLOW_ID_REQUIRED'
+    | 'WORKFLOW_NOT_FOUND'
+    | 'WORKFLOW_RUN_ACCESS_DENIED'
+    | 'WORKFLOW_RUN_GET_FAILED'
+    | 'WORKFLOW_RUN_ID_REQUIRED'
+    | 'WORKFLOW_RUN_NOT_FOUND'
+    | 'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -7321,6 +7754,16 @@ export interface DeleteWorkflowsWorkflowIdRunsRunId_RouteContract {
   request: DeleteWorkflowsWorkflowIdRunsRunId_Request;
   response: DeleteWorkflowsWorkflowIdRunsRunId_Response;
   responseType: 'json';
+  errorCode:
+    | 'WORKFLOW_ID_REQUIRED'
+    | 'WORKFLOW_NOT_FOUND'
+    | 'WORKFLOW_RUN_ACCESS_DENIED'
+    | 'WORKFLOW_RUN_DELETE_FAILED'
+    | 'WORKFLOW_RUN_ID_REQUIRED'
+    | 'WORKFLOW_RUN_NOT_FOUND'
+    | 'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -7364,6 +7807,14 @@ export interface PostWorkflowsWorkflowIdCreateRun_RouteContract {
   request: PostWorkflowsWorkflowIdCreateRun_Request;
   response: PostWorkflowsWorkflowIdCreateRun_Response;
   responseType: 'json';
+  errorCode:
+    | 'WORKFLOW_ID_REQUIRED'
+    | 'WORKFLOW_NOT_FOUND'
+    | 'WORKFLOW_RUN_ACCESS_DENIED'
+    | 'WORKFLOW_RUN_CREATE_FAILED'
+    | 'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -7411,6 +7862,17 @@ export interface PostWorkflowsWorkflowIdStream_RouteContract {
   request: PostWorkflowsWorkflowIdStream_Request;
   response: unknown;
   responseType: 'stream';
+  errorCode:
+    | 'WORKFLOW_ID_REQUIRED'
+    | 'WORKFLOW_NOT_FOUND'
+    | 'WORKFLOW_RUN_ACCESS_DENIED'
+    | 'WORKFLOW_RUN_ALREADY_FINISHED'
+    | 'WORKFLOW_RUN_ID_REQUIRED'
+    | 'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED'
+    | 'WORKFLOW_SCHEMA_VALIDATION_FAILED'
+    | 'WORKFLOW_STREAM_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -7458,6 +7920,19 @@ export interface PostWorkflowsWorkflowIdResumeStream_RouteContract {
   request: PostWorkflowsWorkflowIdResumeStream_Request;
   response: PostWorkflowsWorkflowIdResumeStream_Response;
   responseType: 'stream';
+  errorCode:
+    | 'WORKFLOW_ID_REQUIRED'
+    | 'WORKFLOW_NOT_FOUND'
+    | 'WORKFLOW_RESUME_ALREADY_CLAIMED'
+    | 'WORKFLOW_RESUME_FAILED'
+    | 'WORKFLOW_RUN_ACCESS_DENIED'
+    | 'WORKFLOW_RUN_ID_REQUIRED'
+    | 'WORKFLOW_RUN_NOT_FOUND'
+    | 'WORKFLOW_RUN_NOT_SUSPENDED'
+    | 'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED'
+    | 'WORKFLOW_SCHEMA_VALIDATION_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -7536,6 +8011,15 @@ export interface PostWorkflowsWorkflowIdStartAsync_RouteContract {
   request: PostWorkflowsWorkflowIdStartAsync_Request;
   response: PostWorkflowsWorkflowIdStartAsync_Response;
   responseType: 'json';
+  errorCode:
+    | 'WORKFLOW_ASYNC_START_FAILED'
+    | 'WORKFLOW_ID_REQUIRED'
+    | 'WORKFLOW_NOT_FOUND'
+    | 'WORKFLOW_RUN_ACCESS_DENIED'
+    | 'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED'
+    | 'WORKFLOW_SCHEMA_VALIDATION_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -7570,6 +8054,17 @@ export interface PostWorkflowsWorkflowIdStart_RouteContract {
   request: PostWorkflowsWorkflowIdStart_Request;
   response: PostWorkflowsWorkflowIdStart_Response;
   responseType: 'json';
+  errorCode:
+    | 'WORKFLOW_ID_REQUIRED'
+    | 'WORKFLOW_NOT_FOUND'
+    | 'WORKFLOW_RUN_ACCESS_DENIED'
+    | 'WORKFLOW_RUN_ID_REQUIRED'
+    | 'WORKFLOW_RUN_NOT_FOUND'
+    | 'WORKFLOW_RUN_START_FAILED'
+    | 'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED'
+    | 'WORKFLOW_SCHEMA_VALIDATION_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -7605,6 +8100,17 @@ export interface PostWorkflowsWorkflowIdObserve_RouteContract {
   request: PostWorkflowsWorkflowIdObserve_Request;
   response: PostWorkflowsWorkflowIdObserve_Response;
   responseType: 'stream';
+  errorCode:
+    | 'SERVER_CACHE_NOT_FOUND'
+    | 'WORKFLOW_ID_REQUIRED'
+    | 'WORKFLOW_NOT_FOUND'
+    | 'WORKFLOW_RUN_ACCESS_DENIED'
+    | 'WORKFLOW_RUN_ID_REQUIRED'
+    | 'WORKFLOW_RUN_NOT_FOUND'
+    | 'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED'
+    | 'WORKFLOW_STREAM_OBSERVE_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -7641,6 +8147,19 @@ export interface PostWorkflowsWorkflowIdResumeAsync_RouteContract {
   request: PostWorkflowsWorkflowIdResumeAsync_Request;
   response: PostWorkflowsWorkflowIdResumeAsync_Response;
   responseType: 'json';
+  errorCode:
+    | 'WORKFLOW_ID_REQUIRED'
+    | 'WORKFLOW_NOT_FOUND'
+    | 'WORKFLOW_RESUME_ALREADY_CLAIMED'
+    | 'WORKFLOW_RUN_ACCESS_DENIED'
+    | 'WORKFLOW_RUN_ID_REQUIRED'
+    | 'WORKFLOW_RUN_NOT_FOUND'
+    | 'WORKFLOW_RUN_NOT_SUSPENDED'
+    | 'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED'
+    | 'WORKFLOW_SCHEMA_VALIDATION_FAILED'
+    | 'WORKFLOW_STEP_RESUME_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -7677,6 +8196,19 @@ export interface PostWorkflowsWorkflowIdResumeNoWait_RouteContract {
   request: PostWorkflowsWorkflowIdResumeNoWait_Request;
   response: PostWorkflowsWorkflowIdResumeNoWait_Response;
   responseType: 'json';
+  errorCode:
+    | 'WORKFLOW_ID_REQUIRED'
+    | 'WORKFLOW_NOT_FOUND'
+    | 'WORKFLOW_RESUME_ALREADY_CLAIMED'
+    | 'WORKFLOW_RUN_ACCESS_DENIED'
+    | 'WORKFLOW_RUN_ID_REQUIRED'
+    | 'WORKFLOW_RUN_NOT_FOUND'
+    | 'WORKFLOW_RUN_NOT_SUSPENDED'
+    | 'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED'
+    | 'WORKFLOW_SCHEMA_VALIDATION_FAILED'
+    | 'WORKFLOW_STEP_RESUME_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -7711,6 +8243,19 @@ export interface PostWorkflowsWorkflowIdResume_RouteContract {
   request: PostWorkflowsWorkflowIdResume_Request;
   response: PostWorkflowsWorkflowIdResume_Response;
   responseType: 'json';
+  errorCode:
+    | 'WORKFLOW_ID_REQUIRED'
+    | 'WORKFLOW_NOT_FOUND'
+    | 'WORKFLOW_RESUME_ALREADY_CLAIMED'
+    | 'WORKFLOW_RESUME_FAILED'
+    | 'WORKFLOW_RUN_ACCESS_DENIED'
+    | 'WORKFLOW_RUN_ID_REQUIRED'
+    | 'WORKFLOW_RUN_NOT_FOUND'
+    | 'WORKFLOW_RUN_NOT_SUSPENDED'
+    | 'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED'
+    | 'WORKFLOW_SCHEMA_VALIDATION_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -7735,6 +8280,16 @@ export interface PostWorkflowsWorkflowIdRunsRunIdCancel_RouteContract {
   request: PostWorkflowsWorkflowIdRunsRunIdCancel_Request;
   response: PostWorkflowsWorkflowIdRunsRunIdCancel_Response;
   responseType: 'json';
+  errorCode:
+    | 'WORKFLOW_ID_REQUIRED'
+    | 'WORKFLOW_NOT_FOUND'
+    | 'WORKFLOW_RUN_ACCESS_DENIED'
+    | 'WORKFLOW_RUN_CANCEL_FAILED'
+    | 'WORKFLOW_RUN_ID_REQUIRED'
+    | 'WORKFLOW_RUN_NOT_FOUND'
+    | 'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -7795,6 +8350,19 @@ export interface PostWorkflowsWorkflowIdTimeTravel_RouteContract {
   request: PostWorkflowsWorkflowIdTimeTravel_Request;
   response: PostWorkflowsWorkflowIdTimeTravel_Response;
   responseType: 'json';
+  errorCode:
+    | 'WORKFLOW_ID_REQUIRED'
+    | 'WORKFLOW_NOT_FOUND'
+    | 'WORKFLOW_RUN_ACCESS_DENIED'
+    | 'WORKFLOW_RUN_ID_REQUIRED'
+    | 'WORKFLOW_RUN_NOT_FOUND'
+    | 'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED'
+    | 'WORKFLOW_SCHEMA_VALIDATION_FAILED'
+    | 'WORKFLOW_TIME_TRAVEL_ALREADY_CLAIMED'
+    | 'WORKFLOW_TIME_TRAVEL_FAILED'
+    | 'WORKFLOW_TIME_TRAVEL_RUN_RUNNING'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -7831,6 +8399,19 @@ export interface PostWorkflowsWorkflowIdTimeTravelAsync_RouteContract {
   request: PostWorkflowsWorkflowIdTimeTravelAsync_Request;
   response: PostWorkflowsWorkflowIdTimeTravelAsync_Response;
   responseType: 'json';
+  errorCode:
+    | 'WORKFLOW_ID_REQUIRED'
+    | 'WORKFLOW_NOT_FOUND'
+    | 'WORKFLOW_RUN_ACCESS_DENIED'
+    | 'WORKFLOW_RUN_ID_REQUIRED'
+    | 'WORKFLOW_RUN_NOT_FOUND'
+    | 'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED'
+    | 'WORKFLOW_SCHEMA_VALIDATION_FAILED'
+    | 'WORKFLOW_TIME_TRAVEL_ALREADY_CLAIMED'
+    | 'WORKFLOW_TIME_TRAVEL_FAILED'
+    | 'WORKFLOW_TIME_TRAVEL_RUN_RUNNING'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -7865,6 +8446,19 @@ export interface PostWorkflowsWorkflowIdTimeTravelStream_RouteContract {
   request: PostWorkflowsWorkflowIdTimeTravelStream_Request;
   response: unknown;
   responseType: 'stream';
+  errorCode:
+    | 'WORKFLOW_ID_REQUIRED'
+    | 'WORKFLOW_NOT_FOUND'
+    | 'WORKFLOW_RUN_ACCESS_DENIED'
+    | 'WORKFLOW_RUN_ID_REQUIRED'
+    | 'WORKFLOW_RUN_NOT_FOUND'
+    | 'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED'
+    | 'WORKFLOW_SCHEMA_VALIDATION_FAILED'
+    | 'WORKFLOW_TIME_TRAVEL_ALREADY_CLAIMED'
+    | 'WORKFLOW_TIME_TRAVEL_RUN_RUNNING'
+    | 'WORKFLOW_TIME_TRAVEL_STREAM_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -7908,6 +8502,17 @@ export interface PostWorkflowsWorkflowIdRestart_RouteContract {
   request: PostWorkflowsWorkflowIdRestart_Request;
   response: PostWorkflowsWorkflowIdRestart_Response;
   responseType: 'json';
+  errorCode:
+    | 'WORKFLOW_ID_REQUIRED'
+    | 'WORKFLOW_NOT_FOUND'
+    | 'WORKFLOW_RESTART_FAILED'
+    | 'WORKFLOW_RUN_ACCESS_DENIED'
+    | 'WORKFLOW_RUN_ID_REQUIRED'
+    | 'WORKFLOW_RUN_NOT_FOUND'
+    | 'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED'
+    | 'WORKFLOW_SCHEMA_VALIDATION_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -7944,6 +8549,17 @@ export interface PostWorkflowsWorkflowIdRestartAsync_RouteContract {
   request: PostWorkflowsWorkflowIdRestartAsync_Request;
   response: PostWorkflowsWorkflowIdRestartAsync_Response;
   responseType: 'json';
+  errorCode:
+    | 'WORKFLOW_ID_REQUIRED'
+    | 'WORKFLOW_NOT_FOUND'
+    | 'WORKFLOW_RESTART_FAILED'
+    | 'WORKFLOW_RUN_ACCESS_DENIED'
+    | 'WORKFLOW_RUN_ID_REQUIRED'
+    | 'WORKFLOW_RUN_NOT_FOUND'
+    | 'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED'
+    | 'WORKFLOW_SCHEMA_VALIDATION_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -7968,6 +8584,14 @@ export interface PostWorkflowsWorkflowIdRestartAllActiveWorkflowRuns_RouteContra
   request: PostWorkflowsWorkflowIdRestartAllActiveWorkflowRuns_Request;
   response: PostWorkflowsWorkflowIdRestartAllActiveWorkflowRuns_Response;
   responseType: 'json';
+  errorCode:
+    | 'WORKFLOW_ID_REQUIRED'
+    | 'WORKFLOW_NOT_FOUND'
+    | 'WORKFLOW_RESTART_FAILED'
+    | 'WORKFLOW_RUN_ACCESS_DENIED'
+    | 'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -7992,6 +8616,14 @@ export interface PostWorkflowsWorkflowIdRestartAllActiveWorkflowRunsAsync_RouteC
   request: PostWorkflowsWorkflowIdRestartAllActiveWorkflowRunsAsync_Request;
   response: PostWorkflowsWorkflowIdRestartAllActiveWorkflowRunsAsync_Response;
   responseType: 'json';
+  errorCode:
+    | 'WORKFLOW_ID_REQUIRED'
+    | 'WORKFLOW_NOT_FOUND'
+    | 'WORKFLOW_RESTART_FAILED'
+    | 'WORKFLOW_RUN_ACCESS_DENIED'
+    | 'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -8042,6 +8674,12 @@ export interface PostWorkflowsWorkflowIdRunsRunIdStepsExecute_RouteContract {
   request: PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Request;
   response: PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Response;
   responseType: 'json';
+  errorCode:
+    | 'WORKFLOW_RUN_ACCESS_DENIED'
+    | 'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED'
+    | 'WORKFLOW_STEP_EXECUTE_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -8082,6 +8720,13 @@ export interface PostWorkflowsEvents_RouteContract {
   request: PostWorkflowsEvents_Request;
   response: PostWorkflowsEvents_Response;
   responseType: 'json';
+  errorCode:
+    | 'WORKFLOW_EVENT_RECEIVE_FAILED'
+    | 'WORKFLOW_RUN_ACCESS_DENIED'
+    | 'WORKFLOW_RUN_CREATED_AT_INVALID'
+    | 'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -8104,6 +8749,7 @@ export interface GetTools_RouteContract {
   request: GetTools_Request;
   response: GetTools_Response;
   responseType: 'json';
+  errorCode: 'TOOLS_LIST_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -8129,6 +8775,7 @@ export interface GetToolsToolId_RouteContract {
   request: GetToolsToolId_Request;
   response: GetToolsToolId_Response;
   responseType: 'json';
+  errorCode: 'TOOL_GET_FAILED' | 'TOOL_NOT_FOUND' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -8163,6 +8810,14 @@ export interface PostToolsToolIdExecute_RouteContract {
   request: PostToolsToolIdExecute_Request;
   response: PostToolsToolIdExecute_Response;
   responseType: 'json';
+  errorCode:
+    | 'REQUEST_ARGUMENT_REQUIRED'
+    | 'TOOL_EXECUTE_FAILED'
+    | 'TOOL_ID_REQUIRED'
+    | 'TOOL_NOT_EXECUTABLE'
+    | 'TOOL_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -8196,6 +8851,7 @@ export interface GetProcessors_RouteContract {
   request: GetProcessors_Request;
   response: GetProcessors_Response;
   responseType: 'json';
+  errorCode: 'PROCESSORS_LIST_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -8232,6 +8888,7 @@ export interface GetProcessorsProcessorId_RouteContract {
   request: GetProcessorsProcessorId_Request;
   response: GetProcessorsProcessorId_Response;
   responseType: 'json';
+  errorCode: 'PROCESSOR_GET_FAILED' | 'PROCESSOR_NOT_FOUND' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -8301,6 +8958,16 @@ export interface PostProcessorsProcessorIdExecute_RouteContract {
   request: PostProcessorsProcessorIdExecute_Request;
   response: PostProcessorsProcessorIdExecute_Response;
   responseType: 'json';
+  errorCode:
+    | 'PROCESSOR_EXECUTE_FAILED'
+    | 'PROCESSOR_ID_REQUIRED'
+    | 'PROCESSOR_MESSAGES_REQUIRED'
+    | 'PROCESSOR_NOT_FOUND'
+    | 'PROCESSOR_PHASE_REQUIRED'
+    | 'PROCESSOR_PHASE_UNSUPPORTED'
+    | 'PROCESSOR_WORKFLOW_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -8479,6 +9146,22 @@ export interface PostV1Responses_RouteContract {
   request: PostV1Responses_Request;
   response: PostV1Responses_Response;
   responseType: 'datastream-response';
+  errorCode:
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_NOT_FOUND'
+    | 'CONVERSATION_MEMORY_NOT_CONFIGURED'
+    | 'CONVERSATION_NOT_FOUND'
+    | 'MASTRA_INSTANCE_REQUIRED'
+    | 'RESPONSES_MEMORY_NOT_CONFIGURED'
+    | 'RESPONSES_MEMORY_STORAGE_UNAVAILABLE'
+    | 'RESPONSE_AGENT_MISMATCH'
+    | 'RESPONSE_CONVERSATION_MISMATCH'
+    | 'RESPONSE_CREATE_FAILED'
+    | 'RESPONSE_MODEL_UNRESOLVED'
+    | 'RESPONSE_NOT_FOUND'
+    | 'THREAD_ACCESS_DENIED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -8504,6 +9187,7 @@ export interface GetV1ResponsesResponseId_RouteContract {
   request: GetV1ResponsesResponseId_Request;
   response: GetV1ResponsesResponseId_Response;
   responseType: 'json';
+  errorCode: 'RESPONSE_GET_FAILED' | 'RESPONSE_NOT_FOUND' | 'THREAD_ACCESS_DENIED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -8530,6 +9214,7 @@ export interface DeleteV1ResponsesResponseId_RouteContract {
   request: DeleteV1ResponsesResponseId_Request;
   response: DeleteV1ResponsesResponseId_Response;
   responseType: 'json';
+  errorCode: 'RESPONSE_DELETE_FAILED' | 'RESPONSE_NOT_FOUND' | 'THREAD_ACCESS_DENIED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -8573,6 +9258,16 @@ export interface PostV1Conversations_RouteContract {
   request: PostV1Conversations_Request;
   response: PostV1Conversations_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_NOT_FOUND'
+    | 'CONVERSATION_CREATE_FAILED'
+    | 'CONVERSATION_MEMORY_NOT_CONFIGURED'
+    | 'MASTRA_INSTANCE_REQUIRED'
+    | 'MEMORY_STORAGE_NOT_INITIALIZED'
+    | 'THREAD_ACCESS_DENIED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -8600,6 +9295,12 @@ export interface GetV1ConversationsConversationId_RouteContract {
   request: GetV1ConversationsConversationId_Request;
   response: GetV1ConversationsConversationId_Response;
   responseType: 'json';
+  errorCode:
+    | 'CONVERSATION_GET_FAILED'
+    | 'CONVERSATION_NOT_FOUND'
+    | 'THREAD_ACCESS_DENIED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -8656,6 +9357,12 @@ export interface GetV1ConversationsConversationIdItems_RouteContract {
   request: GetV1ConversationsConversationIdItems_Request;
   response: GetV1ConversationsConversationIdItems_Response;
   responseType: 'json';
+  errorCode:
+    | 'CONVERSATION_GET_FAILED'
+    | 'CONVERSATION_NOT_FOUND'
+    | 'THREAD_ACCESS_DENIED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -8684,6 +9391,12 @@ export interface DeleteV1ConversationsConversationId_RouteContract {
   request: DeleteV1ConversationsConversationId_Request;
   response: DeleteV1ConversationsConversationId_Response;
   responseType: 'json';
+  errorCode:
+    | 'CONVERSATION_DELETE_FAILED'
+    | 'CONVERSATION_NOT_FOUND'
+    | 'THREAD_ACCESS_DENIED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -8729,6 +9442,7 @@ export interface GetMemoryStatus_RouteContract {
   request: GetMemoryStatus_Request;
   response: GetMemoryStatus_Response;
   responseType: 'json';
+  errorCode: 'AGENT_NOT_FOUND' | 'MEMORY_STATUS_GET_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -8818,6 +9532,7 @@ export interface GetMemoryConfig_RouteContract {
   request: GetMemoryConfig_Request;
   response: GetMemoryConfig_Response;
   responseType: 'json';
+  errorCode: 'AGENT_NOT_FOUND' | 'MEMORY_CONFIG_GET_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -8855,6 +9570,15 @@ export interface GetMemoryObservationalMemory_RouteContract {
   request: GetMemoryObservationalMemory_Request;
   response: GetMemoryObservationalMemory_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_NOT_FOUND'
+    | 'MEMORY_NOT_CONFIGURED'
+    | 'MEMORY_STORAGE_NOT_INITIALIZED'
+    | 'OBSERVATIONAL_MEMORY_GET_FAILED'
+    | 'OBSERVATIONAL_MEMORY_NOT_ENABLED'
+    | 'OBSERVATIONAL_MEMORY_RESOURCE_ID_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -8883,6 +9607,16 @@ export interface PostMemoryObservationalMemoryBufferStatus_RouteContract {
   request: PostMemoryObservationalMemoryBufferStatus_Request;
   response: PostMemoryObservationalMemoryBufferStatus_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_NOT_FOUND'
+    | 'MEMORY_BUFFER_STATUS_AWAIT_FAILED'
+    | 'MEMORY_NOT_CONFIGURED'
+    | 'MEMORY_STORAGE_NOT_INITIALIZED'
+    | 'OBSERVATIONAL_MEMORY_NOT_ENABLED'
+    | 'OBSERVATIONAL_MEMORY_PROCESSOR_UNAVAILABLE'
+    | 'RESOURCE_ID_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -8934,6 +9668,7 @@ export interface GetMemoryThreads_RouteContract {
   request: GetMemoryThreads_Request;
   response: GetMemoryThreads_Response;
   responseType: 'json';
+  errorCode: 'AGENT_NOT_FOUND' | 'MEMORY_NOT_CONFIGURED' | 'THREADS_LIST_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -8968,6 +9703,15 @@ export interface GetMemoryThreadsThreadId_RouteContract {
   request: GetMemoryThreadsThreadId_Request;
   response: GetMemoryThreadsThreadId_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_NOT_FOUND'
+    | 'MEMORY_NOT_CONFIGURED'
+    | 'REQUEST_ARGUMENT_REQUIRED'
+    | 'THREAD_ACCESS_DENIED'
+    | 'THREAD_GET_FAILED'
+    | 'THREAD_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -9029,6 +9773,16 @@ export interface GetMemoryThreadsThreadIdMessages_RouteContract {
   request: GetMemoryThreadsThreadIdMessages_Request;
   response: GetMemoryThreadsThreadIdMessages_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_NOT_FOUND'
+    | 'GATEWAY_MEMORY_METADATA_FILTER_UNSUPPORTED'
+    | 'MESSAGES_LIST_FAILED'
+    | 'REQUEST_ARGUMENT_REQUIRED'
+    | 'THREAD_ACCESS_DENIED'
+    | 'THREAD_ID_REQUIRED'
+    | 'THREAD_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -9072,6 +9826,13 @@ export interface GetMemoryThreadsThreadIdWorkingMemory_RouteContract {
   request: GetMemoryThreadsThreadIdWorkingMemory_Request;
   response: GetMemoryThreadsThreadIdWorkingMemory_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_NOT_FOUND'
+    | 'REQUEST_ARGUMENT_REQUIRED'
+    | 'THREAD_ACCESS_DENIED'
+    | 'WORKING_MEMORY_GET_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -9108,6 +9869,17 @@ export interface PostMemorySaveMessages_RouteContract {
   request: PostMemorySaveMessages_Request;
   response: PostMemorySaveMessages_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_NOT_FOUND'
+    | 'MEMORY_NOT_CONFIGURED'
+    | 'MESSAGES_REQUIRED'
+    | 'MESSAGES_RESOURCE_ACCESS_DENIED'
+    | 'MESSAGES_SAVE_FAILED'
+    | 'MESSAGES_THREAD_AND_RESOURCE_REQUIRED'
+    | 'MESSAGES_THREAD_RESOURCE_MISMATCH'
+    | 'THREAD_ACCESS_DENIED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -9149,6 +9921,14 @@ export interface PostMemoryThreads_RouteContract {
   request: PostMemoryThreads_Request;
   response: PostMemoryThreads_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_NOT_FOUND'
+    | 'MEMORY_NOT_CONFIGURED'
+    | 'REQUEST_ARGUMENT_REQUIRED'
+    | 'THREAD_ACCESS_DENIED'
+    | 'THREAD_CREATE_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -9191,6 +9971,15 @@ export interface PatchMemoryThreadsThreadId_RouteContract {
   request: PatchMemoryThreadsThreadId_Request;
   response: PatchMemoryThreadsThreadId_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_NOT_FOUND'
+    | 'MEMORY_NOT_CONFIGURED'
+    | 'REQUEST_ARGUMENT_REQUIRED'
+    | 'THREAD_ACCESS_DENIED'
+    | 'THREAD_NOT_FOUND'
+    | 'THREAD_UPDATE_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -9224,6 +10013,15 @@ export interface DeleteMemoryThreadsThreadId_RouteContract {
   request: DeleteMemoryThreadsThreadId_Request;
   response: DeleteMemoryThreadsThreadId_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_NOT_FOUND'
+    | 'MEMORY_NOT_CONFIGURED'
+    | 'REQUEST_ARGUMENT_REQUIRED'
+    | 'THREAD_ACCESS_DENIED'
+    | 'THREAD_DELETE_FAILED'
+    | 'THREAD_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -9284,6 +10082,15 @@ export interface PostMemoryThreadsThreadIdClone_RouteContract {
   request: PostMemoryThreadsThreadIdClone_Request;
   response: PostMemoryThreadsThreadIdClone_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_NOT_FOUND'
+    | 'MEMORY_NOT_CONFIGURED'
+    | 'REQUEST_ARGUMENT_REQUIRED'
+    | 'THREAD_ACCESS_DENIED'
+    | 'THREAD_CLONE_FAILED'
+    | 'THREAD_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -9324,6 +10131,17 @@ export interface PostMemoryThreadsThreadIdTransfer_RouteContract {
   request: PostMemoryThreadsThreadIdTransfer_Request;
   response: PostMemoryThreadsThreadIdTransfer_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_NOT_FOUND'
+    | 'MEMORY_NOT_CONFIGURED'
+    | 'REQUEST_ARGUMENT_REQUIRED'
+    | 'THREAD_ACCESS_DENIED'
+    | 'THREAD_NOT_FOUND'
+    | 'THREAD_TRANSFER_FAILED'
+    | 'THREAD_TRANSFER_REQUIRES_PRIVILEGED_CONTEXT'
+    | 'THREAD_TRANSFER_UNSUPPORTED_FOR_GATEWAY_AGENT'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -9369,6 +10187,17 @@ export interface PostMemoryThreadsThreadIdWorkingMemory_RouteContract {
   request: PostMemoryThreadsThreadIdWorkingMemory_Request;
   response: PostMemoryThreadsThreadIdWorkingMemory_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_NOT_FOUND'
+    | 'MEMORY_NOT_CONFIGURED'
+    | 'REQUEST_ARGUMENT_REQUIRED'
+    | 'THREAD_ACCESS_DENIED'
+    | 'THREAD_NOT_FOUND'
+    | 'WORKING_MEMORY_MERGE_INVALID'
+    | 'WORKING_MEMORY_MERGE_UNSUPPORTED'
+    | 'WORKING_MEMORY_UPDATE_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -9414,6 +10243,15 @@ export interface PostMemoryMessagesDelete_RouteContract {
   request: PostMemoryMessagesDelete_Request;
   response: PostMemoryMessagesDelete_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_NOT_FOUND'
+    | 'MEMORY_NOT_CONFIGURED'
+    | 'MESSAGES_DELETE_FAILED'
+    | 'MESSAGE_ACCESS_DENIED'
+    | 'MESSAGE_IDS_REQUIRED'
+    | 'THREAD_ACCESS_DENIED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -9457,6 +10295,14 @@ export interface GetMemorySearch_RouteContract {
   request: GetMemorySearch_Request;
   response: GetMemorySearch_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_NOT_FOUND'
+    | 'MEMORY_NOT_CONFIGURED'
+    | 'MEMORY_SEARCH_FAILED'
+    | 'REQUEST_ARGUMENT_REQUIRED'
+    | 'THREAD_ACCESS_DENIED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -9483,6 +10329,7 @@ export interface GetMemoryNetworkStatus_RouteContract {
   request: GetMemoryNetworkStatus_Request;
   response: GetMemoryNetworkStatus_Response;
   responseType: 'json';
+  errorCode: 'AGENT_NOT_FOUND' | 'MEMORY_STATUS_GET_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -9509,6 +10356,7 @@ export interface GetMemoryNetworkThreads_RouteContract {
   request: GetMemoryNetworkThreads_Request;
   response: GetMemoryNetworkThreads_Response;
   responseType: 'json';
+  errorCode: 'AGENT_NOT_FOUND' | 'MEMORY_NOT_CONFIGURED' | 'THREADS_LIST_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -9539,6 +10387,15 @@ export interface GetMemoryNetworkThreadsThreadId_RouteContract {
   request: GetMemoryNetworkThreadsThreadId_Request;
   response: GetMemoryNetworkThreadsThreadId_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_NOT_FOUND'
+    | 'MEMORY_NOT_CONFIGURED'
+    | 'REQUEST_ARGUMENT_REQUIRED'
+    | 'THREAD_ACCESS_DENIED'
+    | 'THREAD_GET_FAILED'
+    | 'THREAD_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -9592,6 +10449,16 @@ export interface GetMemoryNetworkThreadsThreadIdMessages_RouteContract {
   request: GetMemoryNetworkThreadsThreadIdMessages_Request;
   response: GetMemoryNetworkThreadsThreadIdMessages_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_NOT_FOUND'
+    | 'GATEWAY_MEMORY_METADATA_FILTER_UNSUPPORTED'
+    | 'MESSAGES_LIST_FAILED'
+    | 'REQUEST_ARGUMENT_REQUIRED'
+    | 'THREAD_ACCESS_DENIED'
+    | 'THREAD_ID_REQUIRED'
+    | 'THREAD_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -9624,6 +10491,17 @@ export interface PostMemoryNetworkSaveMessages_RouteContract {
   request: PostMemoryNetworkSaveMessages_Request;
   response: PostMemoryNetworkSaveMessages_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_NOT_FOUND'
+    | 'MEMORY_NOT_CONFIGURED'
+    | 'MESSAGES_REQUIRED'
+    | 'MESSAGES_RESOURCE_ACCESS_DENIED'
+    | 'MESSAGES_SAVE_FAILED'
+    | 'MESSAGES_THREAD_AND_RESOURCE_REQUIRED'
+    | 'MESSAGES_THREAD_RESOURCE_MISMATCH'
+    | 'THREAD_ACCESS_DENIED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -9656,6 +10534,14 @@ export interface PostMemoryNetworkThreads_RouteContract {
   request: PostMemoryNetworkThreads_Request;
   response: PostMemoryNetworkThreads_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_NOT_FOUND'
+    | 'MEMORY_NOT_CONFIGURED'
+    | 'REQUEST_ARGUMENT_REQUIRED'
+    | 'THREAD_ACCESS_DENIED'
+    | 'THREAD_CREATE_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -9692,6 +10578,15 @@ export interface PatchMemoryNetworkThreadsThreadId_RouteContract {
   request: PatchMemoryNetworkThreadsThreadId_Request;
   response: PatchMemoryNetworkThreadsThreadId_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_NOT_FOUND'
+    | 'MEMORY_NOT_CONFIGURED'
+    | 'REQUEST_ARGUMENT_REQUIRED'
+    | 'THREAD_ACCESS_DENIED'
+    | 'THREAD_NOT_FOUND'
+    | 'THREAD_UPDATE_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -9722,6 +10617,15 @@ export interface DeleteMemoryNetworkThreadsThreadId_RouteContract {
   request: DeleteMemoryNetworkThreadsThreadId_Request;
   response: DeleteMemoryNetworkThreadsThreadId_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_NOT_FOUND'
+    | 'MEMORY_NOT_CONFIGURED'
+    | 'REQUEST_ARGUMENT_REQUIRED'
+    | 'THREAD_ACCESS_DENIED'
+    | 'THREAD_DELETE_FAILED'
+    | 'THREAD_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -9754,6 +10658,15 @@ export interface PostMemoryNetworkMessagesDelete_RouteContract {
   request: PostMemoryNetworkMessagesDelete_Request;
   response: PostMemoryNetworkMessagesDelete_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_NOT_FOUND'
+    | 'MEMORY_NOT_CONFIGURED'
+    | 'MESSAGES_DELETE_FAILED'
+    | 'MESSAGE_ACCESS_DENIED'
+    | 'MESSAGE_IDS_REQUIRED'
+    | 'THREAD_ACCESS_DENIED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -9776,6 +10689,7 @@ export interface GetScoresScorers_RouteContract {
   request: GetScoresScorers_Request;
   response: GetScoresScorers_Response;
   responseType: 'json';
+  errorCode: 'SCORERS_LIST_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -9801,6 +10715,7 @@ export interface GetScoresScorersScorerId_RouteContract {
   request: GetScoresScorersScorerId_Request;
   response: GetScoresScorersScorerId_Response;
   responseType: 'json';
+  errorCode: 'SCORER_GET_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -9840,6 +10755,7 @@ export interface GetScoresRunRunId_RouteContract {
   request: GetScoresRunRunId_Request;
   response: GetScoresRunRunId_Response;
   responseType: 'json';
+  errorCode: 'SCORES_BY_RUN_LIST_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -9873,6 +10789,7 @@ export interface GetScoresScorerScorerId_RouteContract {
   request: GetScoresScorerScorerId_Request;
   response: GetScoresScorerScorerId_Response;
   responseType: 'json';
+  errorCode: 'SCORES_BY_SCORER_LIST_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -9908,6 +10825,7 @@ export interface GetScoresEntityEntityTypeEntityId_RouteContract {
   request: GetScoresEntityEntityTypeEntityId_Request;
   response: GetScoresEntityEntityTypeEntityId_Response;
   responseType: 'json';
+  errorCode: 'AGENT_ID_REQUIRED' | 'AGENT_NOT_FOUND' | 'SCORES_BY_ENTITY_LIST_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -9938,6 +10856,7 @@ export interface PostScores_RouteContract {
   request: PostScores_Request;
   response: PostScores_Response;
   responseType: 'json';
+  errorCode: 'SCORE_SAVE_FAILED' | 'STORAGE_NOT_CONFIGURED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -10037,6 +10956,15 @@ export interface GetObservabilityTraces_RouteContract {
   request: GetObservabilityTraces_Request;
   response: GetObservabilityTraces_Response;
   responseType: 'json';
+  errorCode:
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'OBSERVABILITY_DELTA_POLLING_UNSUPPORTED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'TRACES_LIST_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -10070,6 +10998,15 @@ export interface GetObservabilityTracesLight_RouteContract {
   request: GetObservabilityTracesLight_Request;
   response: GetObservabilityTracesLight_Response;
   responseType: 'json';
+  errorCode:
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'OBSERVABILITY_DELTA_POLLING_UNSUPPORTED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'TRACES_LIGHT_LIST_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -10166,6 +11103,15 @@ export interface GetObservabilityBranches_RouteContract {
   request: GetObservabilityBranches_Request;
   response: GetObservabilityBranches_Response;
   responseType: 'json';
+  errorCode:
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'OBSERVABILITY_DELTA_POLLING_UNSUPPORTED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'TRACE_BRANCHES_LIST_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -10208,6 +11154,14 @@ export interface GetObservabilityTracesTraceIdBranchesSpanId_RouteContract {
   request: GetObservabilityTracesTraceIdBranchesSpanId_Request;
   response: GetObservabilityTracesTraceIdBranchesSpanId_Response;
   responseType: 'json';
+  errorCode:
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'TRACE_BRANCH_GET_FAILED'
+    | 'TRACE_BRANCH_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -10237,6 +11191,14 @@ export interface GetObservabilityTracesTraceId_RouteContract {
   request: GetObservabilityTracesTraceId_Request;
   response: GetObservabilityTracesTraceId_Response;
   responseType: 'json';
+  errorCode:
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'TRACE_GET_FAILED'
+    | 'TRACE_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -10265,6 +11227,14 @@ export interface GetObservabilityTracesTraceIdLight_RouteContract {
   request: GetObservabilityTracesTraceIdLight_Request;
   response: GetObservabilityTracesTraceIdLight_Response;
   responseType: 'json';
+  errorCode:
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'TRACE_LIGHT_GET_FAILED'
+    | 'TRACE_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -10293,6 +11263,14 @@ export interface GetObservabilityTracesTraceIdSpansSpanId_RouteContract {
   request: GetObservabilityTracesTraceIdSpansSpanId_Request;
   response: GetObservabilityTracesTraceIdSpansSpanId_Response;
   responseType: 'json';
+  errorCode:
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'SPAN_GET_FAILED'
+    | 'SPAN_NOT_FOUND'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -10322,6 +11300,14 @@ export interface GetObservabilityTracesTraceIdTrajectory_RouteContract {
   request: GetObservabilityTracesTraceIdTrajectory_Request;
   response: GetObservabilityTracesTraceIdTrajectory_Response;
   responseType: 'json';
+  errorCode:
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'TRACE_NOT_FOUND'
+    | 'TRACE_TRAJECTORY_GET_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -10353,6 +11339,13 @@ export interface PostObservabilityTracesDelete_RouteContract {
   request: PostObservabilityTracesDelete_Request;
   response: PostObservabilityTracesDelete_Response;
   responseType: 'json';
+  errorCode:
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'TRACES_DELETE_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -10391,6 +11384,13 @@ export interface PostObservabilityTracesScore_RouteContract {
   request: PostObservabilityTracesScore_Request;
   response: PostObservabilityTracesScore_Response;
   responseType: 'json';
+  errorCode:
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'SCORER_NOT_FOUND'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'TRACES_SCORE_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -10539,6 +11539,13 @@ export interface GetObservabilityTracesTraceIdSpanIdScores_RouteContract {
   request: GetObservabilityTracesTraceIdSpanIdScores_Request;
   response: GetObservabilityTracesTraceIdSpanIdScores_Response;
   responseType: 'json';
+  errorCode:
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'SCORES_STORAGE_UNAVAILABLE'
+    | 'SPAN_SCORES_LIST_FAILED'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -10629,6 +11636,17 @@ export interface PostObservabilityTracesQuery_RouteContract {
   request: PostObservabilityTracesQuery_Request;
   response: PostObservabilityTracesQuery_Response;
   responseType: 'json';
+  errorCode:
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'OBSERVABILITY_TENANT_SCOPE_UNSUPPORTED'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'TRACES_QUERY_FAILED'
+    | 'TRACE_QUERY_INVALID'
+    | 'TRACE_QUERY_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -10714,6 +11732,18 @@ export interface PostObservabilityTracesAggregate_RouteContract {
   request: PostObservabilityTracesAggregate_Request;
   response: PostObservabilityTracesAggregate_Response;
   responseType: 'json';
+  errorCode:
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'OBSERVABILITY_TENANT_SCOPE_UNSUPPORTED'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'TRACES_AGGREGATE_FAILED'
+    | 'TRACE_AGGREGATE_UNSUPPORTED'
+    | 'TRACE_QUERY_INVALID'
+    | 'TRACE_QUERY_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -10755,6 +11785,17 @@ export interface PostObservabilitySpansAggregate_RouteContract {
   request: PostObservabilitySpansAggregate_Request;
   response: PostObservabilitySpansAggregate_Response;
   responseType: 'json';
+  errorCode:
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'OBSERVABILITY_TENANT_SCOPE_UNSUPPORTED'
+    | 'SPANS_AGGREGATE_FAILED'
+    | 'SPAN_AGGREGATE_UNSUPPORTED'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'TRACE_QUERY_INVALID'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -10862,6 +11903,18 @@ export interface PostObservabilityThreadsQuery_RouteContract {
   request: PostObservabilityThreadsQuery_Request;
   response: PostObservabilityThreadsQuery_Response;
   responseType: 'json';
+  errorCode:
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'OBSERVABILITY_TENANT_SCOPE_UNSUPPORTED'
+    | 'OBSERVABILITY_THREADS_QUERY_FAILED'
+    | 'OBSERVABILITY_THREAD_QUERY_UNSUPPORTED'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'TRACE_QUERY_INVALID'
+    | 'TRACE_QUERY_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -10946,6 +11999,18 @@ export interface PostObservabilitySpansQuery_RouteContract {
   request: PostObservabilitySpansQuery_Request;
   response: PostObservabilitySpansQuery_Response;
   responseType: 'json';
+  errorCode:
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'OBSERVABILITY_TENANT_SCOPE_UNSUPPORTED'
+    | 'SPANS_QUERY_FAILED'
+    | 'SPAN_QUERY_UNSUPPORTED'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'TRACE_QUERY_INVALID'
+    | 'TRACE_QUERY_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -11026,6 +12091,17 @@ export interface PostObservabilityTracesQueryFields_RouteContract {
   request: PostObservabilityTracesQueryFields_Request;
   response: PostObservabilityTracesQueryFields_Response;
   responseType: 'json';
+  errorCode:
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'OBSERVABILITY_TENANT_SCOPE_UNSUPPORTED'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'TRACE_QUERY_DISCOVERY_UNSUPPORTED'
+    | 'TRACE_QUERY_FIELDS_GET_FAILED'
+    | 'TRACE_QUERY_INVALID'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -11067,6 +12143,17 @@ export interface PostObservabilityTracesQueryValues_RouteContract {
   request: PostObservabilityTracesQueryValues_Request;
   response: PostObservabilityTracesQueryValues_Response;
   responseType: 'json';
+  errorCode:
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'OBSERVABILITY_TENANT_SCOPE_UNSUPPORTED'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'TRACE_QUERY_DISCOVERY_UNSUPPORTED'
+    | 'TRACE_QUERY_INVALID'
+    | 'TRACE_QUERY_VALUES_GET_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -11222,6 +12309,15 @@ export interface GetObservabilityMetrics_RouteContract {
   request: GetObservabilityMetrics_Request;
   response: GetObservabilityMetrics_Response;
   responseType: 'json';
+  errorCode:
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'METRICS_LIST_FAILED'
+    | 'OBSERVABILITY_DELTA_POLLING_UNSUPPORTED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -11353,6 +12449,15 @@ export interface GetObservabilityLogs_RouteContract {
   request: GetObservabilityLogs_Request;
   response: GetObservabilityLogs_Response;
   responseType: 'json';
+  errorCode:
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'OBSERVABILITY_DELTA_POLLING_UNSUPPORTED'
+    | 'OBSERVABILITY_LOGS_LIST_FAILED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -11440,6 +12545,15 @@ export interface GetObservabilityScores_RouteContract {
   request: GetObservabilityScores_Request;
   response: GetObservabilityScores_Response;
   responseType: 'json';
+  errorCode:
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'OBSERVABILITY_DELTA_POLLING_UNSUPPORTED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'SCORES_LIST_FAILED'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -11521,6 +12635,14 @@ export interface PostObservabilityScores_RouteContract {
   request: PostObservabilityScores_Request;
   response: PostObservabilityScores_Response;
   responseType: 'json';
+  errorCode:
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'SCORE_CREATE_FAILED'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -11554,6 +12676,14 @@ export interface DeleteObservabilityScores_RouteContract {
   request: DeleteObservabilityScores_Request;
   response: DeleteObservabilityScores_Response;
   responseType: 'json';
+  errorCode:
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'SCORES_DELETE_FAILED'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -11581,6 +12711,14 @@ export interface GetObservabilityScoresScoreId_RouteContract {
   request: GetObservabilityScoresScoreId_Request;
   response: GetObservabilityScoresScoreId_Response;
   responseType: 'json';
+  errorCode:
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'SCORE_GET_FAILED'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -11625,6 +12763,14 @@ export interface PostObservabilityScoresAggregate_RouteContract {
   request: PostObservabilityScoresAggregate_Request;
   response: PostObservabilityScoresAggregate_Response;
   responseType: 'json';
+  errorCode:
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'SCORE_AGGREGATE_GET_FAILED'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -11671,6 +12817,14 @@ export interface PostObservabilityScoresBreakdown_RouteContract {
   request: PostObservabilityScoresBreakdown_Request;
   response: PostObservabilityScoresBreakdown_Response;
   responseType: 'json';
+  errorCode:
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'SCORE_BREAKDOWN_GET_FAILED'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -11721,6 +12875,14 @@ export interface PostObservabilityScoresTimeseries_RouteContract {
   request: PostObservabilityScoresTimeseries_Request;
   response: PostObservabilityScoresTimeseries_Response;
   responseType: 'json';
+  errorCode:
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'SCORE_TIME_SERIES_GET_FAILED'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -11769,6 +12931,14 @@ export interface PostObservabilityScoresPercentiles_RouteContract {
   request: PostObservabilityScoresPercentiles_Request;
   response: PostObservabilityScoresPercentiles_Response;
   responseType: 'json';
+  errorCode:
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'SCORE_PERCENTILES_GET_FAILED'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -11909,6 +13079,15 @@ export interface GetObservabilityFeedback_RouteContract {
   request: GetObservabilityFeedback_Request;
   response: GetObservabilityFeedback_Response;
   responseType: 'json';
+  errorCode:
+    | 'FEEDBACK_LIST_FAILED'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'OBSERVABILITY_DELTA_POLLING_UNSUPPORTED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -11991,6 +13170,14 @@ export interface PostObservabilityFeedback_RouteContract {
   request: PostObservabilityFeedback_Request;
   response: PostObservabilityFeedback_Response;
   responseType: 'json';
+  errorCode:
+    | 'FEEDBACK_CREATE_FAILED'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -12024,6 +13211,14 @@ export interface DeleteObservabilityFeedback_RouteContract {
   request: DeleteObservabilityFeedback_Request;
   response: DeleteObservabilityFeedback_Response;
   responseType: 'json';
+  errorCode:
+    | 'FEEDBACK_DELETE_FAILED'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -12114,6 +13309,15 @@ export interface PatchObservabilityFeedbackFeedbackIdReviewStatus_RouteContract 
   request: PatchObservabilityFeedbackFeedbackIdReviewStatus_Request;
   response: PatchObservabilityFeedbackFeedbackIdReviewStatus_Response;
   responseType: 'json';
+  errorCode:
+    | 'FEEDBACK_REVIEW_STATUS_UPDATE_FAILED'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'OBSERVABILITY_UPDATE_FEEDBACK_REVIEW_STATUS_CONFLICT'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -12151,6 +13355,14 @@ export interface PostObservabilityFeedbackAggregate_RouteContract {
   request: PostObservabilityFeedbackAggregate_Request;
   response: PostObservabilityFeedbackAggregate_Response;
   responseType: 'json';
+  errorCode:
+    | 'FEEDBACK_AGGREGATE_GET_FAILED'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -12188,6 +13400,14 @@ export interface PostObservabilityFeedbackBreakdown_RouteContract {
   request: PostObservabilityFeedbackBreakdown_Request;
   response: PostObservabilityFeedbackBreakdown_Response;
   responseType: 'json';
+  errorCode:
+    | 'FEEDBACK_BREAKDOWN_GET_FAILED'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -12238,6 +13458,14 @@ export interface PostObservabilityFeedbackTimeseries_RouteContract {
   request: PostObservabilityFeedbackTimeseries_Request;
   response: PostObservabilityFeedbackTimeseries_Response;
   responseType: 'json';
+  errorCode:
+    | 'FEEDBACK_TIME_SERIES_GET_FAILED'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -12275,6 +13503,14 @@ export interface PostObservabilityFeedbackPercentiles_RouteContract {
   request: PostObservabilityFeedbackPercentiles_Request;
   response: PostObservabilityFeedbackPercentiles_Response;
   responseType: 'json';
+  errorCode:
+    | 'FEEDBACK_PERCENTILES_GET_FAILED'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -12327,6 +13563,14 @@ export interface PostObservabilityMetricsAggregate_RouteContract {
   request: PostObservabilityMetricsAggregate_Request;
   response: PostObservabilityMetricsAggregate_Response;
   responseType: 'json';
+  errorCode:
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'METRIC_AGGREGATE_GET_FAILED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -12381,6 +13625,14 @@ export interface PostObservabilityMetricsBreakdown_RouteContract {
   request: PostObservabilityMetricsBreakdown_Request;
   response: PostObservabilityMetricsBreakdown_Response;
   responseType: 'json';
+  errorCode:
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'METRIC_BREAKDOWN_GET_FAILED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -12435,6 +13687,14 @@ export interface PostObservabilityMetricsTimeseries_RouteContract {
   request: PostObservabilityMetricsTimeseries_Request;
   response: PostObservabilityMetricsTimeseries_Response;
   responseType: 'json';
+  errorCode:
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'METRIC_TIME_SERIES_GET_FAILED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -12470,6 +13730,14 @@ export interface PostObservabilityMetricsPercentiles_RouteContract {
   request: PostObservabilityMetricsPercentiles_Request;
   response: PostObservabilityMetricsPercentiles_Response;
   responseType: 'json';
+  errorCode:
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'METRIC_PERCENTILES_GET_FAILED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -12504,6 +13772,14 @@ export interface GetObservabilityDiscoveryMetricNames_RouteContract {
   request: GetObservabilityDiscoveryMetricNames_Request;
   response: GetObservabilityDiscoveryMetricNames_Response;
   responseType: 'json';
+  errorCode:
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'METRIC_NAMES_LIST_FAILED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -12536,6 +13812,14 @@ export interface GetObservabilityDiscoveryMetricLabelKeys_RouteContract {
   request: GetObservabilityDiscoveryMetricLabelKeys_Request;
   response: GetObservabilityDiscoveryMetricLabelKeys_Response;
   responseType: 'json';
+  errorCode:
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'METRIC_LABEL_KEYS_LIST_FAILED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -12574,6 +13858,14 @@ export interface GetObservabilityDiscoveryMetricLabelValues_RouteContract {
   request: GetObservabilityDiscoveryMetricLabelValues_Request;
   response: GetObservabilityDiscoveryMetricLabelValues_Response;
   responseType: 'json';
+  errorCode:
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'METRIC_LABEL_VALUES_LIST_FAILED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -12597,6 +13889,14 @@ export interface GetObservabilityDiscoveryEntityTypes_RouteContract {
   request: GetObservabilityDiscoveryEntityTypes_Request;
   response: GetObservabilityDiscoveryEntityTypes_Response;
   responseType: 'json';
+  errorCode:
+    | 'ENTITY_TYPES_LIST_FAILED'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -12629,6 +13929,14 @@ export interface GetObservabilityDiscoveryEntityNames_RouteContract {
   request: GetObservabilityDiscoveryEntityNames_Request;
   response: GetObservabilityDiscoveryEntityNames_Response;
   responseType: 'json';
+  errorCode:
+    | 'ENTITY_NAMES_LIST_FAILED'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -12652,6 +13960,14 @@ export interface GetObservabilityDiscoveryServiceNames_RouteContract {
   request: GetObservabilityDiscoveryServiceNames_Request;
   response: GetObservabilityDiscoveryServiceNames_Response;
   responseType: 'json';
+  errorCode:
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'SERVICE_NAMES_LIST_FAILED'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -12675,6 +13991,14 @@ export interface GetObservabilityDiscoveryEnvironments_RouteContract {
   request: GetObservabilityDiscoveryEnvironments_Request;
   response: GetObservabilityDiscoveryEnvironments_Response;
   responseType: 'json';
+  errorCode:
+    | 'ENVIRONMENTS_LIST_FAILED'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -12704,6 +14028,14 @@ export interface GetObservabilityDiscoveryTags_RouteContract {
   request: GetObservabilityDiscoveryTags_Request;
   response: GetObservabilityDiscoveryTags_Response;
   responseType: 'json';
+  errorCode:
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'OBSERVABILITY_OPERATION_NOT_SUPPORTED'
+    | 'OBSERVABILITY_STORAGE_UNAVAILABLE'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'TAGS_LIST_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -12728,6 +14060,7 @@ export interface GetObservabilityCapabilities_RouteContract {
   request: GetObservabilityCapabilities_Request;
   response: GetObservabilityCapabilities_Response;
   responseType: 'json';
+  errorCode: CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -12750,6 +14083,7 @@ export interface GetLogsTransports_RouteContract {
   request: GetLogsTransports_Request;
   response: GetLogsTransports_Response;
   responseType: 'json';
+  errorCode: 'LOG_TRANSPORTS_LIST_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -12803,6 +14137,7 @@ export interface GetLogs_RouteContract {
   request: GetLogs_Request;
   response: GetLogs_Response;
   responseType: 'json';
+  errorCode: 'LOGS_LIST_FAILED' | 'REQUEST_ARGUMENT_REQUIRED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -12831,6 +14166,7 @@ export interface GetLogsRunId_RouteContract {
   request: GetLogsRunId_Request;
   response: GetLogsRunId_Response;
   responseType: 'json';
+  errorCode: 'LOGS_BY_RUN_LIST_FAILED' | 'REQUEST_ARGUMENT_REQUIRED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -12873,6 +14209,14 @@ export interface PostVectorVectorNameUpsert_RouteContract {
   request: PostVectorVectorNameUpsert_Request;
   response: PostVectorVectorNameUpsert_Response;
   responseType: 'json';
+  errorCode:
+    | 'VECTORS_UPSERT_FAILED'
+    | 'VECTOR_INDEX_NAME_REQUIRED'
+    | 'VECTOR_STORE_NAME_REQUIRED'
+    | 'VECTOR_STORE_NOT_FOUND'
+    | 'VECTOR_VECTORS_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -12907,6 +14251,15 @@ export interface PostVectorVectorNameCreateIndex_RouteContract {
   request: PostVectorVectorNameCreateIndex_Request;
   response: PostVectorVectorNameCreateIndex_Response;
   responseType: 'json';
+  errorCode:
+    | 'VECTOR_INDEX_CREATE_FAILED'
+    | 'VECTOR_INDEX_DIMENSION_INVALID'
+    | 'VECTOR_INDEX_METRIC_INVALID'
+    | 'VECTOR_INDEX_NAME_REQUIRED'
+    | 'VECTOR_STORE_NAME_REQUIRED'
+    | 'VECTOR_STORE_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -12945,6 +14298,14 @@ export interface PostVectorVectorNameQuery_RouteContract {
   request: PostVectorVectorNameQuery_Request;
   response: PostVectorVectorNameQuery_Response;
   responseType: 'json';
+  errorCode:
+    | 'VECTORS_QUERY_FAILED'
+    | 'VECTOR_INDEX_NAME_REQUIRED'
+    | 'VECTOR_QUERY_VECTOR_REQUIRED'
+    | 'VECTOR_STORE_NAME_REQUIRED'
+    | 'VECTOR_STORE_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -12967,6 +14328,12 @@ export interface GetVectorVectorNameIndexes_RouteContract {
   request: GetVectorVectorNameIndexes_Request;
   response: GetVectorVectorNameIndexes_Response;
   responseType: 'json';
+  errorCode:
+    | 'VECTOR_INDEXES_LIST_FAILED'
+    | 'VECTOR_STORE_NAME_REQUIRED'
+    | 'VECTOR_STORE_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -13000,6 +14367,13 @@ export interface GetVectorVectorNameIndexesIndexName_RouteContract {
   request: GetVectorVectorNameIndexesIndexName_Request;
   response: GetVectorVectorNameIndexesIndexName_Response;
   responseType: 'json';
+  errorCode:
+    | 'VECTOR_INDEX_DESCRIBE_FAILED'
+    | 'VECTOR_INDEX_NAME_REQUIRED'
+    | 'VECTOR_STORE_NAME_REQUIRED'
+    | 'VECTOR_STORE_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -13024,6 +14398,13 @@ export interface DeleteVectorVectorNameIndexesIndexName_RouteContract {
   request: DeleteVectorVectorNameIndexesIndexName_Request;
   response: DeleteVectorVectorNameIndexesIndexName_Response;
   responseType: 'json';
+  errorCode:
+    | 'VECTOR_INDEX_DELETE_FAILED'
+    | 'VECTOR_INDEX_NAME_REQUIRED'
+    | 'VECTOR_STORE_NAME_REQUIRED'
+    | 'VECTOR_STORE_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -13051,6 +14432,7 @@ export interface GetVectors_RouteContract {
   request: GetVectors_Request;
   response: GetVectors_Response;
   responseType: 'json';
+  errorCode: 'VECTOR_STORES_LIST_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -13080,6 +14462,7 @@ export interface GetEmbedders_RouteContract {
   request: GetEmbedders_Request;
   response: GetEmbedders_Response;
   responseType: 'json';
+  errorCode: 'EMBEDDERS_LIST_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -13205,6 +14588,7 @@ export interface GetWellKnownAgentIdAgentCardJson_RouteContract {
   request: GetWellKnownAgentIdAgentCardJson_Request;
   response: GetWellKnownAgentIdAgentCardJson_Response;
   responseType: 'datastream-response';
+  errorCode: 'AGENT_ID_REQUIRED' | 'AGENT_NOT_FOUND' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -13413,6 +14797,7 @@ export interface PostA2aAgentId_RouteContract {
   request: PostA2aAgentId_Request;
   response: PostA2aAgentId_Response;
   responseType: 'datastream-response';
+  errorCode: 'AGENT_ID_REQUIRED' | 'AGENT_NOT_FOUND' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -13453,6 +14838,13 @@ export interface GetWorkspaces_RouteContract {
   request: GetWorkspaces_Request;
   response: GetWorkspaces_Response;
   responseType: 'json';
+  errorCode:
+    | 'WORKSPACES_LIST_FAILED'
+    | 'WORKSPACE_PATH_ACCESS_DENIED'
+    | 'WORKSPACE_PATH_NOT_FOUND'
+    | 'WORKSPACE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -13531,6 +14923,13 @@ export interface GetWorkspacesWorkspaceId_RouteContract {
   request: GetWorkspacesWorkspaceId_Request;
   response: GetWorkspacesWorkspaceId_Response;
   responseType: 'json';
+  errorCode:
+    | 'WORKSPACE_GET_FAILED'
+    | 'WORKSPACE_PATH_ACCESS_DENIED'
+    | 'WORKSPACE_PATH_NOT_FOUND'
+    | 'WORKSPACE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -13572,6 +14971,15 @@ export interface GetWorkspacesWorkspaceIdFsRead_RouteContract {
   request: GetWorkspacesWorkspaceIdFsRead_Request;
   response: GetWorkspacesWorkspaceIdFsRead_Response;
   responseType: 'json';
+  errorCode:
+    | 'WORKSPACE_FILESYSTEM_NOT_CONFIGURED'
+    | 'WORKSPACE_FILE_READ_FAILED'
+    | 'WORKSPACE_PATH_ACCESS_DENIED'
+    | 'WORKSPACE_PATH_NOT_FOUND'
+    | 'WORKSPACE_PATH_REQUIRED'
+    | 'WORKSPACE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -13614,6 +15022,16 @@ export interface PostWorkspacesWorkspaceIdFsWrite_RouteContract {
   request: PostWorkspacesWorkspaceIdFsWrite_Request;
   response: PostWorkspacesWorkspaceIdFsWrite_Response;
   responseType: 'json';
+  errorCode:
+    | 'WORKSPACE_FILESYSTEM_NOT_CONFIGURED'
+    | 'WORKSPACE_FILE_WRITE_FAILED'
+    | 'WORKSPACE_PATH_ACCESS_DENIED'
+    | 'WORKSPACE_PATH_NOT_FOUND'
+    | 'WORKSPACE_PATH_REQUIRED'
+    | 'WORKSPACE_READ_ONLY'
+    | 'WORKSPACE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -13679,6 +15097,14 @@ export interface GetWorkspacesWorkspaceIdFsList_RouteContract {
   request: GetWorkspacesWorkspaceIdFsList_Request;
   response: GetWorkspacesWorkspaceIdFsList_Response;
   responseType: 'json';
+  errorCode:
+    | 'WORKSPACE_DIRECTORY_LIST_FAILED'
+    | 'WORKSPACE_PATH_ACCESS_DENIED'
+    | 'WORKSPACE_PATH_NOT_FOUND'
+    | 'WORKSPACE_PATH_REQUIRED'
+    | 'WORKSPACE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -13716,6 +15142,16 @@ export interface DeleteWorkspacesWorkspaceIdFsDelete_RouteContract {
   request: DeleteWorkspacesWorkspaceIdFsDelete_Request;
   response: DeleteWorkspacesWorkspaceIdFsDelete_Response;
   responseType: 'json';
+  errorCode:
+    | 'WORKSPACE_FILESYSTEM_NOT_CONFIGURED'
+    | 'WORKSPACE_FILE_DELETE_FAILED'
+    | 'WORKSPACE_PATH_ACCESS_DENIED'
+    | 'WORKSPACE_PATH_NOT_FOUND'
+    | 'WORKSPACE_PATH_REQUIRED'
+    | 'WORKSPACE_READ_ONLY'
+    | 'WORKSPACE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -13751,6 +15187,16 @@ export interface PostWorkspacesWorkspaceIdFsMkdir_RouteContract {
   request: PostWorkspacesWorkspaceIdFsMkdir_Request;
   response: PostWorkspacesWorkspaceIdFsMkdir_Response;
   responseType: 'json';
+  errorCode:
+    | 'WORKSPACE_DIRECTORY_CREATE_FAILED'
+    | 'WORKSPACE_FILESYSTEM_NOT_CONFIGURED'
+    | 'WORKSPACE_PATH_ACCESS_DENIED'
+    | 'WORKSPACE_PATH_NOT_FOUND'
+    | 'WORKSPACE_PATH_REQUIRED'
+    | 'WORKSPACE_READ_ONLY'
+    | 'WORKSPACE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -13791,6 +15237,15 @@ export interface GetWorkspacesWorkspaceIdFsStat_RouteContract {
   request: GetWorkspacesWorkspaceIdFsStat_Request;
   response: GetWorkspacesWorkspaceIdFsStat_Response;
   responseType: 'json';
+  errorCode:
+    | 'WORKSPACE_FILESYSTEM_NOT_CONFIGURED'
+    | 'WORKSPACE_FILE_STAT_FAILED'
+    | 'WORKSPACE_PATH_ACCESS_DENIED'
+    | 'WORKSPACE_PATH_NOT_FOUND'
+    | 'WORKSPACE_PATH_REQUIRED'
+    | 'WORKSPACE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -13851,6 +15306,14 @@ export interface GetWorkspacesWorkspaceIdSearch_RouteContract {
   request: GetWorkspacesWorkspaceIdSearch_Request;
   response: GetWorkspacesWorkspaceIdSearch_Response;
   responseType: 'json';
+  errorCode:
+    | 'WORKSPACE_PATH_ACCESS_DENIED'
+    | 'WORKSPACE_PATH_NOT_FOUND'
+    | 'WORKSPACE_SEARCH_FAILED'
+    | 'WORKSPACE_SEARCH_QUERY_REQUIRED'
+    | 'WORKSPACE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -13892,6 +15355,16 @@ export interface PostWorkspacesWorkspaceIdIndex_RouteContract {
   request: PostWorkspacesWorkspaceIdIndex_Request;
   response: PostWorkspacesWorkspaceIdIndex_Response;
   responseType: 'json';
+  errorCode:
+    | 'WORKSPACE_INDEX_FAILED'
+    | 'WORKSPACE_NOT_FOUND'
+    | 'WORKSPACE_PATH_ACCESS_DENIED'
+    | 'WORKSPACE_PATH_NOT_FOUND'
+    | 'WORKSPACE_PATH_REQUIRED'
+    | 'WORKSPACE_SEARCH_NOT_CONFIGURED'
+    | 'WORKSPACE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -13954,6 +15427,14 @@ export interface GetWorkspacesWorkspaceIdSkillsSearch_RouteContract {
   request: GetWorkspacesWorkspaceIdSkillsSearch_Request;
   response: GetWorkspacesWorkspaceIdSkillsSearch_Response;
   responseType: 'json';
+  errorCode:
+    | 'WORKSPACE_PATH_ACCESS_DENIED'
+    | 'WORKSPACE_PATH_NOT_FOUND'
+    | 'WORKSPACE_SEARCH_QUERY_REQUIRED'
+    | 'WORKSPACE_SKILLS_SEARCH_FAILED'
+    | 'WORKSPACE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -14001,6 +15482,13 @@ export interface GetWorkspacesWorkspaceIdSkills_RouteContract {
   request: GetWorkspacesWorkspaceIdSkills_Request;
   response: GetWorkspacesWorkspaceIdSkills_Response;
   responseType: 'json';
+  errorCode:
+    | 'WORKSPACE_PATH_ACCESS_DENIED'
+    | 'WORKSPACE_PATH_NOT_FOUND'
+    | 'WORKSPACE_SKILLS_LIST_FAILED'
+    | 'WORKSPACE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -14064,6 +15552,16 @@ export interface GetWorkspacesWorkspaceIdSkillsSkillName_RouteContract {
   request: GetWorkspacesWorkspaceIdSkillsSkillName_Request;
   response: GetWorkspacesWorkspaceIdSkillsSkillName_Response;
   responseType: 'json';
+  errorCode:
+    | 'SKILL_NAME_REQUIRED'
+    | 'WORKSPACE_PATH_ACCESS_DENIED'
+    | 'WORKSPACE_PATH_NOT_FOUND'
+    | 'WORKSPACE_SKILLS_NOT_CONFIGURED'
+    | 'WORKSPACE_SKILL_GET_FAILED'
+    | 'WORKSPACE_SKILL_NOT_FOUND'
+    | 'WORKSPACE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -14098,6 +15596,16 @@ export interface GetWorkspacesWorkspaceIdSkillsSkillNameReferences_RouteContract
   request: GetWorkspacesWorkspaceIdSkillsSkillNameReferences_Request;
   response: GetWorkspacesWorkspaceIdSkillsSkillNameReferences_Response;
   responseType: 'json';
+  errorCode:
+    | 'SKILL_NAME_REQUIRED'
+    | 'WORKSPACE_PATH_ACCESS_DENIED'
+    | 'WORKSPACE_PATH_NOT_FOUND'
+    | 'WORKSPACE_SKILLS_NOT_CONFIGURED'
+    | 'WORKSPACE_SKILL_NOT_FOUND'
+    | 'WORKSPACE_SKILL_REFERENCES_LIST_FAILED'
+    | 'WORKSPACE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -14140,6 +15648,18 @@ export interface GetWorkspacesWorkspaceIdSkillsSkillNameReferencesReferencePath_
   request: GetWorkspacesWorkspaceIdSkillsSkillNameReferencesReferencePath_Request;
   response: GetWorkspacesWorkspaceIdSkillsSkillNameReferencesReferencePath_Response;
   responseType: 'json';
+  errorCode:
+    | 'WORKSPACE_PATH_ABSOLUTE_NOT_ALLOWED'
+    | 'WORKSPACE_PATH_ACCESS_DENIED'
+    | 'WORKSPACE_PATH_NOT_FOUND'
+    | 'WORKSPACE_PATH_TRAVERSAL'
+    | 'WORKSPACE_SKILLS_NOT_CONFIGURED'
+    | 'WORKSPACE_SKILL_NOT_FOUND'
+    | 'WORKSPACE_SKILL_REFERENCE_GET_FAILED'
+    | 'WORKSPACE_SKILL_REFERENCE_NOT_FOUND'
+    | 'WORKSPACE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -14185,6 +15705,7 @@ export interface GetWorkspacesWorkspaceIdSkillsShSearch_RouteContract {
   request: GetWorkspacesWorkspaceIdSkillsShSearch_Request;
   response: GetWorkspacesWorkspaceIdSkillsShSearch_Response;
   responseType: 'json';
+  errorCode: 'SKILLS_REGISTRY_REQUEST_FAILED' | 'WORKSPACE_SKILLS_SEARCH_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -14230,6 +15751,11 @@ export interface GetWorkspacesWorkspaceIdSkillsShPopular_RouteContract {
   request: GetWorkspacesWorkspaceIdSkillsShPopular_Request;
   response: GetWorkspacesWorkspaceIdSkillsShPopular_Response;
   responseType: 'json';
+  errorCode:
+    | 'SKILLS_REGISTRY_REQUEST_FAILED'
+    | 'WORKSPACE_POPULAR_SKILLS_FETCH_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -14269,6 +15795,12 @@ export interface GetWorkspacesWorkspaceIdSkillsShPreview_RouteContract {
   request: GetWorkspacesWorkspaceIdSkillsShPreview_Request;
   response: GetWorkspacesWorkspaceIdSkillsShPreview_Response;
   responseType: 'json';
+  errorCode:
+    | 'SKILLS_REGISTRY_SKILL_CONTENT_UNAVAILABLE'
+    | 'SKILLS_REGISTRY_SKILL_NOT_FOUND'
+    | 'WORKSPACE_SKILL_PREVIEW_FETCH_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -14313,6 +15845,21 @@ export interface PostWorkspacesWorkspaceIdSkillsShInstall_RouteContract {
   request: PostWorkspacesWorkspaceIdSkillsShInstall_Request;
   response: PostWorkspacesWorkspaceIdSkillsShInstall_Response;
   responseType: 'json';
+  errorCode:
+    | 'SKILLS_REGISTRY_SKILL_NOT_FOUND'
+    | 'SKILL_NAME_INVALID'
+    | 'WORKSPACE_FILESYSTEM_NOT_CONFIGURED'
+    | 'WORKSPACE_MOUNT_NOT_FOUND'
+    | 'WORKSPACE_MOUNT_READ_ONLY'
+    | 'WORKSPACE_NOT_FOUND'
+    | 'WORKSPACE_NO_WRITABLE_MOUNT'
+    | 'WORKSPACE_PATH_ABSOLUTE_NOT_ALLOWED'
+    | 'WORKSPACE_PATH_TRAVERSAL'
+    | 'WORKSPACE_READ_ONLY'
+    | 'WORKSPACE_SKILL_INSTALL_FAILED'
+    | 'WORKSPACE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -14350,6 +15897,19 @@ export interface PostWorkspacesWorkspaceIdSkillsShRemove_RouteContract {
   request: PostWorkspacesWorkspaceIdSkillsShRemove_Request;
   response: PostWorkspacesWorkspaceIdSkillsShRemove_Response;
   responseType: 'json';
+  errorCode:
+    | 'SKILL_NAME_INVALID'
+    | 'WORKSPACE_FILESYSTEM_NOT_CONFIGURED'
+    | 'WORKSPACE_MOUNT_NOT_FOUND'
+    | 'WORKSPACE_MOUNT_READ_ONLY'
+    | 'WORKSPACE_NOT_FOUND'
+    | 'WORKSPACE_NO_WRITABLE_MOUNT'
+    | 'WORKSPACE_READ_ONLY'
+    | 'WORKSPACE_SKILL_NOT_FOUND'
+    | 'WORKSPACE_SKILL_REMOVE_FAILED'
+    | 'WORKSPACE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -14390,6 +15950,17 @@ export interface PostWorkspacesWorkspaceIdSkillsShUpdate_RouteContract {
   request: PostWorkspacesWorkspaceIdSkillsShUpdate_Request;
   response: PostWorkspacesWorkspaceIdSkillsShUpdate_Response;
   responseType: 'json';
+  errorCode:
+    | 'SKILL_NAME_INVALID'
+    | 'WORKSPACE_FILESYSTEM_NOT_CONFIGURED'
+    | 'WORKSPACE_NOT_FOUND'
+    | 'WORKSPACE_PATH_ABSOLUTE_NOT_ALLOWED'
+    | 'WORKSPACE_PATH_TRAVERSAL'
+    | 'WORKSPACE_READ_ONLY'
+    | 'WORKSPACE_SKILLS_UPDATE_FAILED'
+    | 'WORKSPACE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -14495,6 +16066,15 @@ export interface PostAgentsAgentIdGenerateLegacy_RouteContract {
   request: PostAgentsAgentIdGenerateLegacy_Request;
   response: PostAgentsAgentIdGenerateLegacy_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_GENERATE_FAILED'
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_NOT_FOUND'
+    | 'AGENT_THREAD_OR_RESOURCE_ID_REQUIRED'
+    | 'REQUEST_ARGUMENT_REQUIRED'
+    | 'THREAD_ACCESS_DENIED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -14523,6 +16103,15 @@ export interface PostAgentsAgentIdStreamLegacy_RouteContract {
   request: PostAgentsAgentIdStreamLegacy_Request;
   response: PostAgentsAgentIdStreamLegacy_Response;
   responseType: 'datastream-response';
+  errorCode:
+    | 'AGENT_ID_REQUIRED'
+    | 'AGENT_NOT_FOUND'
+    | 'AGENT_STREAM_FAILED'
+    | 'AGENT_THREAD_OR_RESOURCE_ID_REQUIRED'
+    | 'REQUEST_ARGUMENT_REQUIRED'
+    | 'THREAD_ACCESS_DENIED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -14559,6 +16148,16 @@ export interface PostWorkflowsWorkflowIdStreamLegacy_RouteContract {
   request: PostWorkflowsWorkflowIdStreamLegacy_Request;
   response: PostWorkflowsWorkflowIdStreamLegacy_Response;
   responseType: 'stream';
+  errorCode:
+    | 'WORKFLOW_EXECUTE_FAILED'
+    | 'WORKFLOW_ID_REQUIRED'
+    | 'WORKFLOW_NOT_FOUND'
+    | 'WORKFLOW_RUN_ACCESS_DENIED'
+    | 'WORKFLOW_RUN_ID_REQUIRED'
+    | 'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED'
+    | 'WORKFLOW_SCHEMA_VALIDATION_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -14589,6 +16188,18 @@ export interface PostWorkflowsWorkflowIdObserveStreamLegacy_RouteContract {
   request: PostWorkflowsWorkflowIdObserveStreamLegacy_Request;
   response: PostWorkflowsWorkflowIdObserveStreamLegacy_Response;
   responseType: 'stream';
+  errorCode:
+    | 'SERVER_CACHE_NOT_FOUND'
+    | 'WORKFLOW_ID_REQUIRED'
+    | 'WORKFLOW_NOT_FOUND'
+    | 'WORKFLOW_OBSERVE_STREAM_UNAVAILABLE'
+    | 'WORKFLOW_RUN_ACCESS_DENIED'
+    | 'WORKFLOW_RUN_ID_REQUIRED'
+    | 'WORKFLOW_RUN_NOT_FOUND'
+    | 'WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED'
+    | 'WORKFLOW_STREAM_OBSERVE_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -14634,6 +16245,7 @@ export interface GetMcpV0Servers_RouteContract {
   request: GetMcpV0Servers_Request;
   response: GetMcpV0Servers_Response;
   responseType: 'json';
+  errorCode: 'MCP_SERVERS_LIST_FAILED' | 'MCP_SERVERS_LIST_UNSUPPORTED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -14681,6 +16293,13 @@ export interface GetMcpV0ServersId_RouteContract {
   request: GetMcpV0ServersId_Request;
   response: GetMcpV0ServersId_Response;
   responseType: 'json';
+  errorCode:
+    | 'MCP_SERVER_GET_FAILED'
+    | 'MCP_SERVER_LOOKUP_UNSUPPORTED'
+    | 'MCP_SERVER_NOT_FOUND'
+    | 'MCP_SERVER_VERSION_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -14708,6 +16327,13 @@ export interface GetMcpServerIdTools_RouteContract {
   request: GetMcpServerIdTools_Request;
   response: GetMcpServerIdTools_Response;
   responseType: 'json';
+  errorCode:
+    | 'MCP_SERVER_LOOKUP_UNSUPPORTED'
+    | 'MCP_SERVER_NOT_FOUND'
+    | 'MCP_SERVER_TOOLS_LIST_FAILED'
+    | 'MCP_TOOLS_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -14735,6 +16361,14 @@ export interface GetMcpServerIdToolsToolId_RouteContract {
   request: GetMcpServerIdToolsToolId_Request;
   response: GetMcpServerIdToolsToolId_Response;
   responseType: 'json';
+  errorCode:
+    | 'MCP_SERVER_LOOKUP_UNSUPPORTED'
+    | 'MCP_SERVER_NOT_FOUND'
+    | 'MCP_SERVER_TOOL_GET_FAILED'
+    | 'MCP_TOOLS_UNSUPPORTED'
+    | 'MCP_TOOL_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -14782,6 +16416,14 @@ export interface PostMcpServerIdToolsToolIdExecute_RouteContract {
   request: PostMcpServerIdToolsToolIdExecute_Request;
   response: PostMcpServerIdToolsToolIdExecute_Response;
   responseType: 'json';
+  errorCode:
+    | 'MCP_SERVER_LOOKUP_UNSUPPORTED'
+    | 'MCP_SERVER_NOT_FOUND'
+    | 'MCP_SERVER_TOOL_EXECUTE_FAILED'
+    | 'MCP_TOOLS_UNSUPPORTED'
+    | 'MCP_TOOL_INPUT_INVALID'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -14816,6 +16458,12 @@ export interface GetMcpServerIdResources_RouteContract {
   request: GetMcpServerIdResources_Request;
   response: GetMcpServerIdResources_Response;
   responseType: 'json';
+  errorCode:
+    | 'MCP_SERVER_LOOKUP_UNSUPPORTED'
+    | 'MCP_SERVER_NOT_FOUND'
+    | 'MCP_SERVER_RESOURCES_LIST_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -14859,6 +16507,14 @@ export interface PostMcpServerIdResourcesRead_RouteContract {
   request: PostMcpServerIdResourcesRead_Request;
   response: PostMcpServerIdResourcesRead_Response;
   responseType: 'json';
+  errorCode:
+    | 'MCP_RESOURCES_UNSUPPORTED'
+    | 'MCP_RESOURCE_NOT_FOUND'
+    | 'MCP_SERVER_LOOKUP_UNSUPPORTED'
+    | 'MCP_SERVER_NOT_FOUND'
+    | 'MCP_SERVER_RESOURCE_READ_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -14899,6 +16555,12 @@ export interface GetMcpServerIdEvents_RouteContract {
   request: GetMcpServerIdEvents_Request;
   response: GetMcpServerIdEvents_Response;
   responseType: 'json';
+  errorCode:
+    | 'MCP_SERVER_GET_FAILED'
+    | 'MCP_SERVER_LOOKUP_UNSUPPORTED'
+    | 'MCP_SERVER_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -14948,6 +16610,20 @@ export interface PostMcpServerIdEventsEventNamePoll_RouteContract {
   request: PostMcpServerIdEventsEventNamePoll_Request;
   response: PostMcpServerIdEventsEventNamePoll_Response;
   responseType: 'json';
+  errorCode:
+    | 'MCP_EVENT_ACCESS_DENIED'
+    | 'MCP_EVENT_ARGUMENTS_INVALID'
+    | 'MCP_EVENT_DELIVERY_UNSUPPORTED'
+    | 'MCP_EVENT_NOT_EMITTABLE'
+    | 'MCP_EVENT_NOT_FOUND'
+    | 'MCP_EVENT_PAYLOAD_INVALID'
+    | 'MCP_EVENT_REQUEST_FAILED'
+    | 'MCP_EVENT_STREAMS_LIMIT_EXCEEDED'
+    | 'MCP_SERVER_GET_FAILED'
+    | 'MCP_SERVER_LOOKUP_UNSUPPORTED'
+    | 'MCP_SERVER_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -15005,6 +16681,20 @@ export interface PostMcpServerIdEventsEventNameStream_RouteContract {
   request: PostMcpServerIdEventsEventNameStream_Request;
   response: PostMcpServerIdEventsEventNameStream_Response;
   responseType: 'stream';
+  errorCode:
+    | 'MCP_EVENT_ACCESS_DENIED'
+    | 'MCP_EVENT_ARGUMENTS_INVALID'
+    | 'MCP_EVENT_DELIVERY_UNSUPPORTED'
+    | 'MCP_EVENT_NOT_EMITTABLE'
+    | 'MCP_EVENT_NOT_FOUND'
+    | 'MCP_EVENT_PAYLOAD_INVALID'
+    | 'MCP_EVENT_REQUEST_FAILED'
+    | 'MCP_EVENT_STREAMS_LIMIT_EXCEEDED'
+    | 'MCP_SERVER_GET_FAILED'
+    | 'MCP_SERVER_LOOKUP_UNSUPPORTED'
+    | 'MCP_SERVER_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -15041,6 +16731,21 @@ export interface PostMcpServerIdEventsEventNameEmit_RouteContract {
   request: PostMcpServerIdEventsEventNameEmit_Request;
   response: PostMcpServerIdEventsEventNameEmit_Response;
   responseType: 'json';
+  errorCode:
+    | 'MCP_EVENT_ACCESS_DENIED'
+    | 'MCP_EVENT_ARGUMENTS_INVALID'
+    | 'MCP_EVENT_DELIVERY_UNSUPPORTED'
+    | 'MCP_EVENT_NOT_EMITTABLE'
+    | 'MCP_EVENT_NOT_FOUND'
+    | 'MCP_EVENT_PAYLOAD_INVALID'
+    | 'MCP_EVENT_REQUEST_FAILED'
+    | 'MCP_EVENT_STREAMS_LIMIT_EXCEEDED'
+    | 'MCP_SERVER_GET_FAILED'
+    | 'MCP_SERVER_LOOKUP_UNSUPPORTED'
+    | 'MCP_SERVER_NOT_FOUND'
+    | 'ROUTE_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -15061,6 +16766,7 @@ export interface AllMcpServerIdMcp_RouteContract {
   request: AllMcpServerIdMcp_Request;
   response: unknown;
   responseType: 'mcp-http';
+  errorCode: 'MCP_SERVER_LOOKUP_UNSUPPORTED' | 'MCP_SERVER_NOT_FOUND' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -15081,6 +16787,12 @@ export interface AllMcpServerIdSse_RouteContract {
   request: AllMcpServerIdSse_Request;
   response: unknown;
   responseType: 'mcp-sse';
+  errorCode:
+    | 'MCP_SERVER_LOOKUP_UNSUPPORTED'
+    | 'MCP_SERVER_NOT_FOUND'
+    | 'MCP_SSE_TRANSPORT_UNAVAILABLE'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -15101,6 +16813,12 @@ export interface PostMcpServerIdMessages_RouteContract {
   request: PostMcpServerIdMessages_Request;
   response: unknown;
   responseType: 'mcp-sse';
+  errorCode:
+    | 'MCP_SERVER_LOOKUP_UNSUPPORTED'
+    | 'MCP_SERVER_NOT_FOUND'
+    | 'MCP_SSE_TRANSPORT_UNAVAILABLE'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -15158,6 +16876,14 @@ export interface GetStoredAgents_RouteContract {
   request: GetStoredAgents_Request;
   response: GetStoredAgents_Response;
   responseType: 'json';
+  errorCode:
+    | 'FAVORITES_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_AGENTS_LIST_FAILED'
+    | 'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -15196,6 +16922,7 @@ export interface PostStoredAgentsPreviewInstructions_RouteContract {
   request: PostStoredAgentsPreviewInstructions_Request;
   response: PostStoredAgentsPreviewInstructions_Response;
   responseType: 'json';
+  errorCode: 'EDITOR_NOT_CONFIGURED' | 'STORED_AGENT_INSTRUCTIONS_PREVIEW_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -15229,6 +16956,15 @@ export interface GetStoredAgentsStoredAgentIdDependents_RouteContract {
   request: GetStoredAgentsStoredAgentIdDependents_Request;
   response: GetStoredAgentsStoredAgentIdDependents_Response;
   responseType: 'json';
+  errorCode:
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_AGENT_DEPENDENTS_LIST_FAILED'
+    | 'STORED_AGENT_NOT_FOUND'
+    | 'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -15384,6 +17120,13 @@ export interface PostStoredAgentsStoredAgentIdExport_RouteContract {
   request: PostStoredAgentsStoredAgentIdExport_Request;
   response: PostStoredAgentsStoredAgentIdExport_Response;
   responseType: 'json';
+  errorCode:
+    | 'STORED_AGENT_EXPORT_FAILED'
+    | 'STORED_AGENT_NOT_FOUND'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -15539,6 +17282,14 @@ export interface PostStoredAgentsStoredAgentIdChangeRequest_RouteContract {
   request: PostStoredAgentsStoredAgentIdChangeRequest_Request;
   response: PostStoredAgentsStoredAgentIdChangeRequest_Response;
   responseType: 'json';
+  errorCode:
+    | 'SOURCE_CONTROL_CHANGE_REQUESTS_UNSUPPORTED'
+    | 'STORED_AGENT_CHANGE_REQUEST_OPEN_FAILED'
+    | 'STORED_AGENT_NOT_FOUND'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -15570,6 +17321,15 @@ export interface GetStoredAgentsStoredAgentId_RouteContract {
   request: GetStoredAgentsStoredAgentId_Request;
   response: GetStoredAgentsStoredAgentId_Response;
   responseType: 'json';
+  errorCode:
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_AGENT_GET_FAILED'
+    | 'STORED_AGENT_NOT_FOUND'
+    | 'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -15733,6 +17493,25 @@ export interface PostStoredAgents_RouteContract {
   request: PostStoredAgents_Request;
   response: PostStoredAgents_Response;
   responseType: 'json';
+  errorCode:
+    | 'AVATAR_BASE64_INVALID'
+    | 'AVATAR_DATA_URL_INVALID'
+    | 'AVATAR_EMPTY'
+    | 'AVATAR_TOO_LARGE'
+    | 'AVATAR_URL_NOT_STRING'
+    | 'PROMPT_BLOCK_REFERENCE_UNPUBLISHED'
+    | 'PROMPT_BLOCK_REFERENCE_UNRESOLVED'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_AGENT_ALREADY_EXISTS'
+    | 'STORED_AGENT_CREATED_RESOLVE_FAILED'
+    | 'STORED_AGENT_CREATE_FAILED'
+    | 'STORED_AGENT_ID_DERIVATION_FAILED'
+    | 'STORED_AGENT_INSTRUCTIONS_REQUIRED'
+    | 'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -15913,6 +17692,24 @@ export interface PatchStoredAgentsStoredAgentId_RouteContract {
   request: PatchStoredAgentsStoredAgentId_Request;
   response: PatchStoredAgentsStoredAgentId_Response;
   responseType: 'json';
+  errorCode:
+    | 'AVATAR_BASE64_INVALID'
+    | 'AVATAR_DATA_URL_INVALID'
+    | 'AVATAR_EMPTY'
+    | 'AVATAR_TOO_LARGE'
+    | 'AVATAR_URL_NOT_STRING'
+    | 'PROMPT_BLOCK_REFERENCE_UNPUBLISHED'
+    | 'PROMPT_BLOCK_REFERENCE_UNRESOLVED'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_AGENT_INSTRUCTIONS_REQUIRED'
+    | 'STORED_AGENT_NOT_FOUND'
+    | 'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_AGENT_UPDATED_RESOLVE_FAILED'
+    | 'STORED_AGENT_UPDATE_FAILED'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -15937,6 +17734,15 @@ export interface DeleteStoredAgentsStoredAgentId_RouteContract {
   request: DeleteStoredAgentsStoredAgentId_Request;
   response: DeleteStoredAgentsStoredAgentId_Response;
   responseType: 'json';
+  errorCode:
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_AGENT_DELETE_FAILED'
+    | 'STORED_AGENT_NOT_FOUND'
+    | 'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -15985,6 +17791,15 @@ export interface GetStoredAgentsAgentIdVersions_RouteContract {
   request: GetStoredAgentsAgentIdVersions_Request;
   response: GetStoredAgentsAgentIdVersions_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_VERSIONS_LIST_FAILED'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_AGENT_NOT_FOUND'
+    | 'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -16183,6 +17998,16 @@ export interface PostStoredAgentsAgentIdVersions_RouteContract {
   request: PostStoredAgentsAgentIdVersions_Request;
   response: PostStoredAgentsAgentIdVersions_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_VERSION_CREATED_RESOLVE_FAILED'
+    | 'AGENT_VERSION_CREATE_FAILED'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_AGENT_NOT_FOUND'
+    | 'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -16495,6 +18320,15 @@ export interface GetStoredAgentsAgentIdVersionsCompare_RouteContract {
   request: GetStoredAgentsAgentIdVersionsCompare_Request;
   response: GetStoredAgentsAgentIdVersionsCompare_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_VERSIONS_COMPARE_FAILED'
+    | 'AGENT_VERSION_NOT_FOUND'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -16524,6 +18358,15 @@ export interface GetStoredAgentsAgentIdVersionsVersionId_RouteContract {
   request: GetStoredAgentsAgentIdVersionsVersionId_Request;
   response: GetStoredAgentsAgentIdVersionsVersionId_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_VERSION_GET_FAILED'
+    | 'AGENT_VERSION_NOT_FOUND'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -16553,6 +18396,18 @@ export interface PostStoredAgentsAgentIdVersionsVersionIdActivate_RouteContract 
   request: PostStoredAgentsAgentIdVersionsVersionIdActivate_Request;
   response: PostStoredAgentsAgentIdVersionsVersionIdActivate_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_VERSION_ACTIVATE_FAILED'
+    | 'AGENT_VERSION_NOT_FOUND'
+    | 'PROMPT_BLOCK_REFERENCE_UNPUBLISHED'
+    | 'PROMPT_BLOCK_REFERENCE_UNRESOLVED'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_AGENT_NOT_FOUND'
+    | 'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -16713,6 +18568,17 @@ export interface PostStoredAgentsAgentIdVersionsVersionIdRestore_RouteContract {
   request: PostStoredAgentsAgentIdVersionsVersionIdRestore_Request;
   response: PostStoredAgentsAgentIdVersionsVersionIdRestore_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_VERSION_CREATED_RESOLVE_FAILED'
+    | 'AGENT_VERSION_NOT_FOUND'
+    | 'AGENT_VERSION_RESTORE_FAILED'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_AGENT_NOT_FOUND'
+    | 'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -16737,6 +18603,17 @@ export interface DeleteStoredAgentsAgentIdVersionsVersionId_RouteContract {
   request: DeleteStoredAgentsAgentIdVersionsVersionId_Request;
   response: DeleteStoredAgentsAgentIdVersionsVersionId_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_VERSION_ACTIVE_DELETE_FORBIDDEN'
+    | 'AGENT_VERSION_DELETE_FAILED'
+    | 'AGENT_VERSION_NOT_FOUND'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_AGENT_NOT_FOUND'
+    | 'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -16766,6 +18643,17 @@ export interface PutStoredAgentsStoredAgentIdFavorite_RouteContract {
   request: PutStoredAgentsStoredAgentIdFavorite_Request;
   response: PutStoredAgentsStoredAgentIdFavorite_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_BUILDER_NOT_ENABLED'
+    | 'FAVORITES_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_AGENT_FAVORITE_FAILED'
+    | 'STORED_AGENT_NOT_FOUND'
+    | 'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -16790,6 +18678,17 @@ export interface DeleteStoredAgentsStoredAgentIdFavorite_RouteContract {
   request: DeleteStoredAgentsStoredAgentIdFavorite_Request;
   response: DeleteStoredAgentsStoredAgentIdFavorite_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_BUILDER_NOT_ENABLED'
+    | 'FAVORITES_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_AGENT_NOT_FOUND'
+    | 'STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_AGENT_UNFAVORITE_FAILED'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -16824,6 +18723,12 @@ export interface GetStoredWorkflows_RouteContract {
   request: GetStoredWorkflows_Request;
   response: GetStoredWorkflows_Response;
   responseType: 'json';
+  errorCode:
+    | 'DYNAMIC_WORKFLOWS_LIST_FAILED'
+    | 'DYNAMIC_WORKFLOWS_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -16917,6 +18822,7 @@ export interface PostStoredWorkflows_RouteContract {
   request: PostStoredWorkflows_Request;
   response: PostStoredWorkflows_Response;
   responseType: 'json';
+  errorCode: 'DYNAMIC_WORKFLOW_UPSERT_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -16944,6 +18850,13 @@ export interface GetStoredWorkflowsDynamicWorkflowId_RouteContract {
   request: GetStoredWorkflowsDynamicWorkflowId_Request;
   response: GetStoredWorkflowsDynamicWorkflowId_Response;
   responseType: 'json';
+  errorCode:
+    | 'DYNAMIC_WORKFLOWS_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'DYNAMIC_WORKFLOW_GET_FAILED'
+    | 'DYNAMIC_WORKFLOW_NOT_FOUND'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -16971,6 +18884,12 @@ export interface DeleteStoredWorkflowsDynamicWorkflowId_RouteContract {
   request: DeleteStoredWorkflowsDynamicWorkflowId_Request;
   response: DeleteStoredWorkflowsDynamicWorkflowId_Response;
   responseType: 'json';
+  errorCode:
+    | 'DYNAMIC_WORKFLOWS_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'DYNAMIC_WORKFLOW_DELETE_FAILED'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -17022,6 +18941,13 @@ export interface GetStoredMcpClients_RouteContract {
   request: GetStoredMcpClients_Request;
   response: GetStoredMcpClients_Response;
   responseType: 'json';
+  errorCode:
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_MCP_CLIENTS_LIST_FAILED'
+    | 'STORED_MCP_CLIENT_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -17055,6 +18981,15 @@ export interface GetStoredMcpClientsStoredMCPClientId_RouteContract {
   request: GetStoredMcpClientsStoredMCPClientId_Request;
   response: GetStoredMcpClientsStoredMCPClientId_Response;
   responseType: 'json';
+  errorCode:
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_MCP_CLIENT_GET_FAILED'
+    | 'STORED_MCP_CLIENT_NOT_FOUND'
+    | 'STORED_MCP_CLIENT_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -17100,6 +19035,16 @@ export interface PostStoredMcpClients_RouteContract {
   request: PostStoredMcpClients_Request;
   response: PostStoredMcpClients_Response;
   responseType: 'json';
+  errorCode:
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_MCP_CLIENT_ALREADY_EXISTS'
+    | 'STORED_MCP_CLIENT_CREATED_RESOLVE_FAILED'
+    | 'STORED_MCP_CLIENT_CREATE_FAILED'
+    | 'STORED_MCP_CLIENT_ID_DERIVATION_FAILED'
+    | 'STORED_MCP_CLIENT_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -17164,6 +19109,16 @@ export interface PatchStoredMcpClientsStoredMCPClientId_RouteContract {
   request: PatchStoredMcpClientsStoredMCPClientId_Request;
   response: PatchStoredMcpClientsStoredMCPClientId_Response;
   responseType: 'json';
+  errorCode:
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_MCP_CLIENT_NOT_FOUND'
+    | 'STORED_MCP_CLIENT_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_MCP_CLIENT_UPDATED_RESOLVE_FAILED'
+    | 'STORED_MCP_CLIENT_UPDATE_FAILED'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -17188,6 +19143,15 @@ export interface DeleteStoredMcpClientsStoredMCPClientId_RouteContract {
   request: DeleteStoredMcpClientsStoredMCPClientId_Request;
   response: DeleteStoredMcpClientsStoredMCPClientId_Response;
   responseType: 'json';
+  errorCode:
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_MCP_CLIENT_DELETE_FAILED'
+    | 'STORED_MCP_CLIENT_NOT_FOUND'
+    | 'STORED_MCP_CLIENT_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -17227,6 +19191,15 @@ export interface GetStoredMcpClientsMcpClientIdVersions_RouteContract {
   request: GetStoredMcpClientsMcpClientIdVersions_Request;
   response: GetStoredMcpClientsMcpClientIdVersions_Response;
   responseType: 'json';
+  errorCode:
+    | 'MCP_CLIENT_VERSIONS_LIST_FAILED'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_MCP_CLIENT_NOT_FOUND'
+    | 'STORED_MCP_CLIENT_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -17275,6 +19248,16 @@ export interface PostStoredMcpClientsMcpClientIdVersions_RouteContract {
   request: PostStoredMcpClientsMcpClientIdVersions_Request;
   response: PostStoredMcpClientsMcpClientIdVersions_Response;
   responseType: 'json';
+  errorCode:
+    | 'MCP_CLIENT_VERSION_CREATED_RESOLVE_FAILED'
+    | 'MCP_CLIENT_VERSION_CREATE_FAILED'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_MCP_CLIENT_NOT_FOUND'
+    | 'STORED_MCP_CLIENT_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -17354,6 +19337,15 @@ export interface GetStoredMcpClientsMcpClientIdVersionsCompare_RouteContract {
   request: GetStoredMcpClientsMcpClientIdVersionsCompare_Request;
   response: GetStoredMcpClientsMcpClientIdVersionsCompare_Response;
   responseType: 'json';
+  errorCode:
+    | 'MCP_CLIENT_VERSIONS_COMPARE_FAILED'
+    | 'MCP_CLIENT_VERSION_NOT_FOUND'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_MCP_CLIENT_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -17383,6 +19375,15 @@ export interface GetStoredMcpClientsMcpClientIdVersionsVersionId_RouteContract {
   request: GetStoredMcpClientsMcpClientIdVersionsVersionId_Request;
   response: GetStoredMcpClientsMcpClientIdVersionsVersionId_Response;
   responseType: 'json';
+  errorCode:
+    | 'MCP_CLIENT_VERSION_GET_FAILED'
+    | 'MCP_CLIENT_VERSION_NOT_FOUND'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_MCP_CLIENT_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -17409,6 +19410,16 @@ export interface PostStoredMcpClientsMcpClientIdVersionsVersionIdActivate_RouteC
   request: PostStoredMcpClientsMcpClientIdVersionsVersionIdActivate_Request;
   response: PostStoredMcpClientsMcpClientIdVersionsVersionIdActivate_Response;
   responseType: 'json';
+  errorCode:
+    | 'MCP_CLIENT_VERSION_ACTIVATE_FAILED'
+    | 'MCP_CLIENT_VERSION_NOT_FOUND'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_MCP_CLIENT_NOT_FOUND'
+    | 'STORED_MCP_CLIENT_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -17435,6 +19446,17 @@ export interface PostStoredMcpClientsMcpClientIdVersionsVersionIdRestore_RouteCo
   request: PostStoredMcpClientsMcpClientIdVersionsVersionIdRestore_Request;
   response: PostStoredMcpClientsMcpClientIdVersionsVersionIdRestore_Response;
   responseType: 'json';
+  errorCode:
+    | 'MCP_CLIENT_VERSION_CREATED_RESOLVE_FAILED'
+    | 'MCP_CLIENT_VERSION_NOT_FOUND'
+    | 'MCP_CLIENT_VERSION_RESTORE_FAILED'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_MCP_CLIENT_NOT_FOUND'
+    | 'STORED_MCP_CLIENT_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -17460,6 +19482,17 @@ export interface DeleteStoredMcpClientsMcpClientIdVersionsVersionId_RouteContrac
   request: DeleteStoredMcpClientsMcpClientIdVersionsVersionId_Request;
   response: DeleteStoredMcpClientsMcpClientIdVersionsVersionId_Response;
   responseType: 'json';
+  errorCode:
+    | 'MCP_CLIENT_VERSION_ACTIVE_DELETE_FORBIDDEN'
+    | 'MCP_CLIENT_VERSION_DELETE_FAILED'
+    | 'MCP_CLIENT_VERSION_NOT_FOUND'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_MCP_CLIENT_NOT_FOUND'
+    | 'STORED_MCP_CLIENT_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -17511,6 +19544,13 @@ export interface GetStoredPromptBlocks_RouteContract {
   request: GetStoredPromptBlocks_Request;
   response: GetStoredPromptBlocks_Response;
   responseType: 'json';
+  errorCode:
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_PROMPT_BLOCKS_LIST_FAILED'
+    | 'STORED_PROMPT_BLOCK_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -17544,6 +19584,15 @@ export interface GetStoredPromptBlocksStoredPromptBlockId_RouteContract {
   request: GetStoredPromptBlocksStoredPromptBlockId_Request;
   response: GetStoredPromptBlocksStoredPromptBlockId_Response;
   responseType: 'json';
+  errorCode:
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_PROMPT_BLOCK_GET_FAILED'
+    | 'STORED_PROMPT_BLOCK_NOT_FOUND'
+    | 'STORED_PROMPT_BLOCK_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -17600,6 +19649,16 @@ export interface PostStoredPromptBlocks_RouteContract {
   request: PostStoredPromptBlocks_Request;
   response: PostStoredPromptBlocks_Response;
   responseType: 'json';
+  errorCode:
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_PROMPT_BLOCK_ALREADY_EXISTS'
+    | 'STORED_PROMPT_BLOCK_CREATED_RESOLVE_FAILED'
+    | 'STORED_PROMPT_BLOCK_CREATE_FAILED'
+    | 'STORED_PROMPT_BLOCK_ID_DERIVATION_FAILED'
+    | 'STORED_PROMPT_BLOCK_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -17676,6 +19735,16 @@ export interface PatchStoredPromptBlocksStoredPromptBlockId_RouteContract {
   request: PatchStoredPromptBlocksStoredPromptBlockId_Request;
   response: PatchStoredPromptBlocksStoredPromptBlockId_Response;
   responseType: 'json';
+  errorCode:
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_PROMPT_BLOCK_NOT_FOUND'
+    | 'STORED_PROMPT_BLOCK_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_PROMPT_BLOCK_UPDATED_RESOLVE_FAILED'
+    | 'STORED_PROMPT_BLOCK_UPDATE_FAILED'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -17701,6 +19770,15 @@ export interface DeleteStoredPromptBlocksStoredPromptBlockId_RouteContract {
   request: DeleteStoredPromptBlocksStoredPromptBlockId_Request;
   response: DeleteStoredPromptBlocksStoredPromptBlockId_Response;
   responseType: 'json';
+  errorCode:
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_PROMPT_BLOCK_DELETE_FAILED'
+    | 'STORED_PROMPT_BLOCK_NOT_FOUND'
+    | 'STORED_PROMPT_BLOCK_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -17740,6 +19818,15 @@ export interface GetStoredPromptBlocksPromptBlockIdVersions_RouteContract {
   request: GetStoredPromptBlocksPromptBlockIdVersions_Request;
   response: GetStoredPromptBlocksPromptBlockIdVersions_Response;
   responseType: 'json';
+  errorCode:
+    | 'PROMPT_BLOCK_VERSIONS_LIST_FAILED'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_PROMPT_BLOCK_NOT_FOUND'
+    | 'STORED_PROMPT_BLOCK_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -17797,6 +19884,16 @@ export interface PostStoredPromptBlocksPromptBlockIdVersions_RouteContract {
   request: PostStoredPromptBlocksPromptBlockIdVersions_Request;
   response: PostStoredPromptBlocksPromptBlockIdVersions_Response;
   responseType: 'json';
+  errorCode:
+    | 'PROMPT_BLOCK_VERSION_CREATED_RESOLVE_FAILED'
+    | 'PROMPT_BLOCK_VERSION_CREATE_FAILED'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_PROMPT_BLOCK_NOT_FOUND'
+    | 'STORED_PROMPT_BLOCK_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -17890,6 +19987,15 @@ export interface GetStoredPromptBlocksPromptBlockIdVersionsCompare_RouteContract
   request: GetStoredPromptBlocksPromptBlockIdVersionsCompare_Request;
   response: GetStoredPromptBlocksPromptBlockIdVersionsCompare_Response;
   responseType: 'json';
+  errorCode:
+    | 'PROMPT_BLOCK_VERSIONS_COMPARE_FAILED'
+    | 'PROMPT_BLOCK_VERSION_NOT_FOUND'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_PROMPT_BLOCK_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -17919,6 +20025,15 @@ export interface GetStoredPromptBlocksPromptBlockIdVersionsVersionId_RouteContra
   request: GetStoredPromptBlocksPromptBlockIdVersionsVersionId_Request;
   response: GetStoredPromptBlocksPromptBlockIdVersionsVersionId_Response;
   responseType: 'json';
+  errorCode:
+    | 'PROMPT_BLOCK_VERSION_GET_FAILED'
+    | 'PROMPT_BLOCK_VERSION_NOT_FOUND'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_PROMPT_BLOCK_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -17945,6 +20060,16 @@ export interface PostStoredPromptBlocksPromptBlockIdVersionsVersionIdActivate_Ro
   request: PostStoredPromptBlocksPromptBlockIdVersionsVersionIdActivate_Request;
   response: PostStoredPromptBlocksPromptBlockIdVersionsVersionIdActivate_Response;
   responseType: 'json';
+  errorCode:
+    | 'PROMPT_BLOCK_VERSION_ACTIVATE_FAILED'
+    | 'PROMPT_BLOCK_VERSION_NOT_FOUND'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_PROMPT_BLOCK_NOT_FOUND'
+    | 'STORED_PROMPT_BLOCK_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -17971,6 +20096,17 @@ export interface PostStoredPromptBlocksPromptBlockIdVersionsVersionIdRestore_Rou
   request: PostStoredPromptBlocksPromptBlockIdVersionsVersionIdRestore_Request;
   response: PostStoredPromptBlocksPromptBlockIdVersionsVersionIdRestore_Response;
   responseType: 'json';
+  errorCode:
+    | 'PROMPT_BLOCK_VERSION_CREATED_RESOLVE_FAILED'
+    | 'PROMPT_BLOCK_VERSION_NOT_FOUND'
+    | 'PROMPT_BLOCK_VERSION_RESTORE_FAILED'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_PROMPT_BLOCK_NOT_FOUND'
+    | 'STORED_PROMPT_BLOCK_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -17996,6 +20132,17 @@ export interface DeleteStoredPromptBlocksPromptBlockIdVersionsVersionId_RouteCon
   request: DeleteStoredPromptBlocksPromptBlockIdVersionsVersionId_Request;
   response: DeleteStoredPromptBlocksPromptBlockIdVersionsVersionId_Response;
   responseType: 'json';
+  errorCode:
+    | 'PROMPT_BLOCK_VERSION_ACTIVE_DELETE_FORBIDDEN'
+    | 'PROMPT_BLOCK_VERSION_DELETE_FAILED'
+    | 'PROMPT_BLOCK_VERSION_NOT_FOUND'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_PROMPT_BLOCK_NOT_FOUND'
+    | 'STORED_PROMPT_BLOCK_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -18047,6 +20194,13 @@ export interface GetStoredScorers_RouteContract {
   request: GetStoredScorers_Request;
   response: GetStoredScorers_Response;
   responseType: 'json';
+  errorCode:
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | 'STORED_SCORERS_LIST_FAILED'
+    | 'STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -18080,6 +20234,15 @@ export interface GetStoredScorersStoredScorerId_RouteContract {
   request: GetStoredScorersStoredScorerId_Request;
   response: GetStoredScorersStoredScorerId_Response;
   responseType: 'json';
+  errorCode:
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | 'STORED_SCORER_GET_FAILED'
+    | 'STORED_SCORER_NOT_FOUND'
+    | 'STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -18147,6 +20310,16 @@ export interface PostStoredScorers_RouteContract {
   request: PostStoredScorers_Request;
   response: PostStoredScorers_Response;
   responseType: 'json';
+  errorCode:
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | 'STORED_SCORER_ALREADY_EXISTS'
+    | 'STORED_SCORER_CREATED_RESOLVE_FAILED'
+    | 'STORED_SCORER_CREATE_FAILED'
+    | 'STORED_SCORER_ID_DERIVATION_FAILED'
+    | 'STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -18237,6 +20410,16 @@ export interface PatchStoredScorersStoredScorerId_RouteContract {
   request: PatchStoredScorersStoredScorerId_Request;
   response: PatchStoredScorersStoredScorerId_Response;
   responseType: 'json';
+  errorCode:
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | 'STORED_SCORER_NOT_FOUND'
+    | 'STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_SCORER_UPDATED_RESOLVE_FAILED'
+    | 'STORED_SCORER_UPDATE_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -18261,6 +20444,15 @@ export interface DeleteStoredScorersStoredScorerId_RouteContract {
   request: DeleteStoredScorersStoredScorerId_Request;
   response: DeleteStoredScorersStoredScorerId_Response;
   responseType: 'json';
+  errorCode:
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | 'STORED_SCORER_DELETE_FAILED'
+    | 'STORED_SCORER_NOT_FOUND'
+    | 'STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -18300,6 +20492,15 @@ export interface GetStoredScorersScorerIdVersions_RouteContract {
   request: GetStoredScorersScorerIdVersions_Request;
   response: GetStoredScorersScorerIdVersions_Response;
   responseType: 'json';
+  errorCode:
+    | 'SCORER_VERSIONS_LIST_FAILED'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | 'STORED_SCORER_NOT_FOUND'
+    | 'STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -18377,6 +20578,16 @@ export interface PostStoredScorersScorerIdVersions_RouteContract {
   request: PostStoredScorersScorerIdVersions_Request;
   response: PostStoredScorersScorerIdVersions_Response;
   responseType: 'json';
+  errorCode:
+    | 'SCORER_VERSION_CREATED_RESOLVE_FAILED'
+    | 'SCORER_VERSION_CREATE_FAILED'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | 'STORED_SCORER_NOT_FOUND'
+    | 'STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -18498,6 +20709,15 @@ export interface GetStoredScorersScorerIdVersionsCompare_RouteContract {
   request: GetStoredScorersScorerIdVersionsCompare_Request;
   response: GetStoredScorersScorerIdVersionsCompare_Response;
   responseType: 'json';
+  errorCode:
+    | 'SCORER_VERSIONS_COMPARE_FAILED'
+    | 'SCORER_VERSION_NOT_FOUND'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | 'STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -18527,6 +20747,15 @@ export interface GetStoredScorersScorerIdVersionsVersionId_RouteContract {
   request: GetStoredScorersScorerIdVersionsVersionId_Request;
   response: GetStoredScorersScorerIdVersionsVersionId_Response;
   responseType: 'json';
+  errorCode:
+    | 'SCORER_VERSION_GET_FAILED'
+    | 'SCORER_VERSION_NOT_FOUND'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | 'STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -18553,6 +20782,16 @@ export interface PostStoredScorersScorerIdVersionsVersionIdActivate_RouteContrac
   request: PostStoredScorersScorerIdVersionsVersionIdActivate_Request;
   response: PostStoredScorersScorerIdVersionsVersionIdActivate_Response;
   responseType: 'json';
+  errorCode:
+    | 'SCORER_VERSION_ACTIVATE_FAILED'
+    | 'SCORER_VERSION_NOT_FOUND'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | 'STORED_SCORER_NOT_FOUND'
+    | 'STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -18579,6 +20818,17 @@ export interface PostStoredScorersScorerIdVersionsVersionIdRestore_RouteContract
   request: PostStoredScorersScorerIdVersionsVersionIdRestore_Request;
   response: PostStoredScorersScorerIdVersionsVersionIdRestore_Response;
   responseType: 'json';
+  errorCode:
+    | 'SCORER_VERSION_CREATED_RESOLVE_FAILED'
+    | 'SCORER_VERSION_NOT_FOUND'
+    | 'SCORER_VERSION_RESTORE_FAILED'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | 'STORED_SCORER_NOT_FOUND'
+    | 'STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -18604,6 +20854,17 @@ export interface DeleteStoredScorersScorerIdVersionsVersionId_RouteContract {
   request: DeleteStoredScorersScorerIdVersionsVersionId_Request;
   response: DeleteStoredScorersScorerIdVersionsVersionId_Response;
   responseType: 'json';
+  errorCode:
+    | 'SCORER_VERSION_ACTIVE_DELETE_FORBIDDEN'
+    | 'SCORER_VERSION_DELETE_FAILED'
+    | 'SCORER_VERSION_NOT_FOUND'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | 'STORED_SCORER_NOT_FOUND'
+    | 'STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -18688,6 +20949,13 @@ export interface GetStoredWorkspaces_RouteContract {
   request: GetStoredWorkspaces_Request;
   response: GetStoredWorkspaces_Response;
   responseType: 'json';
+  errorCode:
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | 'STORED_WORKSPACES_LIST_FAILED'
+    | 'STORED_WORKSPACE_STORAGE_DOMAIN_UNAVAILABLE'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -18715,6 +20983,15 @@ export interface GetStoredWorkspacesStoredWorkspaceId_RouteContract {
   request: GetStoredWorkspacesStoredWorkspaceId_Request;
   response: GetStoredWorkspacesStoredWorkspaceId_Response;
   responseType: 'json';
+  errorCode:
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | 'STORED_WORKSPACE_GET_FAILED'
+    | 'STORED_WORKSPACE_NOT_FOUND'
+    | 'STORED_WORKSPACE_STORAGE_DOMAIN_UNAVAILABLE'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -18772,6 +21049,16 @@ export interface PostStoredWorkspaces_RouteContract {
   request: PostStoredWorkspaces_Request;
   response: PostStoredWorkspaces_Response;
   responseType: 'json';
+  errorCode:
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | 'STORED_WORKSPACE_ALREADY_EXISTS'
+    | 'STORED_WORKSPACE_CREATED_RESOLVE_FAILED'
+    | 'STORED_WORKSPACE_CREATE_FAILED'
+    | 'STORED_WORKSPACE_ID_DERIVATION_FAILED'
+    | 'STORED_WORKSPACE_STORAGE_DOMAIN_UNAVAILABLE'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -18845,6 +21132,16 @@ export interface PatchStoredWorkspacesStoredWorkspaceId_RouteContract {
   request: PatchStoredWorkspacesStoredWorkspaceId_Request;
   response: PatchStoredWorkspacesStoredWorkspaceId_Response;
   responseType: 'json';
+  errorCode:
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | 'STORED_WORKSPACE_NOT_FOUND'
+    | 'STORED_WORKSPACE_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_WORKSPACE_UPDATED_RESOLVE_FAILED'
+    | 'STORED_WORKSPACE_UPDATE_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -18869,6 +21166,15 @@ export interface DeleteStoredWorkspacesStoredWorkspaceId_RouteContract {
   request: DeleteStoredWorkspacesStoredWorkspaceId_Request;
   response: DeleteStoredWorkspacesStoredWorkspaceId_Response;
   responseType: 'json';
+  errorCode:
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | 'STORED_WORKSPACE_DELETE_FAILED'
+    | 'STORED_WORKSPACE_NOT_FOUND'
+    | 'STORED_WORKSPACE_STORAGE_DOMAIN_UNAVAILABLE'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -18926,6 +21232,14 @@ export interface GetStoredSkills_RouteContract {
   request: GetStoredSkills_Request;
   response: GetStoredSkills_Response;
   responseType: 'json';
+  errorCode:
+    | 'FAVORITES_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | 'STORED_SKILLS_LIST_FAILED'
+    | 'STORED_SKILL_STORAGE_DOMAIN_UNAVAILABLE'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -18951,6 +21265,15 @@ export interface GetStoredSkillsStoredSkillId_RouteContract {
   request: GetStoredSkillsStoredSkillId_Request;
   response: GetStoredSkillsStoredSkillId_Response;
   responseType: 'json';
+  errorCode:
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | 'STORED_SKILL_GET_FAILED'
+    | 'STORED_SKILL_NOT_FOUND'
+    | 'STORED_SKILL_STORAGE_DOMAIN_UNAVAILABLE'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -19010,6 +21333,16 @@ export interface PostStoredSkills_RouteContract {
   request: PostStoredSkills_Request;
   response: PostStoredSkills_Response;
   responseType: 'json';
+  errorCode:
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | 'STORED_SKILL_ALREADY_EXISTS'
+    | 'STORED_SKILL_CREATED_RESOLVE_FAILED'
+    | 'STORED_SKILL_CREATE_FAILED'
+    | 'STORED_SKILL_ID_DERIVATION_FAILED'
+    | 'STORED_SKILL_STORAGE_DOMAIN_UNAVAILABLE'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -19083,6 +21416,16 @@ export interface PatchStoredSkillsStoredSkillId_RouteContract {
   request: PatchStoredSkillsStoredSkillId_Request;
   response: PatchStoredSkillsStoredSkillId_Response;
   responseType: 'json';
+  errorCode:
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | 'STORED_SKILL_NOT_FOUND'
+    | 'STORED_SKILL_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_SKILL_UPDATED_RESOLVE_FAILED'
+    | 'STORED_SKILL_UPDATE_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -19107,6 +21450,15 @@ export interface DeleteStoredSkillsStoredSkillId_RouteContract {
   request: DeleteStoredSkillsStoredSkillId_Request;
   response: DeleteStoredSkillsStoredSkillId_Response;
   responseType: 'json';
+  errorCode:
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | 'STORED_SKILL_DELETE_FAILED'
+    | 'STORED_SKILL_NOT_FOUND'
+    | 'STORED_SKILL_STORAGE_DOMAIN_UNAVAILABLE'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -19140,6 +21492,20 @@ export interface PostStoredSkillsStoredSkillIdPublish_RouteContract {
   request: PostStoredSkillsStoredSkillIdPublish_Request;
   response: PostStoredSkillsStoredSkillIdPublish_Response;
   responseType: 'json';
+  errorCode:
+    | 'BLOB_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'SKILL_PATH_MISSING_SKILL_FILE'
+    | 'SKILL_PATH_NOT_DIRECTORY'
+    | 'SKILL_PATH_NOT_FOUND'
+    | 'SKILL_PATH_OUTSIDE_ALLOWED_DIRECTORY'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | 'STORED_SKILL_NOT_FOUND'
+    | 'STORED_SKILL_PUBLISH_FAILED'
+    | 'STORED_SKILL_STORAGE_DOMAIN_UNAVAILABLE'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -19164,6 +21530,17 @@ export interface PutStoredSkillsStoredSkillIdFavorite_RouteContract {
   request: PutStoredSkillsStoredSkillIdFavorite_Request;
   response: PutStoredSkillsStoredSkillIdFavorite_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_BUILDER_NOT_ENABLED'
+    | 'FAVORITES_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | 'STORED_SKILL_FAVORITE_FAILED'
+    | 'STORED_SKILL_NOT_FOUND'
+    | 'STORED_SKILL_STORAGE_DOMAIN_UNAVAILABLE'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -19188,6 +21565,17 @@ export interface DeleteStoredSkillsStoredSkillIdFavorite_RouteContract {
   request: DeleteStoredSkillsStoredSkillIdFavorite_Request;
   response: DeleteStoredSkillsStoredSkillIdFavorite_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_BUILDER_NOT_ENABLED'
+    | 'FAVORITES_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | 'STORED_RESOURCE_SCOPE_REQUIRED'
+    | 'STORED_SKILL_NOT_FOUND'
+    | 'STORED_SKILL_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'STORED_SKILL_UNFAVORITE_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -19223,6 +21611,7 @@ export interface GetToolProviders_RouteContract {
   request: GetToolProviders_Request;
   response: GetToolProviders_Response;
   responseType: 'json';
+  errorCode: 'EDITOR_NOT_CONFIGURED' | 'TOOL_PROVIDERS_LIST_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -19265,6 +21654,12 @@ export interface GetToolProvidersProviderIdToolkits_RouteContract {
   request: GetToolProvidersProviderIdToolkits_Request;
   response: GetToolProvidersProviderIdToolkits_Response;
   responseType: 'json';
+  errorCode:
+    | 'EDITOR_NOT_CONFIGURED'
+    | 'TOOL_PROVIDER_NOT_FOUND'
+    | 'TOOL_PROVIDER_TOOLKITS_LIST_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -19319,6 +21714,12 @@ export interface GetToolProvidersProviderIdTools_RouteContract {
   request: GetToolProvidersProviderIdTools_Request;
   response: GetToolProvidersProviderIdTools_Response;
   responseType: 'json';
+  errorCode:
+    | 'EDITOR_NOT_CONFIGURED'
+    | 'TOOL_PROVIDER_NOT_FOUND'
+    | 'TOOL_PROVIDER_TOOLS_LIST_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -19350,6 +21751,14 @@ export interface GetToolProvidersProviderIdToolsToolSlugSchema_RouteContract {
   request: GetToolProvidersProviderIdToolsToolSlugSchema_Request;
   response: GetToolProvidersProviderIdToolsToolSlugSchema_Response;
   responseType: 'json';
+  errorCode:
+    | 'EDITOR_NOT_CONFIGURED'
+    | 'TOOL_PROVIDER_NOT_FOUND'
+    | 'TOOL_PROVIDER_OPERATION_UNSUPPORTED'
+    | 'TOOL_PROVIDER_TOOL_SCHEMA_GET_FAILED'
+    | 'TOOL_PROVIDER_TOOL_SCHEMA_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -19400,6 +21809,14 @@ export interface PostToolProvidersProviderIdAuthorize_RouteContract {
   request: PostToolProvidersProviderIdAuthorize_Request;
   response: PostToolProvidersProviderIdAuthorize_Response;
   responseType: 'json';
+  errorCode:
+    | 'EDITOR_NOT_CONFIGURED'
+    | 'TOOL_PROVIDER_AUTHORIZE_FAILED'
+    | 'TOOL_PROVIDER_CONNECTION_RESOURCE_ID_REQUIRED'
+    | 'TOOL_PROVIDER_NOT_FOUND'
+    | 'TOOL_PROVIDER_OPERATION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -19431,6 +21848,13 @@ export interface GetToolProvidersProviderIdAuthStatusAuthId_RouteContract {
   request: GetToolProvidersProviderIdAuthStatusAuthId_Request;
   response: GetToolProvidersProviderIdAuthStatusAuthId_Response;
   responseType: 'json';
+  errorCode:
+    | 'EDITOR_NOT_CONFIGURED'
+    | 'TOOL_PROVIDER_AUTH_STATUS_GET_FAILED'
+    | 'TOOL_PROVIDER_NOT_FOUND'
+    | 'TOOL_PROVIDER_OPERATION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -19473,6 +21897,13 @@ export interface PostToolProvidersProviderIdConnectionStatus_RouteContract {
   request: PostToolProvidersProviderIdConnectionStatus_Request;
   response: PostToolProvidersProviderIdConnectionStatus_Response;
   responseType: 'json';
+  errorCode:
+    | 'EDITOR_NOT_CONFIGURED'
+    | 'TOOL_PROVIDER_CONNECTION_STATUS_GET_FAILED'
+    | 'TOOL_PROVIDER_NOT_FOUND'
+    | 'TOOL_PROVIDER_OPERATION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -19534,6 +21965,13 @@ export interface GetToolProvidersProviderIdConnections_RouteContract {
   request: GetToolProvidersProviderIdConnections_Request;
   response: GetToolProvidersProviderIdConnections_Response;
   responseType: 'json';
+  errorCode:
+    | 'EDITOR_NOT_CONFIGURED'
+    | 'TOOL_PROVIDER_CONNECTIONS_LIST_FAILED'
+    | 'TOOL_PROVIDER_NOT_FOUND'
+    | 'TOOL_PROVIDER_OPERATION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -19576,6 +22014,12 @@ export interface GetToolProvidersProviderIdConnectionFields_RouteContract {
   request: GetToolProvidersProviderIdConnectionFields_Request;
   response: GetToolProvidersProviderIdConnectionFields_Response;
   responseType: 'json';
+  errorCode:
+    | 'EDITOR_NOT_CONFIGURED'
+    | 'TOOL_PROVIDER_CONNECTION_FIELDS_LIST_FAILED'
+    | 'TOOL_PROVIDER_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -19620,6 +22064,14 @@ export interface DeleteToolProvidersProviderIdConnectionsConnectionId_RouteContr
   request: DeleteToolProvidersProviderIdConnectionsConnectionId_Request;
   response: DeleteToolProvidersProviderIdConnectionsConnectionId_Response;
   responseType: 'json';
+  errorCode:
+    | 'EDITOR_NOT_CONFIGURED'
+    | 'TOOL_PROVIDER_CONNECTION_DISCONNECT_FAILED'
+    | 'TOOL_PROVIDER_CONNECTION_PERMISSION_DENIED'
+    | 'TOOL_PROVIDER_CONNECTION_PINNED_BY_AGENTS'
+    | 'TOOL_PROVIDER_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -19658,6 +22110,15 @@ export interface PatchToolProvidersProviderIdConnectionsConnectionId_RouteContra
   request: PatchToolProvidersProviderIdConnectionsConnectionId_Request;
   response: PatchToolProvidersProviderIdConnectionsConnectionId_Response;
   responseType: 'json';
+  errorCode:
+    | 'EDITOR_NOT_CONFIGURED'
+    | 'TOOL_PROVIDER_CONNECTIONS_STORAGE_UNAVAILABLE'
+    | 'TOOL_PROVIDER_CONNECTION_NOT_FOUND'
+    | 'TOOL_PROVIDER_CONNECTION_PERMISSION_DENIED'
+    | 'TOOL_PROVIDER_CONNECTION_UPDATE_FAILED'
+    | 'TOOL_PROVIDER_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -19697,6 +22158,13 @@ export interface GetToolProvidersProviderIdConnectionsConnectionIdUsage_RouteCon
   request: GetToolProvidersProviderIdConnectionsConnectionIdUsage_Request;
   response: GetToolProvidersProviderIdConnectionsConnectionIdUsage_Response;
   responseType: 'json';
+  errorCode:
+    | 'EDITOR_NOT_CONFIGURED'
+    | 'TOOL_PROVIDER_CONNECTION_PERMISSION_DENIED'
+    | 'TOOL_PROVIDER_CONNECTION_USAGE_LIST_FAILED'
+    | 'TOOL_PROVIDER_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -19729,6 +22197,12 @@ export interface GetToolProvidersProviderIdHealth_RouteContract {
   request: GetToolProvidersProviderIdHealth_Request;
   response: GetToolProvidersProviderIdHealth_Response;
   responseType: 'json';
+  errorCode:
+    | 'EDITOR_NOT_CONFIGURED'
+    | 'TOOL_PROVIDER_HEALTH_GET_FAILED'
+    | 'TOOL_PROVIDER_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -19763,6 +22237,7 @@ export interface GetProcessorProviders_RouteContract {
   request: GetProcessorProviders_Request;
   response: GetProcessorProviders_Response;
   responseType: 'json';
+  errorCode: 'EDITOR_NOT_CONFIGURED' | 'PROCESSOR_PROVIDERS_LIST_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -19805,6 +22280,12 @@ export interface GetProcessorProvidersProviderId_RouteContract {
   request: GetProcessorProvidersProviderId_Request;
   response: GetProcessorProvidersProviderId_Response;
   responseType: 'json';
+  errorCode:
+    | 'EDITOR_NOT_CONFIGURED'
+    | 'PROCESSOR_PROVIDER_GET_FAILED'
+    | 'PROCESSOR_PROVIDER_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -19855,6 +22336,7 @@ export interface GetSystemPackages_RouteContract {
   request: GetSystemPackages_Request;
   response: GetSystemPackages_Response;
   responseType: 'json';
+  errorCode: 'SYSTEM_PACKAGES_GET_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -19907,6 +22389,7 @@ export interface GetSystemApiSchema_RouteContract {
   request: GetSystemApiSchema_Request;
   response: GetSystemApiSchema_Response;
   responseType: 'json';
+  errorCode: CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -19959,6 +22442,7 @@ export interface GetDatasets_RouteContract {
   request: GetDatasets_Request;
   response: GetDatasets_Response;
   responseType: 'json';
+  errorCode: 'DATASETS_LIST_FAILED' | 'MASTRA_CORE_VERSION_UNSUPPORTED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -20020,6 +22504,13 @@ export interface PostDatasets_RouteContract {
   request: PostDatasets_Request;
   response: PostDatasets_Response;
   responseType: 'json';
+  errorCode:
+    | 'DATASET_CREATE_FAILED'
+    | 'DATASET_NOT_FOUND'
+    | 'DATASET_SCHEMA_PATTERN_UNSUPPORTED'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -20056,6 +22547,12 @@ export interface GetDatasetsDatasetId_RouteContract {
   request: GetDatasetsDatasetId_Request;
   response: GetDatasetsDatasetId_Response;
   responseType: 'json';
+  errorCode:
+    | 'DATASET_GET_FAILED'
+    | 'DATASET_NOT_FOUND'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -20127,6 +22624,15 @@ export interface PatchDatasetsDatasetId_RouteContract {
   request: PatchDatasetsDatasetId_Request;
   response: PatchDatasetsDatasetId_Response;
   responseType: 'json';
+  errorCode:
+    | 'DATASET_ITEM_SCHEMA_VALIDATION_FAILED'
+    | 'DATASET_NOT_FOUND'
+    | 'DATASET_SCHEMA_PATTERN_UNSUPPORTED'
+    | 'DATASET_SCHEMA_UPDATE_VALIDATION_FAILED'
+    | 'DATASET_UPDATE_FAILED'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -20155,6 +22661,12 @@ export interface DeleteDatasetsDatasetId_RouteContract {
   request: DeleteDatasetsDatasetId_Request;
   response: DeleteDatasetsDatasetId_Response;
   responseType: 'json';
+  errorCode:
+    | 'DATASET_DELETE_FAILED'
+    | 'DATASET_NOT_FOUND'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -20205,6 +22717,12 @@ export interface GetDatasetsDatasetIdItems_RouteContract {
   request: GetDatasetsDatasetIdItems_Request;
   response: GetDatasetsDatasetIdItems_Response;
   responseType: 'json';
+  errorCode:
+    | 'DATASET_ITEMS_LIST_FAILED'
+    | 'DATASET_NOT_FOUND'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -20262,6 +22780,17 @@ export interface PostDatasetsDatasetIdItems_RouteContract {
   request: PostDatasetsDatasetIdItems_Request;
   response: PostDatasetsDatasetIdItems_Response;
   responseType: 'json';
+  errorCode:
+    | 'DATASET_ITEM_ADD_FAILED'
+    | 'DATASET_ITEM_EXTERNAL_ID_INVALID'
+    | 'DATASET_ITEM_IDENTITY_CONFLICT'
+    | 'DATASET_ITEM_PAYLOAD_NOT_SERIALIZABLE'
+    | 'DATASET_ITEM_SCHEMA_VALIDATION_FAILED'
+    | 'DATASET_NOT_FOUND'
+    | 'DATASET_SCHEMA_PATTERN_UNSUPPORTED'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -20320,6 +22849,17 @@ export interface PostDatasetsDatasetIdItemsBatch_RouteContract {
   request: PostDatasetsDatasetIdItemsBatch_Request;
   response: PostDatasetsDatasetIdItemsBatch_Response;
   responseType: 'json';
+  errorCode:
+    | 'DATASET_ITEMS_BATCH_INSERT_FAILED'
+    | 'DATASET_ITEM_EXTERNAL_ID_INVALID'
+    | 'DATASET_ITEM_IDENTITY_CONFLICT'
+    | 'DATASET_ITEM_PAYLOAD_NOT_SERIALIZABLE'
+    | 'DATASET_ITEM_SCHEMA_VALIDATION_FAILED'
+    | 'DATASET_NOT_FOUND'
+    | 'DATASET_SCHEMA_PATTERN_UNSUPPORTED'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -20355,6 +22895,12 @@ export interface DeleteDatasetsDatasetIdItemsBatch_RouteContract {
   request: DeleteDatasetsDatasetIdItemsBatch_Request;
   response: DeleteDatasetsDatasetIdItemsBatch_Response;
   responseType: 'json';
+  errorCode:
+    | 'DATASET_ITEMS_BATCH_DELETE_FAILED'
+    | 'DATASET_NOT_FOUND'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -20384,6 +22930,13 @@ export interface GetDatasetsDatasetIdItemsItemId_RouteContract {
   request: GetDatasetsDatasetIdItemsItemId_Request;
   response: GetDatasetsDatasetIdItemsItemId_Response;
   responseType: 'json';
+  errorCode:
+    | 'DATASET_ITEM_GET_FAILED'
+    | 'DATASET_ITEM_NOT_FOUND'
+    | 'DATASET_NOT_FOUND'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -20441,6 +22994,18 @@ export interface PatchDatasetsDatasetIdItemsItemId_RouteContract {
   request: PatchDatasetsDatasetIdItemsItemId_Request;
   response: PatchDatasetsDatasetIdItemsItemId_Response;
   responseType: 'json';
+  errorCode:
+    | 'DATASET_ITEM_EXTERNAL_ID_INVALID'
+    | 'DATASET_ITEM_IDENTITY_CONFLICT'
+    | 'DATASET_ITEM_NOT_FOUND'
+    | 'DATASET_ITEM_PAYLOAD_NOT_SERIALIZABLE'
+    | 'DATASET_ITEM_SCHEMA_VALIDATION_FAILED'
+    | 'DATASET_ITEM_UPDATE_FAILED'
+    | 'DATASET_NOT_FOUND'
+    | 'DATASET_SCHEMA_PATTERN_UNSUPPORTED'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -20471,6 +23036,13 @@ export interface DeleteDatasetsDatasetIdItemsItemIdPurge_RouteContract {
   request: DeleteDatasetsDatasetIdItemsItemIdPurge_Request;
   response: DeleteDatasetsDatasetIdItemsItemIdPurge_Response;
   responseType: 'json';
+  errorCode:
+    | 'DATASET_ITEM_NOT_FOUND'
+    | 'DATASET_ITEM_PURGE_FAILED'
+    | 'DATASET_NOT_FOUND'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -20495,6 +23067,13 @@ export interface DeleteDatasetsDatasetIdItemsItemId_RouteContract {
   request: DeleteDatasetsDatasetIdItemsItemId_Request;
   response: DeleteDatasetsDatasetIdItemsItemId_Response;
   responseType: 'json';
+  errorCode:
+    | 'DATASET_ITEM_DELETE_FAILED'
+    | 'DATASET_ITEM_NOT_FOUND'
+    | 'DATASET_NOT_FOUND'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -20536,6 +23115,12 @@ export interface GetDatasetsDatasetIdVersions_RouteContract {
   request: GetDatasetsDatasetIdVersions_Request;
   response: GetDatasetsDatasetIdVersions_Response;
   responseType: 'json';
+  errorCode:
+    | 'DATASET_NOT_FOUND'
+    | 'DATASET_VERSIONS_LIST_FAILED'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -20594,6 +23179,13 @@ export interface GetDatasetsDatasetIdItemsItemIdHistory_RouteContract {
   request: GetDatasetsDatasetIdItemsItemIdHistory_Request;
   response: GetDatasetsDatasetIdItemsItemIdHistory_Response;
   responseType: 'json';
+  errorCode:
+    | 'DATASET_ITEM_HISTORY_LIST_FAILED'
+    | 'DATASET_ITEM_NOT_FOUND'
+    | 'DATASET_NOT_FOUND'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -20625,6 +23217,14 @@ export interface GetDatasetsDatasetIdItemsItemIdVersionsDatasetVersion_RouteCont
   request: GetDatasetsDatasetIdItemsItemIdVersionsDatasetVersion_Request;
   response: GetDatasetsDatasetIdItemsItemIdVersionsDatasetVersion_Response;
   responseType: 'json';
+  errorCode:
+    | 'DATASET_ITEM_NOT_FOUND'
+    | 'DATASET_ITEM_VERSION_GET_FAILED'
+    | 'DATASET_ITEM_VERSION_NOT_FOUND'
+    | 'DATASET_NOT_FOUND'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -20679,6 +23279,13 @@ export interface GetExperiments_RouteContract {
   request: GetExperiments_Request;
   response: GetExperiments_Response;
   responseType: 'json';
+  errorCode:
+    | 'EXPERIMENTS_LIST_FAILED'
+    | 'EXPERIMENTS_STORAGE_UNAVAILABLE'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -20707,6 +23314,13 @@ export interface GetExperimentsReviewSummary_RouteContract {
   request: GetExperimentsReviewSummary_Request;
   response: GetExperimentsReviewSummary_Response;
   responseType: 'json';
+  errorCode:
+    | 'EXPERIMENTS_STORAGE_UNAVAILABLE'
+    | 'EXPERIMENT_REVIEW_SUMMARY_GET_FAILED'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -20738,6 +23352,12 @@ export interface GetExperimentsExperimentId_RouteContract {
   request: GetExperimentsExperimentId_Request;
   response: GetExperimentsExperimentId_Response;
   responseType: 'json';
+  errorCode:
+    | 'EXPERIMENT_GET_FAILED'
+    | 'EXPERIMENT_NOT_FOUND'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -20766,6 +23386,12 @@ export interface DeleteExperimentsExperimentId_RouteContract {
   request: DeleteExperimentsExperimentId_Request;
   response: DeleteExperimentsExperimentId_Response;
   responseType: 'json';
+  errorCode:
+    | 'EXPERIMENT_DELETE_FAILED'
+    | 'EXPERIMENT_NOT_FOUND'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -20796,6 +23422,12 @@ export interface GetDatasetsDatasetIdExperiments_RouteContract {
   request: GetDatasetsDatasetIdExperiments_Request;
   response: GetDatasetsDatasetIdExperiments_Response;
   responseType: 'json';
+  errorCode:
+    | 'DATASET_NOT_FOUND'
+    | 'EXPERIMENTS_LIST_FAILED'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -20936,6 +23568,17 @@ export interface PostDatasetsDatasetIdExperiments_RouteContract {
   request: PostDatasetsDatasetIdExperiments_Request;
   response: PostDatasetsDatasetIdExperiments_Response;
   responseType: 'json';
+  errorCode:
+    | 'DATASET_NOT_FOUND'
+    | 'EXPERIMENT_ID_CONFLICT'
+    | 'EXPERIMENT_INVALID_TARGET'
+    | 'EXPERIMENT_NO_ITEMS'
+    | 'EXPERIMENT_TARGET_NOT_FOUND'
+    | 'EXPERIMENT_TARGET_REQUIRED'
+    | 'EXPERIMENT_TRIGGER_FAILED'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -21001,6 +23644,17 @@ export interface PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_Rout
   request: PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_Request;
   response: PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_Response;
   responseType: 'json';
+  errorCode:
+    | 'DATASET_ITEM_NOT_FOUND'
+    | 'DATASET_NOT_FOUND'
+    | 'EXPERIMENT_ALREADY_FINALIZED'
+    | 'EXPERIMENT_HAS_NO_TARGET'
+    | 'EXPERIMENT_ITEM_RUN_FAILED'
+    | 'EXPERIMENT_NOT_FOUND'
+    | 'EXPERIMENT_TARGET_NOT_FOUND'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -21075,6 +23729,16 @@ export interface PostDatasetsDatasetIdExperimentsExperimentIdResults_RouteContra
   request: PostDatasetsDatasetIdExperimentsExperimentIdResults_Request;
   response: PostDatasetsDatasetIdExperimentsExperimentIdResults_Response;
   responseType: 'json';
+  errorCode:
+    | 'DATASET_ITEM_NOT_FOUND'
+    | 'DATASET_NOT_FOUND'
+    | 'EXPERIMENT_ALREADY_FINALIZED'
+    | 'EXPERIMENT_HAS_TARGET'
+    | 'EXPERIMENT_NOT_FOUND'
+    | 'EXPERIMENT_RESULT_SUBMIT_FAILED'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -21100,6 +23764,13 @@ export interface PostDatasetsDatasetIdExperimentsExperimentIdFinalize_RouteContr
   request: PostDatasetsDatasetIdExperimentsExperimentIdFinalize_Request;
   response: PostDatasetsDatasetIdExperimentsExperimentIdFinalize_Response;
   responseType: 'json';
+  errorCode:
+    | 'DATASET_NOT_FOUND'
+    | 'EXPERIMENT_FINALIZE_FAILED'
+    | 'EXPERIMENT_NOT_FOUND'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -21125,6 +23796,13 @@ export interface GetDatasetsDatasetIdExperimentsExperimentId_RouteContract {
   request: GetDatasetsDatasetIdExperimentsExperimentId_Request;
   response: GetDatasetsDatasetIdExperimentsExperimentId_Response;
   responseType: 'json';
+  errorCode:
+    | 'DATASET_NOT_FOUND'
+    | 'EXPERIMENT_GET_FAILED'
+    | 'EXPERIMENT_NOT_FOUND'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -21156,6 +23834,13 @@ export interface DeleteDatasetsDatasetIdExperimentsExperimentId_RouteContract {
   request: DeleteDatasetsDatasetIdExperimentsExperimentId_Request;
   response: DeleteDatasetsDatasetIdExperimentsExperimentId_Response;
   responseType: 'json';
+  errorCode:
+    | 'DATASET_NOT_FOUND'
+    | 'EXPERIMENT_DELETE_FAILED'
+    | 'EXPERIMENT_NOT_FOUND'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -21198,6 +23883,13 @@ export interface PatchDatasetsDatasetIdExperimentsExperimentId_RouteContract {
   request: PatchDatasetsDatasetIdExperimentsExperimentId_Request;
   response: PatchDatasetsDatasetIdExperimentsExperimentId_Response;
   responseType: 'json';
+  errorCode:
+    | 'DATASET_NOT_FOUND'
+    | 'EXPERIMENT_NOT_FOUND'
+    | 'EXPERIMENT_UPDATE_FAILED'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -21251,6 +23943,13 @@ export interface GetDatasetsDatasetIdExperimentsExperimentIdResults_RouteContrac
   request: GetDatasetsDatasetIdExperimentsExperimentIdResults_Request;
   response: GetDatasetsDatasetIdExperimentsExperimentIdResults_Response;
   responseType: 'json';
+  errorCode:
+    | 'DATASET_NOT_FOUND'
+    | 'EXPERIMENT_NOT_FOUND'
+    | 'EXPERIMENT_RESULTS_LIST_FAILED'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -21293,6 +23992,15 @@ export interface PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_Ro
   request: PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_Request;
   response: PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_Response;
   responseType: 'json';
+  errorCode:
+    | 'DATASET_NOT_FOUND'
+    | 'EXPERIMENTS_STORAGE_UNAVAILABLE'
+    | 'EXPERIMENT_NOT_FOUND'
+    | 'EXPERIMENT_RESULT_UPDATE_FAILED'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'STORAGE_NOT_CONFIGURED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -21348,6 +24056,13 @@ export interface PostDatasetsDatasetIdCompare_RouteContract {
   request: PostDatasetsDatasetIdCompare_Request;
   response: PostDatasetsDatasetIdCompare_Response;
   responseType: 'json';
+  errorCode:
+    | 'DATASET_NOT_FOUND'
+    | 'EXPERIMENTS_COMPARE_FAILED'
+    | 'EXPERIMENT_NOT_FOUND'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -21398,6 +24113,12 @@ export interface PostDatasetsDatasetIdGenerateItems_RouteContract {
   request: PostDatasetsDatasetIdGenerateItems_Request;
   response: PostDatasetsDatasetIdGenerateItems_Response;
   responseType: 'json';
+  errorCode:
+    | 'DATASET_ITEMS_GENERATE_FAILED'
+    | 'DATASET_NOT_FOUND'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -21464,6 +24185,7 @@ export interface PostDatasetsClusterFailures_RouteContract {
   request: PostDatasetsClusterFailures_Request;
   response: PostDatasetsClusterFailures_Response;
   responseType: 'json';
+  errorCode: 'EXPERIMENT_FAILURES_CLUSTER_FAILED' | 'MASTRA_CORE_VERSION_UNSUPPORTED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -21496,6 +24218,7 @@ export interface GetBackgroundTasksStream_RouteContract {
   request: GetBackgroundTasksStream_Request;
   response: GetBackgroundTasksStream_Response;
   responseType: 'stream';
+  errorCode: 'THREAD_ACCESS_DENIED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -21540,6 +24263,7 @@ export interface GetBackgroundTasks_RouteContract {
   request: GetBackgroundTasks_Request;
   response: GetBackgroundTasks_Response;
   responseType: 'json';
+  errorCode: 'BACKGROUND_TASKS_LIST_FAILED' | 'THREAD_ACCESS_DENIED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -21566,6 +24290,12 @@ export interface GetBackgroundTasksBackgroundTaskId_RouteContract {
   request: GetBackgroundTasksBackgroundTaskId_Request;
   response: GetBackgroundTasksBackgroundTaskId_Response;
   responseType: 'json';
+  errorCode:
+    | 'BACKGROUND_TASK_GET_FAILED'
+    | 'BACKGROUND_TASK_NOT_FOUND'
+    | 'THREAD_ACCESS_DENIED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -21653,6 +24383,7 @@ export interface GetEditorBuilderSettings_RouteContract {
   request: GetEditorBuilderSettings_Request;
   response: GetEditorBuilderSettings_Response;
   responseType: 'json';
+  errorCode: 'BUILDER_SETTINGS_GET_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -21683,6 +24414,7 @@ export interface GetEditorWorkflowBuilderSettings_RouteContract {
   request: GetEditorWorkflowBuilderSettings_Request;
   response: GetEditorWorkflowBuilderSettings_Response;
   responseType: 'json';
+  errorCode: 'WORKFLOW_BUILDER_SETTINGS_GET_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -21709,6 +24441,14 @@ export interface PostEditorWorkflowBuilderStream_RouteContract {
   request: PostEditorWorkflowBuilderStream_Request;
   response: PostEditorWorkflowBuilderStream_Response;
   responseType: 'stream';
+  errorCode:
+    | 'REQUEST_ARGUMENT_REQUIRED'
+    | 'RESOURCE_ID_REQUIRED'
+    | 'THREAD_ACCESS_DENIED'
+    | 'WORKFLOW_BUILDER_NOT_ENABLED'
+    | 'WORKFLOW_BUILDER_STREAM_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -21729,6 +24469,7 @@ export interface GetEditorBuilderModelsAvailable_RouteContract {
   request: GetEditorBuilderModelsAvailable_Request;
   response: GetEditorBuilderModelsAvailable_Response;
   responseType: 'json';
+  errorCode: 'BUILDER_MODELS_FETCH_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -21789,6 +24530,7 @@ export interface GetEditorBuilderInfrastructure_RouteContract {
   request: GetEditorBuilderInfrastructure_Request;
   response: GetEditorBuilderInfrastructure_Response;
   responseType: 'json';
+  errorCode: 'BUILDER_INFRASTRUCTURE_STATUS_GET_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -21818,6 +24560,7 @@ export interface GetEditorBuilderRegistries_RouteContract {
   request: GetEditorBuilderRegistries_Request;
   response: GetEditorBuilderRegistries_Response;
   responseType: 'json';
+  errorCode: 'BUILDER_REGISTRIES_LIST_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -21856,6 +24599,12 @@ export interface GetEditorBuilderRegistriesRegistryIdSearch_RouteContract {
   request: GetEditorBuilderRegistriesRegistryIdSearch_Request;
   response: GetEditorBuilderRegistriesRegistryIdSearch_Response;
   responseType: 'json';
+  errorCode:
+    | 'BUILDER_REGISTRY_NOT_FOUND'
+    | 'REGISTRY_SEARCH_FAILED'
+    | 'SKILLS_REGISTRY_REQUEST_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -21892,6 +24641,12 @@ export interface GetEditorBuilderRegistriesRegistryIdPopular_RouteContract {
   request: GetEditorBuilderRegistriesRegistryIdPopular_Request;
   response: GetEditorBuilderRegistriesRegistryIdPopular_Response;
   responseType: 'json';
+  errorCode:
+    | 'BUILDER_REGISTRY_NOT_FOUND'
+    | 'REGISTRY_POPULAR_SKILLS_FETCH_FAILED'
+    | 'SKILLS_REGISTRY_REQUEST_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -21930,6 +24685,14 @@ export interface GetEditorBuilderRegistriesRegistryIdPreview_RouteContract {
   request: GetEditorBuilderRegistriesRegistryIdPreview_Request;
   response: GetEditorBuilderRegistriesRegistryIdPreview_Response;
   responseType: 'json';
+  errorCode:
+    | 'BUILDER_REGISTRY_NOT_FOUND'
+    | 'REGISTRY_SKILL_PREVIEW_FETCH_FAILED'
+    | 'SKILLS_REGISTRY_REQUEST_FAILED'
+    | 'SKILLS_REGISTRY_SKILL_CONTENT_UNAVAILABLE'
+    | 'SKILLS_REGISTRY_SKILL_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -21977,6 +24740,19 @@ export interface PostEditorBuilderRegistriesRegistryIdInstall_RouteContract {
   request: PostEditorBuilderRegistriesRegistryIdInstall_Request;
   response: PostEditorBuilderRegistriesRegistryIdInstall_Response;
   responseType: 'json';
+  errorCode:
+    | 'BUILDER_REGISTRY_NOT_FOUND'
+    | 'REGISTRY_SKILL_ID_DERIVATION_FAILED'
+    | 'REGISTRY_SKILL_INSTALL_FAILED'
+    | 'SKILLS_REGISTRY_SKILL_NOT_FOUND'
+    | 'SKILL_NAME_INVALID'
+    | 'STORAGE_NOT_CONFIGURED'
+    | 'STORED_SKILL_ALREADY_EXISTS'
+    | 'STORED_SKILL_STORAGE_DOMAIN_UNAVAILABLE'
+    | 'WORKSPACE_PATH_ABSOLUTE_NOT_ALLOWED'
+    | 'WORKSPACE_PATH_TRAVERSAL'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -21997,6 +24773,7 @@ export interface GetAgentBuilder_RouteContract {
   request: GetAgentBuilder_Request;
   response: GetAgentBuilder_Response;
   responseType: 'json';
+  errorCode: 'AGENT_BUILDER_ACTIONS_LIST_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -22022,6 +24799,7 @@ export interface GetAgentBuilderActionId_RouteContract {
   request: GetAgentBuilderActionId_Request;
   response: GetAgentBuilderActionId_Response;
   responseType: 'json';
+  errorCode: 'AGENT_BUILDER_ACTION_GET_FAILED' | 'AGENT_BUILDER_ACTION_INVALID' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -22050,6 +24828,7 @@ export interface GetAgentBuilderActionIdRuns_RouteContract {
   request: GetAgentBuilderActionIdRuns_Request;
   response: GetAgentBuilderActionIdRuns_Response;
   responseType: 'json';
+  errorCode: 'AGENT_BUILDER_ACTION_INVALID' | 'AGENT_BUILDER_ACTION_RUNS_LIST_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -22085,6 +24864,7 @@ export interface GetAgentBuilderActionIdRunsRunId_RouteContract {
   request: GetAgentBuilderActionIdRunsRunId_Request;
   response: GetAgentBuilderActionIdRunsRunId_Response;
   responseType: 'json';
+  errorCode: 'AGENT_BUILDER_ACTION_INVALID' | 'AGENT_BUILDER_ACTION_RUN_GET_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -22115,6 +24895,11 @@ export interface PostAgentBuilderActionIdCreateRun_RouteContract {
   request: PostAgentBuilderActionIdCreateRun_Request;
   response: PostAgentBuilderActionIdCreateRun_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_BUILDER_ACTION_INVALID'
+    | 'AGENT_BUILDER_ACTION_RUN_CREATE_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -22151,6 +24936,7 @@ export interface PostAgentBuilderActionIdStream_RouteContract {
   request: PostAgentBuilderActionIdStream_Request;
   response: PostAgentBuilderActionIdStream_Response;
   responseType: 'stream';
+  errorCode: 'AGENT_BUILDER_ACTION_INVALID' | 'AGENT_BUILDER_ACTION_STREAM_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -22187,6 +24973,7 @@ export interface PostAgentBuilderActionIdStreamLegacy_RouteContract {
   request: PostAgentBuilderActionIdStreamLegacy_Request;
   response: PostAgentBuilderActionIdStreamLegacy_Response;
   responseType: 'stream';
+  errorCode: 'AGENT_BUILDER_ACTION_INVALID' | 'AGENT_BUILDER_ACTION_STREAM_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -22223,6 +25010,7 @@ export interface PostAgentBuilderActionIdStartAsync_RouteContract {
   request: PostAgentBuilderActionIdStartAsync_Request;
   response: PostAgentBuilderActionIdStartAsync_Response;
   responseType: 'json';
+  errorCode: 'AGENT_BUILDER_ACTION_INVALID' | 'AGENT_BUILDER_ACTION_START_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -22257,6 +25045,7 @@ export interface PostAgentBuilderActionIdStart_RouteContract {
   request: PostAgentBuilderActionIdStart_Request;
   response: PostAgentBuilderActionIdStart_Response;
   responseType: 'json';
+  errorCode: 'AGENT_BUILDER_ACTION_INVALID' | 'AGENT_BUILDER_ACTION_RUN_START_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -22287,6 +25076,11 @@ export interface PostAgentBuilderActionIdObserve_RouteContract {
   request: PostAgentBuilderActionIdObserve_Request;
   response: PostAgentBuilderActionIdObserve_Response;
   responseType: 'stream';
+  errorCode:
+    | 'AGENT_BUILDER_ACTION_INVALID'
+    | 'AGENT_BUILDER_ACTION_STREAM_OBSERVE_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -22317,6 +25111,11 @@ export interface PostAgentBuilderActionIdObserveStreamLegacy_RouteContract {
   request: PostAgentBuilderActionIdObserveStreamLegacy_Request;
   response: PostAgentBuilderActionIdObserveStreamLegacy_Response;
   responseType: 'stream';
+  errorCode:
+    | 'AGENT_BUILDER_ACTION_INVALID'
+    | 'AGENT_BUILDER_ACTION_STREAM_OBSERVE_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -22353,6 +25152,7 @@ export interface PostAgentBuilderActionIdResumeAsync_RouteContract {
   request: PostAgentBuilderActionIdResumeAsync_Request;
   response: PostAgentBuilderActionIdResumeAsync_Response;
   responseType: 'json';
+  errorCode: 'AGENT_BUILDER_ACTION_INVALID' | 'AGENT_BUILDER_ACTION_RESUME_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -22389,6 +25189,7 @@ export interface PostAgentBuilderActionIdResumeNoWait_RouteContract {
   request: PostAgentBuilderActionIdResumeNoWait_Request;
   response: PostAgentBuilderActionIdResumeNoWait_Response;
   responseType: 'json';
+  errorCode: 'AGENT_BUILDER_ACTION_INVALID' | 'AGENT_BUILDER_ACTION_RESUME_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -22425,6 +25226,7 @@ export interface PostAgentBuilderActionIdResume_RouteContract {
   request: PostAgentBuilderActionIdResume_Request;
   response: PostAgentBuilderActionIdResume_Response;
   responseType: 'json';
+  errorCode: 'AGENT_BUILDER_ACTION_INVALID' | 'AGENT_BUILDER_ACTION_RESUME_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -22461,6 +25263,11 @@ export interface PostAgentBuilderActionIdResumeStream_RouteContract {
   request: PostAgentBuilderActionIdResumeStream_Request;
   response: PostAgentBuilderActionIdResumeStream_Response;
   responseType: 'stream';
+  errorCode:
+    | 'AGENT_BUILDER_ACTION_INVALID'
+    | 'AGENT_BUILDER_ACTION_RESUME_STREAM_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -22485,6 +25292,11 @@ export interface PostAgentBuilderActionIdRunsRunIdCancel_RouteContract {
   request: PostAgentBuilderActionIdRunsRunIdCancel_Request;
   response: PostAgentBuilderActionIdRunsRunIdCancel_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_BUILDER_ACTION_INVALID'
+    | 'AGENT_BUILDER_ACTION_RUN_CANCEL_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -22520,6 +25332,7 @@ export interface GetSchedules_RouteContract {
   request: GetSchedules_Request;
   response: GetSchedules_Response;
   responseType: 'json';
+  errorCode: 'SCHEDULES_LIST_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -22544,6 +25357,7 @@ export interface GetSchedulesScheduleId_RouteContract {
   request: GetSchedulesScheduleId_Request;
   response: GetSchedulesScheduleId_Response;
   responseType: 'json';
+  errorCode: 'SCHEDULE_GET_FAILED' | 'SCHEDULE_NOT_FOUND' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -22618,6 +25432,7 @@ export interface PostSchedules_RouteContract {
   request: PostSchedules_Request;
   response: PostSchedules_Response;
   responseType: 'json';
+  errorCode: 'AGENT_NOT_FOUND' | 'SCHEDULE_CREATE_FAILED' | 'WORKFLOW_NOT_FOUND' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -22679,6 +25494,7 @@ export interface PatchSchedulesScheduleId_RouteContract {
   request: PatchSchedulesScheduleId_Request;
   response: PatchSchedulesScheduleId_Response;
   responseType: 'json';
+  errorCode: 'SCHEDULE_NOT_FOUND' | 'SCHEDULE_UPDATE_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -22701,6 +25517,7 @@ export interface DeleteSchedulesScheduleId_RouteContract {
   request: DeleteSchedulesScheduleId_Request;
   response: DeleteSchedulesScheduleId_Response;
   responseType: 'json';
+  errorCode: 'SCHEDULE_DELETE_FAILED' | 'SCHEDULE_NOT_FOUND' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -22768,6 +25585,7 @@ export interface GetSchedulesScheduleIdTriggers_RouteContract {
   request: GetSchedulesScheduleIdTriggers_Request;
   response: GetSchedulesScheduleIdTriggers_Response;
   responseType: 'json';
+  errorCode: 'SCHEDULE_TRIGGERS_LIST_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -22790,6 +25608,7 @@ export interface PostSchedulesScheduleIdPause_RouteContract {
   request: PostSchedulesScheduleIdPause_Request;
   response: PostSchedulesScheduleIdPause_Response;
   responseType: 'json';
+  errorCode: 'SCHEDULE_NOT_FOUND' | 'SCHEDULE_PAUSE_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -22812,6 +25631,7 @@ export interface PostSchedulesScheduleIdResume_RouteContract {
   request: PostSchedulesScheduleIdResume_Request;
   response: PostSchedulesScheduleIdResume_Response;
   responseType: 'json';
+  errorCode: 'SCHEDULE_NOT_FOUND' | 'SCHEDULE_RESUME_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -22838,6 +25658,7 @@ export interface PostSchedulesScheduleIdRun_RouteContract {
   request: PostSchedulesScheduleIdRun_Request;
   response: PostSchedulesScheduleIdRun_Response;
   responseType: 'json';
+  errorCode: 'SCHEDULE_NOT_FOUND' | 'SCHEDULE_RUN_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -22871,6 +25692,7 @@ export interface GetChannelsPlatforms_RouteContract {
   request: GetChannelsPlatforms_Request;
   response: GetChannelsPlatforms_Response;
   responseType: 'json';
+  errorCode: 'CHANNEL_PLATFORMS_LIST_FAILED' | 'MASTRA_CORE_VERSION_UNSUPPORTED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -22898,6 +25720,12 @@ export interface GetChannelsPlatformInstallations_RouteContract {
   request: GetChannelsPlatformInstallations_Request;
   response: GetChannelsPlatformInstallations_Response;
   responseType: 'json';
+  errorCode:
+    | 'CHANNEL_INSTALLATIONS_LIST_FAILED'
+    | 'CHANNEL_PLATFORM_NOT_REGISTERED'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -22957,6 +25785,16 @@ export interface PostChannelsPlatformConnect_RouteContract {
   request: PostChannelsPlatformConnect_Request;
   response: PostChannelsPlatformConnect_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_NOT_FOUND'
+    | 'CHANNEL_CONNECT_FAILED'
+    | 'CHANNEL_INSTALLATION_NOT_FOUND'
+    | 'CHANNEL_PLATFORM_NOT_REGISTERED'
+    | 'CHANNEL_PROGRAMMATIC_CONNECTION_UNSUPPORTED'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -22986,6 +25824,15 @@ export interface PostChannelsPlatformAgentIdReconcile_RouteContract {
   request: PostChannelsPlatformAgentIdReconcile_Request;
   response: PostChannelsPlatformAgentIdReconcile_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_NOT_FOUND'
+    | 'CHANNEL_INSTALLATION_NOT_FOUND'
+    | 'CHANNEL_INSTALLATION_RECONCILE_FAILED'
+    | 'CHANNEL_PLATFORM_NOT_REGISTERED'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -23010,6 +25857,16 @@ export interface PostChannelsPlatformAgentIdDisconnect_RouteContract {
   request: PostChannelsPlatformAgentIdDisconnect_Request;
   response: PostChannelsPlatformAgentIdDisconnect_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_NOT_FOUND'
+    | 'CHANNEL_DISCONNECT_FAILED'
+    | 'CHANNEL_INSTALLATION_NOT_FOUND'
+    | 'CHANNEL_PLATFORM_NOT_REGISTERED'
+    | 'CHANNEL_PROGRAMMATIC_CONNECTION_UNSUPPORTED'
+    | 'MASTRA_CORE_VERSION_UNSUPPORTED'
+    | 'STORED_RESOURCE_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -23034,6 +25891,7 @@ export interface GetAgentController_RouteContract {
   request: GetAgentController_Request;
   response: GetAgentController_Response;
   responseType: 'json';
+  errorCode: 'AGENT_CONTROLLER_LIST_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -23065,6 +25923,7 @@ export interface GetAgentControllerControllerIdModes_RouteContract {
   request: GetAgentControllerControllerIdModes_Request;
   response: GetAgentControllerControllerIdModes_Response;
   responseType: 'json';
+  errorCode: 'AGENT_CONTROLLER_MODES_LIST_FAILED' | 'AGENT_CONTROLLER_NOT_FOUND' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -23097,6 +25956,7 @@ export interface GetAgentControllerControllerIdModels_RouteContract {
   request: GetAgentControllerControllerIdModels_Request;
   response: GetAgentControllerControllerIdModels_Response;
   responseType: 'json';
+  errorCode: 'AGENT_CONTROLLER_MODELS_LIST_FAILED' | 'AGENT_CONTROLLER_NOT_FOUND' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -23127,6 +25987,11 @@ export interface GetAgentControllerControllerIdActiveRuns_RouteContract {
   request: GetAgentControllerControllerIdActiveRuns_Request;
   response: GetAgentControllerControllerIdActiveRuns_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_CONTROLLER_ACTIVE_RUNS_LIST_FAILED'
+    | 'AGENT_CONTROLLER_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -23180,6 +26045,7 @@ export interface PostAgentControllerControllerIdSessions_RouteContract {
   request: PostAgentControllerControllerIdSessions_Request;
   response: PostAgentControllerControllerIdSessions_Response;
   responseType: 'json';
+  errorCode: 'AGENT_CONTROLLER_NOT_FOUND' | 'AGENT_CONTROLLER_SESSION_CREATE_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -23266,6 +26132,13 @@ export interface GetAgentControllerControllerIdSessionsSessionId_RouteContract {
   request: GetAgentControllerControllerIdSessionsSessionId_Request;
   response: GetAgentControllerControllerIdSessionsSessionId_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_CONTROLLER_NOT_FOUND'
+    | 'AGENT_CONTROLLER_SESSION_NOT_STARTED'
+    | 'AGENT_CONTROLLER_SESSION_STATE_GET_FAILED'
+    | 'AGENT_CONTROLLER_THREAD_NOT_FOUND'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -23320,6 +26193,7 @@ export interface GetAgentControllerControllerIdSessionsSessionIdThreads_RouteCon
   request: GetAgentControllerControllerIdSessionsSessionIdThreads_Request;
   response: GetAgentControllerControllerIdSessionsSessionIdThreads_Response;
   responseType: 'json';
+  errorCode: 'AGENT_CONTROLLER_NOT_FOUND' | 'AGENT_CONTROLLER_THREADS_LIST_FAILED' | CommonErrorCode | AuthErrorCode;
 }
 
 // ============================================================================
@@ -23366,6 +26240,12 @@ export interface PostAgentControllerControllerIdSessionsSessionIdThreads_RouteCo
   request: PostAgentControllerControllerIdSessionsSessionIdThreads_Request;
   response: PostAgentControllerControllerIdSessionsSessionIdThreads_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_CONTROLLER_NOT_FOUND'
+    | 'AGENT_CONTROLLER_SESSION_NOT_STARTED'
+    | 'AGENT_CONTROLLER_THREAD_CREATE_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -23403,6 +26283,12 @@ export interface DeleteAgentControllerControllerIdSessionsSessionIdThreadsThread
   request: DeleteAgentControllerControllerIdSessionsSessionIdThreadsThreadId_Request;
   response: DeleteAgentControllerControllerIdSessionsSessionIdThreadsThreadId_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_CONTROLLER_NOT_FOUND'
+    | 'AGENT_CONTROLLER_SESSION_NOT_STARTED'
+    | 'AGENT_CONTROLLER_THREAD_DELETE_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -23444,6 +26330,12 @@ export interface PutAgentControllerControllerIdSessionsSessionIdThreadsThreadId_
   request: PutAgentControllerControllerIdSessionsSessionIdThreadsThreadId_Request;
   response: PutAgentControllerControllerIdSessionsSessionIdThreadsThreadId_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_CONTROLLER_NOT_FOUND'
+    | 'AGENT_CONTROLLER_SESSION_NOT_STARTED'
+    | 'AGENT_CONTROLLER_THREAD_RENAME_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -23486,6 +26378,12 @@ export interface PostAgentControllerControllerIdSessionsSessionIdThreadsClone_Ro
   request: PostAgentControllerControllerIdSessionsSessionIdThreadsClone_Request;
   response: PostAgentControllerControllerIdSessionsSessionIdThreadsClone_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_CONTROLLER_NOT_FOUND'
+    | 'AGENT_CONTROLLER_SESSION_NOT_STARTED'
+    | 'AGENT_CONTROLLER_THREAD_CLONE_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -23561,6 +26459,14 @@ export interface GetAgentControllerControllerIdSessionsSessionIdThreadsThreadIdM
   request: GetAgentControllerControllerIdSessionsSessionIdThreadsThreadIdMessages_Request;
   response: GetAgentControllerControllerIdSessionsSessionIdThreadsThreadIdMessages_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_CONTROLLER_LIMIT_REQUIRES_PAGE'
+    | 'AGENT_CONTROLLER_NOT_FOUND'
+    | 'AGENT_CONTROLLER_THREAD_MESSAGES_LIST_FAILED'
+    | 'AGENT_CONTROLLER_THREAD_NOT_FOUND'
+    | 'THREAD_ACCESS_DENIED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -23591,6 +26497,12 @@ export interface GetAgentControllerControllerIdSessionsSessionIdStream_RouteCont
   request: GetAgentControllerControllerIdSessionsSessionIdStream_Request;
   response: unknown;
   responseType: 'stream';
+  errorCode:
+    | 'AGENT_CONTROLLER_NOT_FOUND'
+    | 'AGENT_CONTROLLER_SESSION_NOT_STARTED'
+    | 'AGENT_CONTROLLER_SESSION_STREAM_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -23644,6 +26556,12 @@ export interface PostAgentControllerControllerIdSessionsSessionIdMessages_RouteC
   request: PostAgentControllerControllerIdSessionsSessionIdMessages_Request;
   response: PostAgentControllerControllerIdSessionsSessionIdMessages_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_CONTROLLER_MESSAGE_SEND_FAILED'
+    | 'AGENT_CONTROLLER_NOT_FOUND'
+    | 'AGENT_CONTROLLER_SESSION_NOT_STARTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -23684,6 +26602,12 @@ export interface PostAgentControllerControllerIdSessionsSessionIdSteer_RouteCont
   request: PostAgentControllerControllerIdSessionsSessionIdSteer_Request;
   response: PostAgentControllerControllerIdSessionsSessionIdSteer_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_CONTROLLER_NOT_FOUND'
+    | 'AGENT_CONTROLLER_SESSION_NOT_STARTED'
+    | 'AGENT_CONTROLLER_SESSION_STEER_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -23724,6 +26648,12 @@ export interface PostAgentControllerControllerIdSessionsSessionIdFollowUp_RouteC
   request: PostAgentControllerControllerIdSessionsSessionIdFollowUp_Request;
   response: PostAgentControllerControllerIdSessionsSessionIdFollowUp_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_CONTROLLER_FOLLOW_UP_FAILED'
+    | 'AGENT_CONTROLLER_NOT_FOUND'
+    | 'AGENT_CONTROLLER_SESSION_NOT_STARTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -23757,6 +26687,12 @@ export interface PostAgentControllerControllerIdSessionsSessionIdAbort_RouteCont
   request: PostAgentControllerControllerIdSessionsSessionIdAbort_Request;
   response: PostAgentControllerControllerIdSessionsSessionIdAbort_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_CONTROLLER_NOT_FOUND'
+    | 'AGENT_CONTROLLER_SESSION_ABORT_FAILED'
+    | 'AGENT_CONTROLLER_SESSION_NOT_STARTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -23807,6 +26743,12 @@ export interface PostAgentControllerControllerIdSessionsSessionIdToolApproval_Ro
   request: PostAgentControllerControllerIdSessionsSessionIdToolApproval_Request;
   response: PostAgentControllerControllerIdSessionsSessionIdToolApproval_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_CONTROLLER_NOT_FOUND'
+    | 'AGENT_CONTROLLER_SESSION_NOT_STARTED'
+    | 'AGENT_CONTROLLER_TOOL_APPROVAL_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -23855,6 +26797,12 @@ export interface PostAgentControllerControllerIdSessionsSessionIdToolSuspension_
   request: PostAgentControllerControllerIdSessionsSessionIdToolSuspension_Request;
   response: PostAgentControllerControllerIdSessionsSessionIdToolSuspension_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_CONTROLLER_NOT_FOUND'
+    | 'AGENT_CONTROLLER_SESSION_NOT_STARTED'
+    | 'AGENT_CONTROLLER_TOOL_SUSPENSION_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -23896,6 +26844,12 @@ export interface PostAgentControllerControllerIdSessionsSessionIdMode_RouteContr
   request: PostAgentControllerControllerIdSessionsSessionIdMode_Request;
   response: PostAgentControllerControllerIdSessionsSessionIdMode_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_CONTROLLER_MODE_SWITCH_FAILED'
+    | 'AGENT_CONTROLLER_NOT_FOUND'
+    | 'AGENT_CONTROLLER_SESSION_NOT_STARTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -23938,6 +26892,12 @@ export interface PostAgentControllerControllerIdSessionsSessionIdModel_RouteCont
   request: PostAgentControllerControllerIdSessionsSessionIdModel_Request;
   response: PostAgentControllerControllerIdSessionsSessionIdModel_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_CONTROLLER_MODEL_SWITCH_FAILED'
+    | 'AGENT_CONTROLLER_NOT_FOUND'
+    | 'AGENT_CONTROLLER_SESSION_NOT_STARTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -23979,6 +26939,12 @@ export interface PostAgentControllerControllerIdSessionsSessionIdThread_RouteCon
   request: PostAgentControllerControllerIdSessionsSessionIdThread_Request;
   response: PostAgentControllerControllerIdSessionsSessionIdThread_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_CONTROLLER_NOT_FOUND'
+    | 'AGENT_CONTROLLER_SESSION_NOT_STARTED'
+    | 'AGENT_CONTROLLER_THREAD_SWITCH_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -24014,6 +26980,14 @@ export interface PostAgentControllerControllerIdSessionsSessionIdThreadsThreadId
   request: PostAgentControllerControllerIdSessionsSessionIdThreadsThreadIdOwner_Request;
   response: PostAgentControllerControllerIdSessionsSessionIdThreadsThreadIdOwner_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_CONTROLLER_NOT_FOUND'
+    | 'AGENT_CONTROLLER_SESSION_NOT_STARTED'
+    | 'AGENT_CONTROLLER_THREAD_NOT_FOUND'
+    | 'AGENT_CONTROLLER_THREAD_OWNERSHIP_TRANSFER_FAILED'
+    | 'THREAD_ACCESS_DENIED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -24076,6 +27050,12 @@ export interface PostAgentControllerControllerIdSessionsSessionIdNotifications_R
   request: PostAgentControllerControllerIdSessionsSessionIdNotifications_Request;
   response: PostAgentControllerControllerIdSessionsSessionIdNotifications_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_CONTROLLER_NOTIFICATION_SEND_FAILED'
+    | 'AGENT_CONTROLLER_NOT_FOUND'
+    | 'AGENT_CONTROLLER_SESSION_NOT_STARTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -24103,6 +27083,11 @@ export interface GetAgentControllerControllerIdWorkspace_RouteContract {
   request: GetAgentControllerControllerIdWorkspace_Request;
   response: GetAgentControllerControllerIdWorkspace_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_CONTROLLER_NOT_FOUND'
+    | 'AGENT_CONTROLLER_WORKSPACE_STATUS_GET_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -24137,6 +27122,12 @@ export interface GetAgentControllerControllerIdSessionsSessionIdOm_RouteContract
   request: GetAgentControllerControllerIdSessionsSessionIdOm_Request;
   response: GetAgentControllerControllerIdSessionsSessionIdOm_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_CONTROLLER_NOT_FOUND'
+    | 'AGENT_CONTROLLER_OM_RECORD_GET_FAILED'
+    | 'AGENT_CONTROLLER_SESSION_NOT_STARTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -24178,6 +27169,12 @@ export interface PostAgentControllerControllerIdSessionsSessionIdResource_RouteC
   request: PostAgentControllerControllerIdSessionsSessionIdResource_Request;
   response: PostAgentControllerControllerIdSessionsSessionIdResource_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_CONTROLLER_NOT_FOUND'
+    | 'AGENT_CONTROLLER_RESOURCE_ID_SET_FAILED'
+    | 'AGENT_CONTROLLER_SESSION_NOT_STARTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -24212,6 +27209,12 @@ export interface GetAgentControllerControllerIdSessionsSessionIdResources_RouteC
   request: GetAgentControllerControllerIdSessionsSessionIdResources_Request;
   response: GetAgentControllerControllerIdSessionsSessionIdResources_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_CONTROLLER_NOT_FOUND'
+    | 'AGENT_CONTROLLER_RESOURCE_IDS_LIST_FAILED'
+    | 'AGENT_CONTROLLER_SESSION_NOT_STARTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -24258,6 +27261,12 @@ export interface GetAgentControllerControllerIdSessionsSessionIdGoal_RouteContra
   request: GetAgentControllerControllerIdSessionsSessionIdGoal_Request;
   response: GetAgentControllerControllerIdSessionsSessionIdGoal_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_CONTROLLER_GOAL_GET_FAILED'
+    | 'AGENT_CONTROLLER_NOT_FOUND'
+    | 'AGENT_CONTROLLER_SESSION_NOT_STARTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -24301,6 +27310,13 @@ export interface PostAgentControllerControllerIdSessionsSessionIdGoal_RouteContr
   request: PostAgentControllerControllerIdSessionsSessionIdGoal_Request;
   response: PostAgentControllerControllerIdSessionsSessionIdGoal_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_CONTROLLER_GOAL_SET_FAILED'
+    | 'AGENT_CONTROLLER_NOT_FOUND'
+    | 'AGENT_CONTROLLER_NO_ACTIVE_THREAD'
+    | 'AGENT_CONTROLLER_SESSION_NOT_STARTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -24344,6 +27360,13 @@ export interface PutAgentControllerControllerIdSessionsSessionIdGoal_RouteContra
   request: PutAgentControllerControllerIdSessionsSessionIdGoal_Request;
   response: PutAgentControllerControllerIdSessionsSessionIdGoal_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_CONTROLLER_GOAL_UPDATE_FAILED'
+    | 'AGENT_CONTROLLER_NOT_FOUND'
+    | 'AGENT_CONTROLLER_NO_ACTIVE_THREAD'
+    | 'AGENT_CONTROLLER_SESSION_NOT_STARTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -24377,6 +27400,13 @@ export interface DeleteAgentControllerControllerIdSessionsSessionIdGoal_RouteCon
   request: DeleteAgentControllerControllerIdSessionsSessionIdGoal_Request;
   response: DeleteAgentControllerControllerIdSessionsSessionIdGoal_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_CONTROLLER_GOAL_CLEAR_FAILED'
+    | 'AGENT_CONTROLLER_NOT_FOUND'
+    | 'AGENT_CONTROLLER_NO_ACTIVE_THREAD'
+    | 'AGENT_CONTROLLER_SESSION_NOT_STARTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -24420,6 +27450,12 @@ export interface GetAgentControllerControllerIdSessionsSessionIdPermissions_Rout
   request: GetAgentControllerControllerIdSessionsSessionIdPermissions_Request;
   response: GetAgentControllerControllerIdSessionsSessionIdPermissions_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_CONTROLLER_NOT_FOUND'
+    | 'AGENT_CONTROLLER_PERMISSIONS_GET_FAILED'
+    | 'AGENT_CONTROLLER_SESSION_NOT_STARTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -24462,6 +27498,12 @@ export interface PutAgentControllerControllerIdSessionsSessionIdPermissionsCateg
   request: PutAgentControllerControllerIdSessionsSessionIdPermissionsCategory_Request;
   response: PutAgentControllerControllerIdSessionsSessionIdPermissionsCategory_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_CONTROLLER_CATEGORY_PERMISSION_SET_FAILED'
+    | 'AGENT_CONTROLLER_NOT_FOUND'
+    | 'AGENT_CONTROLLER_SESSION_NOT_STARTED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -24504,6 +27546,12 @@ export interface PutAgentControllerControllerIdSessionsSessionIdPermissionsTool_
   request: PutAgentControllerControllerIdSessionsSessionIdPermissionsTool_Request;
   response: PutAgentControllerControllerIdSessionsSessionIdPermissionsTool_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_CONTROLLER_NOT_FOUND'
+    | 'AGENT_CONTROLLER_SESSION_NOT_STARTED'
+    | 'AGENT_CONTROLLER_TOOL_PERMISSION_SET_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -24547,6 +27595,12 @@ export interface PutAgentControllerControllerIdSessionsSessionIdState_RouteContr
   request: PutAgentControllerControllerIdSessionsSessionIdState_Request;
   response: PutAgentControllerControllerIdSessionsSessionIdState_Response;
   responseType: 'json';
+  errorCode:
+    | 'AGENT_CONTROLLER_NOT_FOUND'
+    | 'AGENT_CONTROLLER_SESSION_NOT_STARTED'
+    | 'AGENT_CONTROLLER_SESSION_STATE_SET_FAILED'
+    | CommonErrorCode
+    | AuthErrorCode;
 }
 
 // ============================================================================
@@ -24991,6 +28045,1042 @@ export type Body<K extends RouteKey> = RouteTypes[K]['body'];
 export type RouteRequest<K extends RouteKey> = RouteTypes[K]['request'];
 export type RouteResponse<K extends RouteKey> = RouteTypes[K]['response'];
 export type RouteResponseType<K extends RouteKey> = RouteTypes[K]['responseType'];
+export type RouteErrorCode<K extends RouteKey> = RouteTypes[K]['errorCode'];
+/** Error bodies route `K` can return, narrowed by `code`. */
+export type RouteError<K extends RouteKey> = ServerError<RouteErrorCode<K>>;
+
+// ============================================================================
+// Server Error Codes
+// ============================================================================
+export type ServerErrorCode = keyof ServerErrorMetadataMap;
+
+/** Codes any route can return (request validation, generic fallbacks, model policy). */
+export type CommonErrorCode =
+  | 'UNCATEGORIZED_ERROR'
+  | 'UNEXPECTED_ERROR'
+  | 'SERVER_SHUTTING_DOWN'
+  | 'REQUEST_VALIDATION_FAILED'
+  | 'REQUEST_BODY_INVALID_JSON'
+  | 'REQUEST_BODY_TOO_LARGE'
+  | 'REQUEST_MULTIPART_INVALID'
+  | 'REQUEST_FILE_TOO_LARGE'
+  | 'REQUEST_FILE_TYPE_NOT_ALLOWED'
+  | 'REQUEST_RATE_LIMIT_EXCEEDED'
+  | 'MODEL_NOT_ALLOWED';
+
+/** Codes any authenticated route can return from authentication and permission checks. */
+export type AuthErrorCode =
+  | 'AUTHENTICATION_REQUIRED'
+  | 'AUTHENTICATION_FAILED'
+  | 'AUTHENTICATION_TOKEN_INVALID'
+  | 'AUTHENTICATED_USER_RESOURCE_MAPPING_FAILED'
+  | 'AUTHORIZATION_CHECK_FAILED'
+  | 'RESOURCE_ACCESS_DENIED'
+  | 'PERMISSION_DENIED'
+  | 'FGA_USER_REQUIRED'
+  | 'FGA_ROUTE_METADATA_REQUIRED'
+  | 'FGA_ROUTE_METADATA_INCOMPLETE'
+  | 'FGA_AUTHORIZATION_DENIED';
+
+/** The `metadata` each error code carries; `undefined` when the code carries none. */
+export interface ServerErrorMetadataMap {
+  ACCOUNT_CREATE_FAILED: undefined;
+  ADMIN_ACCESS_REQUIRED: undefined;
+  AGENTS_LIST_FAILED: undefined;
+  AGENT_BUILDER_ACTIONS_LIST_FAILED: undefined;
+  AGENT_BUILDER_ACTION_GET_FAILED: undefined;
+  AGENT_BUILDER_ACTION_INVALID: {
+    actionId: string;
+  };
+  AGENT_BUILDER_ACTION_RESUME_FAILED: undefined;
+  AGENT_BUILDER_ACTION_RESUME_STREAM_FAILED: undefined;
+  AGENT_BUILDER_ACTION_RUNS_LIST_FAILED: undefined;
+  AGENT_BUILDER_ACTION_RUN_CANCEL_FAILED: undefined;
+  AGENT_BUILDER_ACTION_RUN_CREATE_FAILED: undefined;
+  AGENT_BUILDER_ACTION_RUN_GET_FAILED: undefined;
+  AGENT_BUILDER_ACTION_RUN_START_FAILED: undefined;
+  AGENT_BUILDER_ACTION_START_FAILED: undefined;
+  AGENT_BUILDER_ACTION_STREAM_FAILED: undefined;
+  AGENT_BUILDER_ACTION_STREAM_OBSERVE_FAILED: undefined;
+  AGENT_BUILDER_NOT_ENABLED: undefined;
+  AGENT_CLONE_FAILED: undefined;
+  AGENT_CONTROLLER_ACTIVE_RUNS_LIST_FAILED: undefined;
+  AGENT_CONTROLLER_CATEGORY_PERMISSION_SET_FAILED: undefined;
+  AGENT_CONTROLLER_FOLLOW_UP_FAILED: undefined;
+  AGENT_CONTROLLER_GOAL_CLEAR_FAILED: undefined;
+  AGENT_CONTROLLER_GOAL_GET_FAILED: undefined;
+  AGENT_CONTROLLER_GOAL_SET_FAILED: undefined;
+  AGENT_CONTROLLER_GOAL_UPDATE_FAILED: undefined;
+  AGENT_CONTROLLER_LIMIT_REQUIRES_PAGE: undefined;
+  AGENT_CONTROLLER_LIST_FAILED: undefined;
+  AGENT_CONTROLLER_MESSAGE_SEND_FAILED: undefined;
+  AGENT_CONTROLLER_MODELS_LIST_FAILED: undefined;
+  AGENT_CONTROLLER_MODEL_SWITCH_FAILED: undefined;
+  AGENT_CONTROLLER_MODES_LIST_FAILED: undefined;
+  AGENT_CONTROLLER_MODE_SWITCH_FAILED: undefined;
+  AGENT_CONTROLLER_NOTIFICATION_SEND_FAILED: undefined;
+  AGENT_CONTROLLER_NOT_FOUND: {
+    controllerId: string;
+  };
+  AGENT_CONTROLLER_NO_ACTIVE_THREAD: undefined;
+  AGENT_CONTROLLER_OM_RECORD_GET_FAILED: undefined;
+  AGENT_CONTROLLER_PERMISSIONS_GET_FAILED: undefined;
+  AGENT_CONTROLLER_RESOURCE_IDS_LIST_FAILED: undefined;
+  AGENT_CONTROLLER_RESOURCE_ID_SET_FAILED: undefined;
+  AGENT_CONTROLLER_SESSION_ABORT_FAILED: undefined;
+  AGENT_CONTROLLER_SESSION_CREATE_FAILED: undefined;
+  AGENT_CONTROLLER_SESSION_NOT_STARTED: {
+    sessionId: string;
+  };
+  AGENT_CONTROLLER_SESSION_STATE_GET_FAILED: undefined;
+  AGENT_CONTROLLER_SESSION_STATE_SET_FAILED: undefined;
+  AGENT_CONTROLLER_SESSION_STEER_FAILED: undefined;
+  AGENT_CONTROLLER_SESSION_STREAM_FAILED: undefined;
+  AGENT_CONTROLLER_THREADS_LIST_FAILED: undefined;
+  AGENT_CONTROLLER_THREAD_CLONE_FAILED: undefined;
+  AGENT_CONTROLLER_THREAD_CREATE_FAILED: undefined;
+  AGENT_CONTROLLER_THREAD_DELETE_FAILED: undefined;
+  AGENT_CONTROLLER_THREAD_MESSAGES_LIST_FAILED: undefined;
+  AGENT_CONTROLLER_THREAD_NOT_FOUND: {
+    threadId: string;
+  };
+  AGENT_CONTROLLER_THREAD_OWNERSHIP_TRANSFER_FAILED: undefined;
+  AGENT_CONTROLLER_THREAD_RENAME_FAILED: undefined;
+  AGENT_CONTROLLER_THREAD_SWITCH_FAILED: undefined;
+  AGENT_CONTROLLER_TOOL_APPROVAL_FAILED: undefined;
+  AGENT_CONTROLLER_TOOL_PERMISSION_SET_FAILED: undefined;
+  AGENT_CONTROLLER_TOOL_SUSPENSION_FAILED: undefined;
+  AGENT_CONTROLLER_WORKSPACE_STATUS_GET_FAILED: undefined;
+  AGENT_GENERATE_FAILED: undefined;
+  AGENT_GET_FAILED: undefined;
+  AGENT_ID_REQUIRED: undefined;
+  AGENT_INSTRUCTIONS_ENHANCE_FAILED: undefined;
+  AGENT_LISTENER_GET_FAILED: undefined;
+  AGENT_LISTEN_FAILED: undefined;
+  AGENT_LOOP_STREAM_FAILED: undefined;
+  AGENT_MESSAGE_QUEUE_FAILED: undefined;
+  AGENT_MESSAGE_SEND_FAILED: undefined;
+  AGENT_MODEL_API_KEY_NOT_FOUND: undefined;
+  AGENT_MODEL_CONFIG_NOT_FOUND: {
+    agentId: string;
+    modelConfigId: string;
+  };
+  AGENT_MODEL_LIST_DYNAMIC: {
+    agentId: string;
+  };
+  AGENT_MODEL_LIST_EMPTY: undefined;
+  AGENT_MODEL_LIST_ITEM_UPDATE_FAILED: undefined;
+  AGENT_MODEL_LIST_REORDER_FAILED: undefined;
+  AGENT_MODEL_LIST_REORDER_INVALID: {
+    agentId: string;
+  };
+  AGENT_MODEL_RESET_FAILED: undefined;
+  AGENT_MODEL_UPDATE_FAILED: undefined;
+  AGENT_NETWORK_TOOL_CALL_APPROVE_FAILED: undefined;
+  AGENT_NETWORK_TOOL_CALL_DECLINE_FAILED: undefined;
+  AGENT_NOT_FOUND: {
+    agentId: string;
+  };
+  AGENT_PENDING_SIGNALS_CANCEL_FAILED: undefined;
+  AGENT_PROVIDERS_LIST_FAILED: undefined;
+  AGENT_RECOVER_UNSUPPORTED: undefined;
+  AGENT_RESUME_ALREADY_CLAIMED:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  AGENT_RESUME_RUN_NOT_SUSPENDED:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  AGENT_RUN_ID_REQUIRED: undefined;
+  AGENT_RUN_RECOVER_FAILED: undefined;
+  AGENT_SIGNALS_UNSUPPORTED: undefined;
+  AGENT_SIGNAL_QUEUE_FAILED: undefined;
+  AGENT_SIGNAL_SEND_FAILED: undefined;
+  AGENT_SKILL_GET_FAILED: undefined;
+  AGENT_SKILL_NOT_FOUND: {
+    skill: string;
+  };
+  AGENT_SPEAKERS_LIST_FAILED: undefined;
+  AGENT_SPEAK_FAILED:
+    | {
+        agentId: string;
+      }
+    | undefined;
+  AGENT_STREAM_FAILED: undefined;
+  AGENT_STREAM_OBSERVE_FAILED: undefined;
+  AGENT_STREAM_RESUME_FAILED: undefined;
+  AGENT_SUSPENDED_RUNS_LIST_FAILED: undefined;
+  AGENT_THREAD_ABORT_FAILED: undefined;
+  AGENT_THREAD_OR_RESOURCE_ID_REQUIRED: undefined;
+  AGENT_THREAD_SUBSCRIBE_FAILED: undefined;
+  AGENT_TOOL_APPROVAL_SEND_FAILED: undefined;
+  AGENT_TOOL_CALL_APPROVE_FAILED: undefined;
+  AGENT_TOOL_CALL_DECLINE_FAILED: undefined;
+  AGENT_TOOL_CALL_ID_REQUIRED: undefined;
+  AGENT_TOOL_EXECUTE_FAILED: undefined;
+  AGENT_TOOL_GET_FAILED: undefined;
+  AGENT_VERSIONS_COMPARE_FAILED: undefined;
+  AGENT_VERSIONS_LIST_FAILED: undefined;
+  AGENT_VERSION_ACTIVATE_FAILED: undefined;
+  AGENT_VERSION_ACTIVE_DELETE_FORBIDDEN: undefined;
+  AGENT_VERSION_CREATED_RESOLVE_FAILED: undefined;
+  AGENT_VERSION_CREATE_FAILED: undefined;
+  AGENT_VERSION_DELETE_FAILED: undefined;
+  AGENT_VERSION_GET_FAILED: undefined;
+  AGENT_VERSION_NOT_FOUND: {
+    versionId: string;
+    agentId: string;
+  };
+  AGENT_VERSION_RESTORE_FAILED: undefined;
+  AGENT_VOICE_NOT_CONFIGURED: {
+    agentId: string;
+  };
+  AUTHENTICATED_USER_RESOURCE_MAPPING_FAILED: undefined;
+  AUTHENTICATION_FAILED: undefined;
+  AUTHENTICATION_REQUIRED: undefined;
+  AUTHENTICATION_TOKEN_INVALID: undefined;
+  AUTHORIZATION_CHECK_FAILED: undefined;
+  AUTH_CAPABILITIES_GET_FAILED: undefined;
+  AUTH_CURRENT_USER_GET_FAILED: undefined;
+  AUTH_LOGOUT_FAILED: undefined;
+  AUTH_ROLE_PERMISSIONS_GET_FAILED: undefined;
+  AUTH_SESSION_REFRESH_FAILED: undefined;
+  AUTH_SSO_LOGIN_FAILED: undefined;
+  AVATAR_BASE64_INVALID: undefined;
+  AVATAR_DATA_URL_INVALID: undefined;
+  AVATAR_EMPTY: undefined;
+  AVATAR_TOO_LARGE: {
+    byteLength: number;
+  };
+  AVATAR_URL_NOT_STRING: undefined;
+  BACKGROUND_TASKS_LIST_FAILED: undefined;
+  BACKGROUND_TASK_GET_FAILED: undefined;
+  BACKGROUND_TASK_NOT_FOUND: undefined;
+  BLOB_STORAGE_DOMAIN_UNAVAILABLE: undefined;
+  BUILDER_INFRASTRUCTURE_STATUS_GET_FAILED: undefined;
+  BUILDER_MODELS_FETCH_FAILED: undefined;
+  BUILDER_REGISTRIES_LIST_FAILED: undefined;
+  BUILDER_REGISTRY_NOT_FOUND: undefined;
+  BUILDER_SETTINGS_GET_FAILED: undefined;
+  CHANNEL_AGENT_MEMORY_NOT_CONFIGURED: undefined;
+  CHANNEL_CONNECT_FAILED: undefined;
+  CHANNEL_DISCONNECT_FAILED: undefined;
+  CHANNEL_INSTALLATIONS_LIST_FAILED: undefined;
+  CHANNEL_INSTALLATION_NOT_FOUND: undefined;
+  CHANNEL_INSTALLATION_RECONCILE_FAILED: undefined;
+  CHANNEL_PLATFORMS_LIST_FAILED: undefined;
+  CHANNEL_PLATFORM_NOT_REGISTERED: {
+    platform: string;
+  };
+  CHANNEL_PROGRAMMATIC_CONNECTION_UNSUPPORTED: {
+    platform: string;
+  };
+  CONVERSATION_CREATE_FAILED: undefined;
+  CONVERSATION_DELETE_FAILED: undefined;
+  CONVERSATION_GET_FAILED: undefined;
+  CONVERSATION_ITEMS_LIST_FAILED: undefined;
+  CONVERSATION_MEMORY_NOT_CONFIGURED: {
+    agentId: string;
+  };
+  CONVERSATION_NOT_FOUND: {
+    conversationId: string;
+  };
+  CREDENTIALS_AUTH_NOT_CONFIGURED: undefined;
+  CREDENTIALS_INVALID: undefined;
+  DATASETS_LIST_FAILED: undefined;
+  DATASETS_STORAGE_UNAVAILABLE: undefined;
+  DATASET_CREATE_FAILED: undefined;
+  DATASET_DELETE_FAILED: undefined;
+  DATASET_FIELD_INVALID: undefined;
+  DATASET_GET_FAILED: undefined;
+  DATASET_ITEMS_BATCH_DELETE_FAILED: undefined;
+  DATASET_ITEMS_BATCH_INSERT_FAILED: undefined;
+  DATASET_ITEMS_GENERATE_FAILED: undefined;
+  DATASET_ITEMS_LIST_FAILED: undefined;
+  DATASET_ITEM_ADD_FAILED: undefined;
+  DATASET_ITEM_DELETE_FAILED: undefined;
+  DATASET_ITEM_EXTERNAL_ID_INVALID: {
+    field: string;
+  };
+  DATASET_ITEM_GET_FAILED: undefined;
+  DATASET_ITEM_HISTORY_LIST_FAILED: undefined;
+  DATASET_ITEM_IDENTITY_CONFLICT: {
+    conflicts: unknown[];
+  };
+  DATASET_ITEM_NOT_FOUND: {
+    itemId: string;
+  };
+  DATASET_ITEM_PAYLOAD_NOT_SERIALIZABLE: undefined;
+  DATASET_ITEM_PURGE_FAILED: undefined;
+  DATASET_ITEM_SCHEMA_VALIDATION_FAILED: {
+    field: 'input' | 'groundTruth';
+    errors: {
+      path: string;
+      code: string;
+      message: string;
+    }[];
+  };
+  DATASET_ITEM_UPDATE_FAILED: undefined;
+  DATASET_ITEM_VERSION_GET_FAILED: undefined;
+  DATASET_ITEM_VERSION_NOT_FOUND: {
+    itemId: string;
+    datasetVersion: number;
+  };
+  DATASET_NOT_FOUND: undefined;
+  DATASET_SCHEMA_PATTERN_UNSUPPORTED: undefined;
+  DATASET_SCHEMA_UPDATE_VALIDATION_FAILED: {
+    failingItems: {
+      index: number;
+      data: unknown;
+      field: 'input' | 'groundTruth';
+      errors: {
+        path: string;
+        code: string;
+        message: string;
+      }[];
+    }[];
+  };
+  DATASET_UPDATE_FAILED: undefined;
+  DATASET_VERSIONING_UNSUPPORTED: undefined;
+  DATASET_VERSIONS_LIST_FAILED: undefined;
+  DATASET_VERSION_NOT_FOUND: undefined;
+  DURABLE_AGENT_EXECUTION_CONFLICT:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  DURABLE_AGENT_RECOVER_RUN_ACTIVE_LOCALLY:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  DURABLE_AGENT_RECOVER_RUN_SUSPENDED:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  DURABLE_AGENT_RUN_ACTIVE:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  DURABLE_RUN_ACCESS_DENIED: undefined;
+  DURABLE_RUN_TOOL_CALL_NOT_SUSPENDED: undefined;
+  DYNAMIC_WORKFLOWS_LIST_FAILED: undefined;
+  DYNAMIC_WORKFLOWS_STORAGE_DOMAIN_UNAVAILABLE: undefined;
+  DYNAMIC_WORKFLOW_DELETE_FAILED: undefined;
+  DYNAMIC_WORKFLOW_GET_FAILED: undefined;
+  DYNAMIC_WORKFLOW_NOT_FOUND: {
+    dynamicWorkflowId: string;
+  };
+  DYNAMIC_WORKFLOW_UPSERT_FAILED: undefined;
+  EDITOR_NOT_CONFIGURED: undefined;
+  EMBEDDERS_LIST_FAILED: undefined;
+  ENDPOINT_DEPRECATED: undefined;
+  ENTITY_NAMES_LIST_FAILED: undefined;
+  ENTITY_TYPES_LIST_FAILED: undefined;
+  ENVIRONMENTS_LIST_FAILED: undefined;
+  EXPERIMENTS_COMPARE_FAILED: undefined;
+  EXPERIMENTS_LIST_FAILED: undefined;
+  EXPERIMENTS_STORAGE_UNAVAILABLE: undefined;
+  EXPERIMENT_ALREADY_FINALIZED: undefined;
+  EXPERIMENT_DELETE_FAILED: undefined;
+  EXPERIMENT_FAILURES_CLUSTER_FAILED: undefined;
+  EXPERIMENT_FINALIZE_FAILED: undefined;
+  EXPERIMENT_GET_FAILED: undefined;
+  EXPERIMENT_HAS_NO_TARGET: undefined;
+  EXPERIMENT_HAS_TARGET: undefined;
+  EXPERIMENT_ID_CONFLICT: undefined;
+  EXPERIMENT_INVALID_TARGET: undefined;
+  EXPERIMENT_ITEM_RUN_FAILED: undefined;
+  EXPERIMENT_NOT_FOUND: {
+    experimentId: string;
+  };
+  EXPERIMENT_NO_ITEMS: undefined;
+  EXPERIMENT_RESULTS_LIST_FAILED: undefined;
+  EXPERIMENT_RESULT_NOT_FOUND: undefined;
+  EXPERIMENT_RESULT_SUBMIT_FAILED: undefined;
+  EXPERIMENT_RESULT_UPDATE_FAILED: undefined;
+  EXPERIMENT_REVIEW_SUMMARY_GET_FAILED: undefined;
+  EXPERIMENT_TARGET_NOT_FOUND: undefined;
+  EXPERIMENT_TARGET_REQUIRED: undefined;
+  EXPERIMENT_TRIGGER_FAILED: undefined;
+  EXPERIMENT_UPDATE_FAILED: undefined;
+  FAVORITES_STORAGE_DOMAIN_UNAVAILABLE: undefined;
+  FEEDBACK_AGGREGATE_GET_FAILED: undefined;
+  FEEDBACK_BREAKDOWN_GET_FAILED: undefined;
+  FEEDBACK_CREATE_FAILED: undefined;
+  FEEDBACK_DELETE_FAILED: undefined;
+  FEEDBACK_LIST_FAILED: undefined;
+  FEEDBACK_PERCENTILES_GET_FAILED: undefined;
+  FEEDBACK_REVIEW_STATUS_UPDATE_FAILED: undefined;
+  FEEDBACK_TIME_SERIES_GET_FAILED: undefined;
+  FGA_AUTHORIZATION_DENIED: {
+    permission: string | string[];
+    resourceType: string;
+    resourceId: string;
+  };
+  FGA_ROUTE_METADATA_INCOMPLETE: undefined;
+  FGA_ROUTE_METADATA_REQUIRED: undefined;
+  FGA_USER_REQUIRED: undefined;
+  GATEWAY_MEMORY_METADATA_FILTER_UNSUPPORTED: undefined;
+  LOGOUT_NOT_CONFIGURED: undefined;
+  LOGS_BY_RUN_LIST_FAILED: undefined;
+  LOGS_LIST_FAILED: undefined;
+  LOG_TRANSPORTS_LIST_FAILED: undefined;
+  MASTRA_CORE_VERSION_UNSUPPORTED:
+    | {
+        methodName?: string | undefined;
+        endpoint?: string | undefined;
+      }
+    | undefined;
+  MASTRA_INSTANCE_REQUIRED: undefined;
+  MCP_CLIENT_VERSIONS_COMPARE_FAILED: undefined;
+  MCP_CLIENT_VERSIONS_LIST_FAILED: undefined;
+  MCP_CLIENT_VERSION_ACTIVATE_FAILED: undefined;
+  MCP_CLIENT_VERSION_ACTIVE_DELETE_FORBIDDEN: undefined;
+  MCP_CLIENT_VERSION_CREATED_RESOLVE_FAILED: undefined;
+  MCP_CLIENT_VERSION_CREATE_FAILED: undefined;
+  MCP_CLIENT_VERSION_DELETE_FAILED: undefined;
+  MCP_CLIENT_VERSION_GET_FAILED: undefined;
+  MCP_CLIENT_VERSION_NOT_FOUND: {
+    versionId: string;
+    mcpClientId: string;
+  };
+  MCP_CLIENT_VERSION_RESTORE_FAILED: undefined;
+  MCP_EVENT_ACCESS_DENIED: undefined;
+  MCP_EVENT_ARGUMENTS_INVALID: undefined;
+  MCP_EVENT_DELIVERY_UNSUPPORTED: undefined;
+  MCP_EVENT_NOT_EMITTABLE: undefined;
+  MCP_EVENT_NOT_FOUND: undefined;
+  MCP_EVENT_PAYLOAD_INVALID: undefined;
+  MCP_EVENT_REQUEST_FAILED: undefined;
+  MCP_EVENT_STREAMS_LIMIT_EXCEEDED: undefined;
+  MCP_RESOURCES_UNSUPPORTED: {
+    serverId: string;
+  };
+  MCP_RESOURCE_NOT_FOUND: {
+    uri: string;
+    serverId: string;
+  };
+  MCP_SERVERS_LIST_FAILED: undefined;
+  MCP_SERVERS_LIST_UNSUPPORTED: undefined;
+  MCP_SERVER_GET_FAILED: undefined;
+  MCP_SERVER_LOOKUP_UNSUPPORTED: undefined;
+  MCP_SERVER_NOT_FOUND: {
+    serverId: string;
+  };
+  MCP_SERVER_RESOURCES_LIST_FAILED: undefined;
+  MCP_SERVER_RESOURCE_READ_FAILED: undefined;
+  MCP_SERVER_TOOLS_LIST_FAILED: undefined;
+  MCP_SERVER_TOOL_EXECUTE_FAILED: undefined;
+  MCP_SERVER_TOOL_GET_FAILED: undefined;
+  MCP_SERVER_VERSION_NOT_FOUND: {
+    serverId: string;
+    version: string;
+    availableVersion: string;
+  };
+  MCP_SSE_TRANSPORT_UNAVAILABLE: undefined;
+  MCP_TOOLS_UNSUPPORTED: {
+    serverId: string;
+  };
+  MCP_TOOL_INPUT_INVALID: {
+    serverId: string;
+    toolId: string;
+  };
+  MCP_TOOL_NOT_FOUND: {
+    toolId: string;
+    serverId: string;
+  };
+  MEMORY_BUFFER_STATUS_AWAIT_FAILED: undefined;
+  MEMORY_CONFIG_GET_FAILED: undefined;
+  MEMORY_NOT_CONFIGURED: undefined;
+  MEMORY_SEARCH_FAILED: undefined;
+  MEMORY_STATUS_GET_FAILED: undefined;
+  MEMORY_STORAGE_NOT_INITIALIZED: {
+    agentId: string;
+  };
+  MESSAGES_DELETE_FAILED: undefined;
+  MESSAGES_LIST_FAILED: undefined;
+  MESSAGES_REQUIRED: undefined;
+  MESSAGES_RESOURCE_ACCESS_DENIED: undefined;
+  MESSAGES_SAVE_FAILED: undefined;
+  MESSAGES_THREAD_AND_RESOURCE_REQUIRED: {
+    invalidMessageCount: number;
+  };
+  MESSAGES_THREAD_RESOURCE_MISMATCH: undefined;
+  MESSAGE_ACCESS_DENIED: undefined;
+  MESSAGE_IDS_REQUIRED: undefined;
+  METRICS_LIST_FAILED: undefined;
+  METRIC_AGGREGATE_GET_FAILED: undefined;
+  METRIC_BREAKDOWN_GET_FAILED: undefined;
+  METRIC_LABEL_KEYS_LIST_FAILED: undefined;
+  METRIC_LABEL_VALUES_LIST_FAILED: undefined;
+  METRIC_NAMES_LIST_FAILED: undefined;
+  METRIC_PERCENTILES_GET_FAILED: undefined;
+  METRIC_TIME_SERIES_GET_FAILED: undefined;
+  MODEL_NOT_ALLOWED: {
+    allowed?:
+      | {
+          kind?: 'custom' | undefined;
+          provider: string;
+          modelId?: string | undefined;
+        }[]
+      | undefined;
+    attempted: {
+      provider: string;
+      modelId: string;
+      origin:
+        | 'static'
+        | 'conditional-variant'
+        | 'conditional-default'
+        | 'runtime'
+        | 'list'
+        | 'sdk-instance'
+        | 'openai-compatible';
+      label?: string | undefined;
+    };
+    offendingLabel: string;
+  };
+  OBSERVABILITY_CAPABILITIES_GET_FAILED: undefined;
+  OBSERVABILITY_DELTA_POLLING_UNSUPPORTED: {
+    endpoint: string;
+  };
+  OBSERVABILITY_LOGS_LIST_FAILED: undefined;
+  OBSERVABILITY_OPERATION_NOT_SUPPORTED: undefined;
+  OBSERVABILITY_STORAGE_UNAVAILABLE: undefined;
+  OBSERVABILITY_TENANT_SCOPE_UNSUPPORTED: undefined;
+  OBSERVABILITY_THREADS_QUERY_FAILED: undefined;
+  OBSERVABILITY_THREAD_QUERY_UNSUPPORTED: undefined;
+  OBSERVABILITY_UPDATE_FEEDBACK_REVIEW_STATUS_CONFLICT:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  OBSERVATIONAL_MEMORY_GET_FAILED: undefined;
+  OBSERVATIONAL_MEMORY_NOT_ENABLED: undefined;
+  OBSERVATIONAL_MEMORY_PROCESSOR_UNAVAILABLE: undefined;
+  OBSERVATIONAL_MEMORY_RESOURCE_ID_REQUIRED: undefined;
+  PAGINATION_PARAMS_INVALID: undefined;
+  PERMISSION_DENIED: {
+    requiredPermissions: string[];
+  };
+  PLAN_CAPABILITY_NOT_FOUND: undefined;
+  PLAN_NOT_FOUND: {
+    path: string;
+  };
+  PLAN_PATH_INVALID: undefined;
+  PLAN_READ_FAILED: undefined;
+  PROCESSORS_LIST_FAILED: undefined;
+  PROCESSOR_EXECUTE_FAILED: undefined;
+  PROCESSOR_GET_FAILED: undefined;
+  PROCESSOR_ID_REQUIRED: undefined;
+  PROCESSOR_MESSAGES_REQUIRED: undefined;
+  PROCESSOR_NOT_FOUND: undefined;
+  PROCESSOR_PHASE_REQUIRED: undefined;
+  PROCESSOR_PHASE_UNSUPPORTED: {
+    phase: string;
+  };
+  PROCESSOR_PROVIDERS_LIST_FAILED: undefined;
+  PROCESSOR_PROVIDER_GET_FAILED: undefined;
+  PROCESSOR_PROVIDER_NOT_FOUND: {
+    providerId: string;
+  };
+  PROCESSOR_WORKFLOW_FAILED: {
+    processorId: string;
+    status?: ('failed' | 'suspended' | 'paused') | undefined;
+  };
+  PROMPT_BLOCK_REFERENCE_UNPUBLISHED: {
+    promptBlockIds: string[];
+  };
+  PROMPT_BLOCK_REFERENCE_UNRESOLVED: {
+    promptBlockIds: string[];
+  };
+  PROMPT_BLOCK_VERSIONS_COMPARE_FAILED: undefined;
+  PROMPT_BLOCK_VERSIONS_LIST_FAILED: undefined;
+  PROMPT_BLOCK_VERSION_ACTIVATE_FAILED: undefined;
+  PROMPT_BLOCK_VERSION_ACTIVE_DELETE_FORBIDDEN: undefined;
+  PROMPT_BLOCK_VERSION_CREATED_RESOLVE_FAILED: undefined;
+  PROMPT_BLOCK_VERSION_CREATE_FAILED: undefined;
+  PROMPT_BLOCK_VERSION_DELETE_FAILED: undefined;
+  PROMPT_BLOCK_VERSION_GET_FAILED: undefined;
+  PROMPT_BLOCK_VERSION_NOT_FOUND: {
+    versionId: string;
+    promptBlockId: string;
+  };
+  PROMPT_BLOCK_VERSION_RESTORE_FAILED: undefined;
+  REGISTRY_POPULAR_SKILLS_FETCH_FAILED: undefined;
+  REGISTRY_SEARCH_FAILED: undefined;
+  REGISTRY_SKILL_ID_DERIVATION_FAILED: undefined;
+  REGISTRY_SKILL_INSTALL_FAILED: undefined;
+  REGISTRY_SKILL_NOT_FOUND: undefined;
+  REGISTRY_SKILL_PREVIEW_FETCH_FAILED: undefined;
+  REQUEST_ARGUMENT_REQUIRED: {
+    argument: string;
+  };
+  REQUEST_BODY_INVALID_JSON: undefined;
+  REQUEST_BODY_TOO_LARGE: undefined;
+  REQUEST_FILE_TOO_LARGE: undefined;
+  REQUEST_FILE_TYPE_NOT_ALLOWED: undefined;
+  REQUEST_MULTIPART_INVALID: undefined;
+  REQUEST_RATE_LIMIT_EXCEEDED:
+    | {
+        retryAfter: number;
+      }
+    | undefined;
+  REQUEST_VALIDATION_FAILED:
+    | {
+        location: 'query' | 'body' | 'path';
+      }
+    | undefined;
+  RESOURCE_ACCESS_DENIED: undefined;
+  RESOURCE_ID_REQUIRED: undefined;
+  RESPONSES_MEMORY_NOT_CONFIGURED: undefined;
+  RESPONSES_MEMORY_STORAGE_UNAVAILABLE: undefined;
+  RESPONSE_AGENT_MISMATCH: {
+    responseId: string;
+    agentId: string;
+  };
+  RESPONSE_CONVERSATION_MISMATCH: undefined;
+  RESPONSE_CREATE_FAILED: undefined;
+  RESPONSE_DELETE_FAILED: undefined;
+  RESPONSE_GET_FAILED: undefined;
+  RESPONSE_MODEL_UNRESOLVED: undefined;
+  RESPONSE_NOT_FOUND: {
+    responseId: string;
+  };
+  ROLE_PERMISSIONS_RESOLUTION_UNAVAILABLE: undefined;
+  ROUTE_NOT_FOUND:
+    | {
+        method: string;
+        path: string;
+      }
+    | undefined;
+  SCHEDULES_LIST_FAILED: undefined;
+  SCHEDULE_CREATE_FAILED: undefined;
+  SCHEDULE_DELETE_FAILED: undefined;
+  SCHEDULE_GET_FAILED: undefined;
+  SCHEDULE_NOT_FOUND: undefined;
+  SCHEDULE_PAUSE_FAILED: undefined;
+  SCHEDULE_RESUME_FAILED: undefined;
+  SCHEDULE_RUN_FAILED: undefined;
+  SCHEDULE_TRIGGERS_LIST_FAILED: undefined;
+  SCHEDULE_UPDATE_FAILED: undefined;
+  SCORERS_LIST_FAILED: undefined;
+  SCORER_GET_FAILED: undefined;
+  SCORER_NOT_FOUND: {
+    scorerName: string;
+  };
+  SCORER_VERSIONS_COMPARE_FAILED: undefined;
+  SCORER_VERSIONS_LIST_FAILED: undefined;
+  SCORER_VERSION_ACTIVATE_FAILED: undefined;
+  SCORER_VERSION_ACTIVE_DELETE_FORBIDDEN: undefined;
+  SCORER_VERSION_CREATED_RESOLVE_FAILED: undefined;
+  SCORER_VERSION_CREATE_FAILED: undefined;
+  SCORER_VERSION_DELETE_FAILED: undefined;
+  SCORER_VERSION_GET_FAILED: undefined;
+  SCORER_VERSION_NOT_FOUND: {
+    versionId: string;
+    scorerId: string;
+  };
+  SCORER_VERSION_RESTORE_FAILED: undefined;
+  SCORES_BY_ENTITY_LIST_FAILED: undefined;
+  SCORES_BY_RUN_LIST_FAILED: undefined;
+  SCORES_BY_SCORER_LIST_FAILED: undefined;
+  SCORES_DELETE_FAILED: undefined;
+  SCORES_LIST_FAILED: undefined;
+  SCORES_STORAGE_UNAVAILABLE: undefined;
+  SCORE_AGGREGATE_GET_FAILED: undefined;
+  SCORE_BREAKDOWN_GET_FAILED: undefined;
+  SCORE_CREATE_FAILED: undefined;
+  SCORE_GET_FAILED: undefined;
+  SCORE_PERCENTILES_GET_FAILED: undefined;
+  SCORE_SAVE_FAILED: undefined;
+  SCORE_TIME_SERIES_GET_FAILED: undefined;
+  SERVER_CACHE_NOT_FOUND: undefined;
+  SERVER_SHUTTING_DOWN: undefined;
+  SERVICE_NAMES_LIST_FAILED: undefined;
+  SESSION_EXPIRED: undefined;
+  SESSION_NOT_FOUND: undefined;
+  SESSION_REFRESH_NOT_CONFIGURED: undefined;
+  SKILLS_REGISTRY_REQUEST_FAILED: {
+    upstreamStatus: number;
+  };
+  SKILLS_REGISTRY_SKILL_CONTENT_UNAVAILABLE: {
+    skillName: string;
+  };
+  SKILLS_REGISTRY_SKILL_NOT_FOUND: {
+    skillName: string;
+    owner: string;
+    repo: string;
+  };
+  SKILL_NAME_INVALID: {
+    skillName: string;
+  };
+  SKILL_NAME_REQUIRED: undefined;
+  SKILL_PATH_MISSING_SKILL_FILE: {
+    skillPath: string;
+  };
+  SKILL_PATH_NOT_DIRECTORY: {
+    skillPath: string;
+  };
+  SKILL_PATH_NOT_FOUND: {
+    skillPath: string;
+  };
+  SKILL_PATH_OUTSIDE_ALLOWED_DIRECTORY: {
+    skillPath: string;
+  };
+  SOURCE_CONTROL_CHANGE_REQUESTS_UNSUPPORTED: undefined;
+  SPANS_AGGREGATE_FAILED: undefined;
+  SPANS_QUERY_FAILED: undefined;
+  SPAN_AGGREGATE_UNSUPPORTED: undefined;
+  SPAN_GET_FAILED: undefined;
+  SPAN_NOT_FOUND: undefined;
+  SPAN_QUERY_UNSUPPORTED: undefined;
+  SPAN_SCORES_LIST_FAILED: undefined;
+  SSO_NOT_CONFIGURED: undefined;
+  STORAGE_NOT_CONFIGURED: undefined;
+  STORED_AGENTS_LIST_FAILED: undefined;
+  STORED_AGENT_ALREADY_EXISTS: {
+    storedAgentId: string;
+  };
+  STORED_AGENT_CHANGE_REQUEST_OPEN_FAILED: undefined;
+  STORED_AGENT_CREATED_RESOLVE_FAILED: undefined;
+  STORED_AGENT_CREATE_FAILED: undefined;
+  STORED_AGENT_DELETE_FAILED: undefined;
+  STORED_AGENT_DEPENDENTS_LIST_FAILED: undefined;
+  STORED_AGENT_EXPORT_FAILED: undefined;
+  STORED_AGENT_FAVORITE_FAILED: undefined;
+  STORED_AGENT_GET_FAILED: undefined;
+  STORED_AGENT_ID_DERIVATION_FAILED: undefined;
+  STORED_AGENT_INSTRUCTIONS_PREVIEW_FAILED: undefined;
+  STORED_AGENT_INSTRUCTIONS_REQUIRED: undefined;
+  STORED_AGENT_NOT_FOUND: {
+    storedAgentId: string;
+  };
+  STORED_AGENT_STORAGE_DOMAIN_UNAVAILABLE: undefined;
+  STORED_AGENT_UNFAVORITE_FAILED: undefined;
+  STORED_AGENT_UPDATED_RESOLVE_FAILED: undefined;
+  STORED_AGENT_UPDATE_FAILED: undefined;
+  STORED_MCP_CLIENTS_LIST_FAILED: undefined;
+  STORED_MCP_CLIENT_ALREADY_EXISTS: {
+    storedMCPClientId: string;
+  };
+  STORED_MCP_CLIENT_CREATED_RESOLVE_FAILED: undefined;
+  STORED_MCP_CLIENT_CREATE_FAILED: undefined;
+  STORED_MCP_CLIENT_DELETE_FAILED: undefined;
+  STORED_MCP_CLIENT_GET_FAILED: undefined;
+  STORED_MCP_CLIENT_ID_DERIVATION_FAILED: undefined;
+  STORED_MCP_CLIENT_NOT_FOUND: {
+    storedMCPClientId: string;
+  };
+  STORED_MCP_CLIENT_STORAGE_DOMAIN_UNAVAILABLE: undefined;
+  STORED_MCP_CLIENT_UPDATED_RESOLVE_FAILED: undefined;
+  STORED_MCP_CLIENT_UPDATE_FAILED: undefined;
+  STORED_PROMPT_BLOCKS_LIST_FAILED: undefined;
+  STORED_PROMPT_BLOCK_ALREADY_EXISTS: {
+    storedPromptBlockId: string;
+  };
+  STORED_PROMPT_BLOCK_CREATED_RESOLVE_FAILED: undefined;
+  STORED_PROMPT_BLOCK_CREATE_FAILED: undefined;
+  STORED_PROMPT_BLOCK_DELETE_FAILED: undefined;
+  STORED_PROMPT_BLOCK_GET_FAILED: undefined;
+  STORED_PROMPT_BLOCK_ID_DERIVATION_FAILED: undefined;
+  STORED_PROMPT_BLOCK_NOT_FOUND: {
+    storedPromptBlockId: string;
+  };
+  STORED_PROMPT_BLOCK_STORAGE_DOMAIN_UNAVAILABLE: undefined;
+  STORED_PROMPT_BLOCK_UPDATED_RESOLVE_FAILED: undefined;
+  STORED_PROMPT_BLOCK_UPDATE_FAILED: undefined;
+  STORED_RESOURCE_NOT_FOUND: undefined;
+  STORED_RESOURCE_SCOPE_REQUIRED: undefined;
+  STORED_SCORERS_LIST_FAILED: undefined;
+  STORED_SCORER_ALREADY_EXISTS: {
+    storedScorerId: string;
+  };
+  STORED_SCORER_CREATED_RESOLVE_FAILED: undefined;
+  STORED_SCORER_CREATE_FAILED: undefined;
+  STORED_SCORER_DELETE_FAILED: undefined;
+  STORED_SCORER_GET_FAILED: undefined;
+  STORED_SCORER_ID_DERIVATION_FAILED: undefined;
+  STORED_SCORER_NOT_FOUND: {
+    storedScorerId: string;
+  };
+  STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE: undefined;
+  STORED_SCORER_UPDATED_RESOLVE_FAILED: undefined;
+  STORED_SCORER_UPDATE_FAILED: undefined;
+  STORED_SKILLS_LIST_FAILED: undefined;
+  STORED_SKILL_ALREADY_EXISTS: {
+    storedSkillId: string;
+  };
+  STORED_SKILL_CREATED_RESOLVE_FAILED: undefined;
+  STORED_SKILL_CREATE_FAILED: undefined;
+  STORED_SKILL_DELETE_FAILED: undefined;
+  STORED_SKILL_FAVORITE_FAILED: undefined;
+  STORED_SKILL_GET_FAILED: undefined;
+  STORED_SKILL_ID_DERIVATION_FAILED: undefined;
+  STORED_SKILL_NOT_FOUND: {
+    storedSkillId: string;
+  };
+  STORED_SKILL_PUBLISH_FAILED: undefined;
+  STORED_SKILL_STORAGE_DOMAIN_UNAVAILABLE: undefined;
+  STORED_SKILL_UNFAVORITE_FAILED: undefined;
+  STORED_SKILL_UPDATED_RESOLVE_FAILED: undefined;
+  STORED_SKILL_UPDATE_FAILED: undefined;
+  STORED_WORKSPACES_LIST_FAILED: undefined;
+  STORED_WORKSPACE_ALREADY_EXISTS: {
+    storedWorkspaceId: string;
+  };
+  STORED_WORKSPACE_CREATED_RESOLVE_FAILED: undefined;
+  STORED_WORKSPACE_CREATE_FAILED: undefined;
+  STORED_WORKSPACE_DELETE_FAILED: undefined;
+  STORED_WORKSPACE_GET_FAILED: undefined;
+  STORED_WORKSPACE_ID_DERIVATION_FAILED: undefined;
+  STORED_WORKSPACE_NOT_FOUND: {
+    storedWorkspaceId: string;
+  };
+  STORED_WORKSPACE_STORAGE_DOMAIN_UNAVAILABLE: undefined;
+  STORED_WORKSPACE_UPDATED_RESOLVE_FAILED: undefined;
+  STORED_WORKSPACE_UPDATE_FAILED: undefined;
+  SYSTEM_PACKAGES_GET_FAILED: undefined;
+  TAGS_LIST_FAILED: undefined;
+  THREADS_LIST_FAILED: undefined;
+  THREAD_ACCESS_DENIED: undefined;
+  THREAD_CLONE_FAILED: undefined;
+  THREAD_CREATE_FAILED: undefined;
+  THREAD_DELETE_FAILED: undefined;
+  THREAD_GET_FAILED: undefined;
+  THREAD_ID_REQUIRED: undefined;
+  THREAD_NOT_FOUND: undefined;
+  THREAD_TRANSFER_FAILED: undefined;
+  THREAD_TRANSFER_REQUIRES_PRIVILEGED_CONTEXT: undefined;
+  THREAD_TRANSFER_UNSUPPORTED_FOR_GATEWAY_AGENT: undefined;
+  THREAD_UPDATE_FAILED: undefined;
+  TOOLS_LIST_FAILED: undefined;
+  TOOL_EXECUTE_FAILED: undefined;
+  TOOL_GET_FAILED: undefined;
+  TOOL_ID_REQUIRED: undefined;
+  TOOL_NOT_EXECUTABLE: undefined;
+  TOOL_NOT_FOUND: undefined;
+  TOOL_PROVIDERS_LIST_FAILED: undefined;
+  TOOL_PROVIDER_AUTHORIZE_FAILED: undefined;
+  TOOL_PROVIDER_AUTH_STATUS_GET_FAILED: undefined;
+  TOOL_PROVIDER_CONNECTIONS_LIST_FAILED: undefined;
+  TOOL_PROVIDER_CONNECTIONS_STORAGE_UNAVAILABLE: undefined;
+  TOOL_PROVIDER_CONNECTION_DISCONNECT_FAILED: undefined;
+  TOOL_PROVIDER_CONNECTION_FIELDS_LIST_FAILED: undefined;
+  TOOL_PROVIDER_CONNECTION_NOT_FOUND: {
+    connectionId: string;
+    providerId: string;
+  };
+  TOOL_PROVIDER_CONNECTION_PERMISSION_DENIED: undefined;
+  TOOL_PROVIDER_CONNECTION_PINNED_BY_AGENTS: {
+    connectionId: string;
+    agentCount: number;
+  };
+  TOOL_PROVIDER_CONNECTION_RESOURCE_ID_REQUIRED: undefined;
+  TOOL_PROVIDER_CONNECTION_STATUS_GET_FAILED: undefined;
+  TOOL_PROVIDER_CONNECTION_UPDATE_FAILED: undefined;
+  TOOL_PROVIDER_CONNECTION_USAGE_LIST_FAILED: undefined;
+  TOOL_PROVIDER_HEALTH_GET_FAILED: undefined;
+  TOOL_PROVIDER_NOT_FOUND: {
+    providerId: string;
+  };
+  TOOL_PROVIDER_OPERATION_UNSUPPORTED: {
+    providerId: string;
+  };
+  TOOL_PROVIDER_TOOLKITS_LIST_FAILED: undefined;
+  TOOL_PROVIDER_TOOLS_LIST_FAILED: undefined;
+  TOOL_PROVIDER_TOOL_SCHEMA_GET_FAILED: undefined;
+  TOOL_PROVIDER_TOOL_SCHEMA_NOT_FOUND: {
+    toolSlug: string;
+    providerId: string;
+  };
+  TRACES_AGGREGATE_FAILED: undefined;
+  TRACES_DELETE_FAILED: undefined;
+  TRACES_LIGHT_LIST_FAILED: undefined;
+  TRACES_LIST_FAILED: undefined;
+  TRACES_QUERY_FAILED: undefined;
+  TRACES_SCORE_FAILED: undefined;
+  TRACE_AGGREGATE_UNSUPPORTED: undefined;
+  TRACE_BRANCHES_LIST_FAILED: undefined;
+  TRACE_BRANCH_GET_FAILED: undefined;
+  TRACE_BRANCH_NOT_FOUND: {
+    spanId: string;
+    traceId: string;
+  };
+  TRACE_GET_FAILED: undefined;
+  TRACE_LIGHT_GET_FAILED: undefined;
+  TRACE_NOT_FOUND: {
+    traceId: string;
+  };
+  TRACE_QUERY_CURSOR_CONFLICT: undefined;
+  TRACE_QUERY_CURSOR_MALFORMED: undefined;
+  TRACE_QUERY_DISCOVERY_UNSUPPORTED: undefined;
+  TRACE_QUERY_EXECUTION_TIMEOUT: undefined;
+  TRACE_QUERY_FIELDS_GET_FAILED: undefined;
+  TRACE_QUERY_INVALID: undefined;
+  TRACE_QUERY_RESOURCE_LIMIT: undefined;
+  TRACE_QUERY_UNSUPPORTED: undefined;
+  TRACE_QUERY_VALUES_GET_FAILED: undefined;
+  TRACE_TRAJECTORY_GET_FAILED: undefined;
+  UNCATEGORIZED_ERROR: undefined;
+  UNEXPECTED_ERROR: undefined;
+  VECTORS_QUERY_FAILED: undefined;
+  VECTORS_UPSERT_FAILED: undefined;
+  VECTOR_INDEXES_LIST_FAILED: undefined;
+  VECTOR_INDEX_CREATE_FAILED: undefined;
+  VECTOR_INDEX_DELETE_FAILED: undefined;
+  VECTOR_INDEX_DESCRIBE_FAILED: undefined;
+  VECTOR_INDEX_DIMENSION_INVALID: undefined;
+  VECTOR_INDEX_METRIC_INVALID: undefined;
+  VECTOR_INDEX_NAME_REQUIRED: undefined;
+  VECTOR_QUERY_VECTOR_REQUIRED: undefined;
+  VECTOR_STORES_LIST_FAILED: undefined;
+  VECTOR_STORE_NAME_REQUIRED: undefined;
+  VECTOR_STORE_NOT_FOUND: {
+    vectorName: string;
+  };
+  VECTOR_VECTORS_REQUIRED: undefined;
+  WORKFLOWS_LIST_FAILED: undefined;
+  WORKFLOW_ACTIVE_RUNS_RESTART_FAILED: undefined;
+  WORKFLOW_ASYNC_START_FAILED: undefined;
+  WORKFLOW_BUILDER_NOT_ENABLED: undefined;
+  WORKFLOW_BUILDER_SETTINGS_GET_FAILED: undefined;
+  WORKFLOW_BUILDER_STREAM_FAILED: undefined;
+  WORKFLOW_EVENT_RECEIVE_FAILED: undefined;
+  WORKFLOW_EXECUTE_FAILED: undefined;
+  WORKFLOW_GET_FAILED: undefined;
+  WORKFLOW_ID_REQUIRED: undefined;
+  WORKFLOW_NOT_FOUND: {
+    workflowId: string;
+  };
+  WORKFLOW_OBSERVE_STREAM_UNAVAILABLE: undefined;
+  WORKFLOW_RESTART_FAILED: undefined;
+  WORKFLOW_RESUME_ALREADY_CLAIMED:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  WORKFLOW_RESUME_FAILED: undefined;
+  WORKFLOW_RUNS_LIST_FAILED: undefined;
+  WORKFLOW_RUN_ACCESS_DENIED: undefined;
+  WORKFLOW_RUN_ALREADY_FINISHED: {
+    runId: string;
+    status: string;
+  };
+  WORKFLOW_RUN_CANCEL_FAILED: undefined;
+  WORKFLOW_RUN_COUNTS_LIST_FAILED: undefined;
+  WORKFLOW_RUN_CREATED_AT_INVALID: undefined;
+  WORKFLOW_RUN_CREATE_FAILED: undefined;
+  WORKFLOW_RUN_DELETE_FAILED: undefined;
+  WORKFLOW_RUN_GET_FAILED: undefined;
+  WORKFLOW_RUN_ID_REQUIRED: undefined;
+  WORKFLOW_RUN_NOT_FOUND: undefined;
+  WORKFLOW_RUN_NOT_SUSPENDED:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  WORKFLOW_RUN_START_FAILED: undefined;
+  WORKFLOW_RUN_UNSCOPED_AUTHORIZATION_REQUIRED: undefined;
+  WORKFLOW_SCHEMA_VALIDATION_FAILED:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  WORKFLOW_STEP_EXECUTE_FAILED: undefined;
+  WORKFLOW_STEP_RESUME_FAILED: undefined;
+  WORKFLOW_STREAM_FAILED: undefined;
+  WORKFLOW_STREAM_OBSERVE_FAILED: undefined;
+  WORKFLOW_TIME_TRAVEL_ALREADY_CLAIMED:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  WORKFLOW_TIME_TRAVEL_FAILED: undefined;
+  WORKFLOW_TIME_TRAVEL_RUN_RUNNING:
+    | {
+        [key: string]: unknown;
+      }
+    | undefined;
+  WORKFLOW_TIME_TRAVEL_STREAM_FAILED: undefined;
+  WORKING_MEMORY_GET_FAILED: undefined;
+  WORKING_MEMORY_MERGE_INVALID: undefined;
+  WORKING_MEMORY_MERGE_UNSUPPORTED: undefined;
+  WORKING_MEMORY_UPDATE_FAILED: undefined;
+  WORKSPACES_LIST_FAILED: undefined;
+  WORKSPACE_DIRECTORY_CREATE_FAILED: undefined;
+  WORKSPACE_DIRECTORY_LIST_FAILED: undefined;
+  WORKSPACE_FILESYSTEM_NOT_CONFIGURED: undefined;
+  WORKSPACE_FILE_DELETE_FAILED: undefined;
+  WORKSPACE_FILE_READ_FAILED: undefined;
+  WORKSPACE_FILE_STAT_FAILED: undefined;
+  WORKSPACE_FILE_WRITE_FAILED: undefined;
+  WORKSPACE_GET_FAILED: undefined;
+  WORKSPACE_INDEX_FAILED: undefined;
+  WORKSPACE_MOUNT_NOT_FOUND: {
+    mount: string;
+  };
+  WORKSPACE_MOUNT_READ_ONLY: {
+    mount: string;
+  };
+  WORKSPACE_NOT_FOUND: undefined;
+  WORKSPACE_NO_WRITABLE_MOUNT: undefined;
+  WORKSPACE_PATH_ABSOLUTE_NOT_ALLOWED: {
+    path: string;
+  };
+  WORKSPACE_PATH_ACCESS_DENIED: undefined;
+  WORKSPACE_PATH_NOT_FOUND:
+    | {
+        path: string;
+      }
+    | undefined;
+  WORKSPACE_PATH_REQUIRED: undefined;
+  WORKSPACE_PATH_TRAVERSAL: {
+    path: string;
+  };
+  WORKSPACE_POPULAR_SKILLS_FETCH_FAILED: undefined;
+  WORKSPACE_READ_ONLY: undefined;
+  WORKSPACE_SEARCH_FAILED: undefined;
+  WORKSPACE_SEARCH_NOT_CONFIGURED: undefined;
+  WORKSPACE_SEARCH_QUERY_REQUIRED: undefined;
+  WORKSPACE_SKILLS_LIST_FAILED: undefined;
+  WORKSPACE_SKILLS_NOT_CONFIGURED: undefined;
+  WORKSPACE_SKILLS_SEARCH_FAILED: undefined;
+  WORKSPACE_SKILLS_UPDATE_FAILED: undefined;
+  WORKSPACE_SKILL_GET_FAILED: undefined;
+  WORKSPACE_SKILL_INSTALL_FAILED: undefined;
+  WORKSPACE_SKILL_NOT_FOUND: {
+    skillName: string;
+  };
+  WORKSPACE_SKILL_PREVIEW_FETCH_FAILED: undefined;
+  WORKSPACE_SKILL_REFERENCES_LIST_FAILED: undefined;
+  WORKSPACE_SKILL_REFERENCE_GET_FAILED: undefined;
+  WORKSPACE_SKILL_REFERENCE_NOT_FOUND: {
+    path: string;
+    skill: string;
+  };
+  WORKSPACE_SKILL_REMOVE_FAILED: undefined;
+  WORKSPACE_VERSION_UNSUPPORTED: undefined;
+}
+
+/** A JSON error body, discriminated by `code` so switching on it narrows `metadata`. */
+export type ServerError<C extends ServerErrorCode = ServerErrorCode> = {
+  [K in C]: Simplify<
+    { error: string; code: K } & (undefined extends ServerErrorMetadataMap[K]
+      ? { metadata?: ServerErrorMetadataMap[K] }
+      : { metadata: ServerErrorMetadataMap[K] })
+  >;
+}[C];
 
 // ============================================================================
 // Path-based Client Types
@@ -26174,4 +30264,10 @@ export type ClientResponseKind<P extends ClientPath, M extends ClientMethod<P>> 
     responseType: infer ResponseType;
   }
     ? ResponseType
+    : never;
+export type ClientError<P extends ClientPath, M extends ClientMethod<P>> =
+  ClientRoute<P, M> extends {
+    errorCode: infer Code extends ServerErrorCode;
+  }
+    ? ServerError<Code>
     : never;

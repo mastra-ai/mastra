@@ -51,6 +51,16 @@ export const FAVORITE_STORED_SKILL_ROUTE = createRoute({
   tags: ['Stored Skills'],
   requiresAuth: true,
   requiresPermission: 'stored-skills:read',
+  errors: [
+    'AGENT_BUILDER_NOT_ENABLED',
+    'FAVORITES_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+    'STORED_SKILL_FAVORITE_FAILED',
+    'STORED_SKILL_NOT_FOUND',
+    'STORED_SKILL_STORAGE_DOMAIN_UNAVAILABLE',
+  ],
   handler: async ({ mastra, requestContext, storedSkillId }) => {
     try {
       await requireBuilderFeature(mastra, 'favorites');
@@ -107,6 +117,16 @@ export const UNFAVORITE_STORED_SKILL_ROUTE = createRoute({
   tags: ['Stored Skills'],
   requiresAuth: true,
   requiresPermission: 'stored-skills:read',
+  errors: [
+    'AGENT_BUILDER_NOT_ENABLED',
+    'FAVORITES_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+    'STORED_SKILL_NOT_FOUND',
+    'STORED_SKILL_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORED_SKILL_UNFAVORITE_FAILED',
+  ],
   handler: async ({ mastra, requestContext, storedSkillId }) => {
     try {
       await requireBuilderFeature(mastra, 'favorites');

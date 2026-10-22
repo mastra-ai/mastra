@@ -211,6 +211,7 @@ export const LIST_BUILDER_REGISTRIES_ROUTE = createRoute({
   tags: ['Editor'],
   requiresAuth: true,
   requiresPermission: 'stored-skills:read',
+  errors: ['BUILDER_REGISTRIES_LIST_FAILED'],
   handler: async ({ mastra }) => {
     try {
       const registries = await resolveRegistries(mastra);
@@ -242,6 +243,7 @@ export const BUILDER_REGISTRY_SEARCH_ROUTE = createRoute({
   tags: ['Editor', 'Skills'],
   requiresAuth: true,
   requiresPermission: 'stored-skills:read',
+  errors: ['BUILDER_REGISTRY_NOT_FOUND', 'REGISTRY_SEARCH_FAILED', 'SKILLS_REGISTRY_REQUEST_FAILED'],
   handler: async ({ mastra, registryId, q, limit }) => {
     try {
       await requireEnabledRegistry(mastra, registryId);
@@ -273,6 +275,7 @@ export const BUILDER_REGISTRY_POPULAR_ROUTE = createRoute({
   tags: ['Editor', 'Skills'],
   requiresAuth: true,
   requiresPermission: 'stored-skills:read',
+  errors: ['BUILDER_REGISTRY_NOT_FOUND', 'REGISTRY_POPULAR_SKILLS_FETCH_FAILED', 'SKILLS_REGISTRY_REQUEST_FAILED'],
   handler: async ({ mastra, registryId, limit, offset }) => {
     try {
       await requireEnabledRegistry(mastra, registryId);
@@ -304,6 +307,13 @@ export const BUILDER_REGISTRY_PREVIEW_ROUTE = createRoute({
   tags: ['Editor', 'Skills'],
   requiresAuth: true,
   requiresPermission: 'stored-skills:read',
+  errors: [
+    'BUILDER_REGISTRY_NOT_FOUND',
+    'REGISTRY_SKILL_PREVIEW_FETCH_FAILED',
+    'SKILLS_REGISTRY_REQUEST_FAILED',
+    'SKILLS_REGISTRY_SKILL_CONTENT_UNAVAILABLE',
+    'SKILLS_REGISTRY_SKILL_NOT_FOUND',
+  ],
   handler: async ({ mastra, registryId, owner, repo, path: skillName }) => {
     try {
       await requireEnabledRegistry(mastra, registryId);
@@ -343,6 +353,18 @@ export const BUILDER_REGISTRY_INSTALL_ROUTE = createRoute({
   tags: ['Editor', 'Skills'],
   requiresAuth: true,
   requiresPermission: 'stored-skills:write',
+  errors: [
+    'BUILDER_REGISTRY_NOT_FOUND',
+    'REGISTRY_SKILL_ID_DERIVATION_FAILED',
+    'REGISTRY_SKILL_INSTALL_FAILED',
+    'SKILLS_REGISTRY_SKILL_NOT_FOUND',
+    'SKILL_NAME_INVALID',
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_SKILL_ALREADY_EXISTS',
+    'STORED_SKILL_STORAGE_DOMAIN_UNAVAILABLE',
+    'WORKSPACE_PATH_ABSOLUTE_NOT_ALLOWED',
+    'WORKSPACE_PATH_TRAVERSAL',
+  ],
   handler: async ({ mastra, requestContext, registryId, owner, repo, skillName, visibility: bodyVisibility }) => {
     try {
       await requireEnabledRegistry(mastra, registryId);

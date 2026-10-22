@@ -266,7 +266,11 @@ async function getMemoryFromContext({
         logger.debug('Agent not found in any resolution tier, returning null for storage fallback', { agentId });
         return null;
       }
-      throw new HTTPException(404, { message: 'Agent not found', code: SERVER_ERROR_CODES.AGENT_NOT_FOUND });
+      throw new HTTPException(404, {
+        message: 'Agent not found',
+        code: SERVER_ERROR_CODES.AGENT_NOT_FOUND,
+        metadata: { agentId },
+      });
     }
   }
 
@@ -478,6 +482,7 @@ export const GET_MEMORY_STATUS_ROUTE = createRoute({
   description: 'Returns the current status of the memory system including configuration and health information',
   tags: ['Memory'],
   requiresAuth: true,
+  errors: ['AGENT_NOT_FOUND', 'MEMORY_STATUS_GET_FAILED'],
   handler: async ({ mastra, agentId, resourceId, threadId, requestContext }) => {
     try {
       // Check if this is a gateway agent first
@@ -608,6 +613,7 @@ export const GET_MEMORY_CONFIG_ROUTE = createRoute({
   description: 'Returns the memory configuration for a specific agent or the system default',
   tags: ['Memory'],
   requiresAuth: true,
+  errors: ['AGENT_NOT_FOUND', 'MEMORY_CONFIG_GET_FAILED'],
   handler: async ({ mastra, agentId, requestContext }) => {
     try {
       // For gateway agents, return config with default OM thresholds
@@ -679,12 +685,24 @@ export const GET_OBSERVATIONAL_MEMORY_ROUTE = createRoute({
   description: 'Returns the current observational memory record and optional history for a resource/thread',
   tags: ['Memory'],
   requiresAuth: true,
+  errors: [
+    'AGENT_NOT_FOUND',
+    'MEMORY_NOT_CONFIGURED',
+    'MEMORY_STORAGE_NOT_INITIALIZED',
+    'OBSERVATIONAL_MEMORY_GET_FAILED',
+    'OBSERVATIONAL_MEMORY_NOT_ENABLED',
+    'OBSERVATIONAL_MEMORY_RESOURCE_ID_REQUIRED',
+  ],
   handler: async ({ mastra, agentId, resourceId, threadId, from, to, offset, limit, requestContext }) => {
     try {
       // Verify agent has OM enabled
       const agent = await getAgentFromContext({ mastra, agentId, requestContext });
       if (!agent) {
-        throw new HTTPException(404, { message: 'Agent not found', code: SERVER_ERROR_CODES.AGENT_NOT_FOUND });
+        throw new HTTPException(404, {
+          message: 'Agent not found',
+          code: SERVER_ERROR_CODES.AGENT_NOT_FOUND,
+          metadata: { agentId },
+        });
       }
 
       const historyLimit = limit ?? 5;
@@ -732,12 +750,14 @@ export const GET_OBSERVATIONAL_MEMORY_ROUTE = createRoute({
         throw new HTTPException(400, {
           message: 'Memory storage is not initialized',
           code: SERVER_ERROR_CODES.MEMORY_STORAGE_NOT_INITIALIZED,
+          metadata: { agentId },
         });
       }
       if (!memoryStore) {
         throw new HTTPException(400, {
           message: 'Memory storage is not initialized',
           code: SERVER_ERROR_CODES.MEMORY_STORAGE_NOT_INITIALIZED,
+          metadata: { agentId },
         });
       }
 
@@ -788,11 +808,24 @@ export const AWAIT_BUFFER_STATUS_ROUTE = createRoute({
     'Blocks until any in-flight buffering operations complete for the given thread/resource, then returns the updated record',
   tags: ['Memory'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, resourceId, threadId, requestContext }: MemoryContext) => {
+  errors: [
+    'AGENT_NOT_FOUND',
+    'MEMORY_BUFFER_STATUS_AWAIT_FAILED',
+    'MEMORY_NOT_CONFIGURED',
+    'MEMORY_STORAGE_NOT_INITIALIZED',
+    'OBSERVATIONAL_MEMORY_NOT_ENABLED',
+    'OBSERVATIONAL_MEMORY_PROCESSOR_UNAVAILABLE',
+    'RESOURCE_ID_REQUIRED',
+  ],
+  handler: async ({ mastra, agentId, resourceId, threadId, requestContext }) => {
     try {
       const agent = await getAgentFromContext({ mastra, agentId, requestContext });
       if (!agent) {
-        throw new HTTPException(404, { message: 'Agent not found', code: SERVER_ERROR_CODES.AGENT_NOT_FOUND });
+        throw new HTTPException(404, {
+          message: 'Agent not found',
+          code: SERVER_ERROR_CODES.AGENT_NOT_FOUND,
+          metadata: { agentId },
+        });
       }
 
       // Gateway proxy: poll the gateway OM record until buffering flags clear
@@ -853,12 +886,14 @@ export const AWAIT_BUFFER_STATUS_ROUTE = createRoute({
         throw new HTTPException(400, {
           message: 'Memory storage is not initialized',
           code: SERVER_ERROR_CODES.MEMORY_STORAGE_NOT_INITIALIZED,
+          metadata: { agentId },
         });
       }
       if (!memoryStore) {
         throw new HTTPException(400, {
           message: 'Memory storage is not initialized',
           code: SERVER_ERROR_CODES.MEMORY_STORAGE_NOT_INITIALIZED,
+          metadata: { agentId },
         });
       }
 
@@ -895,6 +930,7 @@ export const LIST_THREADS_ROUTE = createRoute({
     'Returns a paginated list of conversation threads with optional filtering by resource ID and/or metadata',
   tags: ['Memory'],
   requiresAuth: true,
+  errors: ['AGENT_NOT_FOUND', 'MEMORY_NOT_CONFIGURED', 'THREADS_LIST_FAILED'],
   handler: async ({ mastra, agentId, resourceId, metadata, requestContext, page, perPage, orderBy }) => {
     try {
       // Use effective resourceId (context key takes precedence over client-provided value)
@@ -1053,6 +1089,14 @@ export const GET_THREAD_BY_ID_ROUTE = createRoute({
   description: 'Returns details for a specific conversation thread',
   tags: ['Memory'],
   requiresAuth: true,
+  errors: [
+    'AGENT_NOT_FOUND',
+    'MEMORY_NOT_CONFIGURED',
+    'REQUEST_ARGUMENT_REQUIRED',
+    'THREAD_ACCESS_DENIED',
+    'THREAD_GET_FAILED',
+    'THREAD_NOT_FOUND',
+  ],
   handler: async ({ mastra, agentId, threadId, resourceId, requestContext }) => {
     try {
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
@@ -1147,6 +1191,15 @@ export const LIST_MESSAGES_ROUTE = createRoute({
   description: 'Returns a paginated list of messages in a conversation thread',
   tags: ['Memory'],
   requiresAuth: true,
+  errors: [
+    'AGENT_NOT_FOUND',
+    'GATEWAY_MEMORY_METADATA_FILTER_UNSUPPORTED',
+    'MESSAGES_LIST_FAILED',
+    'REQUEST_ARGUMENT_REQUIRED',
+    'THREAD_ACCESS_DENIED',
+    'THREAD_ID_REQUIRED',
+    'THREAD_NOT_FOUND',
+  ],
   handler: (async ({
     mastra,
     agentId,
@@ -1297,6 +1350,7 @@ export const GET_WORKING_MEMORY_ROUTE = createRoute({
   description: 'Returns the working memory state for a thread',
   tags: ['Memory'],
   requiresAuth: true,
+  errors: ['AGENT_NOT_FOUND', 'REQUEST_ARGUMENT_REQUIRED', 'THREAD_ACCESS_DENIED', 'WORKING_MEMORY_GET_FAILED'],
   handler: async ({ mastra, agentId, threadId, resourceId, requestContext, memoryConfig }) => {
     try {
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
@@ -1360,6 +1414,16 @@ export const SAVE_MESSAGES_ROUTE = createRoute({
   description: 'Saves new messages to memory',
   tags: ['Memory'],
   requiresAuth: true,
+  errors: [
+    'AGENT_NOT_FOUND',
+    'MEMORY_NOT_CONFIGURED',
+    'MESSAGES_REQUIRED',
+    'MESSAGES_RESOURCE_ACCESS_DENIED',
+    'MESSAGES_SAVE_FAILED',
+    'MESSAGES_THREAD_AND_RESOURCE_REQUIRED',
+    'MESSAGES_THREAD_RESOURCE_MISMATCH',
+    'THREAD_ACCESS_DENIED',
+  ],
   handler: async ({ mastra, agentId, messages, requestContext }) => {
     try {
       const effectiveResourceId = getEffectiveResourceId(requestContext, undefined);
@@ -1478,6 +1542,13 @@ export const CREATE_THREAD_ROUTE = createRoute({
   description: 'Creates a new conversation thread',
   tags: ['Memory'],
   requiresAuth: true,
+  errors: [
+    'AGENT_NOT_FOUND',
+    'MEMORY_NOT_CONFIGURED',
+    'REQUEST_ARGUMENT_REQUIRED',
+    'THREAD_ACCESS_DENIED',
+    'THREAD_CREATE_FAILED',
+  ],
   handler: async ({ mastra, agentId, resourceId, title, metadata, threadId, requestContext }) => {
     try {
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
@@ -1557,6 +1628,14 @@ export const UPDATE_THREAD_ROUTE = createRoute({
   description: 'Updates a conversation thread',
   tags: ['Memory'],
   requiresAuth: true,
+  errors: [
+    'AGENT_NOT_FOUND',
+    'MEMORY_NOT_CONFIGURED',
+    'REQUEST_ARGUMENT_REQUIRED',
+    'THREAD_ACCESS_DENIED',
+    'THREAD_NOT_FOUND',
+    'THREAD_UPDATE_FAILED',
+  ],
   handler: async ({ mastra, agentId, threadId, title, metadata, resourceId, requestContext }) => {
     try {
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
@@ -1644,6 +1723,14 @@ export const DELETE_THREAD_ROUTE = createRoute({
   description: 'Deletes a conversation thread',
   tags: ['Memory'],
   requiresAuth: true,
+  errors: [
+    'AGENT_NOT_FOUND',
+    'MEMORY_NOT_CONFIGURED',
+    'REQUEST_ARGUMENT_REQUIRED',
+    'THREAD_ACCESS_DENIED',
+    'THREAD_DELETE_FAILED',
+    'THREAD_NOT_FOUND',
+  ],
   handler: async ({ mastra, agentId, threadId, resourceId, requestContext }) => {
     try {
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
@@ -1719,6 +1806,14 @@ export const CLONE_THREAD_ROUTE = createRoute({
   description: 'Creates a copy of a conversation thread with all its messages',
   tags: ['Memory'],
   requiresAuth: true,
+  errors: [
+    'AGENT_NOT_FOUND',
+    'MEMORY_NOT_CONFIGURED',
+    'REQUEST_ARGUMENT_REQUIRED',
+    'THREAD_ACCESS_DENIED',
+    'THREAD_CLONE_FAILED',
+    'THREAD_NOT_FOUND',
+  ],
   handler: async ({ mastra, agentId, threadId, newThreadId, resourceId, title, metadata, options, requestContext }) => {
     try {
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
@@ -1783,6 +1878,16 @@ export const TRANSFER_THREAD_ROUTE = createRoute({
     'Reassigns a thread and all of its messages to a different resource. Requires a privileged (non-resource-scoped) context.',
   tags: ['Memory'],
   requiresAuth: true,
+  errors: [
+    'AGENT_NOT_FOUND',
+    'MEMORY_NOT_CONFIGURED',
+    'REQUEST_ARGUMENT_REQUIRED',
+    'THREAD_ACCESS_DENIED',
+    'THREAD_NOT_FOUND',
+    'THREAD_TRANSFER_FAILED',
+    'THREAD_TRANSFER_REQUIRES_PRIVILEGED_CONTEXT',
+    'THREAD_TRANSFER_UNSUPPORTED_FOR_GATEWAY_AGENT',
+  ],
   handler: async ({ mastra, agentId, threadId, resourceId, requestContext }) => {
     try {
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
@@ -1879,6 +1984,16 @@ export const UPDATE_WORKING_MEMORY_ROUTE = createRoute({
   description: 'Updates the working memory state for a thread',
   tags: ['Memory'],
   requiresAuth: true,
+  errors: [
+    'AGENT_NOT_FOUND',
+    'MEMORY_NOT_CONFIGURED',
+    'REQUEST_ARGUMENT_REQUIRED',
+    'THREAD_ACCESS_DENIED',
+    'THREAD_NOT_FOUND',
+    'WORKING_MEMORY_MERGE_INVALID',
+    'WORKING_MEMORY_MERGE_UNSUPPORTED',
+    'WORKING_MEMORY_UPDATE_FAILED',
+  ],
   handler: async ({ mastra, agentId, threadId, resourceId, memoryConfig, workingMemory, mode, requestContext }) => {
     try {
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
@@ -1964,6 +2079,14 @@ export const DELETE_MESSAGES_ROUTE = createRoute({
   description: 'Deletes specific messages from memory',
   tags: ['Memory'],
   requiresAuth: true,
+  errors: [
+    'AGENT_NOT_FOUND',
+    'MEMORY_NOT_CONFIGURED',
+    'MESSAGES_DELETE_FAILED',
+    'MESSAGE_ACCESS_DENIED',
+    'MESSAGE_IDS_REQUIRED',
+    'THREAD_ACCESS_DENIED',
+  ],
   handler: async ({ mastra, agentId, resourceId, messageIds, requestContext }) => {
     try {
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
@@ -2089,6 +2212,13 @@ export const SEARCH_MEMORY_ROUTE = createRoute({
   description: 'Searches across memory using semantic or text search',
   tags: ['Memory'],
   requiresAuth: true,
+  errors: [
+    'AGENT_NOT_FOUND',
+    'MEMORY_NOT_CONFIGURED',
+    'MEMORY_SEARCH_FAILED',
+    'REQUEST_ARGUMENT_REQUIRED',
+    'THREAD_ACCESS_DENIED',
+  ],
   handler: async ({ mastra, agentId, searchQuery, resourceId, threadId, limit = 20, requestContext, memoryConfig }) => {
     try {
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
@@ -2331,6 +2461,7 @@ export const GET_MEMORY_STATUS_NETWORK_ROUTE = createRoute({
   description: 'Returns the current status of the memory system (network route)',
   tags: ['Memory - Network'],
   requiresAuth: true,
+  errors: ['AGENT_NOT_FOUND', 'MEMORY_STATUS_GET_FAILED'],
   handler: GET_MEMORY_STATUS_ROUTE.handler,
 });
 
@@ -2344,6 +2475,7 @@ export const LIST_THREADS_NETWORK_ROUTE = createRoute({
   description: 'Returns a paginated list of conversation threads (network route)',
   tags: ['Memory - Network'],
   requiresAuth: true,
+  errors: ['AGENT_NOT_FOUND', 'MEMORY_NOT_CONFIGURED', 'THREADS_LIST_FAILED'],
   handler: LIST_THREADS_ROUTE.handler,
 });
 
@@ -2358,6 +2490,14 @@ export const GET_THREAD_BY_ID_NETWORK_ROUTE = createRoute({
   description: 'Returns details for a specific conversation thread (network route)',
   tags: ['Memory - Network'],
   requiresAuth: true,
+  errors: [
+    'AGENT_NOT_FOUND',
+    'MEMORY_NOT_CONFIGURED',
+    'REQUEST_ARGUMENT_REQUIRED',
+    'THREAD_ACCESS_DENIED',
+    'THREAD_GET_FAILED',
+    'THREAD_NOT_FOUND',
+  ],
   handler: GET_THREAD_BY_ID_ROUTE.handler,
 });
 
@@ -2372,6 +2512,15 @@ export const LIST_MESSAGES_NETWORK_ROUTE = createRoute({
   description: 'Returns a paginated list of messages in a conversation thread (network route)',
   tags: ['Memory - Network'],
   requiresAuth: true,
+  errors: [
+    'AGENT_NOT_FOUND',
+    'GATEWAY_MEMORY_METADATA_FILTER_UNSUPPORTED',
+    'MESSAGES_LIST_FAILED',
+    'REQUEST_ARGUMENT_REQUIRED',
+    'THREAD_ACCESS_DENIED',
+    'THREAD_ID_REQUIRED',
+    'THREAD_NOT_FOUND',
+  ],
   handler: LIST_MESSAGES_ROUTE.handler,
 });
 
@@ -2386,6 +2535,16 @@ export const SAVE_MESSAGES_NETWORK_ROUTE = createRoute({
   description: 'Saves new messages to memory (network route)',
   tags: ['Memory - Network'],
   requiresAuth: true,
+  errors: [
+    'AGENT_NOT_FOUND',
+    'MEMORY_NOT_CONFIGURED',
+    'MESSAGES_REQUIRED',
+    'MESSAGES_RESOURCE_ACCESS_DENIED',
+    'MESSAGES_SAVE_FAILED',
+    'MESSAGES_THREAD_AND_RESOURCE_REQUIRED',
+    'MESSAGES_THREAD_RESOURCE_MISMATCH',
+    'THREAD_ACCESS_DENIED',
+  ],
   handler: SAVE_MESSAGES_ROUTE.handler,
 });
 
@@ -2400,6 +2559,13 @@ export const CREATE_THREAD_NETWORK_ROUTE = createRoute({
   description: 'Creates a new conversation thread (network route)',
   tags: ['Memory - Network'],
   requiresAuth: true,
+  errors: [
+    'AGENT_NOT_FOUND',
+    'MEMORY_NOT_CONFIGURED',
+    'REQUEST_ARGUMENT_REQUIRED',
+    'THREAD_ACCESS_DENIED',
+    'THREAD_CREATE_FAILED',
+  ],
   handler: CREATE_THREAD_ROUTE.handler,
 });
 
@@ -2415,6 +2581,14 @@ export const UPDATE_THREAD_NETWORK_ROUTE = createRoute({
   description: 'Updates a conversation thread (network route)',
   tags: ['Memory - Network'],
   requiresAuth: true,
+  errors: [
+    'AGENT_NOT_FOUND',
+    'MEMORY_NOT_CONFIGURED',
+    'REQUEST_ARGUMENT_REQUIRED',
+    'THREAD_ACCESS_DENIED',
+    'THREAD_NOT_FOUND',
+    'THREAD_UPDATE_FAILED',
+  ],
   handler: UPDATE_THREAD_ROUTE.handler,
 });
 
@@ -2429,6 +2603,14 @@ export const DELETE_THREAD_NETWORK_ROUTE = createRoute({
   description: 'Deletes a conversation thread (network route)',
   tags: ['Memory - Network'],
   requiresAuth: true,
+  errors: [
+    'AGENT_NOT_FOUND',
+    'MEMORY_NOT_CONFIGURED',
+    'REQUEST_ARGUMENT_REQUIRED',
+    'THREAD_ACCESS_DENIED',
+    'THREAD_DELETE_FAILED',
+    'THREAD_NOT_FOUND',
+  ],
   handler: DELETE_THREAD_ROUTE.handler,
 });
 
@@ -2443,5 +2625,13 @@ export const DELETE_MESSAGES_NETWORK_ROUTE = createRoute({
   description: 'Deletes specific messages from memory (network route)',
   tags: ['Memory - Network'],
   requiresAuth: true,
+  errors: [
+    'AGENT_NOT_FOUND',
+    'MEMORY_NOT_CONFIGURED',
+    'MESSAGES_DELETE_FAILED',
+    'MESSAGE_ACCESS_DENIED',
+    'MESSAGE_IDS_REQUIRED',
+    'THREAD_ACCESS_DENIED',
+  ],
   handler: DELETE_MESSAGES_ROUTE.handler,
 });

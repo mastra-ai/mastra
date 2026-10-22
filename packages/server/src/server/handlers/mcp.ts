@@ -74,6 +74,7 @@ export const LIST_MCP_SERVERS_ROUTE = createRoute({
   description: 'Returns a list of registered MCP servers with pagination support',
   tags: ['MCP'],
   requiresAuth: true,
+  errors: ['MCP_SERVERS_LIST_FAILED', 'MCP_SERVERS_LIST_UNSUPPORTED'],
   handler: async ({
     mastra,
     routePrefix,
@@ -168,6 +169,12 @@ export const GET_MCP_SERVER_DETAIL_ROUTE = createRoute({
   description: 'Returns detailed information about a specific MCP server',
   tags: ['MCP'],
   requiresAuth: true,
+  errors: [
+    'MCP_SERVER_GET_FAILED',
+    'MCP_SERVER_LOOKUP_UNSUPPORTED',
+    'MCP_SERVER_NOT_FOUND',
+    'MCP_SERVER_VERSION_NOT_FOUND',
+  ],
   handler: async ({ mastra, id, version }: ServerContext & { id: string; version?: string }) => {
     try {
       if (!mastra || typeof mastra.getMCPServerById !== 'function') {
@@ -222,6 +229,12 @@ export const LIST_MCP_SERVER_TOOLS_ROUTE = createRoute({
   description: 'Returns a list of tools available on the specified MCP server',
   tags: ['MCP'],
   requiresAuth: true,
+  errors: [
+    'MCP_SERVER_LOOKUP_UNSUPPORTED',
+    'MCP_SERVER_NOT_FOUND',
+    'MCP_SERVER_TOOLS_LIST_FAILED',
+    'MCP_TOOLS_UNSUPPORTED',
+  ],
   handler: async ({ mastra, serverId, requestContext }: ServerContext & { serverId: string }) => {
     try {
       if (!mastra || typeof mastra.getMCPServerById !== 'function') {
@@ -269,6 +282,13 @@ export const GET_MCP_SERVER_TOOL_DETAIL_ROUTE = createRoute({
   description: 'Returns detailed information about a specific tool on the MCP server',
   tags: ['MCP'],
   requiresAuth: true,
+  errors: [
+    'MCP_SERVER_LOOKUP_UNSUPPORTED',
+    'MCP_SERVER_NOT_FOUND',
+    'MCP_SERVER_TOOL_GET_FAILED',
+    'MCP_TOOLS_UNSUPPORTED',
+    'MCP_TOOL_NOT_FOUND',
+  ],
   handler: async ({ mastra, serverId, toolId }: ServerContext & { serverId: string; toolId: string }) => {
     try {
       if (!mastra || typeof mastra.getMCPServerById !== 'function') {
@@ -326,6 +346,13 @@ export const EXECUTE_MCP_SERVER_TOOL_ROUTE = createRoute({
   description: 'Executes a tool on the specified MCP server with the provided arguments',
   tags: ['MCP'],
   requiresAuth: true,
+  errors: [
+    'MCP_SERVER_LOOKUP_UNSUPPORTED',
+    'MCP_SERVER_NOT_FOUND',
+    'MCP_SERVER_TOOL_EXECUTE_FAILED',
+    'MCP_TOOLS_UNSUPPORTED',
+    'MCP_TOOL_INPUT_INVALID',
+  ],
   handler: async ({
     mastra,
     serverId,
@@ -420,6 +447,7 @@ export const LIST_MCP_SERVER_RESOURCES_ROUTE = createRoute({
   description: 'Returns a list of resources available on the MCP server, including ui:// app resources',
   tags: ['MCP'],
   requiresAuth: true,
+  errors: ['MCP_SERVER_LOOKUP_UNSUPPORTED', 'MCP_SERVER_NOT_FOUND', 'MCP_SERVER_RESOURCES_LIST_FAILED'],
   handler: async ({ mastra, serverId }: ServerContext & { serverId: string }) => {
     try {
       if (!mastra || typeof mastra.getMCPServerById !== 'function') {
@@ -464,6 +492,13 @@ export const READ_MCP_SERVER_RESOURCE_ROUTE = createRoute({
   description: 'Reads the content of a resource by URI, used for rendering MCP App ui:// resources',
   tags: ['MCP'],
   requiresAuth: true,
+  errors: [
+    'MCP_RESOURCES_UNSUPPORTED',
+    'MCP_RESOURCE_NOT_FOUND',
+    'MCP_SERVER_LOOKUP_UNSUPPORTED',
+    'MCP_SERVER_NOT_FOUND',
+    'MCP_SERVER_RESOURCE_READ_FAILED',
+  ],
   handler: async ({ mastra, serverId, uri }: ServerContext & { serverId: string; uri: string }) => {
     try {
       if (!mastra || typeof mastra.getMCPServerById !== 'function') {
@@ -622,6 +657,7 @@ export const LIST_MCP_SERVER_EVENTS_ROUTE = createRoute({
   description: 'Returns the event types the MCP server declares (experimental)',
   tags: ['MCP'],
   requiresAuth: true,
+  errors: ['MCP_SERVER_GET_FAILED', 'MCP_SERVER_LOOKUP_UNSUPPORTED', 'MCP_SERVER_NOT_FOUND'],
   handler: async ({ mastra, serverId }: ServerContext & { serverId: string }) => {
     const server = getEventsServer(mastra, serverId);
     const events = typeof server.getEventsInfo === 'function' ? (server.getEventsInfo()?.events ?? []) : [];
@@ -642,6 +678,19 @@ export const POLL_MCP_SERVER_EVENT_ROUTE = createRoute({
   requiresAuth: true,
   // Same permission as streaming: both read occurrences through the event's source.
   requiresPermission: 'mcp:execute',
+  errors: [
+    'MCP_EVENT_ACCESS_DENIED',
+    'MCP_EVENT_ARGUMENTS_INVALID',
+    'MCP_EVENT_DELIVERY_UNSUPPORTED',
+    'MCP_EVENT_NOT_EMITTABLE',
+    'MCP_EVENT_NOT_FOUND',
+    'MCP_EVENT_PAYLOAD_INVALID',
+    'MCP_EVENT_REQUEST_FAILED',
+    'MCP_EVENT_STREAMS_LIMIT_EXCEEDED',
+    'MCP_SERVER_GET_FAILED',
+    'MCP_SERVER_LOOKUP_UNSUPPORTED',
+    'MCP_SERVER_NOT_FOUND',
+  ],
   handler: async ({
     mastra,
     serverId,
@@ -685,6 +734,19 @@ export const STREAM_MCP_SERVER_EVENT_ROUTE = createRoute({
     'Streams occurrences of an event type as server-sent events, like the events/stream MCP request (experimental)',
   tags: ['MCP', 'Streaming'],
   requiresAuth: true,
+  errors: [
+    'MCP_EVENT_ACCESS_DENIED',
+    'MCP_EVENT_ARGUMENTS_INVALID',
+    'MCP_EVENT_DELIVERY_UNSUPPORTED',
+    'MCP_EVENT_NOT_EMITTABLE',
+    'MCP_EVENT_NOT_FOUND',
+    'MCP_EVENT_PAYLOAD_INVALID',
+    'MCP_EVENT_REQUEST_FAILED',
+    'MCP_EVENT_STREAMS_LIMIT_EXCEEDED',
+    'MCP_SERVER_GET_FAILED',
+    'MCP_SERVER_LOOKUP_UNSUPPORTED',
+    'MCP_SERVER_NOT_FOUND',
+  ],
   handler: async ({
     mastra,
     serverId,
@@ -772,6 +834,20 @@ export const EMIT_MCP_SERVER_EVENT_ROUTE = createRoute({
     'Emits a test occurrence of an emit-fed event type. Only served under `mastra dev`; otherwise 404 (experimental)',
   tags: ['MCP'],
   requiresAuth: true,
+  errors: [
+    'MCP_EVENT_ACCESS_DENIED',
+    'MCP_EVENT_ARGUMENTS_INVALID',
+    'MCP_EVENT_DELIVERY_UNSUPPORTED',
+    'MCP_EVENT_NOT_EMITTABLE',
+    'MCP_EVENT_NOT_FOUND',
+    'MCP_EVENT_PAYLOAD_INVALID',
+    'MCP_EVENT_REQUEST_FAILED',
+    'MCP_EVENT_STREAMS_LIMIT_EXCEEDED',
+    'MCP_SERVER_GET_FAILED',
+    'MCP_SERVER_LOOKUP_UNSUPPORTED',
+    'MCP_SERVER_NOT_FOUND',
+    'ROUTE_NOT_FOUND',
+  ],
   handler: async ({
     mastra,
     serverId,
@@ -851,6 +927,7 @@ export const MCP_HTTP_TRANSPORT_ROUTE = createRoute({
   description: 'Streamable HTTP transport endpoint for MCP protocol communication',
   tags: ['MCP'],
   requiresAuth: true,
+  errors: ['MCP_SERVER_LOOKUP_UNSUPPORTED', 'MCP_SERVER_NOT_FOUND'],
   handler: async ({ mastra, serverId }: ServerContext & { serverId: string }): Promise<MCPHttpTransportResult> => {
     if (!mastra || typeof mastra.getMCPServerById !== 'function') {
       throw new HTTPException(500, {
@@ -885,6 +962,7 @@ export const MCP_SSE_TRANSPORT_ROUTE = createRoute({
   description: 'SSE transport endpoint for MCP protocol communication',
   tags: ['MCP'],
   requiresAuth: true,
+  errors: ['MCP_SERVER_LOOKUP_UNSUPPORTED', 'MCP_SERVER_NOT_FOUND', 'MCP_SSE_TRANSPORT_UNAVAILABLE'],
   handler: async ({ mastra, serverId }: ServerContext & { serverId: string }): Promise<MCPSseTransportResult> => {
     if (!mastra || typeof mastra.getMCPServerById !== 'function') {
       throw new HTTPException(500, {
@@ -927,5 +1005,6 @@ export const MCP_SSE_MESSAGES_ROUTE = createRoute({
   description: 'Message endpoint for SSE transport (posts messages to active SSE streams)',
   tags: ['MCP'],
   requiresAuth: true,
+  errors: ['MCP_SERVER_LOOKUP_UNSUPPORTED', 'MCP_SERVER_NOT_FOUND', 'MCP_SSE_TRANSPORT_UNAVAILABLE'],
   handler: MCP_SSE_TRANSPORT_ROUTE.handler,
 });

@@ -31,6 +31,12 @@ if (info?.code === SERVER_ERROR_CODES.AGENT_NOT_FOUND) {
 throw new HTTPException(404, { message: 'Agent not found', code: 'AGENT_NOT_FOUND', metadata: { agentId } });
 ```
 
+`metadata` is typed by `code`: codes that carry details require the right `metadata` shape, so `AGENT_NOT_FOUND` without `{ agentId }` fails to compile.
+
+**Error codes per route**
+
+Every built-in route declares the business codes it can return. The generated client types use these declarations, together with the shared request, validation and (on authenticated routes) auth codes, so `@mastra/client-js` can type errors per route.
+
 Errors thrown with an HTTP status but no code (for example Hono's `HTTPException`, or an error with a `status` property) get `UNCATEGORIZED_ERROR` and keep their status. `UNEXPECTED_ERROR` is reserved for errors without a status. Custom routes now keep the status of the errors they throw instead of always returning 500. Server logs still record every custom-route error except 4xx client errors.
 
 **Custom adapters**

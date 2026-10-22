@@ -8,6 +8,8 @@ import type ts from 'typescript-classic';
 import type * as z4 from 'zod/v4/core';
 import { printNode, zodToTs } from 'zod-to-ts';
 
+import { AUTH_ERROR_CODES, COMMON_ERROR_CODES, SERVER_ERROR_CODES } from '../src/server/error-codes/index.js';
+import { SERVER_ERROR_METADATA_SCHEMAS } from '../src/server/error-codes/metadata.js';
 import { SERVER_ROUTES } from '../src/server/server-adapter/routes/index.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -337,7 +339,63 @@ function renderRouteBlock(route: RouteDefinition): string {
 
   const declarations = routeParts.length > 0 ? `${routeParts.map(part => part.content).join('\n\n')}\n\n` : '';
 
-  return `// ============================================================================\n// Route: ${routeKey}\n// ============================================================================\n${declarations}${deprecatedComment}export interface ${baseName}_RouteContract {\n  pathParams: ${getRouteMapTypeName(pathParams)};\n  queryParams: ${getRouteMapTypeName(queryParams)};\n  body: ${getRouteMapTypeName(body)};\n  request: ${requestAliasName};\n  response: ${getRouteMapTypeName(response) === 'never' ? 'unknown' : getRouteMapTypeName(response)};\n  responseType: '${route.responseType}';\n}`;
+  return `// ============================================================================\n// Route: ${routeKey}\n// ============================================================================\n${declarations}${deprecatedComment}export interface ${baseName}_RouteContract {\n  pathParams: ${getRouteMapTypeName(pathParams)};\n  queryParams: ${getRouteMapTypeName(queryParams)};\n  body: ${getRouteMapTypeName(body)};\n  request: ${requestAliasName};\n  response: ${getRouteMapTypeName(response) === 'never' ? 'unknown' : getRouteMapTypeName(response)};\n  responseType: '${route.responseType}';\n  errorCode: ${renderRouteErrorCodes(route)};\n}`;
+}
+
+/** The business codes a route can return: its declared `errors` plus the framework-wide groups. */
+function renderRouteErrorCodes(route: RouteDefinition): string {
+  const groups = ['CommonErrorCode', ...(route.requiresAuth === false ? [] : ['AuthErrorCode'])];
+  const declared = [...new Set<string>(route.errors ?? [])].sort().map(code => JSON.stringify(code));
+  return [...declared, ...groups].join(' | ');
+}
+
+function renderStringUnion(values: readonly string[]): string {
+  return values.map(value => JSON.stringify(value)).join(' | ');
+}
+
+/**
+ * The error code catalog and each code's metadata, inlined because `@mastra/client-js`
+ * does not depend on `@mastra/server`. Codes without a metadata schema map to `undefined`.
+ */
+function renderServerErrorTypes(): string {
+  const schemas: Record<string, z4.$ZodType> = SERVER_ERROR_METADATA_SCHEMAS;
+  const metadataEntries = Object.keys(SERVER_ERROR_CODES)
+    .sort()
+    .map(code => {
+      const schema = schemas[code];
+      const type = schema
+        ? printNode(
+            zodToTs(schema, { io: 'output', auxiliaryTypeStore: createAuxiliaryTypeStore('ErrorMetadata') }).node,
+          )
+        : 'undefined';
+      return `  ${code}: ${type};`;
+    })
+    .join('\n');
+
+  return `// ============================================================================
+// Server Error Codes
+// ============================================================================
+export type ServerErrorCode = keyof ServerErrorMetadataMap;
+
+/** Codes any route can return (request validation, generic fallbacks, model policy). */
+export type CommonErrorCode = ${renderStringUnion(COMMON_ERROR_CODES)};
+
+/** Codes any authenticated route can return from authentication and permission checks. */
+export type AuthErrorCode = ${renderStringUnion(AUTH_ERROR_CODES)};
+
+/** The \`metadata\` each error code carries; \`undefined\` when the code carries none. */
+export interface ServerErrorMetadataMap {
+${metadataEntries}
+}
+
+/** A JSON error body, discriminated by \`code\` so switching on it narrows \`metadata\`. */
+export type ServerError<C extends ServerErrorCode = ServerErrorCode> = {
+  [K in C]: Simplify<
+    { error: string; code: K } & (undefined extends ServerErrorMetadataMap[K]
+      ? { metadata?: ServerErrorMetadataMap[K] }
+      : { metadata: ServerErrorMetadataMap[K] })
+  >;
+}[C];`;
 }
 
 function renderPathClient(routes: readonly RouteDefinition[]): string {
@@ -419,6 +477,11 @@ export type Body<K extends RouteKey> = RouteTypes[K]['body'];
 export type RouteRequest<K extends RouteKey> = RouteTypes[K]['request'];
 export type RouteResponse<K extends RouteKey> = RouteTypes[K]['response'];
 export type RouteResponseType<K extends RouteKey> = RouteTypes[K]['responseType'];
+export type RouteErrorCode<K extends RouteKey> = RouteTypes[K]['errorCode'];
+/** Error bodies route \`K\` can return, narrowed by \`code\`. */
+export type RouteError<K extends RouteKey> = ServerError<RouteErrorCode<K>>;
+
+${renderServerErrorTypes()}
 
 // ============================================================================
 // Path-based Client Types
@@ -443,6 +506,11 @@ export type ClientResponseKind<P extends ClientPath, M extends ClientMethod<P>> 
   responseType: infer ResponseType;
 }
   ? ResponseType
+  : never;
+export type ClientError<P extends ClientPath, M extends ClientMethod<P>> = ClientRoute<P, M> extends {
+  errorCode: infer Code extends ServerErrorCode;
+}
+  ? ServerError<Code>
   : never;
 `;
 }

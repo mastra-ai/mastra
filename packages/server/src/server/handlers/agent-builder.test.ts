@@ -187,7 +187,13 @@ describe('Agent Builder Handlers', () => {
           ...createTestServerContext({ mastra: mockMastra }),
           actionId: 'non-existent',
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' }));
+      ).rejects.toThrow(
+        new HTTPException(404, {
+          message: 'Workflow not found',
+          code: 'WORKFLOW_NOT_FOUND',
+          metadata: { workflowId: 'non-existent' },
+        }),
+      );
     });
 
     it('should get action by ID successfully', async () => {
@@ -232,7 +238,13 @@ describe('Agent Builder Handlers', () => {
           actionId: 'non-existent',
           runId: 'test-run',
         } as any),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' }));
+      ).rejects.toThrow(
+        new HTTPException(404, {
+          message: 'Workflow not found',
+          code: 'WORKFLOW_NOT_FOUND',
+          metadata: { workflowId: 'non-existent' },
+        }),
+      );
     });
 
     it('should start action run successfully when runId is not passed', async () => {
@@ -307,7 +319,13 @@ describe('Agent Builder Handlers', () => {
           actionId: 'non-existent',
           runId: 'test-run',
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' }));
+      ).rejects.toThrow(
+        new HTTPException(404, {
+          message: 'Workflow not found',
+          code: 'WORKFLOW_NOT_FOUND',
+          metadata: { workflowId: 'non-existent' },
+        }),
+      );
     });
 
     it('should get action run successfully', async () => {
@@ -353,7 +371,13 @@ describe('Agent Builder Handlers', () => {
           actionId: 'non-existent',
           runId: 'test-run',
         }),
-      ).rejects.toThrow(new HTTPException(404, { message: 'Workflow not found', code: 'WORKFLOW_NOT_FOUND' }));
+      ).rejects.toThrow(
+        new HTTPException(404, {
+          message: 'Workflow not found',
+          code: 'WORKFLOW_NOT_FOUND',
+          metadata: { workflowId: 'non-existent' },
+        }),
+      );
     });
 
     it('should create action run successfully', async () => {

@@ -5,6 +5,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute, ValidationErrorHook } from '@mastra/core/server';
 import type * as z from 'zod/v4';
 import type { InMemoryTaskStore } from '../../a2a/store';
+import type { ServerErrorCode } from '../../error-codes';
 import type { OpenAPIRoute } from '../openapi-utils';
 import { A2A_ROUTES } from './a2a';
 import { AGENT_BUILDER_ROUTES } from './agent-builder';
@@ -158,6 +159,13 @@ export type ServerRoute<
    */
   fga?: FGARouteConfig;
   onValidationError?: ValidationErrorHook;
+  /**
+   * Business error codes this route can return, on top of the framework-wide codes
+   * (`REQUEST_ERROR_CODES`, plus `AUTH_ERROR_CODES` on authenticated routes).
+   * `generate:route-types` turns this into the route's typed error union for client-js,
+   * and `check:route-errors` fails when a handler can reach a code missing from this list.
+   */
+  errors?: readonly ServerErrorCode[];
   /** @internal Phantom type — not present at runtime. Used for type-level schema inference. */
   readonly __schemas?: TSchemas;
 };

@@ -255,6 +255,12 @@ export const LIST_WORKSPACES_ROUTE = createRoute({
   summary: 'List all workspaces',
   description: 'Returns all workspaces from both Mastra instance and agents',
   tags: ['Workspace'],
+  errors: [
+    'WORKSPACES_LIST_FAILED',
+    'WORKSPACE_PATH_ACCESS_DENIED',
+    'WORKSPACE_PATH_NOT_FOUND',
+    'WORKSPACE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra }) => {
     try {
       requireWorkspaceV1Support();
@@ -395,6 +401,12 @@ export const GET_WORKSPACE_ROUTE = createRoute({
   summary: 'Get workspace info',
   description: 'Returns information about a specific workspace and its capabilities',
   tags: ['Workspace'],
+  errors: [
+    'WORKSPACE_GET_FAILED',
+    'WORKSPACE_PATH_ACCESS_DENIED',
+    'WORKSPACE_PATH_NOT_FOUND',
+    'WORKSPACE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, workspaceId }) => {
     try {
       const workspace = await getWorkspaceById(mastra, workspaceId);
@@ -496,6 +508,14 @@ export const WORKSPACE_FS_READ_ROUTE = createRoute({
   summary: 'Read file content',
   description: 'Returns the content of a file at the specified path',
   tags: ['Workspace'],
+  errors: [
+    'WORKSPACE_FILESYSTEM_NOT_CONFIGURED',
+    'WORKSPACE_FILE_READ_FAILED',
+    'WORKSPACE_PATH_ACCESS_DENIED',
+    'WORKSPACE_PATH_NOT_FOUND',
+    'WORKSPACE_PATH_REQUIRED',
+    'WORKSPACE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, path, encoding, workspaceId }) => {
     try {
       requireWorkspaceV1Support();
@@ -552,6 +572,15 @@ export const WORKSPACE_FS_WRITE_ROUTE = createRoute({
   summary: 'Write file content',
   description: 'Writes content to a file at the specified path. Supports base64 encoding for binary files.',
   tags: ['Workspace'],
+  errors: [
+    'WORKSPACE_FILESYSTEM_NOT_CONFIGURED',
+    'WORKSPACE_FILE_WRITE_FAILED',
+    'WORKSPACE_PATH_ACCESS_DENIED',
+    'WORKSPACE_PATH_NOT_FOUND',
+    'WORKSPACE_PATH_REQUIRED',
+    'WORKSPACE_READ_ONLY',
+    'WORKSPACE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, path, content, encoding, recursive, workspaceId }) => {
     try {
       requireWorkspaceV1Support();
@@ -611,6 +640,13 @@ export const WORKSPACE_FS_LIST_ROUTE = createRoute({
   summary: 'List directory contents',
   description: 'Returns a list of files and directories at the specified path',
   tags: ['Workspace'],
+  errors: [
+    'WORKSPACE_DIRECTORY_LIST_FAILED',
+    'WORKSPACE_PATH_ACCESS_DENIED',
+    'WORKSPACE_PATH_NOT_FOUND',
+    'WORKSPACE_PATH_REQUIRED',
+    'WORKSPACE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, path, recursive, workspaceId }) => {
     try {
       requireWorkspaceV1Support();
@@ -664,6 +700,15 @@ export const WORKSPACE_FS_DELETE_ROUTE = createRoute({
   summary: 'Delete file or directory',
   description: 'Deletes a file or directory at the specified path',
   tags: ['Workspace'],
+  errors: [
+    'WORKSPACE_FILESYSTEM_NOT_CONFIGURED',
+    'WORKSPACE_FILE_DELETE_FAILED',
+    'WORKSPACE_PATH_ACCESS_DENIED',
+    'WORKSPACE_PATH_NOT_FOUND',
+    'WORKSPACE_PATH_REQUIRED',
+    'WORKSPACE_READ_ONLY',
+    'WORKSPACE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, path, recursive, force, workspaceId }) => {
     try {
       requireWorkspaceV1Support();
@@ -731,6 +776,15 @@ export const WORKSPACE_FS_MKDIR_ROUTE = createRoute({
   summary: 'Create directory',
   description: 'Creates a directory at the specified path',
   tags: ['Workspace'],
+  errors: [
+    'WORKSPACE_DIRECTORY_CREATE_FAILED',
+    'WORKSPACE_FILESYSTEM_NOT_CONFIGURED',
+    'WORKSPACE_PATH_ACCESS_DENIED',
+    'WORKSPACE_PATH_NOT_FOUND',
+    'WORKSPACE_PATH_REQUIRED',
+    'WORKSPACE_READ_ONLY',
+    'WORKSPACE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, path, recursive, workspaceId }) => {
     try {
       requireWorkspaceV1Support();
@@ -781,6 +835,14 @@ export const WORKSPACE_FS_STAT_ROUTE = createRoute({
   summary: 'Get file/directory info',
   description: 'Returns metadata about a file or directory',
   tags: ['Workspace'],
+  errors: [
+    'WORKSPACE_FILESYSTEM_NOT_CONFIGURED',
+    'WORKSPACE_FILE_STAT_FAILED',
+    'WORKSPACE_PATH_ACCESS_DENIED',
+    'WORKSPACE_PATH_NOT_FOUND',
+    'WORKSPACE_PATH_REQUIRED',
+    'WORKSPACE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, path, workspaceId }) => {
     try {
       requireWorkspaceV1Support();
@@ -841,6 +903,13 @@ export const WORKSPACE_SEARCH_ROUTE = createRoute({
   summary: 'Search workspace content',
   description: 'Searches across indexed workspace content using BM25, vector, or hybrid search',
   tags: ['Workspace'],
+  errors: [
+    'WORKSPACE_PATH_ACCESS_DENIED',
+    'WORKSPACE_PATH_NOT_FOUND',
+    'WORKSPACE_SEARCH_FAILED',
+    'WORKSPACE_SEARCH_QUERY_REQUIRED',
+    'WORKSPACE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, query, topK, mode, minScore, workspaceId }) => {
     try {
       requireWorkspaceV1Support();
@@ -919,6 +988,15 @@ export const WORKSPACE_INDEX_ROUTE = createRoute({
   summary: 'Index content for search',
   description: 'Indexes content for later search operations',
   tags: ['Workspace'],
+  errors: [
+    'WORKSPACE_INDEX_FAILED',
+    'WORKSPACE_NOT_FOUND',
+    'WORKSPACE_PATH_ACCESS_DENIED',
+    'WORKSPACE_PATH_NOT_FOUND',
+    'WORKSPACE_PATH_REQUIRED',
+    'WORKSPACE_SEARCH_NOT_CONFIGURED',
+    'WORKSPACE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, path, content, metadata, workspaceId }) => {
     try {
       requireWorkspaceV1Support();
@@ -977,6 +1055,12 @@ export const WORKSPACE_LIST_SKILLS_ROUTE = createRoute({
   summary: 'List all skills',
   description: 'Returns a list of all discovered skills with their metadata',
   tags: ['Workspace', 'Skills'],
+  errors: [
+    'WORKSPACE_PATH_ACCESS_DENIED',
+    'WORKSPACE_PATH_NOT_FOUND',
+    'WORKSPACE_SKILLS_LIST_FAILED',
+    'WORKSPACE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, workspaceId, requestContext }) => {
     try {
       requireWorkspaceV1Support();
@@ -1049,6 +1133,15 @@ export const WORKSPACE_GET_SKILL_ROUTE = createRoute({
   summary: 'Get skill details',
   description: 'Returns the full details of a specific skill including instructions and file lists',
   tags: ['Workspace', 'Skills'],
+  errors: [
+    'SKILL_NAME_REQUIRED',
+    'WORKSPACE_PATH_ACCESS_DENIED',
+    'WORKSPACE_PATH_NOT_FOUND',
+    'WORKSPACE_SKILLS_NOT_CONFIGURED',
+    'WORKSPACE_SKILL_GET_FAILED',
+    'WORKSPACE_SKILL_NOT_FOUND',
+    'WORKSPACE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, skillName, path, workspaceId, requestContext }) => {
     try {
       requireWorkspaceV1Support();
@@ -1079,7 +1172,7 @@ export const WORKSPACE_GET_SKILL_ROUTE = createRoute({
         throw new HTTPException(404, {
           message: `Skill "${identifier}" not found`,
           code: SERVER_ERROR_CODES.WORKSPACE_SKILL_NOT_FOUND,
-          metadata: { skill: identifier },
+          metadata: { skillName: identifier },
         });
       }
 
@@ -1115,6 +1208,15 @@ export const WORKSPACE_LIST_SKILL_REFERENCES_ROUTE = createRoute({
   summary: 'List skill references',
   description: 'Returns a list of all reference file paths for a skill',
   tags: ['Workspace', 'Skills'],
+  errors: [
+    'SKILL_NAME_REQUIRED',
+    'WORKSPACE_PATH_ACCESS_DENIED',
+    'WORKSPACE_PATH_NOT_FOUND',
+    'WORKSPACE_SKILLS_NOT_CONFIGURED',
+    'WORKSPACE_SKILL_NOT_FOUND',
+    'WORKSPACE_SKILL_REFERENCES_LIST_FAILED',
+    'WORKSPACE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, skillName, path, workspaceId, requestContext }) => {
     try {
       requireWorkspaceV1Support();
@@ -1145,7 +1247,7 @@ export const WORKSPACE_LIST_SKILL_REFERENCES_ROUTE = createRoute({
         throw new HTTPException(404, {
           message: `Skill "${identifier}" not found`,
           code: SERVER_ERROR_CODES.WORKSPACE_SKILL_NOT_FOUND,
-          metadata: { skill: identifier },
+          metadata: { skillName: identifier },
         });
       }
 
@@ -1174,6 +1276,17 @@ export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
   summary: 'Get skill reference content',
   description: 'Returns the content of a specific reference file from a skill',
   tags: ['Workspace', 'Skills'],
+  errors: [
+    'WORKSPACE_PATH_ABSOLUTE_NOT_ALLOWED',
+    'WORKSPACE_PATH_ACCESS_DENIED',
+    'WORKSPACE_PATH_NOT_FOUND',
+    'WORKSPACE_PATH_TRAVERSAL',
+    'WORKSPACE_SKILLS_NOT_CONFIGURED',
+    'WORKSPACE_SKILL_NOT_FOUND',
+    'WORKSPACE_SKILL_REFERENCE_GET_FAILED',
+    'WORKSPACE_SKILL_REFERENCE_NOT_FOUND',
+    'WORKSPACE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, skillName, path: skillPath, referencePath, workspaceId, requestContext }) => {
     try {
       requireWorkspaceV1Support();
@@ -1198,7 +1311,7 @@ export const WORKSPACE_GET_SKILL_REFERENCE_ROUTE = createRoute({
         throw new HTTPException(404, {
           message: `Skill "${identifier}" not found`,
           code: SERVER_ERROR_CODES.WORKSPACE_SKILL_NOT_FOUND,
-          metadata: { skill: identifier },
+          metadata: { skillName: identifier },
         });
       }
 
@@ -1242,6 +1355,13 @@ export const WORKSPACE_SEARCH_SKILLS_ROUTE = createRoute({
   summary: 'Search skills',
   description: 'Searches across all skills content using BM25 keyword search',
   tags: ['Workspace', 'Skills'],
+  errors: [
+    'WORKSPACE_PATH_ACCESS_DENIED',
+    'WORKSPACE_PATH_NOT_FOUND',
+    'WORKSPACE_SEARCH_QUERY_REQUIRED',
+    'WORKSPACE_SKILLS_SEARCH_FAILED',
+    'WORKSPACE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, query, topK, minScore, skillNames, includeReferences, workspaceId, requestContext }) => {
     try {
       requireWorkspaceV1Support();
@@ -1311,6 +1431,7 @@ export const WORKSPACE_SKILLS_SH_SEARCH_ROUTE = createRoute({
   summary: 'Search skills on skills.sh',
   description: 'Proxies search requests to skills.sh API to avoid CORS issues',
   tags: ['Workspace', 'Skills'],
+  errors: ['SKILLS_REGISTRY_REQUEST_FAILED', 'WORKSPACE_SKILLS_SEARCH_FAILED'],
   handler: async ({ q, limit }) => {
     try {
       const controller = new AbortController();
@@ -1372,6 +1493,7 @@ export const WORKSPACE_SKILLS_SH_POPULAR_ROUTE = createRoute({
   summary: 'Get popular skills from skills.sh',
   description: 'Proxies popular skills requests to skills.sh API to avoid CORS issues',
   tags: ['Workspace', 'Skills'],
+  errors: ['SKILLS_REGISTRY_REQUEST_FAILED', 'WORKSPACE_POPULAR_SKILLS_FETCH_FAILED'],
   handler: async ({ limit, offset }) => {
     try {
       const controller = new AbortController();
@@ -1519,6 +1641,11 @@ export const WORKSPACE_SKILLS_SH_PREVIEW_ROUTE = createRoute({
   summary: 'Preview skill content',
   description: 'Fetches the skill content from the Skills API.',
   tags: ['Workspace', 'Skills'],
+  errors: [
+    'SKILLS_REGISTRY_SKILL_CONTENT_UNAVAILABLE',
+    'SKILLS_REGISTRY_SKILL_NOT_FOUND',
+    'WORKSPACE_SKILL_PREVIEW_FETCH_FAILED',
+  ],
   handler: async ({ owner, repo, path: skillName }) => {
     try {
       const controller = new AbortController();
@@ -1574,6 +1701,20 @@ export const WORKSPACE_SKILLS_SH_INSTALL_ROUTE = createRoute({
   summary: 'Install skill from Skills API',
   description: 'Installs a skill by fetching files from the Skills API and writing to workspace filesystem.',
   tags: ['Workspace', 'Skills'],
+  errors: [
+    'SKILLS_REGISTRY_SKILL_NOT_FOUND',
+    'SKILL_NAME_INVALID',
+    'WORKSPACE_FILESYSTEM_NOT_CONFIGURED',
+    'WORKSPACE_MOUNT_NOT_FOUND',
+    'WORKSPACE_MOUNT_READ_ONLY',
+    'WORKSPACE_NOT_FOUND',
+    'WORKSPACE_NO_WRITABLE_MOUNT',
+    'WORKSPACE_PATH_ABSOLUTE_NOT_ALLOWED',
+    'WORKSPACE_PATH_TRAVERSAL',
+    'WORKSPACE_READ_ONLY',
+    'WORKSPACE_SKILL_INSTALL_FAILED',
+    'WORKSPACE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, workspaceId, owner, repo, skillName, mount }) => {
     try {
       requireWorkspaceV1Support();
@@ -1701,6 +1842,18 @@ export const WORKSPACE_SKILLS_SH_REMOVE_ROUTE = createRoute({
   summary: 'Remove an installed skill',
   description: 'Removes an installed skill by deleting its directory. Does not require sandbox.',
   tags: ['Workspace', 'Skills'],
+  errors: [
+    'SKILL_NAME_INVALID',
+    'WORKSPACE_FILESYSTEM_NOT_CONFIGURED',
+    'WORKSPACE_MOUNT_NOT_FOUND',
+    'WORKSPACE_MOUNT_READ_ONLY',
+    'WORKSPACE_NOT_FOUND',
+    'WORKSPACE_NO_WRITABLE_MOUNT',
+    'WORKSPACE_READ_ONLY',
+    'WORKSPACE_SKILL_NOT_FOUND',
+    'WORKSPACE_SKILL_REMOVE_FAILED',
+    'WORKSPACE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, workspaceId, skillName }) => {
     try {
       requireWorkspaceV1Support();
@@ -1787,6 +1940,16 @@ export const WORKSPACE_SKILLS_SH_UPDATE_ROUTE = createRoute({
   description:
     'Updates installed skills by re-fetching from GitHub. Specify skillName to update one, or omit to update all.',
   tags: ['Workspace', 'Skills'],
+  errors: [
+    'SKILL_NAME_INVALID',
+    'WORKSPACE_FILESYSTEM_NOT_CONFIGURED',
+    'WORKSPACE_NOT_FOUND',
+    'WORKSPACE_PATH_ABSOLUTE_NOT_ALLOWED',
+    'WORKSPACE_PATH_TRAVERSAL',
+    'WORKSPACE_READ_ONLY',
+    'WORKSPACE_SKILLS_UPDATE_FAILED',
+    'WORKSPACE_VERSION_UNSUPPORTED',
+  ],
   handler: async ({ mastra, workspaceId, skillName }) => {
     try {
       requireWorkspaceV1Support();

@@ -146,6 +146,7 @@ function createNewRoute<
     onUnsupportedCore?: () => never;
     /** Business code returned when the handler fails without a more specific code. */
     errorCode: ServerErrorCode;
+    errors?: readonly ServerErrorCode[];
     handler: ServerRouteHandler<InferParams<TPathSchema, TQuerySchema, TBodySchema>>;
   },
 ) {
@@ -326,6 +327,16 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
   onValidationError: traceQueryValidationError,
   maxBodySize: 256 * 1024,
   preserveHttpExceptions: true,
+  errors: [
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'OBSERVABILITY_TENANT_SCOPE_UNSUPPORTED',
+    'STORAGE_NOT_CONFIGURED',
+    'TRACES_QUERY_FAILED',
+    'TRACE_QUERY_INVALID',
+    'TRACE_QUERY_UNSUPPORTED',
+  ],
   handler: async ({
     mastra,
     requestContext,
@@ -493,6 +504,17 @@ export const AGGREGATE_TRACES = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_TRACES, 
       code: SERVER_ERROR_CODES.TRACE_AGGREGATE_UNSUPPORTED,
       message: 'Trace aggregation requires a newer @mastra/core. Please upgrade.',
     }),
+  errors: [
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'OBSERVABILITY_TENANT_SCOPE_UNSUPPORTED',
+    'STORAGE_NOT_CONFIGURED',
+    'TRACES_AGGREGATE_FAILED',
+    'TRACE_AGGREGATE_UNSUPPORTED',
+    'TRACE_QUERY_INVALID',
+    'TRACE_QUERY_UNSUPPORTED',
+  ],
   handler: async ({
     mastra,
     requestContext,
@@ -622,6 +644,16 @@ export const AGGREGATE_SPANS = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_SPANS, {
       code: SERVER_ERROR_CODES.SPAN_AGGREGATE_UNSUPPORTED,
       message: 'Span aggregation requires a newer @mastra/core. Please upgrade.',
     }),
+  errors: [
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'OBSERVABILITY_TENANT_SCOPE_UNSUPPORTED',
+    'SPANS_AGGREGATE_FAILED',
+    'SPAN_AGGREGATE_UNSUPPORTED',
+    'STORAGE_NOT_CONFIGURED',
+    'TRACE_QUERY_INVALID',
+  ],
   handler: async ({
     mastra,
     requestContext,
@@ -738,6 +770,17 @@ export const QUERY_SPANS = createNewRoute(NEW_ROUTE_DEFS.QUERY_SPANS, {
       code: SERVER_ERROR_CODES.SPAN_QUERY_UNSUPPORTED,
       message: 'Span queries require a newer @mastra/core. Please upgrade.',
     }),
+  errors: [
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'OBSERVABILITY_TENANT_SCOPE_UNSUPPORTED',
+    'SPANS_QUERY_FAILED',
+    'SPAN_QUERY_UNSUPPORTED',
+    'STORAGE_NOT_CONFIGURED',
+    'TRACE_QUERY_INVALID',
+    'TRACE_QUERY_UNSUPPORTED',
+  ],
   handler: async ({ mastra, requestContext, timeRange, where, orderBy, page }) => {
     let plan;
     try {
@@ -840,6 +883,16 @@ export const GET_TRACE_QUERY_FIELDS = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QU
   preserveHttpExceptions: true,
   isCoreSupported: supportsTraceQueryDiscoveryCore,
   onUnsupportedCore: throwTraceQueryDiscoveryCoreUnsupported,
+  errors: [
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'OBSERVABILITY_TENANT_SCOPE_UNSUPPORTED',
+    'STORAGE_NOT_CONFIGURED',
+    'TRACE_QUERY_DISCOVERY_UNSUPPORTED',
+    'TRACE_QUERY_FIELDS_GET_FAILED',
+    'TRACE_QUERY_INVALID',
+  ],
   handler: async ({ mastra, requestContext, timeRange, predicateScope, search, limit }) => {
     const args = { timeRange, predicateScope, search, limit };
     const plan = coreStorage.planTraceQueryObservedFields(args, {
@@ -921,6 +974,16 @@ export const GET_TRACE_QUERY_VALUES = createNewRoute(NEW_ROUTE_DEFS.GET_TRACE_QU
   preserveHttpExceptions: true,
   isCoreSupported: supportsTraceQueryDiscoveryCore,
   onUnsupportedCore: throwTraceQueryDiscoveryCoreUnsupported,
+  errors: [
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'OBSERVABILITY_TENANT_SCOPE_UNSUPPORTED',
+    'STORAGE_NOT_CONFIGURED',
+    'TRACE_QUERY_DISCOVERY_UNSUPPORTED',
+    'TRACE_QUERY_INVALID',
+    'TRACE_QUERY_VALUES_GET_FAILED',
+  ],
   handler: async ({ mastra, requestContext, timeRange, predicateScope, path, search, limit }) => {
     const plan = coreStorage.planTraceQueryValues(
       { timeRange, predicateScope, path, search, limit },
@@ -1002,6 +1065,17 @@ export const QUERY_THREADS = createNewRoute(NEW_ROUTE_DEFS.QUERY_THREADS, {
       code: SERVER_ERROR_CODES.TRACE_QUERY_UNSUPPORTED,
       message: 'Thread queries require a newer @mastra/core with observability thread-query support. Please upgrade.',
     }),
+  errors: [
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'OBSERVABILITY_TENANT_SCOPE_UNSUPPORTED',
+    'OBSERVABILITY_THREADS_QUERY_FAILED',
+    'OBSERVABILITY_THREAD_QUERY_UNSUPPORTED',
+    'STORAGE_NOT_CONFIGURED',
+    'TRACE_QUERY_INVALID',
+    'TRACE_QUERY_UNSUPPORTED',
+  ],
   handler: async params => {
     const { mastra, requestContext } = params;
     const rowsRequest = 'timeRange' in params;
@@ -1125,6 +1199,14 @@ export const LIST_LOGS = createNewRoute(NEW_ROUTE_DEFS.LIST_LOGS, {
   errorCode: SERVER_ERROR_CODES.OBSERVABILITY_LOGS_LIST_FAILED,
   queryParamSchema: createObservabilityListQuerySchema(logsFilterSchema, logsOrderBySchema),
   responseSchema: listLogsResponseSchema,
+  errors: [
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'OBSERVABILITY_DELTA_POLLING_UNSUPPORTED',
+    'OBSERVABILITY_LOGS_LIST_FAILED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra, mode, after, limit, ...params }) => {
     const filters = pickParams(logsFilterSchema, params);
     const observabilityStore = await getObservabilityStore(mastra);
@@ -1155,6 +1237,14 @@ export const LIST_SCORES = createNewRoute(NEW_ROUTE_DEFS.LIST_SCORES, {
   errorCode: SERVER_ERROR_CODES.SCORES_LIST_FAILED,
   queryParamSchema: createObservabilityListQuerySchema(scoresFilterSchema, scoresOrderBySchema),
   responseSchema: obsListScoresResponseSchema,
+  errors: [
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'OBSERVABILITY_DELTA_POLLING_UNSUPPORTED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'SCORES_LIST_FAILED',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra, mode, after, limit, ...params }) => {
     const filters = pickParams(scoresFilterSchema, params);
     const observabilityStore = await getObservabilityStore(mastra);
@@ -1181,6 +1271,13 @@ export const CREATE_SCORE = createNewRoute(NEW_ROUTE_DEFS.CREATE_SCORE, {
   errorCode: SERVER_ERROR_CODES.SCORE_CREATE_FAILED,
   bodySchema: createScoreBodySchema,
   responseSchema: createScoreResponseSchema,
+  errors: [
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'SCORE_CREATE_FAILED',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra, score }) => {
     const observabilityStore = await getObservabilityStore(mastra);
     await observabilityStore.createScore({
@@ -1194,6 +1291,13 @@ export const DELETE_SCORES = createNewRoute(NEW_ROUTE_DEFS.DELETE_SCORES, {
   errorCode: SERVER_ERROR_CODES.SCORES_DELETE_FAILED,
   bodySchema: deleteScoresArgsSchema,
   responseSchema: deleteScoresResponseSchema,
+  errors: [
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'SCORES_DELETE_FAILED',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra, ...params }) => {
     if (!coreFeatures.has('observability-signal-deletion')) {
       throw new HTTPException(501, {
@@ -1212,6 +1316,13 @@ export const GET_SCORE = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE, {
   errorCode: SERVER_ERROR_CODES.SCORE_GET_FAILED,
   pathParamSchema: z.object({ scoreId: z.string() }),
   responseSchema: z.object({ score: scoreRecordSchema.nullable() }),
+  errors: [
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'SCORE_GET_FAILED',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra, scoreId }) => {
     const observabilityStore = await getObservabilityStore(mastra);
     const score = await observabilityStore.getScoreById(scoreId);
@@ -1223,6 +1334,13 @@ export const GET_SCORE_AGGREGATE = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE_AGGRE
   errorCode: SERVER_ERROR_CODES.SCORE_AGGREGATE_GET_FAILED,
   bodySchema: getScoreAggregateArgsSchema,
   responseSchema: getScoreAggregateResponseSchema,
+  errors: [
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'SCORE_AGGREGATE_GET_FAILED',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra, ...params }) => {
     const args = pickParams(getScoreAggregateArgsSchema, params);
     const observabilityStore = await getObservabilityStore(mastra);
@@ -1234,6 +1352,13 @@ export const GET_SCORE_BREAKDOWN = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE_BREAK
   errorCode: SERVER_ERROR_CODES.SCORE_BREAKDOWN_GET_FAILED,
   bodySchema: getScoreBreakdownArgsSchema,
   responseSchema: getScoreBreakdownResponseSchema,
+  errors: [
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'SCORE_BREAKDOWN_GET_FAILED',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra, ...params }) => {
     const args = pickParams(getScoreBreakdownArgsSchema, params);
     const observabilityStore = await getObservabilityStore(mastra);
@@ -1245,6 +1370,13 @@ export const GET_SCORE_TIME_SERIES = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE_TIM
   errorCode: SERVER_ERROR_CODES.SCORE_TIME_SERIES_GET_FAILED,
   bodySchema: getScoreTimeSeriesArgsSchema,
   responseSchema: getScoreTimeSeriesResponseSchema,
+  errors: [
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'SCORE_TIME_SERIES_GET_FAILED',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra, ...params }) => {
     const args = pickParams(getScoreTimeSeriesArgsSchema, params);
     const observabilityStore = await getObservabilityStore(mastra);
@@ -1256,6 +1388,13 @@ export const GET_SCORE_PERCENTILES = createNewRoute(NEW_ROUTE_DEFS.GET_SCORE_PER
   errorCode: SERVER_ERROR_CODES.SCORE_PERCENTILES_GET_FAILED,
   bodySchema: getScorePercentilesArgsSchema,
   responseSchema: getScorePercentilesResponseSchema,
+  errors: [
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'SCORE_PERCENTILES_GET_FAILED',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra, ...params }) => {
     const args = pickParams(getScorePercentilesArgsSchema, params);
     const observabilityStore = await getObservabilityStore(mastra);
@@ -1271,6 +1410,14 @@ export const LIST_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.LIST_FEEDBACK, {
   errorCode: SERVER_ERROR_CODES.FEEDBACK_LIST_FAILED,
   queryParamSchema: createObservabilityListQuerySchema(feedbackFilterSchema, feedbackOrderBySchema),
   responseSchema: listFeedbackResponseSchema,
+  errors: [
+    'FEEDBACK_LIST_FAILED',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'OBSERVABILITY_DELTA_POLLING_UNSUPPORTED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra, requestContext, request, mode, after, limit, ...params }) => {
     const filters = pickParams(feedbackFilterSchema, params);
     const observabilityStore = await getObservabilityStore(mastra);
@@ -1307,6 +1454,13 @@ export const CREATE_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.CREATE_FEEDBACK, {
   errorCode: SERVER_ERROR_CODES.FEEDBACK_CREATE_FAILED,
   bodySchema: createFeedbackBodySchema,
   responseSchema: createFeedbackResponseSchema,
+  errors: [
+    'FEEDBACK_CREATE_FAILED',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra, requestContext, feedback }) => {
     const user = requestContext.get(MASTRA_USER_KEY);
     const authenticatedId = user && typeof user === 'object' && 'id' in user ? user.id : undefined;
@@ -1330,6 +1484,13 @@ export const DELETE_FEEDBACK = createNewRoute(NEW_ROUTE_DEFS.DELETE_FEEDBACK, {
   errorCode: SERVER_ERROR_CODES.FEEDBACK_DELETE_FAILED,
   bodySchema: deleteFeedbackArgsSchema,
   responseSchema: deleteFeedbackResponseSchema,
+  errors: [
+    'FEEDBACK_DELETE_FAILED',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra, ...params }) => {
     if (!coreFeatures.has('observability-signal-deletion')) {
       throw new HTTPException(501, {
@@ -1349,6 +1510,14 @@ export const UPDATE_FEEDBACK_REVIEW_STATUS = createNewRoute(NEW_ROUTE_DEFS.UPDAT
   pathParamSchema: z.object({ feedbackId: z.string() }),
   bodySchema: z.object({ reviewStatus: feedbackReviewStatusSchema }),
   responseSchema: feedbackRecordSchema,
+  errors: [
+    'FEEDBACK_REVIEW_STATUS_UPDATE_FAILED',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'OBSERVABILITY_UPDATE_FEEDBACK_REVIEW_STATUS_CONFLICT',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra, feedbackId, reviewStatus }) => {
     const observabilityStore = await getObservabilityStore(mastra);
     return await observabilityStore.updateFeedbackReviewStatus({ feedbackId, reviewStatus });
@@ -1359,6 +1528,13 @@ export const GET_FEEDBACK_AGGREGATE = createNewRoute(NEW_ROUTE_DEFS.GET_FEEDBACK
   errorCode: SERVER_ERROR_CODES.FEEDBACK_AGGREGATE_GET_FAILED,
   bodySchema: getFeedbackAggregateArgsSchema,
   responseSchema: getFeedbackAggregateResponseSchema,
+  errors: [
+    'FEEDBACK_AGGREGATE_GET_FAILED',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra, ...params }) => {
     const args = pickParams(getFeedbackAggregateArgsSchema, params);
     const observabilityStore = await getObservabilityStore(mastra);
@@ -1370,6 +1546,13 @@ export const GET_FEEDBACK_BREAKDOWN = createNewRoute(NEW_ROUTE_DEFS.GET_FEEDBACK
   errorCode: SERVER_ERROR_CODES.FEEDBACK_BREAKDOWN_GET_FAILED,
   bodySchema: getFeedbackBreakdownArgsSchema,
   responseSchema: getFeedbackBreakdownResponseSchema,
+  errors: [
+    'FEEDBACK_BREAKDOWN_GET_FAILED',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra, ...params }) => {
     const args = pickParams(getFeedbackBreakdownArgsSchema, params);
     const observabilityStore = await getObservabilityStore(mastra);
@@ -1381,6 +1564,13 @@ export const GET_FEEDBACK_TIME_SERIES = createNewRoute(NEW_ROUTE_DEFS.GET_FEEDBA
   errorCode: SERVER_ERROR_CODES.FEEDBACK_TIME_SERIES_GET_FAILED,
   bodySchema: getFeedbackTimeSeriesArgsSchema,
   responseSchema: getFeedbackTimeSeriesResponseSchema,
+  errors: [
+    'FEEDBACK_TIME_SERIES_GET_FAILED',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra, ...params }) => {
     const args = pickParams(getFeedbackTimeSeriesArgsSchema, params);
     const observabilityStore = await getObservabilityStore(mastra);
@@ -1392,6 +1582,13 @@ export const GET_FEEDBACK_PERCENTILES = createNewRoute(NEW_ROUTE_DEFS.GET_FEEDBA
   errorCode: SERVER_ERROR_CODES.FEEDBACK_PERCENTILES_GET_FAILED,
   bodySchema: getFeedbackPercentilesArgsSchema,
   responseSchema: getFeedbackPercentilesResponseSchema,
+  errors: [
+    'FEEDBACK_PERCENTILES_GET_FAILED',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra, ...params }) => {
     const args = pickParams(getFeedbackPercentilesArgsSchema, params);
     const observabilityStore = await getObservabilityStore(mastra);
@@ -1407,6 +1604,14 @@ export const LIST_METRICS = createNewRoute(NEW_ROUTE_DEFS.LIST_METRICS, {
   errorCode: SERVER_ERROR_CODES.METRICS_LIST_FAILED,
   queryParamSchema: createObservabilityListQuerySchema(metricsFilterSchema, metricsOrderBySchema),
   responseSchema: listMetricsResponseSchema,
+  errors: [
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'METRICS_LIST_FAILED',
+    'OBSERVABILITY_DELTA_POLLING_UNSUPPORTED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra, mode, after, limit, ...params }) => {
     const filters = pickParams(metricsFilterSchema, params);
     const observabilityStore = await getObservabilityStore(mastra);
@@ -1433,6 +1638,13 @@ export const GET_METRIC_AGGREGATE = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_AGG
   errorCode: SERVER_ERROR_CODES.METRIC_AGGREGATE_GET_FAILED,
   bodySchema: getMetricAggregateArgsSchema,
   responseSchema: getMetricAggregateResponseSchema,
+  errors: [
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'METRIC_AGGREGATE_GET_FAILED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra, ...params }) => {
     const args = pickParams(getMetricAggregateArgsSchema, params);
     const observabilityStore = await getObservabilityStore(mastra);
@@ -1444,6 +1656,13 @@ export const GET_METRIC_BREAKDOWN = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_BRE
   errorCode: SERVER_ERROR_CODES.METRIC_BREAKDOWN_GET_FAILED,
   bodySchema: getMetricBreakdownArgsSchema,
   responseSchema: getMetricBreakdownResponseSchema,
+  errors: [
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'METRIC_BREAKDOWN_GET_FAILED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra, ...params }) => {
     const args = pickParams(getMetricBreakdownArgsSchema, params);
     const observabilityStore = await getObservabilityStore(mastra);
@@ -1455,6 +1674,13 @@ export const GET_METRIC_TIME_SERIES = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_T
   errorCode: SERVER_ERROR_CODES.METRIC_TIME_SERIES_GET_FAILED,
   bodySchema: getMetricTimeSeriesArgsSchema,
   responseSchema: getMetricTimeSeriesResponseSchema,
+  errors: [
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'METRIC_TIME_SERIES_GET_FAILED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra, ...params }) => {
     const args = pickParams(getMetricTimeSeriesArgsSchema, params);
     const observabilityStore = await getObservabilityStore(mastra);
@@ -1466,6 +1692,13 @@ export const GET_METRIC_PERCENTILES = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_P
   errorCode: SERVER_ERROR_CODES.METRIC_PERCENTILES_GET_FAILED,
   bodySchema: getMetricPercentilesArgsSchema,
   responseSchema: getMetricPercentilesResponseSchema,
+  errors: [
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'METRIC_PERCENTILES_GET_FAILED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra, ...params }) => {
     const args = pickParams(getMetricPercentilesArgsSchema, params);
     const observabilityStore = await getObservabilityStore(mastra);
@@ -1481,6 +1714,13 @@ export const GET_METRIC_NAMES = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_NAMES, 
   errorCode: SERVER_ERROR_CODES.METRIC_NAMES_LIST_FAILED,
   queryParamSchema: wrapSchemaForQueryParams(getMetricNamesArgsSchema.partial()),
   responseSchema: getMetricNamesResponseSchema,
+  errors: [
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'METRIC_NAMES_LIST_FAILED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra, ...params }) => {
     const args = getMetricNamesArgsSchema.parse(pickParams(getMetricNamesArgsSchema, params));
     const observabilityStore = await getObservabilityStore(mastra);
@@ -1492,6 +1732,13 @@ export const GET_METRIC_LABEL_KEYS = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_LA
   errorCode: SERVER_ERROR_CODES.METRIC_LABEL_KEYS_LIST_FAILED,
   queryParamSchema: wrapSchemaForQueryParams(getMetricLabelKeysArgsSchema),
   responseSchema: getMetricLabelKeysResponseSchema,
+  errors: [
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'METRIC_LABEL_KEYS_LIST_FAILED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra, ...params }) => {
     const args = getMetricLabelKeysArgsSchema.parse(pickParams(getMetricLabelKeysArgsSchema, params));
     const observabilityStore = await getObservabilityStore(mastra);
@@ -1503,6 +1750,13 @@ export const GET_METRIC_LABEL_VALUES = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_
   errorCode: SERVER_ERROR_CODES.METRIC_LABEL_VALUES_LIST_FAILED,
   queryParamSchema: wrapSchemaForQueryParams(getMetricLabelValuesArgsSchema),
   responseSchema: getMetricLabelValuesResponseSchema,
+  errors: [
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'METRIC_LABEL_VALUES_LIST_FAILED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra, ...params }) => {
     const args = getMetricLabelValuesArgsSchema.parse(pickParams(getMetricLabelValuesArgsSchema, params));
     const observabilityStore = await getObservabilityStore(mastra);
@@ -1513,6 +1767,13 @@ export const GET_METRIC_LABEL_VALUES = createNewRoute(NEW_ROUTE_DEFS.GET_METRIC_
 export const GET_ENTITY_TYPES = createNewRoute(NEW_ROUTE_DEFS.GET_ENTITY_TYPES, {
   errorCode: SERVER_ERROR_CODES.ENTITY_TYPES_LIST_FAILED,
   responseSchema: getEntityTypesResponseSchema,
+  errors: [
+    'ENTITY_TYPES_LIST_FAILED',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra }) => {
     const observabilityStore = await getObservabilityStore(mastra);
     return await withDiscoveryFallback(() => observabilityStore.getEntityTypes({}), { entityTypes: [] });
@@ -1523,6 +1784,13 @@ export const GET_ENTITY_NAMES = createNewRoute(NEW_ROUTE_DEFS.GET_ENTITY_NAMES, 
   errorCode: SERVER_ERROR_CODES.ENTITY_NAMES_LIST_FAILED,
   queryParamSchema: wrapSchemaForQueryParams(getEntityNamesArgsSchema.partial()),
   responseSchema: getEntityNamesResponseSchema,
+  errors: [
+    'ENTITY_NAMES_LIST_FAILED',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra, ...params }) => {
     const args = getEntityNamesArgsSchema.parse(pickParams(getEntityNamesArgsSchema, params));
     const observabilityStore = await getObservabilityStore(mastra);
@@ -1533,6 +1801,13 @@ export const GET_ENTITY_NAMES = createNewRoute(NEW_ROUTE_DEFS.GET_ENTITY_NAMES, 
 export const GET_SERVICE_NAMES = createNewRoute(NEW_ROUTE_DEFS.GET_SERVICE_NAMES, {
   errorCode: SERVER_ERROR_CODES.SERVICE_NAMES_LIST_FAILED,
   responseSchema: getServiceNamesResponseSchema,
+  errors: [
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'SERVICE_NAMES_LIST_FAILED',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra }) => {
     const observabilityStore = await getObservabilityStore(mastra);
     return await withDiscoveryFallback(() => observabilityStore.getServiceNames({}), { serviceNames: [] });
@@ -1542,6 +1817,13 @@ export const GET_SERVICE_NAMES = createNewRoute(NEW_ROUTE_DEFS.GET_SERVICE_NAMES
 export const GET_ENVIRONMENTS = createNewRoute(NEW_ROUTE_DEFS.GET_ENVIRONMENTS, {
   errorCode: SERVER_ERROR_CODES.ENVIRONMENTS_LIST_FAILED,
   responseSchema: getEnvironmentsResponseSchema,
+  errors: [
+    'ENVIRONMENTS_LIST_FAILED',
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+  ],
   handler: async ({ mastra }) => {
     const observabilityStore = await getObservabilityStore(mastra);
     return await withDiscoveryFallback(() => observabilityStore.getEnvironments({}), { environments: [] });
@@ -1552,6 +1834,13 @@ export const GET_TAGS = createNewRoute(NEW_ROUTE_DEFS.GET_TAGS, {
   errorCode: SERVER_ERROR_CODES.TAGS_LIST_FAILED,
   queryParamSchema: wrapSchemaForQueryParams(getTagsArgsSchema.partial()),
   responseSchema: getTagsResponseSchema,
+  errors: [
+    'MASTRA_CORE_VERSION_UNSUPPORTED',
+    'OBSERVABILITY_OPERATION_NOT_SUPPORTED',
+    'OBSERVABILITY_STORAGE_UNAVAILABLE',
+    'STORAGE_NOT_CONFIGURED',
+    'TAGS_LIST_FAILED',
+  ],
   handler: async ({ mastra, ...params }) => {
     const args = getTagsArgsSchema.parse(pickParams(getTagsArgsSchema, params));
     const observabilityStore = await getObservabilityStore(mastra);

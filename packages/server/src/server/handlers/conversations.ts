@@ -53,6 +53,15 @@ export const CREATE_CONVERSATION_ROUTE = createRoute({
   tags: ['Responses'],
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_CREATE,
+  errors: [
+    'AGENT_ID_REQUIRED',
+    'AGENT_NOT_FOUND',
+    'CONVERSATION_CREATE_FAILED',
+    'CONVERSATION_MEMORY_NOT_CONFIGURED',
+    'MASTRA_INSTANCE_REQUIRED',
+    'MEMORY_STORAGE_NOT_INITIALIZED',
+    'THREAD_ACCESS_DENIED',
+  ],
   handler: async ({ mastra, requestContext, agent_id, conversation_id, resource_id, title, metadata }) => {
     try {
       if (!mastra) {
@@ -116,6 +125,7 @@ export const GET_CONVERSATION_ROUTE = createRoute({
   tags: ['Responses'],
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_READ,
+  errors: ['CONVERSATION_GET_FAILED', 'CONVERSATION_NOT_FOUND', 'THREAD_ACCESS_DENIED'],
   handler: async ({ mastra, requestContext, conversationId }) => {
     try {
       const match = await findConversationThreadAcrossAgents({ mastra, conversationId, requestContext });
@@ -148,6 +158,7 @@ export const GET_CONVERSATION_ITEMS_ROUTE = createRoute({
   tags: ['Responses'],
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_READ,
+  errors: ['CONVERSATION_GET_FAILED', 'CONVERSATION_NOT_FOUND', 'THREAD_ACCESS_DENIED'],
   handler: async ({ mastra, requestContext, conversationId }) => {
     try {
       const match = await findConversationThreadAcrossAgents({ mastra, conversationId, requestContext });
@@ -186,6 +197,7 @@ export const DELETE_CONVERSATION_ROUTE = createRoute({
   tags: ['Responses'],
   requiresAuth: true,
   requiresPermission: MastraFGAPermissions.AGENTS_DELETE,
+  errors: ['CONVERSATION_DELETE_FAILED', 'CONVERSATION_NOT_FOUND', 'THREAD_ACCESS_DENIED'],
   handler: async ({ mastra, requestContext, conversationId }) => {
     try {
       const match = await findConversationThreadAcrossAgents({ mastra, conversationId, requestContext });

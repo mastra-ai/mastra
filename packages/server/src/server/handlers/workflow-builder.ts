@@ -24,6 +24,7 @@ export const GET_WORKFLOW_BUILDER_SETTINGS_ROUTE = createRoute({
   tags: ['Editor'],
   requiresAuth: true,
   requiresPermission: 'stored-workflows:read',
+  errors: ['WORKFLOW_BUILDER_SETTINGS_GET_FAILED'],
   handler: async ({ mastra }) => {
     try {
       const editor = mastra.getEditor();
@@ -56,6 +57,13 @@ export const STREAM_WORKFLOW_BUILDER_ROUTE = createRoute({
   tags: ['Editor'],
   requiresAuth: true,
   requiresPermission: 'stored-workflows:write',
+  errors: [
+    'REQUEST_ARGUMENT_REQUIRED',
+    'RESOURCE_ID_REQUIRED',
+    'THREAD_ACCESS_DENIED',
+    'WORKFLOW_BUILDER_NOT_ENABLED',
+    'WORKFLOW_BUILDER_STREAM_FAILED',
+  ],
   handler: async ({ mastra, abortSignal, requestContext: serverRequestContext, ...params }) => {
     try {
       const editor = mastra.getEditor();

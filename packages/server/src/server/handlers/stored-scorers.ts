@@ -47,6 +47,12 @@ export const LIST_STORED_SCORERS_ROUTE = createRoute({
   description: 'Returns a paginated list of all scorer definitions stored in the database',
   tags: ['Stored Scorers'],
   requiresAuth: true,
+  errors: [
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+    'STORED_SCORERS_LIST_FAILED',
+    'STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE',
+  ],
   handler: async ({ mastra, page, perPage, orderBy, status, authorId, metadata, requestContext }) => {
     try {
       const storage = mastra.getStorage();
@@ -101,6 +107,14 @@ export const GET_STORED_SCORER_ROUTE = createRoute({
     'Returns a specific scorer definition from storage by its unique identifier. Use ?status=draft to resolve with the latest (draft) version, or ?status=published (default) for the active published version.',
   tags: ['Stored Scorers'],
   requiresAuth: true,
+  errors: [
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+    'STORED_SCORER_GET_FAILED',
+    'STORED_SCORER_NOT_FOUND',
+    'STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE',
+  ],
   handler: async ({ mastra, storedScorerId, status, requestContext }) => {
     try {
       const storage = mastra.getStorage();
@@ -154,6 +168,15 @@ export const CREATE_STORED_SCORER_ROUTE = createRoute({
   description: 'Creates a new scorer definition in storage with the provided configuration',
   tags: ['Stored Scorers'],
   requiresAuth: true,
+  errors: [
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+    'STORED_SCORER_ALREADY_EXISTS',
+    'STORED_SCORER_CREATED_RESOLVE_FAILED',
+    'STORED_SCORER_CREATE_FAILED',
+    'STORED_SCORER_ID_DERIVATION_FAILED',
+    'STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE',
+  ],
   handler: async ({
     mastra,
     id: providedId,
@@ -257,6 +280,15 @@ export const UPDATE_STORED_SCORER_ROUTE = createRoute({
   description: 'Updates an existing scorer definition in storage with the provided fields',
   tags: ['Stored Scorers'],
   requiresAuth: true,
+  errors: [
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+    'STORED_SCORER_NOT_FOUND',
+    'STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE',
+    'STORED_SCORER_UPDATED_RESOLVE_FAILED',
+    'STORED_SCORER_UPDATE_FAILED',
+  ],
   handler: async ({
     mastra,
     storedScorerId,
@@ -389,6 +421,14 @@ export const DELETE_STORED_SCORER_ROUTE = createRoute({
   description: 'Deletes a scorer definition from storage by its unique identifier',
   tags: ['Stored Scorers'],
   requiresAuth: true,
+  errors: [
+    'STORAGE_NOT_CONFIGURED',
+    'STORED_RESOURCE_NOT_FOUND',
+    'STORED_RESOURCE_SCOPE_REQUIRED',
+    'STORED_SCORER_DELETE_FAILED',
+    'STORED_SCORER_NOT_FOUND',
+    'STORED_SCORER_STORAGE_DOMAIN_UNAVAILABLE',
+  ],
   handler: async ({ mastra, storedScorerId, requestContext }) => {
     try {
       const storage = mastra.getStorage();
