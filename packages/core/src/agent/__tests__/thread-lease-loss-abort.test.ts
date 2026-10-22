@@ -1278,4 +1278,84 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     expect(await output.finishReason).toBe('aborted');
     expect(aborts).toEqual([expect.objectContaining({ reason: 'thread-lease-lost' })]);
   }, 20_000);
+
+  it('stops a run whose retake is refused because another run took the thread during the lapse', async () => {
+    const thread = 'refused-retake-thread';
+    const key = [RESOURCE, thread].join('\u0000');
+    for (let i = 0; i < 100; i++) {
+      llm.on(
+        { userMessage: 'refused retake', sequenceIndex: i },
+        { toolCalls: [{ id: `call_refused_${i}`, name: 'tick', arguments: {} }] },
+      );
+    }
+    const modelCalls = () =>
+      llm.getRequests().filter(request => JSON.stringify(request.body?.messages ?? []).includes('refused retake'))
+        .length;
+    const shared = new SharedLeases();
+    /**
+     * Once cut, the lease backend stops answering renewals and owner checks, as one behind a partition does,
+     * and another process's run takes the thread. Only an acquire still gets through, so the run's
+     * deadline sends it to retake the lease, and the retake must be refused.
+     */
+    class LapseThenTakenPubSub extends ReplicaPubSub {
+      cut = false;
+      override async renewLease(key: string, owner: string, ttlMs: number) {
+        if (this.cut && key.startsWith(`${RESOURCE}\u0000`)) await new Promise(() => {});
+        return super.renewLease(key, owner, ttlMs);
+      }
+      override async getLeaseOwner(key: string) {
+        if (this.cut && key.startsWith(`${RESOURCE}\u0000`)) await new Promise(() => {});
+        return super.getLeaseOwner(key);
+      }
+    }
+    const pubsub = new LapseThenTakenPubSub(shared);
+    let ticks = 0;
+    const tick = createTool({
+      id: 'tick',
+      description: 'Tick once',
+      inputSchema: z.object({}),
+      execute: async () => {
+        ticks++;
+        await new Promise(resolve => setTimeout(resolve, 20));
+        return 'ticked';
+      },
+    });
+    const agent = replica(shared, new MockMemory(), { tick }, pubsub);
+    const subscription = await agent.subscribeToThread({ resourceId: RESOURCE, threadId: thread });
+    const aborts: unknown[] = [];
+    let callsAtAbort = -1;
+    let ticksAtAbort = -1;
+    const watching = (async () => {
+      for await (const chunk of subscription.stream as AsyncIterable<any>) {
+        if (chunk?.type === 'abort') {
+          callsAtAbort = modelCalls();
+          ticksAtAbort = ticks;
+          aborts.push(chunk.payload);
+          break;
+        }
+      }
+    })();
+
+    const { output, drain } = await startStream(agent, 'refused retake', {
+      maxSteps: 100,
+      memory: { thread, resource: RESOURCE },
+    });
+    const done = drain().catch(() => undefined);
+    await vi.waitFor(() => expect(ticks).toBeGreaterThanOrEqual(2), { timeout: 5_000 });
+    pubsub.cut = true;
+    shared.leases.set(key, { owner: 'successor-run', expiresAt: Date.now() + 60_000 });
+    const ticksAtTakeover = ticks;
+    await done;
+    await watching;
+    subscription.unsubscribe();
+    await new Promise(resolve => setTimeout(resolve, 200));
+
+    expect(await output.finishReason).toBe('aborted');
+    expect(aborts).toEqual([expect.objectContaining({ reason: 'thread-lease-lost' })]);
+    // No tool call starts once the thread was taken (one may already be running), and nothing runs after the abort.
+    expect(ticks - ticksAtTakeover).toBeLessThanOrEqual(1);
+    expect(ticks).toBe(ticksAtAbort);
+    expect(modelCalls()).toBe(callsAtAbort);
+    expect(shared.owner(key)).toBe('successor-run');
+  }, 20_000);
 });
