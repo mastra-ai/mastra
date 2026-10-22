@@ -9,6 +9,7 @@ import { onTestFinished } from 'vitest';
 
 import { createBoardRegistry, workItemPhaseSemantics } from '../boards/index.js';
 import { AuditStorage } from './domains/audit/base.js';
+import { BoardsStorage } from './domains/boards/base.js';
 import { ChannelIdentityStorage } from './domains/channel-identity/base.js';
 import { WorkItemCommentsStorage } from './domains/comments/base.js';
 import { ModelCredentialsStorage } from './domains/credentials/base.js';
@@ -32,6 +33,7 @@ export interface FactoryStorageTestSeed {
   projects: FactoryProjectsStorage;
   sourceControl: SourceControlStorage;
   modelDefaults: ModelDefaultsStorage;
+  boardDefinitions: BoardsStorage;
   memorySettings: MemorySettingsStorage;
   customProviders: CustomProvidersStorage;
   queueHealth: QueueHealthStorage;
@@ -61,6 +63,7 @@ export async function createFactoryStorageForTests(): Promise<FactoryStorageTest
   const queueHealth = storage.registerDomain(new QueueHealthStorage());
   const channelIdentity = storage.registerDomain(new ChannelIdentityStorage());
   const comments = storage.registerDomain(new WorkItemCommentsStorage());
+  const boardDefinitions = storage.registerDomain(new BoardsStorage());
   await storage.init();
   onTestFinished(() => storage.close());
   return {
@@ -78,5 +81,6 @@ export async function createFactoryStorageForTests(): Promise<FactoryStorageTest
     queueHealth,
     channelIdentity,
     comments,
+    boardDefinitions,
   };
 }

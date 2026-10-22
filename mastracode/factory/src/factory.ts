@@ -135,6 +135,7 @@ import { createStateSigner } from './state-signing.js';
 import { observeAgentGitAction } from './storage/domains/audit/agent-audit.js';
 import { AuditStorage } from './storage/domains/audit/base.js';
 import { AuditDomain } from './storage/domains/audit/domain.js';
+import { BoardsStorage } from './storage/domains/boards/base.js';
 import { ChannelIdentityStorage } from './storage/domains/channel-identity/base.js';
 import { WorkItemCommentsStorage } from './storage/domains/comments/base.js';
 import { CommentsDomain } from './storage/domains/comments/domain.js';
@@ -649,6 +650,8 @@ export class MastraFactory {
     // tenant, so inbound channel events can resolve the sender's model creds.
     const channelIdentityStorage = storage.registerDomain(new ChannelIdentityStorage());
     const workItemCommentsStorage = storage.registerDomain(new WorkItemCommentsStorage());
+    // Stored board definitions. Nothing reads them yet; boards still come from code.
+    const boardsStorage = storage.registerDomain(new BoardsStorage());
     // Every app-table domain handle the route builders and integrations need,
     // threaded explicitly (no service locator).
     const domains = {
@@ -663,6 +666,7 @@ export class MastraFactory {
       workItems: workItemsStorage,
       channelIdentity: channelIdentityStorage,
       comments: workItemCommentsStorage,
+      boardDefinitions: boardsStorage,
     };
     const auditDomain = new AuditDomain({
       auth: routeAuth,
