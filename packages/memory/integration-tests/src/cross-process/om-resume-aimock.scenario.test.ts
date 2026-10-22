@@ -109,7 +109,15 @@ describe.each(['normal', 'durable', 'evented', 'fs'] as const)('AIMock OM reques
     const requests = llm.getRequests();
     expect(requests).toHaveLength(3);
     for (const request of requests) expect(JSON.stringify(request.body?.messages)).toContain(USER_REQUEST);
-    expect(JSON.stringify(requests[2]!.body?.messages)).toContain('call_1');
+    expect(requests[2]!.body?.messages).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          role: 'tool',
+          tool_call_id: 'call_1',
+          content: expect.stringContaining('TOOL_RESULT 4471-1'),
+        }),
+      ]),
+    );
     const state = await dump(peer);
     expect(JSON.stringify(shape(state))).toContain(FINAL_ANSWER);
   }, 120_000);
@@ -160,9 +168,16 @@ describe.each(['normal', 'durable', 'evented', 'fs'] as const)('AIMock OM reques
       const recoveryRequests = llm.getRequests().slice(3);
       expect(recoveryRequests.length).toBeGreaterThan(0);
       for (const request of recoveryRequests) {
-        const prompt = JSON.stringify(request.body?.messages);
-        expect(prompt.includes(USER_REQUEST)).toBe(true);
-        expect(prompt.includes('call_1')).toBe(true);
+        expect(JSON.stringify(request.body?.messages)).toContain(USER_REQUEST);
+        expect(request.body?.messages).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              role: 'tool',
+              tool_call_id: 'call_1',
+              content: expect.stringContaining('TOOL_RESULT 4471-1'),
+            }),
+          ]),
+        );
       }
       expect(b.events.filter(event => event.type === 'observer')).toHaveLength(0);
       expect(resumed.observedMessageIds).toEqual(beforeKill.observedMessageIds);
