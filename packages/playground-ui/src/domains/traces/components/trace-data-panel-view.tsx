@@ -85,6 +85,12 @@ export interface TraceDataPanelViewProps {
    */
   anchorSpanId?: string;
   /**
+   * Root entity type when the caller knows it before the spans load (e.g. from the listed row).
+   * Sizes the columns from the start, so they don't shift once the trace arrives. `null` is a
+   * trace known to have no entity type.
+   */
+  entityType?: string | null;
+  /**
    * Whether to render the "Evaluating traces and saving them as dataset items is
    * available in Mastra Studio" info notice when neither `onEvaluateTrace` nor
    * `onSaveAsDatasetItem` is provided. Defaults to `true`. Pass `false` when this
@@ -154,6 +160,7 @@ export function TraceDataPanelView({
   entityHref,
   usage,
   anchorSpanId,
+  entityType,
   showUnavailableFeaturesMsg = true,
   scoresTabSlot,
   scoresTabBadge,
@@ -346,7 +353,10 @@ export function TraceDataPanelView({
             otherwise the column flickers Feedback → Messages as the first tab changes. */}
         {isLoading ? (
           <DataPanel.Header className="border-b border-surface-rim">
-            <div aria-hidden className="h-control-sm" />
+            <div aria-hidden className="flex h-control-sm items-center gap-2">
+              <Skeleton className="h-5 w-24 rounded-full" />
+              <Skeleton className="h-5 w-20 rounded-full" />
+            </div>
           </DataPanel.Header>
         ) : (
           <Tabs<TraceSideView> defaultTab={sideView} value={sideView} onValueChange={handleSideViewChange}>
@@ -473,7 +483,7 @@ export function TraceDataPanelView({
           )}
 
           <TracePanelColumns
-            layoutKey={rootSpan ? (rootSpan.entityType ?? 'unknown') : undefined}
+            layoutKey={rootSpan ? (rootSpan.entityType ?? 'unknown') : entityType === null ? 'unknown' : entityType}
             sideColumnSlot={sideColumn}
             spanPanelSlot={spanPanelSlot}
             highlightQuery={query}

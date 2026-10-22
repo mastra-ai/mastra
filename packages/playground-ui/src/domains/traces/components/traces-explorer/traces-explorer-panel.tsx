@@ -104,6 +104,7 @@ export function TracesExplorerPanel({
         traceId={traceId}
         spans={spans}
         anchorSpanId={anchorSpanId}
+        entityType={entityType}
         usage={usage}
         isLoadingSpans={isLoadingSpans}
         selectedSpanId={spanId ?? null}

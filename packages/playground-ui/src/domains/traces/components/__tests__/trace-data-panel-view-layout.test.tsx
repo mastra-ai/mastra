@@ -136,6 +136,21 @@ describe('TraceDataPanelView — persisted widths', () => {
     getItem.mockRestore();
   });
 
+  it('lays the columns out at their stored widths while the trace is still loading', async () => {
+    localStorage.setItem(storageKey('agent'), JSON.stringify({ side: 700 }));
+    const loading = { ...props('agent'), spans: undefined, isLoading: true, entityType: 'agent' };
+
+    const { rerender } = render(<TraceDataPanelView {...loading} />);
+    await expectSideWidth(700);
+    const sidePanel = document.body.querySelector('[data-panel][id="trace-side"]');
+
+    rerender(<TraceDataPanelView {...props('agent')} />);
+
+    // Same columns once the spans land: no remount, so nothing shifts.
+    await expectSideWidth(700);
+    expect(document.body.querySelector('[data-panel][id="trace-side"]')).toBe(sidePanel);
+  });
+
   it('stores the side column width in pixels once it is resized', async () => {
     render(<TraceDataPanelView {...props('agent')} />);
     await expectSideWidth(480);
