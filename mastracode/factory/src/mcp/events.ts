@@ -53,9 +53,18 @@ export interface FactoryActivityEventDeps {
   viewer: { orgId: string; userId: string };
 }
 
-type Subject = { workItem?: { id: string; name?: string }; session?: SourceControlSession; privateSession?: true };
+type Subject = {
+  workItem?: { id: string; name?: string };
+  session?: SourceControlSession;
+  privateSession?: true;
+  /** The agent's thread couldn't be checked, so its id isn't shown. */
+  anonymousAgent?: true;
+};
 
-function toActivity(event: AuditEventRow, { workItem, session, privateSession }: Subject): FactoryActivity {
+function toActivity(
+  event: AuditEventRow,
+  { workItem, session, privateSession, anonymousAgent }: Subject,
+): FactoryActivity {
   const profile = event.metadata[ACTOR_PROFILE_METADATA_KEY] as { name?: unknown } | undefined;
   const parsed = parseAuditAction(event.action);
   const verb = parsed
@@ -67,7 +76,7 @@ function toActivity(event: AuditEventRow, { workItem, session, privateSession }:
     actor: {
       type: event.actorType,
       // An agent's id is its thread, which is the hidden session's id.
-      id: privateSession && event.actorType === 'agent' ? 'agent' : event.actorId,
+      id: (privateSession || anonymousAgent) && event.actorType === 'agent' ? 'agent' : event.actorId,
       ...(typeof profile?.name === 'string' ? { name: profile.name } : {}),
     },
     ...(workItem ? { workItemId: workItem.id } : {}),
@@ -138,14 +147,21 @@ export function factoryActivityEvent(deps: FactoryActivityEventDeps) {
         const sessions = await Promise.all(named.map(lookup));
         let hidden = !sessions.every(visible);
         let session = sessions[0];
+        let anonymousAgent = false;
         if (event.actorType === 'agent' && event.actorId.startsWith('agent:')) {
           const actorSession = await lookup(event.actorId.slice('agent:'.length));
-          if (actorSession && !visible(actorSession)) hidden = true;
+          // A thread that isn't a session (anymore) may still have been a private one.
+          if (!actorSession) anonymousAgent = true;
+          else if (!visible(actorSession)) hidden = true;
           session ??= actorSession ?? undefined;
         }
         if (hidden) return workItem ? { workItem, privateSession: true } : undefined;
         if (!workItem && !session) return undefined;
-        return { ...(workItem ? { workItem } : {}), ...(session ? { session } : {}) };
+        return {
+          ...(workItem ? { workItem } : {}),
+          ...(session ? { session } : {}),
+          ...(anonymousAgent ? { anonymousAgent: true } : {}),
+        };
       };
 
       const settledUntil = now - ACTIVITY_SETTLE_MS;

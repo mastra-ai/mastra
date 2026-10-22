@@ -739,6 +739,13 @@ describe('Factory activity over MCP events', () => {
       action: 'factory.work_item.stage_moved',
       targets: [{ type: 'work_item', id: item.id, name: item.title }],
     });
+    // An agent whose thread isn't a session (or no longer is): the work item shows, the thread doesn't.
+    await record({
+      actorId: 'agent:gone-thread',
+      actorType: 'agent',
+      action: 'factory.work_item.comment_created',
+      targets: [{ type: 'work_item', id: item.id, name: item.title }],
+    });
     tick(1);
     await renameItem(url, item.id, 'Fix the sign-in page');
 
@@ -763,6 +770,12 @@ describe('Factory activity over MCP events', () => {
         privateSession: true,
         summary: 'stage moved: Fix the login page (in a private session)',
       },
+      {
+        ...activity('factory.work_item.comment_created'),
+        actor: { type: 'agent', id: 'agent' },
+        workItemId: item.id,
+        summary: 'comment created: Fix the login page',
+      },
       { ...activity('factory.work_item.updated'), workItemId: item.id, summary: 'updated: Fix the sign-in page' },
     ]);
     expect(await seen('token-bob', bobStart.body!.result.cursor)).toEqual([
@@ -780,6 +793,12 @@ describe('Factory activity over MCP events', () => {
         sessionId: 'bob-private',
         workItemId: item.id,
         summary: 'stage moved: Fix the login page',
+      },
+      {
+        ...activity('factory.work_item.comment_created'),
+        actor: { type: 'agent', id: 'agent' },
+        workItemId: item.id,
+        summary: 'comment created: Fix the login page',
       },
       { ...activity('factory.work_item.updated'), workItemId: item.id, summary: 'updated: Fix the sign-in page' },
     ]);
