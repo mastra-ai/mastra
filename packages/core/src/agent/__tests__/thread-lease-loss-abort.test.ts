@@ -1125,21 +1125,24 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
       );
       llm.on({ userMessage: prompt, sequenceIndex: 1 }, { content: 'draining owner finished' });
       const shared = new SharedLeases();
+      let releaseAcquire!: () => void;
+      const acquireGate = new Promise<void>(resolve => (releaseAcquire = resolve));
       class DrainPubSub extends ReplicaPubSub {
         draining = false;
-        handover: ReturnType<typeof setTimeout> | undefined;
         override async transferLease(leaseKey: string, from: string, to: string) {
           if (leaseKey === key && from === runId && to !== runId) {
             this.draining = true;
             shared.leases.set(key, { owner: token, expiresAt: Date.now() + 60_000 });
-            if (!stuck) {
-              this.handover = setTimeout(() => {
-                shared.leases.set(key, { owner: successor, expiresAt: Date.now() + 60_000 });
-              }, 20);
-            }
             return false;
           }
           return super.transferLease(leaseKey, from, to);
+        }
+        override async acquireLease(leaseKey: string, owner: string, ttlMs: number) {
+          if (leaseKey === key && this.draining) {
+            await acquireGate;
+            if (!stuck) shared.leases.set(key, { owner: successor, expiresAt: Date.now() + 60_000 });
+          }
+          return super.acquireLease(leaseKey, owner, ttlMs);
         }
       }
       const pubsub = new DrainPubSub(shared);
@@ -1173,6 +1176,8 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
         },
       });
       const done = drain();
+      let concurrent: ReturnType<Agent['sendSignal']> | undefined;
+      let concurrentAccepted: { action: string; runId?: string } | undefined;
       try {
         await vi.waitFor(() => expect(ticking).toBe(true));
         if (queue === 'idle') {
@@ -1180,30 +1185,44 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
           await sent!.accepted;
         }
         releaseTool();
+        await vi.waitFor(() => expect(pubsub.draining).toBe(true));
+        concurrent = agent.sendSignal(
+          { type: 'user-message', contents: 'concurrent during drain reservation' },
+          target,
+        );
+        releaseAcquire();
+        concurrentAccepted = await concurrent.accepted;
         await done;
         expect(sent).toBeDefined();
-        const signalId = sent!.signal.id;
-        await vi.waitFor(() => expect(pubsub.draining).toBe(true));
+        const signalIds = [sent!.signal.id, concurrent.signal.id];
         const forwarded = () =>
           published.mock.calls
             .map(([, event]) => event.data as { type?: string; runId?: string; signal?: { id: string } })
             .filter(
-              event => event?.type === 'signal-enqueued' && event.signal?.id === signalId && event.runId !== runId,
+              event =>
+                event?.type === 'signal-enqueued' &&
+                signalIds.includes(event.signal?.id ?? '') &&
+                event.runId !== runId,
             );
+        expect(concurrentAccepted).toMatchObject({ action: stuck ? 'blocked' : 'deliver', runId: successor });
         if (stuck) {
           await new Promise(resolve => setTimeout(resolve, 200));
           expect(forwarded()).toEqual([]);
-          expect(agent.cancelQueuedMessages({ ...target, signalIds: [signalId] })).toEqual({
-            cancelledSignalIds: [signalId],
+          expect(agent.cancelQueuedMessages({ ...target, signalIds: [sent!.signal.id] })).toEqual({
+            cancelledSignalIds: [sent!.signal.id],
           });
         } else {
-          await vi.waitFor(() => expect(forwarded()).toHaveLength(1));
-          expect(forwarded()[0]?.runId).toBe(successor);
+          await vi.waitFor(() => expect(forwarded()).toHaveLength(2));
+          for (const signalId of signalIds) {
+            expect(forwarded().filter(event => event.signal?.id === signalId)).toEqual([
+              expect.objectContaining({ runId: successor }),
+            ]);
+          }
         }
         expect(await output.finishReason).toBe('stop');
       } finally {
         releaseTool();
-        clearTimeout(pubsub.handover);
+        releaseAcquire();
         await done;
         published.mockRestore();
       }
