@@ -1,5 +1,5 @@
 ---
-'@mastra/cli': patch
+'mastra': patch
 ---
 
 Updated hardcoded model router defaults to the latest models in each family:
