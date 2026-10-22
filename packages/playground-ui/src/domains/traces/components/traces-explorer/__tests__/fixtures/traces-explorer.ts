@@ -96,6 +96,11 @@ export const twoTracesPage: TraceQueryKeysetTraceResponse = {
 
 export const emptyTracesPage: TraceQueryKeysetTraceResponse = { traces: [], page: { next: null } };
 
+export const workflowTracesPage: TraceQueryKeysetTraceResponse = {
+  traces: [{ ...weatherTrace, name: 'weather-workflow', entityId: 'weather-workflow', entityType: 'workflow_run' }],
+  page: { next: null },
+};
+
 /** A delta poll with nothing new since the cursor. */
 export const idleDeltaBatch: Extract<TraceQueryResponse, { delta: unknown }> = {
   traces: [],

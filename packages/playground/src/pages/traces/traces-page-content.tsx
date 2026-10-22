@@ -35,7 +35,6 @@ export const TracesPageContent = memo(function TracesPageContent({ isScoped }: {
           </ActionRow.Start>
           <ActionRow.End>
             <TracesExplorer.ColumnsMenu />
-            <TracesExplorer.AutoRefresh />
           </ActionRow.End>
         </ActionRow>
       }

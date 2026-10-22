@@ -83,7 +83,7 @@ export function SpanDataPanelView({
         <DataPanel.HeaderContent>
           <DataPanel.Heading>
             Span
-            <TraceIdButton id={spanId} />
+            <TraceIdButton id={spanId} maxLength={6} ellipsis={false} />
           </DataPanel.Heading>
           {span && <SpanSummaryDescription span={span} />}
         </DataPanel.HeaderContent>

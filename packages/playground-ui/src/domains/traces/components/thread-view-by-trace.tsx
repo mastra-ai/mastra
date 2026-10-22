@@ -53,7 +53,7 @@ export function ThreadViewByTrace({
   const legacyFilters = useMemo<UseTracesListSourceArgs['legacyFilters']>(() => ({ threadId }), [threadId]);
   const { rows, isLoading, isPlaceholderData, error, hasNextPage, isFetchingNextPage, fetchNextPage } =
     useTracesListSource({
-      initialAutoRefetch: false,
+      autoRefetch: false,
       withQueryTrace,
       legacyFilters,
       limit: pageSize,

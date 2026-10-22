@@ -46,7 +46,7 @@ import { buildListDatasetsResponse } from '@/domains/datasets/components/__tests
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
-import { pickTraceSideView, traceSideViewLabel } from '@/test/trace-side-view';
+import { pickTraceSideView, traceSideColumn, traceSideViewLabel } from '@/test/trace-side-view';
 
 const TRACE_COLUMN_STORAGE_KEY = `mastra:traces:columns:${TEST_BASE_URL}:/api`;
 const onBreakdownRequest = vi.fn<() => void>();
@@ -430,7 +430,9 @@ describe('Traces page list source', () => {
       });
 
       expect(screen.getAllByRole('tab', { name: /^scores/i }).length).toBeGreaterThan(0);
+      expect(screen.getAllByRole('button', { name: /^score trace/i }).length).toBeGreaterThan(0);
       expect(screen.queryByRole('tab', { name: /feedback/i })).toBeNull();
+      expect(screen.queryByRole('button', { name: /^feedback/i })).toBeNull();
       expect(onFeedback).not.toHaveBeenCalled();
     });
   });
@@ -459,7 +461,9 @@ describe('Traces page list source', () => {
       });
 
       expect(screen.getAllByRole('tab', { name: /^scores/i }).length).toBeGreaterThan(0);
+      expect(screen.getAllByRole('button', { name: /^score trace/i }).length).toBeGreaterThan(0);
       expect(screen.queryByRole('tab', { name: /feedback/i })).toBeNull();
+      expect(screen.queryByRole('button', { name: /^feedback/i })).toBeNull();
       expect(onFeedback).not.toHaveBeenCalled();
     });
   });
@@ -487,7 +491,6 @@ describe('Traces page view switch', () => {
 
       const filterInput = await screen.findByPlaceholderText('Filter traces…');
       expect(filterInput.closest('main')).not.toBeNull();
-      expect(screen.getByRole('checkbox', { name: 'Auto refresh' }).closest('main')).not.toBeNull();
     });
 
     it('shows each view with its icon', async () => {
@@ -561,8 +564,8 @@ describe('Traces page view switch', () => {
   });
 });
 
-describe('Traces page auto refresh toggle', () => {
-  it('renders labeled checkboxes instead of the old icon button', async () => {
+describe('Traces page action row', () => {
+  it('offers no auto refresh toggle — the list keeps itself up to date', async () => {
     setTracePageHandlers(metricsCapableCapabilities);
 
     const { queryClient } = renderPage();
@@ -571,19 +574,8 @@ describe('Traces page auto refresh toggle', () => {
       expect(queryClient.isFetching()).toBe(0);
     });
 
-    // Auto-refetch is on by default.
-    const toggle = screen.getByRole('checkbox', { name: 'Auto refresh' });
-    expect(toggle.getAttribute('aria-checked')).toBe('true');
-    expect(screen.queryByRole('button', { name: 'Toggle auto-refetch' })).toBeNull();
-
-    fireEvent.click(toggle);
-    expect(toggle.getAttribute('aria-checked')).toBe('false');
-
-    fireEvent.click(toggle);
-    expect(toggle.getAttribute('aria-checked')).toBe('true');
-
+    expect(screen.queryByRole('checkbox', { name: 'Auto refresh' })).toBeNull();
     expect(screen.queryByRole('checkbox', { name: 'Subtraces' })).toBeNull();
-    expect(screen.queryByText('Show subtraces')).toBeNull();
   });
 });
 
@@ -643,17 +635,16 @@ describe('Traces side panel header actions', () => {
       expect(queryClient.isFetching()).toBe(0);
     });
 
-    expect(await screen.findByRole('button', { name: 'Score trace' })).not.toBeNull();
-    fireEvent.click(await screen.findByRole('button', { name: 'Open trace actions' }));
-
-    expect(screen.queryByRole('menuitem', { name: 'Evaluate trace' })).toBeNull();
-    expect(screen.getByRole('menuitem', { name: 'Add full trace to dataset' })).not.toBeNull();
+    expect(await screen.findByRole('button', { name: /^score trace/i })).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Add to dataset' })).not.toBeNull();
+    expect(screen.getByRole('button', { name: 'Download trace JSON' })).not.toBeNull();
+    expect(screen.queryByRole('button', { name: 'Open trace actions' })).toBeNull();
     // The parent trace panel is no longer collapsible.
-    expect(screen.queryByRole('menuitem', { name: /collapse panel/i })).toBeNull();
+    expect(screen.queryByRole('button', { name: /collapse panel/i })).toBeNull();
   });
 });
 
-describe('Traces side panel Scores view', () => {
+describe('Traces side panel scores tab', () => {
   const openScoresTab = async (scoresResponse = emptyTraceSpanScores) => {
     setTracePageHandlers(metricsCapableCapabilities);
     server.use(
@@ -671,13 +662,14 @@ describe('Traces side panel Scores view', () => {
     });
 
     await pickTraceSideView(/^scores/i);
-    return queryClient;
+    return traceSideColumn();
   };
 
   describe('when the trace has scores', () => {
     it('opens score details in a sibling drawer above the trace and closes it independently', async () => {
-      await openScoresTab(traceSpanScores);
-      fireEvent.click(await screen.findByRole('button', { name: 'Score score-1' }));
+      const scoresTab = await openScoresTab(traceSpanScores);
+      const [firstRelevance] = await within(scoresTab).findAllByRole('button', { name: 'Open Relevance score' });
+      fireEvent.click(firstRelevance);
 
       const scoreDialog = await screen.findByRole('dialog', { name: 'Score score-1' });
       expect(scoreDialog.getAttribute('data-depth')).toBe('2');
@@ -685,39 +677,38 @@ describe('Traces side panel Scores view', () => {
 
       fireEvent.click(within(scoreDialog).getByRole('button', { name: /close/i }));
       await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Score score-1' })).toBeNull());
-      expect(traceSideViewLabel()).toMatch(/scores/i);
+      expect(screen.getByRole('dialog', { name: 'Trace details', hidden: true })).not.toBeNull();
     });
 
-    it('renders one card per score with the scorer name and value', async () => {
-      await openScoresTab(traceSpanScores);
+    it('lists each scorer against its value', async () => {
+      const scoresTab = await openScoresTab(traceSpanScores);
 
-      expect(await screen.findByRole('button', { name: 'Score score-1' })).not.toBeNull();
-      expect(screen.getByRole('button', { name: 'Score score-3' })).not.toBeNull();
-      expect(screen.getAllByText('Relevance')).toHaveLength(2);
-      expect(screen.getByText('Toxicity')).not.toBeNull();
-      expect(screen.getByText('0.4')).not.toBeNull();
-      expect(screen.getByText('0.8')).not.toBeNull();
-      expect(screen.getByText('1')).not.toBeNull();
+      await within(scoresTab).findByText('Toxicity');
+      expect(
+        within(scoresTab)
+          .getAllByRole('term')
+          .map(term => term.textContent),
+      ).toEqual(['Relevance', 'Relevance', 'Toxicity']);
+      expect(
+        within(scoresTab)
+          .getAllByRole('definition')
+          .map(value => value.textContent),
+      ).toEqual(['0.40', '0.80', '1.00']);
     });
 
-    it('truncates a long reason and reveals the rest on Read more', async () => {
-      const longReason = 'a'.repeat(200);
-      await openScoresTab({
+    it('reveals a score reason on hover', async () => {
+      const scoresTab = await openScoresTab({
         ...traceSpanScores,
-        scores: [{ ...traceSpanScores.scores[0], reason: longReason }],
+        scores: [{ ...traceSpanScores.scores[0], reason: 'Stays on the user question' }],
       });
 
-      const preview = await screen.findByText(new RegExp(`^${'a'.repeat(100)}…`));
-      expect(preview.textContent).not.toContain(longReason);
-
-      fireEvent.click(screen.getByRole('button', { name: 'Read more' }));
-      expect(screen.getByText(new RegExp(longReason))).not.toBeNull();
-      expect(screen.getByRole('button', { name: 'Read less' })).not.toBeNull();
+      fireEvent.mouseEnter(await within(scoresTab).findByRole('button', { name: 'Show Relevance reason' }));
+      expect(await screen.findByText('Stays on the user question')).not.toBeNull();
     });
   });
 
   describe('when a span is open', () => {
-    it('keeps the span panel open while the side column shows the scores', async () => {
+    it('keeps the span panel open while the scores tab is shown', async () => {
       setTracePageHandlers(metricsCapableCapabilities);
       server.use(
         http.get(`${TEST_BASE_URL}/api/observability/traces/trace-a/spans/span-a`, () =>
@@ -735,18 +726,18 @@ describe('Traces side panel Scores view', () => {
       });
 
       await pickTraceSideView(/^scores/i);
+      const scoresTab = traceSideColumn();
 
-      expect(await screen.findByText(/no scores/i)).not.toBeNull();
+      expect(await within(scoresTab).findByText(/no scores/i)).not.toBeNull();
       expect(screen.getByRole('heading', { name: /^Span/ })).not.toBeNull();
-      expect(traceSideViewLabel()).toMatch(/scores/i);
     });
   });
 
   describe('when the trace has no scores', () => {
-    it('shows the table empty state without a chart', async () => {
-      await openScoresTab();
+    it('shows the empty state', async () => {
+      const scoresTab = await openScoresTab();
 
-      expect(await screen.findByText(/no scores/i)).not.toBeNull();
+      expect(await within(scoresTab).findByText(/no scores/i)).not.toBeNull();
       expect(screen.queryByText('0.60')).toBeNull();
     });
   });

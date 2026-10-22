@@ -40,6 +40,7 @@ import {
   weatherRootSpan,
   weatherTraceSpans,
   weatherTraceUsage,
+  workflowTracesPage,
 } from './fixtures/traces-explorer';
 import { FilterBar } from '@/ds/components/FilterBar';
 import type { FilterBarExpression, FilterBarField } from '@/ds/components/FilterBar';
@@ -195,7 +196,6 @@ function Harness({
           <div>
             {filterBar}
             <TracesExplorer.ColumnsMenu />
-            <TracesExplorer.AutoRefresh />
           </div>
         }
       >
@@ -357,7 +357,7 @@ describe('TracesExplorer', () => {
   });
 
   describe('when a trace is open', () => {
-    const openTraceActions = async (traceHref?: TracesExplorerPanelProps['traceHref']) => {
+    const openTrace = async (traceHref?: TracesExplorerPanelProps['traceHref']) => {
       setExplorerHandlers();
       const { queryClient } = renderExplorer({
         initialSelection: { ...EMPTY_TRACES_SELECTION, traceId: 'trace-weather' },
@@ -365,22 +365,22 @@ describe('TracesExplorer', () => {
       });
       await settle(queryClient);
       const dialog = await screen.findByRole('dialog', { name: 'Trace details' });
-      fireEvent.click(within(dialog).getByRole('button', { name: 'Open trace actions' }));
-      await screen.findByRole('menuitem', { name: 'Download trace JSON' });
+      await within(dialog).findByRole('button', { name: 'Download trace JSON' });
+      return dialog;
     };
 
     it('links to the host trace page of the selected trace', async () => {
-      await openTraceActions(traceId => `/observe/traces/${traceId}`);
+      const dialog = await openTrace(traceId => `/observe/traces/${traceId}`);
 
-      expect(screen.getByRole('menuitem', { name: 'Open trace page' }).getAttribute('href')).toBe(
+      expect(within(dialog).getByRole('link', { name: 'Open trace page' }).getAttribute('href')).toBe(
         '/observe/traces/trace-weather',
       );
     });
 
     it('offers no trace page link without traceHref', async () => {
-      await openTraceActions();
+      const dialog = await openTrace();
 
-      expect(screen.queryByRole('menuitem', { name: 'Open trace page' })).toBeNull();
+      expect(within(dialog).queryByRole('link', { name: 'Open trace page' })).toBeNull();
     });
   });
 
@@ -404,6 +404,48 @@ describe('TracesExplorer', () => {
       fireEvent.click(traceRow('What is the weather in Paris'));
 
       expect(await screen.findByRole('dialog', { name: 'Trace details' })).toBeTruthy();
+    });
+  });
+
+  describe('when a trace opens, the drawer width follows its entity', () => {
+    const openDrawerSize = async (tracesPage: typeof twoTracesPage) => {
+      setExplorerHandlers(traceQueryCapabilities, tracesPage);
+      const { queryClient } = renderExplorer();
+      await settle(queryClient);
+
+      fireEvent.click(traceRow('What is the weather in Paris'));
+
+      const dialog = await screen.findByRole('dialog', { name: 'Trace details' });
+      return dialog.closest('[data-slot="data-panel-popup"]')?.getAttribute('data-size');
+    };
+
+    it('opens an agent trace wide, to fit the Messages column', async () => {
+      expect(await openDrawerSize(twoTracesPage)).toBe('wide');
+    });
+
+    it('opens a workflow trace at half width', async () => {
+      expect(await openDrawerSize(workflowTracesPage)).toBe('half');
+    });
+  });
+
+  describe('when a span opens, the drawer grows one size from its entity width', () => {
+    const openSpanDrawerSize = async (tracesPage: typeof twoTracesPage) => {
+      setExplorerHandlers(traceQueryCapabilities, tracesPage);
+      const { queryClient } = renderExplorer({
+        initialSelection: { ...EMPTY_TRACES_SELECTION, traceId: 'trace-weather', spanId: 'span-weather' },
+      });
+      await settle(queryClient);
+
+      const dialog = await screen.findByRole('dialog', { name: 'Trace details' });
+      return dialog.closest('[data-slot="data-panel-popup"]')?.getAttribute('data-size');
+    };
+
+    it('opens an agent trace full width', async () => {
+      expect(await openSpanDrawerSize(twoTracesPage)).toBe('full');
+    });
+
+    it('opens a workflow trace wide', async () => {
+      expect(await openSpanDrawerSize(workflowTracesPage)).toBe('wide');
     });
   });
 
@@ -798,8 +840,8 @@ describe('TracesExplorer', () => {
     });
   });
 
-  describe('the trace actions menu', () => {
-    const openTraceActions = async (panelProps?: Partial<TracesExplorerPanelProps>) => {
+  describe('the trace header actions', () => {
+    const openTracePanel = async (panelProps?: Partial<TracesExplorerPanelProps>) => {
       setExplorerHandlers();
       const { queryClient } = renderExplorer({
         panelProps,
@@ -807,21 +849,20 @@ describe('TracesExplorer', () => {
       });
       const dialog = await screen.findByRole('dialog', { name: 'Trace details' });
       await settle(queryClient);
-      fireEvent.click(within(dialog).getByRole('button', { name: 'Open trace actions' }));
-      await screen.findByRole('menuitem', { name: 'Download trace JSON' });
+      return dialog;
     };
 
     it('offers adding the trace to a dataset by default', async () => {
-      await openTraceActions();
+      const dialog = await openTracePanel();
 
-      expect(screen.getByRole('menuitem', { name: 'Add full trace to dataset' })).toBeTruthy();
+      expect(within(dialog).getByRole('button', { name: 'Add to dataset' })).toBeTruthy();
     });
 
-    it('hides "Add full trace to dataset" when the host turns it off', async () => {
-      await openTraceActions({ withAddTraceToDataset: false });
+    it('hides "Add to dataset" when the host turns it off', async () => {
+      const dialog = await openTracePanel({ withAddTraceToDataset: false });
 
-      expect(screen.queryByRole('menuitem', { name: 'Add full trace to dataset' })).toBeNull();
-      expect(screen.getByRole('menuitem', { name: 'Download trace JSON' })).toBeTruthy();
+      expect(within(dialog).queryByRole('button', { name: 'Add to dataset' })).toBeNull();
+      expect(within(dialog).getByRole('button', { name: 'Download trace JSON' })).toBeTruthy();
     });
   });
 

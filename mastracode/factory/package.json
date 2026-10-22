@@ -76,6 +76,7 @@
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
+    "@mastra/deployer": "workspace:*",
     "@mastra/libsql": "workspace:*",
     "@mastra/pg": "workspace:*",
     "@mastra/server": "workspace:*",

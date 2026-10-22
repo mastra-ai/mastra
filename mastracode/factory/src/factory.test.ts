@@ -10,8 +10,9 @@ import { AgentController } from '@mastra/core/agent-controller';
 import type { MastraBrowser } from '@mastra/core/browser';
 import { AgentControllerChannels } from '@mastra/core/channels';
 import { Knowledge } from '@mastra/core/knowledge';
+import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
-import type { AuthInitContext, IMastraAuthProvider } from '@mastra/core/server';
+import type { ApiRoute, AuthInitContext, IMastraAuthProvider, ServerConfig } from '@mastra/core/server';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraWorker } from '@mastra/core/worker';
 
@@ -23,9 +24,11 @@ import {
   Workspace,
 } from '@mastra/core/workspace';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
+import { createHonoServer } from '@mastra/deployer/server';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector } from '@mastra/pg';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { Hono } from 'hono';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { createTestBoard } from './boards/test-utils.js';
 import type { VersionControl } from './capabilities/version-control.js';
 import { MastraFactory } from './factory.js';
@@ -35,6 +38,7 @@ import { invalidateCustomProvidersSnapshots } from './routes/custom-provider-sou
 import type * as projectRoutesModule from './routes/projects.js';
 import type * as surfaceModule from './routes/surface.js';
 import type * as tenantCredentialsModule from './routes/tenant-credentials.js';
+import { mountApiRoutes } from './routes/test-utils.js';
 import type * as dispatcherModule from './rules/dispatcher.js';
 import { FactoryPhaseStateProcessor } from './rules/processor.js';
 import type * as terminalCleanupModule from './rules/terminal-cleanup.js';
@@ -1122,6 +1126,37 @@ describe('MastraFactory.prepare', () => {
     expect(paths).toContain('/auth/me');
   });
 
+  it('tells the UI it serves MCP exactly when it mounts the MCP endpoint', async () => {
+    // A developer's own setting would turn on MCP for the provider without config.
+    vi.stubEnv('MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER', '');
+    onTestFinished(() => vi.unstubAllEnvs());
+    const cases = [
+      { auth: fakeProvider(), mcp: { authorizationServers: ['https://auth.example.com'] }, serves: true },
+      // An auth provider with no authorization server for MCP clients to sign in through.
+      { auth: fakeProvider(), mcp: undefined, serves: false },
+      {
+        auth: fakeProvider(),
+        mcp: { enabled: false, authorizationServers: ['https://auth.example.com'] },
+        serves: false,
+      },
+      { auth: null, mcp: { authorizationServers: ['https://auth.example.com'] }, serves: false },
+    ];
+    for (const { auth, mcp, serves } of cases) {
+      prepareMock.mockClear();
+      const config = await prepareFactory({ storage: fakeStorage(), auth, ...(mcp ? { mcp } : {}) });
+      const routes = (config.buildApiRoutes as (deps: object) => ApiRoute[])({
+        controller: sessionNotifierStub,
+        authStorage: {},
+      });
+      const app = new Hono();
+      mountApiRoutes(app as never, routes);
+
+      const features = await (await app.request('/web/config/features')).json();
+      const mountsMcp = routes.some(route => route.path === '/web/factory/projects/:projectId/mcp');
+      expect({ features: features.mcp, mountsMcp }).toEqual({ features: serves, mountsMcp: serves });
+    }
+  });
+
   it('registers the Factory transition tool only for exact active bindings', async () => {
     const storage = fakeStorage();
     const config = await prepareFactory({ storage });
@@ -1916,6 +1951,85 @@ describe('MastraFactory.prepare', () => {
     const config = prepareMock.mock.calls[0]![0];
     const serverConfig = (config.buildServerConfig as () => { auth?: unknown })();
     expect(serverConfig.auth).toBeUndefined();
+  });
+
+  it('lets browser MCP clients send the MCP headers and read the sign-in challenge', async () => {
+    // The deployer merges these into its default allow/expose lists, so
+    // Factory only adds what MCP 2026-07-28 clients need on top.
+    const mcpCors = {
+      allowHeaders: ['Mcp-Protocol-Version', 'Mcp-Method', 'Mcp-Name'],
+      exposeHeaders: ['WWW-Authenticate'],
+    };
+
+    const withOrigins = await prepareFactory({
+      storage: fakeStorage(),
+      auth: fakeProvider(),
+      allowedOrigins: ['https://app.acme.com/'],
+    });
+    expect((withOrigins.buildServerConfig as () => { cors?: unknown })().cors).toEqual({
+      origin: ['https://app.acme.com'],
+      credentials: true,
+      ...mcpCors,
+    });
+
+    prepareMock.mockClear();
+
+    // Without allowed origins Factory still sets no origin or credentials, so
+    // the deployer's own origin defaults keep applying.
+    const sameOrigin = await prepareFactory({ storage: fakeStorage(), auth: fakeProvider() });
+    expect((sameOrigin.buildServerConfig as () => { cors?: unknown })().cors).toEqual(mcpCors);
+  });
+
+  it('signs browser MCP clients in through the real server stack', async () => {
+    vi.stubEnv('MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER', '');
+    onTestFinished(() => vi.unstubAllEnvs());
+    const config = await prepareFactory({
+      storage: fakeStorage(),
+      auth: fakeProvider(),
+      mcp: { authorizationServers: ['https://auth.example.com'] },
+      allowedOrigins: ['https://inspector.example.com'],
+    });
+    const server = (config.buildServerConfig as () => ServerConfig)();
+    const apiRoutes = (config.buildApiRoutes as (deps: object) => ApiRoute[])({
+      controller: sessionNotifierStub,
+      authStorage: {},
+    });
+    const app = await createHonoServer(new Mastra({ server: { ...server, apiRoutes } }), { tools: {} });
+    const url = 'http://localhost/web/factory/projects/fp-1/mcp';
+    const origin = 'https://inspector.example.com';
+
+    const preflight = await app.request(url, {
+      method: 'OPTIONS',
+      headers: {
+        Origin: origin,
+        'Access-Control-Request-Method': 'POST',
+        'Access-Control-Request-Headers': 'authorization, content-type, mcp-protocol-version, mcp-method',
+      },
+    });
+    expect(preflight.headers.get('Access-Control-Allow-Origin')).toBe(origin);
+    expect(preflight.headers.get('Access-Control-Allow-Headers')?.toLowerCase().split(',')).toEqual(
+      expect.arrayContaining(['mcp-protocol-version', 'mcp-method', 'mcp-name']),
+    );
+
+    // The Factory auth gate and the server auth middleware let the anonymous call through to the challenge.
+    const anonymous = await app.request(url, {
+      method: 'POST',
+      headers: { Origin: origin, 'Content-Type': 'application/json', 'Mcp-Protocol-Version': '2026-07-28' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'server/discover', params: {} }),
+    });
+    expect(anonymous.status).toBe(401);
+    expect(anonymous.headers.get('Access-Control-Expose-Headers')?.split(',')).toContain('WWW-Authenticate');
+    const challenge = anonymous.headers
+      .get('WWW-Authenticate')
+      ?.match(/^Bearer resource_metadata="(https?:\/\/[^/"]+)(\/\.well-known\/oauth-protected-resource\/[^"]+)"$/);
+    expect(challenge?.[2]).toBe('/.well-known/oauth-protected-resource/web/factory/projects/fp-1/mcp');
+
+    const metadata = await app.request(`http://localhost${challenge![2]}`, { headers: { Origin: origin } });
+    expect(metadata.status).toBe(200);
+    expect(await metadata.json()).toMatchObject({
+      resource: `${challenge![1]}/web/factory/projects/fp-1/mcp`,
+      authorization_servers: ['https://auth.example.com'],
+    });
   });
 
   it('registers the per-tenant credential resolver when auth is configured', async () => {

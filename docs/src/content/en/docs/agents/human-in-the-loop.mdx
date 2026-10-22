@@ -41,7 +41,7 @@ const deleteTool = createTool({
 const agent = new Agent({
   id: 'my-agent',
   name: 'My Agent',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: { deleteTool },
 })
 
@@ -445,7 +445,7 @@ const agent = new Agent({
   id: 'my-agent',
   name: 'My Agent',
   instructions: 'You are a helpful assistant',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: { weatherTool },
   memory: new Memory(),
   defaultOptions: {
@@ -628,7 +628,7 @@ const dataAgent = new Agent({
   id: 'data-agent',
   name: 'Data Agent',
   description: 'Handles database queries and user data retrieval',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: { findUserTool },
 })
 
