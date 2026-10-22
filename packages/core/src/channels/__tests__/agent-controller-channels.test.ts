@@ -1190,7 +1190,7 @@ describe('AgentControllerChannels', () => {
         await waitFor(() => systemPrompts.length > 0, { what: 'the inbound run' });
         // Everything after the agent's own instructions comes from the channel processor.
         const inbound = systemPrompts[0]!.replace('You are a test agent.\n', '');
-        expect(inbound.startsWith('You are communicating via discord.')).toBe(true);
+        expect(inbound.startsWith('This conversation is connected to a discord')).toBe(true);
 
         const memoryStore = await mastra.getStorage()!.getStore('memory');
         const { threads } = await memoryStore!.listThreads({
