@@ -2,6 +2,14 @@
 '@mastra/factory': patch
 ---
 
-Hovering a session in the Factory sidebar now shows what happened in it, not its branch names. The card shows the owner and who they took it over from, a button to the issue or pull request, what the agent is doing, and one timeline: the stages the work moved through, the agent runs inside them, and avatars where a person moved the work or took the session over. Pointing at a stage, a run or an avatar names it, gives its length, and puts its own start and end on the axis.
+Added the session's history to the Factory sidebar hover card, in place of its branch names.
 
-Each `factory.run.ended` audit record now carries `startedAt`, so a run's length can be read from its end record alone. Runs that ended before this release have no start and are left off the timeline.
+**What the card shows**
+
+- The owner, and who they took the session over from.
+- A link to the issue or pull request.
+- What the agent is doing.
+- A timeline of stages, agent runs, and the moments a person moved the work or took the session over.
+- The name, length, and times of any stage, run, or person you point at on the timeline.
+
+Added `startedAt` to each `factory.run.ended` audit record, so a run's length can be read from its end record alone. Runs that ended before this release have no start time and do not appear on the timeline.
