@@ -6005,6 +6005,13 @@ export class DurableAgent<
     // Also set on wrapped agent
     this.#wrappedAgent.__registerMastra(mastra);
 
+    // With caching disabled, a bus resolved before registration is the
+    // pre-registration run bus; drop it so it is re-resolved against Mastra.
+    if (this.#cacheConfig === false && this.#cachingPubsub) {
+      this.#cachingPubsub = null;
+      this.#resolvedCache = null;
+    }
+
     // Wire mastra.pubsub as the inner pubsub if user didn't provide a custom one.
     // This must happen before CachingPubSub initialization.
     if (!this.#hasCustomPubsub && !this.#cachingPubsub) {

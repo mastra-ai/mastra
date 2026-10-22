@@ -403,6 +403,47 @@ describe('EventedAgent split transport (agent pubsub ≠ mastra.pubsub)', () => 
     await runTransport.close();
   });
 
+  it('moves a cache-disabled run bus to the Mastra bus when the agent is read before it is registered', async () => {
+    const runTransport = new EventEmitterPubSub();
+    const agent = createEventedAgent({
+      agent: new Agent({
+        id: 'early-no-cache-agent',
+        name: 'Early No Cache Agent',
+        instructions: 'test',
+        model: createTextStreamModel('Hi'),
+      }),
+      pubsub: agentPubsub,
+      cache: false,
+    });
+
+    // Resolves the run bus before any Mastra exists.
+    expect(agent.pubsub).toBeDefined();
+
+    new Mastra({
+      agents: { 'early-no-cache-agent': agent as any },
+      logger: false,
+      storage: new InMemoryStore(),
+      pubsub: runTransport,
+    });
+
+    const onRunBus: unknown[] = [];
+    const onAgentBus: unknown[] = [];
+    const topic = AGENT_STREAM_TOPIC('early-no-cache-run');
+    await runTransport.subscribe(topic, event => {
+      onRunBus.push(event);
+    });
+    await agentPubsub.subscribe(topic, event => {
+      onAgentBus.push(event);
+    });
+
+    await agent.pubsub.publish(topic, { type: 'chunk', runId: 'early-no-cache-run', data: {} });
+
+    expect(onRunBus).toHaveLength(1);
+    expect(onAgentBus).toHaveLength(0);
+
+    await runTransport.close();
+  });
+
   it('still aligns the cache when the agent is read before it is registered', () => {
     // Reading `agent.cache` resolves the workflow engine; before registration
     // `#mastra` is undefined and the resolver memoizes 'default'. The evented
