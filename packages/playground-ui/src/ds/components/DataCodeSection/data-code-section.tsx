@@ -158,7 +158,7 @@ export function DataCodeSection({
           {!usePlainTextView &&
             (searchMinimized ? (
               <Button
-                size="sm"
+                size="icon-sm"
                 aria-label="Search code"
                 tooltip="Search code"
                 onClick={() => setSearchMinimized(false)}
@@ -180,6 +180,7 @@ export function DataCodeSection({
             <CopyButton content={codeStr || 'No content'} />
             {hasMultilineText && (
               <Button
+                size="icon-md"
                 aria-label={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
                 tooltip={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
                 onClick={() => setShowAsMultilineText(v => !v)}
@@ -187,7 +188,7 @@ export function DataCodeSection({
                 {showAsMultilineText ? <AlignLeftIcon /> : <AlignJustifyIcon />}
               </Button>
             )}
-            <Button aria-label="Expand" tooltip="Expand" onClick={() => setExpandedOpen(true)}>
+            <Button size="icon-md" aria-label="Expand" tooltip="Expand" onClick={() => setExpandedOpen(true)}>
               <ExpandIcon />
             </Button>
           </ButtonsGroup>
@@ -235,6 +236,7 @@ export function DataCodeSection({
                   <CopyButton content={codeStr || 'No content'} />
                   {hasMultilineText && (
                     <Button
+                      size="icon-md"
                       aria-label={expandedMultiline ? 'Show escaped newlines' : 'Show multiline text'}
                       tooltip={expandedMultiline ? 'Show escaped newlines' : 'Show multiline text'}
                       onClick={() => setExpandedMultiline(v => !v)}

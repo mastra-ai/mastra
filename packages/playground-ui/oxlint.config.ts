@@ -46,6 +46,7 @@ export default defineConfig({
   settings: { tailwindcss: { entryPoint: './src/index.css' } },
   ignorePatterns: ['storybook-static/**'],
   rules: {
+    'mastra/icon-button-size': 'error',
     'typescript/no-unnecessary-type-assertion': 'error',
     'typescript/no-unnecessary-template-expression': 'error',
     'typescript/no-unnecessary-type-arguments': 'error',
