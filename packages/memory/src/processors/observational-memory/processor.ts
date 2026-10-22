@@ -20,6 +20,7 @@ import { omDebug } from './debug';
 import { findLastCompletedObservationBoundary, getObservableMessages } from './message-utils';
 import type { ObservationTurn } from './observation-turn/index';
 import { loadMemoryContextMessages } from './observation-turn/load-memory-context';
+import { getPartKeys } from './observation-turn/step';
 import type { ObservationalMemory } from './observational-memory';
 import { isOmReproCaptureEnabled, safeCaptureJson, writeProcessInputStepReproCapture } from './repro-capture';
 import { insertTemporalGapMarkers } from './temporal-markers';
@@ -52,6 +53,7 @@ export interface MemoryContextProvider {
   }>;
   /** Raw message upsert — persist sealed messages to storage without embedding or working memory processing. */
   persistMessages(messages: MastraDBMessage[]): Promise<void>;
+  getPersistedMessages?(threadId: string, ids: string[]): Promise<MastraDBMessage[]>;
 }
 
 /**
@@ -321,10 +323,24 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         this.turn.requestContext = requestContext;
         await this.turn.start(this.memory, runState);
         if (stepNumber > 0) {
-          // The previous worker's turn is gone, but the durable MessageList snapshot still
-          // tracks which input messages belong to this run, even after they were drained
-          // into memory. Keep those messages in the live prompt during mid-turn cleanup.
+          // The durable snapshot retains the run's inputs, but a background result may have
+          // landed in storage after the snapshot was saved. Reconcile those response messages
+          // before the unread-part scan; the snapshot's part keys represent what was seen.
           this.turn.inputMessageIds = messageList.serialize().newUserMessagesPersisted;
+          if (this.memory?.getPersistedMessages) {
+            const responseIds = messageList.serialize().newResponseMessagesPersisted;
+            const snapshotMessages = new Map(messageList.get.all.db().map(message => [message.id, message]));
+            const storedMessages = await this.memory.getPersistedMessages(threadId, responseIds);
+            for (const stored of storedMessages) {
+              const snapshot = snapshotMessages.get(stored.id);
+              if (!snapshot) continue;
+              const seenKeys = getPartKeys(snapshot);
+              if (getPartKeys(stored).some(key => !seenKeys.includes(key))) {
+                this.turn.drainedPartKeys.set(stored.id, new Set(seenKeys));
+                messageList.add(stored, 'memory');
+              }
+            }
+          }
         }
         // A run recovered by another worker can continue a response message that the dead
         // worker already observed. That worker rotated the id in memory, but the rotation was

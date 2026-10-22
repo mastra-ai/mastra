@@ -40,6 +40,7 @@ export type PeerEvent =
   | { type: 'lapsed' }
   | { type: 'recovered'; data: { succeeded: number; failed: number } }
   | { type: 'dump'; data: StoredState }
+  | { type: 'merged' }
   | { type: 'error'; data: { message: string } };
 
 export type PeerCommand =
@@ -47,13 +48,17 @@ export type PeerCommand =
   | { type: 'runs' }
   | { type: 'lapse'; runId: string }
   | { type: 'recover' }
+  | { type: 'release' }
   | { type: 'dump' };
 
 const isMain = process.argv[1]?.endsWith('om-resume-peer.ts');
 
 if (isMain) {
-  const [dbUrl, engine, mode, aimockUrl] = process.argv.slice(2);
+  const [dbUrl, engine, mode, aimockUrl, scenario] = process.argv.slice(2);
+  const backgroundMerge = scenario === 'background-merge';
   const send = (event: PeerEvent) => process.send!(event);
+  let releaseResearch!: () => void;
+  const researchGate = new Promise<void>(resolve => (releaseResearch = resolve));
 
   const filler = Array.from({ length: 400 }, (_, i) => `line ${i}: shipment scan event recorded at depot`).join('\n');
   const OBSERVATIONS =
@@ -125,6 +130,20 @@ if (isMain) {
     },
   });
 
+  const research = createTool({
+    id: 'research',
+    description: 'Research the delivery window',
+    inputSchema: {
+      type: 'object',
+      properties: { topic: { type: 'string' } },
+      additionalProperties: false,
+    },
+    background: { enabled: true, timeoutMs: 30_000 },
+    execute: async () => {
+      await researchGate;
+      return { finding: 'BACKGROUND_RESULT_MARKER: delivery window confirmed' };
+    },
+  });
   const lookup = createTool({
     id: 'lookup',
     description: 'Look up an order',
@@ -155,7 +174,8 @@ if (isMain) {
     model: aimockUrl
       ? createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${aimockUrl}/v1` })('aimock-scenario')
       : actor,
-    tools: { lookup },
+    tools: backgroundMerge ? { lookup, research } : { lookup },
+    ...(backgroundMerge ? { backgroundTasks: { tools: { research: true } } } : {}),
     memory,
   });
   // A plain durable agent persists `running` snapshots only when asked to (see run-recovery.md).
@@ -169,6 +189,7 @@ if (isMain) {
     logger: false,
     storage,
     agents: engine === 'fs' ? {} : { [registrable.id]: registrable },
+    ...(backgroundMerge ? { backgroundTasks: { enabled: true } } : {}),
   });
   if (engine === 'fs') mastra.__registerFsAgents({ [agent.id]: agent });
   const runningAgent = mastra.getAgent(agent.id);
@@ -207,6 +228,8 @@ if (isMain) {
           }
         ).recoverActiveRuns();
         send({ type: 'recovered', data: { succeeded: r.succeeded, failed: r.failed } });
+      } else if (cmd.type === 'release') {
+        releaseResearch();
       } else if (cmd.type === 'dump') {
         const mem = (await storage.getStore('memory'))!;
         const { messages } = await mem.listMessages({ threadId: 't1', perPage: false });
@@ -223,7 +246,7 @@ if (isMain) {
                   p.type === 'text'
                     ? `text:${p.text}`
                     : p.type === 'tool-invocation'
-                      ? `tool:${p.toolInvocation.toolCallId}:${p.toolInvocation.state}`
+                      ? `tool:${p.toolInvocation.toolCallId}:${p.toolInvocation.state}${JSON.stringify(p.toolInvocation.result).includes('BACKGROUND_RESULT_MARKER') ? ':BACKGROUND_RESULT_MARKER' : ''}`
                       : p.type,
                 ),
             })),
@@ -239,6 +262,17 @@ if (isMain) {
   // No top-level await: this workspace isn't "type": "module", so tsx runs the peer as CJS.
   void storage
     .init()
+    .then(async () => {
+      if (backgroundMerge) {
+        const memoryStore = (await storage.getStore('memory'))!;
+        const saveMessages = memoryStore.saveMessages.bind(memoryStore);
+        memoryStore.saveMessages = async args => {
+          const result = await saveMessages(args);
+          if (JSON.stringify(args.messages).includes('BACKGROUND_RESULT_MARKER')) send({ type: 'merged' });
+          return result;
+        };
+      }
+    })
     .then(() => mastra.startWorkers?.().catch(() => {}))
     .then(() => send({ type: 'ready' }));
 }

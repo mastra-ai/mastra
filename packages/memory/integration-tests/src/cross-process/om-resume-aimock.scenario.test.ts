@@ -53,8 +53,8 @@ describe.each(['normal', 'durable', 'evented', 'fs'] as const)('AIMock OM reques
   let dir: string;
   const peers: Peer[] = [];
 
-  async function spawn(db: string, mode: 'normal' | 'hang') {
-    const child = fork(PEER, [`file:${join(dir, db)}`, engine, mode, llm.url], {
+  async function spawn(db: string, mode: 'normal' | 'hang', scenario?: 'background-merge') {
+    const child = fork(PEER, [`file:${join(dir, db)}`, engine, mode, llm.url, ...(scenario ? [scenario] : [])], {
       execArgv: ['--import', TSX],
       stdio: ['ignore', 'inherit', 'inherit', 'ipc'],
     });
@@ -183,6 +183,65 @@ describe.each(['normal', 'durable', 'evented', 'fs'] as const)('AIMock OM reques
       expect(resumed.observedMessageIds).toEqual(beforeKill.observedMessageIds);
       expect(shape(resumed)).toEqual(shape(baseline));
       expect(new Set(resumed.messages.map(message => message.id)).size).toBe(resumed.messages.length);
+    }, 240_000);
+
+    it('keeps a delayed background result merged into an already drained message after worker recovery', async () => {
+      llm.on(
+        { endpoint: 'chat', sequenceIndex: 0 },
+        { toolCalls: [{ id: 'call_bg', name: 'research', arguments: { topic: '4471' } }] },
+      );
+      llm.on(
+        { endpoint: 'chat', sequenceIndex: 1 },
+        { toolCalls: [{ id: 'call_0', name: 'lookup', arguments: { orderId: '4471-0' } }] },
+      );
+      llm.on(
+        { endpoint: 'chat', sequenceIndex: 2 },
+        { content: `${FINAL_ANSWER} ${'waiting '.repeat(200)}` },
+        { chunkSize: 1, latency: 200 },
+      );
+      const a = await spawn('background.db', 'hang', 'background-merge');
+      send(a, { type: 'stream' });
+      await expect.poll(() => llm.getRequests().length, { timeout: 30_000 }).toBe(3);
+      expect(JSON.stringify(llm.getRequests()[1]?.body?.messages)).toContain('Background task started');
+      expect(JSON.stringify(llm.getRequests()[2]?.body?.messages)).not.toContain('BACKGROUND_RESULT_MARKER');
+      const merged = next(a, 'merged');
+      send(a, { type: 'release' });
+      await merged;
+      expect(JSON.stringify(shape(await dump(a)))).toContain('BACKGROUND_RESULT_MARKER');
+      const runsResponse = next(a, 'runs');
+      send(a, { type: 'runs' });
+      const runs = (await runsResponse).data.filter(run => run.status === 'running');
+      expect(runs.length).toBeGreaterThan(0);
+      const exited = new Promise(resolve => a.child.once('exit', resolve));
+      a.child.kill('SIGKILL');
+      await exited;
+
+      llm.clearFixtures();
+      llm.resetMatchCounts();
+      llm.on({ endpoint: 'chat' }, { content: FINAL_ANSWER });
+      const b = await spawn('background.db', 'normal', 'background-merge');
+      for (const { runId } of runs) {
+        const lapsed = next(b, 'lapsed');
+        send(b, { type: 'lapse', runId });
+        await lapsed;
+      }
+      const recovered = next(b, 'recovered');
+      send(b, { type: 'recover' });
+      expect((await recovered).data).toEqual({ succeeded: 1, failed: 0 });
+      const resumed = await dump(b);
+      expect(JSON.stringify(shape(resumed))).toContain('BACKGROUND_RESULT_MARKER');
+      expect(new Set(resumed.messages.map(message => message.id)).size).toBe(resumed.messages.length);
+      expect(b.events.filter(event => event.type === 'observer')).toHaveLength(0);
+      const request = llm.getRequests().slice(3).at(-1);
+      expect(request?.body?.messages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            role: 'tool',
+            tool_call_id: 'call_bg',
+            content: expect.stringContaining('BACKGROUND_RESULT_MARKER'),
+          }),
+        ]),
+      );
     }, 240_000);
   }
 });
