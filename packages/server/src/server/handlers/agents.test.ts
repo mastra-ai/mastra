@@ -2333,6 +2333,37 @@ describe('Agent Routes Authorization', () => {
       });
     }
 
+    it('resolves request-scoped memory before authorizing run cancellation', async () => {
+      const scopedAgent = createDurableAgent({
+        id: 'test-durable-agent',
+        agent: new Agent({
+          id: 'scoped-agent',
+          name: 'Scoped agent',
+          instructions: 'Do not run.',
+          model: 'openai/gpt-4o-mini',
+          memory: ({ requestContext }) => {
+            if (requestContext.get('tenantId') !== 'tenant-a') throw new Error('Missing memory tenant');
+            return mockMemory;
+          },
+        }),
+      });
+      mastra = new Mastra({ agents: { 'test-durable-agent': scopedAgent }, storage, logger: false });
+      await mockMemory.createThread({ threadId: 'scoped-abort-thread', resourceId: 'user-a' });
+      await persistDurableAgenticLoopRun({
+        runId: 'scoped-abort',
+        resourceId: 'user-a',
+        threadId: 'scoped-abort-thread',
+      });
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+      requestContext.set('tenantId', 'tenant-a');
+      const abort = vi.spyOn(scopedAgent, 'abortRunStream').mockResolvedValue(true);
+
+      await expect(
+        ABORT_AGENT_RUN_ROUTE.handler({ mastra, agentId: 'test-durable-agent', runId: 'scoped-abort', requestContext }),
+      ).resolves.toEqual({ aborted: true });
+      expect(abort).toHaveBeenCalledWith('scoped-abort');
+    });
+
     it.each(['user-a', 'user-b'])('checks thread ownership for an ownerless run called by %s', async caller => {
       await mockMemory.createThread({ threadId: 'abort-thread', resourceId: 'user-a', title: 'Protected thread' });
       const abort = vi.spyOn(mockDurableAgent, 'abortRunStream').mockResolvedValue(true);
