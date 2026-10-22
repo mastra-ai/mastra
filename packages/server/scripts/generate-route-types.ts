@@ -507,11 +507,6 @@ export type ClientResponseKind<P extends ClientPath, M extends ClientMethod<P>> 
 }
   ? ResponseType
   : never;
-export type ClientError<P extends ClientPath, M extends ClientMethod<P>> = ClientRoute<P, M> extends {
-  errorCode: infer Code extends ServerErrorCode;
-}
-  ? ServerError<Code>
-  : never;
 `;
 }
 

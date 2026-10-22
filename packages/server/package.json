@@ -112,7 +112,6 @@
     "generate:api-cli-route-metadata": "tsx scripts/generate-api-cli-route-metadata.ts",
     "generate:route-types": "tsx scripts/generate-route-types.ts",
     "check:permissions": "tsx scripts/check-permissions.ts",
-    "check:route-errors": "tsx scripts/check-route-errors.ts",
     "test": "vitest run",
     "lint": "oxlint --type-aware .",
     "lint:fix": "oxlint --type-aware --fix ."

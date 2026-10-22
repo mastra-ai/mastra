@@ -10,10 +10,9 @@
  *   because the code comes from the core error's id at runtime;
  * - codes thrown by packages outside `src/` (voice routes).
  *
- * Used by `check-route-errors.ts`.
+ * Used by the `route-errors` drift test.
  */
 
-import * as fs from 'node:fs';
 import * as path from 'node:path';
 import ts from 'typescript-classic';
 
@@ -24,7 +23,7 @@ const ROUTE_FACTORIES = new Set(['createRoute', 'createPublicRoute', 'createNewR
 /** Functions whose codes depend on the error they receive, so walking their body over-reports. */
 const OPAQUE_FUNCTIONS = new Set(['handleError']);
 
-export type AnalyzedRoute = {
+type AnalyzedRoute = {
   /** Variable the route is assigned to, or `<anon>`. */
   name: string;
   file: string;
@@ -35,8 +34,6 @@ export type AnalyzedRoute = {
   declared: string[] | undefined;
   /** Codes the route's handler can reach. */
   reachable: string[];
-  /** The config object literal that holds `handler` (and `errors`). */
-  config: ts.ObjectLiteralExpression;
 };
 
 function isRouteCall(e: ts.Node): e is ts.CallExpression {
@@ -157,7 +154,6 @@ export function analyzeRouteErrors(serverRoot: string): AnalyzedRoute[] {
             isPublic: factory === 'createPublicRoute' || requiresAuth?.initializer.kind === ts.SyntaxKind.FalseKeyword,
             declared: declaredErrorCodes(config),
             reachable: [...acc].sort(),
-            config,
           });
         }
       }
@@ -169,7 +165,7 @@ export function analyzeRouteErrors(serverRoot: string): AnalyzedRoute[] {
 }
 
 /** Codes every route can return without listing them: request/framework codes, plus auth codes unless public. */
-export function frameworkErrorCodes(route: Pick<AnalyzedRoute, 'isPublic'>): Set<string> {
+function frameworkErrorCodes(route: Pick<AnalyzedRoute, 'isPublic'>): Set<string> {
   return new Set<string>([...COMMON_ERROR_CODES, ...(route.isPublic ? [] : AUTH_ERROR_CODES)]);
 }
 
@@ -178,37 +174,4 @@ export function missingErrorCodes(route: AnalyzedRoute): string[] {
   const framework = frameworkErrorCodes(route);
   const declared = new Set(route.declared ?? []);
   return route.reachable.filter(code => !framework.has(code) && !declared.has(code));
-}
-
-/**
- * Rewrites each route's `errors` to the given codes (sorted), inserting the property right before
- * `handler` when the route has none. Returns the files it changed.
- */
-export function writeRouteErrors(serverRoot: string, updates: Map<AnalyzedRoute, string[]>): string[] {
-  const byFile = new Map<string, { start: number; end: number; text: string }[]>();
-  for (const [route, codes] of updates) {
-    const sf = route.config.getSourceFile();
-    const list = `[${[...new Set(codes)]
-      .sort()
-      .map(c => `'${c}'`)
-      .join(', ')}]`;
-    const existing = getProperty(route.config, 'errors');
-    const edits = byFile.get(sf.fileName) ?? [];
-    if (existing) {
-      edits.push({ start: existing.initializer.getStart(), end: existing.initializer.getEnd(), text: list });
-    } else {
-      const handler = getProperty(route.config, 'handler')!;
-      const start = handler.getStart();
-      const lineStart = sf.text.lastIndexOf('\n', start - 1) + 1;
-      const indent = sf.text.slice(lineStart, start);
-      edits.push({ start, end: start, text: `errors: ${list},\n${indent}` });
-    }
-    byFile.set(sf.fileName, edits);
-  }
-  for (const [file, edits] of byFile) {
-    let text = fs.readFileSync(file, 'utf-8');
-    for (const e of edits.sort((a, b) => b.start - a.start)) text = text.slice(0, e.start) + e.text + text.slice(e.end);
-    fs.writeFileSync(file, text);
-  }
-  return [...byFile.keys()].map(f => path.relative(serverRoot, f));
 }

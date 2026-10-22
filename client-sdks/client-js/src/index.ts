@@ -68,17 +68,14 @@ export type {
   TraceQueryValueKind,
 } from './resources/observability-route-types';
 export type {
-  AuthErrorCode,
   Body,
   Client,
-  ClientError,
   ClientMethod,
   ClientPath,
   ClientRequest,
   ClientResponse,
   ClientResponseKind,
   ClientRoute,
-  CommonErrorCode,
   PathParams,
   QueryParams,
   RouteError,

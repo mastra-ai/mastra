@@ -1,5 +1,5 @@
 import { expectTypeOf, test } from 'vitest';
-import type { ClientError, RouteError, ServerError } from '../src/route-types.generated';
+import type { RouteError, ServerError } from '../src/route-types.generated';
 import { getServerError } from '../src/types';
 
 declare const error: unknown;
@@ -41,8 +41,4 @@ test('getServerError narrows the union to the codes a route can return', () => {
 test('public routes never return auth codes', () => {
   expectTypeOf<Extract<RouteError<'GET /auth/sso/callback'>['code'], 'AUTHENTICATION_REQUIRED'>>().toBeNever();
   expectTypeOf<Extract<RouteError<'GET /agents/:agentId'>['code'], 'AUTHENTICATION_REQUIRED'>>().not.toBeNever();
-});
-
-test('path-based client errors match route-key errors', () => {
-  expectTypeOf<ClientError<'/agents/:agentId', 'GET'>>().toEqualTypeOf<RouteError<'GET /agents/:agentId'>>();
 });

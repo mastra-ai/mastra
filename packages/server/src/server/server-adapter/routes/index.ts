@@ -161,9 +161,9 @@ export type ServerRoute<
   onValidationError?: ValidationErrorHook;
   /**
    * Business error codes this route can return, on top of the framework-wide codes
-   * (`REQUEST_ERROR_CODES`, plus `AUTH_ERROR_CODES` on authenticated routes).
+   * (`COMMON_ERROR_CODES`, plus `AUTH_ERROR_CODES` on authenticated routes).
    * `generate:route-types` turns this into the route's typed error union for client-js,
-   * and `check:route-errors` fails when a handler can reach a code missing from this list.
+   * and the `route-errors` test fails when a handler can reach a code missing from this list.
    */
   errors?: readonly ServerErrorCode[];
   /** @internal Phantom type — not present at runtime. Used for type-level schema inference. */

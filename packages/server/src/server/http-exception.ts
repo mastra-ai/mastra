@@ -77,7 +77,7 @@ export type StatusCode =
  * @property cause - Optional cause of the error.
  * @property stack - Optional stack trace for the error.
  */
-export type HTTPExceptionOptions<C extends ServerErrorCode = ServerErrorCode> = {
+type HTTPExceptionOptions<C extends ServerErrorCode = ServerErrorCode> = {
   code?: C;
   res?: Response;
   message?: string;

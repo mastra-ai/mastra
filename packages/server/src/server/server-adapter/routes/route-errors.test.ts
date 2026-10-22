@@ -13,7 +13,7 @@ describe('route error declarations', () => {
     expect(routes.length).toBeGreaterThan(400);
   });
 
-  it('declares every business code each handler can reach (run `pnpm check:route-errors --write` to fix)', () => {
+  it('declares every business code each handler can reach', () => {
     const missing = routes
       .map(route => ({ route: `${route.name} (${route.file}:${route.line})`, codes: missingErrorCodes(route) }))
       .filter(entry => entry.codes.length > 0);
