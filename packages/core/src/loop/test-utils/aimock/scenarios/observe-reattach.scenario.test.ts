@@ -126,13 +126,26 @@ describeForAllEngines(
           if (variant === 'dead') {
             expect(suffix.map(chunk => chunk.type)).toContain('error');
             expect(commits).toEqual([]);
+            // A bare observer timeout must not cancel the still-live producer.
+            released.forEach(g => g.resolve());
+            await consuming;
+            assertComplete(live);
+            expect(commits).toEqual([1, 2, 3]);
           } else {
             await consuming;
             assertComplete(observed);
             expect(commits).toEqual([1, 2, 3]);
-            if (variant === 'offset') expect(suffix[0]?.type).not.toBe('start');
+            if (variant === 'offset') {
+              const boundaryChunkIndex = live.findIndex(
+                chunk => chunk.type === 'tool-result' && chunk.payload.toolCallId === 'call_1',
+              );
+              expect(boundaryChunkIndex).toBeGreaterThanOrEqual(0);
+              expect(suffix[0]?.type).not.toBe('start');
+              expect(suffix).toEqual(live.slice(boundaryChunkIndex + 1));
+            } else {
+              expect(observed).toEqual(live);
+            }
             if (variant === 'late') {
-              expect(observed.map(chunk => chunk.type)).toEqual(live.map(chunk => chunk.type));
               replayTypes.set(
                 engine,
                 observed.map(chunk => chunk.type),

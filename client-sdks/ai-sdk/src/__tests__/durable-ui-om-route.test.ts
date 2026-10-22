@@ -80,7 +80,6 @@ describe.each(['plain', 'durable'] as const)('OM route on %s (COR-1409)', engine
       const mastra = new Mastra({ agents: { agent }, storage, logger: false });
       const thread = randomUUID();
       const resource = randomUUID();
-      const allParts: { type: string; delta?: string; transient?: boolean }[] = [];
       const backgroundErrors: unknown[] = [];
       try {
         for (const turn of ['first', 'second']) {
@@ -111,18 +110,26 @@ describe.each(['plain', 'durable'] as const)('OM route on %s (COR-1409)', engine
           expect(parts.some(part => part.type === 'error')).toBe(false);
           const finish = parts.findIndex(part => part.type === 'finish');
           expect(parts.slice(finish + 1).some(part => part.type.startsWith('data-om-'))).toBe(false);
-          allParts.push(...parts);
+          expect(parts.some(part => part.type === 'data-om-status')).toBe(true);
+          if (variant === 'buffering') {
+            expect(parts.some(part => /^data-om-(buffering-|observation-|thread-update)/.test(part.type))).toBe(true);
+          }
           if ('cleanup' in run) run.cleanup();
         }
         expect(backgroundErrors).toEqual([]);
-        expect(allParts.some(part => part.type === 'data-om-status')).toBe(true);
-        if (variant === 'buffering') {
-          expect(observerCalls).toBeGreaterThan(0);
-          expect(allParts.some(part => /^data-om-(buffering-|observation-|thread-update)/.test(part.type))).toBe(true);
-        } else expect(observerCalls).toBe(0);
+        if (variant === 'buffering') expect(observerCalls).toBeGreaterThan(0);
+        else expect(observerCalls).toBe(0);
         const { messages } = await memory.recall({ threadId: thread, resourceId: resource });
         const persisted = messages.flatMap(message => message.content.parts ?? []);
-        expect(persisted.some(part => part.type === 'text' && part.text.includes('second answer'))).toBe(true);
+        for (const answer of ['first answer', 'second answer']) {
+          expect(
+            messages.some(
+              message =>
+                message.role === 'assistant' &&
+                message.content.parts?.some(part => part.type === 'text' && part.text.includes(answer)),
+            ),
+          ).toBe(true);
+        }
         expect(persisted.some(part => part.type === 'data-om-status')).toBe(false);
         expect(persisted.some(part => 'transient' in part && part.transient === true)).toBe(false);
       } finally {
