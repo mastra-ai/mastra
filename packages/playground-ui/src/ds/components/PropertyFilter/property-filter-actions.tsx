@@ -39,7 +39,7 @@ export function PropertyFilterActions({
       {hasMenuItems && (
         <DropdownMenu>
           <DropdownMenu.Trigger asChild>
-            <Button disabled={disabled} size="md" aria-label="More filter actions">
+            <Button disabled={disabled} size="icon-md" aria-label="More filter actions">
               <EllipsisVerticalIcon />
             </Button>
           </DropdownMenu.Trigger>
