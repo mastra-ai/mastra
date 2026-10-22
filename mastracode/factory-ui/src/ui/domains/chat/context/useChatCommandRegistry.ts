@@ -208,7 +208,8 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
             );
             return;
           }
-          if (modelLocked && (action.kind === 'set' || action.kind === 'clear')) return refuseLockedModel();
+          const changesThinkingLevel = action.kind === 'set' || action.kind === 'clear';
+          if (modelLocked && changesThinkingLevel) return refuseLockedModel();
           if (action.kind === 'set') {
             await ensureSettings();
             await updateSettingsMutation.mutateAsync({ thinkingLevel: action.level });

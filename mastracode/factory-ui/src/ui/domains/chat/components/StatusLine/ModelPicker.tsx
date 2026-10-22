@@ -40,13 +40,20 @@ function groupByProvider(models: AvailableModelOption[]): [string, AvailableMode
   return [...groups.entries()].sort(([a], [b]) => a.localeCompare(b));
 }
 
-function canSwitchModel(kind: ChatSessionContextApi['kind'], isDraft: boolean, sessionEnabled: boolean): boolean {
-  if (kind === 'user' && isDraft) return true;
+function canSwitchModel({
+  kind,
+  draftSessionId,
+  sessionEnabled,
+  modelLocked,
+}: Pick<ChatSessionContextApi, 'kind' | 'draftSessionId' | 'sessionEnabled' | 'modelLocked'>): boolean {
+  if (modelLocked) return false;
+  if (kind === 'user' && draftSessionId) return true;
   return sessionEnabled;
 }
 
 export function ModelPicker() {
-  const { kind, sessionEnabled, draftSessionId, modelLocked } = useChatSessionContext();
+  const chatSession = useChatSessionContext();
+  const { kind } = chatSession;
   const { status } = useChatConnection();
   const { activeModelId, defaultModelId, setModel, isLoading, error } = useChatModels();
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -77,7 +84,7 @@ export function ModelPicker() {
     Boolean(selectedModelId) &&
     modelsQuery.isSuccess &&
     !modelsQuery.data.some(model => model.id === selectedModelId);
-  const switchable = !modelLocked && canSwitchModel(kind, Boolean(draftSessionId), sessionEnabled);
+  const switchable = canSwitchModel(chatSession);
   const canReset =
     kind === 'user' &&
     modelScope !== 'factory' &&

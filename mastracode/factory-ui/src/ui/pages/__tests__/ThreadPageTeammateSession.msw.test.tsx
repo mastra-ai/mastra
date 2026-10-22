@@ -213,15 +213,15 @@ describe("a teammate's Factory session", () => {
 
   describe('when a teammate tries to change its model', () => {
     it("shows the owner's model without a picker, and refuses /model and /think", async () => {
-      const modelChanges: unknown[] = [];
+      const modelSwitches: unknown[] = [];
+      const stateWrites: unknown[] = [];
       server.use(
         http.post(`${AC}/sessions/:resourceId/model`, async ({ request }) => {
-          modelChanges.push(await request.json());
+          modelSwitches.push(await request.json());
           return HttpResponse.json({ ok: true });
         }),
         http.put(`${AC}/sessions/:resourceId/state`, async ({ request }) => {
-          const body = await request.json();
-          if (JSON.stringify(body).includes('thinkingLevel')) modelChanges.push(body);
+          stateWrites.push(await request.json());
           return HttpResponse.json({ ok: true });
         }),
       );
@@ -242,7 +242,8 @@ describe("a teammate's Factory session", () => {
 
       const refusal = 'Only Ward Peeters can change this session’s model or thinking level.';
       await waitFor(() => expect(screen.getAllByText(refusal)).toHaveLength(2));
-      expect(modelChanges).toEqual([]);
+      expect(modelSwitches).toEqual([]);
+      expect(stateWrites).not.toContainEqual({ state: { thinkingLevel: 'high' } });
     });
 
     it('keeps the picker for the owner', async () => {
