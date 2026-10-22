@@ -11,22 +11,24 @@ const sessions: FactoryUserSession[] = [
   ['user/session', 'User session'],
   ['slack/1791936483-798759', 'Slack discussion'],
   ['factory/issue-528', 'Work session'],
-].map(([branch, title], index): FactoryUserSession => ({
-  id: `row-${index}`,
-  sessionId: `session-${index}`,
-  projectRepositoryId: 'repo-1',
-  orgId: 'org-1',
-  userId: 'user-1',
-  visibility: 'org',
-  branch,
-  title,
-  baseBranch: 'main',
-  sandboxId: null,
-  sandboxWorkdir: null,
-  materializedAt: null,
-  createdAt: '2026-10-22T00:00:00.000Z',
-  updatedAt: '2026-10-22T00:00:00.000Z',
-}));
+].map(
+  ([branch, title], index): FactoryUserSession => ({
+    id: `row-${index}`,
+    sessionId: `session-${index}`,
+    projectRepositoryId: 'repo-1',
+    orgId: 'org-1',
+    userId: 'user-1',
+    visibility: 'org',
+    branch,
+    title,
+    baseBranch: 'main',
+    sandboxId: null,
+    sandboxWorkdir: null,
+    materializedAt: null,
+    createdAt: '2026-10-22T00:00:00.000Z',
+    updatedAt: '2026-10-22T00:00:00.000Z',
+  }),
+);
 
 /** Records what the browser bases its native menu on: whether the default survived, and the link under the pointer. */
 async function recordContextMenus(page: Page) {
