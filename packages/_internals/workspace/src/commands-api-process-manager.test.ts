@@ -42,7 +42,11 @@ class HostCommands implements CommandsApi {
 
   async run(command: string, opts: Listener & { stdin?: boolean; cwd?: string; envs?: Record<string, string> }) {
     this.calls.push('run');
+    // Own process group, so kill() takes down what `sh -c` forked too. Killing
+    // only `sh` leaves e.g. dash's forked `sleep` holding the pipes open, and
+    // `close` (which `done` waits on) never fires.
     const child = spawn('sh', ['-c', command], {
+      detached: true,
       cwd: opts.cwd,
       env: { ...process.env, ...opts.envs },
       stdio: [opts.stdin === false ? 'ignore' : 'pipe', 'pipe', 'pipe'],
@@ -85,7 +89,7 @@ class HostCommands implements CommandsApi {
 
   async kill(pid: number) {
     this.calls.push('kill');
-    return this.children.get(pid)?.child.kill('SIGKILL') ?? false;
+    return this.children.has(pid) ? killGroup(pid) : false;
   }
 
   async sendStdin(pid: number, data: string) {
@@ -122,7 +126,16 @@ class HostCommands implements CommandsApi {
   }
 
   stopAll() {
-    for (const { child } of this.children.values()) child.kill('SIGKILL');
+    for (const pid of this.children.keys()) killGroup(pid);
+  }
+}
+
+function killGroup(pid: number): boolean {
+  try {
+    process.kill(-pid, 'SIGKILL');
+    return true;
+  } catch {
+    return false;
   }
 }
 

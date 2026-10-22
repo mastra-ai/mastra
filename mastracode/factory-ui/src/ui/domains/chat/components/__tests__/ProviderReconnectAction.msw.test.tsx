@@ -53,14 +53,29 @@ function renderAction(session: ChatSessionContextApi) {
 
 describe('ProviderReconnectAction', () => {
   it.each([
-    { modelScope: 'factory', ownedBy: 'nobody', owner: undefined, href: '/factories/factory-1/settings/models' },
-    { modelScope: 'factory', ownedBy: 'a teammate', owner: ward, href: '/factories/factory-1/settings/models' },
-    { modelScope: 'user', ownedBy: 'nobody', owner: undefined, href: '/factories/factory-1/settings/personal-models' },
+    {
+      modelScope: 'factory',
+      ownedBy: 'nobody',
+      owner: undefined,
+      href: '/factories/factory-1/settings/models#factory-defaults',
+    },
+    {
+      modelScope: 'factory',
+      ownedBy: 'a teammate',
+      owner: ward,
+      href: '/factories/factory-1/settings/models#factory-defaults',
+    },
+    {
+      modelScope: 'user',
+      ownedBy: 'nobody',
+      owner: undefined,
+      href: '/factories/factory-1/settings/models#personal-defaults',
+    },
     {
       modelScope: 'user',
       ownedBy: 'the viewer',
       owner: { id: VIEWER_ID },
-      href: '/factories/factory-1/settings/personal-models',
+      href: '/factories/factory-1/settings/models#personal-defaults',
     },
   ] as const)('links a $modelScope-scoped session owned by $ownedBy to $href', async ({ modelScope, owner, href }) => {
     serveSession(modelScope);

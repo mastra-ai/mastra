@@ -49,7 +49,6 @@ export const SkillWorkspaceLayout = ({
           size="icon-sm"
           variant="ghost"
           onClick={() => navigate('/agent-builder/skills', { viewTransition: true })}
-          className="rounded-full"
           tooltip="Skills list"
           data-testid="skill-edit-back-button"
         >
