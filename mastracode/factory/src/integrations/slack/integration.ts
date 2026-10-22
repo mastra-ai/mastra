@@ -112,6 +112,8 @@ const factoryTypingStatus =
     case 'tool-call-input-streaming-start':
       return chunk.payload.toolName === REPLY_TOOL_NAME ? 'is typing...' : undefined;
     case 'tool-call':
+      // Still finishing the streamed reply; don't flip to "is working...".
+      if (chunk.payload.toolName === REPLY_TOOL_NAME) return 'is typing...';
       return describeToolCall(chunk.payload.args) ?? 'is working...';
     default:
       return undefined;

@@ -51,6 +51,10 @@ describe('SlackIntegration.channels', () => {
     expect(
       typingStatus({ type: 'tool-call-input-streaming-start', payload: { toolName: 'search' } } as any, context()),
     ).toBeUndefined();
+    // When the reply's args finish it is still typing, not "working".
+    expect(
+      typingStatus({ type: 'tool-call', payload: { toolName: 'reply_in_thread', args: { text: 'hi' } } } as any, context()),
+    ).toBe('is typing...');
     expect(typingStatus({ type: 'tool-call', payload: { toolName: 'search' } } as any, context())).toBe(
       'is working...',
     );
