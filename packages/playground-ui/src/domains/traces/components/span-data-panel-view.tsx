@@ -1,5 +1,5 @@
 import { describeProcessorPipeline, describeSpanInput, describeSpanOutput } from '@mastra/core/observability';
-import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
+import { BracesIcon, ExternalLinkIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { SpanRecord } from '../types';
 import { getTokenLimitMessage, isTokenLimitExceeded } from '../utils/span-utils';
@@ -15,6 +15,7 @@ import { SpanSummaryDescription } from './span-summary-description';
 import { SpanTokenUsage } from './span-token-usage';
 import type { TokenUsage } from './span-token-usage';
 import { TraceIdButton } from './trace-id-button';
+import { Button } from '@/ds/components/Button';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { DataPanel } from '@/ds/components/DataPanel';
 import { Notice } from '@/ds/components/Notice';
@@ -34,6 +35,11 @@ export interface SpanDataPanelViewProps {
   onNext?: () => void;
   /** When provided, an × button in the header closes the span column. */
   onClose?: () => void;
+  /**
+   * When provided, a "Go to trace" button in the header calls it with the span's ids.
+   * The caller decides where the trace opens (e.g. its own traces route).
+   */
+  onShowTrace?: (span: { traceId: string; spanId: string }) => void;
   activeTab?: string;
   onTabChange?: (tab: string) => void;
   /**
@@ -61,6 +67,7 @@ export function SpanDataPanelView({
   onPrevious,
   onNext,
   onClose,
+  onShowTrace,
   activeTab,
   onTabChange,
   feedbackTabSlot,
@@ -81,6 +88,18 @@ export function SpanDataPanelView({
           {span && <SpanSummaryDescription span={span} />}
         </DataPanel.HeaderContent>
         <DataPanel.HeaderActions>
+          {onShowTrace && (
+            <Button
+              size="sm"
+              variant="ghost"
+              aria-label="Go to trace"
+              tooltip="Go to trace"
+              className="shrink-0"
+              onClick={() => onShowTrace({ traceId, spanId })}
+            >
+              <ExternalLinkIcon />
+            </Button>
+          )}
           <DataPanel.NextPrevNav
             onPrevious={onPrevious}
             onNext={onNext}
