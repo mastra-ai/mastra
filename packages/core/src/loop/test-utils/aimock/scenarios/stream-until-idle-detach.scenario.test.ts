@@ -15,6 +15,68 @@ describeForAllEngines('AIMock loop scenario: durable untilIdle observer detach (
   const getMock = useLoopScenarioAimock();
 
   if (isDurableEngineVariant(engine)) {
+    for (const detached of [false, true]) {
+      it(`replaces a ${detached ? 'detached' : 'connected'} idle loop with the same thread policy`, async () => {
+        const llm = getMock();
+        const memory = new MockMemory();
+        const gate = Promise.withResolvers<void>();
+        const research = createTool({
+          id: 'research',
+          description: 'Research in the background',
+          inputSchema: z.object({}),
+          background: { enabled: true },
+          execute: async () => {
+            await gate.promise;
+            return { summary: 'Research complete.' };
+          },
+        });
+        const { agent } = await createSharedAgent(llm, {
+          engine,
+          memory,
+          tools: { research },
+          agentBackgroundTasks: { tools: { research: true } },
+          backgroundTasks: BG_CONFIG,
+        });
+        const thread = { thread: `replacement-${engine}-${detached}`, resource: 'detach-user' };
+        llm.on(
+          { endpoint: 'chat', sequenceIndex: 0 },
+          { toolCalls: [{ id: 'research-1', name: 'research', arguments: {} }] },
+        );
+        llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Research dispatched.' });
+        llm.on({ endpoint: 'chat', sequenceIndex: 2 }, { content: 'Replacement accepted.' });
+        llm.on({ endpoint: 'chat', sequenceIndex: 3 }, { content: 'Final research answer.' });
+        const first = await agent.stream('Start', { memory: thread, untilIdle: { maxIdleMs: 5_000 } });
+        const reader = first.fullStream.getReader();
+        try {
+          while (true) {
+            const next = await reader.read();
+            expect(next.done).toBe(false);
+            if (next.value?.type === 'finish') break;
+          }
+          if (detached) await reader.cancel();
+          const replacement = await agent.stream('Continue on the same thread', {
+            memory: thread,
+            untilIdle: { maxIdleMs: 5_000 },
+          });
+          const reading = (async () => {
+            for await (const chunk of replacement.fullStream) {
+              /* Drain the replacement and its background continuation. */
+            }
+          })();
+          await vi.waitFor(() => expect(llm.getRequests()).toHaveLength(3));
+          gate.resolve();
+          await reading;
+          await vi.waitFor(async () => {
+            const { messages } = await memory.recall({ threadId: thread.thread, resourceId: thread.resource });
+            expect(JSON.stringify(messages)).toContain('Final research answer.');
+          });
+          expect(llm.getRequests()).toHaveLength(4);
+        } finally {
+          gate.resolve();
+          await reader.cancel();
+        }
+      }, 30_000);
+    }
     for (const abortBy of ['run', 'thread'] as const) {
       it(`aborting a detached continuation by ${abortBy} prevents another background reply`, async () => {
         const llm = getMock();
@@ -347,9 +409,6 @@ describeForAllEngines('AIMock loop scenario: durable untilIdle observer detach (
               ).rejects.toMatchObject({
                 id: 'DURABLE_AGENT_EXECUTION_CONFLICT',
               });
-              await expect(
-                agent.stream('Competing idle loop', { runId: result.runId, memory: thread, untilIdle: true }),
-              ).rejects.toMatchObject({ id: 'DURABLE_AGENT_EXECUTION_CONFLICT' });
               expect(toolSignal?.aborted).toBe(false);
             }
           }

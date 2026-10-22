@@ -12,7 +12,6 @@
  */
 import { resolveAgentScopes } from '../../agent/scopes';
 import type { BackgroundTaskManager } from '../../background-tasks/manager';
-import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { MastraMemory } from '../../memory/memory';
 import {
   MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY,
@@ -471,14 +470,6 @@ export async function runIdleLoop<
 
   const abortWrapper = (reason?: 'replaced') => {
     if ((closed && !detached) || aborting) return;
-    if (reason === 'replaced' && observerDetached && !parked) {
-      throw new MastraError({
-        id: 'DURABLE_AGENT_EXECUTION_CONFLICT',
-        domain: ErrorDomain.AGENT,
-        category: ErrorCategory.USER,
-        text: 'A detached durable idle loop is still executing. Abort it explicitly before starting another stream in this scope.',
-      });
-    }
     if (reason === 'replaced' && hooks?.detachOnCancel && parked) {
       forceClose({ keepInnerRuns: true });
       return;
