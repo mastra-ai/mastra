@@ -36,14 +36,10 @@ export function canSwitchSessionModel(
   return session.userId === viewer.userId;
 }
 
-/** The controller reads the guard needs to find which resource and thread a session runs on. */
+/** The controller reads the guard needs to find which resource a session runs on. */
 export interface SessionResourceLookup {
-  getSession(
-    sessionId: string,
-  ): Promise<{ identity: { getResourceId(): string }; thread: { getId(): string | null } } | undefined>;
-  queryThreadById(input: {
-    threadId: string;
-  }): Promise<{ resourceId: string; metadata?: Record<string, unknown> } | null>;
+  getSession(sessionId: string): Promise<{ identity: { getResourceId(): string } } | undefined>;
+  queryThreadById(input: { threadId: string }): Promise<{ resourceId: string } | null>;
 }
 
 type Viewer = { orgId?: string; userId: string };
@@ -198,28 +194,6 @@ export function createSessionAccessGuard({
     return canReachResource(resourceId, viewer);
   };
 
-  /**
-   * A model change lands on the session's live thread, so every Factory session tied to that thread must allow it:
-   * the thread's id, its `factorySessionId` stamp, or a pre-sharing session running on the thread's resource. A thread
-   * nothing ties to a session is refused, unless it is the session's own or sits on the caller's own memory: otherwise
-   * a second session could switch the model on an owner's unstamped thread.
-   */
-  const canSwitchModelThrough = async (sessionId: string, viewer: Viewer): Promise<boolean> => {
-    const lookup = controller();
-    const threadId = (await lookup?.getSession(sessionId))?.thread.getId() ?? sessionId;
-    const thread = await lookup?.queryThreadById({ threadId });
-    const stamp = thread?.metadata?.factorySessionId;
-    const stampedSessionId = typeof stamp === 'string' ? stamp : undefined;
-    const claimants = await Promise.all(
-      [sessionId, threadId, stampedSessionId, thread?.resourceId].map(id => (id ? sessions.getBySessionId(id) : null)),
-    );
-    if (claimants.some(session => session && !canSwitchSessionModel(session, viewer))) return false;
-    const [, threadSession, , resourceSession] = claimants;
-    const ownThread = threadId === sessionId;
-    const onViewerMemory = thread?.resourceId === viewer.userId;
-    return ownThread || onViewerMemory || Boolean(stampedSessionId || threadSession || resourceSession);
-  };
-
   return async (c, next) => {
     if (!auth.enabled()) return next();
     const ctx = c as unknown as Context;
@@ -240,7 +214,8 @@ export function createSessionAccessGuard({
     }
     if (await switchesModel(ctx)) {
       for (const sessionId of target.sessionIds) {
-        if (!(await canSwitchModelThrough(sessionId, viewer))) {
+        const session = await sessions.getBySessionId(sessionId);
+        if (session && !canSwitchSessionModel(session, viewer)) {
           return c.json({ error: 'Only the session’s owner can change its model' }, 403);
         }
       }
