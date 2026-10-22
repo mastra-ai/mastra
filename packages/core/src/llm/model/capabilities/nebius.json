@@ -54,15 +54,22 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "Qwen/Qwen3.5-397B-A17B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Qwen/Qwen3.8-27B": [
+    "moonshotai/Kimi-K3": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "meta-models/muse-spark-open": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "zai-org/GLM-5.2": [
@@ -83,25 +90,19 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "meta-models/muse-spark-open": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
     "reflection/beam": [
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "nvidia/Nemotron-3.5-Super-VL": [
+    "nvidia/Nemotron-3_5-Lightning": [
       {
         "type": "effort",
         "values": ["none", "high"]
       }
     ],
-    "nvidia/Nemotron-3_5-Lightning": [
+    "nvidia/Nemotron-3.5-Super-VL": [
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -113,19 +114,7 @@
         "values": ["none", "high"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4.1-Flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
     "deepseek-ai/DeepSeek-V4-Flash-0731": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4-Pro-0813": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
@@ -137,16 +126,27 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "openai/gpt-oss-120b": [
+    "deepseek-ai/DeepSeek-V4-Pro-0813": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
-    "moonshotai/Kimi-K3": [
+    "deepseek-ai/DeepSeek-V4.1-Flash": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "Qwen/Qwen3.8-27B": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "Qwen/Qwen3.5-397B-A17B": [
+      {
+        "type": "toggle"
       }
     ]
   }

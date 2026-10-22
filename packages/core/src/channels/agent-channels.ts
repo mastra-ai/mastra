@@ -1085,7 +1085,7 @@ export class AgentChannels {
     if (this.channelConfig.threadContext?.addSystemMessage === false) return [];
     const hasProcessor = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'chat-channel-context');
     if (hasProcessor) return [];
-    return [new ChatChannelProcessor()];
+    return [new ChatChannelProcessor(this)];
   }
 
   /**
