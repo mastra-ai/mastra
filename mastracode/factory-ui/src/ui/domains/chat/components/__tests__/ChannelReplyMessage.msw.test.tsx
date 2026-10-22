@@ -10,7 +10,10 @@ import { replyText } from '../ChannelReplyMessage';
 
 const CREATED_AT = new Date('2026-10-21T10:00:00.000Z');
 
-function replyEntry(toolInvocation: Record<string, unknown>, after: unknown[] = []): TimelineEntry {
+function replyEntry(
+  toolInvocation: Record<string, unknown>,
+  after: unknown[] = [],
+): Extract<TimelineEntry, { kind: 'message' }> {
   const message = {
     id: 'msg-reply',
     role: 'assistant',
@@ -128,15 +131,13 @@ describe('reply_in_thread in the transcript', () => {
     expect(await navigator.clipboard.readText()).toBe('Hello world');
   });
 
-  it('gives a post its footer as soon as it is sent, while the turn keeps going', async () => {
-    renderEntries([
-      {
-        ...replyEntry({ state: 'result', args: { text: 'Starting the build now.' }, result: { posted: true } }),
-        streaming: true,
-      },
-    ]);
+  it('gives a post its footer as soon as it is sent, while the turn keeps going', () => {
+    const sent = replyEntry({ state: 'result', args: { text: 'Starting the build now.' }, result: { posted: true } });
+    const { rerender } = renderEntries([sent]);
+    // The post is on screen and the agent keeps working, so the turn is streaming again.
+    rerender(<TranscriptEntries entries={[{ ...sent, streaming: true }]} onApprove={() => {}} onRespond={() => {}} />);
 
-    const post = await screen.findByRole('group', { name: 'Reply in Slack thread' });
+    const post = screen.getByRole('group', { name: 'Reply in Slack thread' });
     expect(within(post).getByText('Sent to Slack')).toBeInTheDocument();
     expect(within(post).getByRole('button', { name: 'Copy message' })).toBeInTheDocument();
   });
