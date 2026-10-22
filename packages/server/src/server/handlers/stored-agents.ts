@@ -151,7 +151,11 @@ function toolDescriptionsOnly(tools: StoredTools): StoredTools {
 
   if (tools === undefined) return undefined;
   if (Array.isArray(tools)) {
-    return tools.map(variant => ({ value: descriptions(variant.value) }));
+    // Request rules are caller-owned, and the registered agent does not expose
+    // project-owned variant rules. Reject instead of widening a scoped override.
+    throw new HTTPException(400, {
+      message: 'Conditional tool description overrides require project-owned rules and are not supported',
+    });
   }
   return descriptions(tools);
 }

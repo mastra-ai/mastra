@@ -782,10 +782,20 @@ describe('Stored Agents Handlers', () => {
     };
 
     describe.each([false, true])('when tools are conditional: %s', conditional => {
-      const tools = conditional ? [{ value: toolMap, rules: toolRules }] : toolMap;
-      const expectedTools = conditional
-        ? [{ value: { weatherTool: { description: 'Edited weather description' } } }]
-        : { weatherTool: { description: 'Edited weather description' } };
+      const tools = conditional
+        ? ['admin', 'viewer'].map(role => ({
+            value: { weatherTool: { description: `Weather for ${role}` } },
+            rules: {
+              operator: 'AND' as const,
+              conditions: [{ field: 'user.role', operator: 'equals' as const, value: role }],
+            },
+          }))
+        : toolMap;
+      const expectedTools = { weatherTool: { description: 'Edited weather description' } };
+      const conditionalError = {
+        status: 400,
+        message: 'Conditional tool description overrides require project-owned rules and are not supported',
+      };
 
       const setup = () => {
         const storage = new InMemoryStore();
@@ -812,19 +822,23 @@ describe('Stored Agents Handlers', () => {
         return { storage, context, payload };
       };
 
-      it('exports only descriptions without tool selection, rules, or sources', async () => {
+      it('exports plain descriptions or rejects conditional overrides without trusted rules', async () => {
         const { context, payload } = setup();
-        const result = await EXPORT_STORED_AGENT_ROUTE.handler({
+        const result = EXPORT_STORED_AGENT_ROUTE.handler({
           ...context,
           storedAgentId: 'description-only',
           ...payload,
         });
-        expect(result.config).toEqual({ tools: expectedTools });
+        if (conditional) {
+          await expect(result).rejects.toMatchObject(conditionalError);
+          return;
+        }
+        expect((await result).config).toEqual({ tools: expectedTools });
       });
 
-      it('persists only descriptions when creating an override', async () => {
+      it('creates plain description overrides or rejects conditional ones before writing', async () => {
         const { storage, context, payload } = setup();
-        await CREATE_STORED_AGENT_ROUTE.handler({
+        const result = CREATE_STORED_AGENT_ROUTE.handler({
           ...context,
           id: 'description-only',
           name: 'Description Only',
@@ -834,6 +848,12 @@ describe('Stored Agents Handlers', () => {
           ...payload,
         });
         const store = await storage.getStore('agents');
+        if (conditional) {
+          await expect(result).rejects.toMatchObject(conditionalError);
+          expect(await store.getById('description-only')).toBeNull();
+          return;
+        }
+        await result;
         const saved = await store.getByIdResolved('description-only', { status: 'draft' });
         expect(saved?.tools).toEqual(expectedTools);
         expect(saved?.integrationTools).toBeUndefined();
@@ -841,7 +861,7 @@ describe('Stored Agents Handlers', () => {
         expect(saved?.toolProviders).toBeUndefined();
       });
 
-      it('persists only descriptions when updating an override', async () => {
+      it('updates plain description overrides or rejects conditional ones before writing', async () => {
         const { storage, context, payload } = setup();
         const store = await storage.getStore('agents');
         await store.create({
@@ -852,12 +872,19 @@ describe('Stored Agents Handlers', () => {
             model: { provider: 'openai', name: 'gpt-4o-mini' },
           },
         });
-        await useRealAutoVersioningOnce();
-        await UPDATE_STORED_AGENT_ROUTE.handler({
+        if (!conditional) await useRealAutoVersioningOnce();
+        const before = await store.getByIdResolved('description-only', { status: 'draft' });
+        const result = UPDATE_STORED_AGENT_ROUTE.handler({
           ...context,
           storedAgentId: 'description-only',
           ...payload,
         });
+        if (conditional) {
+          await expect(result).rejects.toMatchObject(conditionalError);
+          expect(await store.getByIdResolved('description-only', { status: 'draft' })).toEqual(before);
+          return;
+        }
+        await result;
         const saved = await store.getByIdResolved('description-only', { status: 'draft' });
         expect(saved?.tools).toEqual(expectedTools);
         expect(saved?.integrationTools).toBeUndefined();
