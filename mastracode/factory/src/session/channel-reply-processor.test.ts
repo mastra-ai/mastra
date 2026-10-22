@@ -47,6 +47,14 @@ describe('FactoryChannelReplyProcessor', () => {
     expect(text).not.toMatch(/reply first with one short line/);
   });
 
+  it('tells a Slack-linked run that did not start from Slack to post only the outcome there', () => {
+    // A web prompt or woken run: no `channel`, but the session's thread mounted the reply tool.
+    const text = instruction(new RequestContext(), { reply_in_thread: {} });
+    expect(text).toContain('Post to that thread with `reply_in_thread`.');
+    expect(text).toContain("don't post an opener or progress there");
+    expect(text).not.toContain('Only messages you send with');
+  });
+
   it('adds the instruction once across steps', () => {
     const requestContext = channelContext();
     const messageList = new MessageList({});

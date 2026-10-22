@@ -210,6 +210,12 @@ channels: {
 
 Tool display, approval prompts, error messages, and typing status are unaffected. The reply text still reaches the agent's stream and memory.
 
+The channel instructions Mastra adds to the agent's prompt follow this setting: with text hidden, the agent is told that only what it posts with tools reaches the conversation, and that staying quiet means posting nothing.
+
+## Runs that don't start from a message
+
+A thread that started in a channel can also run from elsewhere, such as a schedule, a Studio prompt, or a signal waking the agent. On those runs, Mastra tells the agent the thread is linked to the channel conversation, what its identity is there, and whether its text replies are posted there. That way it knows to post a result the people there asked for.
+
 ## Multi-user awareness
 
 In group conversations, Mastra prefixes each message with the sender's name and platform ID so the agent can distinguish between speakers:
