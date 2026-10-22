@@ -137,14 +137,19 @@ export function testPersistenceProjection(createStorage: () => Promise<MastraCom
       expect(live).toEqual(snapshot);
     });
 
-    it('sanitizes effective partial edits while retaining omitted content fields', async () => {
+    it('sanitizes partial text edits while retaining omitted parts and metadata', async () => {
       const storage = await createStorage();
       const memory = new Memory({ storage });
       await memory.createThread({ threadId, resourceId });
-      const store = await storage.getStore('memory');
-      await store!.saveMessages({ messages: [message()] });
-      // Metadata-only content patches must retain and project the existing parts and text.
-      const update = { id: 'assistant', content: { format: 2 as const, metadata: { edited: true } } };
+      await memory.persistMessages([message()]);
+      const update = {
+        id: 'assistant',
+        content: {
+          format: 2 as const,
+          content: 'Visible <working_memory>private replacement</working_memory>',
+          metadata: { edited: true },
+        },
+      };
       const snapshot = structuredClone(update);
       // @ts-expect-error Storage supports nested partial content patches at runtime.
       await memory.updateMessages({ messages: [update] });
@@ -152,6 +157,61 @@ export function testPersistenceProjection(createStorage: () => Promise<MastraCom
       assertProjection(recalled.messages[0]!);
       expect(recalled.messages[0]!.content.metadata).toMatchObject({ edited: true });
       expect(update).toEqual(snapshot);
+    });
+
+    it('does not overwrite concurrent text edits with omitted fields in partial patches', async () => {
+      const memory = new Memory({ storage: await createStorage() });
+      await memory.createThread({ threadId, resourceId });
+      await memory.saveMessages({
+        messages: [{ ...message(), content: { format: 2, parts: [{ type: 'text', text: 'Original' }] } }],
+      });
+      await Promise.all([
+        memory.updateMessages({
+          messages: [{ id: 'assistant', content: { format: 2, parts: [{ type: 'text', text: 'Edited' }] } }],
+        }),
+        memory.updateMessages({ messages: [{ id: 'assistant', role: 'user' }] }),
+        // @ts-expect-error Storage supports nested partial content patches at runtime.
+        memory.updateMessages({ messages: [{ id: 'assistant', content: { format: 2, metadata: { edited: true } } }] }),
+      ]);
+      const recalled = await memory.recall({ threadId, resourceId, perPage: false });
+      expect(recalled.messages[0]).toMatchObject({
+        role: 'user',
+        content: {
+          parts: [{ type: 'text', text: 'Edited' }],
+          metadata: { edited: true },
+        },
+      });
+    });
+
+    it('removes partial calls from legacy mirrors as well as parts', async () => {
+      const memory = new Memory({ storage: await createStorage() });
+      await memory.createThread({ threadId, resourceId });
+      const live: MastraDBMessage = {
+        ...message(),
+        content: {
+          format: 2,
+          parts: [
+            { type: 'text', text: 'Visible' },
+            {
+              type: 'tool-invocation',
+              toolInvocation: {
+                state: 'partial-call',
+                toolName: 'lookup',
+                toolCallId: 'partial',
+                args: { secret: 'unfinished' },
+              },
+            },
+          ],
+          toolInvocations: [
+            { state: 'partial-call', toolName: 'lookup', toolCallId: 'partial', args: { secret: 'unfinished' } },
+          ],
+        },
+      };
+      await memory.persistMessages([live]);
+      const recalled = await memory.recall({ threadId, resourceId, perPage: false });
+      expect(JSON.stringify(recalled.messages)).not.toMatch(/partial-call|unfinished/);
+      expect(recalled.messages[0]?.content.parts).toEqual([{ type: 'text', text: 'Visible' }]);
+      expect(live.content.toolInvocations).toHaveLength(1);
     });
 
     it('hides replaced parts and skips system, transient and empty edits without deleting rows', async () => {

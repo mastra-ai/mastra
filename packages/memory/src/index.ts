@@ -1930,7 +1930,9 @@ ${workingMemory}`;
 
     if (Array.isArray(newMessage.content?.parts)) {
       if (Array.isArray(newMessage.content.toolInvocations)) {
-        newMessage.content.toolInvocations = removeWorkingMemoryToolInvocations(newMessage.content.toolInvocations);
+        newMessage.content.toolInvocations = removeWorkingMemoryToolInvocations(
+          newMessage.content.toolInvocations,
+        )?.filter(invocation => invocation.state !== 'partial-call');
       }
       const lastOriginalPart = newMessage.content.parts.at(-1);
       const sealMetadata = lastOriginalPart && 'metadata' in lastOriginalPart ? lastOriginalPart.metadata : undefined;
@@ -3142,9 +3144,8 @@ Notes:
     const memoryStore = await this.getMemoryStore();
     const config = this.getMergedThreadConfig(memoryConfig);
 
-    const contentUpdateIds = new Set(messages.filter(m => m.content !== undefined).map(m => m.id));
-    // Stores merge partial content updates. Project that effective content so an
-    // omitted parts/text field cannot bypass filtering or be accidentally erased.
+    // Use effective content for filtering/empty-message decisions, but keep the
+    // patch shape: forwarding omitted fields would overwrite concurrent edits.
     const existing = await memoryStore.listMessagesById({ messageIds: messages.map(m => m.id) });
     const existingById = new Map(existing.messages.map(m => [m.id, m]));
     messages = messages.flatMap(update => {
@@ -3164,14 +3165,24 @@ Notes:
       };
       const [projected] = this.prepareMessagesForPersistence([effective]);
       if (!projected) return [];
-      existingById.set(update.id, projected);
-      return [{ ...update, content: projected.content }];
+      if (update.content === undefined) {
+        existingById.set(update.id, effective);
+        return [update];
+      }
+      const content = {
+        ...update.content,
+        ...(update.content.parts !== undefined ? { parts: projected.content.parts } : {}),
+        ...(update.content.content !== undefined ? { content: projected.content.content } : {}),
+        ...(update.content.toolInvocations !== undefined ? { toolInvocations: projected.content.toolInvocations } : {}),
+      };
+      existingById.set(update.id, { ...effective, content: { ...effective.content, ...content } });
+      return [{ ...update, content }];
     });
     if (messages.length === 0) return [];
 
     // Update vector database if semantic recall is enabled and any messages have content updates
     if (this.vector && config.semanticRecall) {
-      const messagesWithContent = messages.filter(m => contentUpdateIds.has(m.id));
+      const messagesWithContent = messages.filter(m => m.content !== undefined);
 
       if (messagesWithContent.length > 0) {
         // Reuse the pre-update rows for vector metadata.
