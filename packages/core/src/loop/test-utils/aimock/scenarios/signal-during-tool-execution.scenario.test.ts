@@ -23,12 +23,7 @@ import { InMemoryDB } from '../../../../storage/domains/inmemory-db';
 import { InMemoryMemory } from '../../../../storage/domains/memory/inmemory';
 import type { MastraDBMessage } from '../../../../agent/message-list';
 import { createTool } from '../../../../tools';
-import {
-  runLoopScenario,
-  useLoopScenarioAimock,
-  describeForAllEngines,
-  isDurableEngineVariant,
-} from '../aimock-scenario';
+import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 import type { EngineVariant } from '../types';
 
 const REMINDER = 'Reminder: the deploy window closes in 5 minutes';
@@ -200,7 +195,9 @@ describeForAllEngines('AIMock scenario: signal arrives while a tool is running',
     ).toBe(true);
   });
 
-  if (isDurableEngineVariant(engine)) {
+  // This boundary is native workflow-state dehydration; Inngest stores the
+  // transcript in step payloads and does not perform this verification read.
+  if (engine === 'durable' || engine === 'evented') {
     it('delivers a signal while the serialized transcript awaits storage (#27457)', async () => {
       const { requests, messages, chunks, sentSignal } = await runDeployWithReminder(
         engine,
