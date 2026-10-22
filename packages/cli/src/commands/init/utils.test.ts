@@ -28,8 +28,15 @@ vi.mock('../auth/orgs.js', () => ({
   resolveCurrentOrg: vi.fn(),
 }));
 
-const { getAPIKey, promptForObservability, writeAPIKey, writeObservabilityEnv, writeIndexFile } =
-  await import('./utils');
+const {
+  getAPIKey,
+  promptForObservability,
+  writeAPIKey,
+  writeObservabilityEnv,
+  writeIndexFile,
+  writeAgentSample,
+  writeScorersSample,
+} = await import('./utils');
 const prompts = await import('@clack/prompts');
 const { getToken, loadCredentials } = await import('../auth/credentials.js');
 const { resolveCurrentOrg } = await import('../auth/orgs.js');
@@ -174,6 +181,30 @@ describe('promptForObservability', () => {
     await expect(promptForObservability()).resolves.toEqual({});
 
     expect(selectMock).toHaveBeenCalledTimes(2);
+  });
+});
+
+describe('sample scaffolds', () => {
+  const dirPath = '/mock-project/src/mastra';
+
+  beforeEach(() => {
+    vol.reset();
+    fs.mkdirSync(dirPath, { recursive: true });
+  });
+
+  test.each([
+    ['anthropic', 'anthropic/claude-sonnet-5'],
+    ['google', 'google/gemini-3.8-flash'],
+    ['openai', 'openai/gpt-5-mini'],
+  ] as const)('generates a working default for %s in the agent and scorer (#28043)', async (provider, model) => {
+    const agentPath = `${dirPath}/weather-agent.ts`;
+    const scorerPath = `${dirPath}/weather-scorer.ts`;
+
+    await writeAgentSample(provider, agentPath, false, true);
+    await writeScorersSample(provider, scorerPath);
+
+    expect(fs.readFileSync(agentPath, 'utf-8')).toContain(`model: '${model}'`);
+    expect(fs.readFileSync(scorerPath, 'utf-8')).toContain(`model: '${model}'`);
   });
 });
 
