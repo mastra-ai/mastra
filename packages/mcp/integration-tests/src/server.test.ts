@@ -8,6 +8,7 @@ vi.setConfig({ testTimeout: 20000, hookTimeout: 20000 });
 
 describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
   let mastraServer: ReturnType<typeof spawn>;
+  let startupTimer: ReturnType<typeof setTimeout> | undefined;
   const port: number = 4114;
   // Note: The ID gets slugified in MCPServerBase constructor, so 'myMcpServer' becomes 'my-mcp-server'
   const mcpServerId = 'my-mcp-server';
@@ -44,6 +45,7 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
             const data = await response.json();
             const hasExpectedServer = data.servers?.some((s: any) => s.id === mcpServerId);
             if (hasExpectedServer) {
+              clearTimeout(startupTimer);
               resolve();
               return true;
             }
@@ -94,7 +96,7 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
         }
       });
 
-      setTimeout(() => {
+      startupTimer = setTimeout(() => {
         clearInterval(healthCheckInterval);
         reject(new Error(`Mastra server failed to start within 100s. Output: ${output}\nErrors: ${errorOutput}`));
       }, 100000);
@@ -109,14 +111,32 @@ describe('MCPServer through Mastra HTTP Integration (Subprocess)', () => {
     });
   });
 
-  afterAll(() => {
-    // Kill the server and its process group
+  afterAll(async () => {
+    await client?.disconnect();
+
+    // Kill the server and its process group, then wait for it to exit. Without
+    // this the child keeps writing to stdout while Vitest tears the worker down,
+    // which surfaces as "Closing rpc while onUserConsoleLog was pending".
     if (mastraServer?.pid) {
+      const exited =
+        mastraServer.exitCode !== null
+          ? Promise.resolve()
+          : new Promise<void>(resolve => mastraServer.once('exit', () => resolve()));
+
       try {
         process.kill(-mastraServer.pid, 'SIGTERM');
       } catch (e) {
         console.error('Failed to kill Mastra server:', e);
       }
+
+      await exited;
+    }
+
+    mastraServer?.stdout?.removeAllListeners('data');
+    mastraServer?.stderr?.removeAllListeners('data');
+
+    if (startupTimer) {
+      clearTimeout(startupTimer);
     }
   });
 
