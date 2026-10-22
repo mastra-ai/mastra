@@ -859,10 +859,12 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
             }
           }
 
+          // Path params last: the custom handler reads them from the URL, so query/body
+          // values must not be able to change which resource FGA checks.
           const fgaError = await checkRouteFGA(this.mastra, serverRoute, ctx.requestContext, {
-            ...(matchedRoute?.params ?? {}),
             ...(ctx.query as Record<string, string>),
             ...(typeof ctx.body === 'object' && ctx.body !== null ? ctx.body : {}),
+            ...(matchedRoute?.params ?? {}),
           });
           if (fgaError) {
             return new Response(JSON.stringify({ error: fgaError.error, message: fgaError.message }), {
