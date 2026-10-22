@@ -1,6 +1,6 @@
 ---
 title: "MCP | Connections"
-description: "Connect Mastra agents to remote MCP servers, expose Mastra tools through MCPServer, manage approvals, and build interactive MCP Apps for Studio."
+description: "Connect Mastra agents to remote MCP servers, expose Mastra tools through MCPServer, manage approvals, subscribe to MCP events, and build interactive MCP Apps for Studio."
 packages:
   - "@mastra/mcp"
 ---
@@ -369,6 +369,80 @@ Tools loaded through `listTools()` include a `serverId` in `_meta.ui`, allowing 
 Mastra Studio uses [`@mcp-ui/client`](https://www.npmjs.com/package/@mcp-ui/client) to load app HTML through a sandbox proxy and communicate over JSON-RPC with `postMessage`.
 
 App iframes allow scripts, forms, and popups. They can't access the parent page's DOM, cookies, or storage. The host controls all communication with the guest app.
+
+## MCP events
+
+MCP events let a client react when something happens on a server, such as a ticket being opened or a build finishing, instead of calling a tool on a schedule to check. A server declares event types, a client subscribes with arguments, and the server delivers each matching occurrence over the same stdio or Streamable HTTP transport as its tools.
+
+:::warning
+MCP events implement [SEP-3415](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/3415), a draft MCP extension. The wire format and the Mastra API are experimental and may change in any release.
+:::
+
+- **Subscription:** one client request for one event type with arguments, such as `{ project: 'web' }`. The server delivers only matching occurrences.
+- **Occurrence:** one delivered event with an `eventId`, `name`, `timestamp`, and `data`. Delivery is at least once, and the client drops duplicates by `eventId`. Handlers should still tolerate a repeat.
+- **Cursor:** an opaque position in the event sequence. Save it to resume after a restart without missing occurrences.
+
+### Publish events
+
+Declare each type with `defineEvent()` in the `events` option of `MCPServer`, then publish occurrences with `server.events.emit()`:
+
+```typescript title="src/mastra/mcp/tickets.ts"
+import { createTool } from '@mastra/core/tools'
+import { MCPServer, defineEvent } from '@mastra/mcp'
+import { z } from 'zod'
+
+const ticket = z.object({ id: z.string(), project: z.string(), title: z.string() })
+
+const server: MCPServer = new MCPServer({
+  id: 'tickets',
+  name: 'Tickets',
+  version: '1.0.0',
+  tools: {
+    openTicket: createTool({
+      id: 'openTicket',
+      description: 'Opens a support ticket',
+      inputSchema: ticket,
+      execute: async input => server.events.emit('ticket.created', input),
+    }),
+  },
+  events: {
+    'ticket.created': defineEvent({
+      description: 'A support ticket was opened',
+      inputSchema: z.object({ project: z.string() }),
+      payloadSchema: ticket,
+      match: (args, data) => data.project === args.project,
+    }),
+  },
+})
+```
+
+`match` decides which subscriptions receive an occurrence. It filters on arguments the client chooses, so it doesn't control who can subscribe; add `authorize` to restrict callers, since it runs on every poll and every subscription open and rejects the request when it returns `false`. An event type takes its occurrences from either `server.events.emit()`, which serves push and poll from an in-process buffer, or a `poll` function that reads an external system and supports poll only.
+
+### Subscribe to events
+
+List the types a server offers with `mcp.events.list()`, then subscribe with `mcp.events.subscribe()`. The returned subscription is an async iterable of occurrences:
+
+```typescript title="src/mastra/mcp/client.ts"
+import { MCPClient } from '@mastra/mcp'
+
+const mcp = new MCPClient({ servers: { tickets: { url: new URL('http://localhost:4111/mcp') } } })
+
+const eventTypes = await mcp.events.list('tickets')
+const subscription = await mcp.events.subscribe('tickets', 'ticket.created', { project: 'web' })
+
+for await (const event of subscription) {
+  console.log(event.eventId, event.data)
+  if (subscription.cursor) await saveCursor('tickets:web', subscription.cursor)
+}
+```
+
+`subscribe()` resolves once the server accepts the subscription. A new subscription starts from now, so pass `options.cursor` to resume from a saved position. The client prefers push delivery, then webhook, then poll, and reopens dropped streams on its own.
+
+### Start runs from events
+
+Subscribe in a loop that starts one agent run or workflow run per occurrence. The occurrence comes from the server, so pass `event.data` as data rather than as instructions, and save `subscription.cursor` after handling each one. Because the loop handles one occurrence at a time and a slow run delays the next, when order doesn't matter you can start runs without awaiting them and save the cursor only after every earlier run has finished, since a crash otherwise loses the occurrences whose runs were still going. Under push or webhook delivery the client buffers occurrences the loop hasn't read, and a loop that falls more than `maxBufferedEvents` behind loses the oldest ones and reports `MCP_EVENTS_BUFFER_OVERFLOW`. To deliver occurrences to agent threads as notifications instead of writing your own loop, use [`MCPEventsSignalProvider`](/reference/tools/mcp-client#events-in-agents-and-workflows-experimental).
+
+When the server is remote and your application already serves HTTP, use webhook delivery instead: enable `webhook` in `eventsOptions` on the server and `webhook` on the client, and each occurrence arrives as a POST to your endpoint. For delivery modes, error codes, buffers, retries, and the `poll` source example, visit the [`MCPServer` events reference](/reference/tools/mcp-server#events-experimental) and the [`MCPClient` events reference](/reference/tools/mcp-client#events-property-experimental). The [MCP events example](https://github.com/mastra-ai/mastra/tree/main/examples/mcp-events) runs the agent flow end to end against a local stdio server.
 
 ## Next steps
 

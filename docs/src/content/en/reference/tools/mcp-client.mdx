@@ -931,7 +931,7 @@ Notes:
 
 The `events` property lists and subscribes to server events from servers that implement the [MCP Events extension (SEP-3415)](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/3415). Use it to react to things that happen on the server, such as a push to a repository, without polling a tool. Delivery is at least once. After a reconnect or a resume, the server can resend an occurrence, and the client drops repeats by `eventId` within `dedupWindow` of recent ids.
 
-For an end-to-end walkthrough, see the [MCP events guide](/docs/guides/mcp-events).
+For an end-to-end walkthrough, see [MCP events](/docs/connections/mcp#mcp-events).
 
 :::warning
 SEP-3415 is a draft. This API may change in any release.

@@ -2229,6 +2229,11 @@
       "source": "/reference/observability/tracing/trace-query",
       "destination": "/reference/observability/tracing/advanced-queries",
       "permanent": true
+    },
+    {
+      "source": "/docs/guides/mcp-events",
+      "destination": "/docs/connections/mcp#mcp-events",
+      "permanent": true
     }
   ]
 }
