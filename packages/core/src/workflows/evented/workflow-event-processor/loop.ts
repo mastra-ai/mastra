@@ -615,6 +615,7 @@ export async function processWorkflowForEach(
       result = {
         ...currentResult,
         status: 'success',
+        suspendedAt: undefined,
         startedAt: currentResult.startedAt ?? Date.now(),
         endedAt: Date.now(),
       };
