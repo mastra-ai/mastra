@@ -145,6 +145,28 @@ function readForeachResult(
   return result;
 }
 
+// Module-level so the Mastra-owned processor and each workflow's own processor share it.
+const runSnapshotWrites = new Map<string, Promise<void>>();
+
+/**
+ * Wait for this run's previous snapshot read-modify-write to finish, then hold the
+ * run until the returned release is called. Release is idempotent. This only
+ * serializes handlers in this process.
+ */
+async function acquireRunSnapshotWrite(runId: string): Promise<() => void> {
+  const previous = runSnapshotWrites.get(runId) ?? Promise.resolve();
+  let release!: () => void;
+  const tail = previous.then(() => new Promise<void>(resolve => (release = resolve)));
+  runSnapshotWrites.set(runId, tail);
+  await previous;
+  return () => {
+    release();
+    if (runSnapshotWrites.get(runId) === tail) {
+      runSnapshotWrites.delete(runId);
+    }
+  };
+}
+
 export class WorkflowEventProcessor extends EventProcessor {
   private stepExecutor: StepExecutor;
   private stepExecutionStrategy?: StepExecutionStrategy;
@@ -158,7 +180,6 @@ export class WorkflowEventProcessor extends EventProcessor {
   // SQLITE_BUSY) eventually surfaces as a terminal workflow.fail rather than
   // silently hanging agent.generate().
   private deliveryAttempts: Map<string, number> = new Map();
-  readonly #runSnapshotWrites = new Map<string, Promise<void>>();
   // Maximum number of times handle() will ask the transport to redeliver the
   // same event before declaring it terminally failed. The underlying storage
   // layer already retries lock errors internally (~5 attempts with backoff)
@@ -846,35 +867,42 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
 
       if (parentWorkflow) {
-        const parentSnap = await workflowsStore?.loadWorkflowSnapshot({
-          workflowName: parentWorkflow.workflowId,
-          runId: parentWorkflow.runId,
-        });
-        const existing = parentSnap?.context?.[workflowId] as any;
-        await workflowsStore?.updateWorkflowResults({
-          workflowName: parentWorkflow.workflowId,
-          runId: parentWorkflow.runId,
-          stepId: workflowId,
-          result: {
-            startedAt: existing?.startedAt ?? Date.now(),
-            status: 'running',
-            payload: existing?.payload ?? parentWorkflow.input?.output ?? {},
-            ...(existing ?? {}), // preserve anything else (suspendPayload, etc.)
-            // A child start does not own queued siblings from this potentially stale snapshot.
-            ...(parentWorkflow.stepGraph[parentWorkflow.executionPath[0]!]?.type === 'foreach' &&
-            Array.isArray(existing?.output)
-              ? { output: existing.output.map((value: unknown) => (isQueuedForeachIteration(value) ? null : value)) }
-              : {}),
-            metadata: {
-              ...(existing?.metadata ?? {}),
-              nestedRunId: runId,
-              ...(parentWorkflow.stepGraph[parentWorkflow.executionPath[0]!]?.type === 'foreach'
-                ? { foreachNestedRunIds: { [parentWorkflow.executionPath[1]!]: runId } }
+        // Same parent step record that foreach iteration ends merge into; don't write it back
+        // from a snapshot read before a sibling's result landed.
+        const releaseSnapshotWrite = await acquireRunSnapshotWrite(parentWorkflow.runId);
+        try {
+          const parentSnap = await workflowsStore?.loadWorkflowSnapshot({
+            workflowName: parentWorkflow.workflowId,
+            runId: parentWorkflow.runId,
+          });
+          const existing = parentSnap?.context?.[workflowId] as any;
+          await workflowsStore?.updateWorkflowResults({
+            workflowName: parentWorkflow.workflowId,
+            runId: parentWorkflow.runId,
+            stepId: workflowId,
+            result: {
+              startedAt: existing?.startedAt ?? Date.now(),
+              status: 'running',
+              payload: existing?.payload ?? parentWorkflow.input?.output ?? {},
+              ...(existing ?? {}), // preserve anything else (suspendPayload, etc.)
+              // A child start does not own queued siblings from this potentially stale snapshot.
+              ...(parentWorkflow.stepGraph[parentWorkflow.executionPath[0]!]?.type === 'foreach' &&
+              Array.isArray(existing?.output)
+                ? { output: existing.output.map((value: unknown) => (isQueuedForeachIteration(value) ? null : value)) }
                 : {}),
+              metadata: {
+                ...(existing?.metadata ?? {}),
+                nestedRunId: runId,
+                ...(parentWorkflow.stepGraph[parentWorkflow.executionPath[0]!]?.type === 'foreach'
+                  ? { foreachNestedRunIds: { [parentWorkflow.executionPath[1]!]: runId } }
+                  : {}),
+              },
             },
-          },
-          requestContext: withoutAuthToken(requestContext),
-        });
+            requestContext: withoutAuthToken(requestContext),
+          });
+        } finally {
+          releaseSnapshotWrite();
+        }
       }
     }
 
@@ -2846,7 +2874,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       // Iterations ending concurrently each read the foreach step result, merge their own
       // iteration into it and write the whole step result back. Serialize that per run so a
       // sibling's write isn't computed from a snapshot that misses this one.
-      const releaseSnapshotWrite = await this.#acquireRunSnapshotWrite(runId);
+      const releaseSnapshotWrite = await acquireRunSnapshotWrite(runId);
       try {
         const snapshot = await workflowsStore?.loadWorkflowSnapshot({
           workflowName: workflowId,
@@ -3625,25 +3653,6 @@ export class WorkflowEventProcessor extends EventProcessor {
         },
       });
     }
-  }
-
-  /**
-   * Wait for this run's previous snapshot read-modify-write to finish, then hold the
-   * run until the returned release is called. Release is idempotent. This only
-   * serializes handlers in this process.
-   */
-  async #acquireRunSnapshotWrite(runId: string): Promise<() => void> {
-    const previous = this.#runSnapshotWrites.get(runId) ?? Promise.resolve();
-    let release!: () => void;
-    const tail = previous.then(() => new Promise<void>(resolve => (release = resolve)));
-    this.#runSnapshotWrites.set(runId, tail);
-    await previous;
-    return () => {
-      release();
-      if (this.#runSnapshotWrites.get(runId) === tail) {
-        this.#runSnapshotWrites.delete(runId);
-      }
-    };
   }
 
   async loadData({

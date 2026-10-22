@@ -216,4 +216,83 @@ describe('evented foreach iterations ending concurrently', () => {
       await mastra.stopWorkers();
     }
   });
+
+  // A nested workflow body records its child run on the parent foreach step when it starts. That
+  // start reads the parent snapshot, so a sibling's failure landing between the read and the write
+  // must not be reverted.
+  it('keeps a sibling failure when a nested child starts at the same time', async () => {
+    const id = 'foreach-concurrent-child-start';
+    const storage = new MockStore();
+    const pubsub = new EventEmitterPubSub();
+    const workflows = (await storage.getStore('workflows'))!;
+
+    let childStartWriteReached!: () => void;
+    const secondChildStarting = new Promise<void>(resolve => (childStartWriteReached = resolve));
+    let releaseSecondChild!: () => void;
+    const secondChildMayFinish = new Promise<void>(resolve => (releaseSecondChild = resolve));
+    let failureRecorded!: () => void;
+    const failureWritten = new Promise<void>(resolve => (failureRecorded = resolve));
+
+    let afterBoth: any;
+    const update = workflows.updateWorkflowResults.bind(workflows);
+    workflows.updateWorkflowResults = async args => {
+      const result = args.result as any;
+      if (
+        args.workflowName === id &&
+        args.stepId === 'child' &&
+        result?.status === 'running' &&
+        result?.metadata?.foreachNestedRunIds?.['1']
+      ) {
+        // Second child's start has read the parent; hold its write until the first failure lands.
+        childStartWriteReached();
+        await Promise.race([failureWritten, new Promise(resolve => setTimeout(resolve, 200))]);
+        const written = await update(args);
+        // Once both the child start and the first failure are written, record the parent step.
+        void failureWritten.then(async () => {
+          const snap: any = await workflows.loadWorkflowSnapshot({ workflowName: id, runId: args.runId });
+          afterBoth = snap?.context?.child;
+          releaseSecondChild();
+        });
+        return written;
+      }
+      const written = await update(args);
+      if (args.workflowName === id && args.stepId === 'child' && result?.status === 'failed') failureRecorded();
+      return written;
+    };
+
+    const inner = createStep({
+      id: 'inner',
+      inputSchema: item,
+      outputSchema: item,
+      retries: 0,
+      execute: async ({ inputData }) => {
+        if (inputData.n === 1) {
+          await Promise.race([secondChildStarting, new Promise(resolve => setTimeout(resolve, 200))]);
+          throw new Error('failure 1');
+        }
+        await secondChildMayFinish;
+        return inputData;
+      },
+    });
+    const child = createWorkflow({ id: 'child', inputSchema: item, outputSchema: item }).then(inner).commit();
+    const workflow = createWorkflow({ id, inputSchema: z.array(item), outputSchema: z.array(item) })
+      .foreach(child, { concurrency: 2 })
+      .commit();
+    const mastra = new Mastra({ workflows: { [id]: workflow }, storage, pubsub, logger: false });
+    await mastra.startWorkers();
+    try {
+      const run = await workflow.createRun();
+      const result: any = await Promise.race([
+        run.start({ inputData: [{ n: 1 }, { n: 2 }] }),
+        new Promise(resolve => setTimeout(() => resolve({ status: 'hung' }), 3000)),
+      ]);
+      expect(result.status).toBe('failed');
+
+      // The second child's own step-end can repair the record later, so check it before that runs.
+      expect(afterBoth?.status, 'foreach status once the child start and first failure are written').toBe('failed');
+      expect(afterBoth?.error?.message).toBe('failure 1');
+    } finally {
+      await mastra.stopWorkers();
+    }
+  });
 });
