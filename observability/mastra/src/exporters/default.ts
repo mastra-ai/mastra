@@ -363,35 +363,49 @@ export class DefaultExporter extends BaseExporter {
     }
 
     try {
-      const partials: UpdateSpanPartial[] = [];
-      for (const event of events) {
-        const span = event.exportedSpan;
-        let spanExists = this.#eventBuffer.spanExists(span);
-        if (!spanExists && !this.#spanReadsUnsupported) {
-          // Cache only for this flush: a missing span may be created before a retry.
-          const key = `${span.traceId}:${span.id}`;
-          const cached = persistedSpans.get(key);
-          if (cached !== undefined) {
-            spanExists = cached;
-          } else if (typeof this.#observabilityStorage!.getSpan !== 'function') {
-            this.#spanReadsUnsupported = true;
-          } else {
-            try {
-              spanExists = !!(await this.#observabilityStorage!.getSpan({ traceId: span.traceId, spanId: span.id }));
-              persistedSpans.set(key, spanExists);
-            } catch (error) {
-              // Write-only providers retain the existing create-before-update behavior.
-              if (
-                !(error instanceof MastraError) ||
-                error.domain !== ErrorDomain.MASTRA_OBSERVABILITY ||
-                error.id !== 'OBSERVABILITY_STORAGE_GET_SPAN_NOT_IMPLEMENTED'
-              ) {
-                throw error;
-              }
+      // Cache only for this flush: a missing span may be created before a retry.
+      const pendingSpans = new Map<string, TracingEvent['exportedSpan']>();
+      const lookupErrors = new Map<string, unknown>();
+      for (const { exportedSpan: span } of events) {
+        const key = `${span.traceId}:${span.id}`;
+        if (!this.#eventBuffer.spanExists(span) && !persistedSpans.has(key)) {
+          pendingSpans.set(key, span);
+        }
+      }
+      const storage = this.#observabilityStorage!;
+      if (typeof storage.getSpan !== 'function') this.#spanReadsUnsupported = true;
+      const pending = pendingSpans.entries();
+      const lookup = async () => {
+        for (const [key, span] of pending) {
+          if (this.#spanReadsUnsupported) break;
+          try {
+            persistedSpans.set(key, !!(await storage.getSpan({ traceId: span.traceId, spanId: span.id })));
+          } catch (error) {
+            // Write-only providers retain the existing create-before-update behavior.
+            if (
+              error instanceof MastraError &&
+              error.domain === ErrorDomain.MASTRA_OBSERVABILITY &&
+              error.id === 'OBSERVABILITY_STORAGE_GET_SPAN_NOT_IMPLEMENTED'
+            ) {
               this.#spanReadsUnsupported = true;
+            } else {
+              lookupErrors.set(key, error);
             }
           }
         }
+      };
+      await Promise.all(Array.from({ length: Math.min(8, pendingSpans.size) }, lookup));
+
+      const partials: UpdateSpanPartial[] = [];
+      const lookupFailedEvents: BufferedEvent[] = [];
+      for (const event of events) {
+        const span = event.exportedSpan;
+        const key = `${span.traceId}:${span.id}`;
+        if (lookupErrors.has(key)) {
+          lookupFailedEvents.push(event);
+          continue;
+        }
+        const spanExists = this.#eventBuffer.spanExists(span) || persistedSpans.get(key) === true;
         if (spanExists) {
           partials.push({
             traceId: span.traceId,
@@ -403,11 +417,19 @@ export class DefaultExporter extends BaseExporter {
         }
       }
 
-      if (partials.length === 0) return FLUSH_SUCCEEDED;
-
-      await this.#observabilityStorage!.batchUpdateSpans({ records: partials });
-      if (isEnd) {
-        this.#eventBuffer.endFinishedSpans({ records: partials });
+      if (partials.length > 0) {
+        await storage.batchUpdateSpans({ records: partials });
+        if (isEnd) {
+          this.#eventBuffer.endFinishedSpans({ records: partials });
+        }
+      }
+      if (lookupFailedEvents.length > 0) {
+        const error = lookupErrors.values().next().value;
+        const dropped = this.#eventBuffer.reAddUpdates(lookupFailedEvents);
+        const retryAttempt = this.retryAttempt(lookupFailedEvents);
+        this.logStorageFailure('tracing', lookupFailedEvents, retryAttempt, error);
+        this.emitDrop('tracing', 'retry-exhausted', dropped.length, error);
+        return { failed: true, retryAttempt };
       }
       return FLUSH_SUCCEEDED;
     } catch (error) {

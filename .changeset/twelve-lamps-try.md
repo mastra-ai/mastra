@@ -2,4 +2,4 @@
 '@mastra/observability': patch
 ---
 
-Fixed updates to rebuilt spans already persisted in storage in both storage exporters. Fixes #27479.
+Fixed a problem where updates to rebuilt spans already in storage were not persisted. Fixes #27479.
