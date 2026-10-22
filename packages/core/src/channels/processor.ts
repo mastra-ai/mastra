@@ -105,7 +105,7 @@ function inboundLines(ctx: ChannelContext, textHidden: boolean, tools: Record<st
     `Only ${textHidden ? 'post' : 'respond with text'} when you are explicitly mentioned, replied to, or your input is clearly needed (e.g. a direct question to you, or a task you were asked to do).`,
     'If users appear to be talking to each other, showing your previous output to a third party, reacting to your output, or having a side conversation, stay silent. Staying silent is the correct and preferred action — it is not rude or unhelpful.',
     textHidden
-      ? 'To stay silent, post nothing. Do NOT post status notes, acknowledgements like "Got it" or "Noted", or apologies for staying quiet.'
+      ? 'To stay silent, post nothing. Do NOT post acknowledgements like "Got it" or "Noted", or apologies for staying quiet.'
       : 'To stay silent, respond with an empty message. Do NOT narrate the situation. Do NOT write bracketed status notes like "[no response needed]" or "[empty message — user is showing the report to someone else]". Do NOT acknowledge with text like "Got it" or "Noted". Do NOT apologize for staying quiet. An empty response is a first-class action, not a fallback.',
   );
   // Only point at the reaction tool when the agent actually has it;
