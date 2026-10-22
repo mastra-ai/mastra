@@ -11,6 +11,7 @@ import type { Location } from 'react-router';
 import { SourceIcon } from '../../factory/components/BoardIcons';
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
 import type { SessionSource } from '../services/sessionPresentation';
+import type { SessionExternalLink } from '../services/sessionRows';
 import type { SessionRowStatus } from '../services/sessionStatus';
 import { ActivityBelt } from '@mastra/playground-ui/components/Activity';
 import { SessionActionsMenu } from './SessionActionsMenu';
@@ -33,6 +34,7 @@ export function SessionNavRow({
   name,
   title,
   url,
+  externalLinks,
   source,
   active,
   disabled,
@@ -55,6 +57,7 @@ export function SessionNavRow({
   /** Hover tooltip, typically the branch name. */
   title?: string;
   url: string;
+  externalLinks: readonly SessionExternalLink[];
   /** Leading icon: a user session, or the source of the session's work item. */
   source?: SessionSource;
   active: boolean;
@@ -119,6 +122,7 @@ export function SessionNavRow({
   );
   const menuProps = {
     url,
+    externalLinks,
     pinned,
     onPinChange,
     onDelete,
@@ -208,11 +212,11 @@ function SessionSourceIcon({ source }: { source: SessionSource }) {
   return <SourceIcon source={source} className="size-3.5" />;
 }
 
-const trailingSlot = 'size-control-sm shrink-0 place-items-center *:col-start-1 *:row-start-1';
+const trailingSlot = 'size-control-sm shrink-0 grid-rows-1 place-items-center *:col-start-1 *:row-start-1';
 
 // An empty slot claims no width, so the label runs the full row until there is something to show.
 const revealedSlot =
-  'hidden group-focus-within/session:grid group-hover/session:grid group-has-[[data-popup-open]]/session:grid';
+  'grid pointer-fine:hidden group-focus-within/session:grid group-hover/session:grid group-has-[[data-popup-open]]/session:grid';
 
 function beltLabel(status: SessionRowStatus, name: string) {
   if (status === 'initializing') return `Initializing ${name}`;
@@ -228,4 +232,4 @@ function trailingKind({ loading, status, merged }: { loading?: boolean; status?:
 
 // The actions menu owns the slot as soon as the row is hovered, focused, or its menu is open.
 const yieldsToActions =
-  'group-hover/session:hidden group-focus-within/session:hidden group-has-[[data-popup-open]]/session:hidden';
+  'pointer-coarse:hidden group-hover/session:hidden group-focus-within/session:hidden group-has-[[data-popup-open]]/session:hidden';
