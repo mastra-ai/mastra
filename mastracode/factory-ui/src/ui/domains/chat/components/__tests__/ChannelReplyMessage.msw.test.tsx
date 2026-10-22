@@ -148,7 +148,7 @@ describe('reply_in_thread in the transcript', () => {
     expect(screen.queryByText('Sent to Slack')).not.toBeInTheDocument();
   });
 
-  it('says a reply was not sent when its input was rejected before it could post', () => {
+  it('shows an error on a reply whose input was rejected, even if part of it streamed', () => {
     renderEntries([
       replyEntry({
         state: 'result',
@@ -158,7 +158,7 @@ describe('reply_in_thread in the transcript', () => {
     ]);
 
     const post = screen.getByRole('group', { name: 'Reply in Slack thread' });
-    expect(within(post).getByText('Not sent to Slack')).toBeInTheDocument();
+    expect(within(post).getByText('Error sending to Slack')).toBeInTheDocument();
     expect(within(post).queryByText('Sent to Slack')).not.toBeInTheDocument();
     // Nothing went out, so there's no posted message to copy or time.
     expect(within(post).queryByRole('button', { name: 'Copy message' })).not.toBeInTheDocument();
