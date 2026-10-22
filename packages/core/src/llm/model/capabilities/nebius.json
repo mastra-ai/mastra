@@ -54,6 +54,12 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
+    "meta-models/muse-spark-open": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
     "zai-org/GLM-5.3-Flash": [
       {
         "type": "effort",
@@ -72,6 +78,18 @@
         "values": ["low", "medium", "high"]
       }
     ],
+    "deepseek-ai/DeepSeek-V4-Flash-0731": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4-Pro": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
     "deepseek-ai/DeepSeek-V4.1-Flash": [
       {
         "type": "effort",
@@ -84,19 +102,19 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Pro": [
+    "moonshotai/Kimi-K3": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["none", "low", "medium", "high", "max"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Flash-0731": [
+    "openai/gpt-oss-120b": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["low", "medium", "high"]
       }
     ],
-    "nvidia/Nemotron-3_5-Lightning": [
+    "nvidia/Nemotron-3-Ultra-550b-a55b": [
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -108,16 +126,10 @@
         "values": ["none", "high"]
       }
     ],
-    "nvidia/Nemotron-3-Ultra-550b-a55b": [
+    "nvidia/Nemotron-3_5-Lightning": [
       {
         "type": "effort",
         "values": ["none", "high"]
-      }
-    ],
-    "meta-models/muse-spark-open": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "Qwen/Qwen3.8-27B": [
@@ -135,18 +147,6 @@
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "openai/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "moonshotai/Kimi-K3": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
       }
     ]
   }

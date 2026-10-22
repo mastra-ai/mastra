@@ -24,7 +24,7 @@ export function SessionActionsMenu({
             size="icon-sm"
             aria-label={`Session actions for ${name}`}
             disabled={disabled}
-            className="hidden group-focus-within/session:flex group-hover/session:flex data-[popup-open]:flex"
+            className="group-focus-within/session:flex group-hover/session:flex data-[popup-open]:flex pointer-fine:hidden"
           >
             <MoreHorizontal />
           </Button>

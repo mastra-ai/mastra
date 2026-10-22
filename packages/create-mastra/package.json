@@ -38,12 +38,12 @@
   ],
   "devDependencies": {
     "@internal/lint": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.20.5",
     "commander": "^14.0.3",
     "mastra": "workspace:^",
     "posthog-node": "^5.46.1",
     "tinyexec": "^1.1.1",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
