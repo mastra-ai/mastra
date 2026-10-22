@@ -470,7 +470,7 @@ The adapter reads these settings from `mastra.getServer()`:
 | `auth` | Authentication config, used by `registerAuthMiddleware()`. |
 | `bodySizeLimit` | Default body size limit in bytes. Can be overridden per-adapter via `bodyLimitOptions`. |
 | `onError` | Custom error handler called when an unhandled error occurs in a route handler. See [server.onError](/reference/configuration#serveronerror). |
-| `middleware` | User [middleware](/docs/server/middleware), registered by `registerUserMiddleware()`. Hono-based adapters run it; Express, Fastify, and Koa log a warning because Hono handlers can't run there. |
+| `middleware` | User [middleware](/docs/server/middleware), registered by `registerUserMiddleware()`. Hono-based adapters run it; Elysia, Express, Fastify, and Koa log a warning because Hono handlers can't run there. |
 
 ### Adapter constructor only
 
