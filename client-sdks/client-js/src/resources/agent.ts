@@ -2344,7 +2344,7 @@ export class Agent extends BaseResource {
         } catch (error) {
           if (
             !cancellationAbort.signal.aborted &&
-            !(error instanceof Error && 'status' in error && error.status === 501)
+            !(error instanceof Error && 'status' in error && (error.status === 404 || error.status === 501))
           ) {
             try {
               controller.error(error);

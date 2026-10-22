@@ -1164,8 +1164,8 @@ export const useChat = ({
       await threadSubscription?.abort?.();
     })()
       .catch(error => {
-        // Non-durable agents still stop when their HTTP request is aborted.
-        if (isObject(error) && error.status === 501) return;
+        // Older servers and non-durable agents still stop when their HTTP request is aborted.
+        if (isObject(error) && (error.status === 404 || error.status === 501)) return;
         throw error;
       })
       .finally(() => {

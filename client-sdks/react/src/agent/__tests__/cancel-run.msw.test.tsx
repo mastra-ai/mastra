@@ -59,6 +59,42 @@ describe.each([undefined, 'thread-1'])('useChat Stop with thread %s (COR-1489)',
     }
   }, 13_000);
 
+  it.each([404, 501])('falls back to transport cancellation for unsupported endpoints (%s)', async status => {
+    const release = Promise.withResolvers<void>();
+    let streamSignal: AbortSignal | undefined;
+    let sending: Promise<void> | undefined;
+    let abortAttempts = 0;
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/agents/agent-1/stream`, async ({ request }) => {
+        streamSignal = request.signal;
+        await release.promise;
+        return new HttpResponse(null, { headers: { 'content-type': 'text/event-stream' } });
+      }),
+      http.post(`${TEST_BASE_URL}/api/agents/agent-1/${threadId ? 'threads/abort' : 'runs/:runId/abort'}`, () => {
+        abortAttempts++;
+        return new HttpResponse(null, { status });
+      }),
+    );
+    const { result } = renderHookWithProviders(() =>
+      useChat({ agentId: 'agent-1', resourceId: 'resource-1', threadId }),
+    );
+    try {
+      act(() => {
+        sending = result.current.sendMessage({ message: 'Stop on an older server', threadId }).catch(() => {});
+      });
+      await waitFor(() => expect(streamSignal).toBeDefined());
+      await act(async () => {
+        await expect(result.current.cancelRun()).resolves.toBeUndefined();
+      });
+      expect(abortAttempts).toBe(1);
+      expect(streamSignal?.aborted).toBe(true);
+      expect(result.current.isRunning).toBe(false);
+    } finally {
+      release.resolve();
+      await sending;
+    }
+  });
+
   it('keeps cancelling when the observer ends without acknowledgement', async () => {
     let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
     let sending: Promise<void> | undefined;

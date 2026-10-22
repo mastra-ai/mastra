@@ -136,13 +136,13 @@ describe('stream execution cancellation over HTTP', () => {
     await response.body!.cancel().catch(() => {});
   });
 
-  it('falls back to transport cancellation once for ordinary agents', async () => {
-    abortStatus = 501;
+  it.each([404, 501])('falls back to transport cancellation once for unsupported endpoints (%s)', async status => {
+    abortStatus = status;
     const ac = new AbortController();
     const response = await start('stream', ac.signal);
     ac.abort();
     await expect.poll(() => aborts.length).toBe(1);
-    await expect(response.body!.getReader().read()).rejects.toBeDefined();
+    await expect(response.body!.getReader().read()).rejects.toMatchObject({ name: 'AbortError' });
     expect(aborts).toHaveLength(1);
   });
 
