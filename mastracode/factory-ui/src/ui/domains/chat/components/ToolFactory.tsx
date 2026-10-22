@@ -6,6 +6,7 @@ import { memo } from 'react';
 import type { ReactNode } from 'react';
 
 import { SkillMessage } from '@mastra/playground-ui/domains/chat/messages/skill-message';
+import { ChannelReplyMessage, REPLY_IN_THREAD_TOOL, replyText } from './ChannelReplyMessage';
 import { SubmitPlanCard } from './SubmitPlanCard';
 
 type ToolStatus = 'running' | 'done' | 'error';
@@ -16,6 +17,8 @@ export interface ToolFactoryProps {
   toolName: string;
   toolCallId: string;
   input?: unknown;
+  /** The args JSON streamed so far, before `input` is parsed. */
+  argsText?: string;
   output?: unknown;
   status: ToolStatus;
   isSubmitting?: boolean;
@@ -69,6 +72,7 @@ function ToolFactoryComponent({
   toolName,
   toolCallId,
   input,
+  argsText,
   output,
   status,
   isSubmitting = false,
@@ -95,6 +99,11 @@ function ToolFactoryComponent({
   }
 
   if (isTaskTool(toolName)) return null;
+
+  if (toolName === REPLY_IN_THREAD_TOOL) {
+    const text = replyText(input, argsText);
+    if (text) return <ChannelReplyMessage text={text} status={status} />;
+  }
 
   if (toolName === 'skill') {
     const name = stringValue(record(input)?.name);

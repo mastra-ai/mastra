@@ -222,6 +222,7 @@ export function MessageBubble({
             toolName={tool.toolName}
             toolCallId={tool.toolCallId}
             input={suspension?.suspendPayload ?? tool.args}
+            argsText={tool.argsText}
             output={tool.result}
             status={suspension ? 'running' : tool.status}
             isSubmitting={isSubmitting}
