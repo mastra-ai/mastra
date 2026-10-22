@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../../../agent';
 import { createDurableAgent } from '../../../../agent/durable';
+import type { IMastraEditor } from '../../../../editor';
 import { useLoopScenarioAimock } from '../../../../loop/test-utils/aimock/aimock-scenario';
 import { Mastra } from '../../../../mastra';
 import { InMemoryStore } from '../../../../storage';
@@ -187,5 +188,62 @@ describe('Experiment scenario: override the agent model', () => {
         scorers: [],
       }),
     ).rejects.toThrow(/agentModel.*agent target/);
+  });
+
+  it('rejects a model override when an inline task replaces the agent target', async () => {
+    const { mastra, datasetId } = await setup();
+
+    await expect(
+      runExperiment(mastra, {
+        datasetId,
+        targetType: 'agent',
+        targetId: 'model-override-agent',
+        task: async ({ input }) => input,
+        agentModel: aimockModel(OVERRIDE_MODEL),
+        scorers: [],
+      }),
+    ).rejects.toThrow(/agentModel.*agent target.*task/);
+  });
+
+  it('keeps the stored version instructions when agentVersion is combined with the override', async () => {
+    scriptModels();
+    const agent = new Agent({
+      id: 'model-override-agent',
+      name: 'Model Override Agent',
+      instructions: 'code-defined instructions',
+      model: aimockModel(BASE_MODEL),
+    });
+    // Stand-in for @mastra/editor (core cannot depend on it). It mirrors the real
+    // applyStoredOverrides contract: fork the agent, then set stored instructions on the fork.
+    const editor = {
+      agent: {
+        applyStoredOverrides: async (target: Agent) => {
+          const fork = target.__fork();
+          fork.__updateInstructions('stored version instructions');
+          return fork;
+        },
+      },
+    } as unknown as IMastraEditor;
+    const storage = new InMemoryStore();
+    const mastra = new Mastra({ agents: { 'model-override-agent': agent }, storage, editor, logger: false });
+    const datasetsStore = (await storage.getStore('datasets'))!;
+    const dataset = await datasetsStore.createDataset({ name: 'stored version ds' });
+    await datasetsStore.addItem({ datasetId: dataset.id, input: 'first prompt' });
+
+    await runExperiment(mastra, {
+      datasetId: dataset.id,
+      targetType: 'agent',
+      targetId: 'model-override-agent',
+      agentVersion: 'version-1',
+      agentModel: aimockModel(OVERRIDE_MODEL),
+      scorers: [],
+    });
+
+    const [request] = getMock().getRequests();
+    const body = request!.body as { model: string; messages: { role: string; content: unknown }[] };
+    expect(body.model).toBe(OVERRIDE_MODEL);
+    const system = body.messages.filter(message => message.role === 'system').map(m => JSON.stringify(m.content));
+    expect(system.join('\n')).toContain('stored version instructions');
+    expect(system.join('\n')).not.toContain('code-defined instructions');
   });
 });

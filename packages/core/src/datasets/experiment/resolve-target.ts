@@ -79,7 +79,8 @@ export async function resolveTarget(
  * `agentVersion` is honored because it is resolved before forking.
  */
 export function forkAgentWithModel(agent: Agent, model: MastraModelConfig): Agent {
-  const fork = agent.__fork();
+  // A stored-version agent is already a private fork carrying overrides that __fork() would drop.
+  const fork = agent.__isStoredVersionApplied() ? agent : agent.__fork();
   fork.__updateModel({ model });
   fork.__markStoredVersionApplied();
   return fork;

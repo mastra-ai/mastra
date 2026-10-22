@@ -310,10 +310,11 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   let execFn: (item: ExperimentItem, signal?: AbortSignal) => Promise<ExecutionResult>;
 
   try {
+    if (agentModel !== undefined && config.task) {
+      throw new Error('agentModel is only supported for an agent target, not an inline task');
+    }
     if (agentModel !== undefined && targetType !== 'agent') {
-      throw new Error(
-        `agentModel is only supported for an agent target (got ${config.task ? 'task' : (targetType ?? 'none')})`,
-      );
+      throw new Error(`agentModel is only supported for an agent target (got ${targetType ?? 'none'})`);
     }
     if (config.task) {
       // Inline task path

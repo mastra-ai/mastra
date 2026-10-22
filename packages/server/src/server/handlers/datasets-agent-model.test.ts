@@ -106,25 +106,31 @@ describe('TRIGGER_EXPERIMENT_ROUTE agentModel', () => {
     expect(await outputsOf(experimentId)).toEqual(['from base', 'from base']);
   });
 
-  it('rejects agentModel for a non-agent target', async () => {
-    await expect(
-      trigger({
+  function agentModelIssues(body: Record<string, unknown>) {
+    const result = TRIGGER_EXPERIMENT_ROUTE.bodySchema.safeParse(body);
+    expect(result.success).toBe(false);
+    return result.error!.issues.filter(issue => issue.path.join('.') === 'agentModel').map(issue => issue.message);
+  }
+
+  it('rejects agentModel for a non-agent target before the handler', () => {
+    expect(
+      agentModelIssues({
         targetType: 'workflow',
         targetId: 'some-workflow',
         agentModel: { provider: 'openai', modelId: 'gpt-4.1' },
       }),
-    ).rejects.toMatchObject({ status: 400 });
+    ).toEqual(['agentModel is only supported for agent targets']);
   });
 
-  it('rejects agentModel on a create-only experiment', async () => {
-    await expect(
-      trigger({
+  it('rejects agentModel on a create-only experiment before the handler', () => {
+    expect(
+      agentModelIssues({
         start: false,
         targetType: 'agent',
         targetId: 'support-agent',
         agentModel: { provider: 'openai', modelId: 'gpt-4.1' },
       }),
-    ).rejects.toMatchObject({ status: 400 });
+    ).toEqual(['agentModel requires start: true; create-only experiments do not keep a model override']);
   });
 
   it('rejects an incomplete agentModel before the handler', () => {
