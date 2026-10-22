@@ -204,17 +204,23 @@ it.each([
             execute: async (_input, context) => {
               counts.omegaStarts++;
               if (variant.interrupt && counts.omegaStarts === 1) {
-                expect(counts.alphaCommits).toBe(1);
-                expect(counts.omegaCommits).toBe(0);
-                const request = requestScope.getStore();
-                expect(request).toBeDefined();
-                if (!request) throw new Error('Analyst tool is not executing inside an Inngest HTTP request');
-                interruptedRequest = request.invocation;
-                expect(interruptedRequest.event.data.inputData.agentId).toBe(supervisorId);
-                expect(interruptedRequest.ctx.attempt).toBe(0);
-                expect(interruptedRequest.ctx.max_attempts).toBe(variant.retries + 1);
-                abandonedSignal = context?.abortSignal;
-                expect(abandonedSignal).toBeDefined();
+                let request: RequestScope | undefined;
+                try {
+                  expect(counts.alphaCommits).toBe(1);
+                  expect(counts.omegaCommits).toBe(0);
+                  request = requestScope.getStore();
+                  if (!request) throw new Error('Analyst tool is not executing inside an Inngest HTTP request');
+                  interruptedRequest = request.invocation;
+                  expect(interruptedRequest.event.data.inputData.agentId).toBe(supervisorId);
+                  expect(interruptedRequest.ctx.attempt).toBe(0);
+                  expect(interruptedRequest.ctx.max_attempts).toBe(variant.retries + 1);
+                  abandonedSignal = context?.abortSignal;
+                  expect(abandonedSignal).toBeDefined();
+                } catch (error) {
+                  // Tool errors become model-visible results; preserve the original test failure.
+                  failures.push(error);
+                  throw error;
+                }
                 request.incoming.socket.destroy();
                 try {
                   await abandoned.promise;
