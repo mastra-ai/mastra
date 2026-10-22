@@ -4,19 +4,11 @@ import { RotatingText } from '@mastra/playground-ui/components/RotatingText';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
 import { useNow } from '../hooks/use-now';
+import { QUEUED_MESSAGE, RUNNING_MESSAGES } from './experiment-run-messages';
 
 export interface ExperimentRunProgressProps {
   experiment: DatasetExperiment;
 }
-
-const RUNNING_MESSAGES = [
-  'Calling your target…',
-  'Working through the items…',
-  'Consulting the scorers…',
-  'Tallying the results…',
-];
-
-const QUEUED_MESSAGE = 'Waiting to start…';
 
 /** Stands in for the KPIs and results while a run is queued or in progress, which would only show partial data. */
 export function ExperimentRunProgress({ experiment }: ExperimentRunProgressProps) {

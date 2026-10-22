@@ -22,6 +22,7 @@ import { newerExperimentsPage } from './fixtures/experiment-lookup';
 import { queuedExperiment, runningExperiment, runningExperimentWithoutStart } from './fixtures/experiment-run-progress';
 import { renamedPostgresWithMetrics } from '@/domains/configuration/hooks/__tests__/fixtures/observability-storage-capabilities';
 import { emptyUsageBreakdown } from '@/domains/experiments/components/__tests__/fixtures/experiment-usage';
+import { RUNNING_MESSAGES } from '@/domains/experiments/components/experiment-run-messages';
 import ExperimentPage from '@/pages/experiments/experiment';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL } from '@/test/render';
@@ -113,13 +114,7 @@ describe('Experiment page — run progress', () => {
     });
 
     it('rotates through what the run is busy with', async () => {
-      const runningMessages = [
-        'Calling your target…',
-        'Working through the items…',
-        'Consulting the scorers…',
-        'Tallying the results…',
-      ];
-      const shownMessage = () => runningMessages.find(message => screen.queryByText(message));
+      const shownMessage = () => RUNNING_MESSAGES.find(message => screen.queryByText(message));
       renderExperimentRoute();
 
       await screen.findByText('2 / 3 items finished');
