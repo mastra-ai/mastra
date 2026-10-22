@@ -295,15 +295,15 @@ export class SyncObservationStrategy extends ObservationStrategy {
       }
     }
 
-    if (!committed.alreadyCovered) {
-      await this.indexObservationGroups(
-        processed.observations,
-        threadId,
-        resourceId,
-        processed.lastObservedAt,
-        committed.record.id,
-      );
-    }
+    // A previous instance may have committed the text but failed its vector write.
+    // The indexer's durable receipts make this safe for both new and covered cycles.
+    await this.indexObservationGroups(
+      processed.observations,
+      threadId,
+      resourceId,
+      processed.lastObservedAt,
+      committed.record.id,
+    );
 
     return { status: 'committed', processed, record: committed.record, alreadyCovered: committed.alreadyCovered };
   }
