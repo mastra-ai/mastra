@@ -9,10 +9,10 @@
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "glm-5.3": [
+    "claude-opus-5": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "deepseek-v4-flash": [
@@ -24,10 +24,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "claude-opus-5": [
+    "glm-5.3": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "high", "max"]
       }
     ],
     "claude-opus-4-8": [

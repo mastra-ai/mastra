@@ -31,7 +31,7 @@ import {
   MessageTimestamp,
 } from '@mastra/playground-ui/components/Message';
 import { ChannelOriginBadge, SenderAvatar } from './MessageSender';
-import { ProviderLoginAction } from './ProviderLoginAction';
+import { ProviderReconnectAction } from './ProviderReconnectAction';
 import { ToolCard } from './tool/ToolCard';
 import { ToolGroup } from './tool/ToolGroup';
 import { ToolFactory } from './ToolFactory';
@@ -170,7 +170,7 @@ export function MessageBubble({
       <Notice
         variant="destructive"
         title={part.error.name ?? 'Error'}
-        action={part.error.name === PROVIDER_AUTH_REQUIRED_ERROR ? <ProviderLoginAction /> : undefined}
+        action={part.error.name === PROVIDER_AUTH_REQUIRED_ERROR ? <ProviderReconnectAction /> : undefined}
       >
         <Notice.Message>{part.error.message}</Notice.Message>
       </Notice>

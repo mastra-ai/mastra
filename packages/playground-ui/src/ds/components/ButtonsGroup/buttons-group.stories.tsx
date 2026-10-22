@@ -83,7 +83,7 @@ export const AsSplitButton: Story = {
       <Button>Save</Button>
       <DropdownMenu>
         <DropdownMenu.Trigger asChild>
-          <Button aria-label="More save options">
+          <Button size="icon-md" aria-label="More save options">
             <ChevronDownIcon />
           </Button>
         </DropdownMenu.Trigger>

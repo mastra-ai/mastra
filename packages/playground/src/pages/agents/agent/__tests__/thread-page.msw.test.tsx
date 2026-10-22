@@ -877,7 +877,9 @@ describe('Standalone thread page', () => {
       expect(input.value).toBe('');
       fireEvent.change(input, { target: { value: 'Keep this follow-up' } });
       await act(async () => response.finish());
-      await waitFor(() => expect(router.state.location.pathname).not.toContain('/threads/new'));
+      // The router commits navigations in a transition, so wait for the created thread to render,
+      // not just for the router state, before reading its composer or leaving it.
+      await waitFor(() => expect(screen.getByTestId('location-probe').textContent).not.toContain('/threads/new'));
       const createdPath = router.state.location.pathname;
       expect((await composerInput()).value).toBe('Keep this follow-up');
       await act(() => router.navigate(`/agents/${AGENT_ID}/threads/new`));

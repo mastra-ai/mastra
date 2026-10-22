@@ -312,7 +312,10 @@ interface OwnershipBackend {
    * reject its remaining writes. Returns the claim that superseded it, when
    * ownership lives in storage and `claim` was still current.
    */
-  abandon(claim: DurableExecutionClaim): Promise<RunFence | undefined>;
+  abandon(
+    claim: DurableExecutionClaim,
+    whileOwned?: (successor?: RunFence) => Promise<void>,
+  ): Promise<RunFence | undefined>;
 }
 
 function leaseBackend(provider: LeaseProvider, agentId: string, runId: string): OwnershipBackend {
@@ -367,8 +370,12 @@ function leaseBackend(provider: LeaseProvider, agentId: string, runId: string): 
       await provider.releaseLease(key, claim.executionId);
     },
     // A lease has no generation to move past: releasing is all it can do.
-    async abandon(claim) {
-      await provider.releaseLease(key, claim.executionId);
+    async abandon(claim, whileOwned) {
+      try {
+        await whileOwned?.();
+      } finally {
+        await provider.releaseLease(key, claim.executionId);
+      }
       return undefined;
     },
   };
@@ -452,7 +459,7 @@ function storageBackend(store: WorkflowsStorage, runId: string): OwnershipBacken
     // Releasing alone keeps accepting the claim's writes until the next claim.
     // Claiming under a fresh owner first moves the generation past them; the
     // pinned generation leaves a claim made in between to its claimant.
-    async abandon(claim) {
+    async abandon(claim, whileOwned) {
       const successor = await store.claimRunOwnership({
         runId,
         ownerId: crypto.randomUUID(),
@@ -466,7 +473,11 @@ function storageBackend(store: WorkflowsStorage, runId: string): OwnershipBacken
         generation: successor.record.generation,
         ownerId: successor.record.ownerId,
       };
-      await store.releaseRunOwnership(successorFence);
+      try {
+        await whileOwned?.(successorFence);
+      } finally {
+        await store.releaseRunOwnership(successorFence);
+      }
       return successorFence;
     },
   };
@@ -513,6 +524,8 @@ export class ExecutionFence implements RunFenceScope {
   #resolveSettled!: () => void;
   /** Resolves once {@link settle} has finished and the claim is released or left to its new holder. */
   readonly whenSettled: Promise<void>;
+  /** Set only by the winning total-deadline settlement, for late stream readers. */
+  deadlineError?: Error;
 
   private constructor(args: {
     backend: OwnershipBackend;
@@ -644,6 +657,11 @@ export class ExecutionFence implements RunFenceScope {
     return this.#lossError !== undefined;
   }
 
+  /** An owned deadline settlement revokes writes without handing its topics to another execution. */
+  ownsRunTopics(): boolean {
+    return this.#settledAs === 'owned' || !this.#lossError;
+  }
+
   /** Throw the loss error once this execution lost the run. Checks local state only. */
   throwIfLost(): void {
     if (this.#lossError) throw this.#lossError;
@@ -761,7 +779,8 @@ export class ExecutionFence implements RunFenceScope {
    * Release keeps the owner record, so a write the execution makes after
    * settling is still rejected once a newer claim exists. An owned execution
    * stops fencing its writes after settling, leaving late background work to
-   * land as it did before fencing.
+   * land as it did before fencing. With `interrupt`, the old claim is fenced
+   * out before terminal writes run under a temporary replacement claim.
    *
    * - `owned`: ownership verified; `whileOwned` ran.
    * - `orphaned`: ownership could not be verified, but nobody else claimed
@@ -769,20 +788,42 @@ export class ExecutionFence implements RunFenceScope {
    * - `superseded`: another execution holds the run (or its holder is
    *   unknown); nothing may be written on its topic or rows.
    */
-  settle(whileOwned: () => Promise<void>): Promise<ExecutionSettlement> {
+  settle(whileOwned: () => Promise<void>, interrupt = false): Promise<ExecutionSettlement> {
     if (this.#settlement) return this.#settlement.catch(() => this.#settledAs!);
-    this.#settlement = this.#settle(whileOwned);
+    this.#settlement = this.#settle(whileOwned, interrupt);
     return this.#settlement;
   }
 
-  async #settle(whileOwned: () => Promise<void>): Promise<ExecutionSettlement> {
+  async #settle(whileOwned: () => Promise<void>, interrupt: boolean): Promise<ExecutionSettlement> {
     this.stopHeartbeat();
     this.#settledAs = await this.#classifySettlement();
     try {
-      if (this.#settledAs === 'owned') await this.run(whileOwned);
+      if (
+        this.#settledAs === 'owned' ||
+        (interrupt && this.#settledAs === 'orphaned' && this.generation !== undefined)
+      ) {
+        if (interrupt) {
+          this.#markLost(new DurableExecutionFenceError(EXECUTION_ABANDONED_ERROR_ID, this.#details()));
+          let wrote = false;
+          await this.#abandonClaim(async successor => {
+            wrote = true;
+            await runInRunFenceScope(
+              {
+                fenceFor: (store, runId) => (this.fenceFor(store, runId) && successor) || undefined,
+              },
+              whileOwned,
+            );
+          });
+          this.#settledAs = wrote ? 'owned' : 'superseded';
+        } else {
+          await this.run(whileOwned);
+        }
+      }
     } finally {
-      if (this.#settledAs !== 'superseded') await this.#release();
-      if (this.#settledAs === 'owned') this.#armed = false;
+      if (!interrupt) {
+        if (this.#settledAs !== 'superseded') await this.#release();
+        if (this.#settledAs === 'owned') this.#armed = false;
+      }
       if (fencesByExecutionId.get(this.executionId) === this) fencesByExecutionId.delete(this.executionId);
       if (activeFenceByRunId.get(this.runId) === this) activeFenceByRunId.delete(this.runId);
       this.#resolveSettled();
@@ -803,19 +844,26 @@ export class ExecutionFence implements RunFenceScope {
   async abandon(): Promise<void> {
     if (this.#settlement || this.#lossError) return;
     this.#markLost(new DurableExecutionFenceError(EXECUTION_ABANDONED_ERROR_ID, this.#details()));
+    await this.#abandonClaim();
+    await this.settle(async () => {});
+  }
+
+  async #abandonClaim(whileOwned?: (successor?: RunFence) => Promise<void>): Promise<void> {
     try {
-      const successor = await this.#backend.abandon(this.claim);
-      if (successor && this.#memoryStore) {
-        await this.#memoryStore.raiseRunFence(successor);
-        // Nothing executes under the successor; retire it so retention can prune it.
-        await this.#retireMemoryFence(successor);
-      }
+      await this.#backend.abandon(this.claim, async successor => {
+        try {
+          if (successor && this.#memoryStore) await this.#memoryStore.raiseRunFence(successor);
+          await whileOwned?.(successor);
+        } finally {
+          if (successor) await this.#retireMemoryFence(successor);
+        }
+      });
     } catch (error) {
       this.#logger?.warn?.(
         `[DurableAgent] run ${this.runId}: failed to release the abandoned run; it can be recovered once its claim expires: ${error}`,
       );
+      if (whileOwned) throw error;
     }
-    await this.settle(async () => {});
   }
 
   async #release(): Promise<void> {

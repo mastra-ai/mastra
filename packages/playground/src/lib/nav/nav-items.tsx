@@ -150,6 +150,8 @@ export const mainNav: NavSection[] = [
         url: '/traces',
         Icon: TraceIcon,
         isOnMastraPlatform: true,
+        // /spans is reached through the Traces/Spans switch on the traces page.
+        activePaths: ['/spans'],
       },
       signalsNavItem,
       {
