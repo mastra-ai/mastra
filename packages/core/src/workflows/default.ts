@@ -954,6 +954,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           stepExecutionPath,
         });
 
+        this.clearLastPersistedStatus(runId);
+
         return {
           ...formattedResult,
           runId,

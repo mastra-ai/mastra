@@ -293,6 +293,51 @@ describe('workflow sleep cancellation', () => {
     expect(snapshot?.status).toBe('canceled');
   });
 
+  it('time travels a run whose cancellation was recorded by the abort branch', async () => {
+    const workflowId = 'time-travel-abort-branch-canceled-workflow';
+    const storage = new MockStore();
+    const afterFirstStep = vi.fn().mockResolvedValue({});
+    const workflow = createWorkflow({
+      id: workflowId,
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+      options: {
+        validateInputs: false,
+        shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus === 'canceled',
+      },
+    })
+      .then(noopStep('first-step', async () => ({})))
+      .then(noopStep('after-first-step', afterFirstStep))
+      .commit();
+    new Mastra({ logger: false, storage, workflows: { [workflowId]: workflow } });
+
+    const store = await storage.getStore('workflows');
+    if (!store) throw new Error('workflows store missing');
+    const run = await workflow.createRun();
+    const loadStatus = store.loadWorkflowRunStatus.bind(store);
+    // Cancel after the first step's result is decided but before the engine's
+    // abort check. cancel()'s own storage write fails (and is swallowed), so the
+    // engine's abort branch is what records the cancellation.
+    const statusRead = vi.spyOn(store, 'loadWorkflowRunStatus').mockImplementationOnce(async args => {
+      const status = await loadStatus(args);
+      vi.spyOn(store, 'updateWorkflowState').mockRejectedValueOnce(new Error('unavailable'));
+      await run.cancel();
+      return status;
+    });
+
+    expect((await run.start({ inputData: {} })).status).toBe('canceled');
+    expect(afterFirstStep).not.toHaveBeenCalled();
+    expect((await store.loadWorkflowSnapshot({ workflowName: workflowId, runId: run.runId }))?.status).toBe('canceled');
+    statusRead.mockRestore();
+    vi.restoreAllMocks();
+
+    const replay = await workflow.createRun({ runId: run.runId });
+    const result = await replay.timeTravel({ step: 'after-first-step', inputData: {} });
+
+    expect(result.status).toBe('success');
+    expect(afterFirstStep).toHaveBeenCalledTimes(1);
+  });
+
   it('completes a sleep normally when the run is not canceled', async () => {
     const afterSleep = vi.fn().mockResolvedValue({});
     const workflow = createWorkflow({
