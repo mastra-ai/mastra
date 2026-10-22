@@ -1,3 +1,4 @@
+import { hasPermission } from '@mastra/core/auth/ee';
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { formatZodError } from '@mastra/server/handlers/error';
@@ -13,20 +14,6 @@ import { BadRequestException, ForbiddenException, HttpException, Inject, Injecta
 
 import { MASTRA, MASTRA_OPTIONS } from '../constants';
 import type { MastraModuleOptions } from '../mastra.module';
-
-type HasPermissionFn = (userPerms: string[], required: string) => boolean;
-let hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
-function loadHasPermission(): Promise<HasPermissionFn | undefined> {
-  hasPermissionPromise ??= import('@mastra/core/auth/ee')
-    .then(m => m.hasPermission)
-    .catch(() => {
-      console.error(
-        '[@mastra/nestjs] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
-      );
-      return undefined;
-    });
-  return hasPermissionPromise;
-}
 
 export interface RouteMatch {
   route: ServerRoute;
@@ -327,8 +314,7 @@ export class RouteHandlerService {
     const rbacProvider =
       requestContext.get(MASTRA_AUTH_MODE_KEY) === 'studio' ? (studio?.rbac ?? server?.rbac) : server?.rbac;
     const requiredPermission = rbacProvider ? getEffectivePermission(route) : null;
-    const hasPermission = requiredPermission ? await loadHasPermission() : undefined;
-    if (requiredPermission && hasPermission) {
+    if (requiredPermission) {
       const required = Array.isArray(requiredPermission) ? requiredPermission : [requiredPermission];
       const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
       if (!userPermissions || !required.some(permission => hasPermission(userPermissions, permission))) {
