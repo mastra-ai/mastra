@@ -214,7 +214,7 @@ The channel instructions Mastra adds to the agent's prompt follow this setting: 
 
 ## Runs that don't start from a message
 
-A thread that started in a channel can also run from elsewhere, such as a schedule, a Studio prompt, or a signal waking the agent. Those runs get the same channel instructions as a run started by a message, so the agent still knows its identity there and whether its text replies are posted there. The system prompt doesn't change between the two, which keeps it cached.
+A thread that started in a channel can also run from elsewhere, such as a schedule, a Studio prompt, or a signal waking the agent. Those runs get the same channel instructions as a run started by a message. The agent knows its identity in the channel and whether its text replies are posted there. Because the system prompt is identical for both kinds of run, it stays cached.
 
 Messages that come in over a channel carry a `platform` attribute (for example `platform="slack"`), so the agent can tell them apart from a prompt sent from somewhere else.
 
