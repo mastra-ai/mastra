@@ -63,20 +63,32 @@ describe('reply_in_thread in the transcript', () => {
     expect(screen.queryByText(/"posted"/)).not.toBeInTheDocument();
   });
 
-  it('ends the turn like any reply: model, Sent to Slack, copy and time, copying what was posted', async () => {
+  it('keeps a Slack post apart from the text only the web UI sees', async () => {
     const user = userEvent.setup();
     const { container } = renderEntries([
-      replyEntry(
-        { state: 'result', args: { text: 'Hello world' }, result: { posted: true } },
-        // The model's own closing text never reached Slack and is not the reply.
-        [{ type: 'text', text: 'I posted hello world in the thread.' }],
-      ),
+      replyEntry({ state: 'result', args: { text: 'Hello world' }, result: { posted: true } }, [
+        { type: 'text', text: 'I posted hello world in the thread.' },
+      ]),
     ]);
 
-    expect(screen.getByText(/^Claude Opus 4\.6/)).toBeInTheDocument();
-    expect(screen.getByText('Sent to Slack')).toBeInTheDocument();
-    expect(container.querySelector('time')?.getAttribute('datetime')).toBe(CREATED_AT.toISOString());
+    // The post says where it went; the agent's own text and the turn footer don't.
+    const post = screen.getByRole('group', { name: 'Reply in Slack thread' });
+    expect(within(post).getByText('Hello world')).toBeInTheDocument();
+    expect(within(post).getByText('Sent to Slack')).toBeInTheDocument();
+    expect(screen.getAllByText('Sent to Slack')).toHaveLength(1);
+    expect(within(post).queryByText(/I posted hello world/)).not.toBeInTheDocument();
 
+    expect(screen.getByText(/^Claude Opus 4\.6/)).toBeInTheDocument();
+    expect(container.querySelector('time')?.getAttribute('datetime')).toBe(CREATED_AT.toISOString());
+    await user.click(screen.getByRole('button', { name: 'Copy message' }));
+    expect(await navigator.clipboard.readText()).toBe('I posted hello world in the thread.');
+  });
+
+  it('copies what was posted when the turn only posted to Slack', async () => {
+    const user = userEvent.setup();
+    renderEntries([replyEntry({ state: 'result', args: { text: 'Hello world' }, result: { posted: true } })]);
+
+    expect(screen.getByText(/^Claude Opus 4\.6/)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Copy message' }));
     expect(await navigator.clipboard.readText()).toBe('Hello world');
   });

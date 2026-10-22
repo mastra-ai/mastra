@@ -23,19 +23,6 @@ export function ChannelOriginBadge({ origin }: { origin: ChannelOrigin }) {
   );
 }
 
-/** Under an agent reply posted to a chat thread with `reply_in_thread`. */
-export function SentToChannel({ platform }: { platform: string }) {
-  const label = CHANNEL_PLATFORM_LABEL[platform] ?? platform;
-  return (
-    <span className="text-muted-foreground flex items-center gap-1">
-      {platform === 'slack' && <SlackIcon className="size-3" aria-hidden="true" />}
-      <Txt as="span" variant="meta">
-        {`Sent to ${label}`}
-      </Txt>
-    </span>
-  );
-}
-
 /** The bubble beside a message someone else sent; hover or focus it for their name. */
 export function SenderAvatar({ author }: { author: MessageAuthor }) {
   return (

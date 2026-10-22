@@ -11,20 +11,18 @@ type ReplyStatus = 'running' | 'done' | 'error';
  * people in the Slack thread read it, instead of a JSON tool card.
  */
 export function ChannelReplyMessage({ text, status }: { text: string; status: ReplyStatus }) {
-  // A post that landed is marked once, in the turn's footer ("Sent to Slack");
-  // only one still being written or that failed says so here.
-  const label = status === 'running' ? 'Sending to Slack…' : status === 'error' ? 'Not sent to Slack' : undefined;
+  // Each post says where it went, so it stays apart from the agent's own text
+  // in the same turn, which only the web UI sees.
+  const label = status === 'running' ? 'Sending to Slack…' : status === 'error' ? 'Not sent to Slack' : 'Sent to Slack';
   return (
     <div role="group" aria-label="Reply in Slack thread" className="my-3">
       <MarkdownRenderer streaming={status === 'running'}>{text}</MarkdownRenderer>
-      {label && (
-        <div className="text-muted-foreground mt-1 flex items-center gap-1">
-          <SlackIcon className="size-3" aria-hidden="true" />
-          <Txt as="span" variant="meta" className={status === 'error' ? 'text-destructive-foreground' : undefined}>
-            {label}
-          </Txt>
-        </div>
-      )}
+      <div className="text-muted-foreground mt-1 flex items-center gap-1">
+        <SlackIcon className="size-3" aria-hidden="true" />
+        <Txt as="span" variant="meta" className={status === 'error' ? 'text-destructive-foreground' : undefined}>
+          {label}
+        </Txt>
+      </div>
     </div>
   );
 }
