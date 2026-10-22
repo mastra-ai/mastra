@@ -75,7 +75,7 @@ describe('ChatChannelProcessor', () => {
     // And the channel system message must be present under its own tag.
     const channelAfter = args.messageList.getSystemMessages('chat-channel-context');
     expect(channelAfter).toHaveLength(1);
-    expect(channelAfter[0]!.content).toContain('communicating via slack');
+    expect(channelAfter[0]!.content).toContain('connected to a slack direct message');
   });
 
   it('does not re-add a duplicate channel system message across steps', async () => {
@@ -93,7 +93,21 @@ describe('ChatChannelProcessor', () => {
 
     const channelMessages = messageList.getSystemMessages('chat-channel-context');
     expect(channelMessages).toHaveLength(1);
-    expect(channelMessages[0]!.content).toContain('communicating via slack');
+    expect(channelMessages[0]!.content).toContain('connected to a slack direct message');
+  });
+
+  it('says which platform the conversation is connected to and how its messages are marked', async () => {
+    const firstLine = async (isDM: boolean) => {
+      const args = createArgs({ channel: { platform: 'slack', isDM } as ChannelContext });
+      await new ChatChannelProcessor().processInputStep(args);
+      return String(args.messageList.getSystemMessages('chat-channel-context')[0]!.content).split('\n')[0];
+    };
+    expect(await firstLine(false)).toBe(
+      'This conversation is connected to a slack thread. Messages marked platform="slack" were sent there; other messages came from elsewhere.',
+    );
+    expect(await firstLine(true)).toBe(
+      'This conversation is connected to a slack direct message. Messages marked platform="slack" were sent there; other messages came from elsewhere.',
+    );
   });
 
   describe('bot identity', () => {
