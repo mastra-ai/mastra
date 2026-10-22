@@ -108,12 +108,6 @@ vi.mock('@mastra/core/llm', async () => {
 });
 
 describe('getProvidersHandler', () => {
-  it('includes catalog release dates for model pickers', async () => {
-    const result = await GET_PROVIDERS_ROUTE.handler({});
-    const openai = result.providers.find(provider => provider.id === 'openai');
-    expect(openai?.modelReleaseDates?.['gpt-5']).toBe('2025-08-07');
-  });
-
   // Store original env
   const originalEnv = process.env;
 
@@ -127,6 +121,23 @@ describe('getProvidersHandler', () => {
     process.env = originalEnv;
     // Clear mock registry to prevent cross-test contamination
     delete (global as any).__MOCK_PROVIDER_REGISTRY__;
+  });
+
+  it('includes catalog release dates for model pickers', async () => {
+    Object.assign(globalThis, {
+      __MOCK_PROVIDER_REGISTRY__: {
+        acme: {
+          name: 'ACME',
+          models: ['acme-classic', 'acme-next'],
+          modelReleaseDates: { 'acme-next': '2025-08-07' },
+          apiKeyEnvVar: 'ACME_API_KEY',
+          gateway: 'models.dev',
+        },
+      },
+    });
+    const result = await GET_PROVIDERS_ROUTE.handler({});
+    const acme = result.providers.find(provider => provider.id === 'acme');
+    expect(acme?.modelReleaseDates).toEqual({ 'acme-next': '2025-08-07' });
   });
 
   it('should return all providers from the registry', async () => {
