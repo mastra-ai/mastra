@@ -13,7 +13,7 @@ Signals are typed asynchronous input to a thread. A thread is the durable, addre
 
 For a thread-based agent, signals are the default input path: input goes to the thread instead of starting a new stream for each request. Send a message when a user replies, a signal when a background job adds context, and a notification when an external event should reach the agent later.
 
-When a request never becomes an ongoing conversation, there's no thread for input to arrive on. That's where [`agent.stream()`](/reference/streaming/agents/stream) fits: a single request that returns its answer and doesn't need to be addressed again.
+When a request never becomes an ongoing conversation, there's no thread for input to arrive on. For that case, [`agent.stream()`](/reference/streaming/agents/stream) runs one request and returns the answer without leaving anything behind that you'd address later.
 
 :::tip[📹 Watch]
 
