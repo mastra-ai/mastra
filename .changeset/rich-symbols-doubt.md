@@ -6,6 +6,7 @@ Added `@mastra/playground-ui/oxlint`, an oxlint plugin with the design system's 
 
 ```ts
 import { recommended as playgroundUiRules } from '@mastra/playground-ui/oxlint';
+import { defineConfig } from 'oxlint';
 
 export default defineConfig({
   jsPlugins: ['@mastra/playground-ui/oxlint'],
