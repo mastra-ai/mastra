@@ -2,4 +2,4 @@
 '@mastra/client-js': patch
 ---
 
-Fixed per-call abortSignal cancellation for durable agent streaming, resumption, and tool approval or decline. The SDK explicitly cancels the run, retrying briefly while it registers and bounding cancellation requests to 10 seconds. Cancelling response.body or the client-wide signal still only detaches the observer. Older servers without the cancellation endpoint fall back to transport cancellation, preserving AbortError handling.
+Fix per-call `abortSignal` cancellation so it stops durable runs when streaming, resuming, or approving or declining tool calls. Cancelling `response.body` or the client-wide signal only stops receiving updates and does not cancel the run. With older servers, per-call cancellation closes the stream and preserves `AbortError` handling.
