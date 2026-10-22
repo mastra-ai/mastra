@@ -182,6 +182,7 @@ describe('streaming reply_in_thread into the thread', () => {
       await run(chunk('tool-call-delta', { toolCallId: 'call-1', argsTextDelta: delta }));
       await tick();
     }
+    return run;
   }
 
   it('shows the text while the model writes it, then finishes the same post with the session link', async () => {
@@ -222,6 +223,26 @@ describe('streaming reply_in_thread into the thread', () => {
     expect(thread.post).toHaveBeenCalledTimes(1);
     expect(thread.whole).toEqual([]);
   });
+
+  for (const [ending, chunks] of [
+    ['its arguments fail validation', [chunk('tool-error', { toolCallId: 'call-1', toolName: REPLY_TOOL_NAME })]],
+    ['the run is aborted', [chunk('abort', {})]],
+    ['the run errors', [chunk('error', { error: new Error('boom') })]],
+    ['the run ends', [chunk('finish', {})]],
+  ] as const) {
+    it(`ends a streamed post with what was shown when ${ending} before the tool runs`, async () => {
+      const thread = streamingThread();
+      const { requestContext } = channelRun({ post: thread.post });
+
+      const run = await feed(requestContext, ['{"text": "Here is the full report: part one']);
+      expect(thread.streamed.join('')).toBe('Here is the full report: part one');
+      for (const part of chunks) await run(part);
+
+      // The post settles instead of staying open in Slack, and nothing more is added to it.
+      await expect(thread.post.mock.results[0]!.value).resolves.toEqual({});
+      expect(thread.streamed.join('')).toBe('Here is the full report: part one');
+    });
+  }
 
   it('posts the reply whole when the streamed post fails', async () => {
     const thread = streamingThread({ fail: true });
