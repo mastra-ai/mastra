@@ -2,4 +2,4 @@
 '@mastra/e2b': patch
 ---
 
-Bump the default Node.js version installed into E2B sandbox templates to 24.22.1 (Oct 2026 Node.js security release, incl. CVE-2026-111497).
+Updated the default E2B template to Node.js 24.22.1 for the October 2026 security fixes. New default templates get a new cache identity. Existing sandboxes, custom templates, and the Node.js runtime running Mastra still need separate updates.
