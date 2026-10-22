@@ -4,7 +4,8 @@
 
 `RedisServerCache` now supports atomic appends and extend-only expiry.
 
-`listPushIndexed` allocates the entry's index and appends it in one Lua script, and writes the topic log and its counter with one TTL. The list and the counter that numbers it must expire together: a counter that outlives its list restarts at zero while subscribed observers still expect the old numbering, and a counter that expires first reuses indices already in the list. Every append refreshes both keys with `ttlSeconds` (default 300 seconds), and `clearTopic` removes both.
+`listPushIndexed` allocates the entry's index and appends it in one Lua script, and writes the topic log and its counter with one TTL. The list and the counter that numbers it must expire together: a counter that outlives its list restarts at zero while subscribed observers still expect the old numbering, and a counter that expires first reuses indices already in the list. Every append gives both keys at least `ttlSeconds` (default 300 seconds) and `clearTopic` removes both.
+A key that already lives longer, such as a log extended for a run parked on an approval, keeps its own deadline: extending a parked run's retention and then appending a frame may not stamp the default back over it.
 
 ```ts
 import { RedisServerCache } from '@mastra/redis';

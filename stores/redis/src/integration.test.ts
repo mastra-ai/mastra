@@ -167,6 +167,43 @@ describe('RedisServerCache Integration', () => {
       }
     });
 
+    it('keeps a parked run log alive when the run appends again', async () => {
+      await cache.listPushIndexed('events', 'events:counter', { type: 'a' });
+
+      // A run parks on tool approval: both keys are pushed out to a day.
+      const parkedFor = 24 * 60 * 60 * 1000;
+      await cache.expire('events', parkedFor);
+      await cache.expire('events:counter', parkedFor);
+
+      // Resuming appends again. Earlier this re-stamped the cache's 60s
+      // default and threw the day away, expiring the replay log early.
+      expect(await cache.listPushIndexed('events', 'events:counter', { type: 'b' })).toBe(1);
+
+      for (const key of ['test:events', 'test:events:counter']) {
+        const ttl = await redis.ttl(key);
+        expect(ttl).toBeGreaterThan(parkedFor / 1000 - 120);
+        expect(ttl).toBeLessThanOrEqual(parkedFor / 1000);
+      }
+    });
+
+    it('does not lose a retention extension to an append that races it', async () => {
+      await cache.listPushIndexed('events', 'events:counter', { type: 'a' });
+      const parkedFor = 24 * 60 * 60 * 1000;
+
+      // The extension and the resumed append run against the same keys, in
+      // either order. Neither write may leave a shorter deadline behind.
+      await Promise.all([
+        cache.expire('events', parkedFor),
+        cache.listPushIndexed('events', 'events:counter', { type: 'b' }),
+        cache.expire('events:counter', parkedFor),
+        cache.listPushIndexed('events', 'events:counter', { type: 'c' }),
+      ]);
+
+      for (const key of ['test:events', 'test:events:counter']) {
+        expect(await redis.ttl(key)).toBeGreaterThan(parkedFor / 1000 - 120);
+      }
+    });
+
     it('should apply TTL to keys written via increment', async () => {
       await cache.increment('counter');
 

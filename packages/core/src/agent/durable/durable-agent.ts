@@ -1702,8 +1702,10 @@ export class DurableAgent<
     if (this.#cachingPubsub) return;
 
     if (this.#cacheConfig === false) {
-      // Caching explicitly disabled
-      this.#cachingPubsub = this.#innerPubsub;
+      // Caching explicitly disabled. Run frames still have to travel on the run
+      // bus, not the agent's own pubsub: every worker and observer watches the
+      // Mastra transport, so caching off must not also change the route.
+      this.#cachingPubsub = this.#runStreamBus();
       this.#resolvedCache = null;
       return;
     }
@@ -4418,6 +4420,12 @@ export class DurableAgent<
             executionFence,
           );
           executionFence.throwIfLost();
+          if (result?.status === 'suspended') {
+            // A recovered run can park too. This path never reaches
+            // settleExecution(), so refresh the log here or the freshly parked
+            // run keeps the cache's normal TTL and loses its replay window.
+            await this.#extendRunLogRetention(runId);
+          }
           if (finishPublishedBeforeCrash && result?.status === 'success') {
             // The run's result is map-final-output's saved output, passed through
             // execute-scorers unchanged: the same payload the lost FINISH carried.

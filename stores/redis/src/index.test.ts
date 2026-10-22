@@ -1,5 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { RedisServerCache, upstashPreset, nodeRedisPreset, LIST_PUSH_INDEXED_SCRIPT } from './index';
+import {
+  RedisServerCache,
+  upstashPreset,
+  nodeRedisPreset,
+  EXTEND_EXPIRY_SCRIPT,
+  LIST_PUSH_INDEXED_SCRIPT,
+} from './index';
 import type { RedisClient } from './index';
 
 // Create a mock Redis client
@@ -231,6 +237,19 @@ describe('RedisServerCache', () => {
       expect(mockClient.eval.mock.calls[0]!.slice(4)).toEqual(['{"type":"x"}', '86400']);
     });
 
+    it('reads both deadlines before writing so an append cannot shorten them', () => {
+      // Lua cannot run in a unit test, so pin the ordering that makes the
+      // append extend-only: TTLs are captured before INCR/RPUSH, and the
+      // refresh skips persistent keys and deadlines at or past the target.
+      // The behaviour itself is covered in integration.test.ts.
+      const script = LIST_PUSH_INDEXED_SCRIPT;
+      expect(script.indexOf("redis.call('TTL', KEYS[1])")).toBeGreaterThan(-1);
+      expect(script.indexOf("redis.call('TTL', KEYS[2])")).toBeGreaterThan(-1);
+      expect(script.indexOf("redis.call('TTL', KEYS[1])")).toBeLessThan(script.indexOf("redis.call('INCR'"));
+      expect(script.indexOf("redis.call('TTL', KEYS[2])")).toBeLessThan(script.indexOf("redis.call('RPUSH'"));
+      expect(script).toContain('current ~= -1 and current < ttl');
+    });
+
     it('throws when the client has no eval', async () => {
       const { eval: _eval, ...clientWithoutEval } = mockClient;
       const fallbackCache = new RedisServerCache({ client: clientWithoutEval as RedisClient });
@@ -252,57 +271,32 @@ describe('RedisServerCache', () => {
   });
 
   describe('expire', () => {
-    it('sets a prefixed key TTL in seconds', async () => {
-      mockClient.ttl.mockResolvedValue(60);
+    it('extends a prefixed key in seconds with one atomic script', async () => {
+      mockClient.eval.mockResolvedValue(1);
 
       await cache.expire('events', 90_000);
 
-      expect(mockClient.expire).toHaveBeenCalledWith('mastra:cache:events', 90);
+      // The comparison and the EXPIRE live in the script, so an append
+      // stamping its own TTL cannot interleave between them.
+      expect(mockClient.eval).toHaveBeenCalledWith(EXTEND_EXPIRY_SCRIPT, 1, 'mastra:cache:events', '90');
+      expect(mockClient.ttl).not.toHaveBeenCalled();
+      expect(mockClient.expire).not.toHaveBeenCalled();
     });
 
     it('rounds up sub-second TTLs so the key is not removed', async () => {
-      mockClient.ttl.mockResolvedValue(0);
+      mockClient.eval.mockResolvedValue(1);
 
       await cache.expire('events', 1);
 
       // Redis treats EXPIRE with a non-positive TTL as a delete.
-      expect(mockClient.expire).toHaveBeenCalledWith('mastra:cache:events', 1);
+      expect(mockClient.eval).toHaveBeenCalledWith(EXTEND_EXPIRY_SCRIPT, 1, 'mastra:cache:events', '1');
     });
 
     it('does nothing for a non-positive TTL', async () => {
       await cache.expire('events', 0);
 
+      expect(mockClient.eval).not.toHaveBeenCalled();
       expect(mockClient.ttl).not.toHaveBeenCalled();
-      expect(mockClient.expire).not.toHaveBeenCalled();
-    });
-
-    it('never shortens a key that already lives longer', async () => {
-      // A cache configured for a week must keep its week: shortening it to the
-      // parked-run window would expire the log early and restart numbering.
-      mockClient.ttl.mockResolvedValue(7 * 24 * 60 * 60);
-
-      await cache.expire('events', 24 * 60 * 60 * 1000);
-
-      expect(mockClient.expire).not.toHaveBeenCalled();
-    });
-
-    it('leaves a key without expiry persistent', async () => {
-      mockClient.ttl.mockResolvedValue(-1);
-
-      await cache.expire('events', 24 * 60 * 60 * 1000);
-
-      expect(mockClient.expire).not.toHaveBeenCalled();
-    });
-
-    it('does not shorten a key when the client cannot report its TTL', async () => {
-      // `ttl` is part of the client contract, but an untyped client can omit
-      // it. Guessing a deadline there would shorten a longer configured TTL,
-      // so the refresh is skipped instead.
-      const { ttl: _omitted, ...clientWithoutTtl } = mockClient;
-      const noTtlCache = new RedisServerCache({ client: clientWithoutTtl as any });
-
-      await noTtlCache.expire('events', 24 * 60 * 60 * 1000);
-
       expect(mockClient.expire).not.toHaveBeenCalled();
     });
 
@@ -313,7 +307,41 @@ describe('RedisServerCache', () => {
 
       await immortal.expire('events', 24 * 60 * 60 * 1000);
 
+      expect(mockClient.eval).not.toHaveBeenCalled();
       expect(mockClient.ttl).not.toHaveBeenCalled();
+      expect(mockClient.expire).not.toHaveBeenCalled();
+    });
+
+    it('only ever lengthens when it falls back to TTL + EXPIRE', async () => {
+      const { eval: _eval, ...clientWithoutEval } = mockClient;
+      const fallbackCache = new RedisServerCache({ client: clientWithoutEval as RedisClient });
+
+      mockClient.ttl.mockResolvedValue(60);
+      await fallbackCache.expire('events', 90_000);
+      expect(mockClient.expire).toHaveBeenCalledWith('mastra:cache:events', 90);
+
+      // A cache configured for a week must keep its week: shortening it to the
+      // parked-run window would expire the log early and restart numbering.
+      mockClient.expire.mockClear();
+      mockClient.ttl.mockResolvedValue(7 * 24 * 60 * 60);
+      await fallbackCache.expire('events', 24 * 60 * 60 * 1000);
+      expect(mockClient.expire).not.toHaveBeenCalled();
+
+      // `-1` is a key without expiry; it stays persistent.
+      mockClient.ttl.mockResolvedValue(-1);
+      await fallbackCache.expire('events', 24 * 60 * 60 * 1000);
+      expect(mockClient.expire).not.toHaveBeenCalled();
+    });
+
+    it('does not shorten a key when the client cannot report its TTL', async () => {
+      // `ttl` is part of the client contract, but an untyped client can omit
+      // it. Guessing a deadline there would shorten a longer configured TTL,
+      // so the refresh is skipped instead.
+      const { ttl: _omitted, eval: _eval, ...clientWithoutTtl } = mockClient;
+      const noTtlCache = new RedisServerCache({ client: clientWithoutTtl as any });
+
+      await noTtlCache.expire('events', 24 * 60 * 60 * 1000);
+
       expect(mockClient.expire).not.toHaveBeenCalled();
     });
   });

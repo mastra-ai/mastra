@@ -27,6 +27,8 @@ const stringValue = (value: unknown): string => (Buffer.isBuffer(value) ? value.
  * so `{...}` → `{"index":N,...}` and `{}` → `{"index":N}`.
  */
 const LIST_PUSH_INDEXED_SCRIPT = `
+local listTtl = redis.call('TTL', KEYS[1])
+local counterTtl = redis.call('TTL', KEYS[2])
 local i = redis.call('INCR', KEYS[2]) - 1
 local body = ARGV[1]
 local doc
@@ -38,10 +40,27 @@ end
 redis.call('RPUSH', KEYS[1], doc)
 local ttl = tonumber(ARGV[2])
 if ttl > 0 then
-  redis.call('EXPIRE', KEYS[1], ttl)
-  redis.call('EXPIRE', KEYS[2], ttl)
+  -- Extend-only: a log extended for a parked run keeps its longer deadline
+  -- when the run resumes and appends again. -2 means this call created the key
+  -- and -1 that it is persistent on purpose.
+  local function refresh(key, current)
+    if current == -2 or (current ~= -1 and current < ttl) then
+      redis.call('EXPIRE', key, ttl)
+    end
+  end
+  refresh(KEYS[1], listTtl)
+  refresh(KEYS[2], counterTtl)
 end
 return i
+`.trim();
+
+const EXTEND_EXPIRY_SCRIPT = `
+local current = redis.call('TTL', KEYS[1])
+if current == -1 or current == -2 then return 0 end
+local want = tonumber(ARGV[1])
+if current >= want then return 0 end
+redis.call('EXPIRE', KEYS[1], want)
+return 1
 `.trim();
 
 /** GLIDE-backed Valkey cache for Mastra server state. */
@@ -135,11 +154,9 @@ export class ValkeyServerCache extends MastraServerCache {
     // every writer treats as immortal.
     if (ttlMs <= 0 || this.ttlSeconds <= 0) return;
     const fullKey = this.getKey(key);
-    const remainingSeconds = Number(await this.command(['TTL', fullKey]));
-    // `-1` is a key without expiry and `-2` one that is already gone: neither
-    // should be given a (possibly shorter) deadline.
-    if (remainingSeconds < 0 || remainingSeconds * 1000 >= ttlMs) return;
-    await this.command(['EXPIRE', fullKey, String(Math.max(1, Math.ceil(ttlMs / 1000)))]);
+    // One script so the comparison and the write cannot interleave with an
+    // append stamping its own deadline on the same key.
+    await this.command(['EVAL', EXTEND_EXPIRY_SCRIPT, '1', fullKey, String(Math.max(1, Math.ceil(ttlMs / 1000)))]);
   }
 
   /**

@@ -129,6 +129,17 @@ export class InMemoryServerCache extends MastraServerCache {
     return true;
   }
 
+  /**
+   * Deadline to use when re-stamping a key this call writes: the cache's
+   * default, unless the key already lives longer (a parked run's log is
+   * extended past it) or never expires.
+   */
+  #writeTtl(key: string): number {
+    const fallback = this.ttlMs > 0 ? this.ttlMs : Infinity;
+    if (this.cache.get(key) === undefined) return fallback;
+    return Math.max(this.cache.getRemainingTTL(key), fallback);
+  }
+
   async listPushIndexed(listKey: string, counterKey: string, value: Record<string, unknown>): Promise<number> {
     const existingCounter = this.cache.get(counterKey);
     if (existingCounter !== undefined && typeof existingCounter !== 'number') {
@@ -142,9 +153,9 @@ export class InMemoryServerCache extends MastraServerCache {
     }
     const list = Array.isArray(existingList) ? existingList : [];
 
-    this.cache.set(counterKey, index + 1);
+    this.cache.set(counterKey, index + 1, { ttl: this.#writeTtl(counterKey) });
     list.push({ ...value, index });
-    this.cache.set(listKey, list);
+    this.cache.set(listKey, list, { ttl: this.#writeTtl(listKey) });
 
     return index;
   }

@@ -362,6 +362,47 @@ describe('EventedAgent split transport (agent pubsub ≠ mastra.pubsub)', () => 
     await agentTransport.close();
   });
 
+  it('keeps run frames on the Mastra bus when caching is disabled', async () => {
+    // Turning the cache off may not turn the transport off with it: another
+    // worker still watches the Mastra bus, so a frame that only reaches the
+    // agent's own bus is a frame nobody else sees.
+    const runTransport = new EventEmitterPubSub();
+    const agent = createEventedAgent({
+      agent: new Agent({
+        id: 'no-cache-agent',
+        name: 'No Cache Agent',
+        instructions: 'test',
+        model: createTextStreamModel('Hi'),
+      }),
+      pubsub: agentPubsub,
+      cache: false,
+    });
+    new Mastra({
+      agents: { 'no-cache-agent': agent as any },
+      logger: false,
+      storage: new InMemoryStore(),
+      pubsub: runTransport,
+    });
+
+    const onRunBus: unknown[] = [];
+    const onAgentBus: unknown[] = [];
+    const topic = AGENT_STREAM_TOPIC('no-cache-run');
+    await runTransport.subscribe(topic, event => {
+      onRunBus.push(event);
+    });
+    await agentPubsub.subscribe(topic, event => {
+      onAgentBus.push(event);
+    });
+
+    expect(agent.cache).toBeNull();
+    await agent.pubsub.publish(topic, { type: 'chunk', runId: 'no-cache-run', data: {} });
+
+    expect(onRunBus).toHaveLength(1);
+    expect(onAgentBus).toHaveLength(0);
+
+    await runTransport.close();
+  });
+
   it('still aligns the cache when the agent is read before it is registered', () => {
     // Reading `agent.cache` resolves the workflow engine; before registration
     // `#mastra` is undefined and the resolver memoizes 'default'. The evented

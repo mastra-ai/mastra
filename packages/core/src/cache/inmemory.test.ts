@@ -211,6 +211,24 @@ describe('InMemoryServerCache', () => {
         ]);
         expect(await cache.increment('events:counter')).toBe(4);
       });
+
+      it('keeps a log and counter that were extended for a parked run', async () => {
+        const ttlCache = new InMemoryServerCache({ ttlMs: 20 });
+        await ttlCache.listPushIndexed('events', 'events:counter', { type: 'a' });
+        await ttlCache.expire('events', 5_000);
+        await ttlCache.expire('events:counter', 5_000);
+
+        // Resuming the run appends again, which would normally re-stamp the
+        // cache's 20ms default and throw away the suspended-run window.
+        expect(await ttlCache.listPushIndexed('events', 'events:counter', { type: 'b' })).toBe(1);
+        await new Promise(resolve => setTimeout(resolve, 60));
+
+        expect(await ttlCache.listFromTo('events', 0)).toEqual([
+          { type: 'a', index: 0 },
+          { type: 'b', index: 1 },
+        ]);
+        expect(await ttlCache.increment('events:counter')).toBe(3);
+      });
     });
 
     describe('increment', () => {
