@@ -10,12 +10,17 @@ type ReplyTool = {
   execute: (input: { text: string }, ctx: Record<string, unknown>) => Promise<unknown>;
 };
 
-function channelRun({ textDisplay = 'hidden' as 'hidden' | 'show' | null, post = vi.fn(async () => ({})) } = {}) {
+function channelRun({
+  textDisplay = 'hidden' as 'hidden' | 'show' | null,
+  streaming = true,
+  post = vi.fn(async () => ({})),
+} = {}) {
   const requestContext = new RequestContext();
   requestContext.set('channel', { platform: 'slack', isDM: false });
   requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, {
     platform: 'slack',
     ...(textDisplay ? { textDisplay } : {}),
+    streaming: { enabled: streaming },
     chatThread: { post },
   });
   requestContext.set('controller', {
@@ -205,6 +210,19 @@ describe('streaming reply_in_thread into the thread', () => {
     await feed(requestContext, ['{"text": "Hel', 'lo"}']);
     await tool.execute({ text: 'Hello' }, { agent: { toolCallId: 'call-1' } });
 
+    expect(thread.whole).toEqual([{ markdown: 'Hello' }]);
+  });
+
+  it('posts the reply whole when the adapter does not stream', async () => {
+    const thread = streamingThread();
+    const { requestContext } = channelRun({ streaming: false, post: thread.post });
+    const tool = await replyTool(requestContext);
+
+    await feed(requestContext, ['{"text": "Hel', 'lo"}']);
+    expect(thread.post).not.toHaveBeenCalled();
+    await tool.execute({ text: 'Hello' }, { agent: { toolCallId: 'call-1' } });
+
+    expect(thread.streamed).toEqual([]);
     expect(thread.whole).toEqual([{ markdown: 'Hello' }]);
   });
 

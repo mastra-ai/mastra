@@ -152,7 +152,8 @@ function openReplyStream(chatThread: ChatChannelRenderContext['chatThread']): Re
  * Streams a `reply_in_thread` call's `text` into the thread while the model is
  * still writing it, so a long reply appears as it is written instead of all at
  * once when the call completes. The tool finishes the post with the validated
- * text; any run without a hidden-text chat thread is left alone.
+ * text. Runs whose adapter doesn't stream, or that show reply text, are left
+ * alone.
  */
 export class FactoryReplyStreamProcessor implements Processor {
   readonly id = 'factory-reply-stream';
@@ -162,7 +163,8 @@ export class FactoryReplyStreamProcessor implements Processor {
     const args = (state.args ??= {}) as Record<string, string>;
     if (part.type === 'tool-call-input-streaming-start' && part.payload.toolName === REPLY_TOOL_NAME) {
       const render = requestContext.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as ChatChannelRenderContext | undefined;
-      if (render?.textDisplay !== 'hidden') return part;
+      // A static adapter (`streaming: false`) posts each reply whole, so the tool does too.
+      if (render?.textDisplay !== 'hidden' || !render.streaming?.enabled) return part;
       args[part.payload.toolCallId] = '';
       replyStreams(requestContext).set(part.payload.toolCallId, openReplyStream(render.chatThread));
     } else if (part.type === 'tool-call-delta' && part.payload.toolCallId in args) {
