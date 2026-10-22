@@ -36,6 +36,7 @@ import {
   chunksOfType,
   createCellMemory,
   errorChunks,
+  isReplayDeterministic,
   prefillRepairs,
   recordProviderRequests,
   streamTurn,
@@ -63,7 +64,7 @@ function createScorerThatFailsOnce(scores: number[]) {
 describe.each(Object.entries(PROVIDERS))('T15 structured output — %s', (provider, model) => {
   describe.each(ENGINES)('%s engine', engine => {
     // One recording file per provider × engine, covering the pass/failonce variants.
-    useRecordedMock(`${RECORDING_NAME}-${provider}-${engine}`, { transformRequest });
+    const mock = useRecordedMock(`${RECORDING_NAME}-${provider}-${engine}`, { transformRequest });
     let recorder: ReturnType<typeof recordProviderRequests>;
 
     beforeEach(() => {
@@ -146,7 +147,13 @@ describe.each(Object.entries(PROVIDERS))('T15 structured output — %s', (provid
       expectSettled(chunks, threw, finishPayloads, errorPayloads);
 
       expect(scores).toEqual([0, 1]);
-      expect(assistantEndedRequests(recorder.requests).rejected).toEqual([]);
+      const ended = assistantEndedRequests(recorder.requests);
+      expect(ended.rejected).toEqual([]);
+      // OpenAI accepts an assistant-ended turn, so the retry control *is* that accepted request.
+      // Require it in replay: otherwise a skipped second turn would pass as "nothing rejected".
+      if (isReplayDeterministic(mock) && provider === 'openai') {
+        expect(ended.accepted.length).toBeGreaterThan(0);
+      }
       const object = finishPayloads.at(-1)?.object;
       expect(SCHEMA.safeParse(object).success).toBe(true);
       expect(object).toMatchObject({ number: 7 });

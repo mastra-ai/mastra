@@ -172,10 +172,12 @@ describe.each(Object.entries(PROVIDERS))('T3 is-task-complete — %s', (provider
     });
 
     it('throws: a failing scorer never hangs the run', async () => {
+      let invocations = 0;
       const { run } = await runCell(
         () =>
           createScorer({ id: 't3-scorer', description: 'throws before scoring' })
             .generateScore(async () => {
+              invocations++;
               throw new Error('scorer exploded');
             })
             .generateReason(async () => 'scorer exploded'),
@@ -186,6 +188,8 @@ describe.each(Object.entries(PROVIDERS))('T3 is-task-complete — %s', (provider
       // The contract only requires settling: one finish with its callback, or an error with onError.
       const settled = finishPayloads.length === 1 || (errorChunks(chunks).length > 0 && errorPayloads.length > 0);
       expect(settled).toBe(true);
+      // A failure before scoring also settles, so prove this cell exercised its scorer at all.
+      expect(invocations).toBeGreaterThan(0);
     }, 180_000);
   });
 });

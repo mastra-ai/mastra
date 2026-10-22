@@ -69,6 +69,17 @@ export function useRecordedMock(
   return mock;
 }
 
+/**
+ * `true` when traffic is served from recordings rather than a live model.
+ *
+ * A live model is free to ignore the prompt, so a cell that never produces the shape it asserts is
+ * legitimately N/A while recording. In replay the run is fixed: the same cell not producing that
+ * shape means the fixture or the request shape drifted, and passing anyway hides the regression.
+ */
+export function isReplayDeterministic(mock: { mode: string }) {
+  return mock.mode === 'replay' || mock.mode === 'auto';
+}
+
 /** Wrap `globalThis.fetch` so every provider request is recorded with its status. */
 export function recordProviderRequests() {
   const requests: ModelRequest[] = [];
@@ -216,8 +227,11 @@ export async function streamTurn(
     });
     // Durable and evented runners wrap the agent stream in `output`.
     const output = engine === 'plain' || !result.output ? result : result.output;
-    for await (const chunk of output.fullStream) chunks.push(chunk);
-    result.cleanup?.();
+    try {
+      for await (const chunk of output.fullStream) chunks.push(chunk);
+    } finally {
+      await result.cleanup?.();
+    }
   } catch (err: any) {
     threw = String(err?.message ?? err);
   }

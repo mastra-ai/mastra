@@ -17,8 +17,11 @@
  *
  * Declared difference: with `buffering`, the observation boundary is a fraction of a token threshold,
  * so the observer may fire at a slightly different point in replay than it did during recording. The
- * recorder then serves that request through its fuzzy fallback instead of an exact hash match. The
- * assertions below (final text persisted and recallable) do not depend on where the boundary landed.
+ * recorder is configured with `exactMatch`, so a request it cannot match is not served from a fuzzy
+ * candidate — `_llm-recorder` throws inside the MSW handler and the observer side channel swallows
+ * it, i.e. that observer call simply does not replay. The assertions below (final text persisted and
+ * recallable) do not depend on where the boundary landed, and the cell's own shape is still required
+ * in replay, so a drifting fixture cannot pass silently.
  *
  * Replay is the default: traffic is served from `packages/memory/__recordings__/`. To re-record
  * (needs OPENAI_API_KEY and ANTHROPIC_API_KEY), from `packages/memory/integration-tests`:
@@ -44,6 +47,7 @@ import {
   PROVIDERS,
   chunksOfType,
   errorChunks,
+  isReplayDeterministic,
   persistedMessages,
   recordProviderRequests,
   streamTurn,
@@ -96,7 +100,7 @@ const getForecast = createTool({
 describe.each(Object.entries(PROVIDERS))('T86 om-final-text — %s', (provider, model) => {
   describe.each(ENGINES)('%s engine', engine => {
     // One recording file per provider × engine, covering the default/buffering variants.
-    useRecordedMock(`${RECORDING_NAME}-${provider}-${engine}`, { transformRequest });
+    const mock = useRecordedMock(`${RECORDING_NAME}-${provider}-${engine}`, { transformRequest });
     let recorder: ReturnType<typeof recordProviderRequests>;
 
     beforeEach(() => {
@@ -165,13 +169,14 @@ describe.each(Object.entries(PROVIDERS))('T86 om-final-text — %s', (provider, 
         expect(errorPayloads).toEqual([]);
         expect(chunksOfType(chunks, 'finish')).toHaveLength(1);
 
-        // NOT EXERCISED: the model must call both tools and end on prose for this case to apply.
+        // NOT EXERCISED only while recording: a live model can skip a tool or end on one. In replay
+        // the run is fixed, so a missing call or empty final prose means the fixture drifted.
         const calledTools = new Set(
           chunks.filter((c: any) => c.type === 'tool-call').map((c: any) => c.payload?.toolName),
         );
-        const lastFinish = finishPayloads.at(-1);
-        const lastText = lastFinish?.text ?? '';
+        const lastText = finishPayloads.at(-1)?.text ?? '';
         if (!calledTools.has('lookupCity') || !calledTools.has('getForecast') || !String(lastText).trim()) {
+          expect(isReplayDeterministic(mock)).toBe(false);
           return;
         }
 

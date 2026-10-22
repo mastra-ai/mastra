@@ -51,6 +51,7 @@ import {
   chunksOfType,
   createCellMemory,
   errorChunks,
+  isReplayDeterministic,
   persistedMessages,
   prefillRepairs,
   recordProviderRequests,
@@ -102,7 +103,7 @@ function fetchRecordTool() {
 describe.each(Object.entries(PROVIDERS))('T4 background tools · %s', (provider, model) => {
   describe.each(ENGINES)('%s engine', engine => {
     // One recording file per provider × engine, covering the foreground/deferred/awaited variants.
-    useRecordedMock(`${RECORDING_NAME}-${provider}-${engine}`, { transformRequest: transformT4Request });
+    const mock = useRecordedMock(`${RECORDING_NAME}-${provider}-${engine}`, { transformRequest: transformT4Request });
     let recorder: ReturnType<typeof recordProviderRequests>;
 
     beforeEach(() => {
@@ -227,14 +228,18 @@ describe.each(Object.entries(PROVIDERS))('T4 background tools · %s', (provider,
           const persistedResults = invocations.filter((invocation: any) => invocation.state === 'result');
           const orphanedCalls = invocations.filter((invocation: any) => invocation.state !== 'result');
 
-          // NOT EXERCISED: the model is free to ignore the instruction. Only judge the contract when
-          // it actually made the call the prompt asked for, with the disposition that was requested.
+          // NOT EXERCISED only while recording: a live model is free to ignore the instruction.
+          // In replay the run is fixed, so a missing call means the fixture or request shape drifted.
           if (invocations.length === 0) {
             expect(toolCallChunks).toEqual([]);
+            expect(isReplayDeterministic(mock)).toBe(false);
             return;
           }
-          // NOT EXERCISED unless at least one call carried the disposition this variant asks for.
-          if (!invocations.some((invocation: any) => invocation.args?._background?.disposition === variant)) return;
+          // Same rule for the disposition this variant asks for.
+          if (!invocations.some((invocation: any) => invocation.args?._background?.disposition === variant)) {
+            expect(isReplayDeterministic(mock)).toBe(false);
+            return;
+          }
 
           // F9 (COR-1311): each tool call is streamed exactly once — one `tool-call` chunk per toolCallId.
           // (The model may call more than once; the comparable claim is the per-call ratio, not the count.)

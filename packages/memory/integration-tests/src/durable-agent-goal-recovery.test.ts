@@ -124,6 +124,18 @@ describe.each(Object.entries(PROVIDERS))('T21 goal recovery · %s', (provider, m
         expect(goalChunks).toHaveLength(1);
         expect(goalChunks[0].payload).toMatchObject({ objective: OBJECTIVE, passed: true });
 
+        // The objective only requires the word DONE, so the verdict alone would not notice if the
+        // recorded step tool call were dropped. Pin that it ran once and returned its result.
+        const stepCalls = chunks.filter(
+          (chunk: any) => chunk.type === 'tool-call' && chunk.payload?.toolName === 'step',
+        );
+        const stepResults = chunks.filter(
+          (chunk: any) => chunk.type === 'tool-result' && chunk.payload?.toolName === 'step',
+        );
+        expect(stepCalls).toHaveLength(1);
+        expect(stepResults).toHaveLength(1);
+        expect(stepResults[0].payload?.result).toMatchObject({ step: 1 });
+
         // F7 (COR-1312): the judge's requests are still subject to the prefill repair path.
         const repairs = prefillRepairs(recorder.requests);
         expect(repairs.unrepaired).toEqual([]);

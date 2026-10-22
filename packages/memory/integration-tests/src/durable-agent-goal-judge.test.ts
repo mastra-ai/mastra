@@ -29,6 +29,7 @@ import {
   chunksOfType,
   createCellMemory,
   errorChunks,
+  isReplayDeterministic,
   recordProviderRequests,
   streamTurn,
   useRecordedMock,
@@ -41,12 +42,13 @@ setupDummyApiKeys(MODE, ['openai', 'anthropic']);
 const RECORDING_NAME = 'memory-integration-tests-src-durable-agent-goal-judge';
 const OBJECTIVE = 'The assistant has replied with the word DONE.';
 const PROMPT = 'Reply with the single word DONE.';
-const BAD_JUDGE = 'openai/cor-1252-no-such-model';
+const JUDGE_MODEL_ID = 'cor-1252-no-such-model';
+const BAD_JUDGE = `openai/${JUDGE_MODEL_ID}`;
 
 describe.each(Object.entries(PROVIDERS))('T8 goal judge — %s', (provider, model) => {
   describe.each(ENGINES)('%s engine', engine => {
     // One recording file per provider × engine, covering the judged/judgefail variants.
-    useRecordedMock(`${RECORDING_NAME}-${provider}-${engine}`, { transformRequest });
+    const mock = useRecordedMock(`${RECORDING_NAME}-${provider}-${engine}`, { transformRequest });
     let recorder: ReturnType<typeof recordProviderRequests>;
 
     beforeEach(() => {
@@ -117,6 +119,15 @@ describe.each(Object.entries(PROVIDERS))('T8 goal judge — %s', (provider, mode
       const errored = errorChunks(chunks).length > 0 || errorPayloads.length > 0;
       expect(finished || errored).toBe(true);
       expect(finishPayloads.length + errorPayloads.length).toBeGreaterThan(0);
+
+      // A skipped judge would also settle, so prove the unavailable model was actually asked.
+      // Request bodies carry the bare model id, not the `provider/model` spec used to configure it.
+      const judgeRequests = recorder.requests.filter(r => JSON.stringify(r.body ?? '').includes(JUDGE_MODEL_ID));
+      expect(judgeRequests.length).toBeGreaterThan(0);
+      // In replay the recorded answer for that model is the failure this cell is about.
+      if (isReplayDeterministic(mock)) {
+        expect(judgeRequests.every(r => r.status !== 200)).toBe(true);
+      }
     }, 150_000);
   });
 });
