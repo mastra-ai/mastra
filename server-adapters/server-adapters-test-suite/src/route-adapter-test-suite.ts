@@ -1242,7 +1242,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
         const response = await executeHttpRequest(setup.app, {
           method: 'POST',
           path: `/api/datasets/${dataset.id}/items`,
-          body: { input: { question: 42, note: 'submitted-secret-value' } },
+          body: { input: { question: { marker: 'submitted-secret-value' } } },
         });
 
         expect(response.status).toBe(400);
