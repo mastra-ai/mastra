@@ -1,7 +1,7 @@
 {
   "name": "@mastra/playground-ui",
   "type": "module",
-  "version": "65.0.0-alpha.8",
+  "version": "65.0.0",
   "description": "Mastra Playground components",
   "sideEffects": [
     "**/*.css"
@@ -186,6 +186,7 @@
     "@lezer/highlight": "^1.2.3",
     "@lukeed/uuid": "^2.0.1",
     "@mcp-ui/client": "^7.1.0",
+    "@nangohq/frontend": "0.71.9",
     "@pierre/diffs": "1.5.1",
     "@radix-ui/react-visually-hidden": "^1.2.4",
     "@tailwindcss/typography": "^0.5.19",
@@ -266,7 +267,7 @@
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "4.3.3",
     "typescript": "catalog:",
-    "vite": "^7.3.1",
+    "vite": "^8.0.0",
     "vite-plugin-lib-inject-css": "^2.2.2",
     "vitest": "catalog:"
   },

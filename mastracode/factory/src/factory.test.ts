@@ -7,10 +7,12 @@ import { resolveCustomProviders } from '@mastra/code-sdk/agents/custom-provider-
 import { getDynamicInstructions } from '@mastra/code-sdk/agents/instructions';
 import { Agent } from '@mastra/core/agent';
 import { AgentController } from '@mastra/core/agent-controller';
+import type { MastraBrowser } from '@mastra/core/browser';
 import { AgentControllerChannels } from '@mastra/core/channels';
 import { Knowledge } from '@mastra/core/knowledge';
+import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
-import type { AuthInitContext, IMastraAuthProvider } from '@mastra/core/server';
+import type { ApiRoute, AuthInitContext, IMastraAuthProvider, ServerConfig } from '@mastra/core/server';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraWorker } from '@mastra/core/worker';
 
@@ -22,9 +24,11 @@ import {
   Workspace,
 } from '@mastra/core/workspace';
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
+import { createHonoServer } from '@mastra/deployer/server';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { PgVector } from '@mastra/pg';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { Hono } from 'hono';
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
 import { createTestBoard } from './boards/test-utils.js';
 import type { VersionControl } from './capabilities/version-control.js';
 import { MastraFactory } from './factory.js';
@@ -34,13 +38,16 @@ import { invalidateCustomProvidersSnapshots } from './routes/custom-provider-sou
 import type * as projectRoutesModule from './routes/projects.js';
 import type * as surfaceModule from './routes/surface.js';
 import type * as tenantCredentialsModule from './routes/tenant-credentials.js';
+import { mountApiRoutes } from './routes/test-utils.js';
 import type * as dispatcherModule from './rules/dispatcher.js';
+import { FactoryPhaseStateProcessor } from './rules/processor.js';
 import type * as terminalCleanupModule from './rules/terminal-cleanup.js';
 import type * as transitionServiceModule from './rules/transition-service.js';
 import { DEFAULT_FACTORY_CONFIG_VERSION } from './rules/validation.js';
 import { createFactorySecretEncryption } from './secret-encryption.js';
 import { FactoryChannelReplyProcessor } from './session/channel-reply-processor.js';
 import { FactoryEnvironmentStateProcessor } from './session/environment-state-processor.js';
+import type * as resourceMigrationModule from './session/resource-migration.js';
 import type { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
 import type { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
@@ -71,8 +78,9 @@ const controllerMock = {
   onSessionCreated: vi.fn(),
   setChannels: vi.fn(),
   queryThreadById: vi.fn(),
-  getSessionByResource: vi.fn(),
+  getSession: vi.fn(),
   createSession: vi.fn(),
+  getChannels: vi.fn(() => null),
 };
 
 // Run-end reports the factory's session reporter is asked to send.
@@ -235,6 +243,20 @@ vi.mock('./routes/surface', async importOriginal => {
   };
 });
 
+// Hold the session resource migration open so tests can show boot doesn't wait
+// for it. Unset, the real migration runs.
+const sessionMigrationOverride: {
+  current?: () => Promise<Awaited<ReturnType<typeof resourceMigrationModule.migrateSessionResources>>>;
+} = {};
+vi.mock('./session/resource-migration', async importOriginal => {
+  const actual = await importOriginal<typeof resourceMigrationModule>();
+  return {
+    ...actual,
+    migrateSessionResources: (deps: Parameters<typeof actual.migrateSessionResources>[0]) =>
+      sessionMigrationOverride.current?.() ?? actual.migrateSessionResources(deps),
+  };
+});
+
 /** An SSO-shaped fake provider: gets the hosted-login `/auth/*` routes. */
 function fakeProvider(
   overrides: Record<string, unknown> = {},
@@ -291,6 +313,7 @@ async function prepareIntegrationContext(config: ConstructorParameters<typeof Ma
 
 beforeEach(() => {
   vi.clearAllMocks();
+  controllerMock.queryThreadById.mockReset();
   studioInstances.length = 0;
   dispatcherOptions.length = 0;
   terminalCleanups.length = 0;
@@ -298,6 +321,13 @@ beforeEach(() => {
   platformGithubOptions.length = 0;
   runEndReports.length = 0;
 });
+
+/** Serve stored threads by id for the rest of the test. */
+function threadsById(threads: Record<string, { id: string; resourceId: string; metadata: Record<string, unknown> }>) {
+  controllerMock.queryThreadById.mockImplementation(
+    async ({ threadId }: { threadId: string }) => threads[threadId] ?? null,
+  );
+}
 
 describe('MastraFactory constructor', () => {
   it('requires a storage backend', () => {
@@ -329,10 +359,23 @@ describe('MastraFactory constructor', () => {
 });
 
 describe('MastraFactory.prepare', () => {
+  it('passes the configured MastraBrowser to the agent controller', async () => {
+    const browser = { getTools: vi.fn() } as unknown as MastraBrowser;
+    const config = await prepareFactory({ storage: fakeStorage(), auth: null, browser });
+
+    expect(config.browser).toBe(browser);
+  });
+
   it('given a Factory deployment, when the controller mounts, then sessions run without modes', async () => {
     const config = await prepareFactory({ storage: fakeStorage(), auth: null });
 
     expect(config.modes).toBe(false);
+  });
+
+  it('given a Factory deployment, when the controller mounts, then subagents are disabled', async () => {
+    const config = await prepareFactory({ storage: fakeStorage(), auth: null });
+
+    expect(config.subagents).toEqual([]);
   });
 
   it('loads authoritative memory settings before dynamic memory resolves for each invocation', async () => {
@@ -554,7 +597,7 @@ describe('MastraFactory.prepare', () => {
     });
 
     const session = {
-      identity: { getResourceId: () => 'session-1' },
+      identity: { getId: () => 'session-1', getResourceId: () => 'session-1' },
       om: {
         observer: { modelId: () => undefined, switchModel: vi.fn().mockResolvedValue(undefined) },
         reflector: { modelId: () => undefined, switchModel: vi.fn().mockResolvedValue(undefined) },
@@ -858,7 +901,7 @@ describe('MastraFactory.prepare', () => {
       },
       role: 'review',
       session: { sessionId: 'session-1', branch: 'review/pr-17', threadId: 'session-1' },
-      resourceId: 'session-1',
+      resourceId: '11111111-2222-4333-8444-555555555555',
       kickoffKey: 'github-review-17',
       kickoffMessage: null,
     });
@@ -867,7 +910,8 @@ describe('MastraFactory.prepare', () => {
     const context = new RequestContext();
     context.set('user', { workosId: 'user-1', organizationId: 'org-1' });
     context.set('controller', {
-      resourceId: 'session-1',
+      resourceId: '11111111-2222-4333-8444-555555555555',
+      sessionId: 'session-1',
       threadId: 'session-1',
       getState: () => state,
       setState: async (updates: Record<string, unknown>) => {
@@ -916,7 +960,7 @@ describe('MastraFactory.prepare', () => {
       },
       role: 'review',
       session: { sessionId: 'session-1', branch: 'review/pr-18', threadId: 'session-1' },
-      resourceId: 'session-1',
+      resourceId: '11111111-2222-4333-8444-555555555555',
       kickoffKey: 'github-review-18',
       kickoffMessage: null,
     });
@@ -930,7 +974,8 @@ describe('MastraFactory.prepare', () => {
     const context = new RequestContext();
     context.set('user', { workosId: 'user-1', organizationId: 'org-1' });
     context.set('controller', {
-      resourceId: 'session-1',
+      resourceId: '11111111-2222-4333-8444-555555555555',
+      sessionId: 'session-1',
       threadId: 'session-1',
       getState: () => state,
       setState: async (updates: Record<string, unknown>) => {
@@ -991,7 +1036,7 @@ describe('MastraFactory.prepare', () => {
         },
         role: 'review',
         session: { sessionId: 'session-1', branch: 'review/mr-17', threadId: 'session-1' },
-        resourceId: 'session-1',
+        resourceId: '11111111-2222-4333-8444-555555555555',
         kickoffKey: 'gitlab-review-prompt-17',
         kickoffMessage: null,
       });
@@ -999,7 +1044,8 @@ describe('MastraFactory.prepare', () => {
       const context = new RequestContext();
       context.set('user', { workosId: 'user-1', organizationId: 'org-1' });
       context.set('controller', {
-        resourceId: 'session-1',
+        resourceId: '11111111-2222-4333-8444-555555555555',
+        sessionId: 'session-1',
         threadId: 'session-1',
         session: { modeId: 'review' },
         getState: () => state,
@@ -1080,6 +1126,37 @@ describe('MastraFactory.prepare', () => {
     expect(paths).toContain('/auth/me');
   });
 
+  it('tells the UI it serves MCP exactly when it mounts the MCP endpoint', async () => {
+    // A developer's own setting would turn on MCP for the provider without config.
+    vi.stubEnv('MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER', '');
+    onTestFinished(() => vi.unstubAllEnvs());
+    const cases = [
+      { auth: fakeProvider(), mcp: { authorizationServers: ['https://auth.example.com'] }, serves: true },
+      // An auth provider with no authorization server for MCP clients to sign in through.
+      { auth: fakeProvider(), mcp: undefined, serves: false },
+      {
+        auth: fakeProvider(),
+        mcp: { enabled: false, authorizationServers: ['https://auth.example.com'] },
+        serves: false,
+      },
+      { auth: null, mcp: { authorizationServers: ['https://auth.example.com'] }, serves: false },
+    ];
+    for (const { auth, mcp, serves } of cases) {
+      prepareMock.mockClear();
+      const config = await prepareFactory({ storage: fakeStorage(), auth, ...(mcp ? { mcp } : {}) });
+      const routes = (config.buildApiRoutes as (deps: object) => ApiRoute[])({
+        controller: sessionNotifierStub,
+        authStorage: {},
+      });
+      const app = new Hono();
+      mountApiRoutes(app as never, routes);
+
+      const features = await (await app.request('/web/config/features')).json();
+      const mountsMcp = routes.some(route => route.path === '/web/factory/projects/:projectId/mcp');
+      expect({ features: features.mcp, mountsMcp }).toEqual({ features: serves, mountsMcp: serves });
+    }
+  });
+
   it('registers the Factory transition tool only for exact active bindings', async () => {
     const storage = fakeStorage();
     const config = await prepareFactory({ storage });
@@ -1106,8 +1183,8 @@ describe('MastraFactory.prepare', () => {
     requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
     requestContext.set('controller', {
       resourceId: 'resource-1',
+      sessionId: 'session-1',
       threadId: 'thread-1',
-      scope: '/worktree',
       getState: () => ({ factoryProjectId: binding.factoryProjectId }),
     });
 
@@ -1117,7 +1194,10 @@ describe('MastraFactory.prepare', () => {
   });
 
   describe('Factory tools in user sessions', () => {
-    async function seedUserSession(storage: ReturnType<typeof fakeStorage>) {
+    async function seedUserSession(
+      storage: ReturnType<typeof fakeStorage>,
+      session: { visibility?: 'org' | 'private'; origin?: { sessionId: string; threadId: string } } = {},
+    ) {
       await storage.init();
       const sourceControl = storage.getDomain<SourceControlStorage>('source-control').forIntegration('github');
       const project = await storage
@@ -1154,6 +1234,7 @@ describe('MastraFactory.prepare', () => {
         userId: 'user-1',
         branch: 'user/session-1',
         baseBranch: 'main',
+        ...session,
       });
       return project;
     }
@@ -1162,7 +1243,12 @@ describe('MastraFactory.prepare', () => {
       const requestContext = new RequestContext();
       requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
       if (interactive) requestContext.set('factoryInteractive', true);
-      requestContext.set('controller', { resourceId: 'session-1', threadId: 'thread-1', getState: () => ({}) });
+      requestContext.set('controller', {
+        sessionId: 'session-1',
+        resourceId: 'session-1',
+        threadId: 'thread-1',
+        getState: () => ({}),
+      });
       return requestContext;
     }
 
@@ -1200,6 +1286,7 @@ describe('MastraFactory.prepare', () => {
       'factory_list_side_sessions',
       'factory_subscribe_session',
       'factory_unsubscribe_session',
+      'factory_recreate_sandbox',
     ];
 
     it('gives a user session every tool on every turn, and other sessions none', async () => {
@@ -1225,6 +1312,33 @@ describe('MastraFactory.prepare', () => {
       for (const name of [...READ_TOOLS, ...MANAGEMENT_TOOLS]) expect(none).not.toHaveProperty(name);
     });
 
+    it('offers a session its own sandbox recreate only on Platform sandboxes', async () => {
+      class Sandbox extends FactorySandbox {
+        constructor(readonly provider: string) {
+          super();
+        }
+        create = vi.fn(() => ({ id: 'sb' }) as never);
+      }
+      const toolsWith = async (provider: string | undefined) => {
+        prepareMock.mockClear();
+        const storage = fakeStorage();
+        const config = await prepareFactory({
+          storage,
+          ...(provider ? { sandbox: new Sandbox(provider) } : {}),
+        });
+        await seedUserSession(storage);
+        const extraTools = config.extraTools as (args: {
+          requestContext: RequestContext;
+        }) => Promise<Record<string, unknown>>;
+        return extraTools({ requestContext: sessionContext(false) });
+      };
+
+      expect(await toolsWith('platform')).toHaveProperty('factory_recreate_sandbox');
+      expect(await toolsWith('e2b')).not.toHaveProperty('factory_recreate_sandbox');
+      expect(await toolsWith('local')).not.toHaveProperty('factory_recreate_sandbox');
+      expect(await toolsWith(undefined)).not.toHaveProperty('factory_recreate_sandbox');
+    });
+
     it('refuses an approval answer on a woken turn, which a person in the same session could give', async () => {
       const storage = fakeStorage();
       const config = await prepareFactory({ storage });
@@ -1240,7 +1354,12 @@ describe('MastraFactory.prepare', () => {
 
       const wake = new RequestContext();
       await prepareWake({ requestContext: wake, resourceId: 'session-1' });
-      wake.set('controller', { resourceId: 'session-1', threadId: 'thread-1', getState: () => ({}) });
+      wake.set('controller', {
+        sessionId: 'session-1',
+        resourceId: 'session-1',
+        threadId: 'thread-1',
+        getState: () => ({}),
+      });
       const woken = await extraTools({ requestContext: wake });
       await expect(woken.factory_answer_approval!.execute(answer, {})).rejects.toThrow(
         'Only a person can answer an approval',
@@ -1270,6 +1389,193 @@ describe('MastraFactory.prepare', () => {
       expect(wake.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
     });
 
+    it('wakes a user session under its owner resource through its own thread', async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      // A New session: private, on its owner's resource.
+      await seedUserSession(storage, { visibility: 'private' });
+      const prepareWake = config.prepareWakeRequestContext as (args: {
+        requestContext: RequestContext;
+        resourceId: string;
+        threadId: string;
+      }) => Promise<void>;
+      controllerMock.queryThreadById.mockResolvedValue({ id: 'session-1', resourceId: 'user-1', metadata: {} });
+
+      const wake = new RequestContext();
+      wake.set('user', { workosId: 'user-2', organizationId: 'org-1' });
+      await prepareWake({ requestContext: wake, resourceId: 'user-1', threadId: 'session-1' });
+
+      expect(wake.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+      expect(runEndReports).toEqual([]);
+    });
+
+    it("wakes a run session on the Factory's resource through its thread's session stamp", async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      const project = await seedUserSession(storage);
+      const prepareWake = config.prepareWakeRequestContext as (args: {
+        requestContext: RequestContext;
+        resourceId: string;
+        threadId: string;
+      }) => Promise<void>;
+      // A run is bound to the session, so its threads run on the Factory's resource.
+      vi.spyOn(storage.getDomain<WorkItemsStorage>('work-items'), 'hasRunBindingForSession').mockResolvedValue(true);
+      threadsById({
+        'session-1': { id: 'session-1', resourceId: project.id, metadata: {} },
+        'thread-7': { id: 'thread-7', resourceId: project.id, metadata: { factorySessionId: 'session-1' } },
+      });
+
+      const wake = new RequestContext();
+      wake.set('user', { workosId: 'user-2', organizationId: 'org-1' });
+      await prepareWake({ requestContext: wake, resourceId: project.id, threadId: 'thread-7' });
+
+      expect(wake.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+      expect(runEndReports).toEqual([]);
+    });
+
+    it("refuses a wake on a thread under the Factory stamped with a private run's session id", async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      const project = await seedUserSession(storage, { visibility: 'private' });
+      const prepareWake = config.prepareWakeRequestContext as (args: {
+        requestContext: RequestContext;
+        resourceId: string;
+        threadId: string;
+      }) => Promise<void>;
+      // The private run runs on the Factory's resource, where any org member can stamp a thread.
+      vi.spyOn(storage.getDomain<WorkItemsStorage>('work-items'), 'hasRunBindingForSession').mockResolvedValue(true);
+      threadsById({
+        'session-1': { id: 'session-1', resourceId: project.id, metadata: {} },
+        'thread-atk': { id: 'thread-atk', resourceId: project.id, metadata: { factorySessionId: 'session-1' } },
+      });
+
+      const wake = new RequestContext();
+      wake.set('user', { workosId: 'user-atk', organizationId: 'org-1' });
+      await expect(
+        prepareWake({ requestContext: wake, resourceId: project.id, threadId: 'thread-atk' }),
+      ).rejects.toThrow("can't be woken as its owner");
+      expect(wake.get('user')).toEqual({ workosId: 'user-atk', organizationId: 'org-1' });
+    });
+
+    it('wakes a private run on its own thread under the Factory as its owner', async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      const project = await seedUserSession(storage, { visibility: 'private' });
+      const prepareWake = config.prepareWakeRequestContext as (args: {
+        requestContext: RequestContext;
+        resourceId: string;
+        threadId: string;
+      }) => Promise<void>;
+      vi.spyOn(storage.getDomain<WorkItemsStorage>('work-items'), 'hasRunBindingForSession').mockResolvedValue(true);
+      threadsById({ 'session-1': { id: 'session-1', resourceId: project.id, metadata: {} } });
+
+      const wake = new RequestContext();
+      wake.set('user', { workosId: 'user-2', organizationId: 'org-1' });
+      await prepareWake({ requestContext: wake, resourceId: project.id, threadId: 'session-1' });
+
+      expect(wake.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
+    });
+
+    it("refuses a wake on a thread under the Factory stamped with a user session's id", async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      const project = await seedUserSession(storage);
+      const prepareWake = config.prepareWakeRequestContext as (args: {
+        requestContext: RequestContext;
+        resourceId: string;
+        threadId: string;
+      }) => Promise<void>;
+      // user-1's session runs under user-1; any org member can stamp a Factory thread.
+      threadsById({
+        'session-1': { id: 'session-1', resourceId: 'user-1', metadata: {} },
+        'thread-atk': { id: 'thread-atk', resourceId: project.id, metadata: { factorySessionId: 'session-1' } },
+      });
+
+      const wake = new RequestContext();
+      wake.set('user', { workosId: 'user-atk', organizationId: 'org-1' });
+      await expect(
+        prepareWake({ requestContext: wake, resourceId: project.id, threadId: 'thread-atk' }),
+      ).rejects.toThrow("can't be woken as its owner");
+      expect(wake.get('user')).toEqual({ workosId: 'user-atk', organizationId: 'org-1' });
+    });
+
+    it("refuses a wake on a thread under the Factory stamped with a private side session's id", async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      const project = await seedUserSession(storage, {
+        visibility: 'private',
+        origin: { sessionId: 'parent-1', threadId: 'parent-1' },
+      });
+      const prepareWake = config.prepareWakeRequestContext as (args: {
+        requestContext: RequestContext;
+        resourceId: string;
+        threadId: string;
+      }) => Promise<void>;
+      // A private side session runs under its owner; any org member can stamp a Factory thread.
+      threadsById({
+        'session-1': { id: 'session-1', resourceId: 'user-1', metadata: {} },
+        'thread-atk': { id: 'thread-atk', resourceId: project.id, metadata: { factorySessionId: 'session-1' } },
+      });
+
+      const wake = new RequestContext();
+      wake.set('user', { workosId: 'user-atk', organizationId: 'org-1' });
+      await expect(
+        prepareWake({ requestContext: wake, resourceId: project.id, threadId: 'thread-atk' }),
+      ).rejects.toThrow("can't be woken as its owner");
+      expect(wake.get('user')).toEqual({ workosId: 'user-atk', organizationId: 'org-1' });
+    });
+
+    it("refuses a wake on a thread created with a session's id under someone else's resource", async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      await seedUserSession(storage);
+      const prepareWake = config.prepareWakeRequestContext as (args: {
+        requestContext: RequestContext;
+        resourceId: string;
+        threadId: string;
+      }) => Promise<void>;
+      threadsById({ 'session-1': { id: 'session-1', resourceId: 'user-atk', metadata: {} } });
+
+      const wake = new RequestContext();
+      wake.set('user', { workosId: 'user-atk', organizationId: 'org-1' });
+      await expect(
+        prepareWake({ requestContext: wake, resourceId: 'user-atk', threadId: 'session-1' }),
+      ).rejects.toThrow("can't be woken as its owner");
+      expect(wake.get('user')).toEqual({ workosId: 'user-atk', organizationId: 'org-1' });
+    });
+
+    it("refuses a wake on a thread another resource stamped with someone else's session", async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({ storage });
+      await seedUserSession(storage);
+      const prepareWake = config.prepareWakeRequestContext as (args: {
+        requestContext: RequestContext;
+        resourceId: string;
+        threadId: string;
+      }) => Promise<void>;
+      // An attacker's own thread, stamped with user-1's session id.
+      controllerMock.queryThreadById.mockResolvedValueOnce({
+        id: 'thread-atk',
+        resourceId: 'user-atk',
+        metadata: { factorySessionId: 'session-1' },
+      });
+
+      const wake = new RequestContext();
+      wake.set('user', { workosId: 'user-atk', organizationId: 'org-1' });
+      await expect(
+        prepareWake({ requestContext: wake, resourceId: 'user-atk', threadId: 'thread-atk' }),
+      ).rejects.toThrow("can't be woken as its owner");
+
+      expect(wake.get('user')).toEqual({ workosId: 'user-atk', organizationId: 'org-1' });
+      expect(runEndReports).toEqual([
+        expect.objectContaining({
+          sessionId: 'thread-atk',
+          threadId: 'thread-atk',
+          outcome: expect.objectContaining({ status: 'failed', failureCode: 'wake-owner-unresolved' }),
+        }),
+      ]);
+    });
+
     it("fails a wake whose owner can't be resolved, with a failed report, rather than running it as the sender", async () => {
       const storage = fakeStorage();
       const config = await prepareFactory({ storage });
@@ -1284,14 +1590,15 @@ describe('MastraFactory.prepare', () => {
       const wake = new RequestContext();
       wake.set('user', { workosId: 'user-2', organizationId: 'org-1' });
       const message = "Factory session session-2 can't be woken as its owner: no Factory session row names its owner.";
-      await expect(
-        prepareWake({ requestContext: wake, resourceId: 'session-2', threadId: 'thread-2' }),
-      ).rejects.toThrow(message);
+      // session-2's own thread, under its owner's resource.
+      await expect(prepareWake({ requestContext: wake, resourceId: 'user-2', threadId: 'session-2' })).rejects.toThrow(
+        message,
+      );
 
       expect(runEndReports).toEqual([
         expect.objectContaining({
           sessionId: 'session-2',
-          threadId: 'thread-2',
+          threadId: 'session-2',
           outcome: { status: 'failed', reason: message, failureCode: 'wake-owner-unresolved' },
         }),
       ]);
@@ -1319,7 +1626,7 @@ describe('MastraFactory.prepare', () => {
       const project = await seedUserSession(storage);
       const resumeWake = config.resumeWakeSession as (args: { resourceId: string; threadId: string }) => Promise<void>;
       controllerMock.queryThreadById.mockResolvedValue({ id: 'thread-1', resourceId: 'session-1' });
-      controllerMock.getSessionByResource.mockResolvedValue(undefined);
+      controllerMock.getSession.mockResolvedValue(undefined);
       controllerMock.createSession.mockResolvedValue({});
 
       await resumeWake({ resourceId: 'session-1', threadId: 'thread-1' });
@@ -1345,7 +1652,7 @@ describe('MastraFactory.prepare', () => {
       controllerMock.queryThreadById.mockResolvedValue({ id: 'thread-9', resourceId: 'session-9' });
 
       await expect(resumeWake({ resourceId: 'session-1', threadId: 'thread-9' })).rejects.toThrow(
-        "Factory session session-1 can't be woken as its owner: thread thread-9 is not the session's.",
+        "Factory session thread-9 can't be woken as its owner: thread thread-9 is not the session's.",
       );
       expect(controllerMock.createSession).not.toHaveBeenCalled();
       expect(runEndReports).toHaveLength(1);
@@ -1607,11 +1914,12 @@ describe('MastraFactory.prepare', () => {
     expect(json).toHaveBeenCalledWith({ authEnabled: false, authenticated: false }, 404);
   });
 
-  it('installs the auth gate and tenant credential primer when auth is configured', async () => {
+  it('installs the auth gate, session access guard and tenant credential primer when auth is configured', async () => {
     // Both modes mount the custom-providers primer and the SPA static
     // middleware is environment-dependent (present when ui/dist exists), so
-    // assert the delta: the gate and the credential primer replace the open
-    // mode's interactive marker (the gate marks signed-in requests itself).
+    // assert the delta: the gate, the session access guard and the credential
+    // primer replace the open mode's interactive marker (the gate marks
+    // signed-in requests itself).
     const openConfig = await prepareFactory({ storage: fakeStorage(), auth: null });
     const openMiddleware = (openConfig.buildServerConfig as () => { middleware?: unknown[] })().middleware ?? [];
 
@@ -1619,7 +1927,7 @@ describe('MastraFactory.prepare', () => {
 
     const gatedConfig = await prepareFactory({ storage: fakeStorage(), auth: fakeProvider() });
     const gatedMiddleware = (gatedConfig.buildServerConfig as () => { middleware?: unknown[] })().middleware ?? [];
-    expect(gatedMiddleware).toHaveLength(openMiddleware.length + 1);
+    expect(gatedMiddleware).toHaveLength(openMiddleware.length + 2);
   });
 
   it('passes the resolved auth provider to both server.auth and studio.auth', async () => {
@@ -1643,6 +1951,85 @@ describe('MastraFactory.prepare', () => {
     const config = prepareMock.mock.calls[0]![0];
     const serverConfig = (config.buildServerConfig as () => { auth?: unknown })();
     expect(serverConfig.auth).toBeUndefined();
+  });
+
+  it('lets browser MCP clients send the MCP headers and read the sign-in challenge', async () => {
+    // The deployer merges these into its default allow/expose lists, so
+    // Factory only adds what MCP 2026-07-28 clients need on top.
+    const mcpCors = {
+      allowHeaders: ['Mcp-Protocol-Version', 'Mcp-Method', 'Mcp-Name'],
+      exposeHeaders: ['WWW-Authenticate'],
+    };
+
+    const withOrigins = await prepareFactory({
+      storage: fakeStorage(),
+      auth: fakeProvider(),
+      allowedOrigins: ['https://app.acme.com/'],
+    });
+    expect((withOrigins.buildServerConfig as () => { cors?: unknown })().cors).toEqual({
+      origin: ['https://app.acme.com'],
+      credentials: true,
+      ...mcpCors,
+    });
+
+    prepareMock.mockClear();
+
+    // Without allowed origins Factory still sets no origin or credentials, so
+    // the deployer's own origin defaults keep applying.
+    const sameOrigin = await prepareFactory({ storage: fakeStorage(), auth: fakeProvider() });
+    expect((sameOrigin.buildServerConfig as () => { cors?: unknown })().cors).toEqual(mcpCors);
+  });
+
+  it('signs browser MCP clients in through the real server stack', async () => {
+    vi.stubEnv('MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER', '');
+    onTestFinished(() => vi.unstubAllEnvs());
+    const config = await prepareFactory({
+      storage: fakeStorage(),
+      auth: fakeProvider(),
+      mcp: { authorizationServers: ['https://auth.example.com'] },
+      allowedOrigins: ['https://inspector.example.com'],
+    });
+    const server = (config.buildServerConfig as () => ServerConfig)();
+    const apiRoutes = (config.buildApiRoutes as (deps: object) => ApiRoute[])({
+      controller: sessionNotifierStub,
+      authStorage: {},
+    });
+    const app = await createHonoServer(new Mastra({ server: { ...server, apiRoutes } }), { tools: {} });
+    const url = 'http://localhost/web/factory/projects/fp-1/mcp';
+    const origin = 'https://inspector.example.com';
+
+    const preflight = await app.request(url, {
+      method: 'OPTIONS',
+      headers: {
+        Origin: origin,
+        'Access-Control-Request-Method': 'POST',
+        'Access-Control-Request-Headers': 'authorization, content-type, mcp-protocol-version, mcp-method',
+      },
+    });
+    expect(preflight.headers.get('Access-Control-Allow-Origin')).toBe(origin);
+    expect(preflight.headers.get('Access-Control-Allow-Headers')?.toLowerCase().split(',')).toEqual(
+      expect.arrayContaining(['mcp-protocol-version', 'mcp-method', 'mcp-name']),
+    );
+
+    // The Factory auth gate and the server auth middleware let the anonymous call through to the challenge.
+    const anonymous = await app.request(url, {
+      method: 'POST',
+      headers: { Origin: origin, 'Content-Type': 'application/json', 'Mcp-Protocol-Version': '2026-07-28' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'server/discover', params: {} }),
+    });
+    expect(anonymous.status).toBe(401);
+    expect(anonymous.headers.get('Access-Control-Expose-Headers')?.split(',')).toContain('WWW-Authenticate');
+    const challenge = anonymous.headers
+      .get('WWW-Authenticate')
+      ?.match(/^Bearer resource_metadata="(https?:\/\/[^/"]+)(\/\.well-known\/oauth-protected-resource\/[^"]+)"$/);
+    expect(challenge?.[2]).toBe('/.well-known/oauth-protected-resource/web/factory/projects/fp-1/mcp');
+
+    const metadata = await app.request(`http://localhost${challenge![2]}`, { headers: { Origin: origin } });
+    expect(metadata.status).toBe(200);
+    expect(await metadata.json()).toMatchObject({
+      resource: `${challenge![1]}/web/factory/projects/fp-1/mcp`,
+      authorization_servers: ['https://auth.example.com'],
+    });
   });
 
   it('registers the per-tenant credential resolver when auth is configured', async () => {
@@ -1997,7 +2384,7 @@ describe('MastraFactory.prepare integrations', () => {
     });
     const config = await prepareFactory({ storage: fakeStorage(), integrations: [custom] });
     const extraTools = config.extraTools as (args: { requestContext: object }) => Promise<Record<string, unknown>>;
-    const tools = await extraTools({ requestContext: {} });
+    const tools = await extraTools({ requestContext: new RequestContext() });
     expect(tools.customAgentTool).toBe(agentTool);
     expect(tools.customSessionTool).toBe(sessionTool);
   });
@@ -2013,7 +2400,7 @@ describe('MastraFactory.prepare integrations', () => {
     });
     const config = await prepareFactory({ storage: fakeStorage(), integrations: [first, second] });
     const extraTools = config.extraTools as (args: { requestContext: object }) => Promise<Record<string, unknown>>;
-    await expect(extraTools({ requestContext: {} })).rejects.toThrow(
+    await expect(extraTools({ requestContext: new RequestContext() })).rejects.toThrow(
       "integration tool 'sharedTool' from 'second' conflicts with 'first'",
     );
   });
@@ -2318,5 +2705,57 @@ describe('MastraFactory.finalize', () => {
     await factory.finalize();
     const prepared = await prepareMock.mock.results[0]!.value;
     expect(prepared.finalize).toHaveBeenCalledOnce();
+  });
+
+  it('starts while the session resource migration runs, then reconciles bound threads it moved', async () => {
+    const reconcile = vi.spyOn(FactoryPhaseStateProcessor.prototype, 'reconcileAllBoundThreads').mockResolvedValue();
+    let finish!: (runBindings: number) => void;
+    sessionMigrationOverride.current = () =>
+      new Promise(resolve => {
+        finish = runBindings =>
+          resolve({
+            sessions: 1,
+            factorySessions: 1,
+            userSessions: 0,
+            isolatedSessions: 0,
+            skipped: [],
+            failed: [],
+            subscriptionsPending: [],
+            threads: 1,
+            runBindings,
+            subscriptions: 0,
+            resourceObservationsLeft: [],
+          });
+      });
+    try {
+      const factory = new MastraFactory({ secretEncryption, storage: fakeStorage() });
+      // Both used to wait for the migration, so the server never listened until it finished.
+      await factory.prepare();
+      await factory.finalize();
+      expect(reconcile).toHaveBeenCalledOnce();
+
+      // Its messages moved before its run binding did, so the boot reconcile may have missed them.
+      finish(1);
+      await vi.waitFor(() => expect(reconcile).toHaveBeenCalledTimes(2));
+    } finally {
+      sessionMigrationOverride.current = undefined;
+      reconcile.mockRestore();
+    }
+  });
+
+  it('does not reconcile again when the migration moved no run bindings', async () => {
+    const reconcile = vi.spyOn(FactoryPhaseStateProcessor.prototype, 'reconcileAllBoundThreads').mockResolvedValue();
+    const finalizeSettled = vi.fn();
+    try {
+      const factory = new MastraFactory({ secretEncryption, storage: fakeStorage() });
+      await factory.prepare();
+      await factory.finalize().then(finalizeSettled);
+      // The real migration over an empty store; give its background job time to settle.
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(finalizeSettled).toHaveBeenCalledOnce();
+      expect(reconcile).toHaveBeenCalledOnce();
+    } finally {
+      reconcile.mockRestore();
+    }
   });
 });

@@ -109,7 +109,7 @@ const controllerSetStateMock = vi.fn();
 const controllerSetThreadSettingMock = vi.fn();
 const controllerSetThreadSettingOnMock = vi.fn();
 const controllerEmitMock = vi.fn();
-const controllerGetSessionByResourceMock = vi.fn();
+const controllerGetSessionMock = vi.fn();
 let createdSessionMock: any;
 const createMcpManagerMock = vi.fn();
 const hookManagerConstructorMock = vi.fn();
@@ -259,8 +259,8 @@ vi.mock('@mastra/core/agent-controller', async importOriginal => ({
       };
       return createdSessionMock;
     }
-    async getSessionByResource(resourceId: string) {
-      return controllerGetSessionByResourceMock(resourceId);
+    async getSession(sessionId: string) {
+      return controllerGetSessionMock(sessionId);
     }
     getState() {
       return controllerStateMock;
@@ -536,8 +536,8 @@ describe('createMastraCode', () => {
     controllerSetThreadSettingOnMock.mockReset();
     controllerSetThreadSettingOnMock.mockResolvedValue(undefined);
     controllerEmitMock.mockReset();
-    controllerGetSessionByResourceMock.mockReset();
-    controllerGetSessionByResourceMock.mockImplementation(async () => createdSessionMock);
+    controllerGetSessionMock.mockReset();
+    controllerGetSessionMock.mockImplementation(async () => createdSessionMock);
     createdSessionMock = undefined;
     createMcpManagerMock.mockReset();
     hookManagerConstructorMock.mockReset();
@@ -2206,7 +2206,7 @@ describe('createMastraCode', () => {
     const prepareWakeRequestContext = vi.fn();
     const { createMastraCode } = await import('../index.js');
     await createMastraCode({ prepareWakeRequestContext });
-    controllerGetSessionByResourceMock.mockResolvedValue(undefined);
+    controllerGetSessionMock.mockResolvedValue(undefined);
     const decide = agentConstructorMock.mock.calls
       .map(call => call[0] as Record<string, any>)
       .find(config => config.notifications)?.notifications?.deliveryPolicy?.decide;
@@ -2220,15 +2220,24 @@ describe('createMastraCode', () => {
     expect(prepareWakeRequestContext).not.toHaveBeenCalled();
   });
 
-  async function decideDelivery(options: Record<string, unknown>, { ownedHere }: { ownedHere: boolean }) {
+  async function decideDelivery(
+    options: Record<string, unknown>,
+    { ownedHere, metadata }: { ownedHere: boolean; metadata?: Record<string, unknown> },
+  ) {
     const { createMastraCode } = await import('../index.js');
     const mastraCode = await createMastraCode(options);
-    if (!ownedHere) controllerGetSessionByResourceMock.mockResolvedValue(undefined);
+    if (!ownedHere) controllerGetSessionMock.mockResolvedValue(undefined);
     const decide = agentConstructorMock.mock.calls
       .map(call => call[0] as Record<string, any>)
       .find(config => config.notifications)?.notifications?.deliveryPolicy?.decide;
     const decision = await decide({
-      record: { priority: 'high', source: 'sentinel', resourceId: 'some-resource', threadId: 'some-thread' },
+      record: {
+        priority: 'high',
+        source: 'sentinel',
+        resourceId: 'project-resource',
+        threadId: 'some-thread',
+        metadata,
+      },
       threadState: 'idle',
       now: new Date('2026-10-01T00:00:00.000Z'),
     });
@@ -2240,7 +2249,13 @@ describe('createMastraCode', () => {
   it("leaves another project's notifications for that project's process, with the socket pubsub on or off", async () => {
     for (const unixSocketPubSub of [true, false]) {
       const decision = await decideDelivery({ unixSocketPubSub }, { ownedHere: false });
-      expect(decision).toMatchObject({ action: 'deliver', hold: true });
+      // Due now rather than delivered, so the first send does not wake it here either.
+      expect(decision).toEqual({
+        action: 'defer',
+        deliverAt: new Date('2026-10-01T00:00:00.000Z'),
+        reason: 'idle-high',
+        hold: true,
+      });
       expect(decision.streamOptions).toBeUndefined();
     }
   });
@@ -2252,12 +2267,27 @@ describe('createMastraCode', () => {
     expect(decision.streamOptions).toBeDefined();
   });
 
-  it('does not hold notifications when the embedder configured its own PubSub', async () => {
-    for (const ownedHere of [true, false]) {
-      expect(await decideDelivery({ pubsub: {} as any, crossProcessPubSub: true }, { ownedHere })).not.toHaveProperty(
-        'hold',
-      );
-    }
+  it("delivers this resource's notifications from the shared schedule when the embedder configured its own PubSub", async () => {
+    const decision = await decideDelivery({ pubsub: {} as any, crossProcessPubSub: true }, { ownedHere: true });
+
+    expect(decision).not.toHaveProperty('hold');
+    expect(decision.streamOptions).toBeDefined();
+  });
+
+  it('leaves a resource no session here serves for its own process when the embedder configured its own PubSub', async () => {
+    const decision = await decideDelivery({ pubsub: {} as any, crossProcessPubSub: true }, { ownedHere: false });
+
+    expect(decision).toMatchObject({ action: 'defer', hold: true });
+    expect(decision.streamOptions).toBeUndefined();
+  });
+
+  it("still sends a delivery routed to the thread's claimed owner when no session here serves it", async () => {
+    // Where Core keeps a sender's `requireClaimedOwner` on the record.
+    const metadata = { __mastraNotificationRouting: { requireClaimedOwner: true } };
+    const decision = await decideDelivery({ unixSocketPubSub: true }, { ownedHere: false, metadata });
+
+    expect(decision).toMatchObject({ action: 'deliver', hold: true });
+    expect(decision.streamOptions).toBeUndefined();
   });
 
   it("holds another project's thread on a shared resource, and runs it as that project's session once one is live here", async () => {
@@ -2277,7 +2307,7 @@ describe('createMastraCode', () => {
     };
 
     const foreign = await decide(input);
-    expect(foreign).toMatchObject({ action: 'deliver', hold: true });
+    expect(foreign).toMatchObject({ action: 'defer', hold: true });
     expect(foreign.streamOptions).toBeUndefined();
     expect(prepareWakeRequestContext).not.toHaveBeenCalled();
 

@@ -2,6 +2,8 @@ packages:
   - '.'
 
 overrides:
+  # Vanta 2026-10-21: GHSA-587h-7wmj-h5pm (CVE-2026-112942/3/4) via vitest 4 (vite ^6||^7||^8)
+  'vite@>=8.0.0 <8.3.3': 8.3.4
   proxy-addr: 2.0.8
   '@fastify/proxy-addr@<=5.1.0': 5.1.1
   qs@>=6.7.0 <6.16.0: 6.16.0

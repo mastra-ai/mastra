@@ -17,13 +17,14 @@ import { runOMCommit } from './commit-queue';
 import { OBSERVATION_CONTINUATION_HINT } from './constants';
 import { isContextOverflowError } from './context-overflow';
 import { omDebug } from './debug';
-import { getObservableMessages } from './message-utils';
+import { findLastCompletedObservationBoundary, getObservableMessages } from './message-utils';
 import type { ObservationTurn } from './observation-turn/index';
 import { loadMemoryContextMessages } from './observation-turn/load-memory-context';
 import type { ObservationalMemory } from './observational-memory';
 import { isOmReproCaptureEnabled, safeCaptureJson, writeProcessInputStepReproCapture } from './repro-capture';
 import { insertTemporalGapMarkers } from './temporal-markers';
 import type { TokenCounterModelContext } from './token-counter';
+import type { ObservationModelContext } from './types';
 
 /**
  * Coerce a shared `state.__omTurn` value to a usable live turn.
@@ -322,9 +323,27 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         // A run recovered by another worker can continue a response message that the dead
         // worker already observed. That worker rotated the id in memory, but the rotation was
         // lost with it. Seal and rotate again so the rest of the turn isn't merged into the observed message.
-        if (messageId && this.turn.record.observedMessageIds?.includes(messageId)) {
-          const observed = messageList.get.all.db().find(message => message.id === messageId);
-          if (observed) this.engine.sealMessagesForBuffering([observed]);
+        // observedMessageIds alone misses responses observed before an activation or a reflection,
+        // neither of which keeps their ids. What survives is on the message itself: buffering
+        // persists OM's seal before the Observer runs, and sync observation persists its end
+        // marker on the observed message before it may reflect.
+        // When only the ids say so, persist the seal too: a later reflection drops the ids, and
+        // the message would otherwise look unobserved if this worker also dies.
+        const observedIds = this.turn.record.observedMessageIds;
+        const response = messageId ? messageList.get.all.db().find(message => message.id === messageId) : undefined;
+        const responseSealed =
+          (response?.content?.metadata as { mastra?: { sealed?: boolean } } | undefined)?.mastra?.sealed === true;
+        const responseObserved =
+          responseSealed ||
+          (!!response && findLastCompletedObservationBoundary(response) >= 0) ||
+          (!!messageId && Array.isArray(observedIds) && observedIds.includes(messageId));
+        if (messageId && responseObserved) {
+          if (response && !responseSealed) {
+            // Persist first, and fail the step rather than continue: without the stored seal, a later
+            // reflection erases the only evidence, and the next recovery would merge into this message.
+            await this.engine.persistMessageSeal(response);
+            this.engine.sealMessagesForBuffering([response]);
+          }
           responseMessageId = rotateResponseMessageId?.() ?? messageId;
         }
         if (stepNumber === 0 && this.temporalMarkers) {
@@ -530,6 +549,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           sendSignal: args.sendSignal,
           sendStateSignal: args.sendStateSignal,
           requestContext,
+          currentModel: state.__omActorModelContext as ObservationModelContext | undefined,
           writer: args.writer,
           observabilityContext: getOmObservabilityContext(args),
         }),

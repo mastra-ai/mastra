@@ -318,6 +318,61 @@ describe('createInngestAgent observe-replay wiring', () => {
     expect(receivedEvents[2].type).toBe(AgentStreamEventTypes.FINISH);
   });
 
+  it.each(['stream', 'generate'] as const)(
+    '%s terminates when the opening event and error event cannot be published',
+    async method => {
+      const error = new Error('Pubsub transport unavailable');
+      class UnavailablePubSub extends EventEmitterPubSub {
+        override async publish(): Promise<void> {
+          throw error;
+        }
+      }
+      const durableAgent = createInngestAgent({
+        agent: makeAgent(`opening-publish-failure-${method}`),
+        inngest,
+        pubsub: new UnavailablePubSub(),
+      });
+      const errors: unknown[] = [];
+      let cleanup: (() => void) | undefined;
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const run = async () => {
+          if (method === 'generate') {
+            await expect(
+              durableAgent.generate('Hello', {
+                onError: ({ error }) => {
+                  errors.push(error);
+                },
+              }),
+            ).rejects.toThrow('Pubsub transport unavailable');
+          } else {
+            const result = await durableAgent.stream('Hello', {
+              onError: ({ error }) => {
+                errors.push(error);
+              },
+            });
+            cleanup = result.cleanup;
+            const chunks = [];
+            for await (const chunk of result.fullStream) {
+              chunks.push(chunk);
+            }
+            expect(chunks).toEqual([{ type: 'error', payload: { error } }]);
+          }
+          expect(errors).toEqual([error]);
+        };
+        await Promise.race([
+          run(),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new Error('Stream did not terminate after publish failure')), 1000);
+          }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+        cleanup?.();
+      }
+    },
+  );
+
   it('routes workflow agent topics through the configured pubsub exactly once', async () => {
     const customPubsub = new EventEmitterPubSub();
     const customPublish = vi.spyOn(customPubsub, 'publish');

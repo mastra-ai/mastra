@@ -221,7 +221,7 @@ const parserOverride = (schema: JsonSchemaObject, refs: Refs) => {
       item => typeof item === 'object' && its.an.object(item) && item.properties !== undefined,
     );
     if (schema.anyOf.length > 1 && allObjects) {
-      const propertiesWithConst: string[][] = schema.anyOf.reduce((acc, item) => {
+      const propertiesWithConst: string[][] = schema.anyOf.reduce<string[][]>((acc, item) => {
         if (typeof item === 'object' && its.an.object(item)) {
           const propertyWithConst = Object.entries(item.properties ?? {}).filter(
             ([_, value]) => typeof value === 'object' && (value as any)?.const !== undefined,
@@ -232,7 +232,7 @@ const parserOverride = (schema: JsonSchemaObject, refs: Refs) => {
           }
         }
         return acc;
-      }, [] as string[][]);
+      }, []);
 
       if (propertiesWithConst.length === schema.anyOf.length) {
         if (seen) {

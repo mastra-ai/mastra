@@ -40,7 +40,7 @@ describe('AgentController createSession({ resumeOnly })', () => {
 
     expect(isSessionNotStartedError(error)).toBe(true);
     expect(await controller.queryThreads({ resourceId: 'r-1' })).toEqual([]);
-    expect(await controller.getSessionByResource('r-1')).toBeUndefined();
+    expect(await controller.getSession('r-1')).toBeUndefined();
     expect(workspaceFactory).not.toHaveBeenCalled();
   });
 
@@ -72,7 +72,6 @@ describe('AgentController createSession({ resumeOnly })', () => {
     await before.createSession({
       resourceId: 'r-1',
       id: 'r-1::/repo-a',
-      scope: '/repo-a',
       tags: { projectPath: '/repo-a' },
     });
 
@@ -81,7 +80,6 @@ describe('AgentController createSession({ resumeOnly })', () => {
       .createSession({
         resourceId: 'r-1',
         id: 'r-1::/repo-b',
-        scope: '/repo-b',
         tags: { projectPath: '/repo-b' },
         resumeOnly: true,
       })

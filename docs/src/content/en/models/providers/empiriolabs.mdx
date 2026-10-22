@@ -7,7 +7,7 @@ description: "Browse EmpirioLabs AI model IDs, capabilities, context windows, an
 
 # <img src="https://models.dev/logos/empiriolabs.svg" alt="EmpirioLabs AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />EmpirioLabs AI
 
-Access 65 EmpirioLabs AI models through Mastra's model router. Authentication is handled automatically using the `EMPIRIOLABS_API_KEY` environment variable.
+Access 63 EmpirioLabs AI models through Mastra's model router. Authentication is handled automatically using the `EMPIRIOLABS_API_KEY` environment variable.
 
 Learn more in the [EmpirioLabs AI documentation](https://docs.empiriolabs.ai).
 
@@ -45,18 +45,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 
 <ProviderModelsTable
   models={[
-  {
-    "model": "empiriolabs/deepseek-v4-1-flash",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 393216,
-    "inputCost": 0.3,
-    "outputCost": 1.2
-  },
   {
     "model": "empiriolabs/deepseek-v4-1-flash-1017",
     "imageInput": true,
@@ -310,30 +298,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 15
   },
   {
-    "model": "empiriolabs/mimo-v2-5",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 128000,
-    "inputCost": 0.7,
-    "outputCost": 1.4
-  },
-  {
-    "model": "empiriolabs/mimo-v2-5-pro",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 128000,
-    "inputCost": 2.175,
-    "outputCost": 4.35
-  },
-  {
     "model": "empiriolabs/mimo-v2-6-flash",
     "imageInput": true,
     "audioInput": true,
@@ -368,30 +332,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 4.35,
     "outputCost": 8.7
-  },
-  {
-    "model": "empiriolabs/minimax-m2-7",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 32768,
-    "inputCost": 0.15,
-    "outputCost": 0.6
-  },
-  {
-    "model": "empiriolabs/minimax-m2-7-highspeed",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 32768,
-    "inputCost": 0.3,
-    "outputCost": 1.2
   },
   {
     "model": "empiriolabs/minimax-m3",
@@ -514,18 +454,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.459
   },
   {
-    "model": "empiriolabs/qwen3-5-397b-a17b",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 256000,
-    "maxOutput": 64000,
-    "inputCost": 0.172,
-    "outputCost": 1.032
-  },
-  {
     "model": "empiriolabs/qwen3-5-4b",
     "imageInput": true,
     "audioInput": false,
@@ -560,18 +488,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": 0.09,
     "outputCost": 0.368
-  },
-  {
-    "model": "empiriolabs/qwen3-5-plus",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": true,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 65536,
-    "inputCost": 0.36,
-    "outputCost": 2.21
   },
   {
     "model": "empiriolabs/qwen3-6-27b",

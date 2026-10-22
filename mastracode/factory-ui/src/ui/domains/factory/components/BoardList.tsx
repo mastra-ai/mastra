@@ -17,7 +17,14 @@ export const SPANS_LIST_GRID = 'col-span-full grid grid-cols-subgrid';
 /** Each row lays out its own columns, so one wide action or badge never narrows every other title. */
 export function BoardList({ children }: { children: ReactNode }) {
   return (
-    <DataList columns="minmax(0,1fr)" variant="light" fit="container" aria-label="Board stages" className="p-0">
+    <DataList
+      columns="minmax(0,1fr)"
+      variant="light"
+      fit="container"
+      scrollable={false}
+      aria-label="Board stages"
+      className="p-0"
+    >
       {children}
     </DataList>
   );
@@ -92,7 +99,8 @@ export function BoardListGroup({
       </div>
       <CollapsibleContent
         keepMounted
-        render={<div className={SPANS_LIST_GRID} />}
+        // Clip during the collapse animation, then let the first/last row's activity halo extend beyond the panel.
+        render={<div className={cn(SPANS_LIST_GRID, 'data-open:not-data-starting-style:overflow-visible')} />}
         className={cn(SPANS_LIST_GRID, 'gap-y-px [&>:not(.data-list-row)]:col-span-full')}
       >
         {children}

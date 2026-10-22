@@ -5,10 +5,10 @@ import type { MastraScorer } from '../../evals/base';
 import type { ScorerRunInputForAgent, ScorerRunOutputForAgent } from '../../evals/types';
 import type { ScoringData } from '../../llm/model/base.types';
 import type { VersionOverrides } from '../../mastra/types';
-import { resolveObservabilityContext } from '../../observability';
+import { EntityType, getOrCreateSpan, resolveObservabilityContext, SpanType } from '../../observability';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
 import type { TargetType } from '../../storage/types';
-import type { ToolHooks } from '../../tools/types';
+import type { MastraToolInvocationOptions, ToolHookContext, ToolHooks } from '../../tools/types';
 import type { StepResult, Workflow } from '../../workflows';
 import type { ItemToolMock, ToolMockReport, UnmockedToolPolicy } from './tool-mocks';
 import { ToolMockMatcher } from './tool-mocks';
@@ -435,6 +435,7 @@ function buildToolMockHooks(agent: Agent, matcher: ToolMockMatcher, mockAbort: A
       // 2. Mock matcher.
       const resolution = matcher.resolve(context.toolName, context.input);
       if (resolution.kind === 'serve') {
+        recordMockedToolCallSpan(context, resolution.output, true);
         await userHooks?.afterToolCall?.({ ...context, output: resolution.output });
         return { proceed: false, output: resolution.output };
       }
@@ -443,8 +444,10 @@ function buildToolMockHooks(agent: Agent, matcher: ToolMockMatcher, mockAbort: A
         // the item fails deterministically via the catch path. Short-circuit the
         // tool here too so the mis-called tool never runs live even before the
         // abort propagates.
+        const output = { error: resolution.code };
+        recordMockedToolCallSpan(context, output, false);
         mockAbort.abort(new Error(`Tool mock failure for "${context.toolName}" (${resolution.code})`));
-        return { proceed: false, output: { error: resolution.code } };
+        return { proceed: false, output };
       }
 
       // 3. `live` — fall through to the real tool.
@@ -455,6 +458,33 @@ function buildToolMockHooks(agent: Agent, matcher: ToolMockMatcher, mockAbort: A
     // mocks invoke it manually above, since they short-circuit the real tool.
     afterToolCall: userHooks?.afterToolCall,
   };
+}
+
+/**
+ * Record a `tool_call` span for a tool call the mock matcher short-circuited.
+ *
+ * The real tool never runs, so `CoreToolBuilder` never opens its span and the
+ * trace would show only model steps. This span mirrors the builder's shape and
+ * is flagged `mocked: true` so trace readers can tell a mock-intercepted call
+ * (served, mismatched, exhausted or denied) from a live call. Without a current
+ * span (observability off) nothing is recorded.
+ */
+function recordMockedToolCallSpan(context: ToolHookContext, output: unknown, success: boolean): void {
+  const invocation = context.context as MastraToolInvocationOptions | undefined;
+  const toolSpan = getOrCreateSpan({
+    type: SpanType.TOOL_CALL,
+    name: `tool: '${context.toolName}'`,
+    input: context.input,
+    entityType: EntityType.TOOL,
+    entityId: context.toolName,
+    entityName: context.toolName,
+    attributes: { toolType: 'tool', toolCallId: invocation?.toolCallId, mocked: true },
+    // Inherit the model step's policy so `InternalSpans.TOOL` hides mocked spans like live ones.
+    tracingPolicy: invocation?.tracingContext?.currentSpan?.tracingPolicy,
+    tracingContext: invocation?.tracingContext,
+    requestContext: invocation?.requestContext,
+  });
+  toolSpan?.end({ output, attributes: { success } });
 }
 
 /**

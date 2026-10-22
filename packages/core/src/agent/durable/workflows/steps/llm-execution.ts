@@ -47,7 +47,10 @@ import { PrepareStepProcessor } from '../../../../processors/processors/prepare-
 import { resolveMaxProcessorRetries } from '../../../../processors/retry-budget';
 import type { ProcessorState } from '../../../../processors/runner';
 import { ProcessorRunner } from '../../../../processors/runner';
-import { needsTrailingAssistantGuard } from '../../../../processors/trailing-assistant-guard';
+import {
+  needsTrailingAssistantGuard,
+  removeTrailingAssistantGuardContinuations,
+} from '../../../../processors/trailing-assistant-guard';
 import { getToolDefinitionsForTracing } from '../../../../stream/aisdk/v5/compat/prepare-tools';
 import { execute, sendsNativeResponseFormat } from '../../../../stream/aisdk/v5/execute';
 import { MastraModelOutput, persistProcessorDataChunk } from '../../../../stream/base/output';
@@ -1033,6 +1036,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 };
               }
             }
+            removeTrailingAssistantGuardContinuations(messageList);
             await persistUnavailableAttachments({
               messageList,
               memory: getRunRegistryEntry(runId, mastra as Mastra | undefined)?.memory,
@@ -2055,7 +2059,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       toolCallId: payload.toolCallId,
                       toolName: payload.toolName,
                       args: payload.args || {},
-                      providerMetadata: payload.providerMetadata as Record<string, unknown> | undefined,
+                      providerMetadata: payload.providerMetadata,
                       providerExecuted: payload.providerExecuted,
                       output: payload.output,
                       activeTools: currentActiveTools ?? null,
@@ -2672,7 +2676,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // 15. Build output
             const output: DurableLLMStepOutput = {
               ...(await storeMessageListState(params, messageList.serialize())),
-              text: textDeltas.join(''),
+              // Serialized steps feed onFinish; rejected attempts must not contribute text.
+              text: processOutputStepTripwire ? '' : textDeltas.join(''),
               // A rejected response's tool calls never run.
               toolCalls: processOutputStepTripwire ? [] : toolCalls,
               stepResult: {

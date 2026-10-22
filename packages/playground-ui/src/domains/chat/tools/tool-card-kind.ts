@@ -2,8 +2,10 @@ import type { MessageMetadata, SuspendedToolMetadata, ToolApprovalMetadata } fro
 import type { ToolPartFields } from '../messages/renderers/tool-part';
 import { isRecord } from '../messages/signal-data';
 import { getCodeModeCall } from './code-mode';
+import { CONNECT_PROMPT_TOOL_NAME } from './connect-prompt-tool-id';
 import { SUBMIT_PLAN_TOOL_ID } from './submit-plan-tool-id';
 import { WORKSPACE_TOOLS } from './workspace-tool-constants';
+import { isConnectPromptPayload } from '@/domains/connect/types';
 import type { ActivityStatus } from '@/ds/components/ai/activity';
 import { isTaskTool } from '@/ds/components/ai/tool-call';
 
@@ -12,6 +14,7 @@ export type ToolCardKind =
   | 'hidden'
   | 'observation'
   | 'ask_user'
+  | 'connect_prompt'
   | 'submit_plan'
   | 'background'
   | 'agent'
@@ -96,6 +99,9 @@ export function toolCardKind(
   if (isHiddenTool(toolName)) return 'hidden';
   // A question read back in history draws as a plain badge, but it is still a question: never folded away.
   if (toolName === 'ask_user') return 'ask_user';
+  // Built-in `request_connection` tool from `@mastra/connect`: a settled call renders
+  // as an interactive connect card; while running it falls back to a plain badge.
+  if (toolName === CONNECT_PROMPT_TOOL_NAME && isConnectPromptPayload(output)) return 'connect_prompt';
   const { suspended } = toolInteraction(metadata, toolName, toolCallId);
   if (
     toolName === SUBMIT_PLAN_TOOL_ID ||

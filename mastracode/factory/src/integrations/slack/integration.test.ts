@@ -192,6 +192,7 @@ describe('SlackIntegration.channels', () => {
       }),
     );
     const session = {
+      identity: { getId: () => 'us-1', getResourceId: () => 'us-1' },
       mode: { get: () => 'build' },
       thread: {
         getId: () => 'us-1',

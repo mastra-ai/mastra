@@ -116,6 +116,8 @@ import type {
   TraceQueryResponse,
   TrustedThreadQueryPlan,
   TrustedTraceAggregatePlan,
+  TrustedSpanAggregatePlan,
+  SpanAggregateResponse,
   TrustedTraceQueryObservedFieldsPlan,
   TrustedTraceQueryPlan,
   TrustedTraceQueryValuesPlan,
@@ -161,6 +163,8 @@ const spanQueryFeatures =
   typeof coreStorage.planSpanQuery === 'function'
     ? (['span-query', 'span-query-context-fields'] as const)
     : ([] as const);
+const spanAggregateFeatures =
+  typeof coreStorage.planSpanAggregate === 'function' ? (['span-aggregate'] as const) : ([] as const);
 
 export type { PartitionMode, PartitioningOptions } from './partitioning';
 export type { DiscoveryConfig } from './discovery';
@@ -386,6 +390,7 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
         'trace-query',
         'trace-aggregate',
         ...spanQueryFeatures,
+        ...spanAggregateFeatures,
         ...(typeof coreStorage.planThreadRowsQuery === 'function' ? (['thread-query-rows'] as const) : []),
         'trace-query-root-duration',
         'trace-query-discovery',
@@ -395,6 +400,7 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
         'trace-query-context-ids',
         ...traceQueryOps.timeToFirstChunkFeatures,
         'trace-query-root-span-fields',
+        'trace-query-root-entity-id',
       ] as const;
     }
     return [
@@ -410,6 +416,7 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
       'trace-query',
       'trace-aggregate',
       ...spanQueryFeatures,
+      ...spanAggregateFeatures,
       ...(typeof coreStorage.planThreadRowsQuery === 'function' ? (['thread-query-rows'] as const) : []),
       'trace-query-root-duration',
       'trace-query-discovery',
@@ -419,6 +426,7 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
       'trace-query-context-ids',
       ...traceQueryOps.timeToFirstChunkFeatures,
       'trace-query-root-span-fields',
+      'trace-query-root-entity-id',
     ] as const;
   }
 
@@ -505,6 +513,12 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   override async aggregateTraces(plan: TrustedTraceAggregatePlan): Promise<TraceAggregateResponse> {
     return this.#run('AGGREGATE_TRACES', () =>
       traceAggregateOps.aggregateTraces(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs),
+    );
+  }
+
+  override async aggregateSpans(plan: TrustedSpanAggregatePlan): Promise<SpanAggregateResponse> {
+    return this.#run('AGGREGATE_SPANS', () =>
+      traceAggregateOps.aggregateSpans(this.#readClient, this.#schema, plan, this.#traceQueryTimeoutMs),
     );
   }
 
