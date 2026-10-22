@@ -118,6 +118,8 @@ export interface FactoryApiRoutesDeps {
   intakeReady: boolean;
   factoryReady: boolean;
   knowledgeEnabled: boolean;
+  /** The Factory MCP endpoint is mounted; surfaced so the UI can show its URL. */
+  mcpEnabled: boolean;
   /** Providers the operator opted in to run on the server process's own credentials. */
   deploymentModelProviders?: ReadonlySet<string>;
   knowledgeKey?: string;
@@ -750,7 +752,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       memorySettings: deps.domains.memorySettings,
       factoryProjects: deps.domains.projects,
       customProviders: deps.domains.customProviders,
-      features: { knowledge: deps.knowledgeEnabled },
+      features: { knowledge: deps.knowledgeEnabled, mcp: deps.mcpEnabled },
       deploymentProviders: deps.deploymentModelProviders,
       onCredentialsChanged: invalidateTenantCredentialSnapshots,
       onCustomProvidersChanged: invalidateCustomProvidersSnapshots,

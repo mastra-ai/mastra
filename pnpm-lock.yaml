@@ -2444,6 +2444,9 @@ importers:
       '@internal/workspace':
         specifier: workspace:*
         version: link:../../packages/_internals/workspace
+      '@mastra/deployer':
+        specifier: workspace:*
+        version: link:../../packages/deployer
       '@mastra/libsql':
         specifier: workspace:*
         version: link:../../stores/libsql

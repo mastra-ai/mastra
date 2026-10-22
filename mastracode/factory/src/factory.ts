@@ -566,6 +566,9 @@ export class MastraFactory {
     const mcpConfig = this.#config.mcp;
     const mcpAuthorizationServers =
       mcpConfig === false || mcpConfig?.enabled === false ? [] : resolveMcpAuthorizationServers(auth?.name, mcpConfig);
+    // The MCP endpoint authenticates callers itself, so it needs an auth
+    // provider and somewhere for clients to get tokens.
+    const mcpEnabled = Boolean(auth) && mcpAuthorizationServers.length > 0;
 
     // Explicit integrations win. Platform credentials fill only missing
     // provider slots so callers can override each integration independently.
@@ -1679,7 +1682,7 @@ export class MastraFactory {
           // Hono app the deployer generates. `requiresAuth: false`; the gate
           // skips `/auth/*`. Auth-disabled mode still answers `/auth/me` (404).
           ...(auth ? buildAuthRoutes(auth, { publicUrl: publicOrigin }) : buildAuthDisabledRoutes()),
-          ...(auth && mcpAuthorizationServers.length > 0
+          ...(mcpEnabled
             ? buildFactoryMcpRoutes({
                 auth: routeAuth,
                 publicOrigin,
@@ -1722,6 +1725,7 @@ export class MastraFactory {
             intakeReady,
             factoryReady,
             knowledgeEnabled,
+            mcpEnabled,
             deploymentModelProviders,
             knowledgeKey: this.#config.knowledge?.key,
             configVersion,
@@ -1802,7 +1806,16 @@ export class MastraFactory {
             : []),
         ],
         buildServerConfig: () => {
-          const cors = allowedOrigins.length ? { cors: { origin: allowedOrigins, credentials: true } } : {};
+          // MCP 2026-07-28 clients send `Mcp-*` headers on every request and
+          // read the OAuth challenge from `WWW-Authenticate`; the deployer
+          // merges these into its default allow/expose lists.
+          const mcpCors = {
+            allowHeaders: ['Mcp-Protocol-Version', 'Mcp-Method', 'Mcp-Name'],
+            exposeHeaders: ['WWW-Authenticate'],
+          };
+          const cors = {
+            cors: allowedOrigins.length ? { origin: allowedOrigins, credentials: true, ...mcpCors } : mcpCors,
+          };
           // Log route errors with method/path/stack and answer with structured
           // JSON instead of an opaque `Internal Server Error`. Applied by the
           // deployer to both the top-level app and the custom-route sub-app.
