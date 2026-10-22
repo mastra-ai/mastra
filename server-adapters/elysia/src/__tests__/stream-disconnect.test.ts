@@ -1,6 +1,6 @@
-import { createServer } from 'node:http';
-import type { Server } from 'node:http';
+import { createServer } from 'node:net';
 import { LLMock } from '@copilotkit/aimock';
+import { node } from '@elysiajs/node';
 import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { Elysia } from 'elysia';
@@ -9,47 +9,18 @@ import { MastraServer } from '../index';
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-/**
- * Serves an Elysia app over real HTTP and cancels the response body when the client goes away,
- * as Bun and other fetch-based servers do. The shared test helper never cancels, so it can't
- * exercise disconnects.
- */
-async function serveWithDisconnect(app: Elysia): Promise<{ server: Server; port: number }> {
-  const server = createServer(async (req, res) => {
-    const controller = new AbortController();
-    res.on('close', () => controller.abort());
-    const chunks: Buffer[] = [];
-    for await (const chunk of req) chunks.push(Buffer.from(chunk));
-    const response = await app.fetch(
-      new Request(`http://localhost${req.url}`, {
-        method: req.method,
-        headers: { 'content-type': req.headers['content-type'] ?? 'application/json' },
-        body: chunks.length ? Buffer.concat(chunks) : undefined,
-        signal: controller.signal,
-      }),
-    );
-    res.writeHead(response.status, Object.fromEntries(response.headers));
-    const reader = response.body!.getReader();
-    res.on('close', () => void reader.cancel().catch(() => {}));
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        res.write(value);
-      }
-    } catch {
-      // body cancelled after disconnect
-    }
-    res.end();
-  });
-  await new Promise<void>(resolve => server.listen(0, 'localhost', () => resolve()));
-  const address = server.address();
-  return { server, port: typeof address === 'object' && address ? address.port : 0 };
+// @elysiajs/node reports port 0 back instead of the bound port, so pick a free port up front.
+async function getFreePort(): Promise<number> {
+  const probe = createServer();
+  await new Promise<void>(resolve => probe.listen(0, 'localhost', () => resolve()));
+  const address = probe.address();
+  await new Promise(resolve => probe.close(resolve));
+  return typeof address === 'object' && address ? address.port : 0;
 }
 
 describe('Elysia stream client disconnect', () => {
   let llm: LLMock;
-  let server: Server;
+  let stopServer: () => unknown;
   let port: number;
   const loggedErrors: string[] = [];
 
@@ -81,13 +52,20 @@ describe('Elysia stream client disconnect', () => {
       originalError(message, ...args);
     };
 
-    const app = new Elysia();
+    // Served through Elysia's official Node adapter, so disconnects reach the app the way they do in production.
+    const app = new Elysia({ adapter: node() });
     await new MastraServer({ app, mastra }).init();
-    ({ server, port } = await serveWithDisconnect(app));
+    port = await getFreePort();
+    await new Promise<void>(resolve =>
+      app.listen({ port, hostname: 'localhost' }, server => {
+        stopServer = () => server.stop(true);
+        resolve();
+      }),
+    );
   });
 
   afterEach(async () => {
-    await new Promise(resolve => server.close(resolve));
+    await stopServer();
     await llm.stop();
   });
 

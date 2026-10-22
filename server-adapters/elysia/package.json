@@ -34,6 +34,7 @@
     "@ai-sdk/openai": "^2.0.135",
     "@copilotkit/aimock": "^1.29.0",
     "@elysiajs/cors": "^1.4.1",
+    "@elysiajs/node": "^1.4.5",
     "@elysiajs/openapi": "^1.4.14",
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
