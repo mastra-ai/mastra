@@ -328,9 +328,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               if (
                 !signalOwner ||
                 getRunRegistryEntry(runId, mastra as Mastra | undefined) !== signalOwner ||
-                !signalOwner.executionFence ||
-                ExecutionFence.getLocalActive(runId) !== signalOwner.executionFence ||
-                signalOwner.executionFence.isLost() ||
+                (signalOwner.executionFence &&
+                  (ExecutionFence.getLocalActive(runId) !== signalOwner.executionFence ||
+                    signalOwner.executionFence.isLost())) ||
                 signalOwner.abortSignal?.aborted
               ) {
                 throw new Error(`Cannot send processor signal: run ${runId} is no longer active`);
