@@ -2401,7 +2401,7 @@ describe('@bot mute / unmute', () => {
       return handlers[slot]!(thread, message, defaultHandler, ctx).then(() => message);
     };
     const muted = async () => (await memory.getThreadById({ threadId: 'thread-1' }))?.metadata?.factory_muted;
-    return { thread, accountLinks, defaultHandler, send, muted };
+    return { thread, accountLinks, defaultHandler, send, muted, memory };
   }
 
   it('mutes on a tagged `mute`, confirms with a reaction, and starts no run', async () => {
@@ -2412,6 +2412,15 @@ describe('@bot mute / unmute', () => {
     expect(f.thread.adapter.addReaction).toHaveBeenCalledWith('slack:C-1:1700.42', message.id, 'mute');
     expect(f.defaultHandler).not.toHaveBeenCalled();
     expect(f.thread.post).not.toHaveBeenCalled();
+  });
+
+  it('looks the thread up once per message for the mute check and the access gate', async () => {
+    const f = await fixture();
+    const listThreads = vi.spyOn(f.memory, 'listThreads');
+
+    await f.send('just chatting among ourselves');
+    expect(f.defaultHandler).toHaveBeenCalledTimes(1);
+    expect(listThreads).toHaveBeenCalledTimes(1);
   });
 
   it('lets only a sender who passes the link gate mute the thread', async () => {
