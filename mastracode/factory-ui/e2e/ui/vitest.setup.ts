@@ -90,6 +90,10 @@ if (!Element.prototype.scrollTo) {
   Element.prototype.scrollTo = () => {};
 }
 
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {};
+}
+
 // jsdom's window.scrollTo only logs "Not implemented"; <ScrollRestoration /> calls it on every navigation.
 window.scrollTo = () => {};
 
