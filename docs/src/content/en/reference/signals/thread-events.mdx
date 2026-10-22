@@ -25,13 +25,11 @@ const unsubscribe = agent.subscribeThreadEvents(scope, event => {
   }
 })
 
-agent.queueMessage('Review the failing test.', {
-  ...scope,
-  ifIdle: { streamOptions: { maxSteps: 3 } },
-})
-
+// Later, when you no longer need updates:
 unsubscribe()
 ```
+
+The count changes when you call [`queueMessage()`](/reference/agents/agent#queuemessagemessage-options) or [`queueSignal()`](/reference/agents/agent#queuesignalsignal-options) while a run is active on the thread.
 
 `SubscribeAgentThreadEventsOptions` accepts:
 
