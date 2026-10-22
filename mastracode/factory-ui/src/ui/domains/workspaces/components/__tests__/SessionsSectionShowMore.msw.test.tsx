@@ -64,15 +64,15 @@ describe('Sessions sidebar show more', () => {
     renderSection();
 
     const group = await screen.findByRole('region', { name: 'Review sessions' });
-    expect(await within(group).findAllByRole('button', { name: /^factory\/pr-200\d+$/ })).toHaveLength(5);
-    expect(within(group).queryByRole('button', { name: 'factory/pr-20001' })).not.toBeInTheDocument();
+    expect(await within(group).findAllByRole('link', { name: /^factory\/pr-200\d+$/ })).toHaveLength(5);
+    expect(within(group).queryByRole('link', { name: 'factory/pr-20001' })).not.toBeInTheDocument();
 
     await user.click(within(group).getByRole('button', { name: 'Show 3 more' }));
-    expect(within(group).getAllByRole('button', { name: /^factory\/pr-200\d+$/ })).toHaveLength(8);
-    expect(within(group).getByRole('button', { name: 'factory/pr-20001' })).toBeInTheDocument();
+    expect(within(group).getAllByRole('link', { name: /^factory\/pr-200\d+$/ })).toHaveLength(8);
+    expect(within(group).getByRole('link', { name: 'factory/pr-20001' })).toBeInTheDocument();
 
     await user.click(within(group).getByRole('button', { name: 'Show less' }));
-    expect(within(group).getAllByRole('button', { name: /^factory\/pr-200\d+$/ })).toHaveLength(5);
+    expect(within(group).getAllByRole('link', { name: /^factory\/pr-200\d+$/ })).toHaveLength(5);
   });
 
   it('keeps a pinned session visible and persists the pin', async () => {
@@ -88,19 +88,19 @@ describe('Sessions sidebar show more', () => {
 
     expect(within(group).getByLabelText('factory/pr-20001 pinned')).toBeInTheDocument();
     await user.click(within(group).getByRole('button', { name: 'Show less' }));
-    expect(within(group).getAllByRole('button', { name: /^factory\/pr-200\d+$/ })[0]).toHaveAccessibleName(
+    expect(within(group).getAllByRole('link', { name: /^factory\/pr-200\d+$/ })[0]).toHaveAccessibleName(
       'factory/pr-20001',
     );
 
     rendered.unmount();
     renderSection();
     const remountedGroup = await screen.findByRole('region', { name: 'Review sessions' });
-    expect(within(remountedGroup).getByRole('button', { name: 'factory/pr-20001' })).toBeInTheDocument();
+    expect(within(remountedGroup).getByRole('link', { name: 'factory/pr-20001' })).toBeInTheDocument();
     expect(within(remountedGroup).getByLabelText('factory/pr-20001 pinned')).toBeInTheDocument();
 
     await user.click(within(remountedGroup).getByRole('button', { name: 'Session actions for factory/pr-20001' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Unpin' }));
-    expect(within(remountedGroup).queryByRole('button', { name: 'factory/pr-20001' })).not.toBeInTheDocument();
+    expect(within(remountedGroup).queryByRole('link', { name: 'factory/pr-20001' })).not.toBeInTheDocument();
   });
 
   it('shows no toggle when a group fits within the cap', async () => {
@@ -109,7 +109,7 @@ describe('Sessions sidebar show more', () => {
     renderSection();
 
     const group = await screen.findByRole('region', { name: 'Review sessions' });
-    expect(await within(group).findAllByRole('button', { name: /^factory\/pr-200\d+$/ })).toHaveLength(3);
+    expect(await within(group).findAllByRole('link', { name: /^factory\/pr-200\d+$/ })).toHaveLength(3);
     expect(screen.queryByRole('button', { name: /Show \d+ more/ })).not.toBeInTheDocument();
   });
 });
