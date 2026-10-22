@@ -4,7 +4,10 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { SpansFilterBar } from '@mastra/playground-ui/domains/spans/components/spans-filter-bar';
 import { buildSpanQueryWhere } from '@mastra/playground-ui/domains/spans/span-filters';
 import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/components/traces-error-content';
-import { resolveTracesDateWindow } from '@mastra/playground-ui/domains/traces/components/traces-explorer';
+import {
+  DEFAULT_TRACES_FILTERS,
+  resolveTracesDateWindow,
+} from '@mastra/playground-ui/domains/traces/components/traces-explorer';
 import { TracesListView } from '@mastra/playground-ui/domains/traces/components/traces-list-view';
 import type { TracesListViewTrace } from '@mastra/playground-ui/domains/traces/components/traces-list-view';
 import { recoveryRefetchInterval } from '@mastra/playground-ui/domains/traces/hooks/use-traces-list-source';
@@ -14,13 +17,14 @@ import type { TraceDatePreset } from '@mastra/playground-ui/domains/traces/types
 import { useObservabilityCapabilities } from '@mastra/react/hooks/capabilities';
 import { useQuerySpans } from '@mastra/react/hooks/traces';
 import type { SpanQueryArgs, SpanRow } from '@mastra/react/hooks/traces';
-import { useCallback, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router';
+import { useMemo, useState } from 'react';
+import { useNavigate, useSearchParams } from 'react-router';
 import { SpanDetailSidePanel } from './span-detail-side-panel';
 import type { SpanSelection } from './span-detail-side-panel';
 import { TracesSpansSwitch } from '@/domains/traces/components/traces-spans-switch';
 
-const DEFAULT_DATE_PRESET: TraceDatePreset = 'last-24h';
+// Same window as /traces, so switching between the two pages keeps the time chip identical.
+const DEFAULT_DATE_PRESET: TraceDatePreset = DEFAULT_TRACES_FILTERS.datePreset;
 
 // `entityName` is left out: the list's Name column prefers it over `name`, which would label every
 // span of an agent with the agent's name instead of the span's own name.
@@ -49,7 +53,29 @@ type DateState = { datePreset: TraceDatePreset; dateFrom?: Date; dateTo?: Date }
 
 export function SpansPageContent() {
   const navigate = useNavigate();
-  const [selection, setSelection] = useState<SpanSelection>();
+  // The open span lives in the URL (same params as /traces), so it survives a reload and can be shared.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const selectedTraceId = searchParams.get('traceId');
+  const selectedSpanId = searchParams.get('spanId');
+  const selection = useMemo<SpanSelection | undefined>(
+    () => (selectedTraceId && selectedSpanId ? { traceId: selectedTraceId, spanId: selectedSpanId } : undefined),
+    [selectedTraceId, selectedSpanId],
+  );
+  const setSelection = (next: SpanSelection | undefined) =>
+    setSearchParams(
+      current => {
+        const params = new URLSearchParams(current);
+        if (next) {
+          params.set('traceId', next.traceId);
+          params.set('spanId', next.spanId);
+        } else {
+          params.delete('traceId');
+          params.delete('spanId');
+        }
+        return params;
+      },
+      { replace: true },
+    );
   const [dates, setDates] = useState<DateState>({ datePreset: DEFAULT_DATE_PRESET });
   const [tokens, setTokens] = useState<TraceFilterToken[]>([]);
   const [groups, setGroups] = useState<TraceFilterGroup[]>([]);
@@ -115,7 +141,7 @@ export function SpansPageContent() {
     const isOpen = selection?.traceId === row.traceId && selection.spanId === row.spanId;
     setSelection(isOpen ? undefined : { traceId: row.traceId, spanId: row.spanId });
   };
-  const closePanel = useCallback(() => setSelection(undefined), []);
+  const closePanel = () => setSelection(undefined);
   const showTrace = ({ traceId, spanId }: SpanSelection) =>
     navigate(`/traces?${new URLSearchParams({ traceId, spanId })}`);
 
@@ -123,10 +149,11 @@ export function SpansPageContent() {
 
   return (
     <PageLayout
+      breadcrumbs={<TracesSpansSwitch current="spans" />}
+      headerBorder={false}
       actionRow={
         <ActionRow>
           <ActionRow.Start>
-            <TracesSpansSwitch current="spans" />
             <SpansFilterBar
               datePreset={datePreset}
               dateFrom={dateFrom}

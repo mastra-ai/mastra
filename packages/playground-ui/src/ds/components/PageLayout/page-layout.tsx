@@ -10,6 +10,8 @@ export interface PageLayoutProps {
   breadcrumbs?: ReactNode;
   /** Right side of the page header row. */
   headerActions?: ReactNode;
+  /** Draw the header row's bottom border. On by default; the row keeps its height either way. */
+  headerBorder?: boolean;
   /** Controls pinned between the header and the scrollable body (search, filters, toggles…). */
   actionRow?: ReactNode;
   /** Page-level header (e.g. `PageHeader`) rendered inside the body container, above children. */
@@ -31,6 +33,7 @@ export function PageLayout({
   children,
   breadcrumbs,
   headerActions,
+  headerBorder = true,
   actionRow,
   header,
   variant = 'container',
@@ -45,7 +48,7 @@ export function PageLayout({
   return (
     <div data-slot="page-layout" className="flex h-full min-h-0 flex-col">
       {(breadcrumbs || headerActions) && (
-        <Header className="min-h-header-default shrink-0 gap-2 overflow-hidden px-2">
+        <Header border={headerBorder} className="min-h-header-default shrink-0 gap-2 overflow-hidden px-2">
           {breadcrumbs}
           {headerActions && (
             <div className="ml-auto flex shrink-0 items-center gap-2 overflow-hidden">{headerActions}</div>

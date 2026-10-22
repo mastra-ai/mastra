@@ -2,7 +2,7 @@ import type { GetObservabilityCapabilitiesResponse } from '@mastra/client-js';
 import { EntityType } from '@mastra/core/observability';
 import { serializeTraceColumnPreferences } from '@mastra/playground-ui/domains/traces/trace-list-columns';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { useLocation } from 'react-router';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import TracesPage from '..';
@@ -476,6 +476,37 @@ describe('Traces page view switch', () => {
       expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull();
     });
 
+    it('shows the switch in the page header, with the filter bar below it', async () => {
+      setTracePageHandlers(traceQueryCapabilities);
+
+      renderPage();
+
+      const filterInput = await screen.findByPlaceholderText('Filter traces…');
+      const views = screen.getByRole('navigation', { name: 'Observability views' });
+      expect(views.closest('header')).not.toBeNull();
+      expect(filterInput.closest('header')).toBeNull();
+    });
+
+    it('draws no border under the header row that holds the switch', async () => {
+      setTracePageHandlers(traceQueryCapabilities);
+
+      renderPage();
+
+      const views = await screen.findByRole('navigation', { name: 'Observability views' });
+      expect(views.closest('header')?.className).not.toContain('border-b');
+    });
+
+    it('gives both switch buttons the same borderless box, so the current one does not shift its neighbour', async () => {
+      setTracePageHandlers(traceQueryCapabilities);
+
+      renderPage();
+
+      const views = await screen.findByRole('navigation', { name: 'Observability views' });
+      for (const link of within(views).getAllByRole('link')) {
+        expect(link.className).toContain('border-0');
+      }
+    });
+
     it('marks Traces as the current view', async () => {
       setTracePageHandlers(traceQueryCapabilities);
 
@@ -484,6 +515,41 @@ describe('Traces page view switch', () => {
       const views = within(await screen.findByRole('navigation', { name: 'Observability views' }));
       expect(views.getByRole('link', { name: 'Traces' }).getAttribute('aria-current')).toBe('page');
       expect(views.getByRole('link', { name: 'Spans' }).getAttribute('aria-current')).toBeNull();
+    });
+  });
+
+  describe('while the storage capabilities are loading', () => {
+    it('holds the header row with a placeholder for the Traces/Spans switch', async () => {
+      setTracePageHandlers(traceQueryCapabilities);
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, async () => {
+          await delay('infinite');
+          return HttpResponse.json(traceQueryCapabilities);
+        }),
+      );
+
+      renderPage();
+
+      const placeholder = await screen.findByRole('status', { name: 'Loading views' });
+      expect(placeholder.closest('header')?.className).not.toContain('border-b');
+      expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull();
+    });
+  });
+
+  describe('while the filter fields are still loading', () => {
+    it('keeps the Traces/Spans switch in the header above the loading skeleton', async () => {
+      setTracePageHandlers(traceQueryCapabilities);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query/fields`, async () => {
+          await delay('infinite');
+          return HttpResponse.json(emptyTraceQueryFields);
+        }),
+      );
+
+      renderPage();
+
+      expect(await screen.findByRole('navigation', { name: 'Observability views' })).toBeTruthy();
+      expect(screen.getByTestId('traces-page-skeleton')).toBeTruthy();
     });
   });
 

@@ -6,8 +6,10 @@ import { useSpanQueryAvailable } from '@mastra/playground-ui/domains/capabilitie
 import { SpansPageContent } from './spans-page-content';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { navCrumb } from '@/domains/navigation/crumbs';
+import { TracesSpansSwitchSkeleton } from '@/domains/traces/components/traces-spans-switch';
 
-const crumbs = [navCrumb('/spans')];
+// Spans has no sidebar entry of its own; it lives under Traces.
+const crumbs = [navCrumb('/traces'), { id: 'spans', label: 'Spans' }];
 
 export default function SpansPage() {
   const { enabled, isLoading } = useSpanQueryAvailable();
@@ -15,8 +17,12 @@ export default function SpansPage() {
   // The content owns its layout so it can put the filter bar in the action row.
   if (enabled) return <SpansPageContent />;
 
+  // While loading, hold the header row the way the switch will, so it does not swap a bordered breadcrumb out.
   return (
-    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+    <PageLayout
+      breadcrumbs={isLoading ? <TracesSpansSwitchSkeleton /> : <PageBreadcrumbs crumbs={crumbs} />}
+      headerBorder={!isLoading}
+    >
       <h1 className="sr-only">Spans</h1>
       {isLoading ? (
         <div className="flex h-full items-center justify-center gap-2">

@@ -21,13 +21,21 @@ export type TracesExplorerErrorRenderArgs = Pick<TracesListContextValue, 'refetc
 
 export type TracesExplorerLayoutProps = {
   breadcrumbs?: ReactNode;
+  /** Draw the header row's bottom border (see `PageLayout`). On by default. */
+  headerBorder?: boolean;
   actionRow: ReactNode;
   children: ReactNode;
   /** Renders the list-error state (e.g. host-classified errors with a retry). Defaults to `TracesErrorContent`. */
   renderError?: (args: TracesExplorerErrorRenderArgs) => ReactNode;
 };
 
-export function TracesExplorerLayout({ breadcrumbs, actionRow, children, renderError }: TracesExplorerLayoutProps) {
+export function TracesExplorerLayout({
+  breadcrumbs,
+  headerBorder,
+  actionRow,
+  children,
+  renderError,
+}: TracesExplorerLayoutProps) {
   const { isCapabilitiesLoading } = useTracesConfig();
   const { isLoading: isDiscoveryLoading } = useTracesDiscovery();
   const { rows, isLoading, error, refetch } = useTracesList();
@@ -40,7 +48,7 @@ export function TracesExplorerLayout({ breadcrumbs, actionRow, children, renderE
   // `isFetching`) gates this: background refetches after the stale window must not flash it.
   if (isCapabilitiesLoading || isDiscoveryLoading) {
     return (
-      <PageLayout breadcrumbs={breadcrumbs}>
+      <PageLayout breadcrumbs={breadcrumbs} headerBorder={headerBorder}>
         <h1 className="sr-only">Traces</h1>
         <div>
           <TracesPageSkeleton columnPreferences={displayedPreferences} />
@@ -51,7 +59,7 @@ export function TracesExplorerLayout({ breadcrumbs, actionRow, children, renderE
 
   if (error) {
     return (
-      <PageLayout breadcrumbs={breadcrumbs} actionRow={actionRow}>
+      <PageLayout breadcrumbs={breadcrumbs} headerBorder={headerBorder} actionRow={actionRow}>
         <h1 className="sr-only">Traces</h1>
         <div className="flex h-full items-center justify-center">
           {renderError ? (
@@ -66,7 +74,7 @@ export function TracesExplorerLayout({ breadcrumbs, actionRow, children, renderE
 
   if (rows.length === 0 && !isLoading && !contentFiltersApplied && !selectedTraceId) {
     return (
-      <PageLayout breadcrumbs={breadcrumbs} actionRow={actionRow}>
+      <PageLayout breadcrumbs={breadcrumbs} headerBorder={headerBorder} actionRow={actionRow}>
         <h1 className="sr-only">Traces</h1>
         <NoTracesInfo datePreset={filters.datePreset} dateFrom={dateFrom} dateTo={dateTo} />
       </PageLayout>
@@ -74,7 +82,7 @@ export function TracesExplorerLayout({ breadcrumbs, actionRow, children, renderE
   }
 
   return (
-    <PageLayout breadcrumbs={breadcrumbs} actionRow={actionRow}>
+    <PageLayout breadcrumbs={breadcrumbs} headerBorder={headerBorder} actionRow={actionRow}>
       <h1 className="sr-only">Traces</h1>
       {children}
     </PageLayout>
