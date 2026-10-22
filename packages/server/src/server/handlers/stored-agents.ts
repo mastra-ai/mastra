@@ -99,6 +99,15 @@ const CODE_AGENT_OVERRIDE_FIELDS = [
 ] as const;
 
 /**
+ * Whether a registered agent is defined by the project: in code (`'code'`) or in an
+ * `agents/<name>/` folder (`'fs'`). Stored records for these agents are overrides whose
+ * fields are limited by the agent's editor config.
+ */
+function isCodeBackedAgent<TAgent extends { source?: string }>(agent: TAgent | undefined): agent is TAgent {
+  return agent?.source === 'code' || agent?.source === 'fs';
+}
+
+/**
  * Derive ownership flags from a code agent's editor config.
  * Mirrors the semantics of `editor.agent.applyStoredOverrides` so that
  * client save payloads, persisted snapshots, and export output all agree
@@ -179,7 +188,7 @@ function buildExportConfig(
   agent?: { __getEditorConfig?: () => unknown; source?: string },
 ) {
   const editorConfig = agent?.__getEditorConfig?.();
-  const isCodeAgent = agent?.source === 'code';
+  const isCodeAgent = isCodeBackedAgent(agent);
   const allowedFields = isCodeAgent ? CODE_AGENT_OVERRIDE_FIELDS : AGENT_SNAPSHOT_CONFIG_FIELDS;
   const ownership = isCodeAgent ? getCodeAgentOwnership(editorConfig) : null;
   const config: Record<string, unknown> = {};
@@ -634,7 +643,7 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
       } catch {
         codeAgentForCreate = undefined;
       }
-      if (codeAgentForCreate?.source === 'code') {
+      if (isCodeBackedAgent(codeAgentForCreate)) {
         const ownership = getCodeAgentOwnership(codeAgentForCreate.__getEditorConfig?.());
         if (ownership.ownsInstructions) {
           assertOwnedInstructionsNotEmpty(createInstructions);
@@ -846,7 +855,7 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
       } catch {
         codeAgentForUpdate = undefined;
       }
-      if (codeAgentForUpdate?.source === 'code') {
+      if (isCodeBackedAgent(codeAgentForUpdate)) {
         const ownership = getCodeAgentOwnership(codeAgentForUpdate.__getEditorConfig?.());
         if (ownership.ownsInstructions) {
           if (instructions !== undefined) {

@@ -842,6 +842,34 @@ describe('Stored Agents Handlers', () => {
       });
     });
 
+    it('should omit fields not owned by a file-based agent editor config', async () => {
+      mockMastra = createMockMastra({
+        storage: mockStorage,
+        editor: mockEditor,
+        agents: {
+          'fs-agent': {
+            source: 'fs',
+            __getEditorConfig: () => ({ instructions: false, tools: false }),
+          },
+        },
+      });
+
+      const result = await EXPORT_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mockMastra),
+        storedAgentId: 'fs-agent',
+        instructions: 'Ignored instructions',
+        tools: { weatherTool: { description: 'Ignored tool' } },
+        model: { provider: 'openai', name: 'gpt-4o' },
+        requestContextSchema: { type: 'object' },
+      });
+
+      expect(result).toMatchObject({
+        agentId: 'fs-agent',
+        config: { requestContextSchema: { type: 'object' } },
+        content: '{\n  "requestContextSchema": {\n    "type": "object"\n  }\n}\n',
+      });
+    });
+
     it('should export supported storage-only agent config fields', async () => {
       mockAgentsData.set('storage-only-agent', {
         id: 'storage-only-agent',
@@ -1073,6 +1101,36 @@ describe('Stored Agents Handlers', () => {
         agent: expect.objectContaining({
           id: 'description-only-agent',
           instructions: undefined,
+        }),
+      });
+    });
+
+    it('should strip code-owned fields when creating an override for a file-based agent', async () => {
+      const mastra = createMockMastra({
+        storage: mockStorage,
+        editor: mockEditor,
+        agents: {
+          'fs-agent': {
+            source: 'fs',
+            __getEditorConfig: () => ({ instructions: false, tools: false }),
+          },
+        },
+      });
+
+      await CREATE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mastra),
+        id: 'fs-agent',
+        name: 'FS Agent',
+        instructions: 'Studio instructions',
+        tools: { weatherTool: { description: 'Studio tool' } },
+        model: { name: 'gpt-4', provider: 'openai' },
+      });
+
+      expect(mockAgentsStore.create).toHaveBeenCalledWith({
+        agent: expect.objectContaining({
+          id: 'fs-agent',
+          instructions: undefined,
+          tools: undefined,
         }),
       });
     });
@@ -1439,6 +1497,41 @@ describe('Stored Agents Handlers', () => {
         expect.objectContaining({
           id: 'description-only-agent',
           instructions: undefined,
+        }),
+      );
+    });
+
+    it('should strip code-owned fields when updating an override for a file-based agent', async () => {
+      mockAgentsData.set('fs-agent', {
+        id: 'fs-agent',
+        name: 'FS Agent',
+        instructions: 'Existing instructions',
+        model: { name: 'gpt-4', provider: 'openai' },
+        activeVersionId: 'v-fs-agent-1',
+      });
+      const mastra = createMockMastra({
+        storage: mockStorage,
+        editor: mockEditor,
+        agents: {
+          'fs-agent': {
+            source: 'fs',
+            __getEditorConfig: () => ({ instructions: false, tools: false }),
+          },
+        },
+      });
+
+      await UPDATE_STORED_AGENT_ROUTE.handler({
+        ...createTestContext(mastra),
+        storedAgentId: 'fs-agent',
+        instructions: 'Studio instructions',
+        tools: { weatherTool: { description: 'Studio tool' } },
+      });
+
+      expect(mockAgentsStore.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'fs-agent',
+          instructions: undefined,
+          tools: undefined,
         }),
       );
     });
