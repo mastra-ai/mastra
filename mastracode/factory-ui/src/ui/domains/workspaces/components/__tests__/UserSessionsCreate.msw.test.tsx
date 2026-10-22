@@ -130,7 +130,7 @@ describe('User sessions creation', () => {
     );
     // The session only exists once the first prompt creates it, so the sidebar
     // has nothing to list yet.
-    expect(screen.queryByRole('button', { name: 'New session' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'New session' })).not.toBeInTheDocument();
     expect(screen.getByText('No sessions yet')).toBeInTheDocument();
     await waitForMutationsIdle(client);
     expect(sessionPosts).toBe(0);
@@ -160,9 +160,9 @@ describe('User sessions creation', () => {
 
     renderSection();
 
-    expect(await screen.findByRole('button', { name: 'Fix login' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'feature-readable' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'New session' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Fix login' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'feature-readable' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'New session' })).toBeInTheDocument();
     expect(screen.queryByText(opaqueSessionId)).not.toBeInTheDocument();
   });
 
@@ -210,7 +210,7 @@ describe('User sessions creation', () => {
     expect(deletedSessions).toBe(1);
     expect(client.getQueryData(queryKeys.userSession(sessionId))).toBeUndefined();
     expect(await screen.findByText('Session deleted')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'session-1' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'session-1' })).not.toBeInTheDocument();
   });
 
   it('surfaces a failed delete and keeps the session listed', async () => {
@@ -230,6 +230,6 @@ describe('User sessions creation', () => {
     await waitForMutationsIdle(client);
 
     expect(await screen.findByText(/Failed to delete session \(500\)/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'session-1' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'session-1' })).toBeInTheDocument();
   });
 });

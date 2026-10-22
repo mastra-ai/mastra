@@ -47,7 +47,7 @@ afterEach(() => {
 });
 
 function TracesList() {
-  const { rows } = useTracesListSource({ query, initialAutoRefetch: false });
+  const { rows } = useTracesListSource({ query, autoRefetch: false });
   return <TracesListView traces={rows} onTraceClick={() => {}} />;
 }
 

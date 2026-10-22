@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry, defineBoard } from '../boards/index.js';
 import { createLifecycleTestRegistry, createTestBoard } from '../boards/test-utils.js';
 import { DecisionAttentionProvider, failedDecisionAttentionSpec } from '../routes/attention-providers.js';
+import { resolveFactoryCredentialTenant } from '../session/credential-policy.js';
 import { FACTORY_OPEN_RUNS_SETTING, observeSessionRunEnd, waitForSessionRunAudit } from '../session/run-audit.js';
 import { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import { FACTORY_RULE_MATERIALIZATION_KEY, WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
@@ -1347,10 +1348,27 @@ describe('FactoryDecisionDispatcher', () => {
     const requestContext = session.sendSignal.mock.calls[0]?.[1]?.requestContext;
     expect(requestContext?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
     expect(requestContext?.get('controller')).toMatchObject({
+      sessionId: 'session-1',
       resourceId: PROJECT_ID,
       threadId: 'thread-1',
       session: { modelId: 'openai/gpt-5.6-sol' },
     });
+    expect(
+      await resolveFactoryCredentialTenant(requestContext!, {
+        projects: {
+          getById: vi.fn(async () => ({ id: PROJECT_ID, orgId: 'org-1', modelScope: 'factory' })) as never,
+        },
+        sourceControl: {
+          getBySessionId: vi.fn(async () => ({
+            sessionId: 'session-1',
+            orgId: 'org-1',
+            userId: 'user-1',
+            factoryProjectId: PROJECT_ID,
+          })) as never,
+        },
+        workItems: storage,
+      }),
+    ).toEqual({ orgId: 'org-1', userId: 'user-1', credentialScope: 'factory' });
     expect(session.subscribe).toHaveBeenCalledTimes(2);
     expect(getAgentEndListenerCount()).toBe(0);
   });

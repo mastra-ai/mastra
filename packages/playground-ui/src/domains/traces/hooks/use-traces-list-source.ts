@@ -21,8 +21,11 @@ export function fixedWindowRefetchInterval(error: unknown): number | false {
   return isRejectedTraceListRequest(error) ? false : TRACES_LIST_REFETCH_INTERVAL_MS;
 }
 
-/** With delta polling the list only reloads to recover from a transient failure; delta polls bring new traces. */
-function deltaListRefetchInterval(error: unknown): number | false {
+/**
+ * For an infinite list that must not reload its pages on a timer: it only reloads to recover from a
+ * transient failure. With delta polling, delta polls bring the new traces instead.
+ */
+export function recoveryRefetchInterval(error: unknown): number | false {
   return error && !isRejectedTraceListRequest(error) ? TRACES_LIST_REFETCH_INTERVAL_MS : false;
 }
 
@@ -30,7 +33,8 @@ export interface UseTracesListSourceArgs {
   query: (now: Date) => TraceQueryArgs;
   orderBy?: TraceQueryArgs['orderBy'];
   rolling?: boolean;
-  initialAutoRefetch?: boolean;
+  /** Poll for new traces and refetch on window focus. */
+  autoRefetch?: boolean;
   withQueryTrace?: boolean;
   /** The server supports delta polling: auto-refresh merges new traces instead of reloading the pages. */
   withDeltaPolling?: boolean;
@@ -44,7 +48,7 @@ export function useTracesListSource({
   query: buildQuery,
   orderBy,
   rolling = true,
-  initialAutoRefetch = true,
+  autoRefetch = true,
   withQueryTrace,
   withDeltaPolling = false,
   legacyFilters,
@@ -52,7 +56,6 @@ export function useTracesListSource({
   enabled = true,
 }: UseTracesListSourceArgs) {
   const [tickNow, setTickNow] = useState(() => new Date());
-  const [autoRefetch, setAutoRefetch] = useState(initialAutoRefetch);
   const delta = withDeltaPolling && withQueryTrace !== false;
   // A fixed window polls in place. Transient failures keep polling (a blip must not silence the
   // list), but a request the server refuses ends it: each retry would only clear the error, flash
@@ -61,7 +64,7 @@ export function useTracesListSource({
   const refetchInterval = !autoRefetch
     ? false
     : delta
-      ? (query: { state: { error: unknown } }) => deltaListRefetchInterval(query.state.error)
+      ? (query: { state: { error: unknown } }) => recoveryRefetchInterval(query.state.error)
       : !rolling
         ? (query: { state: { error: unknown } }) => fixedWindowRefetchInterval(query.state.error)
         : false;
@@ -122,6 +125,5 @@ export function useTracesListSource({
     ...result,
     rows,
     autoRefetch,
-    setAutoRefetch,
   };
 }
