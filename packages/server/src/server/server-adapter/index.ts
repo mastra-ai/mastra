@@ -59,6 +59,47 @@ export function getCustomHTTPExceptionResponse(error: unknown): Response | undef
   return error.getResponse();
 }
 
+export interface HTTPErrorResponseBody {
+  error: string;
+  cause?: { failingItems: unknown[] };
+}
+
+/**
+ * Only `cause.failingItems` (dataset schema-update rejections) is exposed to clients;
+ * any other cause stays server-side.
+ */
+function getSafeErrorCause(error: unknown): HTTPErrorResponseBody['cause'] {
+  try {
+    const raw = error instanceof Error ? error.cause : undefined;
+    if (raw && typeof raw === 'object' && !Array.isArray(raw) && Array.isArray((raw as any).failingItems)) {
+      return { failingItems: (raw as any).failingItems };
+    }
+  } catch {
+    // property access threw (e.g. a getter) — omit cause
+  }
+  return undefined;
+}
+
+/**
+ * Maps a handler error to the status and JSON body every adapter sends:
+ * `error.status` (HTTPException) first, then `error.details.status` (MastraError), else 500.
+ */
+export function getHTTPErrorResponse(error: unknown): { status: number; body: HTTPErrorResponseBody } {
+  const message = error instanceof Error ? error.message : 'Unknown error';
+
+  if (error && typeof error === 'object') {
+    if ('status' in error) {
+      const cause = getSafeErrorCause(error);
+      return { status: (error as any).status, body: { error: message, ...(cause ? { cause } : {}) } };
+    }
+    if ('details' in error && error.details && typeof error.details === 'object' && 'status' in error.details) {
+      return { status: (error.details as any).status, body: { error: message } };
+    }
+  }
+
+  return { status: 500, body: { error: message } };
+}
+
 /**
  * Hono/adapter context key set by the framework-public middleware.
  *
