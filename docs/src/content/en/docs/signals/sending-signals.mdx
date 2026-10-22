@@ -8,7 +8,9 @@ packages:
 
 # Sending signals
 
-Signals send input to a thread, and subscribing to its stream carries the output back. Use them for messages, queued follow-ups, system context, and the durable notification and state paths, while a one-off request that doesn't need a thread can use [`agent.stream()`](/reference/streaming/agents/stream) instead.
+Signals are how new input reaches a thread. You don't start a fresh stream for each request: you send into the thread, and a subscription to that thread's stream carries the output back. Everything on this page follows that shape, from a plain user message through a queued follow-up, context supplied by a background system, and the durable notification and state paths.
+
+The exception is a request that never becomes a conversation. There's no thread to send to, so [`agent.stream()`](/reference/streaming/agents/stream) runs it and returns the answer directly.
 
 The examples call an `Agent`; from a server, use the [client SDK](/reference/client-js/agents) or [server routes](/reference/server/routes#agent-message-routes). The [Agent reference](/reference/agents/agent#thread-signals) is canonical for signatures.
 

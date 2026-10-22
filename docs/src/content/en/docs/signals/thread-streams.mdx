@@ -8,7 +8,7 @@ packages:
 
 # Thread streams
 
-A thread stream is the ordered output for a [thread](/docs/memory/message-history#threads-and-resources): model text, tool calls, approvals, errors, and run events, delivered as [chunks](/reference/streaming/ChunkType). You read it through a subscription, which can start with stored history as a [`thread-history` chunk](/reference/streaming/ChunkType#thread-history) before live output. Use [`Agent.subscribeToThread()`](/reference/agents/agent#subscribetothreadoptions) when your code owns the [Agent](/reference/agents/agent), or the [client SDK](/reference/client-js/agents#subscribetothread) when it calls a running server.
+A thread stream is the ordered output for a [thread](/docs/memory/message-history#threads-and-resources). Signals carry input into the thread. This stream carries the output back: model text, tool calls, approvals, errors, and run events, all delivered as [chunks](/reference/streaming/ChunkType). You read it through a subscription, which can start with stored history as a [`thread-history` chunk](/reference/streaming/ChunkType#thread-history) before switching to live output. Use [`Agent.subscribeToThread()`](/reference/agents/agent#subscribetothreadoptions) when your code owns the [Agent](/reference/agents/agent), or the [client SDK](/reference/client-js/agents#subscribetothread) when it calls a running server.
 
 ## Quickstart
 

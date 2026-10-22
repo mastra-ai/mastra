@@ -7,9 +7,11 @@ packages:
 
 # State signals
 
-A state signal holds named current context on a thread, separate from chat messages. A producer sends a snapshot or delta for a state ID, and Mastra stores it durably and gives it to the model as context. The producer owns merge and diff logic. Mastra doesn't merge values for you.
+A state signal holds named current context on a thread, separate from chat messages. Each state ID is a labeled slot the model can consult: the page a user is looking at, a result a background job produced, or the state of a long-running task. A producer sends a snapshot or delta for that slot, and Mastra stores the value durably and gives it to the model as context.
 
-Use one when the model needs a current view of something that changes across turns and isn't a user message, such as the active page, a watcher result, or task state. [Sending signals](/docs/signals/sending-signals) covers the durable input paths.
+The producer owns merge and diff logic. Mastra doesn't merge values for you.
+
+Use state signals when the model needs a current view of something that changes across turns and isn't a user message. [Sending signals](/docs/signals/sending-signals) covers the durable input paths.
 
 ## How state signals work
 

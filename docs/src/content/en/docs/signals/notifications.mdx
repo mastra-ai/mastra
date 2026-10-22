@@ -8,7 +8,7 @@ packages:
 
 # Notifications
 
-A notification is an external event that should reach an agent but shouldn't disappear if the agent is busy. Use [`agent.sendNotificationSignal()`](/reference/agents/agent#sendnotificationsignalnotification-options) to store the event as a durable inbox record, apply a delivery policy, and deliver it now or later. The agent can read pending records with [`createNotificationInboxTool()`](/reference/signals/create-notification-inbox-tool).
+A notification is an external event that should reach an agent but shouldn't disappear if the agent is busy. A build doesn't stop failing because the agent was halfway through an answer, and a review comment doesn't wait politely for the next turn. Use [`agent.sendNotificationSignal()`](/reference/agents/agent#sendnotificationsignalnotification-options) to store the event as a durable inbox record, apply a delivery policy, and deliver it now or later. The agent can read pending records with [`createNotificationInboxTool()`](/reference/signals/create-notification-inbox-tool).
 
 Unlike a chat message, a notification has its own lifecycle: it can be coalesced, summarized, deferred, retried, read, dismissed, or archived. The [Notifications reference](/reference/signals/notifications) documents the record and policy types.
 

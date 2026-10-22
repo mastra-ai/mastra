@@ -7,7 +7,7 @@ packages:
 
 # Signal providers
 
-A signal provider connects an external system to your agents. It tracks which threads care about which external resources, watches those resources, and sends matching events into each thread as [notifications](/docs/signals/notifications).
+A signal provider connects an external system to your agents. It tracks which threads care about which external resources, watches those resources, and sends matching events into each thread as [notifications](/docs/signals/notifications). It's the piece that answers "who wants to hear about this pull request?" so your application doesn't have to.
 
 Use a provider when several threads can watch the same source and you don't want to wire that bookkeeping by hand. The [`SignalProvider`](/reference/signals/signal-provider) base class owns the subscription registry, polling loop, and notification delivery.
 

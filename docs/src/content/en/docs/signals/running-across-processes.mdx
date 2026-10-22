@@ -10,7 +10,7 @@ packages:
 
 # Running across processes
 
-A single Mastra process can keep every [thread](/docs/memory/message-history#threads-and-resources) in memory. With more than one instance, the instance receiving a signal may not be running the agent, so the signal must reach the process that owns the thread. Only one process should run it at a time.
+A single Mastra process can keep every [thread](/docs/memory/message-history#threads-and-resources) in memory. That works right up until you run a second instance. Once more than one process can receive a signal, the one that receives it may not be the one running the agent, so the signal has to reach the process that owns the thread. Only one process should run it at a time.
 
 Mastra uses a [PubSub](/docs/server/pubsub) backend to move signals between processes and a [lease](/reference/pubsub/lease-provider) to elect one owner per thread.
 
