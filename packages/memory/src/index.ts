@@ -4227,10 +4227,11 @@ Notes:
     const runtimeObservationalMemory = normalizeObservationalMemoryConfig(
       runtimeMemory?.memoryConfig?.observationalMemory,
     );
-    const threadConfig = runtimeObservationalMemory
+    // A disabled override normalizes to undefined, but must not restore instance defaults.
+    const threadConfig = runtimeMemory?.memoryConfig?.observationalMemory !== undefined
       ? this.getMergedThreadConfig({
           ...runtimeMemory?.memoryConfig,
-          observationalMemory: runtimeObservationalMemory,
+          observationalMemory: runtimeObservationalMemory ?? false,
         } as MemoryConfigInternal)
       : this.threadConfig;
 
