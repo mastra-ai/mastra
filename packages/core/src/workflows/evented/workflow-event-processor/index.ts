@@ -397,10 +397,11 @@ export class WorkflowEventProcessor extends EventProcessor {
   }): Promise<void> {
     const pruneSnapshot = workflow?.options?.pruneSnapshot;
     if (!pruneSnapshot && !terminalHandoff) return;
+    let guarded = false;
     try {
       const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
       if (!workflowsStore || (!pruneSnapshot && !workflowsStore.supportsWorkflowStepGuards())) return;
-      const guarded = workflowsStore.supportsWorkflowStepGuards();
+      guarded = workflowsStore.supportsWorkflowStepGuards();
       const run = guarded ? undefined : await workflowsStore.getWorkflowRunById({ runId, workflowName: workflowId });
       const snapshot = guarded
         ? await workflowsStore.loadWorkflowSnapshot({ runId, workflowName: workflowId })
@@ -427,8 +428,8 @@ export class WorkflowEventProcessor extends EventProcessor {
         snapshot: pruned,
       });
     } catch (error) {
-      // Retry terminal storage failures before notifying the parent or finish topic.
-      if (terminalHandoff) throw error;
+      // Guarded terminal writes retire occurrences before notifying the finish topic.
+      if (terminalHandoff && guarded) throw error;
       this.mastra.getLogger()?.warn?.(`Failed to prune workflow snapshot for run ${runId}: ${error}`);
     }
   }
