@@ -2428,6 +2428,21 @@ export class AgentThreadStreamRuntime {
     state.locallyQueuedSignalIdsByThread.set(key, ids);
   }
 
+  /**
+   * Remove exactly one caller's queued pre-run copy. A reservation's losing
+   * rollback can only clear the whole queue while it still owns the thread
+   * slot; once a newer reservation replaced it, each sender discards its own
+   * acknowledged-or-rejected copy here so a later run cannot replay it.
+   */
+  #discardQueuedPreRunSignal(state: AgentThreadRuntimeState, key: string, signalId: string) {
+    const queue = state.preRunSignalsByThread.get(key);
+    if (!queue) return;
+    const index = queue.findIndex(signal => signal.id === signalId);
+    if (index === -1) return;
+    queue.splice(index, 1);
+    if (queue.length === 0) state.preRunSignalsByThread.delete(key);
+  }
+
   #isLocalSignalEcho(state: AgentThreadRuntimeState, key: string, signalId: string, runId: string) {
     const ids = state.locallyQueuedSignalIdsByThread.get(key);
     return !!ids?.has(signalId) && ids.get(signalId) !== runId;
@@ -6502,9 +6517,14 @@ export class AgentThreadStreamRuntime {
               // The reserved run owns the lease and takes this signal from the pre-run queue.
               return { action: 'deliver' as const, runId: admission.runId };
             }
+            // This attempt never consumed the signal locally, so this caller drops
+            // its own copy before acknowledging: the queue may now belong to a newer
+            // reservation whose slot guard keeps the losing rollback from cleaning
+            // it, and a later run there must not replay acknowledged input.
+            this.#discardQueuedPreRunSignal(state, pendingKey, signal.id);
             if (admission.action === 'remote') {
-              // The reservation lost its lease. Its cleanup removes the pre-run copy, so
-              // hand this signal to the same real owner before acknowledging it.
+              // The reservation lost its lease; hand this signal to the same real
+              // owner before acknowledging it.
               await this.#publishAndWait(pubsub, pendingKey, {
                 type: 'signal-enqueued',
                 runId: admission.runId,
@@ -6515,7 +6535,11 @@ export class AgentThreadStreamRuntime {
             }
             return { action: 'blocked' as const, reason: 'thread-blocked' as const, runId: admission.runId };
           });
-          void accepted.catch(() => {});
+          void accepted.catch(() => {
+            // No outcome was produced, so nothing acknowledged this signal; drop
+            // its copy so a later run cannot replay input the caller must retry.
+            this.#discardQueuedPreRunSignal(state, pendingKey, signal.id);
+          });
           return { signal, accepted };
         }
         const claimedOwnerDiscovery = isLocalReservedRun ? state.claimedThreadOwnerDiscoveries.get(key) : undefined;
@@ -6718,9 +6742,12 @@ export class AgentThreadStreamRuntime {
         // so we don't trip our own activeThreadRunIds check on a follow-up.
         if (state.activeThreadRunIds.get(reservedKey) === reservedRunId) {
           state.activeThreadRunIds.delete(reservedKey);
+          // Only discard the queue while this reservation still owns the slot —
+          // a newer reservation's queued input must survive, and this attempt's
+          // own senders discard their copies per signal when it settles.
+          state.preRunSignalsByThread.delete(reservedKey);
         }
         state.threadKeysByRunId.delete(reservedRunId);
-        state.preRunSignalsByThread.delete(reservedKey);
 
         const winnerRunId = lease.owner;
         if (winnerRunId && isRetakeLeaseOwner(winnerRunId)) {
