@@ -44,6 +44,12 @@ export interface BodyLimitTestSuiteConfig<TApp> {
     options?: { headers?: Record<string, string>; body?: string },
   ) => Promise<{ status: number }>;
 
+  /**
+   * Skip the non-JSON streamed-body cases for adapters that never read non-JSON
+   * bodies themselves and leave them to host-level parsers.
+   */
+  skipNonJsonStreamedBody?: boolean;
+
   /** Optional teardown for the app instance (e.g. closing a listening server) */
   cleanupApp?: (app: TApp) => void | Promise<void>;
 }
@@ -66,6 +72,7 @@ export function createBodyLimitTestSuite<TApp>(config: BodyLimitTestSuiteConfig<
     registerRoute,
     executeRequest,
     executeRequestWithoutContentLength,
+    skipNonJsonStreamedBody,
     cleanupApp,
   } = config;
 
@@ -134,6 +141,83 @@ export function createBodyLimitTestSuite<TApp>(config: BodyLimitTestSuiteConfig<
 
         expect(response.status).toBe(413);
         expect(handlerCalled).toBe(false);
+
+        await cleanupApp?.(wiredApp);
+      });
+
+      it.skipIf(skipNonJsonStreamedBody).each(['text/plain', 'application/octet-stream'])(
+        'rejects an oversized %s body without Content-Length before handler execution',
+        async contentType => {
+          const mastra = new Mastra({});
+          const app = createApp();
+          const { adapter, app: wiredApp } = await setupAdapter(app, mastra, {
+            maxSize,
+            onError: () => ({ error: 'Request body too large' }),
+          });
+          let handlerCalled = false;
+
+          const testRoute: ServerRoute<any, any, any> = {
+            method: 'POST',
+            path: '/test/body-limit-no-content-length-non-json',
+            responseType: 'json',
+            handler: async () => {
+              handlerCalled = true;
+              return { ok: true };
+            },
+          };
+
+          await registerRoute(adapter, wiredApp, testRoute);
+
+          const response = await executeRequestWithoutContentLength(
+            wiredApp,
+            'POST',
+            'http://localhost/test/body-limit-no-content-length-non-json',
+            {
+              headers: { 'Content-Type': contentType },
+              body: 'x'.repeat(maxSize * 4),
+            },
+          );
+
+          expect(response.status).toBe(413);
+          expect(handlerCalled).toBe(false);
+
+          await cleanupApp?.(wiredApp);
+        },
+      );
+
+      it('passes a JSON body within the limit without Content-Length to the handler', async () => {
+        const mastra = new Mastra({});
+        const app = createApp();
+        const { adapter, app: wiredApp } = await setupAdapter(app, mastra, {
+          maxSize,
+          onError: () => ({ error: 'Request body too large' }),
+        });
+        let receivedBody: unknown;
+
+        const testRoute: ServerRoute<any, any, any> = {
+          method: 'POST',
+          path: '/test/body-limit-no-content-length-within',
+          responseType: 'json',
+          handler: async ({ message }) => {
+            receivedBody = { message };
+            return { ok: true };
+          },
+        };
+
+        await registerRoute(adapter, wiredApp, testRoute);
+
+        const response = await executeRequestWithoutContentLength(
+          wiredApp,
+          'POST',
+          'http://localhost/test/body-limit-no-content-length-within',
+          {
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: 'hello' }),
+          },
+        );
+
+        expect(response.status).toBe(200);
+        expect(receivedBody).toEqual({ message: 'hello' });
 
         await cleanupApp?.(wiredApp);
       });
