@@ -42,13 +42,22 @@ describe('SlackIntegration.channels', () => {
 
     expect(typingStatus({ type: 'reasoning-delta' } as any, context())).toBe('is thinking...');
     expect(typingStatus({ type: 'reasoning-delta' } as any, context('is thinking...'))).toBe('is thinking...');
-    expect(typingStatus({ type: 'text-delta' } as any, context())).toBe('is typing...');
+    // Reply text is hidden by default, so streamed text sets no status.
+    expect(typingStatus({ type: 'text-delta' } as any, context())).toBeUndefined();
     expect(typingStatus({ type: 'tool-call', payload: { toolName: 'search' } } as any, context())).toBe(
       'is working...',
     );
     expect(typingStatus({ type: 'tool-call', payload: { toolName: 'search' } } as any, context('is working...'))).toBe(
       'is working...',
     );
+  });
+
+  it('shows "is typing..." for streamed text when reply text is shown', () => {
+    const integration = new SlackIntegration({ signingSecret: 'secret', adapterOptions: { textDisplay: 'show' } });
+    const typingStatus = integration.channels(ctxWith()).adapters.slack.typingStatus;
+    if (typeof typingStatus !== 'function') throw new Error('Expected a typing status function');
+    const ctx = { currentStatus: undefined, channelTools: new Set<string>() } as any;
+    expect(typingStatus({ type: 'text-delta' } as any, ctx)).toBe('is typing...');
   });
 
   it("names the tool's current step in the typing status when its args describe it", () => {

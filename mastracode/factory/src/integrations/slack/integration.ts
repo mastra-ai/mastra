@@ -94,12 +94,19 @@ function describeToolCall(args: unknown): string | undefined {
   return `is ${/^[A-Z][a-z]/.test(text) ? text.charAt(0).toLowerCase() + text.slice(1) : text}`;
 }
 
-const factoryTypingStatus: TypingStatusFn = chunk => {
+/**
+ * With reply text hidden, streamed text never reaches the thread, so it gets
+ * no status: an "is typing..." set after the reply tool's post would sit on
+ * the thread with nothing coming, and race the clear at the end of the run.
+ */
+const factoryTypingStatus =
+  (textDisplay: SlackAdapterChannelConfig['textDisplay']): TypingStatusFn =>
+  chunk => {
   switch (chunk.type) {
     case 'reasoning-delta':
       return 'is thinking...';
     case 'text-delta':
-      return 'is typing...';
+      return textDisplay === 'hidden' ? undefined : 'is typing...';
     case 'tool-call':
       return describeToolCall(chunk.payload.args) ?? 'is working...';
     default:
@@ -126,7 +133,8 @@ function adapterOverrides(options: SlackAdapterChannelConfig | undefined): Slack
  * who want Slack's "Thinking Steps" widget.
  */
 function factoryAdapterOptions(overrides: SlackAdapterChannelConfig): SlackAdapterChannelConfig {
-  return { typingStatus: factoryTypingStatus, toolDisplay: 'hidden', textDisplay: 'hidden', ...overrides };
+  const textDisplay = overrides.textDisplay ?? 'hidden';
+  return { typingStatus: factoryTypingStatus(textDisplay), toolDisplay: 'hidden', textDisplay, ...overrides };
 }
 
 export class SlackIntegration implements FactoryIntegration {
