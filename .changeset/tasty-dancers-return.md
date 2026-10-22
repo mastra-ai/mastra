@@ -15,12 +15,16 @@ Re-exported `useSpanQueryAvailable` from `@mastra/playground-ui/domains/capabili
 />
 ```
 
-`PageLayout` takes an optional `headerBorder` prop (default `true`). Set it to `false` to drop the header's bottom border while keeping its height, so content below stays in the same place.
+`TracesExplorer.Layout` takes two new optional slots. `tabs` is pinned under the header and stays visible while filter fields load. `toolbar` renders at the top of the page body, above the list, and stays up when the list fails so filters can still be changed. `actionRow` is now optional.
 
 ```tsx
-<PageLayout headerBorder={false} breadcrumbs={<ViewSwitch />} actionRow={<FilterBar />}>
-  {children}
-</PageLayout>
+<TracesExplorer.Layout
+  breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
+  tabs={<ViewTabs />}
+  toolbar={<TracesExplorer.FilterBar />}
+>
+  <TracesExplorer.List />
+</TracesExplorer.Layout>
 ```
 
 `FilterBar` chips that are already there when the bar mounts no longer play their entrance animation; only chips added afterwards animate in. The traces loading skeleton now matches the toolbar's pill-shaped controls and spacing, so the page no longer jumps when it finishes loading.

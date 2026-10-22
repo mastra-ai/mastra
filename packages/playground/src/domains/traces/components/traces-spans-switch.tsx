@@ -9,9 +9,7 @@ const VIEWS: { id: ObservabilityView; label: string; to: string }[] = [
   { id: 'spans', label: 'Spans', to: '/spans' },
 ];
 
-// The header row is inset less than the action row below it; `px-2` lines the switch up with the
-// filter bar, and with the breadcrumbs on every other page.
-const SWITCH_CLASS = 'flex shrink-0 items-center gap-1 px-2';
+const SWITCH_CLASS = 'flex shrink-0 items-center gap-1';
 
 export function TracesSpansSwitch({ current }: { current: ObservabilityView }) {
   return (

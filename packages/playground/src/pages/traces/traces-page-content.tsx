@@ -17,23 +17,19 @@ const crumbs = [navCrumb('/traces')];
 export const TracesPageContent = memo(function TracesPageContent({ isScoped }: { isScoped: boolean }) {
   const navigate = useNavigate();
   const { enabled: spanQueryEnabled, isLoading: spanQueryLoading } = useSpanQueryAvailable();
-  const showBreadcrumbs = !spanQueryLoading && !spanQueryEnabled;
 
   // Scoped instances render inside another page (e.g. the agent Traces tab) that already owns the header.
-  // Stores that can query spans show the Traces/Spans switch in the header row instead of the breadcrumb,
-  // without its bottom border; the row keeps its height so the filter bar sits where it does on every other page.
-  let header;
+  let tabs;
   if (!isScoped) {
-    if (spanQueryLoading) header = <TracesSpansSwitchSkeleton />;
-    else if (spanQueryEnabled) header = <TracesSpansSwitch current="traces" />;
-    else header = <PageBreadcrumbs crumbs={crumbs} />;
+    if (spanQueryLoading) tabs = <TracesSpansSwitchSkeleton />;
+    else if (spanQueryEnabled) tabs = <TracesSpansSwitch current="traces" />;
   }
 
   return (
     <TracesExplorer.Layout
-      breadcrumbs={header}
-      headerBorder={showBreadcrumbs}
-      actionRow={
+      breadcrumbs={isScoped ? undefined : <PageBreadcrumbs crumbs={crumbs} />}
+      tabs={tabs}
+      toolbar={
         <ActionRow>
           <ActionRow.Start>
             <TracesExplorer.FilterBar />

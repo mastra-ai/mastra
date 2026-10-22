@@ -19,8 +19,10 @@ import { useQuerySpans } from '@mastra/react/hooks/traces';
 import type { SpanQueryArgs, SpanRow } from '@mastra/react/hooks/traces';
 import { useMemo, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router';
+import { tracesCrumbs } from './crumbs';
 import { SpanDetailSidePanel } from './span-detail-side-panel';
 import type { SpanSelection } from './span-detail-side-panel';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { TracesSpansSwitch } from '@/domains/traces/components/traces-spans-switch';
 
 // Same window as /traces, so switching between the two pages keeps the time chip identical.
@@ -149,9 +151,11 @@ export function SpansPageContent() {
 
   return (
     <PageLayout
-      breadcrumbs={<TracesSpansSwitch current="spans" />}
-      headerBorder={false}
-      actionRow={
+      breadcrumbs={<PageBreadcrumbs crumbs={tracesCrumbs} />}
+      actionRow={<TracesSpansSwitch current="spans" />}
+    >
+      <h1 className="sr-only">Spans</h1>
+      <div className="flex h-full min-h-0 flex-col gap-4">
         <ActionRow>
           <ActionRow.Start>
             <SpansFilterBar
@@ -169,30 +173,30 @@ export function SpansPageContent() {
             />
           </ActionRow.Start>
         </ActionRow>
-      }
-    >
-      <h1 className="sr-only">Spans</h1>
-      {isError ? (
-        <div className="flex h-full items-center justify-center">
-          <TracesErrorContent error={error} resource="spans" errorTitle="Failed to load spans" />
+        <div className="min-h-0 flex-1">
+          {isError ? (
+            <div className="flex h-full items-center justify-center">
+              <TracesErrorContent error={error} resource="spans" errorTitle="Failed to load spans" />
+            </div>
+          ) : (
+            <TracesListView
+              listId="all-spans"
+              traces={rows}
+              isLoading={isLoading}
+              isFetchingNextPage={isFetchingNextPage}
+              hasNextPage={hasNextPage}
+              setEndOfListElement={setEndOfListElement}
+              filtersApplied={filtersApplied}
+              isBranchesMode
+              createdSort={sort}
+              onSortChange={setSort}
+              featuredTraceId={selection?.traceId}
+              featuredSpanId={selection?.spanId}
+              onTraceClick={handleSpanClick}
+            />
+          )}
         </div>
-      ) : (
-        <TracesListView
-          listId="all-spans"
-          traces={rows}
-          isLoading={isLoading}
-          isFetchingNextPage={isFetchingNextPage}
-          hasNextPage={hasNextPage}
-          setEndOfListElement={setEndOfListElement}
-          filtersApplied={filtersApplied}
-          isBranchesMode
-          createdSort={sort}
-          onSortChange={setSort}
-          featuredTraceId={selection?.traceId}
-          featuredSpanId={selection?.spanId}
-          onTraceClick={handleSpanClick}
-        />
-      )}
+      </div>
       <SpanDetailSidePanel
         selection={selection}
         spans={panelSpans}

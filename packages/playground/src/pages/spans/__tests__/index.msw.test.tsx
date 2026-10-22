@@ -166,10 +166,21 @@ describe('Spans page', () => {
       expect(screen.getByRole('navigation', { name: 'Breadcrumb' })).toBeTruthy();
       expect(screen.queryByRole('navigation', { name: 'Observability views' })).toBeNull();
     });
+
+    it('names Spans in the breadcrumb, since no switch shows it', async () => {
+      setSpansHandlers(noSpanQueryCapabilities, { first: spansFirstPage });
+
+      renderPage();
+
+      await screen.findByText('Query spans capability not activated');
+      const breadcrumb = within(screen.getByRole('navigation', { name: 'Breadcrumb' }));
+      expect(breadcrumb.getByText('Traces')).toBeTruthy();
+      expect(breadcrumb.getByText('Spans')).toBeTruthy();
+    });
   });
 
   describe('while the storage capabilities are loading', () => {
-    it('holds the header row with a placeholder for the Traces/Spans switch', async () => {
+    it('shows the Traces breadcrumb and a placeholder for the Traces/Spans switch below it', async () => {
       setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
       server.use(
         http.get(CAPABILITIES_URL, async () => {
@@ -181,39 +192,46 @@ describe('Spans page', () => {
       renderPage();
 
       const placeholder = await screen.findByRole('status', { name: 'Loading views' });
-      expect(placeholder.closest('header')?.className).not.toContain('border-b');
-      expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull();
+      expect(placeholder.closest('header')).toBeNull();
+      expect(placeholder.closest('main')).toBeNull();
+      const breadcrumb = screen.getByRole('navigation', { name: 'Breadcrumb' });
+      expect(breadcrumb.closest('header')).not.toBeNull();
+      expect(within(breadcrumb).getByText('Traces')).toBeTruthy();
+      expect(within(breadcrumb).queryByText('Spans')).toBeNull();
     });
   });
 
   describe('when the observability store supports span queries', () => {
-    it('replaces the breadcrumb header with the Traces/Spans switch', async () => {
-      setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
-
-      renderPage();
-
-      expect(await screen.findByRole('navigation', { name: 'Observability views' })).toBeTruthy();
-      expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull();
-    });
-
-    it('shows the switch in the page header, with the filter bar below it', async () => {
-      setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
-
-      renderPage();
-
-      const filterInput = await screen.findByPlaceholderText('Filter spans…');
-      const views = screen.getByRole('navigation', { name: 'Observability views' });
-      expect(views.closest('header')).not.toBeNull();
-      expect(filterInput.closest('header')).toBeNull();
-    });
-
-    it('draws no border under the header row that holds the switch', async () => {
+    it('keeps the Traces breadcrumb in the header, with the Traces/Spans switch below it', async () => {
       setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
 
       renderPage();
 
       const views = await screen.findByRole('navigation', { name: 'Observability views' });
-      expect(views.closest('header')?.className).not.toContain('border-b');
+      const breadcrumb = screen.getByRole('navigation', { name: 'Breadcrumb' });
+      expect(within(breadcrumb).getByText('Traces')).toBeTruthy();
+      expect(breadcrumb.closest('header')).not.toBeNull();
+      expect(views.closest('header')).toBeNull();
+      expect(views.closest('main')).toBeNull();
+    });
+
+    it('leaves Spans out of the breadcrumb, since the switch already shows it', async () => {
+      setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
+
+      renderPage();
+
+      await screen.findByRole('navigation', { name: 'Observability views' });
+      const breadcrumb = screen.getByRole('navigation', { name: 'Breadcrumb' });
+      expect(within(breadcrumb).queryByText('Spans')).toBeNull();
+    });
+
+    it('puts the filter bar in the page body, above the list', async () => {
+      setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
+
+      renderPage();
+
+      const filterInput = await screen.findByPlaceholderText('Filter spans…');
+      expect(filterInput.closest('main')).not.toBeNull();
     });
 
     it('gives both switch buttons the same borderless box, so the current one does not shift its neighbour', async () => {

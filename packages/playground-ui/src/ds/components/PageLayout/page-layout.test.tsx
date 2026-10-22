@@ -27,20 +27,6 @@ describe('PageLayout', () => {
     });
   });
 
-  describe('when the header border is turned off', () => {
-    it('drops the bottom border but keeps the header height', () => {
-      render(
-        <PageLayout breadcrumbs={<span>Crumbs</span>} headerBorder={false}>
-          <p>Body</p>
-        </PageLayout>,
-      );
-
-      const header = screen.getByRole('banner');
-      expect(header.className).not.toContain('border-b');
-      expect(header.className).toContain('h-header-default');
-    });
-  });
-
   describe('when an action row is provided', () => {
     it('pins it between the header and the scrollable body', () => {
       render(

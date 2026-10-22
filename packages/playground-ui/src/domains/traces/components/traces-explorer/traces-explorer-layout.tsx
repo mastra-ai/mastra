@@ -21,9 +21,12 @@ export type TracesExplorerErrorRenderArgs = Pick<TracesListContextValue, 'refetc
 
 export type TracesExplorerLayoutProps = {
   breadcrumbs?: ReactNode;
-  /** Draw the header row's bottom border (see `PageLayout`). On by default. */
-  headerBorder?: boolean;
-  actionRow: ReactNode;
+  /** Navigation pinned under the header (e.g. view tabs). Unlike `actionRow`, it stays up while filter fields load. */
+  tabs?: ReactNode;
+  /** Controls pinned under the header, hidden while filter fields load. */
+  actionRow?: ReactNode;
+  /** Controls at the top of the page body, above the list (filters, columns…). The loading skeleton stands in for them. */
+  toolbar?: ReactNode;
   children: ReactNode;
   /** Renders the list-error state (e.g. host-classified errors with a retry). Defaults to `TracesErrorContent`. */
   renderError?: (args: TracesExplorerErrorRenderArgs) => ReactNode;
@@ -31,8 +34,9 @@ export type TracesExplorerLayoutProps = {
 
 export function TracesExplorerLayout({
   breadcrumbs,
-  headerBorder,
+  tabs,
   actionRow,
+  toolbar,
   children,
   renderError,
 }: TracesExplorerLayoutProps) {
@@ -48,7 +52,7 @@ export function TracesExplorerLayout({
   // `isFetching`) gates this: background refetches after the stale window must not flash it.
   if (isCapabilitiesLoading || isDiscoveryLoading) {
     return (
-      <PageLayout breadcrumbs={breadcrumbs} headerBorder={headerBorder}>
+      <PageLayout breadcrumbs={breadcrumbs} actionRow={tabs}>
         <h1 className="sr-only">Traces</h1>
         <div>
           <TracesPageSkeleton columnPreferences={displayedPreferences} />
@@ -57,34 +61,41 @@ export function TracesExplorerLayout({
     );
   }
 
-  if (error) {
-    return (
-      <PageLayout breadcrumbs={breadcrumbs} headerBorder={headerBorder} actionRow={actionRow}>
-        <h1 className="sr-only">Traces</h1>
-        <div className="flex h-full items-center justify-center">
-          {renderError ? (
-            <HostTracesError renderError={renderError} error={error} refetch={refetch} />
-          ) : (
-            <TracesErrorContent error={error} resource="traces" errorTitle="Failed to load traces" />
-          )}
-        </div>
-      </PageLayout>
-    );
-  }
+  const pinned =
+    tabs || actionRow ? (
+      <>
+        {tabs}
+        {actionRow}
+      </>
+    ) : undefined;
 
-  if (rows.length === 0 && !isLoading && !contentFiltersApplied && !selectedTraceId) {
-    return (
-      <PageLayout breadcrumbs={breadcrumbs} headerBorder={headerBorder} actionRow={actionRow}>
-        <h1 className="sr-only">Traces</h1>
-        <NoTracesInfo datePreset={filters.datePreset} dateFrom={dateFrom} dateTo={dateTo} />
-      </PageLayout>
+  let body: ReactNode = children;
+  if (error) {
+    body = (
+      <div className="flex h-full items-center justify-center">
+        {renderError ? (
+          <HostTracesError renderError={renderError} error={error} refetch={refetch} />
+        ) : (
+          <TracesErrorContent error={error} resource="traces" errorTitle="Failed to load traces" />
+        )}
+      </div>
     );
+  } else if (rows.length === 0 && !isLoading && !contentFiltersApplied && !selectedTraceId) {
+    body = <NoTracesInfo datePreset={filters.datePreset} dateFrom={dateFrom} dateTo={dateTo} />;
   }
 
   return (
-    <PageLayout breadcrumbs={breadcrumbs} headerBorder={headerBorder} actionRow={actionRow}>
+    <PageLayout breadcrumbs={breadcrumbs} actionRow={pinned}>
       <h1 className="sr-only">Traces</h1>
-      {children}
+      {toolbar ? (
+        // Spaced like the skeleton's toolbar placeholder, so nothing moves when loading ends.
+        <div className="flex h-full min-h-0 flex-col gap-4">
+          {toolbar}
+          <div className="min-h-0 flex-1">{body}</div>
+        </div>
+      ) : (
+        body
+      )}
     </PageLayout>
   );
 }

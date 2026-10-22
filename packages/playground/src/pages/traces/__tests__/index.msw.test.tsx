@@ -467,33 +467,27 @@ describe('Traces page list source', () => {
 
 describe('Traces page view switch', () => {
   describe('when the store supports span queries', () => {
-    it('replaces the breadcrumb header with the Traces/Spans switch', async () => {
-      setTracePageHandlers(traceQueryCapabilities);
-
-      renderPage();
-
-      expect(await screen.findByRole('navigation', { name: 'Observability views' })).toBeTruthy();
-      expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull();
-    });
-
-    it('shows the switch in the page header, with the filter bar below it', async () => {
-      setTracePageHandlers(traceQueryCapabilities);
-
-      renderPage();
-
-      const filterInput = await screen.findByPlaceholderText('Filter traces…');
-      const views = screen.getByRole('navigation', { name: 'Observability views' });
-      expect(views.closest('header')).not.toBeNull();
-      expect(filterInput.closest('header')).toBeNull();
-    });
-
-    it('draws no border under the header row that holds the switch', async () => {
+    it('keeps the Traces breadcrumb in the header, with the Traces/Spans switch below it', async () => {
       setTracePageHandlers(traceQueryCapabilities);
 
       renderPage();
 
       const views = await screen.findByRole('navigation', { name: 'Observability views' });
-      expect(views.closest('header')?.className).not.toContain('border-b');
+      const breadcrumb = screen.getByRole('navigation', { name: 'Breadcrumb' });
+      expect(within(breadcrumb).getByText('Traces')).toBeTruthy();
+      expect(breadcrumb.closest('header')).not.toBeNull();
+      expect(views.closest('header')).toBeNull();
+      expect(views.closest('main')).toBeNull();
+    });
+
+    it('puts the filter bar in the page body, above the list', async () => {
+      setTracePageHandlers(traceQueryCapabilities);
+
+      renderPage();
+
+      const filterInput = await screen.findByPlaceholderText('Filter traces…');
+      expect(filterInput.closest('main')).not.toBeNull();
+      expect(screen.getByRole('checkbox', { name: 'Auto refresh' }).closest('main')).not.toBeNull();
     });
 
     it('gives both switch buttons the same borderless box, so the current one does not shift its neighbour', async () => {
@@ -519,7 +513,7 @@ describe('Traces page view switch', () => {
   });
 
   describe('while the storage capabilities are loading', () => {
-    it('holds the header row with a placeholder for the Traces/Spans switch', async () => {
+    it('shows the Traces breadcrumb and a placeholder for the Traces/Spans switch below it', async () => {
       setTracePageHandlers(traceQueryCapabilities);
       server.use(
         http.get(`${TEST_BASE_URL}/api/observability/capabilities`, async () => {
@@ -531,13 +525,14 @@ describe('Traces page view switch', () => {
       renderPage();
 
       const placeholder = await screen.findByRole('status', { name: 'Loading views' });
-      expect(placeholder.closest('header')?.className).not.toContain('border-b');
-      expect(screen.queryByRole('navigation', { name: 'Breadcrumb' })).toBeNull();
+      expect(placeholder.closest('header')).toBeNull();
+      expect(placeholder.closest('main')).toBeNull();
+      expect(screen.getByRole('navigation', { name: 'Breadcrumb' }).closest('header')).not.toBeNull();
     });
   });
 
   describe('while the filter fields are still loading', () => {
-    it('keeps the Traces/Spans switch in the header above the loading skeleton', async () => {
+    it('keeps the Traces/Spans switch above the loading skeleton', async () => {
       setTracePageHandlers(traceQueryCapabilities);
       server.use(
         http.post(`${TEST_BASE_URL}/api/observability/traces/query/fields`, async () => {

@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import type { GetObservabilityCapabilitiesResponse } from '@mastra/client-js';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { Profiler, useState } from 'react';
 import type { ReactNode } from 'react';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -913,6 +913,94 @@ describe('TracesExplorer', () => {
       } finally {
         vi.useRealTimers();
       }
+    });
+  });
+});
+
+describe('TracesExplorer.Layout', () => {
+  const renderLayout = () =>
+    renderWithProviders(
+      <TestLinkProvider>
+        <TracesExplorer
+          selection={EMPTY_TRACES_SELECTION}
+          filters={DEFAULT_TRACES_FILTERS}
+          onChange={() => {}}
+          sortDirection="desc"
+          onSortDirectionChange={() => {}}
+          metricsSupport={METRICS_SUPPORTED}
+        >
+          <TracesExplorer.Layout
+            breadcrumbs={<span>Traces</span>}
+            tabs={<nav aria-label="Views">Tabs</nav>}
+            toolbar={
+              <div role="toolbar" aria-label="Trace filters">
+                <TracesExplorer.FilterBar />
+              </div>
+            }
+          >
+            <TracesExplorer.List />
+          </TracesExplorer.Layout>
+        </TracesExplorer>
+      </TestLinkProvider>,
+    );
+
+  describe('when the traces have loaded', () => {
+    it('pins the tabs above the page body', async () => {
+      setExplorerHandlers();
+
+      renderLayout();
+
+      expect(await screen.findByText('What is the weather in Paris?')).toBeTruthy();
+      const tabs = screen.getByRole('navigation', { name: 'Views' });
+      expect(tabs.closest('main')).toBeNull();
+      expect(tabs.closest('header')).toBeNull();
+    });
+
+    it('puts the toolbar in the page body, above the list', async () => {
+      setExplorerHandlers();
+
+      renderLayout();
+
+      expect(await screen.findByText('What is the weather in Paris?')).toBeTruthy();
+      const toolbar = screen.getByRole('toolbar', { name: 'Trace filters' });
+      const main = screen.getByRole('main');
+      expect(main.contains(toolbar)).toBe(true);
+      const row = screen.getByText('What is the weather in Paris?');
+      expect(toolbar.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+  });
+
+  describe('when the filter fields are still being discovered', () => {
+    it('keeps the tabs and holds the toolbar behind the skeleton', async () => {
+      setExplorerHandlers();
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query/fields`, async () => {
+          await delay('infinite');
+          return HttpResponse.json(emptyTraceQueryFields);
+        }),
+      );
+
+      renderLayout();
+
+      expect(await screen.findByTestId('traces-page-skeleton')).toBeTruthy();
+      expect(screen.getByRole('navigation', { name: 'Views' })).toBeTruthy();
+      expect(screen.queryByRole('toolbar', { name: 'Trace filters' })).toBeNull();
+    });
+  });
+
+  describe('when the list request fails', () => {
+    it('keeps the toolbar so the filters can still be changed', async () => {
+      setExplorerHandlers();
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query`, () =>
+          HttpResponse.json({ error: 'Bad filter' }, { status: 422 }),
+        ),
+      );
+
+      renderLayout();
+
+      expect(await screen.findByText('Failed to load traces')).toBeTruthy();
+      expect(screen.getByRole('toolbar', { name: 'Trace filters' })).toBeTruthy();
     });
   });
 });
