@@ -418,7 +418,10 @@ describe('Shared background operation ownership (#27792)', () => {
       await turn.start();
       const step = await turn.step(0).prepare();
       expect(step.observed).toBe(false);
+      const waiter = engine.waitForBuffering(threadId, resourceId, 5000, a.signal);
+      const cancelledWaiter = expect(waiter).rejects.toHaveProperty('name', 'AbortError');
       a.abort();
+      await cancelledWaiter;
       expect(observer.cancelled).toBe(false);
       await run;
       if (outcome === 'abort') {

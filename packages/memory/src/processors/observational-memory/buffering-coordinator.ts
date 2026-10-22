@@ -1,5 +1,6 @@
 import type { ObservationalMemoryRecord } from '@mastra/core/storage';
 
+import { waitWithAbort } from './background-operation';
 import { getOMLockKey, runOMCommit } from './commit-queue';
 import { omDebug } from './debug';
 import { isOpActiveInProcess } from './operation-registry';
@@ -199,6 +200,7 @@ export class BufferingCoordinator {
     resourceId: string | null | undefined,
     scope: 'thread' | 'resource',
     timeoutMs = 30000,
+    abortSignal?: AbortSignal,
   ): Promise<void> {
     const lockKey = getOMLockKey(scope, threadId, resourceId);
     const obsKey = `obs:${lockKey}`;
@@ -216,12 +218,15 @@ export class BufferingCoordinator {
 
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     try {
-      await Promise.race([
-        Promise.allSettled(promises).then(() => undefined),
-        new Promise<void>(resolve => {
-          timeoutId = setTimeout(resolve, timeoutMs);
-        }),
-      ]);
+      await waitWithAbort(
+        Promise.race([
+          Promise.allSettled(promises).then(() => undefined),
+          new Promise<void>(resolve => {
+            timeoutId = setTimeout(resolve, timeoutMs);
+          }),
+        ]),
+        abortSignal,
+      );
     } finally {
       if (timeoutId !== undefined) {
         clearTimeout(timeoutId);

@@ -23,6 +23,7 @@ import type { Memory } from '../..';
 import { WORKING_MEMORY_STATE_ID } from '../working-memory-state/processor';
 import { getMarkerActivationTTL, resolveActivationTTL } from './activation-ttl';
 import { resolveAutoModelId } from './auto-model';
+import { BackgroundOperation } from './background-operation';
 import { BufferingCoordinator } from './buffering-coordinator';
 import { composeObservationExtractors, composeReflectionExtractors } from './built-in-extractors';
 import { runOMCommit } from './commit-queue';
@@ -945,8 +946,9 @@ export class ObservationalMemory {
     threadId: string | null | undefined,
     resourceId: string | null | undefined,
     timeoutMs = 30000,
+    abortSignal?: AbortSignal,
   ): Promise<void> {
-    return BufferingCoordinator.awaitBuffering(threadId, resourceId, this.scope, timeoutMs);
+    return BufferingCoordinator.awaitBuffering(threadId, resourceId, this.scope, timeoutMs, abortSignal);
   }
 
   private getConcreteModel(
@@ -3539,6 +3541,7 @@ ${formattedMessages}
    */
   /** @internal Used by ObservationStep. */
   async buffer(opts: {
+    abortSignal?: AbortSignal;
     threadId: string;
     resourceId?: string;
     messages?: MastraDBMessage[];
@@ -3618,6 +3621,8 @@ ${formattedMessages}
 
     // Set persistent flag and register op. Unregister under the same id: `record` is replaced by the
     // fresh head below, which a rollover may have given a new id.
+    const operation = new BackgroundOperation(lockKey, opts.abortSignal);
+    const abortSignal = operation.signal;
     const opRecordId = record.id;
     registerOp(opRecordId, 'bufferingObservation');
     const releaseChunkWrite = BufferingCoordinator.trackChunkWrite(bufferKey);
@@ -3690,6 +3695,7 @@ ${formattedMessages}
         return { buffered: false, record };
       }
 
+      abortSignal.throwIfAborted();
       // Seal candidates before the observer runs.
       // If a beforeBuffer callback is provided (processor path), it handles sealing + persistence.
       // Otherwise, seal automatically so external consumers don't need to deal with it.
@@ -3763,6 +3769,7 @@ ${formattedMessages}
             messages: candidateMessages,
             cycleId,
             startedAt,
+            abortSignal,
             writer,
             agent: opts.agent,
             sendSignal: opts.sendSignal,
@@ -3805,6 +3812,7 @@ ${formattedMessages}
       omError('[OM] buffer() failed', error);
       return { buffered: false, record };
     } finally {
+      operation.dispose();
       releaseChunkWrite();
       unregisterOp(opRecordId, 'bufferingObservation');
       // A later call may already have registered itself behind this op; keep its entry.
@@ -3814,6 +3822,9 @@ ${formattedMessages}
       resolveOp!();
       // Only clear the flag if the success path didn't already clear it (with token count)
       if (!flagCleared) {
+        if (abortSignal.aborted && BufferingCoordinator.ownsObservationBoundary(bufferKey, boundaryOwner)) {
+          BufferingCoordinator.setObservationBoundary(bufferKey, 0);
+        }
         setBufferingState(false);
         await runOMCommit(lockKey, () => this.storage.setBufferingObservationFlag(record.id, false)).catch(() => {});
       }
@@ -3842,6 +3853,7 @@ ${formattedMessages}
    */
   /** @internal Used by ObservationStep. */
   async activate(opts: {
+    abortSignal?: AbortSignal;
     threadId: string;
     resourceId?: string;
     /** When true, skip activation if pending tokens are below the observation threshold. */
@@ -4008,6 +4020,7 @@ ${formattedMessages}
         const blockAfter = this.getEffectiveObservationBlockAfter(head);
         const forceMaxActivation = !!(blockAfter && currentPendingTokens >= blockAfter);
 
+        opts.abortSignal?.throwIfAborted();
         // Storage adapters decrement the persisted pending count during the swap. Keep
         // that base aligned with the live count used to select chunks so the returned
         // record reflects the unactivated tail rather than the previous step's count.
@@ -4016,6 +4029,7 @@ ${formattedMessages}
         }
 
         // Perform the swap
+        opts.abortSignal?.throwIfAborted();
         const result = await this.storage.swapBufferedToActive({
           id: head.id,
           activationRatio,
@@ -4228,6 +4242,7 @@ ${formattedMessages}
    * along with the updated record.
    */
   async observe(opts: {
+    abortSignal?: AbortSignal;
     threadId: string;
     resourceId?: string;
     messages?: MastraDBMessage[];
@@ -4273,6 +4288,7 @@ ${formattedMessages}
 
     try {
       await this.withLock(lockKey, async () => {
+        opts.abortSignal?.throwIfAborted();
         const freshRecord = await this.getOrCreateRecord(threadId, resourceId);
         recordInsideLock = freshRecord;
         generationBefore = freshRecord.generationCount;
@@ -4304,6 +4320,7 @@ ${formattedMessages}
           resourceId,
           messages: unobservedMessages,
           messageList: opts.messageList,
+          abortSignal: opts.abortSignal,
           reflectionHooks,
           trigger,
           agent: opts.agent,
@@ -4658,6 +4675,7 @@ ${formattedMessages}
    * ```
    */
   beginTurn(opts: {
+    abortSignal?: AbortSignal;
     threadId: string;
     resourceId?: string;
     messageList: MessageList;
@@ -4669,6 +4687,7 @@ ${formattedMessages}
   }): ObservationTurn {
     return new ObservationTurn({
       om: this,
+      abortSignal: opts.abortSignal,
       threadId: opts.threadId,
       resourceId: opts.resourceId,
       messageList: opts.messageList,

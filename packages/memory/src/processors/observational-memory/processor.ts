@@ -304,6 +304,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           await this.turn.end().catch(() => {});
         }
         this.turn = this.engine.beginTurn({
+          abortSignal,
           threadId,
           resourceId,
           messageList,
@@ -540,6 +541,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       .getTokenCounter()
       .runWithModelContext(state.__omActorModelContext as TokenCounterModelContext | undefined, () =>
         this.engine.observe({
+          abortSignal: args.abortSignal,
           threadId,
           resourceId,
           messages: getObservableMessages(messageList),

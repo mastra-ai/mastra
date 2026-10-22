@@ -12,6 +12,7 @@ import type { ProviderMetadata } from '@mastra/core/stream';
 
 import type { Memory } from '../..';
 import { getMarkerActivationTTL, resolveActivationTTL } from './activation-ttl';
+import { BackgroundOperation, waitWithAbort } from './background-operation';
 import { BufferingCoordinator } from './buffering-coordinator';
 import { runOMCommit } from './commit-queue';
 import { omDebug, omError } from './debug';
@@ -88,6 +89,7 @@ async function persistThreadExtractedValues(
   extractors: readonly Extractor<any>[],
   threadId: string | undefined,
   values: Record<string, unknown> | undefined,
+  abortSignal?: AbortSignal,
 ): Promise<void> {
   if (!threadId || !values) {
     return;
@@ -106,6 +108,7 @@ async function persistThreadExtractedValues(
     threadTitle: metadataUpdate.threadTitle ?? previousOmMetadata?.threadTitle,
     extracted: { ...(previousOmMetadata?.extracted ?? {}), ...(metadataUpdate.extracted ?? {}) },
   });
+  abortSignal?.throwIfAborted();
   await storage.patchThread({
     id: threadId,
     metadata: newMetadata,
@@ -715,6 +718,7 @@ export class ReflectorRunner {
     sendSignal?: ProcessorContext['sendSignal'],
     trigger?: ObserveTrigger,
     currentModel?: ObservationModelContext,
+    abortSignal?: AbortSignal,
   ): void {
     const bufferKey = this.buffering.getReflectionBufferKey(lockKey);
 
@@ -722,6 +726,7 @@ export class ReflectorRunner {
       return;
     }
 
+    const operation = new BackgroundOperation(lockKey, abortSignal);
     BufferingCoordinator.lastBufferedBoundary.set(bufferKey, observationTokens);
 
     registerOp(record.id, 'bufferingReflection');
@@ -751,10 +756,11 @@ export class ReflectorRunner {
           sendSignal,
           trigger,
           currentModel,
+          operation.signal,
         );
       } catch (error) {
         reflectionError = error instanceof Error ? error : new Error(String(error));
-        if (writer) {
+        if (writer && !operation.signal.aborted) {
           try {
             const failedMarker = createBufferingFailedMarker({
               cycleId: `reflect-buf-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
@@ -791,6 +797,7 @@ export class ReflectorRunner {
           omError('[OM] onReflectionEnd hook failed after async buffered reflection', hookError);
         }
 
+        operation.dispose();
         BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
         unregisterOp(record.id, 'bufferingReflection');
         await this.storage.setBufferingReflectionFlag(record.id, false).catch(err => {
@@ -818,6 +825,7 @@ export class ReflectorRunner {
     sendSignal?: ProcessorContext['sendSignal'],
     trigger?: ObserveTrigger,
     currentModel?: ObservationModelContext,
+    abortSignal?: AbortSignal,
   ): Promise<
     | {
         usage?: { inputTokens?: number; outputTokens?: number; totalTokens?: number };
@@ -894,7 +902,7 @@ export class ReflectorRunner {
       undefined,
       undefined,
       compressionTarget,
-      undefined,
+      abortSignal,
       true,
       compressionStartLevel,
       requestContext,
@@ -912,11 +920,13 @@ export class ReflectorRunner {
       hookContext,
     );
 
+    abortSignal?.throwIfAborted();
     await persistThreadExtractedValues(
       this.storage,
       this.reflectionConfig.extractors,
       currentRecord.threadId ?? undefined,
       reflectResult.extractedValues,
+      abortSignal,
     );
 
     const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
@@ -931,6 +941,7 @@ export class ReflectorRunner {
       async () => {
         const head = await this.storage.getObservationalMemory(currentRecord.threadId, currentRecord.resourceId);
         if (head?.id !== currentRecord.id) return false;
+        abortSignal?.throwIfAborted();
         await this.storage.updateBufferedReflection({
           id: currentRecord.id,
           reflection: reflectResult.observations,
@@ -1008,10 +1019,10 @@ export class ReflectorRunner {
       } else {
         omDebug(`[OM:reflect] tryActivateBufferedReflection: waiting for in-progress op...`);
         try {
-          await Promise.race([
-            asyncOp,
-            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5_000)),
-          ]);
+          await waitWithAbort(
+            Promise.race([asyncOp, new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5_000))]),
+            committedContext?.abortSignal,
+          );
         } catch {
           // Timeout or error - proceed with what we have
         }
@@ -1095,12 +1106,14 @@ export class ReflectorRunner {
     const newRecordId = crypto.randomUUID();
     const swapped = await runOMCommit(
       lockKey,
-      () =>
-        this.storage.swapBufferedReflectionToActive({
+      () => {
+        committedContext?.abortSignal?.throwIfAborted();
+        return this.storage.swapBufferedReflectionToActive({
           currentRecord: freshRecord,
           tokenCount: combinedTokenCount,
           newRecordId,
-        }),
+        });
+      },
       { priority: 'reflection' },
     );
     if (!isReflectionApplied(swapped, newRecordId, freshRecord.id)) {
@@ -1198,6 +1211,7 @@ export class ReflectorRunner {
     observabilityContext?: ObservabilityContext;
     lastActivityAt?: number;
   }): Promise<void> {
+    opts.abortSignal?.throwIfAborted();
     const {
       record: callerRecord,
       observationTokens,
@@ -1258,6 +1272,7 @@ export class ReflectorRunner {
           sendSignal,
           trigger,
           currentModel,
+          abortSignal,
         );
       }
     }
@@ -1366,6 +1381,7 @@ export class ReflectorRunner {
           sendSignal,
           trigger,
           currentModel,
+          abortSignal,
         );
         return;
       }
@@ -1475,6 +1491,7 @@ export class ReflectorRunner {
         reflectResult.observations,
         hookContext,
       );
+      abortSignal?.throwIfAborted();
       reflectionUsage = reflectResult.usage;
       reflectionProviderMetadata = reflectResult.providerMetadata;
       const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
@@ -1482,13 +1499,15 @@ export class ReflectorRunner {
       const newRecordId = crypto.randomUUID();
       const committedRecord = await runOMCommit(
         this.buffering.getLockKey(record.threadId, record.resourceId),
-        () =>
-          this.storage.createReflectionGeneration({
+        () => {
+          abortSignal?.throwIfAborted();
+          return this.storage.createReflectionGeneration({
             currentRecord: record,
             reflection: reflectResult.observations,
             tokenCount: reflectionTokenCount,
             newRecordId,
-          }),
+          });
+        },
         { priority: 'reflection' },
       );
       if (!isReflectionApplied(committedRecord, newRecordId, record.id)) {
@@ -1498,12 +1517,14 @@ export class ReflectorRunner {
         omDebug(`[OM:reflect] reflection of ${record.id} not applied (head is ${committedRecord.id})`);
         throw new ReflectionNotAppliedError(record.id, committedRecord.id);
       }
+      abortSignal?.throwIfAborted();
       // Only an applied reflection's extracted values belong to the thread.
       await persistThreadExtractedValues(
         this.storage,
         this.reflectionConfig.extractors,
         record.threadId ?? undefined,
         reflectResult.extractedValues,
+        abortSignal,
       );
 
       // Best-effort results still over threshold are committed (they usually
@@ -1559,6 +1580,7 @@ export class ReflectorRunner {
       });
     } catch (error) {
       reflectionError = error instanceof Error ? error : new Error(String(error));
+      if (abortSignal?.aborted) throw error;
       const failedMarker = createObservationFailedMarker({
         cycleId: streamContext?.cycleId ?? cycleId,
         operationType: 'reflection',
