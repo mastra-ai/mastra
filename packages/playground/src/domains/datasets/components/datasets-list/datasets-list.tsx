@@ -154,7 +154,6 @@ function DatasetRow({
 
       {trailingCell !== null && <DataList.Cell>{trailingCell}</DataList.Cell>}
       {hasExperimentsAction && (
-        // oxlint-disable-next-line mastra/icon-button-size -- the badge is a label that fills the cell, not an icon
         <Button
           render={<Link href={`/experiments?dataset=${ds.id}`} />}
 

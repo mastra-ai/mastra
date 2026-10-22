@@ -221,6 +221,13 @@ function ButtonLabel({ variant, children }: { variant: ButtonVariant; children: 
   );
 }
 
+// True when every child is an element (no label text). A text-sized button can still hold
+// only an icon when its size is forwarded from a wrapper, and it then needs a name too.
+function isIconOnly(children: React.ReactNode): boolean {
+  const flat = React.Children.toArray(children);
+  return flat.length > 0 && flat.every(child => React.isValidElement(child));
+}
+
 // Type guard: narrows `ButtonSize` to `IconButtonSize`, so an icon-mode button can be
 // told from a text-mode one without a cast.
 // eslint-disable-next-line react-refresh/only-export-components -- shared with Combobox's icon-only trigger
@@ -258,7 +265,8 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
     const adornmentSize = adornmentIconSize(resolvedVariant, resolvedSize);
 
     // Icon-only buttons need an a11y label. If a string tooltip is provided, reuse it.
-    const ariaLabel = ariaLabelProp ?? (iconMode && typeof tooltip === 'string' ? tooltip : undefined);
+    const ariaLabel =
+      ariaLabelProp ?? ((iconMode || isIconOnly(children)) && typeof tooltip === 'string' ? tooltip : undefined);
 
     const content = iconMode ? (
       <Icon size={iconSizeMap[resolvedSize]}>{children}</Icon>

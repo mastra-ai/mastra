@@ -26,30 +26,36 @@ function restrictedSyntax(context) {
 // pill. `icon-sm|md|lg` is the same height as a square, which the design system rounds into a circle.
 // Only literal sizes are checked: a forwarded `size={size}` is the wrapping component's call to make.
 
-// Components that hold text, so a child of this kind is a label, not an icon.
-const textElementNames = new Set(['Txt', 'Trans', 'Kbd', 'Truncate', 'FormattedMessage']);
+// An icon is a component imported from an icon module (lucide-react, an `icons/` folder), one named
+// `*Icon` (`Icon`, `XIcon`, `TraceIcon`), or a spinner. Anything else may render text, like a badge.
+const iconModulePattern = /^lucide-react$|\/icons?(\/|$)/;
 
-function isIconElement(node) {
-  if (node.type !== 'JSXElement') return false;
-  const { name } = node.openingElement;
-  if (name.type === 'JSXMemberExpression') return true;
-  return name.type === 'JSXIdentifier' && /^[A-Z]/.test(name.name) && !textElementNames.has(name.name);
+function isIconName(name, iconImports) {
+  return iconImports.has(name) || /Icon$/.test(name) || name === 'Spinner';
 }
 
-function isIconExpression(node) {
-  if (node.type === 'JSXElement') return isIconElement(node);
+function isIconElement(node, iconImports) {
+  if (node.type !== 'JSXElement') return false;
+  const { name } = node.openingElement;
+  return name.type === 'JSXIdentifier' && isIconName(name.name, iconImports);
+}
+
+function isIconExpression(node, iconImports) {
+  if (node.type === 'JSXElement') return isIconElement(node, iconImports);
   if (node.type === 'ConditionalExpression')
-    return isIconExpression(node.consequent) && isIconExpression(node.alternate);
-  if (node.type === 'LogicalExpression' && node.operator === '&&') return isIconExpression(node.right);
+    return isIconExpression(node.consequent, iconImports) && isIconExpression(node.alternate, iconImports);
+  if (node.type === 'LogicalExpression' && node.operator === '&&') return isIconExpression(node.right, iconImports);
   return false;
 }
 
-function hasOnlyIconChildren(children) {
+function hasOnlyIconChildren(children, iconImports) {
   const content = children.filter(child => !(child.type === 'JSXText' && !child.value.trim()));
   return (
     content.length > 0 &&
     content.every(child =>
-      child.type === 'JSXExpressionContainer' ? isIconExpression(child.expression) : isIconElement(child),
+      child.type === 'JSXExpressionContainer'
+        ? isIconExpression(child.expression, iconImports)
+        : isIconElement(child, iconImports),
     )
   );
 }
@@ -63,7 +69,12 @@ function literalAttribute(value) {
 function iconButtonSize(context) {
   const { components = ['Button'] } = context.options[0] ?? {};
   const names = new Set(components);
+  const iconImports = new Set();
   return {
+    ImportDeclaration(node) {
+      if (!iconModulePattern.test(node.source.value)) return;
+      for (const specifier of node.specifiers) iconImports.add(specifier.local.name);
+    },
     JSXElement(node) {
       const { openingElement } = node;
       if (openingElement.name.type !== 'JSXIdentifier' || !names.has(openingElement.name.name)) return;
@@ -78,7 +89,7 @@ function iconButtonSize(context) {
       if (attributes.has('size') && literalAttribute(attributes.get('size')) === undefined) return;
       const size = literalAttribute(attributes.get('size')) ?? 'md';
       if (typeof size !== 'string' || size.startsWith('icon-')) return;
-      if (!hasOnlyIconChildren(node.children)) return;
+      if (!hasOnlyIconChildren(node.children, iconImports)) return;
       context.report({
         node: openingElement,
         message: `This ${openingElement.name.name} holds only an icon: use size="icon-${size}" so it renders as a circle, not a pill.`,
