@@ -145,21 +145,17 @@ export class CachingPubSub extends PubSub {
   }
 
   /**
-   * Get the cache key for a topic's event log.
-   *
-   * The braces are a cluster hash tag: Redis and Valkey place
-   * `pubsub:{topic}` and `pubsub:{topic}:counter` in the same slot, so the one
-   * atomic append script can touch both keys without a CROSSSLOT error.
+   * Get the cache key for a topic's event list
    */
   private getCacheKey(topic: string): string {
-    return `${this.keyPrefix}{${topic}}`;
+    return `${this.keyPrefix}${topic}`;
   }
 
   /**
-   * Get the cache key for a topic's index counter.
+   * Get the cache key for a topic's index counter
    */
   private getCounterKey(topic: string): string {
-    return `${this.getCacheKey(topic)}:counter`;
+    return `${this.keyPrefix}${topic}:counter`;
   }
 
   async publish(

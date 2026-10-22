@@ -82,10 +82,7 @@ const defaultEvalScript = (client: RedisClient, script: string, keys: string[], 
  * KEYS[1] = list key, KEYS[2] = counter key
  * ARGV[1] = JSON-serialized object WITHOUT an `index` property
  * ARGV[2] = TTL in seconds (0 = no expiry), applied to BOTH keys
- *
- * The list key and counter key must hash to the same Cluster slot. Use the
- * brace form for the shared part of the key (`pubsub:{topic}` and
- * `pubsub:{topic}:counter`) so the whole script runs in one slot.
+
  *
  * The index is spliced into the JSON text as the first property rather than
  * decoded/re-encoded with cjson, which would silently alter large integers
@@ -265,8 +262,9 @@ export class RedisServerCache extends MastraServerCache {
       return Number(result);
     } catch (error) {
       // Redis Cluster rejects multi-key scripts whose keys hash to different
-      // slots. Callers that do not hash-tag their keys degrade to the composed
-      // path instead of losing replay caching entirely.
+      // slots. The list and counter keys are not hash-tagged (changing that
+      // would rename existing keys), so degrade to the composed path instead
+      // of losing replay caching entirely.
       if (error instanceof Error && error.message.includes('CROSSSLOT')) {
         this.scriptingDisabled = true;
         this.logger.warn(

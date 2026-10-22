@@ -536,7 +536,7 @@ describe('StepExecutor', () => {
         } as any);
       }
 
-      const cached = await cache.listFromTo(`pubsub:{${topic}}`, 0);
+      const cached = await cache.listFromTo(`pubsub:${topic}`, 0);
       expect(cached.map(event => event.index)).toEqual([0, 1]);
     });
 
@@ -559,7 +559,7 @@ describe('StepExecutor', () => {
       } as any);
 
       expect(live).toHaveLength(1);
-      const cached = await cache.listFromTo(`pubsub:{${topic}}`, 0);
+      const cached = await cache.listFromTo(`pubsub:${topic}`, 0);
       expect(cached.map(event => event.index)).toEqual([0]);
       expect(live[0]?.index).toBe(0);
       expect(stepPubsub).toBe(target.pubsub);
@@ -576,7 +576,7 @@ describe('StepExecutor', () => {
         data: {},
       } as any);
 
-      expect(await cache.listLength('pubsub:{workflow.events.v2.run-numbered}')).toBe(0);
+      expect(await cache.listLength('pubsub:workflow.events.v2.run-numbered')).toBe(0);
     });
   });
 });

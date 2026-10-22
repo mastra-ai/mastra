@@ -773,7 +773,7 @@ describe('CachingPubSub', () => {
       await new Promise(resolve => setTimeout(resolve, 10));
 
       // Events should be cached under custom prefix
-      const rawCacheValue = await cache.get('custom:{test}');
+      const rawCacheValue = await cache.get('custom:test');
       expect(Array.isArray(rawCacheValue)).toBe(true);
     });
   });
@@ -787,7 +787,7 @@ describe('CachingPubSub', () => {
       await new Promise(resolve => setTimeout(resolve, 10));
 
       // Check cache directly
-      const rawCacheValue = await cache.get('myapp:{events}');
+      const rawCacheValue = await cache.get('myapp:events');
       expect(Array.isArray(rawCacheValue)).toBe(true);
       expect(rawCacheValue).toHaveLength(1);
     });
@@ -799,17 +799,8 @@ describe('CachingPubSub', () => {
       await new Promise(resolve => setTimeout(resolve, 10));
 
       // Check cache directly with default prefix
-      const rawCacheValue = await cache.get('pubsub:{events}');
+      const rawCacheValue = await cache.get('pubsub:events');
       expect(Array.isArray(rawCacheValue)).toBe(true);
-    });
-
-    it('shares one cluster slot between a topic log and its counter', async () => {
-      await cachingPubsub.publish('events', { type: 'test', runId: 'run-1', data: {} });
-
-      // Redis Cluster routes by the first `{...}` hash tag, so the list and the
-      // counter must carry the same one.
-      const hashTag = (key: string) => key.slice(key.indexOf('{'), key.indexOf('}') + 1);
-      expect(hashTag('pubsub:{events}')).toBe(hashTag('pubsub:{events}:counter'));
     });
   });
 
@@ -849,7 +840,7 @@ describe('CachingPubSub', () => {
 
       expect(callback).toHaveBeenCalledTimes(1);
       expect(callback.mock.calls[0]![0]).not.toHaveProperty('index');
-      expect(await cache.listLength(`pubsub:{${topic}}`)).toBe(0);
+      expect(await cache.listLength(`pubsub:${topic}`)).toBe(0);
     });
 
     it('numbers and caches frames through a cache that only has the default append', async () => {
@@ -871,7 +862,7 @@ describe('CachingPubSub', () => {
       await pubsub.publish(topic, { type: 'test', runId: 'run-1', data: {} });
 
       expect(callback.mock.calls.map(call => call[0].index)).toEqual([0, 1]);
-      expect(await cache.listLength(`pubsub:{${topic}}`)).toBe(2);
+      expect(await cache.listLength(`pubsub:${topic}`)).toBe(2);
     });
 
     it('publishes through a single listPushIndexed cache call (no separate increment/listPush)', async () => {
@@ -887,8 +878,8 @@ describe('CachingPubSub', () => {
 
       expect(indexedSpy).toHaveBeenCalledTimes(1);
       expect(indexedSpy.mock.calls[0]!.slice(0, 3)).toEqual([
-        `pubsub:{${topic}}`,
-        `pubsub:{${topic}}:counter`,
+        `pubsub:${topic}`,
+        `pubsub:${topic}:counter`,
         expect.objectContaining({ type: 'test', runId: 'run-1', data: { a: 1 }, id: expect.any(String) }),
       ]);
       expect(listPushSpy).not.toHaveBeenCalled();
@@ -901,7 +892,7 @@ describe('CachingPubSub', () => {
         expect.any(Function),
         expect.any(Function),
       );
-      const cached = await cache.listFromTo(`pubsub:{${topic}}`, 0);
+      const cached = await cache.listFromTo(`pubsub:${topic}`, 0);
       expect(cached).toHaveLength(1);
       expect((cached[0] as any).index).toBe(0);
     });
@@ -1301,8 +1292,8 @@ describe('CachingPubSub', () => {
         createdAt: new Date(),
       } as Event;
       frame.index = await target.listPushIndexed(
-        `pubsub:{${topic}}`,
-        `pubsub:{${topic}}:counter`,
+        `pubsub:${topic}`,
+        `pubsub:${topic}:counter`,
         frame as Omit<Event, 'id' | 'createdAt'>,
       );
       return frame;
@@ -1457,8 +1448,8 @@ describe('CachingPubSub', () => {
       expect(received).toEqual([0, 1, 2]);
 
       // The log's TTL lapses, the run resumes, and numbering restarts at 0.
-      await shared.delete(`pubsub:{${topic}}`);
-      await shared.delete(`pubsub:{${topic}}:counter`);
+      await shared.delete(`pubsub:${topic}`);
+      await shared.delete(`pubsub:${topic}:counter`);
       const secondSegment = [await append(shared, 0), await append(shared, 1)];
       for (const frame of secondSegment) await inner.publish(topic, frame);
       await flush();
@@ -1570,8 +1561,8 @@ describe('CachingPubSub', () => {
 
       // Both keys exist and the counter tracks the next index, so a subscriber
       // can tell the log's numbering from a restarted one.
-      expect(await shared.listFromTo(`pubsub:{${topic}}`, 0)).toHaveLength(1);
-      expect(await shared.get(`pubsub:{${topic}}:counter`)).toBe(1);
+      expect(await shared.listFromTo(`pubsub:${topic}`, 0)).toHaveLength(1);
+      expect(await shared.get(`pubsub:${topic}:counter`)).toBe(1);
     });
 
     it('retains a durable run log for the run-log TTL on every append', async () => {
@@ -1596,8 +1587,8 @@ describe('CachingPubSub', () => {
       // Real timers: the in-memory cache's TTL clock is not faked by vitest.
       await new Promise(resolve => setTimeout(resolve, 60));
 
-      expect(await shared.listFromTo(`pubsub:{${runTopic}}`, 0)).toHaveLength(1);
-      expect(await shared.get(`pubsub:{${runTopic}}:counter`)).toBe(1);
+      expect(await shared.listFromTo(`pubsub:${runTopic}`, 0)).toHaveLength(1);
+      expect(await shared.get(`pubsub:${runTopic}:counter`)).toBe(1);
     });
   });
 });

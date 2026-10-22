@@ -9,5 +9,3 @@ A durable run's frames are now appended to one log (`MastraServerCache.listPushI
 On the evented engine, a run's frames, abort requests and execution leases now use the Mastra-level pubsub and cache, because each step publishes from whichever worker claims it; every worker then appends to the same run log. An evented agent constructed with its own `pubsub` on a different transport logs a warning. To observe evented runs from another process, configure the shared transport on Mastra (`new Mastra({ pubsub, cache })`). The default engine is unchanged and keeps using an agent-level `pubsub` when one is set.
 
 When no shared cache is configured, `observe({ offset })` is live-only: observers see the live tail but cannot resume from an offset.
-
-Cached keys are now `pubsub:{topic}` instead of `pubsub:topic`, so history written before an upgrade is not read back after it.
