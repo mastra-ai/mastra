@@ -93,10 +93,8 @@ export function layoutSessionTrack({
   const withinTrack = (time: number) => time >= startedAt && time <= now;
 
   const history = stageHistory.toSorted((a, b) => Date.parse(a.enteredAt) - Date.parse(b.enteredAt));
-  const stages = history.flatMap((entry, index) => {
-    const nextEnteredAt = history[index + 1] ? Date.parse(history[index + 1].enteredAt) : now;
-    const exitedAt = entry.exitedAt ? Date.parse(entry.exitedAt) : now;
-    const span = spanBetween(Date.parse(entry.enteredAt), Math.min(exitedAt, nextEnteredAt));
+  const stages = history.flatMap(entry => {
+    const span = spanBetween(Date.parse(entry.enteredAt), entry.exitedAt ? Date.parse(entry.exitedAt) : now);
     return span ? [{ ...span, stage: entry.stage }] : [];
   });
 

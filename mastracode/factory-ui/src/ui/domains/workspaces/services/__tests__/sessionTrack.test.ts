@@ -31,11 +31,11 @@ function layout(overrides: Partial<Parameters<typeof layoutSessionTrack>[0]>) {
 }
 
 describe('layoutSessionTrack', () => {
-  it('draws and times only the part of each stage the session lived through, ending an open entry where the next begins', () => {
+  it('draws and times only the part of each stage the session lived through', () => {
     const { stages } = layout({
       stageHistory: [
         { stage: 'triage', enteredAt: iso(-5), exitedAt: iso(2), by: 'user-ada' },
-        { stage: 'planning', enteredAt: iso(2), by: 'factory-rule-dispatcher' },
+        { stage: 'planning', enteredAt: iso(2), exitedAt: iso(6), by: 'factory-rule-dispatcher' },
         { stage: 'execute', enteredAt: iso(6), by: 'factory-rule-dispatcher' },
       ],
     });
@@ -44,6 +44,22 @@ describe('layoutSessionTrack', () => {
       { stage: 'triage', left: 0, width: 20, from: sessionStart, to: sessionStart + 2 * HOUR },
       { stage: 'planning', left: 20, width: 40, from: sessionStart + 2 * HOUR, to: sessionStart + 6 * HOUR },
       { stage: 'execute', left: 60, width: 40, from: sessionStart + 6 * HOUR, to: sessionStart + 10 * HOUR },
+    ]);
+  });
+
+  it('keeps every stage an item sat in at once, each with its own recorded length', () => {
+    const { stages } = layout({
+      stageHistory: [
+        { stage: 'planning', enteredAt: iso(2), exitedAt: iso(8), by: 'user-ada' },
+        { stage: 'execute', enteredAt: iso(6), by: 'user-ada' },
+        { stage: 'review', enteredAt: iso(6), by: 'user-ada' },
+      ],
+    });
+
+    expect(stages.map(({ stage, from, to }) => ({ stage, from, to }))).toEqual([
+      { stage: 'planning', from: sessionStart + 2 * HOUR, to: sessionStart + 8 * HOUR },
+      { stage: 'execute', from: sessionStart + 6 * HOUR, to: sessionStart + 10 * HOUR },
+      { stage: 'review', from: sessionStart + 6 * HOUR, to: sessionStart + 10 * HOUR },
     ]);
   });
 

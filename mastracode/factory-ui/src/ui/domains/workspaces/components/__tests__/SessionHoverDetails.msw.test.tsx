@@ -160,6 +160,44 @@ describe('Workspace session hover details', () => {
       expect(await within(card).findByRole('img', { name: /Ada Lovelace took over/ })).toBeInTheDocument();
     });
 
+    it('pins a takeover on a session that has no stages or agent runs to draw', async () => {
+      const updatedAt = new Date().toISOString();
+      stubSessionDetails(updatedAt);
+      const fixtures = createSessionHoverDetailsFixtures(updatedAt);
+      const ownSession = {
+        ...fixtures.sessionsResponse.sessions[0],
+        id: 'row-session-own',
+        sessionId: 'session-own',
+        branch: 'user/token-refresh-notes',
+        title: 'Notes on token refresh',
+      };
+      const takeover = fixtures.transfersResponse.events[0];
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () =>
+          HttpResponse.json({ sessions: [...fixtures.sessionsResponse.sessions, ownSession] }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/audit`, ({ request }) => {
+          if (new URL(request.url).searchParams.get('namespaces') !== 'session') {
+            return HttpResponse.json({ events: [], actors: {} });
+          }
+          const ownTakeover = {
+            ...takeover,
+            targets: [{ type: 'session', id: ownSession.id, name: ownSession.title }],
+          };
+          return HttpResponse.json({ events: [ownTakeover], actors: {} });
+        }),
+      );
+      const user = userEvent.setup();
+      renderSection();
+
+      await user.hover(await screen.findByRole('link', { name: ownSession.title }));
+
+      const card = await screen.findByLabelText(`${ownSession.title} session details`);
+      expect(
+        await within(card).findByRole('img', { name: 'Session timeline. Ada Lovelace took over' }),
+      ).toBeInTheDocument();
+    });
+
     it('closes the details when the pointer leaves', async () => {
       const { user, workRow } = await setupSessionRows();
       await user.hover(workRow);

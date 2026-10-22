@@ -104,7 +104,7 @@ function SessionPreview({
         </div>
       </div>
       <SessionStatusLine status={status} merged={merged} />
-      {(layout.stages.length > 0 || layout.runs.length > 0) && (
+      {(layout.stages.length > 0 || layout.runs.length > 0 || layout.pins.length > 0) && (
         <SessionTrack layout={layout} startedAt={startedAt} now={openedAt} people={people} />
       )}
     </div>

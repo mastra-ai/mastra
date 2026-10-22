@@ -22,7 +22,12 @@ function renderTrack() {
     startedAt,
     now,
     stageHistory: [
-      { stage: 'triage', enteredAt: new Date(at(-1)).toISOString(), by: 'user-ada' },
+      {
+        stage: 'triage',
+        enteredAt: new Date(at(-1)).toISOString(),
+        exitedAt: new Date(at(0.1)).toISOString(),
+        by: 'user-ada',
+      },
       { stage: 'execute', enteredAt: new Date(at(0.1)).toISOString(), by: 'user-grace' },
     ],
     runs: [{ startedAt: at(2), endedAt: at(3) }],
@@ -38,7 +43,26 @@ function renderTrack() {
   return { user: userEvent.setup(), track, hitArea };
 }
 
-describe('Session track hover readout', () => {
+describe('Session track', () => {
+  it('names only one of the stages an item sat in at once, so their labels never overlap', () => {
+    const layout = layoutSessionTrack({
+      startedAt,
+      now,
+      stageHistory: [
+        { stage: 'execute', enteredAt: new Date(at(0)).toISOString(), by: 'user-ada' },
+        { stage: 'review', enteredAt: new Date(at(0)).toISOString(), by: 'user-ada' },
+      ],
+      runs: [],
+      ownerChanges: [],
+    });
+
+    render(<SessionTrack layout={layout} startedAt={startedAt} now={now} people={people} />);
+
+    const track = screen.getByRole('img', { name: /^Session timeline. Building 10h, Review 10h/ });
+    expect(within(track).getByText('Building')).toBeInTheDocument();
+    expect(within(track).queryByText('Review')).not.toBeInTheDocument();
+  });
+
   it.each([
     { piece: 'Agent run', readout: ['Agent run', '1h', moment(2), moment(3)] },
     { piece: 'Triage', readout: ['Triage', '6m', moment(0), moment(0.1)] },

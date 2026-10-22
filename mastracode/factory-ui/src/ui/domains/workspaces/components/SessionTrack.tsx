@@ -68,6 +68,15 @@ function hitAreaStyle(span: TrackSpan): CSSProperties {
   return { left: `${span.left + span.width / 2}%`, width: `max(${span.width}%, ${MIN_HIT_WIDTH})` };
 }
 
+/** Wide enough to name and clear of the previous label: an item can sit in several stages at once. */
+function labelledStages(stages: readonly TrackStage[]): TrackStage[] {
+  return stages.reduce<TrackStage[]>((labelled, stage) => {
+    const previous = labelled.at(-1);
+    const clearOfPrevious = previous === undefined || stage.from >= previous.to;
+    return stage.width >= MIN_LABELLED_STAGE_PERCENT && clearOfPrevious ? [...labelled, stage] : labelled;
+  }, []);
+}
+
 /** Narrowest last, so a sliver's widened hit area sits above its neighbour's edge. */
 function widestFirst<Span extends TrackSpan>(spans: readonly Span[]): Span[] {
   return spans.toSorted((a, b) => b.width - a.width);
@@ -104,20 +113,18 @@ export function SessionTrack({
             )}
           </div>
         ) : (
-          layout.stages
-            .filter(stage => stage.width >= MIN_LABELLED_STAGE_PERCENT)
-            .map(stage => (
-              <Txt
-                key={stageKey(stage)}
-                as="span"
-                variant="meta"
-                tone="muted"
-                className="absolute top-0 truncate leading-3"
-                style={{ left: `${stage.left}%`, maxWidth: `${stage.width}%` }}
-              >
-                {stageLabel(stage.stage)}
-              </Txt>
-            ))
+          labelledStages(layout.stages).map(stage => (
+            <Txt
+              key={stageKey(stage)}
+              as="span"
+              variant="meta"
+              tone="muted"
+              className="absolute top-0 truncate leading-3"
+              style={{ left: `${stage.left}%`, maxWidth: `${stage.width}%` }}
+            >
+              {stageLabel(stage.stage)}
+            </Txt>
+          ))
         )}
       </div>
       <div aria-hidden className="relative h-2.5" onPointerLeave={() => setFocus(undefined)}>
@@ -157,7 +164,7 @@ export function SessionTrack({
           <span
             key={runKey(run)}
             data-track-hit="Agent run"
-            className="absolute -inset-y-1 -translate-x-1/2"
+            className="absolute top-0.5 h-1.5 -translate-x-1/2"
             style={hitAreaStyle(run)}
             onPointerEnter={() => setFocus(runFocus(run))}
           />
