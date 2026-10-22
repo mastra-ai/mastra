@@ -4,3 +4,6 @@
 # Stryker mutation testing output (`pnpm test:mutate`).
 /.stryker-tmp/
 /reports/
+
+# Staging output of the dev watch build, published into dist (vite.config.ts).
+/.dist-dev/
