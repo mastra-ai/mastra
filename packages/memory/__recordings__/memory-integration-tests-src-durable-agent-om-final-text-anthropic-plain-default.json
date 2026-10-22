@@ -1,0 +1,476 @@
+{
+  "meta": {
+    "name": "memory-integration-tests-src-durable-agent-om-final-text-anthropic-plain-default",
+    "testFile": "src/durable-agent-om-final-text.test.ts",
+    "testName": "T86 om-final-text — anthropic > plain engine > default variant > persists the final text reply and the user message exactly once",
+    "model": "claude-sonnet-4-6",
+    "createdAt": "2026-10-22T06:00:59.324Z"
+  },
+  "recordings": [
+    {
+      "hash": "9db9c0ef45e8bb1e",
+      "request": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "body": {
+          "model": "claude-sonnet-4-6",
+          "max_tokens": 128000,
+          "system": [
+            {
+              "type": "text",
+              "text": "Use the tools when they help, then answer the question."
+            }
+          ],
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "What is the weather in Lisbon today?"
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "name": "lookupCity",
+              "description": "Look up the code for a city.",
+              "input_schema": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "city"
+                ],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              },
+              "eager_input_streaming": true
+            },
+            {
+              "name": "getForecast",
+              "description": "Get the forecast for a city code.",
+              "input_schema": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code"
+                ],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              },
+              "eager_input_streaming": true
+            }
+          ],
+          "tool_choice": {
+            "type": "auto"
+          },
+          "stream": true
+        },
+        "timestamp": 1792648854181
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "anthropic-ratelimit-input-tokens-limit": "10000000",
+          "anthropic-ratelimit-input-tokens-remaining": "10000000",
+          "anthropic-ratelimit-input-tokens-reset": "2026-10-22T06:00:54Z",
+          "anthropic-ratelimit-output-tokens-limit": "2000000",
+          "anthropic-ratelimit-output-tokens-remaining": "2000000",
+          "anthropic-ratelimit-output-tokens-reset": "2026-10-22T06:00:54Z",
+          "anthropic-ratelimit-requests-limit": "20000",
+          "anthropic-ratelimit-requests-remaining": "19999",
+          "anthropic-ratelimit-requests-reset": "2026-10-22T06:00:54Z",
+          "anthropic-ratelimit-tokens-limit": "12000000",
+          "anthropic-ratelimit-tokens-remaining": "12000000",
+          "anthropic-ratelimit-tokens-reset": "2026-10-22T06:00:54Z",
+          "cache-control": "no-cache",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a4e648cb8a772fc2-DFW",
+          "connection": "keep-alive",
+          "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Thu, 22 Oct 2026 06:00:55 GMT",
+          "request-id": "req_011CgGmPbFumfi6tzpPBmRRk",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "traceresponse": "00-6ad9a696000000006fe78896bf1c3869-dc90ee6f015c821a-01",
+          "vary": "Accept-Encoding",
+          "x-robots-tag": "none"
+        },
+        "chunks": [
+          "event: message_start\nd",
+          "ata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-sonnet-4-6\",\"id\":\"msg_011CgGmPcHv4ASNdrqr76F95\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"container\":null,\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":691,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":3,\"service_tier\":\"standard\",\"inference_geo\":\"global\",\"speed\":\"standard\"},\"diagnostics\":null}         }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}             }\n\nevent: ping\ndata: {\"type\": \"ping\"}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"I'll start\"}  }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" by looking up the city\"}             }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" code\"}        }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" for Lisbon!\"}           }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0     }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_01Pi9g9DUdUybE2GkjYYxZro\",\"name\":\"lookupCity\",\"input\":{},\"caller\":{\"type\":\"direct\"}}  }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\"}    }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"city\\\": \\\"Lisbon\"}              }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\\\"}\"}       }\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":1             }\n\n",
+          "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":691,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":70}            }\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"    }\n\n"
+        ],
+        "chunkTimings": [
+          0,
+          0,
+          1,
+          39,
+          207,
+          76,
+          112,
+          162,
+          2
+        ],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "5ae4673e49c3684f",
+      "request": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "body": {
+          "model": "claude-sonnet-4-6",
+          "max_tokens": 128000,
+          "system": [
+            {
+              "type": "text",
+              "text": "Use the tools when they help, then answer the question."
+            }
+          ],
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "What is the weather in Lisbon today?"
+                }
+              ]
+            },
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "I'll start by looking up the city code for Lisbon!"
+                },
+                {
+                  "type": "tool_use",
+                  "id": "toolu_01Pi9g9DUdUybE2GkjYYxZro",
+                  "name": "lookupCity",
+                  "input": {
+                    "city": "Lisbon"
+                  },
+                  "caller": {
+                    "type": "direct"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "tool_result",
+                  "tool_use_id": "toolu_01Pi9g9DUdUybE2GkjYYxZro",
+                  "content": "{\"code\":\"C-LIS-91\"}"
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "name": "lookupCity",
+              "description": "Look up the code for a city.",
+              "input_schema": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "city"
+                ],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              },
+              "eager_input_streaming": true
+            },
+            {
+              "name": "getForecast",
+              "description": "Get the forecast for a city code.",
+              "input_schema": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code"
+                ],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              },
+              "eager_input_streaming": true
+            }
+          ],
+          "tool_choice": {
+            "type": "auto"
+          },
+          "stream": true
+        },
+        "timestamp": 1792648856406
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "anthropic-ratelimit-input-tokens-limit": "10000000",
+          "anthropic-ratelimit-input-tokens-remaining": "10000000",
+          "anthropic-ratelimit-input-tokens-reset": "2026-10-22T06:00:56Z",
+          "anthropic-ratelimit-output-tokens-limit": "2000000",
+          "anthropic-ratelimit-output-tokens-remaining": "2000000",
+          "anthropic-ratelimit-output-tokens-reset": "2026-10-22T06:00:56Z",
+          "anthropic-ratelimit-requests-limit": "20000",
+          "anthropic-ratelimit-requests-remaining": "19999",
+          "anthropic-ratelimit-requests-reset": "2026-10-22T06:00:56Z",
+          "anthropic-ratelimit-tokens-limit": "12000000",
+          "anthropic-ratelimit-tokens-remaining": "12000000",
+          "anthropic-ratelimit-tokens-reset": "2026-10-22T06:00:56Z",
+          "cache-control": "no-cache",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a4e648d92bd82fc2-DFW",
+          "connection": "keep-alive",
+          "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Thu, 22 Oct 2026 06:00:57 GMT",
+          "request-id": "req_011CgGmPkWnMPJ4gQksZkQ1q",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "traceresponse": "00-6ad9a69800000000049542fea8e5b4ca-fad699334a55a34e-01",
+          "vary": "Accept-Encoding",
+          "x-robots-tag": "none"
+        },
+        "chunks": [
+          "event: message_start\nd",
+          "ata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-sonnet-4-6\",\"id\":\"msg_011CgGmPkjgExtHJaq5DJtKe\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"container\":null,\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":783,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":1,\"service_tier\":\"standard\",\"inference_geo\":\"global\",\"speed\":\"standard\"},\"diagnostics\":null}             }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}       }\n\nevent: ping\ndata: {\"type\": \"ping\"}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"Got\"}        }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" the\"}       }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" code\"}              }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"!\"}            }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" Now let me fetch\"}   }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" the forecast\"}       }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" for Lisbon.\"}}\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0  }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":1,\"content_block\":{\"type\":\"tool_use\",\"id\":\"toolu_01KrqTLaZmyDnB3wqaua5WLZ\",\"name\":\"getForecast\",\"input\":{},\"caller\":{\"type\":\"direct\"}}        }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\"}               }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"{\\\"code\\\": \\\"C-LIS-\"} }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"91\"}          }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":1,\"delta\":{\"type\":\"input_json_delta\",\"partial_json\":\"\\\"}\"}          }\n\nevent: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":1          }\n\n",
+          "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"tool_use\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":783,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":74}     }\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"           }\n\n"
+        ],
+        "chunkTimings": [
+          0,
+          1,
+          436,
+          2,
+          114,
+          112,
+          54,
+          142,
+          0
+        ],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "85fed5b0731361dc",
+      "request": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "body": {
+          "model": "claude-sonnet-4-6",
+          "max_tokens": 128000,
+          "system": [
+            {
+              "type": "text",
+              "text": "Use the tools when they help, then answer the question."
+            }
+          ],
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "What is the weather in Lisbon today?"
+                }
+              ]
+            },
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "I'll start by looking up the city code for Lisbon!"
+                },
+                {
+                  "type": "tool_use",
+                  "id": "toolu_01Pi9g9DUdUybE2GkjYYxZro",
+                  "name": "lookupCity",
+                  "input": {
+                    "city": "Lisbon"
+                  },
+                  "caller": {
+                    "type": "direct"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "tool_result",
+                  "tool_use_id": "toolu_01Pi9g9DUdUybE2GkjYYxZro",
+                  "content": "{\"code\":\"C-LIS-91\"}"
+                }
+              ]
+            },
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Got the code! Now let me fetch the forecast for Lisbon."
+                },
+                {
+                  "type": "tool_use",
+                  "id": "toolu_01KrqTLaZmyDnB3wqaua5WLZ",
+                  "name": "getForecast",
+                  "input": {
+                    "code": "C-LIS-91"
+                  },
+                  "caller": {
+                    "type": "direct"
+                  }
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "tool_result",
+                  "tool_use_id": "toolu_01KrqTLaZmyDnB3wqaua5WLZ",
+                  "content": "{\"forecast\":\"sunny\",\"highC\":23}"
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "name": "lookupCity",
+              "description": "Look up the code for a city.",
+              "input_schema": {
+                "type": "object",
+                "properties": {
+                  "city": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "city"
+                ],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              },
+              "eager_input_streaming": true
+            },
+            {
+              "name": "getForecast",
+              "description": "Get the forecast for a city code.",
+              "input_schema": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code"
+                ],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#"
+              },
+              "eager_input_streaming": true
+            }
+          ],
+          "tool_choice": {
+            "type": "auto"
+          },
+          "stream": true
+        },
+        "timestamp": 1792648858132
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "anthropic-ratelimit-input-tokens-limit": "10000000",
+          "anthropic-ratelimit-input-tokens-remaining": "10000000",
+          "anthropic-ratelimit-input-tokens-reset": "2026-10-22T06:00:58Z",
+          "anthropic-ratelimit-output-tokens-limit": "2000000",
+          "anthropic-ratelimit-output-tokens-remaining": "2000000",
+          "anthropic-ratelimit-output-tokens-reset": "2026-10-22T06:00:58Z",
+          "anthropic-ratelimit-requests-limit": "20000",
+          "anthropic-ratelimit-requests-remaining": "19999",
+          "anthropic-ratelimit-requests-reset": "2026-10-22T06:00:58Z",
+          "anthropic-ratelimit-tokens-limit": "12000000",
+          "anthropic-ratelimit-tokens-remaining": "12000000",
+          "anthropic-ratelimit-tokens-reset": "2026-10-22T06:00:58Z",
+          "cache-control": "no-cache",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a4e648e3efda2fc2-DFW",
+          "connection": "keep-alive",
+          "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Thu, 22 Oct 2026 06:00:58 GMT",
+          "request-id": "req_011CgGmPsw1ss54CR8XTeoCM",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "traceresponse": "00-6ad9a69a00000000fd55b09e019623cb-deeef0b848c00ff9-01",
+          "vary": "Accept-Encoding",
+          "x-robots-tag": "none"
+        },
+        "chunks": [
+          "event: message_start\nd",
+          "ata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-sonnet-4-6\",\"id\":\"msg_011CgGmPt9AvnhUv2M8Z7cuv\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"container\":null,\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":878,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":3,\"service_tier\":\"standard\",\"inference_geo\":\"global\",\"speed\":\"standard\"},\"diagnostics\":null}             }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}              }\n\nevent: ping\ndata: {\"type\": \"ping\"}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"The weather in\"}    }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" Lisbon today is **\"}     }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"sunny** with a high of\"}             }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" **23°C (\"}           }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"73°F)**\"}            }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\". It sounds\"}               }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" like a\"}            }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" beautiful day!\"}               }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" \"}         }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"☀️\"}}\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0   }\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":878,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":39}         }\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"
+        ],
+        "chunkTimings": [
+          1,
+          0,
+          275,
+          4,
+          29,
+          52,
+          47,
+          43,
+          5
+        ],
+        "isStreaming": true
+      }
+    }
+  ]
+}

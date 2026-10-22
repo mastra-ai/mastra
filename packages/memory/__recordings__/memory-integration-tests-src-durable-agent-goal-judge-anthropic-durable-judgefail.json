@@ -1,0 +1,148 @@
+{
+  "meta": {
+    "name": "memory-integration-tests-src-durable-agent-goal-judge-anthropic-durable-judgefail",
+    "testFile": "src/durable-agent-goal-judge.test.ts",
+    "testName": "T8 goal judge — anthropic > durable engine > judgefail: settles instead of hanging when the judge model is unavailable",
+    "model": "claude-sonnet-4-6",
+    "createdAt": "2026-10-22T05:58:19.725Z"
+  },
+  "recordings": [
+    {
+      "hash": "06514a93da4fb07d",
+      "request": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "body": {
+          "model": "claude-sonnet-4-6",
+          "max_tokens": 128000,
+          "system": [
+            {
+              "type": "text",
+              "text": "Answer briefly and follow the instruction exactly."
+            }
+          ],
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Reply with the single word DONE."
+                },
+                {
+                  "type": "text",
+                  "text": "<current-objective status=\"active\">\n  The assistant has replied with the word DONE.\n</current-objective>"
+                }
+              ]
+            }
+          ],
+          "stream": true
+        },
+        "timestamp": 1792648693691
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "anthropic-ratelimit-input-tokens-limit": "10000000",
+          "anthropic-ratelimit-input-tokens-remaining": "10000000",
+          "anthropic-ratelimit-input-tokens-reset": "2026-10-22T05:58:13Z",
+          "anthropic-ratelimit-output-tokens-limit": "2000000",
+          "anthropic-ratelimit-output-tokens-remaining": "2000000",
+          "anthropic-ratelimit-output-tokens-reset": "2026-10-22T05:58:13Z",
+          "anthropic-ratelimit-requests-limit": "20000",
+          "anthropic-ratelimit-requests-remaining": "19999",
+          "anthropic-ratelimit-requests-reset": "2026-10-22T05:58:13Z",
+          "anthropic-ratelimit-tokens-limit": "12000000",
+          "anthropic-ratelimit-tokens-remaining": "12000000",
+          "anthropic-ratelimit-tokens-reset": "2026-10-22T05:58:13Z",
+          "cache-control": "no-cache",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a4e644e02f49f475-DFW",
+          "connection": "keep-alive",
+          "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Thu, 22 Oct 2026 05:58:14 GMT",
+          "request-id": "req_011CgGmBks2ss731gK9ZLLHa",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "traceresponse": "00-6ad9a5f5000000002d84b4e77e8d6752-1d1ddd0402ed81aa-01",
+          "vary": "Accept-Encoding",
+          "x-robots-tag": "none"
+        },
+        "chunks": [
+          "event: message_start\nd",
+          "ata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-sonnet-4-6\",\"id\":\"msg_011CgGmBm6R7wJ42DHoPbpAx\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"container\":null,\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":49,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":5,\"service_tier\":\"standard\",\"inference_geo\":\"global\",\"speed\":\"standard\"},\"diagnostics\":null}              }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}         }\n\nevent: ping\ndata: {\"type\": \"ping\"}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"DONE\"}    }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0           }\n\n",
+          "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":49,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":5}              }\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"       }\n\n"
+        ],
+        "chunkTimings": [
+          0,
+          1,
+          2,
+          6
+        ],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "d5c3cdb1ed1fecba",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "cor-1252-no-such-model",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are the goal judge. Your decision directly controls whether the assistant continues working toward the goal.\n\nGiven a goal and the assistant's latest response, reason about whether the goal's requirements have been satisfied. Compare what the goal asks for against what the assistant has actually produced. Focus on substance, not phrasing.\n\nUse \"done\" when the goal is fully achieved.\nUse \"waiting\" when the goal explicitly requires a user checkpoint, user feedback, human verification, human confirmation, or another external event outside the goal-judge loop before the assistant should continue, and the assistant has correctly stopped at that checkpoint.\nUse \"waiting\" when the latest user message asks a question or requests clarification and the latest assistant message answers it; let the user acknowledge the answer, ask a follow-up, or otherwise return control before continuing goal work. Use common sense and do not wait if the user explicitly asked the assistant to continue autonomously after answering.\nUse \"continue\" when the goal is not done and the assistant should keep working autonomously, including when it asked for input that the goal did not explicitly require.\nIf your previous decision was \"waiting\" for an explicit user checkpoint, keep choosing \"waiting\" when the user's latest response asks a question, requests clarification, or otherwise does not satisfy the checkpoint. Do not continue until the required user feedback/confirmation/verification has actually been provided.\nIf the goal says to wait for the goal judge, judge, evaluator, or you to respond, approve, verify, validate, tell the assistant to continue, or otherwise provide the next signal, treat your own decision as that judge response. Verification can be performed by you unless the goal explicitly says it needs human/user verification. Choose \"continue\" when the assistant should proceed to the next step. Do not choose \"waiting\" for judge-controlled checkpoints, because that would mean waiting for yourself.\n\nYour \"reason\" field is sent back to the assistant as guidance when the goal is not yet done — be specific about what still needs to be accomplished. When choosing \"continue\", write the reason as an instruction for what the assistant should do next. When choosing \"waiting\", explain what specific user checkpoint is still outstanding."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Goal: The assistant has replied with the word DONE.\n\nLatest user message:\nReply with the single word DONE.\n\nAssistant steps since that user message: 1\n\nLatest assistant message:\nDONE"
+                },
+                {
+                  "type": "input_text",
+                  "text": "Return your response as JSON matching this schema:\n\n{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"decision\":{\"type\":\"string\",\"enum\":[\"done\",\"continue\",\"waiting\"],\"description\":\"Whether the goal is done, should continue autonomously, or is at an explicit user checkpoint required by the goal\"},\"reason\":{\"type\":\"string\",\"description\":\"Brief explanation of what was accomplished or what remains to be done\"}},\"required\":[\"decision\",\"reason\"],\"additionalProperties\":false}\n\nReturn only valid JSON. Do not include markdown or explanatory text."
+                }
+              ]
+            }
+          ],
+          "stream": true
+        },
+        "timestamp": 1792648694423
+      },
+      "response": {
+        "status": 404,
+        "statusText": "Not Found",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a4e644e4bb18478b-DFW",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Thu, 22 Oct 2026 05:58:19 GMT",
+          "openai-processing-ms": "5138",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-request-id": "req_74517347b8b54027b7d49be69557d8d6"
+        },
+        "body": {
+          "error": {
+            "message": "The model `cor-1252-no-such-model` does not exist or you do not have access to it.",
+            "type": "invalid_request_error",
+            "param": null,
+            "code": "model_not_found"
+          }
+        },
+        "isStreaming": false
+      }
+    }
+  ]
+}

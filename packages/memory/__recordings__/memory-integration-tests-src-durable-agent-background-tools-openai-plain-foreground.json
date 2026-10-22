@@ -1,0 +1,473 @@
+{
+  "meta": {
+    "name": "memory-integration-tests-src-durable-agent-background-tools-openai-plain-foreground",
+    "testFile": "src/durable-agent-background-tools.test.ts",
+    "testName": "T4 background tools · openai > plain engine > foreground",
+    "model": "gpt-5-mini",
+    "createdAt": "2026-10-22T05:32:52.986Z",
+    "updatedAt": "2026-10-22T05:43:17.783Z"
+  },
+  "recordings": [
+    {
+      "hash": "26a827800c894341",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-5-mini",
+          "input": [
+            {
+              "role": "developer",
+              "content": "Use tools exactly as instructed. When the fetched record arrives, report its amount.\n\nYou have the ability to run certain tools in the background while continuing the conversation. The following tools support background execution:\n- fetchRecord (default: background)\n\nFor any of these tools, you can include a \"_background\" field in the tool arguments to override the default:\n  \"_background\": { \"disposition\": \"foreground\" | \"deferred\" | \"awaited\", \"timeoutMs\": number, \"maxRetries\": number }\n\nAll fields in \"_background\" are optional. Only include what you want to override. Tools listed with \"default: background\" run in the background unless you set \"disposition\": \"foreground\". Tools listed with \"default: foreground\" run inline unless you explicitly request \"deferred\" or \"awaited\" — for those tools, omitting \"_background\" never starts background work.\n\nDispositions:\n- \"deferred\": the tool runs in the background while you continue; you receive a placeholder result with a task ID and are notified when the task completes.\n- \"awaited\": the tool runs as a durable background task but your run waits for its result before continuing.\n- \"foreground\": the tool runs inline and returns its real result immediately.\n\nGuidelines:\n- Use background execution when the user doesn't need the result immediately, or when you're launching multiple independent tasks.\n- Use foreground execution when the user is directly waiting for the result and the conversation can't continue without it.\n- When a tool runs deferred, you'll receive a placeholder result with a task ID. You can reference this in your response to the user.\n\nIMPORTANT: \"_background\" field is always an object. The fields in the _background field should be inside the _background object, not outside of it."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Call fetchRecord exactly once with name \"comparison\" and _background: {\"disposition\": \"foreground\"}. Do not call it again. When the result is available, reply with the amount."
+                }
+              ]
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "fetchRecord",
+              "description": "Fetch a record by name. Slow.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "_background": {
+                    "description": "Optional: override how this specific call executes (foreground, deferred, or awaited). When omitted, the tool's configured default disposition applies. The enabled boolean remains supported for compatibility.",
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "enabled": {
+                            "description": "Force deferred (true) or foreground (false) execution for this call.",
+                            "anyOf": [
+                              {
+                                "type": "boolean",
+                                "description": "Force deferred (true) or foreground (false) execution for this call."
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "disposition": {
+                            "description": "Choose foreground, deferred, or awaited execution for this call.",
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "foreground",
+                                  "deferred",
+                                  "awaited"
+                                ],
+                                "description": "Choose foreground, deferred, or awaited execution for this call."
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "timeoutMs": {
+                            "description": "Override timeout in milliseconds for this call.",
+                            "anyOf": [
+                              {
+                                "type": "number",
+                                "description": "Override timeout in milliseconds for this call."
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "maxRetries": {
+                            "description": "Override maximum retry attempts for this call.",
+                            "anyOf": [
+                              {
+                                "type": "number",
+                                "description": "Override maximum retry attempts for this call."
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "enabled",
+                          "disposition",
+                          "timeoutMs",
+                          "maxRetries"
+                        ],
+                        "additionalProperties": false,
+                        "x-optional": [
+                          "enabled",
+                          "disposition",
+                          "timeoutMs",
+                          "maxRetries"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "name",
+                  "_background"
+                ],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "x-optional": [
+                  "_background"
+                ]
+              }
+            }
+          ],
+          "tool_choice": "auto",
+          "stream": true
+        },
+        "timestamp": 1792647794520
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a4e62eec8bed86ee-DFW",
+          "connection": "keep-alive",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Thu, 22 Oct 2026 05:43:15 GMT",
+          "openai-processing-ms": "368",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "10000000",
+          "x-ratelimit-remaining-requests": "9999",
+          "x-ratelimit-remaining-tokens": "9998878",
+          "x-ratelimit-reset-requests": "6ms",
+          "x-ratelimit-reset-tokens": "6ms",
+          "x-request-id": "req_8e2c110e07244192bf549f1df0ecfbd1"
+        },
+        "chunks": [
+          "event: response.created\nda",
+          "ta: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_00dae171e25cc4ac006ad9a272c84c87d1b541ca45239a2425\",\"object\":\"response\",\"created_at\":1792647794,\"status\":\"in_progress\",\"access_programs\":null,\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-5-mini-2025-08-07\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":\"current_turn\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Fetch a record by name. Slow.\",\"name\":\"fetchRecord\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"_background\":{\"description\":\"Optional: override how this specific call executes (foreground, deferred, or awaited). When omitted, the too",
+          "l's configured default disposition applies. The enabled boolean remains supported for compatibility.\",\"anyOf\":[{\"type\":\"object\",\"properties\":{\"enabled\":{\"description\":\"Force deferred (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"type\":\"boolean\",\"description\":\"Force deferred (true) or foreground (false) execution for this call.\"},{\"type\":\"null\"}]},\"disposition\":{\"description\":\"Choose foreground, deferred, or awaited execution for this call.\",\"anyOf\":[{\"type\":\"string\",\"enum\":[\"foreground\",\"deferred\",\"awaited\"],\"description\":\"Choose foreground, deferred, or awaited execution for this call.\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"type\":\"number\",\"description\":\"Override timeout in milliseconds for this call.\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"type\":\"number\",\"description\":\"Override maximum retry attempts for this call.\"},{\"type\":\"null\"}]}},\"required\":[\"enabled\",\"disposition\",\"timeoutMs\",\"maxRetries\"],\"additionalProperties\":false,\"x-optional\":[\"enabled\",\"disposition\",\"timeoutMs\",\"maxRetries\"]},{\"type\":\"null\"}]}},\"required\":[\"name\",\"_background\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"x-optional\":[\"_background\"]},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.",
+          "0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\nevent: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_00dae171e25cc4ac006ad9a272c84c87d1b541ca45239a2425\",\"object\":\"response\",\"created_at\":1792647794,\"status\":\"in_progress\",\"access_programs\":null,\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-5-mini-2025-08-07\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":\"current_turn\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Fetch a record by name. Slow.\",\"name\":\"fetchRecord\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"_background\":{\"descri",
+          "ption\":\"Optional: override how this specific call executes (foreground, deferred, or awaited). When omitted, the tool's configured default disposition applies. The enabled boolean remains supported for compatibility.\",\"anyOf\":[{\"type\":\"object\",\"properties\":{\"enabled\":{\"description\":\"Force deferred (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"type\":\"boolean\",\"description\":\"Force deferred (true) or foreground (false) execution for this call.\"},{\"type\":\"null\"}]},\"disposition\":{\"description\":\"Choose foreground, deferred, or awaited execution for this call.\",\"anyOf\":[{\"type\":\"string\",\"enum\":[\"foreground\",\"deferred\",\"awaited\"],\"description\":\"Choose foreground, deferred, or awaited execution for this call.\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"type\":\"number\",\"description\":\"Override timeout in milliseconds for this call.\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"type\":\"number\",\"description\":\"Override maximum retry attempts for this call.\"},{\"type\":\"null\"}]}},\"required\":[\"enabled\",\"disposition\",\"timeoutMs\",\"maxRetries\"],\"additionalProperties\":false,\"x-optional\":[\"enabled\",\"disposition\",\"timeoutMs\",\"maxRetries\"]},{\"type\":\"null\"}]}},\"required\":[\"name\",\"_background\"],\"additionalProperties\":false,\"$schema\"",
+          ":\"http://json-schema.org/draft-07/schema#\",\"x-optional\":[\"_background\"]},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item",
+          ".added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"rs_00dae171e25cc4ac006ad9a2734d1087d19695c0a21e372f66\",\"type\":\"reasoning\",\"content\":[],\"encrypted_content\":\"gAAAAABq2aJzApSJNZvPQolBZ4bpaQRR2Yb3UV07zbt7yXvFHROzlCO_KimvCKVI5Qr2FrDccbr0xR0j81Jk48YnpjdmShd6n4RfWkiR7qoVIknI-8516p1Tk00Eind2h8fcHjETaFbL36d3kNTq2HUHLdu5qf-H17opZcG9uedZYbocEb3_JIwWeT7fBS8Q2OUrhNsfWKOrlBMBJJzwBPphjDCyEtUhenb3PwT_R6V1ruX75NAaMb2WHgFT9PtTftXX9L8XL1TUWorFobO55kio_ZZrNLE08qq-HK2te4l6m08e9qkZAJqd_zjHX8t_-bvP7-UbuP_07WIxZ_bZyEZTPAVUIFcsJC7v5QaeqFnFXRcPNdgGFf9-QYlEVTXFzqduK-gDBk-dRYEWaS9R2ZBKLeSE1rAq5XjR4Imm_GC1ko-SGIiZmmWXC1AlbRJTPk5q3rLqm-40KJD1c4tEGEn7oAT4dp1V4AumW1MHULnnLEaIJJM6QPf7_iItTIlYYZ8_j4FUvJE6Rnq_7gXhqKp3OBlHGX2LND0M8W-Qp1wnaWJJczQDDRhtWA6Z2xhpaqu1z3lQdanzQt3L4lYKO0HhzZ6pUmcjNv52yAWETh_V0P_AlAhwG56kpdB1hF72dw8OwVXNr6xJSLrxA3dJCJqnub3cBLlhNJv4GfDBVDh93NU6kTQroiwI1JbNFI7shInAlblLFOUjucU77BR4E6BXCQD7TICSLszyCEUzuGzvMxsF3632AWYz1ESGyNoXdlxtHo-S51bnK9_UkcgSHOqYVthdecfPfH4TPGrwm7664mP20BknNHUnZpBBBSTKMRGR0I9E88HWOB43CLZJV726gjBAOV3NWtRimblqVLH2Whg_j8KTyMUzV0c9q_Q3dZY2EFRdJtLby2EoYINrUqheWVJbE2jE27fmyUMWR4ngvFlKp4FmTVm176hTZaFG2LL-jBkxRz2dfuRzI-KPSzEXfrQ1OWHA1rGAc-uy0lRRWI2xc-8dFBv84k4KtrtSzBcvDGQql-w_D56c0Cq8QMAhRWDQfRsFmxpOrCPrLNpIyYOYiS7SRafyoK_-4dy090mAqt0w7sxzUnTY-u3Nr6WK0lxE5CgPuthSxFZwSXXtsWkUBpH2xXXHpdgEWkBwjdLDL0gKEHrFlSWn879XaiLRTK8OC5jMgVfshRCo",
+          "2hdrg7JdBii7JNBDZ6yM1Hb07BzSE0M2IT2X1qZ0neVZSgPZbmiNsjlt6Q==\",\"summary\":[]},\"output_index\":0,\"sequence_number\":2}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"rs_00dae171e25cc4ac006ad9a2734d1087d19695c0a21e372f66\",\"type\":\"reasoning\",\"content\":[],\"encrypted_content\":\"gAAAAABq2aJ0AflwaAaXl4HyykMtJ2L9jNtPdQ041GUL7R5JOqs_7DNsLpiqcl_Q6g_VO5arEBIe0RDc8b6WI20NpIrm8vb0UnReMIi1461KjQtZIj_8b5OI3aRNAYGmg5W-GOReB0wTMYngGaVq3vkk3Honwbd_AG2BrBQqo5-ktroKta9xMDd05LK03WuQufiIWzvlrQnAjRuWNBIsI6v7Mnzm990hiMttccVNdm5EruVap7eyHO_SbtZAnuJY21RplgZUOCXfXMZABUa7D4W74iwbOxBynJTM62_HvWnGWe0Vr51JKokXEslhT2B6R6fvehAFNw3QEJPxjPALw8c8BRJSkYzGRXKtLousuzIYEJEcVJsLzp8YyUMp12JkYqQoBY6Pkpu32kVd4lbvfpfAniXZqBvv8A2UIZEThA9oNM8egsDvMn3W_Q6rLLRnpi3ZvyFXdSbRBSmziXXY5A-1AAKXWOKq_-wTlMd51TpgaFdmCqsIjiY7-dtYQKsQQ-ax5ZR9z0GjYoLkWPr5UlgNAeZ2nyAYWo9DwbWVC7RGmOt8nJJ6S0YjW8BzAD2xl3y-m0dNliHwtgjTAGmFNAjIdd5cUwyv1ptzKxxjUwd32Z2h1Z2WzsLFF4DWP0Qh9T4bvPrhA5jLHsF72b7qbM0VBlmL1lFamIILWDeMGJOea5fc49fI1y3ulDT425UFC2FWsxuzI3zCPJMnZxAMlS0SEQoat3k8QJnJyIsEJMiPU4aYJEd9wyaS-N3ZLE8RcsTMcP7hCqpEBnTC8xfnweogWmpzs6NzH2PU7BR4P7g09RCqwBffdsOqmxuGYQ4Zl9JLM50CH_elIT1sL9f-fCPybRxpfwbV9crYEXef2xSi6tpZoe_L9feNBvQntEWX7PGU08wQ0A79V-Q2DqfAYBGEPf0Q2a7c8iWZ1KMxdslIAerISW92CE7yStP1_fl5WAwOfX5zXPYhZavp0dn4S8FKiw-TiEqKKPCqLJc2Mmxyt_g-2YBb8ZQ0sPXUIFIlVr8cnb_XY0EMHE_McD9jZTAREqcOZUhqFmvRxs2JP0NIcyzxFa1EAdfq5kv6A3DQEh2D1oNsuwbsFWhtZinvxrPwa6M40Q-GMl4qVhM8pm0RNoHTNttjBPw8ClTU5IdSDVAelGxezzW902h",
+          "VRWEgP3NxrIyT3zQMUB5JGC-jl-vsxTmQ0amiGLSiLxvgzV8tvpu9hSPVr71HhP5dTRqSN6fNTTHjLG4z6fAVccwQ2uyhVjYW8o2hDYfxp_Z1YoYC_AAOP1k2IG1oIJqrYjqwfStyMPRUsVYx4ZNaHCTP6INN_D1aOA5hTj67XIs9l5c8Hv3JxavpvVpZyfMAn3dR8dCRzZE5X8w6S06KXU2wF8Cuap-BjzWxQfACBWUxhy-ig4OvMpj7-DpAqgHrwWQ6gnase8xnyFJH574zEMZ6p7RDm7Lj78e9AI4A15MbZLgNxDYZy_MD4m4Bl_K9o44RnFDoLSKFQLjXpaoQkurPB7DsuMBjS-Zyv3QWzJ0w9jG6Onp-W59MM3s5XqoHZePXI_n37YUsEggXt_gT6WFVZHnDhNfWHVodgJA6UxxWB02IUF3qePI8HvOgsHAyxHdwEX_zwSJGAO7xnFcazi_LKnDlmbRfcdBXhF1Hw9ohSlxcPSlgsaVyymjMlbXcdJXIvdq17NaxtT83xPgXIhBtpMs30jkMWBhBCvpporxYHhQ2u2KEPyyFCThSXj6lUdogrfyHY3xQCGy-TTv0VcjFvd-3q43KQehusp2oKdOQYDLf7Urx7HwVLcMunvbRxbQNQHw7JcQeDqtfdV45jTF8w2kZVeJKXtpeg9UNQ9olpQCLSI35QoNHA6QZDq7dgtsX4NddaaBLkhEgcI9OerU0ha9hC9r5TCgmUizrq8GL9hpbug3C2rTboNi2XmKMz3QoSyFMvLLCc3omL88tKWlL1k5sZH3b8PTjhpxHXBzbESTVSqkv2FVIIJenZ9JP82zXXj1f2LNHk0oRwGBbkkJ-kExNmDBE58NVSEj2u0ZWtypNMujwbQYsKmQcq9JzAh9xWYjyt3WA9Pk6UUmmUWJ1Hec7hRMQb2IPGmW7miojxVq8Tiv4GauCOMEtgmSoHZFjuTxr2xSPXrm_2L_1LanLOPn0R_Sftu8WHZ8prOhTpvCYrrFX-R8Emt_4edMBA10HbYA8QW88qdeUsZd6CyYQGR50lLqoFP5Ayx9IyATluK9cUIroFK1YwDIuriTxgovqXWvzYox1lNsdNVPSQ8Xt9ncP1o6SPHP1hJRkFMtMIn_nJYwF3sihykqbA_ivYktGN9jIWqqvwJO-N3cuXSRL9mT2-Nmp_mvv9tqcleGutj8sWeOxyPsZ_cir90qhoSZMyRVOK2EFhcfu83-xXZibAbS8ENede8Xn99SiEfZ3-DISh3FKOxhb7O7_wsqhZuaytBhSvrJRjHMKULfiNbNyj2SjahlKwXZfNb2NlYN1nCdVxWEHnW6A-jYLMuHlKa-qL0JnuVra48lyg2T0OHyd",
+          "-TcRcy5bNbAGb9gONh2AiLEt0zO4-bLbHkKtJBQnH203sFB1EkEB1BTcUW8tdelvkZCCjfBVJrs2n214AqqdaJN6sYjVIEBVAwx8kCH9PhtpSQaEu6uL79D6aTiY4Wm6SGLlC3udiIC22vG71T97VHQ1d5HOFZC8j1L1f-URB3TDhg-7Yl3F4ZAFyppZygPqlYzJ9pp1AKgRnYPIsMZEQrJS768MYmaQiQjq4HAtnexkJUQj_ZMAIip2mskmCxnfLcKdGCQchiwhOCY=\",\"summary\":[]},\"output_index\":0,\"sequence_number\":3}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"fc_00dae171e25cc4ac006ad9a274775c87d1b034f22ca3e6c2ef\",\"type\":\"function_call\",\"status\":\"in_progress\",\"arguments\":\"\",\"call_id\":\"call_SKotY0UPE6rVKii2s9RQDp9Z\",\"name\":\"fetchRecord\"},\"output_index\":1,\"sequence_number\":4}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"{\\\"\",\"item_id\":\"fc_00dae171e25cc4ac006ad9a274775c87d1b034f22ca3e6c2ef\",\"obfuscation\":\"Usr9jmssyX1gzR\",\"output_index\":1,\"sequence_number\":5}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"name\",\"item_id\":\"fc_00dae171e25cc4ac006ad9a274775c87d1b034f22ca3e6c2ef\",\"obfuscation\":\"xUqFs6XMlF6h\",\"output_index\":1,\"sequence_number\":6}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\\\"\",\"item_id\":\"fc_00dae171e25cc4ac006ad9a274775c87d1b034f22ca3e6c2ef\",\"obfuscation\":\"0R7NobKkkapbj\",\"output_index\":1,\"sequence_number\":7}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"comparison\",\"item_id\":\"fc_00dae171e25cc4ac006ad9a274775c87d1b034f22ca3e6c2ef\",\"obfuscation\":\"e4ifBp\",\"output_index\":1,\"sequence_number\":8}\n\n",
+          "event: response.function_ca",
+          "ll_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\",\\\"\",\"item_id\":\"fc_00dae171e25cc4ac006ad9a274775c87d1b034f22ca3e6c2ef\",\"obfuscation\":\"HbvgktvyYHLkB\",\"output_index\":1,\"sequence_number\":9}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"_\",\"item_id\":\"fc_00dae171e25cc4ac006ad9a274775c87d1b034f22ca3e6c2ef\",\"obfuscation\":\"XlAHTTwiLBj56gl\",\"output_index\":1,\"sequence_number\":10}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"background\",\"item_id\":\"fc_00dae171e25cc4ac006ad9a274775c87d1b034f22ca3e6c2ef\",\"obfuscation\":\"GIyZr2\",\"output_index\":1,\"sequence_number\":11}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":{\\\"\",\"item_id\":\"fc_00dae171e25cc4ac006ad9a274775c87d1b034f22ca3e6c2ef\",\"obfuscation\":\"aemveBO2kPQc\",\"output_index\":1,\"sequence_number\":12}\n\n",
+          "event: response.function_cal",
+          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"enabled\",\"item_id\":\"fc_00dae171e25cc4ac006ad9a274775c87d1b034f22ca3e6c2ef\",\"obfuscation\":\"3h5s4ULL2\",\"output_index\":1,\"sequence_number\":13}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\",\"item_id\":\"fc_00dae171e25cc4ac006ad9a274775c87d1b034f22ca3e6c2ef\",\"obfuscation\":\"eUsEU1OaRhWZAS\",\"output_index\":1,\"sequence_number\":14}\n\n",
+          "event: response.function_ca",
+          "ll_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"false\",\"item_id\":\"fc_00dae171e25cc4ac006ad9a274775c87d1b034f22ca3e6c2ef\",\"obfuscation\":\"en6KwdigJAi\",\"output_index\":1,\"sequence_number\":15}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\",\\\"\",\"item_id\":\"fc_00dae171e25cc4ac006ad9a274775c87d1b034f22ca3e6c2ef\",\"obfuscation\":\"OOZVfqVUCmS9WB\",\"output_index\":1,\"sequence_number\":16}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"dis\",\"item_id\":\"fc_00dae171e25cc4ac006ad9a274775c87d1b034f22ca3e6c2ef\",\"obfuscation\":\"vCf6v3UKqNk7X\",\"output_index\":1,\"sequence_number\":17}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"position\",\"item_id\":\"fc_00dae171e25cc4ac006ad9a274775c87d1b034f22ca3e6c2ef\",\"obfuscation\":\"7Y4443Ja\",\"output_index\":1,\"sequence_number\":18}\n\n",
+          "event: response.function_cal",
+          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\\\"\",\"item_id\":\"fc_00dae171e25cc4ac006ad9a274775c87d1b034f22ca3e6c2ef\",\"obfuscation\":\"EslCnGs8U4l40\",\"output_index\":1,\"sequence_number\":19}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"foreground\",\"item_id\":\"fc_00dae171e25cc4ac006ad9a274775c87d1b034f22ca3e6c2ef\",\"obfuscation\":\"XXAL6p\",\"output_index\":1,\"sequence_number\":20}\n\nevent: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\",\\\"\",\"item_id\":\"fc_00dae171e25cc4ac006ad9a274775c87d1b034f22ca3e6c2ef\",\"obfuscation\":\"CJdRu85wWezmf\",\"output_index\":1,\"sequence_number\":21}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"timeout\",\"item_id\":\"fc_00dae171e25cc4ac006ad9a274775c87d1b034f22ca3e6c2ef\",\"obfuscation\":\"ZLPWc3DJh\",\"output_index\":1,\"sequence_number\":22}\n\n",
+          "event: response.function_cal",
+          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Ms\",\"item_id\":\"fc_00dae171e25cc4ac006ad9a274775c87d1b034f22ca3e6c2ef\",\"obfuscation\":\"yL3DqzgtSykstM\",\"output_index\":1,\"sequence_number\":23}\n\n",
+          "event: response.function_cal",
+          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\",\"item_id\":\"fc_00dae171e25cc4ac006ad9a274775c87d1b034f22ca3e6c2ef\",\"obfuscation\":\"mYnpYp9eIwAWuM\",\"output_index\":1,\"sequence_number\":24}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"120\",\"item_id\":\"fc_00dae171e25cc4ac006ad9a274775c87d1b034f22ca3e6c2ef\",\"obfuscation\":\"3JxJ2xwN2b8Ye\",\"output_index\":1,\"sequence_number\":25}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"000\",\"item_id\":\"fc_00dae171e25cc4ac006ad9a274775c87d1b034f22ca3e6c2ef\",\"obfuscation\":\"jttffwu7dXpsQ\",\"output_index\":1,\"sequence_number\":26}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\",\\\"\",\"item_id\":\"fc_00dae171e25cc4ac006ad9a274775c87d1b034f22ca3e6c2ef\",\"obfuscation\":\"uNGYqtjcwhX7bO\",\"output_index\":1,\"sequence_number\":27}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"max\",\"item_id\":\"fc_00dae171e25cc4ac006ad9a274775c87d1b034f22ca3e6c2ef\",\"obfuscation\":\"sz5lFBsgYQeIS\",\"output_index\":1,\"sequence_number\":28}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"Retries\",\"item_id\":\"fc_00dae171e25cc4ac006ad9a274775c87d1b034f22ca3e6c2ef\",\"obfuscation\":\"KZCoLI0qK\",\"output_index\":1,\"sequence_number\":29}\n\n",
+          "event: response.function_call_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"\\\":\",\"item_id\":\"fc_00dae171e25cc4ac006ad9a274775c87d1b034f22ca3e6c2ef\",\"obfuscation\":\"5LObdzLykIsXyy\",\"output_index\":1,\"sequence_number\":30}\n\n",
+          "event: response.function_cal",
+          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"0\",\"item_id\":\"fc_00dae171e25cc4ac006ad9a274775c87d1b034f22ca3e6c2ef\",\"obfuscation\":\"76H5E1YXGEpKOI3\",\"output_index\":1,\"sequence_number\":31}\n\nevent: response.function_cal",
+          "l_arguments.delta\ndata: {\"type\":\"response.function_call_arguments.delta\",\"delta\":\"}}\",\"item_id\":\"fc_00dae171e25cc4ac006ad9a274775c87d1b034f22ca3e6c2ef\",\"obfuscation\":\"gNBoW0VBiCmqCi\",\"output_index\":1,\"sequence_number\":32}\n\n",
+          "event: response.function_ca",
+          "ll_arguments.done\ndata: {\"type\":\"response.function_call_arguments.done\",\"arguments\":\"{\\\"name\\\":\\\"comparison\\\",\\\"_background\\\":{\\\"enabled\\\":false,\\\"disposition\\\":\\\"foreground\\\",\\\"timeoutMs\\\":120000,\\\"maxRetries\\\":0}}\",\"item_id\":\"fc_00dae171e25cc4ac006ad9a274775c87d1b034f22ca3e6c2ef\",\"output_index\":1,\"sequence_number\":33}\n\nevent: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"fc_00dae171e25cc4ac006ad9a274775c87d1b034f22ca3e6c2ef\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"name\\\":\\\"comparison\\\",\\\"_background\\\":{\\\"enabled\\\":false,\\\"disposition\\\":\\\"foreground\\\",\\\"timeoutMs\\\":120000,\\\"maxRetries\\\":0}}\",\"call_id\":\"call_SKotY0UPE6rVKii2s9RQDp9Z\",\"name\":\"fetchRecord\"},\"output_index\":1,\"sequence_number\":34}\n\n",
+          "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_00dae171e25cc4ac006ad9a272c84c87d1b541ca45239a2425\",\"object\":\"response\",\"created_at\":1792647794,\"status\":\"completed\",\"access_programs\":null,\"background\":false,\"completed_at\":1792647796,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-5-mini-2025-08-07\",\"moderation\":null,\"output\":[{\"id\":\"rs_00dae171e25cc4ac006ad9a2734d1087d19695c0a21e372f66\",\"type\":\"reasoning\",\"content\":[],\"encrypted_content\":\"gAAAAABq2aJ0I8ITQpR3ji3jrp15pJT3S0zcBZDzmhvVM9m5dKEtuYool3eUPtBzk6g_wbGcCDXc8wWBLAGUqAhHAZOMzCV_JBy79uB4Cggx_vGXT2ddo0rnWu2nqogh5draByyKirj3PScg1q9VnIqmasda1NYJDpM2huojQGMSRyBdL-KQvPYatWmVjihmZJHCXZF8oTkcQwYwD331VZjeHes1sggPb4lEgwI6uWI_Qcoj5tmbId41T4ecXs7rL3_q6kW_b3TwXhQrdeX6tOBvuQ59Y0bA4pgCvU3rTyIv2nMH1R8zbdQOAGy5uMb8qoei8uN8Bhy5ox023jszUKb7iqb5cyQGh5Aw3alglMj_Vkl_l97WG6EIL-mmJdRDBuaygIOxKnOyUbIifOTfE6dqtSsbJ8A0MH2i72PeqLeZnzLP4lbu0eZAMyvTfVhhEkoYTQhmzF0N2vI1HeRhZTfEJoAnT1amQmApQxA3DpSmoGrnp9RVZmXEn5EOwNlyggIAK6BC5NDqsOqU6mnJuHkFEUiaJK5B9SOhtQupvNunTXEjw2Z0qMzgugp7loeZDU5yFf8BILqCFsG5gIhpfmpcwHltcIloNwGsJM_5W0xZsiTZWwKl0ZDxiUIRJZhhwGbf42HAG-PpdHSazOl2n7M2Uc9ByQjsFZndFkug0ImwQSaY8B7odLgyNP0DFlZmo3xquooy632z5Nk8nwOfNk1xeUsAfwI_cPw3jJkdh7WDyIVVtUMRxTGy3LiX3neUTQmLbuTrBCzqxJ2t_kk4sKw06ZdSbmvfry7KpS0cmdkfRifGSml74x_vOwKnx7jwKK34bQhs-6JSmUHTkFLIlc6yZmYbW3FYJXffs_CWz9Mn1a08Vh1Tyfn3LtDoXj4ymmD4mNGM0A2L0Kr5eHItxUARzC6AacIwFksrj8Rl7DYXATmV_jes1c4AXKQfm_K9FnSvPp1_5fldLl-96v5BPkNES6g2GDxR2CU8Mx0QuT9zYGP-Uk63nIbZTzAN_I_D9MYkyPkaT9R7W2TbLp-ipc2kqIWAx5MGciW1_6da1LJE67Z2-0HO_YticVGH6bnqbm6napagcmi5vo8dGyqSUhMskMqCT95VCFz1RBICwgv2fbmtS_anjSBSa5lsHBqC40pBLn5bBKP7A4ReAwolsCyqncs3Kv_ImKJ4RZ4XEkCc8QZf8kRwGQtOSsmx02JNO8hdt6iAZYEzRVH-pTqnWPUVcdb61ZxZpuLX0qiP-dG0RqNgJqvJ66McgL__ad5bPvekbwCF0m1f4hEj1-aBBeP5-5VQDDFF6SSReGLSLDSlQHtQtar-kPDEBODvvLM_xytppvOlIwScMMmiDtEAD5f-UQxL1M2_mSw-MKz3y4m0nVAtYJ9Zmu7c1OLuNFCfJjvHemF_MtcpRuw60axEbd3FWvce9gpjmXR6cbkE01YMu22OAvJFfj8sYxg9t4ZiwHYypWBUkGuW5KGvL2UqEXn1XHVlvWgAE8tGY8u0qHJnuxkdwLcki8jm3ToBdxCMy7L1FIM6pTJ0e15uBlxDF5b0i-Pg8p_EM1hfEkstvYGhmq28_SMFiXKAHObrO_ymzHSZVBKaCOFS0gkcAlzdfPwim1_yasC7sa55cAgCTrOnUlxc--urvIRpS_p3eP305VuExKcL-24Tx2LXD8S3-rfZIHIM0KNju186ClnPRE8e6NpGZ5qZRwjl4v9FOFgLvLW61exYLaG9BcT3aXRRBsbnz_OzDCQp40rIbHZdeWcjitip5B6eYLPhczv4fx7TI4EsqEKolC-IFPMGwiYKlmb0NST57wO5Q4VGgmW6ts-35xznNA_HM9SDs6z-BF2WFURAt5GGk9OqY-3GaJAVpG0FWG90bpRuw2KX-9Pqh4aKuxdM0KjOgoomZrAHgJPfJVaPQa1OiZ6yQxQmfTWwzgG95L2xiSql5sTJJ-D24qGUogbleMxn-715QA3xSSjJPdnyPPG0G20cgOCQ3xdCS5sb_FMmmRHoexm2DmSslVNW70Wm2DlDNfunO19epeL3hBPyyoaPTsH8MoZi5SjqPz-hGCkTU3-K7KcPrt4Lme8gvCLBhxV0waIFTe9oAoTDvOHdZxQDczDfPLeF5sYM7UZqPSgAfA_ILXLTa4gSZ-_WNZWLY3Vas6RCvLyLLqb1oY2vY4LBC4GDuJQVnNSymongHJX2UdpvWaipAExgynFMqbgtmcLaZ0zWd8fsyaGK62mLGLs7_SN_NWIP35MRo8XSlhak9eD5co_Yp2U-BFnymGc4Gk9YoAteCzxKy2v47QbnPO7vuEmssnmua6s8d7XhI-RzLmjaAYMrGkVrJAOG26hKoL3-B3aAm4QlgUP9PorFZQ-5Sk_WYdVMC-WuBzfQb3f_tTkQsjRNc_gUOa2CmNUtNEN68CZy9BxW-IVGl-4rYhCtv7wRZV03KKimzmUAO6EkyRhNb5GT7oQyqGNfJUSjsrlb3S6LktDtc6bDqsytpNMw0eWzzK0f-nzH3eYW2LXt5qrelORZf32AjQQ88yhucXo-SfAJ9oulqje5kF1q5fJQDBmru6_-X6f3EKE_GN_uRDyvWRsk_iy-6I-gJbebraWUmmeCdkjMGPFnYFZWvcTPuxMmabt0v_xQWiW-QQJ3SzZ2w7eMsZZGokXDg54_sadzQ8gRQ7io_NN8OOHdYl1E3vhZrTla_gubZ1SxdJfk-vuv2oSlckcK-DicMxH1Bd2n0RVPzQf6lfc3rZqLgLlR9V_QjICgcM65Z3CxvbAFY88t95928fwas_Hmc3unKgbMyVc=\",\"summary\":[]},{\"id\":\"fc_00dae171e25cc4ac006ad9a274775c87d1b034f22ca3e6c2ef\",\"type\":\"function_call\",\"status\":\"completed\",\"arguments\":\"{\\\"name\\\":\\\"comparison\\\",\\\"_background\\\":{\\\"enabled\\\":false,\\\"disposition\\\":\\\"foreground\\\",\\\"timeoutMs\\\":120000,\\\"maxRetries\\\":0}}\",\"call_id\":\"call_SKotY0UPE6rVKii2s9RQDp9Z\",\"name\":\"fetchRecord\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":\"current_turn\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"ou",
+          "tput_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Fetch a record by name. Slow.\",\"name\":\"fetchRecord\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"_background\":{\"description\":\"Optional: override how this specific call executes (foreground, deferred, or awaited). When omitted, the tool's configured default disposition applies. The enabled boolean remains supported for compatibility.\",\"anyOf\":[{\"type\":\"object\",\"properties\":{\"enabled\":{\"description\":\"Force deferred (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"type\":\"boolean\",\"description\":\"Force deferred (true) or foreground (false) execution for this call.\"},{\"type\":\"null\"}]},\"disposition\":{\"description\":\"Choose foreground, deferred, or awaited execution for this call.\",\"anyOf\":[{\"type\":\"string\",\"enum\":[\"foreground\",\"deferred\",\"awaited\"],\"description\":\"Choose foreground, deferred, or awaited execution for this call.\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"type\":\"number\",\"description\":\"Override timeout in milliseconds for this call.\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"type\":\"number\",\"description\":\"Override maximum retry attempts for this call.\"},{\"type\":\"null\"}]}},\"required\":[\"enabled\",\"disposition\",\"timeoutMs\",\"maxRetries\"],\"additionalProperties\":false,\"x-optional\":[\"enabled\",\"disposition\",\"timeoutMs\",\"maxRetries\"]},{\"type\":\"null\"}]}},\"required\":[\"name\",\"_background\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"x-optional\":[\"_background\"]},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":626,\"input_tokens_details\":{\"cache_write_tokens\":0,\"cached_tokens\":0},\"output_tokens\":140,\"output_tokens_details\":{\"reasoning_tokens\":64},\"total_tokens\":766},\"user\":null,\"metadata\":{}},\"sequence_number\":35}\n\n"
+        ],
+        "chunkTimings": [
+          0,
+          0,
+          0,
+          1,
+          0,
+          0,
+          164,
+          0,
+          0,
+          1190,
+          0,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          24,
+          0,
+          17,
+          8,
+          12,
+          0,
+          10,
+          11,
+          2,
+          18,
+          11,
+          7,
+          0,
+          12,
+          18,
+          11,
+          1,
+          13,
+          0,
+          7,
+          13,
+          9,
+          8,
+          16,
+          14,
+          12,
+          1,
+          0,
+          93,
+          0,
+          148,
+          0
+        ],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "e089e431b47973d6",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-5-mini",
+          "input": [
+            {
+              "role": "developer",
+              "content": "Use tools exactly as instructed. When the fetched record arrives, report its amount.\n\nYou have the ability to run certain tools in the background while continuing the conversation. The following tools support background execution:\n- fetchRecord (default: background)\n\nFor any of these tools, you can include a \"_background\" field in the tool arguments to override the default:\n  \"_background\": { \"disposition\": \"foreground\" | \"deferred\" | \"awaited\", \"timeoutMs\": number, \"maxRetries\": number }\n\nAll fields in \"_background\" are optional. Only include what you want to override. Tools listed with \"default: background\" run in the background unless you set \"disposition\": \"foreground\". Tools listed with \"default: foreground\" run inline unless you explicitly request \"deferred\" or \"awaited\" — for those tools, omitting \"_background\" never starts background work.\n\nDispositions:\n- \"deferred\": the tool runs in the background while you continue; you receive a placeholder result with a task ID and are notified when the task completes.\n- \"awaited\": the tool runs as a durable background task but your run waits for its result before continuing.\n- \"foreground\": the tool runs inline and returns its real result immediately.\n\nGuidelines:\n- Use background execution when the user doesn't need the result immediately, or when you're launching multiple independent tasks.\n- Use foreground execution when the user is directly waiting for the result and the conversation can't continue without it.\n- When a tool runs deferred, you'll receive a placeholder result with a task ID. You can reference this in your response to the user.\n\nIMPORTANT: \"_background\" field is always an object. The fields in the _background field should be inside the _background object, not outside of it."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Call fetchRecord exactly once with name \"comparison\" and _background: {\"disposition\": \"foreground\"}. Do not call it again. When the result is available, reply with the amount."
+                }
+              ]
+            },
+            {
+              "type": "item_reference",
+              "id": "rs_00dae171e25cc4ac006ad9a2734d1087d19695c0a21e372f66"
+            },
+            {
+              "type": "function_call",
+              "call_id": "call_SKotY0UPE6rVKii2s9RQDp9Z",
+              "name": "fetchRecord",
+              "arguments": "{\"_background\":{\"disposition\":\"foreground\",\"enabled\":false,\"maxRetries\":0,\"timeoutMs\":120000},\"name\":\"comparison\"}"
+            },
+            {
+              "type": "function_call_output",
+              "call_id": "call_SKotY0UPE6rVKii2s9RQDp9Z",
+              "output": "{\"amount\":42,\"name\":\"comparison\"}"
+            }
+          ],
+          "tools": [
+            {
+              "type": "function",
+              "name": "fetchRecord",
+              "description": "Fetch a record by name. Slow.",
+              "parameters": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  },
+                  "_background": {
+                    "description": "Optional: override how this specific call executes (foreground, deferred, or awaited). When omitted, the tool's configured default disposition applies. The enabled boolean remains supported for compatibility.",
+                    "anyOf": [
+                      {
+                        "type": "object",
+                        "properties": {
+                          "enabled": {
+                            "description": "Force deferred (true) or foreground (false) execution for this call.",
+                            "anyOf": [
+                              {
+                                "type": "boolean",
+                                "description": "Force deferred (true) or foreground (false) execution for this call."
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "disposition": {
+                            "description": "Choose foreground, deferred, or awaited execution for this call.",
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "foreground",
+                                  "deferred",
+                                  "awaited"
+                                ],
+                                "description": "Choose foreground, deferred, or awaited execution for this call."
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "timeoutMs": {
+                            "description": "Override timeout in milliseconds for this call.",
+                            "anyOf": [
+                              {
+                                "type": "number",
+                                "description": "Override timeout in milliseconds for this call."
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          },
+                          "maxRetries": {
+                            "description": "Override maximum retry attempts for this call.",
+                            "anyOf": [
+                              {
+                                "type": "number",
+                                "description": "Override maximum retry attempts for this call."
+                              },
+                              {
+                                "type": "null"
+                              }
+                            ]
+                          }
+                        },
+                        "required": [
+                          "enabled",
+                          "disposition",
+                          "timeoutMs",
+                          "maxRetries"
+                        ],
+                        "additionalProperties": false,
+                        "x-optional": [
+                          "enabled",
+                          "disposition",
+                          "timeoutMs",
+                          "maxRetries"
+                        ]
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [
+                  "name",
+                  "_background"
+                ],
+                "additionalProperties": false,
+                "$schema": "http://json-schema.org/draft-07/schema#",
+                "x-optional": [
+                  "_background"
+                ]
+              }
+            }
+          ],
+          "tool_choice": "auto",
+          "stream": true
+        },
+        "timestamp": 1792647796992
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a4e62efba9ae86ee-DFW",
+          "connection": "keep-alive",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Thu, 22 Oct 2026 05:43:17 GMT",
+          "openai-processing-ms": "241",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "10000000",
+          "x-ratelimit-remaining-requests": "9999",
+          "x-ratelimit-remaining-tokens": "9998720",
+          "x-ratelimit-reset-requests": "6ms",
+          "x-ratelimit-reset-tokens": "7ms",
+          "x-request-id": "req_95ff672c7b444e0d8959faa791837071"
+        },
+        "chunks": [
+          "event: response.created\ndat",
+          "a: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_00dae171e25cc4ac006ad9a275228487d1b464d016e4cbd5b7\",\"object\":\"response\",\"created_at\":1792647797,\"status\":\"in_progress\",\"access_programs\":null,\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-5-mini-2025-08-07\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":\"current_turn\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Fetch a record by name. Slow.\",\"name\":\"fetchRecord\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"_background\":{\"description\":\"Optional: override how this specific call executes (foreground, deferred, or awaited). When omitted, the tool's configured default disposition applies. The enabled boolean remains supported for compatibility.\",\"anyOf\":[{\"type\":\"object\",\"properties\":{\"enabled\":{\"description\":\"Force deferred (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"type\":\"boolean\",\"description\":\"Force deferred (true) or foreground (false) execution for this call.\"},{\"type\":\"null\"}]},\"disposition\":{\"description\":\"Choose foreground, deferred, or awaited execution for this call.\",\"anyOf\":[{\"type\":\"string\",\"enum\":[\"foreground\",\"deferred\",\"awaited\"],\"description\":\"Choose foreground, deferred, or awaited execution for this call.\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"type\":\"number\",\"description\":\"Override timeout in milliseconds for this call.\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"type\":\"number\",\"description\":\"Override maximum retry attempts for this call.\"},{\"type\":\"null\"}]}},\"required\":[\"enabled\",\"disposition\",\"timeoutMs\",\"maxRetries\"],\"additionalProperties\":false,\"x-optional\":[\"enabled\",\"disposition\",\"timeoutMs\",\"maxRetries\"]},{\"type\":\"null\"}]}},\"required\":[\"name\",\"_background\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"x-optional\":[\"_background\"]},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\n",
+          "event: response.in_progress",
+          "\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_00dae171e25cc4ac006ad9a275228487d1b464d016e4cbd5b7\",\"object\":\"response\",\"created_at\":1792647797,\"status\":\"in_progress\",\"access_programs\":null,\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-5-mini-2025-08-07\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":\"current_turn\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Fetch a record by name. Slow.\",\"name\":\"fetchRecord\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"_background\":{\"description\":\"Optional: override how this specific call executes (foreground, deferred, or awaited). When omitted, the tool's configured default disposition applies. The enabled boolean remains supported for compatibility.\",\"anyOf\":[{\"type\":\"object\",\"properties\":{\"enabled\":{\"description\":\"Force deferred (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"type\":\"boolean\",\"description\":\"Force deferred (true) or foreground (false) execution for this call.\"},{\"type\":\"null\"}]},\"disposition\":{\"description\":\"Choose foreground, deferred, or awaited execution for this call.\",\"anyOf\":[{\"type\":\"string\",\"enum\":[\"foreground\",\"deferred\",\"awaited\"],\"description\":\"Choose foreground, deferred, or awaited execution for this call.\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"type\":\"number\",\"description\":\"Override timeout in milliseconds for this call.\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"type\":\"number\",\"description\":\"Override maximum retry attempts for this call.\"},{\"type\":\"null\"}]}},\"required\":[\"enabled\",\"disposition\",\"timeoutMs\",\"maxRetries\"],\"additionalProperties\":false,\"x-optional\":[\"enabled\",\"disposition\",\"timeoutMs\",\"maxRetries\"]},{\"type\":\"null\"}]}},\"required\":[\"name\",\"_background\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"x-optional\":[\"_background\"]},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item.added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_00dae171e25cc4ac006ad9a2758a3c87d19ddb80fe83532b36\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":2}\n\n",
+          "event: response.content_part.added\ndata: {\"type\":\"response.content_part.added\",\"content_index\":0,\"item_id\":\"msg_00dae171e25cc4ac006ad9a2758a3c87d19ddb80fe83532b36\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"},\"sequence_number\":3}\n\nevent: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"42\",\"item_id\":\"msg_00dae171e25cc4ac006ad9a2758a3c87d19ddb80fe83532b36\",\"logprobs\":[],\"obfuscation\":\"cQVh1hTDf0uBnR\",\"output_index\":0,\"sequence_number\":4}\n\n",
+          "event: response.output_text.",
+          "done\ndata: {\"type\":\"response.output_text.done\",\"content_index\":0,\"item_id\":\"msg_00dae171e25cc4ac006ad9a2758a3c87d19ddb80fe83532b36\",\"logprobs\":[],\"output_index\":0,\"sequence_number\":5,\"text\":\"42\"}\n\n",
+          "event: response.content_par",
+          "t.done\ndata: {\"type\":\"response.content_part.done\",\"content_index\":0,\"item_id\":\"msg_00dae171e25cc4ac006ad9a2758a3c87d19ddb80fe83532b36\",\"output_index\":0,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"42\"},\"sequence_number\":6}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_00dae171e25cc4ac006ad9a2758a3c87d19ddb80fe83532b36\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"42\"}],\"role\":\"assistant\"},\"output_index\":0,\"sequence_number\":7}\n\n",
+          "event: response.completed\nd",
+          "ata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_00dae171e25cc4ac006ad9a275228487d1b464d016e4cbd5b7\",\"object\":\"response\",\"created_at\":1792647797,\"status\":\"completed\",\"access_programs\":null,\"background\":false,\"completed_at\":1792647797,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-5-mini-2025-08-07\",\"moderation\":null,\"output\":[{\"id\":\"msg_00dae171e25cc4ac006ad9a2758a3c87d19ddb80fe83532b36\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"42\"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":\"current_turn\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[{\"type\":\"function\",\"description\":\"Fetch a record by name. Slow.\",\"name\":\"fetchRecord\",\"output_schema\":null,\"parameters\":{\"type\":\"object\",\"properties\":{\"name\":{\"type\":\"string\"},\"_background\":{\"description\":\"Optional: override how this specific call executes (foreground, deferred, or awaited). When omitted, the tool's configured default disposition applies. The enabled boolean remains supported for compatibility.\",\"anyOf\":[{\"type\":\"object\",\"properties\":{\"enabled\":{\"description\":\"Force deferred (true) or foreground (false) execution for this call.\",\"anyOf\":[{\"type\":\"boolean\",\"description\":\"Force deferred (true) or foreground (false) execution for this call.\"},{\"type\":\"null\"}]},\"disposition\":{\"description\":\"Choose foreground, deferred, or awaited execution for this call.\",\"anyOf\":[{\"type\":\"string\",\"enum\":[\"foreground\",\"deferred\",\"awaited\"],\"description\":\"Choose foreground, deferred, or awaited execution for this call.\"},{\"type\":\"null\"}]},\"timeoutMs\":{\"description\":\"Override timeout in milliseconds for this call.\",\"anyOf\":[{\"type\":\"number\",\"description\":\"Override timeout in milliseconds for this call.\"},{\"type\":\"null\"}]},\"maxRetries\":{\"description\":\"Override maximum retry attempts for this call.\",\"anyOf\":[{\"type\":\"number\",\"description\":\"Override maximum retry attempts for this call.\"},{\"type\":\"null\"}]}},\"required\":[\"enabled\",\"disposition\",\"timeoutMs\",\"maxRetries\"],\"additionalProperties\":false,\"x-optional\":[\"enabled\",\"disposition\",\"timeoutMs\",\"maxRetries\"]},{\"type\":\"null\"}]}},\"required\":[\"name\",\"_background\"],\"additionalProperties\":false,\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"x-optional\":[\"_background\"]},\"strict\":true}],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":783,\"input_tokens_details\":{\"cache_write_tokens\":0,\"cached_tokens\":0},\"output_tokens\":5,\"output_tokens_details\":{\"reasoning_tokens\":0},\"total_tokens\":788},\"user\":null,\"metadata\":{}},\"sequence_number\":8}\n\n"
+        ],
+        "chunkTimings": [
+          2,
+          0,
+          1,
+          0,
+          182,
+          0,
+          88,
+          0,
+          12,
+          0,
+          8,
+          112,
+          1
+        ],
+        "isStreaming": true
+      }
+    }
+  ]
+}

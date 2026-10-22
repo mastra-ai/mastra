@@ -1,0 +1,1047 @@
+{
+  "meta": {
+    "name": "memory-integration-tests-src-durable-agent-is-task-complete-anthropic-evented-throws",
+    "testFile": "src/durable-agent-is-task-complete.test.ts",
+    "testName": "T3 is-task-complete — anthropic > evented engine > throws: a failing scorer never hangs the run",
+    "model": "claude-sonnet-4-6",
+    "createdAt": "2026-10-22T05:58:04.761Z"
+  },
+  "recordings": [
+    {
+      "hash": "5632cfe86e1682c6",
+      "request": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "body": {
+          "model": "claude-sonnet-4-6",
+          "max_tokens": 128000,
+          "system": [
+            {
+              "type": "text",
+              "text": "Answer briefly."
+            }
+          ],
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Reply with one short sentence that contains the word ALPHA."
+                }
+              ]
+            }
+          ],
+          "stream": true
+        },
+        "timestamp": 1792648677486
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "anthropic-ratelimit-input-tokens-limit": "10000000",
+          "anthropic-ratelimit-input-tokens-remaining": "10000000",
+          "anthropic-ratelimit-input-tokens-reset": "2026-10-22T05:57:57Z",
+          "anthropic-ratelimit-output-tokens-limit": "2000000",
+          "anthropic-ratelimit-output-tokens-remaining": "2000000",
+          "anthropic-ratelimit-output-tokens-reset": "2026-10-22T05:57:57Z",
+          "anthropic-ratelimit-requests-limit": "20000",
+          "anthropic-ratelimit-requests-remaining": "19999",
+          "anthropic-ratelimit-requests-reset": "2026-10-22T05:57:57Z",
+          "anthropic-ratelimit-tokens-limit": "12000000",
+          "anthropic-ratelimit-tokens-remaining": "12000000",
+          "anthropic-ratelimit-tokens-reset": "2026-10-22T05:57:57Z",
+          "cache-control": "no-cache",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a4e6447adfb9f03c-DFW",
+          "connection": "keep-alive",
+          "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Thu, 22 Oct 2026 05:57:58 GMT",
+          "request-id": "req_011CgGmAZXNJeeDQurGY58S1",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "traceresponse": "00-6ad9a5e50000000058fc59f327803432-8e87ca4d4f3bb7aa-01",
+          "vary": "Accept-Encoding",
+          "x-robots-tag": "none"
+        },
+        "chunks": [
+          "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-sonnet-4-6\",\"id\":\"msg_011CgGmAZmFWxi1mbSK4U5o2\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"container\":null,\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":23,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":1,\"service_tier\":\"standard\",\"inference_geo\":\"global\",\"speed\":\"standard\"},\"diagnostics\":null}     }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}      }\n\nevent: ping\ndata: {\"type\": \"ping\"}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"The\"}              }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" alpha\"}            }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" wolf\"}              }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" leads\"}  }\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" the pack with\"}    }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" confidence\"}  }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" and\"}          }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" strength\"}             }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\".\"}               }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0            }\n\n",
+          "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":23,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":14}        }\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"       }\n\n"
+        ],
+        "chunkTimings": [
+          0,
+          238,
+          7,
+          3,
+          45,
+          46,
+          42,
+          1,
+          2
+        ],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "58bb6dbb5187e610",
+      "request": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "body": {
+          "model": "claude-sonnet-4-6",
+          "max_tokens": 128000,
+          "system": [
+            {
+              "type": "text",
+              "text": "Answer briefly."
+            }
+          ],
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Reply with one short sentence that contains the word ALPHA."
+                }
+              ]
+            },
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "The alpha wolf leads the pack with confidence and strength."
+                },
+                {
+                  "type": "text",
+                  "text": "#### Completion Check Results\n\nOverall: ❌ NOT COMPLETE\nDuration: 0ms\n\n**t3-scorer** (t3-scorer)\nScore: 0 ❌\nReason: Scorer threw an error: Scorer Run Failed: scorer exploded\n\n🔄 The task is not yet complete. Please continue working based on the feedback above."
+                }
+              ]
+            }
+          ],
+          "stream": true
+        },
+        "timestamp": 1792648678589
+      },
+      "response": {
+        "status": 400,
+        "statusText": "Bad Request",
+        "headers": {
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a4e64481bc8df03c-DFW",
+          "connection": "keep-alive",
+          "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+          "content-type": "application/json",
+          "date": "Thu, 22 Oct 2026 05:57:58 GMT",
+          "request-id": "req_011CgGmAeGciGgoSgKXe8mPt",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "traceresponse": "00-6ad9a5e60000000085c655836818553a-e1f3c438721faffa-01",
+          "vary": "Accept-Encoding",
+          "x-robots-tag": "none",
+          "x-should-retry": "false"
+        },
+        "body": {
+          "type": "error",
+          "error": {
+            "type": "invalid_request_error",
+            "message": "This model does not support assistant message prefill. The conversation must end with a user message."
+          },
+          "request_id": "req_011CgGmAeGciGgoSgKXe8mPt"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "23c62486a92130ca",
+      "request": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "body": {
+          "model": "claude-sonnet-4-6",
+          "max_tokens": 128000,
+          "system": [
+            {
+              "type": "text",
+              "text": "Answer briefly."
+            }
+          ],
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Reply with one short sentence that contains the word ALPHA."
+                }
+              ]
+            },
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "The alpha wolf leads the pack with confidence and strength."
+                },
+                {
+                  "type": "text",
+                  "text": "#### Completion Check Results\n\nOverall: ❌ NOT COMPLETE\nDuration: 0ms\n\n**t3-scorer** (t3-scorer)\nScore: 0 ❌\nReason: Scorer threw an error: Scorer Run Failed: scorer exploded\n\n🔄 The task is not yet complete. Please continue working based on the feedback above."
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "<system-reminder type=\"anthropic-prefill-processor-retry\">continue</system-reminder>"
+                }
+              ]
+            }
+          ],
+          "stream": true
+        },
+        "timestamp": 1792648678715
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "anthropic-ratelimit-input-tokens-limit": "10000000",
+          "anthropic-ratelimit-input-tokens-remaining": "10000000",
+          "anthropic-ratelimit-input-tokens-reset": "2026-10-22T05:57:58Z",
+          "anthropic-ratelimit-output-tokens-limit": "2000000",
+          "anthropic-ratelimit-output-tokens-remaining": "2000000",
+          "anthropic-ratelimit-output-tokens-reset": "2026-10-22T05:57:58Z",
+          "anthropic-ratelimit-requests-limit": "20000",
+          "anthropic-ratelimit-requests-remaining": "19999",
+          "anthropic-ratelimit-requests-reset": "2026-10-22T05:57:58Z",
+          "anthropic-ratelimit-tokens-limit": "12000000",
+          "anthropic-ratelimit-tokens-remaining": "12000000",
+          "anthropic-ratelimit-tokens-reset": "2026-10-22T05:57:58Z",
+          "cache-control": "no-cache",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a4e644828d17f03c-DFW",
+          "connection": "keep-alive",
+          "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Thu, 22 Oct 2026 05:57:59 GMT",
+          "request-id": "req_011CgGmAenNjGyCecMYbt5Rg",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "traceresponse": "00-6ad9a5e600000000b6e9c141a36e964d-b64ffdea865a36ff-01",
+          "vary": "Accept-Encoding",
+          "x-robots-tag": "none"
+        },
+        "chunks": [
+          "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-sonnet-4-6\",\"id\":\"msg_011CgGmAeznLzNsJVqffE2Hf\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"container\":null,\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":144,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":1,\"service_tier\":\"standard\",\"inference_geo\":\"global\",\"speed\":\"standard\"},\"diagnostics\":null}          }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}}\n\nevent: ping\ndata: {\"type\": \"ping\"}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"The\"}             }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" alpha wolf leads the pack with confidence\"}              }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" and strength.\"}    }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0               }\n\n",
+          "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":144,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":14}         }\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"   }\n\n"
+        ],
+        "chunkTimings": [
+          0,
+          90,
+          51,
+          41,
+          2
+        ],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "9f3b349d8b13f2a9",
+      "request": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "body": {
+          "model": "claude-sonnet-4-6",
+          "max_tokens": 128000,
+          "system": [
+            {
+              "type": "text",
+              "text": "Answer briefly."
+            }
+          ],
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Reply with one short sentence that contains the word ALPHA."
+                }
+              ]
+            },
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "The alpha wolf leads the pack with confidence and strength."
+                },
+                {
+                  "type": "text",
+                  "text": "#### Completion Check Results\n\nOverall: ❌ NOT COMPLETE\nDuration: 0ms\n\n**t3-scorer** (t3-scorer)\nScore: 0 ❌\nReason: Scorer threw an error: Scorer Run Failed: scorer exploded\n\n🔄 The task is not yet complete. Please continue working based on the feedback above."
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "<system-reminder type=\"anthropic-prefill-processor-retry\">continue</system-reminder>"
+                }
+              ]
+            },
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "The alpha wolf leads the pack with confidence and strength."
+                },
+                {
+                  "type": "text",
+                  "text": "#### Completion Check Results\n\nOverall: ❌ NOT COMPLETE\nDuration: 1ms\n\n**t3-scorer** (t3-scorer)\nScore: 0 ❌\nReason: Scorer threw an error: Scorer Run Failed: scorer exploded\n\n🔄 The task is not yet complete. Please continue working based on the feedback above."
+                }
+              ]
+            }
+          ],
+          "stream": true
+        },
+        "timestamp": 1792648680054
+      },
+      "response": {
+        "status": 400,
+        "statusText": "Bad Request",
+        "headers": {
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a4e6448aeb51f03c-DFW",
+          "connection": "keep-alive",
+          "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+          "content-type": "application/json",
+          "date": "Thu, 22 Oct 2026 05:58:00 GMT",
+          "request-id": "req_011CgGmAkUgSMBKUo7u9dR4t",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "traceresponse": "00-6ad9a5e80000000095c9bcf1647a840b-790f7a433ab95286-01",
+          "vary": "Accept-Encoding",
+          "x-robots-tag": "none",
+          "x-should-retry": "false"
+        },
+        "body": {
+          "type": "error",
+          "error": {
+            "type": "invalid_request_error",
+            "message": "This model does not support assistant message prefill. The conversation must end with a user message."
+          },
+          "request_id": "req_011CgGmAkUgSMBKUo7u9dR4t"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "71abb1048eb71f9f",
+      "request": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "body": {
+          "model": "claude-sonnet-4-6",
+          "max_tokens": 128000,
+          "system": [
+            {
+              "type": "text",
+              "text": "Answer briefly."
+            }
+          ],
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Reply with one short sentence that contains the word ALPHA."
+                }
+              ]
+            },
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "The alpha wolf leads the pack with confidence and strength."
+                },
+                {
+                  "type": "text",
+                  "text": "#### Completion Check Results\n\nOverall: ❌ NOT COMPLETE\nDuration: 0ms\n\n**t3-scorer** (t3-scorer)\nScore: 0 ❌\nReason: Scorer threw an error: Scorer Run Failed: scorer exploded\n\n🔄 The task is not yet complete. Please continue working based on the feedback above."
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "<system-reminder type=\"anthropic-prefill-processor-retry\">continue</system-reminder>"
+                }
+              ]
+            },
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "The alpha wolf leads the pack with confidence and strength."
+                },
+                {
+                  "type": "text",
+                  "text": "#### Completion Check Results\n\nOverall: ❌ NOT COMPLETE\nDuration: 1ms\n\n**t3-scorer** (t3-scorer)\nScore: 0 ❌\nReason: Scorer threw an error: Scorer Run Failed: scorer exploded\n\n🔄 The task is not yet complete. Please continue working based on the feedback above."
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "<system-reminder type=\"anthropic-prefill-processor-retry\">continue</system-reminder>"
+                }
+              ]
+            }
+          ],
+          "stream": true
+        },
+        "timestamp": 1792648680180
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "anthropic-ratelimit-input-tokens-limit": "10000000",
+          "anthropic-ratelimit-input-tokens-remaining": "10000000",
+          "anthropic-ratelimit-input-tokens-reset": "2026-10-22T05:58:00Z",
+          "anthropic-ratelimit-output-tokens-limit": "2000000",
+          "anthropic-ratelimit-output-tokens-remaining": "2000000",
+          "anthropic-ratelimit-output-tokens-reset": "2026-10-22T05:58:00Z",
+          "anthropic-ratelimit-requests-limit": "20000",
+          "anthropic-ratelimit-requests-remaining": "19999",
+          "anthropic-ratelimit-requests-reset": "2026-10-22T05:58:00Z",
+          "anthropic-ratelimit-tokens-limit": "12000000",
+          "anthropic-ratelimit-tokens-remaining": "12000000",
+          "anthropic-ratelimit-tokens-reset": "2026-10-22T05:58:00Z",
+          "cache-control": "no-cache",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a4e6448bbbc4f03c-DFW",
+          "connection": "keep-alive",
+          "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Thu, 22 Oct 2026 05:58:01 GMT",
+          "request-id": "req_011CgGmAm4Qbb6Me3S9Uvz1E",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "traceresponse": "00-6ad9a5e8000000007fe6c20cbf2bd090-0c4d74f1f7376643-01",
+          "vary": "Accept-Encoding",
+          "x-robots-tag": "none"
+        },
+        "chunks": [
+          "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-sonnet-4-6\",\"id\":\"msg_011CgGmAmGZfuvgN3XRXdN6R\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"container\":null,\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":265,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":1,\"service_tier\":\"standard\",\"inference_geo\":\"global\",\"speed\":\"standard\"},\"diagnostics\":null}       }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}          }\n\nevent: ping\ndata: {\"type\": \"ping\"}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"The\"}      }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" alpha wolf leads the pack with confidence\"}             }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" and strength.\"}    }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0}\n\n",
+          "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":265,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":14}}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"    }\n\n"
+        ],
+        "chunkTimings": [
+          0,
+          90,
+          53,
+          39,
+          0
+        ],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "3759468cf9fa310a",
+      "request": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "body": {
+          "model": "claude-sonnet-4-6",
+          "max_tokens": 128000,
+          "system": [
+            {
+              "type": "text",
+              "text": "Answer briefly."
+            }
+          ],
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Reply with one short sentence that contains the word ALPHA."
+                }
+              ]
+            },
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "The alpha wolf leads the pack with confidence and strength."
+                },
+                {
+                  "type": "text",
+                  "text": "#### Completion Check Results\n\nOverall: ❌ NOT COMPLETE\nDuration: 0ms\n\n**t3-scorer** (t3-scorer)\nScore: 0 ❌\nReason: Scorer threw an error: Scorer Run Failed: scorer exploded\n\n🔄 The task is not yet complete. Please continue working based on the feedback above."
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "<system-reminder type=\"anthropic-prefill-processor-retry\">continue</system-reminder>"
+                }
+              ]
+            },
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "The alpha wolf leads the pack with confidence and strength."
+                },
+                {
+                  "type": "text",
+                  "text": "#### Completion Check Results\n\nOverall: ❌ NOT COMPLETE\nDuration: 1ms\n\n**t3-scorer** (t3-scorer)\nScore: 0 ❌\nReason: Scorer threw an error: Scorer Run Failed: scorer exploded\n\n🔄 The task is not yet complete. Please continue working based on the feedback above."
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "<system-reminder type=\"anthropic-prefill-processor-retry\">continue</system-reminder>"
+                }
+              ]
+            },
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "The alpha wolf leads the pack with confidence and strength."
+                },
+                {
+                  "type": "text",
+                  "text": "#### Completion Check Results\n\nOverall: ❌ NOT COMPLETE\nDuration: 1ms\n\n**t3-scorer** (t3-scorer)\nScore: 0 ❌\nReason: Scorer threw an error: Scorer Run Failed: scorer exploded\n\n🔄 The task is not yet complete. Please continue working based on the feedback above."
+                }
+              ]
+            }
+          ],
+          "stream": true
+        },
+        "timestamp": 1792648681527
+      },
+      "response": {
+        "status": 400,
+        "statusText": "Bad Request",
+        "headers": {
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a4e644941a0ef03c-DFW",
+          "connection": "keep-alive",
+          "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+          "content-type": "application/json",
+          "date": "Thu, 22 Oct 2026 05:58:01 GMT",
+          "request-id": "req_011CgGmArpvwnQqHQuj3EFPV",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "traceresponse": "00-6ad9a5e900000000849b29300727fda3-325321009479f156-01",
+          "vary": "Accept-Encoding",
+          "x-robots-tag": "none",
+          "x-should-retry": "false"
+        },
+        "body": {
+          "type": "error",
+          "error": {
+            "type": "invalid_request_error",
+            "message": "This model does not support assistant message prefill. The conversation must end with a user message."
+          },
+          "request_id": "req_011CgGmArpvwnQqHQuj3EFPV"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "32a2b6302d98bb84",
+      "request": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "body": {
+          "model": "claude-sonnet-4-6",
+          "max_tokens": 128000,
+          "system": [
+            {
+              "type": "text",
+              "text": "Answer briefly."
+            }
+          ],
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Reply with one short sentence that contains the word ALPHA."
+                }
+              ]
+            },
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "The alpha wolf leads the pack with confidence and strength."
+                },
+                {
+                  "type": "text",
+                  "text": "#### Completion Check Results\n\nOverall: ❌ NOT COMPLETE\nDuration: 0ms\n\n**t3-scorer** (t3-scorer)\nScore: 0 ❌\nReason: Scorer threw an error: Scorer Run Failed: scorer exploded\n\n🔄 The task is not yet complete. Please continue working based on the feedback above."
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "<system-reminder type=\"anthropic-prefill-processor-retry\">continue</system-reminder>"
+                }
+              ]
+            },
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "The alpha wolf leads the pack with confidence and strength."
+                },
+                {
+                  "type": "text",
+                  "text": "#### Completion Check Results\n\nOverall: ❌ NOT COMPLETE\nDuration: 1ms\n\n**t3-scorer** (t3-scorer)\nScore: 0 ❌\nReason: Scorer threw an error: Scorer Run Failed: scorer exploded\n\n🔄 The task is not yet complete. Please continue working based on the feedback above."
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "<system-reminder type=\"anthropic-prefill-processor-retry\">continue</system-reminder>"
+                }
+              ]
+            },
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "The alpha wolf leads the pack with confidence and strength."
+                },
+                {
+                  "type": "text",
+                  "text": "#### Completion Check Results\n\nOverall: ❌ NOT COMPLETE\nDuration: 1ms\n\n**t3-scorer** (t3-scorer)\nScore: 0 ❌\nReason: Scorer threw an error: Scorer Run Failed: scorer exploded\n\n🔄 The task is not yet complete. Please continue working based on the feedback above."
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "<system-reminder type=\"anthropic-prefill-processor-retry\">continue</system-reminder>"
+                }
+              ]
+            }
+          ],
+          "stream": true
+        },
+        "timestamp": 1792648681650
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "anthropic-ratelimit-input-tokens-limit": "10000000",
+          "anthropic-ratelimit-input-tokens-remaining": "10000000",
+          "anthropic-ratelimit-input-tokens-reset": "2026-10-22T05:58:01Z",
+          "anthropic-ratelimit-output-tokens-limit": "2000000",
+          "anthropic-ratelimit-output-tokens-remaining": "2000000",
+          "anthropic-ratelimit-output-tokens-reset": "2026-10-22T05:58:01Z",
+          "anthropic-ratelimit-requests-limit": "20000",
+          "anthropic-ratelimit-requests-remaining": "19999",
+          "anthropic-ratelimit-requests-reset": "2026-10-22T05:58:01Z",
+          "anthropic-ratelimit-tokens-limit": "12000000",
+          "anthropic-ratelimit-tokens-remaining": "12000000",
+          "anthropic-ratelimit-tokens-reset": "2026-10-22T05:58:01Z",
+          "cache-control": "no-cache",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a4e64494eaabf03c-DFW",
+          "connection": "keep-alive",
+          "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Thu, 22 Oct 2026 05:58:02 GMT",
+          "request-id": "req_011CgGmAsLgNoQrRdetqtXz4",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "traceresponse": "00-6ad9a5e900000000795d95697369edb2-c997021ced1ff3dd-01",
+          "vary": "Accept-Encoding",
+          "x-robots-tag": "none"
+        },
+        "chunks": [
+          "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-sonnet-4-6\",\"id\":\"msg_011CgGmAsYLY1LZZoB3W5pdE\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"container\":null,\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":386,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":1,\"service_tier\":\"standard\",\"inference_geo\":\"global\",\"speed\":\"standard\"},\"diagnostics\":null}           }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}  }\n\nevent: ping\ndata: {\"type\": \"ping\"}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"The\"}         }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" alpha wolf leads the pack with confidence\"} }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" and strength.\"}        }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0  }\n\nevent: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":386,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":14}      }\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"           }\n\n"
+        ],
+        "chunkTimings": [
+          0,
+          91,
+          52,
+          41
+        ],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "1a731e6c1a3f693d",
+      "request": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "body": {
+          "model": "claude-sonnet-4-6",
+          "max_tokens": 128000,
+          "system": [
+            {
+              "type": "text",
+              "text": "Answer briefly."
+            }
+          ],
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Reply with one short sentence that contains the word ALPHA."
+                }
+              ]
+            },
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "The alpha wolf leads the pack with confidence and strength."
+                },
+                {
+                  "type": "text",
+                  "text": "#### Completion Check Results\n\nOverall: ❌ NOT COMPLETE\nDuration: 0ms\n\n**t3-scorer** (t3-scorer)\nScore: 0 ❌\nReason: Scorer threw an error: Scorer Run Failed: scorer exploded\n\n🔄 The task is not yet complete. Please continue working based on the feedback above."
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "<system-reminder type=\"anthropic-prefill-processor-retry\">continue</system-reminder>"
+                }
+              ]
+            },
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "The alpha wolf leads the pack with confidence and strength."
+                },
+                {
+                  "type": "text",
+                  "text": "#### Completion Check Results\n\nOverall: ❌ NOT COMPLETE\nDuration: 1ms\n\n**t3-scorer** (t3-scorer)\nScore: 0 ❌\nReason: Scorer threw an error: Scorer Run Failed: scorer exploded\n\n🔄 The task is not yet complete. Please continue working based on the feedback above."
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "<system-reminder type=\"anthropic-prefill-processor-retry\">continue</system-reminder>"
+                }
+              ]
+            },
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "The alpha wolf leads the pack with confidence and strength."
+                },
+                {
+                  "type": "text",
+                  "text": "#### Completion Check Results\n\nOverall: ❌ NOT COMPLETE\nDuration: 1ms\n\n**t3-scorer** (t3-scorer)\nScore: 0 ❌\nReason: Scorer threw an error: Scorer Run Failed: scorer exploded\n\n🔄 The task is not yet complete. Please continue working based on the feedback above."
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "<system-reminder type=\"anthropic-prefill-processor-retry\">continue</system-reminder>"
+                }
+              ]
+            },
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "The alpha wolf leads the pack with confidence and strength."
+                },
+                {
+                  "type": "text",
+                  "text": "#### Completion Check Results\n\nOverall: ❌ NOT COMPLETE\nDuration: 0ms\n\n**t3-scorer** (t3-scorer)\nScore: 0 ❌\nReason: Scorer threw an error: Scorer Run Failed: scorer exploded\n\n🔄 The task is not yet complete. Please continue working based on the feedback above."
+                }
+              ]
+            }
+          ],
+          "stream": true
+        },
+        "timestamp": 1792648682885
+      },
+      "response": {
+        "status": 400,
+        "statusText": "Bad Request",
+        "headers": {
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a4e6449c9827f03c-DFW",
+          "connection": "keep-alive",
+          "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+          "content-type": "application/json",
+          "date": "Thu, 22 Oct 2026 05:58:03 GMT",
+          "request-id": "req_011CgGmAxbgsJAbK9FAQMQqt",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "traceresponse": "00-6ad9a5eb00000000a0ea78d3b9073741-7d54ea9342ab38d2-01",
+          "vary": "Accept-Encoding",
+          "x-robots-tag": "none",
+          "x-should-retry": "false"
+        },
+        "body": {
+          "type": "error",
+          "error": {
+            "type": "invalid_request_error",
+            "message": "This model does not support assistant message prefill. The conversation must end with a user message."
+          },
+          "request_id": "req_011CgGmAxbgsJAbK9FAQMQqt"
+        },
+        "isStreaming": false
+      }
+    },
+    {
+      "hash": "f590833fa8d3abd5",
+      "request": {
+        "url": "https://api.anthropic.com/v1/messages",
+        "method": "POST",
+        "body": {
+          "model": "claude-sonnet-4-6",
+          "max_tokens": 128000,
+          "system": [
+            {
+              "type": "text",
+              "text": "Answer briefly."
+            }
+          ],
+          "messages": [
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Reply with one short sentence that contains the word ALPHA."
+                }
+              ]
+            },
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "The alpha wolf leads the pack with confidence and strength."
+                },
+                {
+                  "type": "text",
+                  "text": "#### Completion Check Results\n\nOverall: ❌ NOT COMPLETE\nDuration: 0ms\n\n**t3-scorer** (t3-scorer)\nScore: 0 ❌\nReason: Scorer threw an error: Scorer Run Failed: scorer exploded\n\n🔄 The task is not yet complete. Please continue working based on the feedback above."
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "<system-reminder type=\"anthropic-prefill-processor-retry\">continue</system-reminder>"
+                }
+              ]
+            },
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "The alpha wolf leads the pack with confidence and strength."
+                },
+                {
+                  "type": "text",
+                  "text": "#### Completion Check Results\n\nOverall: ❌ NOT COMPLETE\nDuration: 1ms\n\n**t3-scorer** (t3-scorer)\nScore: 0 ❌\nReason: Scorer threw an error: Scorer Run Failed: scorer exploded\n\n🔄 The task is not yet complete. Please continue working based on the feedback above."
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "<system-reminder type=\"anthropic-prefill-processor-retry\">continue</system-reminder>"
+                }
+              ]
+            },
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "The alpha wolf leads the pack with confidence and strength."
+                },
+                {
+                  "type": "text",
+                  "text": "#### Completion Check Results\n\nOverall: ❌ NOT COMPLETE\nDuration: 1ms\n\n**t3-scorer** (t3-scorer)\nScore: 0 ❌\nReason: Scorer threw an error: Scorer Run Failed: scorer exploded\n\n🔄 The task is not yet complete. Please continue working based on the feedback above."
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "<system-reminder type=\"anthropic-prefill-processor-retry\">continue</system-reminder>"
+                }
+              ]
+            },
+            {
+              "role": "assistant",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "The alpha wolf leads the pack with confidence and strength."
+                },
+                {
+                  "type": "text",
+                  "text": "#### Completion Check Results\n\nOverall: ❌ NOT COMPLETE\nDuration: 0ms\n\n**t3-scorer** (t3-scorer)\nScore: 0 ❌\nReason: Scorer threw an error: Scorer Run Failed: scorer exploded\n\n🔄 The task is not yet complete. Please continue working based on the feedback above."
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "<system-reminder type=\"anthropic-prefill-processor-retry\">continue</system-reminder>"
+                }
+              ]
+            }
+          ],
+          "stream": true
+        },
+        "timestamp": 1792648682998
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "anthropic-ratelimit-input-tokens-limit": "10000000",
+          "anthropic-ratelimit-input-tokens-remaining": "10000000",
+          "anthropic-ratelimit-input-tokens-reset": "2026-10-22T05:58:03Z",
+          "anthropic-ratelimit-output-tokens-limit": "2000000",
+          "anthropic-ratelimit-output-tokens-remaining": "2000000",
+          "anthropic-ratelimit-output-tokens-reset": "2026-10-22T05:58:03Z",
+          "anthropic-ratelimit-requests-limit": "20000",
+          "anthropic-ratelimit-requests-remaining": "19999",
+          "anthropic-ratelimit-requests-reset": "2026-10-22T05:58:03Z",
+          "anthropic-ratelimit-tokens-limit": "12000000",
+          "anthropic-ratelimit-tokens-remaining": "12000000",
+          "anthropic-ratelimit-tokens-reset": "2026-10-22T05:58:03Z",
+          "cache-control": "no-cache",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a4e6449d58a5f03c-DFW",
+          "connection": "keep-alive",
+          "content-security-policy": "default-src 'none'; frame-ancestors 'none'",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Thu, 22 Oct 2026 05:58:04 GMT",
+          "request-id": "req_011CgGmAy6D5vxK12usWVtBg",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "traceresponse": "00-6ad9a5eb000000000ebc169a74509285-300975a3c1c19c47-01",
+          "vary": "Accept-Encoding",
+          "x-robots-tag": "none"
+        },
+        "chunks": [
+          "event: message_start\ndata: {\"type\":\"message_start\",\"message\":{\"model\":\"claude-sonnet-4-6\",\"id\":\"msg_011CgGmAyJrjE1wPaetjZv2M\",\"type\":\"message\",\"role\":\"assistant\",\"content\":[],\"container\":null,\"stop_reason\":null,\"stop_sequence\":null,\"stop_details\":null,\"usage\":{\"input_tokens\":507,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"cache_creation\":{\"ephemeral_5m_input_tokens\":0,\"ephemeral_1h_input_tokens\":0},\"output_tokens\":1,\"service_tier\":\"standard\",\"inference_geo\":\"global\",\"speed\":\"standard\"},\"diagnostics\":null}           }\n\nevent: content_block_start\ndata: {\"type\":\"content_block_start\",\"index\":0,\"content_block\":{\"type\":\"text\",\"text\":\"\"}       }\n\nevent: ping\ndata: {\"type\": \"ping\"}\n\nevent: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\"She\"}         }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" was\"}          }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" the alpha of\"}   }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" her\"}               }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" team\"}             }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\",\"} }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" inspiring\"}          }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" everyone\"}          }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" around\"}        }\n\n",
+          "event: content_block_delta\ndata: {\"type\":\"content_block_delta\",\"index\":0,\"delta\":{\"type\":\"text_delta\",\"text\":\" her.\"}          }\n\n",
+          "event: content_block_stop\ndata: {\"type\":\"content_block_stop\",\"index\":0            }\n\n",
+          "event: message_delta\ndata: {\"type\":\"message_delta\",\"delta\":{\"stop_reason\":\"end_turn\",\"stop_sequence\":null,\"stop_details\":null,\"container\":null},\"usage\":{\"input_tokens\":507,\"cache_creation_input_tokens\":0,\"cache_read_input_tokens\":0,\"output_tokens\":16}   }\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"          }\n\n"
+        ],
+        "chunkTimings": [
+          0,
+          46,
+          74,
+          42,
+          45,
+          46,
+          50,
+          41,
+          45,
+          63,
+          29,
+          0
+        ],
+        "isStreaming": true
+      }
+    }
+  ]
+}

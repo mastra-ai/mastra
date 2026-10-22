@@ -1,0 +1,130 @@
+{
+  "meta": {
+    "name": "memory-integration-tests-src-durable-agent-is-task-complete-openai-evented-pass",
+    "testFile": "src/durable-agent-is-task-complete.test.ts",
+    "testName": "T3 is-task-complete — openai > evented engine > pass: one committed score, one model request, one persisted user message",
+    "model": "gpt-5-mini",
+    "createdAt": "2026-10-22T05:58:49.541Z"
+  },
+  "recordings": [
+    {
+      "hash": "aba1274334bebc3c",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-5-mini",
+          "input": [
+            {
+              "role": "developer",
+              "content": "Answer briefly."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Reply with one short sentence that contains the word ALPHA."
+                }
+              ]
+            }
+          ],
+          "stream": true
+        },
+        "timestamp": 1792648727253
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a4e645b1ee62f080-DFW",
+          "connection": "keep-alive",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Thu, 22 Oct 2026 05:58:47 GMT",
+          "openai-processing-ms": "223",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "10000000",
+          "x-ratelimit-remaining-requests": "9999",
+          "x-ratelimit-remaining-tokens": "9999758",
+          "x-ratelimit-reset-requests": "6ms",
+          "x-ratelimit-reset-tokens": "1ms",
+          "x-request-id": "req_09c9892a70a74dcf8a6897cac92c8c12"
+        },
+        "chunks": [
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_09353f93bde27db5006ad9a6176c2c87d1b68364af95922db5\",\"object\":\"response\",\"created_at\":1792648727,\"status\":\"in_progress\",\"access_programs\":null,\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-5-mini-2025-08-07\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":\"current_turn\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\nevent: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_09353f93bde27db5006ad9a6176c2c87d1b68364af95922db5\",\"object\":\"response\",\"created_at\":1792648727,\"status\":\"in_progress\",\"access_programs\":null,\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-5-mini-2025-08-07\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":\"current_turn\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item",
+          ".added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"rs_09353f93bde27db5006ad9a617cabc87d1bebdd0164370112b\",\"type\":\"reasoning\",\"content\":[],\"encrypted_content\":\"gAAAAABq2aYXpZW7WCIiJ9kbN7Dy8G00yZNo--YJPb5i967BYJjHS9LjcYYM-nwk7r5dPNd1JTI3C8-N-2nMucfAF0zC3r6aTSoVccHdz03UzoAeXSXF8XJOgfyoZu5Oin-9P2zwql8wwfb_Qm5kcsZAMPTlHNAvLhAhMXQsgY8pM9PTVFI4aF-iTeGqhXfo-sppnIyz5WZBs-OPzVjqvUOD_FmpBqd7TVVuavyZTZj_fp-K7-jmMLwCwJlSU4kU7Ma_C-_BMzGedzKtpW_4Jz1VSDnvzSm5m1O9RFVtG3zcEUxX6de3ZiT_t-TBbb-GSC80n817VV5M5Zz6KrkK65mtD9GvtjBxYtov6AxDQ1_L_O_3_OAGiME0-UYvlZmpm6dfnRpunX4ye3SHef4pNJrzbsDwkQaQcdYOnQDMBbS0TPPdcUZ2wTFeRLay0nNDIdkvYDttbJgJnWFgMM_mmkuObX7BiB1LNZAXbXsXOneIH0ktm2Da4ddHZhKDIayJzXGeNuzCVV1Z6SLYDeL1UeV9SkJkcjNgZClNZq4e5RFvvqrr48WN6V-HSVJFaEFVVsJJEGqld9drfV7dTEvo8jRO5IRHs6pWiP1xYkBBHWnev5LEjtZa0OVB9Pp2AJJM8GuLDL2WN3BRZAzZvx4X7oFMezP3r3BhnIaxxyou3VA0dhgMboNllQUJBPNt-fPJ2MMGkB-bKBUKo1bNlVuME7KRfUfITIiA4i9IJA6y3EzvTrfzzC82QY9XMPKTGC9BCD86egvJ41NYzt7aavUwvespC3nJj04RPfFJH8P3d5Ygq4TRMG9j9ImbAYDs5HoR1dKLB0_JlJIBgcyiiKkfwmDG_DQSv7jKG_P37UVXNOq-vlL8itQldVHv3Jxx7n7F547bPAg8JL6D_tS5-6Gxr2GQAz5JplBh6wYlW3sG-aKU_G7-iJLLFsMqnVZGSz3aNyq4Mq8CVV_qQNy6d6TxyTgCYhFeowaEGN0lWOxJuJ3RuGCoxa90Y3KumaytiEChEPgueNPdCOQnDWp3xRHlqhwWQJiebccB2N3pxh6RPbru9v8f2ELjA-Z9S_2w5AFXJ-d43tK_hchCBPh2P2x5LpDjSMdi6ynXpG84DCv2cBEp2QSdeOVJ2zFD4bnErA_PGVUpZU0-ExcAVNy10DmMzglDaedlh7duNwEv8U8na_85ZBvcmtgye-qvy9dPvkJtNGU4qpmdxb2-1jXetFEoUJ-cPzroSYictQ==\",\"summary\":[]},\"output_index\":0,\"sequence_number\":2}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"rs_09353f93bde27db5006ad9a617cabc87d1bebdd0164370112b\",\"type\":\"reasoning\",\"content\":[],\"encrypted_content\":\"gAAAAABq2aYZ1huhwkCwGsLF3NC-Z6XENO0qDB1cr2X5PXJ0EfzVm5U78iu6dEBWiTSfr4nZbgSRFcQNNQDi_1Eaf1NGbAtx9Qqi8vxtx80tHExTK6frLrCc49iwmDn1FPQh-EIHGAy1dgLhVuIzla5arSN-d8G595NXJp3Gnt9K3kkvvB8vkzIH3L4ZF8m9hPyqXrB1mNoryyyFLLSxVYB_RE1pVMv0-0ssfHmSdcdsbEsMgZUiDW9bAya6uf53dtYWIMHB66uucHUL2JZPb9Ulqg4nBhppskQAhqzFN7KeSvQ6ZaXdHNEMZIrWwpU5BUPq4O1pVsTiP_Zioyb5BcJZKKulg8dCURI-HVi_VMizCnfRtyvd1q_sMFEsyzWyPhz_idJHBB4_xa46-CltiNDR9dY1P_ROecEnaurrXqqItfJCWRA-M5skbAdAG9oM82VVJWLkVuAoT7MAjw85q4qsDGabkqFKfJjBP6bPCAqG_pyHWvxyCp2ufK6e1sOfgIYY2RJGCmocO27EVUh0cZqVpye2-LFzICouhCsPgU5F2yMwZSwRp_C3U23f3GKywlZRK_-Ff_k9zXY8mL1r7gii6tHtTi_bWrTaGJ5qeGk2ZOgirt9oCQaD4UhRDcA2jTUt04b_84DYuGBHqPSZs1lGWr-251uw_G6fPU_F6s47uAZ1mq7loZ8WorkZlnOqGzAqYABjfKCIGBCaMwgjwU9idbAcfn3V8NqtEVFl34-LtNe6QiaeQN-IuDPphXVSlDa4pYaJe2RTOobn98JtSKhOJHi0JRD7jRI965mh2YNq7t4OZuYvLXAY88Fa_DMQ8gkWP5CAGBqgXHNk0f5MpIMgHu_odjoc3ZQS6aWR_LFpfq7FAssSnJCUO15oQnonPqLS6VLzMuteBJ3ZbbldKSoLznQj9GVxSAlneLO9UbQtimQUzaJFpyFdTAd3yfH89tn03IcPMMnj6p6ocHv59ZwwqHlZFRBgEQF448g0wN5ffqfOxvCowiZAiHQnmGDHuJJJSPnx-Xzh6hP0qlPJhQd4qRBz2rWNSswXeAKnTI5gNq_ywXcE-AEPabw64BNs2gXri198QLbn5mY1QoExrCQz_qapNrseeUx02I0JbzPoqZXwol_VVGu5GbtKlA3GAd46-f247Q_7vXIWjR0n9vc6RL4aI2rMFo__8P32M4-PS-cKwXkKfDMovPqiyEMj0-98IbFDV_9aBkRCY4KKtgWf51NVbc54rgamcj43kR2mzXA87_kenbKvIANHCcH9oFQR5JFgonxi1pPLjv-D-nI80pIQW1OPlnblghMp6T4YHM6DQQvL38WhnFhD4ZRqp72ZJMgo-48NS8wYQxC2nHylmp2dnMCcJMFKV4UMcQ52-vtyEcAzM31_kTmQfuUNJA5K6lZZofLegh47SA4Cnj4H9d16a4m95OKjrPSg3JnSQ0hP7brPVnbv_s1JIOjee33DsNO_nzmIt5ux7XafThRd73nVuTIRJZzKNHXFGub0RLGJXRnNYcQxFt7hoEhO-oe9kgN8Sr-ppwfwKffNC8FjJ2Y3GsYV7AMZFrQYGVtCsW82xBoBGlTUGZ4vLTXX66HdTTkuSONFxUdDxStkvlh9mwTy6cIh_YZzF4O7tILhtrsyrGqfIr1t7LKNGTqTiyXH__eFDaOZtUdMXV8m4FHL23fKbczbS1WHIwz0FY2XTtzvG9dnCdR3gLAo2yhYmzOYge_XlBglpXxp9JLDU8iTrCQmOVruzwO1d2lXwoxyla21iVqolZEuIfInaQo6gls3-ZSygSpJNzFYC5-3T5Do2VrzWGRAveL4LiNoBKHa3Mcly7gmSc0HZlYNxEDbPDfK2SWmQz-E9Ez12s_ttLKWcndyg5N_fv5eQRWnHJ-VlwtJ_G2MHh_rJmfyUVjgyvP4TPfQRRJNzWhsaliwecXmwFwmwQI_FOnY6e9GNrrzR99cFQffvMbo7-5Dr9M0UNr-d6u5VL-qGI0D00g266CLeG4VoCq3yk11lqKt80GDFFgVm9dYfiPpmQ-8B_NtevTOwBmeFtp5rPVUA7dv5hn_4w2piZUDukr9ur443wyhsdDz3RUx_TLVeix1AviuB-Dmbr7YPIe3A3uC5Bb-2PRwWdkxuSBw0PkaaJ5aU3yscbTHrdDca8KbBtQOm4ftCH7_jPZ6fgqM7VbYH7BL7SkDKFVH4bt2fEqDFMCErdK9u2Lg3FSZNWHmUSxCrQXY4mlN33CRBjleTbUtA--CvBCqphquGXVUKBPZXsXVtx2ccIxe_KVE7l937l_svPJ3ihHVnQWifQJ3WKzlVcB72JTwuGEUhv_d4baiWmGXsveU18Z8aNBQjlvELBFrVk816BKq693-y9w7pBmluxxlBvW2pcfS5FjSSfzg7KxbFS-lhjbKyjTe9_hGcHBngi63kI9GEf4CwefwXRnp_epw5IgYqSIBqNsK_d8WEbrzny7q4Y8Gz9UCWrABsgArJcHWPpQMUIOJJiFesxgHSTe4gEcVmci9jqJRP0v7mUZQKOYDMfIUytcTszClurfLxw0yWkNbhMKY7DlpONZoY2tcbebfvbyV1abGOQgdZw3X1LHmvV7urfJeJRB3ys7zIwoPZyg0ntecLEn48SoBIyB96KD2Crtn3lK9-huNaywR1ox6rqKT5cyN-kvSSj7hi4Wjeed4W6ws7RLYcAOCAOSWbvpVGCZobMTn96-0njKlbFeF37V9bah1MaC17_-FuygbZxUftpw0Zb5HWjcdxpDUJFm7yvKuKoG5iBLUDPm70a84cj-h5iFjYFGg06d2SjB6IyqpvTmmUqmSUpqAPtxzum_kZEdDNT0NbdaAzeiLwggPqoOtgm753UgT2sf3F5jykRnhknK58379fT2hTGR67CKAzYpks22rCBiUjbHEL0ynMR2bfJ04yj3G495TEVQ3kzERtzcOEf9dFKpdyZ2dK-80TSg1GCZ2Vf6SrR3LcNKMLySYUC4K6m0p_RDZ-ddDb-LU3IT2Rf2pi0Hab6nqktOW1CKDQ4h2d10d2FSCF8rF9UExhz1cNVGgdifpmqs_ijaNnLG22A5O_qKF0vc0Gf46g3tJwx6mGjGR6HYsIxb4uVQXP3L_Gyyv8cG13GgyT-c6mzqY9ym8I9vSeuz52HvkCNK5aNvmHHm_T3HZKxLUdmq0QTCRgOYw9DXLFAE4AFwZYrEhRFf0gClFI_ZBXjXgctKOECMfoQGz8XFBfsod1k29HFg1usLyL64kxuUABvkwXxp9Xs1Kdvro3GE95NtUImMPH27_NC3n6fwiQINfjUBe_v_m_tGG5V1zZxvmneYwIvGPL801NN3m0qJ59kObVrloF2MRUPdZR7yF6TUpOQLbuYYW7b-HDWClSUg_aXNkcl2mnK3vs5Yp6zvQsIzKyGIZgHEd8JOGPqK_xFS8nSqMzP1X6Kg=\",\"summary\":[]},\"output_index\":0,\"sequence_number\":3}\n\n",
+          "event: response.output_item",
+          ".added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_09353f93bde27db5006ad9a6192e5c87d1bd8a27b5bab9a92f\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"role\":\"assistant\"},\"output_index\":1,\"sequence_number\":4}\n\n",
+          "event: response.content_part.added\ndata: {\"type\":\"response.content_part.added\",\"content_index\":0,\"item_id\":\"msg_09353f93bde27db5006ad9a6192e5c87d1bd8a27b5bab9a92f\",\"output_index\":1,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"},\"sequence_number\":5}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"AL\",\"item_id\":\"msg_09353f93bde27db5006ad9a6192e5c87d1bd8a27b5bab9a92f\",\"logprobs\":[],\"obfuscation\":\"uekwGq6y7twNyy\",\"output_index\":1,\"sequence_number\":6}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"PHA\",\"item_id\":\"msg_09353f93bde27db5006ad9a6192e5c87d1bd8a27b5bab9a92f\",\"logprobs\":[],\"obfuscation\":\"hTwEF18Wx6j7S\",\"output_index\":1,\"sequence_number\":7}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" is\",\"item_id\":\"msg_09353f93bde27db5006ad9a6192e5c87d1bd8a27b5bab9a92f\",\"logprobs\":[],\"obfuscation\":\"GhRl5EaCM6nAg\",\"output_index\":1,\"sequence_number\":8}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" the\",\"item_id\":\"msg_09353f93bde27db5006ad9a6192e5c87d1bd8a27b5bab9a92f\",\"logprobs\":[],\"obfuscation\":\"BCuNOG7jDWEr\",\"output_index\":1,\"sequence_number\":9}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" first\",\"item_id\":\"msg_09353f93bde27db5006ad9a6192e5c87d1bd8a27b5bab9a92f\",\"logprobs\":[],\"obfuscation\":\"Veok3xdnHB\",\"output_index\":1,\"sequence_number\":10}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" letter\",\"item_id\":\"msg_09353f93bde27db5006ad9a6192e5c87d1bd8a27b5bab9a92f\",\"logprobs\":[],\"obfuscation\":\"8PCyLkofz\",\"output_index\":1,\"sequence_number\":11}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" of\",\"item_id\":\"msg_09353f93bde27db5006ad9a6192e5c87d1bd8a27b5bab9a92f\",\"logprobs\":[],\"obfuscation\":\"t1bfJb69l1qn7\",\"output_index\":1,\"sequence_number\":12}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" the\",\"item_id\":\"msg_09353f93bde27db5006ad9a6192e5c87d1bd8a27b5bab9a92f\",\"logprobs\":[],\"obfuscation\":\"KHQ09c5gp4KC\",\"output_index\":1,\"sequence_number\":13}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" Greek\",\"item_id\":\"msg_09353f93bde27db5006ad9a6192e5c87d1bd8a27b5bab9a92f\",\"logprobs\":[],\"obfuscation\":\"esYb1pX5K9\",\"output_index\":1,\"sequence_number\":14}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\" alphabet\",\"item_id\":\"msg_09353f93bde27db5006ad9a6192e5c87d1bd8a27b5bab9a92f\",\"logprobs\":[],\"obfuscation\":\"AEy7bTc\",\"output_index\":1,\"sequence_number\":15}\n\n",
+          "event: response.output_text",
+          ".delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\".\",\"item_id\":\"msg_09353f93bde27db5006ad9a6192e5c87d1bd8a27b5bab9a92f\",\"logprobs\":[],\"obfuscation\":\"bcvAI4OzyP1eLMG\",\"output_index\":1,\"sequence_number\":16}\n\n",
+          "event: response.output_text",
+          ".done\ndata: {\"type\":\"response.output_text.done\",\"content_index\":0,\"item_id\":\"msg_09353f93bde27db5006ad9a6192e5c87d1bd8a27b5bab9a92f\",\"logprobs\":[],\"output_index\":1,\"sequence_number\":17,\"text\":\"ALPHA is the first letter of the Greek alphabet.\"}\n\n",
+          "event: response.content_part.done\ndata: {\"type\":\"response.content_part.done\",\"content_index\":0,\"item_id\":\"msg_09353f93bde27db5006ad9a6192e5c87d1bd8a27b5bab9a92f\",\"output_index\":1,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"ALPHA is the first letter of the Greek alphabet.\"},\"sequence_number\":18}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_09353f93bde27db5006ad9a6192e5c87d1bd8a27b5bab9a92f\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"ALPHA is the first letter of the Greek alphabet.\"}],\"role\":\"assistant\"},\"output_index\":1,\"sequence_number\":19}\n\n",
+          "event: response.completed\ndata: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_09353f93bde27db5006ad9a6176c2c87d1b68364af95922db5\",\"object\":\"response\",\"created_at\":1792648727,\"status\":\"completed\",\"access_programs\":null,\"background\":false,\"completed_at\":1792648729,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-5-mini-2025-08-07\",\"moderation\":null,\"output\":[{\"id\":\"rs_09353f93bde27db5006ad9a617cabc87d1bebdd0164370112b\",\"type\":\"reasoning\",\"content\":[],\"encrypted_content\":\"gAAAAABq2aYZgK-p_mNYzzZzmsTKLzuJvZc_3l94Cu0Ci5Zj_Hg1dIgLv7yQsyIK7XbXZPDXGipEKZSuCCDP_q6mzaszxEs7RDiglkRxVGx_sZQABK16KqPXOrXytPs7OYk0womvjYNAPGqUw4PpEXIIS7fV5woGV_-f8DT1dWcMguDrgbGuTTqNiCAtVGxiOli_IMs_CE0z6-fMUyxCd5ZF5DREJdDqlh2xy5DGjYNTir0RAF3DA1ViGl1t3HryPXQRc7FGsH9b__tWBcRPoDiOs4kt_NelhjhJNgs1gFUF6WmuV09s5qjp53tMVl-hTpQ8a9OpMOuQFG3I2W3W3-QZm7rHeAZiWBLt0vTv9OJTsyS4Qh11zXy_UkdOD7dy0Puw-xL3UzU4-L0e4Af23K5cKO1M20uPxEfqkg2zVVrpO8feRg4h7Dny-diWGNC8-YOegxNDgyLzcNjKfwjsPIYXFDEsARLqGDpTZzSsHjoF5XSNbbuhDsZBCInjZz3isn4YGPEHh-zfxltg7WXHILO8jHwO1Gy8L48EI6t90O_cUMmzSyz5nZdm3YrbFxMcJw1Mf-GTU57oeIK2bMqecZuSPjWFxnfw7Tm9kLHZTqfhKrhtza93KJNbaSlBwsGl_06hXqXAMww5Ds4qhY4qIULq6i4cUtC5Lk0H6fnQZpjWPG3S1_XoneQX8V5vsIK-9iwaNb1QJMfCLYT4hAq-JM5Hhv-dgZ-ZLwm7RJnQ-Aki5vsjQtCvsuCR2X1znpSbIPGtpFyaCmlKePiz9p2grrgo4Kx6D20cNuO3fhPcZEMom-GZeEv0IMV4JTo8w03le3eMZr0_EVBlkYYuGbkQZ6htPa9sQNO5tXVpVTjacxl6U9U0gz5_J6K4kUum4tEAmnJyA7LIIuoZ5J3oJljS335E_86_Wvkk-6hN6Zrh6wyx6IqrDr0jKpQZFHZPD_jjDKFsgDLZjy0Wrcp0YeKTeDnBfSpwYcXg1b4sv23FTvOO8_JBoV6yYSXOYtvmhLRE0eiXG5k6bZSYIjPFXiuoAz2ibSwEigWOSWDFjShd82rBJhfLBB5Jvrh5RWT9760WN8kaW4KdQLrLfQuIaF2SZNra6Ua0a3jn-k_mTGtNMU-kKzDiS4o2Dnx-mHAXlUgaNPb70BoSoaxXSiHKGByepLbFbbXJbMzOilQmAJa3T_Wq7pC1Ta-P3ihexPIrJbmflZLCtlpdSHpXiPPH4UBcWUuoa2v2XaX9eO3TjmC0IXyAmOG5NxiOpBv0JvTjRbk5ji94LU6AbJwP2y0FBfZhplbiSzZwq6iiA1UNsIEHsdOynQQPogdI-KkpACWgymRHHRFVoUYLdIrkwJs0TvuC3jLjfh43ASTv7G0PIk-crx7sGJR3vVZ2123MHpZuCo_KtRI2N_ZBAAgGtXJD-cAm_w_jUbCFx0F3aSKtIogp46xOw2AzyrrCCPdu5496gQJeQQh5uFQAs23Gwr7vKhnAWSR4H0LFoo882TThzjO02yymyxPeML74gzeSkNGzws1peYtxxgEEis0UcHM00ie9nql6p30KCL9o5TT4XckuM6obVxzpIEUQ7HgsChIH0grN_JalVo97vWxRCqCuXnfVIvMAOXMncvKQO1K5RpyN6nUYBzgvOXj_VuLUHH_nl_SgsWRgFPRrGRNNlcoT77esOl5tV_oWvrRngLI3Yg9SE0yuHb-Sb1P6tIgmY9X9fwnbAznh4J2t_jG9NJ08KZn5G04dH9BmyZTALCkYS6-39Vpz5fOfZHxZj_sAhZ6rzz2om-EBsiDZ__1oQNF2pe5OkE8zCzX4rRwMXsDvjG8tHRvU3t9VpJDxqJ-qNcv8_ymxmu_ENOFdCoMbtMeQin_qPiEyEIptzOz-oxKXUMUEreY4K797xeYWC1yEE-6VaoMlNwJcDDUJvtxXR7a7qx1XarELeJ5GfnDiRq1i0bcxtJz-CAJGr0yGRAltJQaI6JXaIxQv5LqKeV2QnusxurJYVqR9G_QNAOf_8fTMSUBzhEMh1d_kRiRHJP5nZ_As0o99oQ7QXHn6xBJJgaeskaoXo4Gh71v7QUkF1L4od5d7vFYX8Z0yjHYLOawYehPmg7UI3iNbMLR3uafI5MZYZCYo-tfIwLXgMhOCd8MYZLBFOFMgiViEyRteR6qXNrkRNw7phiQLAU7ke4e2SPsPdTSbdC54s-hgWOz1t4S55-ezQb8mZYc1ehZ-gs2Pz0Pat30hmol-BpdCHaECGhg5pEg8wUtdU-W6mzthhj-rfxDeJzuMhpv3vc5-beuL5tA5QM6F7Z11yj9Xr6Qx8OSj5GUbch-GHJsOYZjLAzDcpiXPnY280jMsFAPJK5cMjzsFALLU0kvQO4aRRLCZCIR7WfSDwnC7dsqbwUgf9r33wPWwp5bk4QGlri-E549o8ktt9cHtFFhd6Nn2qHgKsY-ST-2vuIPdDlNYSGOISPuOOiKxcK_U7EWnWnjkz5_-rAsPdY23P5-kBInWIcCbvXb_3XHDsuCOgV7qYqfnuRYz39KKuqFHDRkpzBxSH1tKQFHPBIt_XZ7MoIGmCv0elqbFSoQIFxhOyuR963O1dhyX6PI2vrTI__OzdzLq6TSy6S7chSMumd8XLRbmMcKWtcDjlo-MzRIXOvvODV4NtiF3NCK-XtZHCBORaUunirzWDepcAaccek49jKBsuyel0J-ARdoFF6zf70J8b5r8Rh1Z-KNvG14U5wCLpqOrSxEQ_HvymiYATDcqUF8d7ttGeKEQqRRMqQDhStUmkJSgZDnUg4RhPaE4Zs88dguFUXBJNrtedZEbBG-msy-tVYcOH7m-eCJTIjRD2oMCCz0HkWCKWxv0DFgAcWWPoyiazrlvLw3tcDvYCrqIxrn03UHb-bOWOxy6F0pjCRF3o45OUkQaT-6c9gSq_do0lGcH6BhwW3x7YMle1jlD9oXD0rKDyv8ECODy-08WbHC9R1R_3kD38qFg8EPwBHgFgvFyWH-vbmLlDXy8NSy_XJdisBQYfK-ccBH5ePwEr8EtXXqULV6ob1fTukUaaYFRxuPWXX3AxgAjjfgXBxj5ZguidTXWwmyjcQi1vzVRPsgtkBoFIdAjkOlQ1aVSAkhyMdiW0jUS72v0q5OWnK1RAZVIrKm-7c1rJzLyJN15L5qsSpfXE-tp9-h4d0U-fjmmjsf6SS2b2NVeFTP1UQxw_Sy0ANx-DLGNA3p8SsSDyeAna5lkle33CY2ruTPMNtkq0IvRgPMwUPe8a2ZG8O-dauks-CZ_yMKmfzBFpAQHo-nX3qZ_BBsCYxZFW8Pf6ndvZhX3Tulo2r-8XIK8PSCmuXIO33ISCMC-5sqIYtKz_-ddaWY4X2OU9w8d2zj5NP_ZiFkomVtMe6qEXbmeDBBupSMUFXg2ZzH70vhtw5CO2jpr22o-Up5FO05KrTOgEk-dB1Q4KCI=\",\"summary\":[]},{\"id\":\"msg_09353f93bde27db5006ad9a6192e5c87d1bd8a27b5bab9a92f\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"ALPHA is the first letter of the Greek alphabet.\"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":\"current_turn\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":25,\"input_tokens_details\":{\"cache_write_tokens\":0,\"cached_tokens\":0},\"output_tokens\":169,\"output_tokens_details\":{\"reasoning_tokens\":128},\"total_tokens\":194},\"user\":null,\"metadata\":{}},\"sequence_number\":20}\n\n"
+        ],
+        "chunkTimings": [
+          0,
+          171,
+          0,
+          1391,
+          3,
+          1,
+          3,
+          5,
+          0,
+          1,
+          2,
+          0,
+          1,
+          0,
+          4,
+          0,
+          12,
+          0,
+          6,
+          0,
+          11,
+          0,
+          7,
+          9,
+          7,
+          0,
+          110,
+          0,
+          4,
+          9,
+          171
+        ],
+        "isStreaming": true
+      }
+    }
+  ]
+}

@@ -1,0 +1,178 @@
+{
+  "meta": {
+    "name": "memory-integration-tests-src-durable-agent-goal-judge-openai-durable-judgefail",
+    "testFile": "src/durable-agent-goal-judge.test.ts",
+    "testName": "T8 goal judge — openai > durable engine > judgefail: settles instead of hanging when the judge model is unavailable",
+    "model": "gpt-5-mini",
+    "createdAt": "2026-10-22T05:58:41.807Z"
+  },
+  "recordings": [
+    {
+      "hash": "0cb2917bbb7815da",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "gpt-5-mini",
+          "input": [
+            {
+              "role": "developer",
+              "content": "Answer briefly and follow the instruction exactly."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Reply with the single word DONE."
+                }
+              ]
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "<current-objective status=\"active\">\n  The assistant has replied with the word DONE.\n</current-objective>"
+                }
+              ]
+            }
+          ],
+          "stream": true
+        },
+        "timestamp": 1792648720040
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a4e64584dbc51ad9-DFW",
+          "connection": "keep-alive",
+          "content-type": "text/event-stream; charset=utf-8",
+          "date": "Thu, 22 Oct 2026 05:58:40 GMT",
+          "openai-processing-ms": "220",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-ratelimit-limit-requests": "10000",
+          "x-ratelimit-limit-tokens": "10000000",
+          "x-ratelimit-remaining-requests": "9999",
+          "x-ratelimit-remaining-tokens": "9999731",
+          "x-ratelimit-reset-requests": "6ms",
+          "x-ratelimit-reset-tokens": "1ms",
+          "x-request-id": "req_14fd2e9e43a34177968767fd87b6edbf"
+        },
+        "chunks": [
+          "event: response.created\ndata: {\"type\":\"response.created\",\"response\":{\"id\":\"resp_0830b250eeba251f006ad9a610383c87d185fde525f5485ec9\",\"object\":\"res",
+          "ponse\",\"created_at\":1792648720,\"status\":\"in_progress\",\"access_programs\":null,\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-5-mini-2025-08-07\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":\"current_turn\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":0}\n\nevent: response.in_progress\ndata: {\"type\":\"response.in_progress\",\"response\":{\"id\":\"resp_0830b250eeba251f006ad9a610383c87d185fde525f5485ec9\",\"object\":\"response\",\"created_at\":1792648720,\"status\":\"in_progress\",\"access_programs\":null,\"background\":false,\"completed_at\":null,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_deta",
+          "ils\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-5-mini-2025-08-07\",\"moderation\":null,\"output\":[],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":\"current_turn\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"auto\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"web_search\":{\"num_requests\":0}},\"tools\":[],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":null,\"user\":null,\"metadata\":{}},\"sequence_number\":1}\n\n",
+          "event: response.output_item",
+          ".added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"rs_0830b250eeba251f006ad9a6107f7487d189a30a3d2973327e\",\"type\":\"reasoning\",\"content\":[],\"encrypted_content\":\"gAAAAABq2aYQH5Apy53f2wBCFrkhgm6_BLv612YIA-Klxle0XKECbCERnki4cEVd82OsUFkCM9TRlG54pfLLl4th04jzLjPx6Y-ljOuWqZa58bs_0AUfb-4HnKgSBqOD8F205OAMj73ed3pkrTnmylUDinRnkyAkwoFyyr7AqCRmw7EKibQd4Um308SGscatlxI9IW17DQklSm5523XgsmAEuNNBtg-WNDK6n9qvtWUusd1An8KSh8D3MC6gslL6ZXZw-JN_vbduugKsKfk5EXC4HQKVzPGyZnX4S1TQyKNqpiDrttoVOUTk7eDCo_lp1z27FsRG0DRQ5b_nyj3bS3RENzmJOZ5NusqPfFksdnXc6seEb8ZL7hK_EL4YOL0Axvv751_9PRyEAfQvQEh9EmTmqzyqQKP_HY4RdaVLGlKdz57KMQbEMWaslHJ6XpTYbLBrr1X8qNn_p-jznaLD07L4oOk0lnVtgklqpb853xLLQnAn2kTfcF2Htuea3o8qQyFkFketd2Bm10hitlldqx0Amh6-Iwe1utZxPdzjK6lNKE4gh1V1-4gAeOuiiMXVKndHn45pC_UQvTGAFZYdrFJYeBKXNBUtaWwvGxMZ6205Xf0nNvv0JE6b8FCD9l5ytsEMPM2HyMHH5M-LmfIf-qJhrVKFB56OSVnWIuPiwUt2ow7c8CE1KFou2_0lRzgGaFzpQFJ2R3mHXms2_yyKJY4BPMi786jEfke5xblrcaGEpQvA7NjNorwO4pExpaMCyVS9lkUVGertcmvVzj2lyT54moVjDcq0qQ9Fti0OSZwcSuToYpxCkvydUZdvqzTL9DcgjA9F-XHke7Ug-MnhMGhEPKYOpblnkyTvbnwrCO-ufv0LLDMA-IGvnoJF92CITFljADj0Jr1aFnqNIMSEXyVmzXwVQzoOJOI0dQzZv536X0w8RT1HDySdzexzK7qdwDIrHEDQFoispWmu-pRJPQXeYfzcYveJC0rYOmlNEmzktXB0xNPNqf7TXss4TdY-i2ejcVum44hjnbEdfjpZ8caHjS3afy7rGwPrDxleEm5uarHDETPSE2Z0FbKRaNmlZ4j9nDzdE9Xfzuh4YKpSct78g0HBSCC4IdHlYRSPZL4rLb7LudDPp5WUQ0boKc8s9lEqLDYdwei0cvig9uEphXTKNatXjA8qymFvFSjc",
+          "PZxaVNQ54Szz8pY42LpfGJNGK2SRiyqrGMgD66BWLwYttu1adwIb4-azpQ==\",\"summary\":[]},\"output_index\":0,\"sequence_number\":2}\n\n",
+          "event: response.output_item",
+          ".done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"rs_0830b250eeba251f006ad9a6107f7487d189a30a3d2973327e\",\"type\":\"reasoning\",\"content\":[],\"encrypted_content\":\"gAAAAABq2aYRVuJAfsrfVRmvw_aGItn4PYD5wY1k4HR0NI3tMIrU-cpAsmFh1TPmTnp0qLMDoin8at9GEJLrQuN0hAVuVhQUgLj8zkvnUmYaEe_BzlkjKtfJgdwlA9I8cOjDN-odMCecc6B3y8DzGFvwn8AKEq6gshFxWLGZuh7peBlMlLHjGcWA1nVnpRuFVOkCElosFzgZZ2W726U18g8mjxf4t2S2qvWwFeB-fqBjXOhewKTeGWNfcCtvfDC8mnKaqcAvFS07tEDN8IHztbYDB_ZsTdaZWaOlpijx_bhjkOAEDTwJ5hsJPe_ZcI7e6D4aBDGUQ6t4fQqI0-12vEkCix3WEDpXD9_UJTrFRHKRnOX176pzI3Socd7ox235YPFqLeexosS1OimA-deUC6mU3XTFRvtNbBtNKR-5xAAnbHcTCR-whDiKRXVed2mM1fFNKaoAO-FdUcDhA6XrjAmfyVwXelFWfecCjh_tJ5SwL7NFfrSTbDBNd0N0HA6hzSiVr43oCbyanX7L2OsrrHRw91ho0kz_juRlgttvB1DSu2UqxbdcsYdqg3tKKNh6OXPFoJl-JjdYb9xwHvsRabI5jl-kgsk6mb4Ym0L2tEtM5WQ3eor7JC8Q2eQdNQ52PF8WPVlf9xppri5X3G98wajN5fev9Hq1-xNr_NnRGp9JLAWxOvPDMxozhZ3SLvIxSehWtcqbgEMtBIVD5rAz9OzzBOLgCaajcngSmL3VN1I_a2Uk-hqBEzMtu9iwHjulBWKv5jVu5HQOt4NRunJyXDlYmhJpG8k1E_TKor3Av7LbHxQA_Xc6un-sNXc8c86kOXenkIi-BTA7ZbU6nA2fKxvCTiWKKGzRDk4eLKBYmhkycsxEwpPEwfdolumKu6QJ7JTtzbA4Oj1dKGcLgw_zj-cp-X0M7d7Z_hJm4_mDAOJQ7cU-VlMkcvwYQyqJCN8aYMByeO2clbqakwTFOgOOgQZD3yxWgb7ihZh14G1pz8YplfKXlIFl0YjyZdZPkSbhfBYTN_5OWTDys2xGNdi8tQ9XqkawxGd7IuzsVLinszsNfXK-ZkziPolZ9ZUj_lsZkl2EwefPH5yJCwNgGVUblSLG9uSeG4cPUGQyeTvlkWaHaZbkQ-ZJvFltzI1fQ8Usep9G6ZiNG2t6KceIAzlFt_YQ5NJuHd5BJNNHiFozwi",
+          "mnMIYIOfGSsUGvgAdQ6CgogCrBMRDfPrYbvxUrakAFYAz0eg3NwPIdY4WSLfeVElKOXFo5Oqo0ZZCxVngi4hV7LjJJqlBNHB11mMuqWRWtL9wKmeVVpORhV9JUzuH0vND91MPktoby9hsLXA5KBn-0UXtypUtZRkZ7M8DKRrot4Dms1d97f4vNvlj_Kw_PNwM7tGQ_oO_ihPu7Lf_wFQYoCqtrUGiIxLLtO8ntPgEwHZvkiHrjvUeNyj1PwjccGhBDWn6YqVquBd1xhZR37v4-_EyKC4oMvLqrZIsMWeSPvuxxQjSPTYa-ORtrD6uWxL2jcmpGu0enOIWkq0zH4o6RvwroGary9kGk0-K71zUlgn6JCFS7MUwXQs_4aVLaE9TQBrYKK-J2nj8PGzoxIfXoVJihcvSsK6YoofT-uzQnllk1rh8ixOAZJhKnP4FQ7rNa49iDY8goX062oQEBddd4Z_TFyFpbyff364RsSGO5iDbSb5UDqMxEkfBuKk_1KqCpDsx0zUCDNf59uPi_LdSqLLpVvcUMFEjh2vASl4rOEiTgkKY0zjg-q-gYyFnmSckt3RrCkVYmLytEJXWZlT11dt5BEl27D7ZKCjW0Wul9ek50SUopaXcnCkeyTAdY4yv0yQI-iEWqjw3coLZC2SDIVWEd4FTId6v7IMgvKpstVjkjzo1LXKPNLlxoTZJ6Mg6uKvv-xFSe-XAGTWZFF_dklX7Vrbo2ijy_Ym7uPC9PWBMikrjyS4kEPAa73tkCJ3iJ2-JOth14XbMZ5NeKQx-QVrIWP602JKFfam2MRdOPr-WISFW9khZGRi7jWOiYZDl_2DFC5RGpXx5suHV-9JwoDbcEuoomoYysB8YU3BmsFrF9GeZ781G6jYIQZWNj9dtd_s66e0d7Sc5ls98paVo1pTu8hRijRdQLe8s8sEqo-tdhsQ9f-BNm3d-84kAqZLtCNWQ2jjXxu41Cd0yBnURV9xnIruyXrByDWEzai_K6UweZcBDdDYO1vN0N02RQmcMxW3kTPSnW0BRLfTNOeRqkK2mmpX_84ziPBXpEYePUtZjFL8kpjVG7FQJ8KdudNvs24v4aQWzrOIGUDLrcAh6IAsVSg7SXcbOLHvD6vHdAH8cH81Sf0KLZECRE50B9bhDd46UrIR_XQnj2JVMYV0sCUfSy0oHVejtsDW2L074CbP_AS5Zkm-Q0JIr0F9sN7l3MnKLgPBfvPpCQu_pNpG1fMBAXCxEnxS7sPCaOZ0aOMDncapWJHgwy0Fvo92C77vrIg471sM23Eft94oqJx4AK2-SmNy0f8lETB3ZILDg5ptGY-zu3ZCJaXq5nla-j7M9V4GfsOJD4Ffy8GaDIx3YMqqT",
+          "CqAKZ5PNq8ldTE5sPXyhUbrcslzQYRGG6y42JA7pQAaP1EwHz91gjulgzUYlE31U_c1Wp4veMI5zGuV7sT1XZa1A7J6AcSBOsMEgkSnce5aF1VF3gUoX3O4d4fVP_n7oAiCtOxO4RLDXaUgLE4YUcwcziZg1mgV0qzlb2D7hU9pG17ana0XHq1UwOMX_NM8VlIug3G0vieQtY1-nKfMnBji5lC6ozIJNqKOgFvOoCddUXGBFGncuEfVTtJul0pXPv97X51nGJFgGDPiWve4iORY1NaT9lDSO4PHBLUCeQ0hK2u-SpXbk=\",\"summary\":[]},\"output_index\":0,\"sequence_number\":3}\n\n",
+          "event: response.output_item",
+          ".added\ndata: {\"type\":\"response.output_item.added\",\"item\":{\"id\":\"msg_0830b250eeba251f006ad9a611536c87d19423d7d0ebc1999d\",\"type\":\"message\",\"status\":\"in_progress\",\"content\":[],\"role\":\"assistant\"},\"output_index\":1,\"sequence_number\":4}\n\n",
+          "event: response.content_part.added\ndata: {\"type\":\"response.content_part.added\",\"content_index\":0,\"item_id\":\"msg_0830b250eeba251f006ad9a611536c87d19423d7d0ebc1999d\",\"output_index\":1,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"\"},\"sequence_number\":5}\n\n",
+          "event: response.output_text.delta\ndata: {\"type\":\"response.output_text.delta\",\"content_index\":0,\"delta\":\"DONE\",\"item_id\":\"msg_0830b250eeba251f006ad9a611536c87d19423d7d0ebc1999d\",\"logprobs\":[],\"obfuscation\":\"q9SPH4yyxK78\",\"output_index\":1,\"sequence_number\":6}\n\n",
+          "event: response.output_text.done\ndata: {\"type\":\"response.output_text.done\",\"content_index\":0,\"item_id\":\"msg_0830b250eeba251f006ad9a611536c87d19423d7d0ebc1999d\",\"logprobs\":[],\"output_index\":1,\"sequence_number\":7,\"text\":\"DONE\"}\n\n",
+          "event: response.content_par",
+          "t.done\ndata: {\"type\":\"response.content_part.done\",\"content_index\":0,\"item_id\":\"msg_0830b250eeba251f006ad9a611536c87d19423d7d0ebc1999d\",\"output_index\":1,\"part\":{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"DONE\"},\"sequence_number\":8}\n\n",
+          "event: response.output_item.done\ndata: {\"type\":\"response.output_item.done\",\"item\":{\"id\":\"msg_0830b250eeba251f006ad9a611536c87d19423d7d0ebc1999d\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"DONE\"}],\"role\":\"assistant\"},\"output_index\":1,\"sequence_number\":9}\n\n",
+          "event: response.completed\n",
+          "data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_0830b250eeba251f006ad9a610383c87d185fde525f5485ec9\",\"object\":\"response\",\"created_at\":1792648720,\"status\":\"completed\",\"access_programs\":null,\"background\":false,\"completed_at\":1792648721,\"error\":null,\"frequency_penalty\":0.0,\"incomplete_details\":null,\"instructions\":null,\"max_output_tokens\":null,\"max_tool_calls\":null,\"model\":\"gpt-5-mini-2025-08-07\",\"moderation\":null,\"output\":[{\"id\":\"rs_0830b250eeba251f006ad9a6107f7487d189a30a3d2973327e\",\"type\":\"reasoning\",\"content\":[],\"encrypted_content\":\"gAAAAABq2aYR32_w0-9VHT-wgedkl1GoK0tE8P-gvR2W57USIwSiL8Et0uWKlY94l2KeZCu_Xwgpd6IsH2GvkrbmRfP9VesJmQKMxfW59BOestnYO4yX8O8alLJMHWRYbnIP2Lg_45x0O9vHq_CbhINs5YxCcp-2GPq5AVpn5leynf9oyBhAWFpgVexqiBIz6bBc_sj4Ql1awfrmTagzIZaXM9k292fghn5mCEwVk39jht8QOeIb1e6R8z-c_Tj0CjsZPRxU7eQT7Iw5GBRfgB7wm6HUG4cY-NFbMFVMsB8DHCpKe4Rb530wvl0gJ3jRBUETQeVzmV50jGhd8nhTupf8PWz8h6WE82Xe3XB256ItdIBclsvXZDBRua4D_HGM41merl5QXHLnlmF_9y3a65I6mE5JXCXWQ0YlNyMxROQNKZysz0qewO8yIThX-DLvIUh9n0Lu0EOA9FBSCadE4GpunG_m8SOxv_HhVA4ffwMjPMUGdGOcFrWbB7r6UzCk7SSC4i1rg7U1HX6UqbmRwj2a87iqF7oYLWPNhDX8G2kIoDiIP8QqguI7tXvTB-e2mrHbBmPAj3lZSYSL4waXq9e_h4DJDHFS5W2GUlSqJti1p1rKL2ciakLJ4DD6O_RPn9ibOridi-LVxTu6hUY-x-bRJJ7enKsCtshvwobWdnzbHtrTxC8sBt1nkZejZ6nRfePpwJNDveGZSJ8-Isu4Blf4LGrrUS3qa8bG9rmuYzDlIcAm5hY-gOuctWJlU2-dCZbmIFexHEcUFJ6kAlWx8cx4w6Er8dTKvJ26pkhUrLLaObvzGUWiWRZUi3jC51Uwmpt19gsQTc9QWxjFk1ZUwIEb0kSsFyz-88bI7fiAnPUMEfYltKLJQGGtwWN3Q7LDMrqt2_xf9wTnj9C0u-cZRuL7_dyOyz1APXfZkJrdClNdSf9xqFcvS99CvUSmisBznqg1T6NxfngLF4FxZBS5TROUFpUDnH1-glrcVHKHMRKDFJDSB9GHwuvc-ql5lwy9zOUgjGYSTEP5o43c5ng6yvZQ7B9zdHNZ1-CERFIIw8aRV8wsVG_kqHwoZR-MftCHr4_zjY5kAy_QzvqWprdtFFqafcV62KS6t9ouYW1G715u15ydxyfbfXJcW5lK975yt7UQlf6PyD10zOte_g-DhPmkjeKKQOloXot62K7EBLYAOG0AmQPRL459Q3QkX-_gvYjUQvTB9HAekOs8EuQ69lfdHQ1UhXiyWdbgUFbOGjkymp890tdoW7ChZy5lx27U0dBkWG6cDx3Q2oCwXGz8kylrRToHHdlpmDJbPpuH4mrGyjL5nVMYyYxKAEuk97u78kontg3apNNsVpPFzcVnOSJAoWX0-DBt7G5uIvyObtOd7KDgW4G1ydaSwgE8riEgBKZz6IHZQgRw01CcZpeudhUAzKQxZnUhfgOvAt2uLQX0MIsF5w31SS5lRPilddMdbPDswdfU49JjpUCXSplHUIVrCiQnJBk0tlwchnWA88b22mKVtiMkpBAJJeDfqm6uvyJXTaAMQ2zjnNcmOmHSq3FbRBxK9navPmBEhVFKRWeYNExiUdErur2KCFN7KxOX1kfuOJ4vfdGxTztH7yFt3zNeXtwwzb0lTaoL8522ThVJRSDy7-sPrqF62oezHpi6pEi65DHaaXYztrJUHNOSQi7KVnTNGAPuSxEJQkV9HS1GVZpyMppiKl13WWlh3hio5JrUmiiMjE17k1UBL5DfQpmokQmUlQhxi7qA_cTLT-cBWGd8yLsCG4CWx3PW33WtwHyYG-SyF9U2a_X4DVoXPzf-KvKOxta24QjLIwLyYAe53xWJd4JJRupT6k1_S_IyZ-yqHcgG4-O6kbQ5Rk4hGeNyMKan1a1fbE_yHxLgEoktBKk98Pxo7Xfr5X78E7KSF1WfHG21UkrCX2_AdiOVjvNNxm0TWmvJ5MFc62LBv26Ac64P47z_zrKU3pKdNFzwxEgPGqi3ASCxj3CHbtEktLwL6KAwjlZhhRliYf7dIUqc3FwDNatQ_9r5JaYSa8dI6RB8-mKTqvigw52ONX7QDlNSYDzxCqiy3wIgyVXw9UpusJQIN4BDm4TOcVqRvnF0xDr7ubx-NrU751KQIxj-sYq4n6MbTO1gr8bUd3nzhIaU-zrn6-4wlm3IbZCdkCH1QYl_jHHdzlqxUor7f12GPfTvjazuQVaaJckPuufk5Ldz5kvdmOIM6EORFQlwK845bt7f7OYJY0zPVgrzxizxumfzcQvOdx18sWVh-9twzQ2MaeSL-oiT6dvczmALih3ABSGLjrAJJsNDZhnMMR207JWAS8COvXp6sI7iIxsOMvMiU8Y3iG5lf55EkW_do2R5uzX1Rw68taPqhTRRzk41AFjWdEyp_KtH7T7XqyxGCagX1e-PleWBAT8Ar9fTvSlZZ3VhvaIjDYKwnK56jhxrDhv262jJ6z9CoTD2YgvlkY5kSSlBVbIoKhqqRo5GnltwaiVh40l4-XitFS4OdQZ758LauuT2Rzg6m3vpT5zi795AVSE2JfjuWRDINVd3IZHQnIUbCcPM_gT_NKKGDwR6Q3AgLjv-I6hKhYiMLEOB4DolwqjGiAIV_tu-mN98iHEHFe1NJv5jbTKNpDdrC-t4_VQ6LozTBqEuA0rAtezHe6SELoXypv6YjJ1QYr-LUEFgjtToZ4CsAl0gc8WLdDpfUVzVeAlrDHDee_8LF7zHi-9B_5OXHQU9J0BBsPMczozD7VxqGc-5OPwJLiC634dwRyIKEUFZluwmkP80s1Bx8RUlZKwGv_xK5y4YgKbOaDxbW6DyoSdje1t5foSf6pN2MPW_t3ggT-_FcaWz9XMjcT8KZw-pjT-vFHM=\",\"summary\":[]},{\"id\":\"msg_0830b250eeba251f006ad9a611536c87d19423d7d0ebc1999d\",\"type\":\"message\",\"status\":\"completed\",\"content\":[{\"type\":\"output_text\",\"annotations\":[],\"logprobs\":[],\"text\":\"DONE\"}],\"role\":\"assistant\"}],\"parallel_tool_calls\":true,\"presence_penalty\":0.0,\"previous_response_id\":null,\"prompt_cache_key\":null,\"prompt_cache_retention\":\"in_memory\",\"reasoning\":{\"context\":\"current_turn\",\"effort\":\"medium\",\"mode\":\"standard\",\"summary\":null},\"safety_identifier\":null,\"service_tier\":\"default\",\"store\":true,\"temperature\":1.0,\"text\":{\"format\":{\"type\":\"text\"},\"verbosity\":\"medium\"},\"tool_choice\":\"auto\",\"tool_usage\":{\"image_gen\":{\"input_tokens\":0,\"input_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"output_tokens\":0,\"output_tokens_details\":{\"image_tokens\":0,\"text_tokens\":0},\"total_tokens\":0},\"w",
+          "eb_search\":{\"num_requests\":0}},\"tools\":[],\"top_logprobs\":0,\"top_p\":1.0,\"truncation\":\"disabled\",\"usage\":{\"input_tokens\":52,\"input_tokens_details\":{\"cache_write_tokens\":0,\"cached_tokens\":0},\"output_tokens\":111,\"output_tokens_details\":{\"reasoning_tokens\":64},\"total_tokens\":163},\"user\":null,\"metadata\":{}},\"sequence_number\":10}\n\n"
+        ],
+        "chunkTimings": [
+          1,
+          0,
+          0,
+          97,
+          0,
+          1,
+          828,
+          0,
+          0,
+          0,
+          0,
+          1,
+          0,
+          6,
+          76,
+          8,
+          0,
+          0,
+          162,
+          1,
+          0
+        ],
+        "isStreaming": true
+      }
+    },
+    {
+      "hash": "d5c3cdb1ed1fecba",
+      "request": {
+        "url": "https://api.openai.com/v1/responses",
+        "method": "POST",
+        "body": {
+          "model": "cor-1252-no-such-model",
+          "input": [
+            {
+              "role": "system",
+              "content": "You are the goal judge. Your decision directly controls whether the assistant continues working toward the goal.\n\nGiven a goal and the assistant's latest response, reason about whether the goal's requirements have been satisfied. Compare what the goal asks for against what the assistant has actually produced. Focus on substance, not phrasing.\n\nUse \"done\" when the goal is fully achieved.\nUse \"waiting\" when the goal explicitly requires a user checkpoint, user feedback, human verification, human confirmation, or another external event outside the goal-judge loop before the assistant should continue, and the assistant has correctly stopped at that checkpoint.\nUse \"waiting\" when the latest user message asks a question or requests clarification and the latest assistant message answers it; let the user acknowledge the answer, ask a follow-up, or otherwise return control before continuing goal work. Use common sense and do not wait if the user explicitly asked the assistant to continue autonomously after answering.\nUse \"continue\" when the goal is not done and the assistant should keep working autonomously, including when it asked for input that the goal did not explicitly require.\nIf your previous decision was \"waiting\" for an explicit user checkpoint, keep choosing \"waiting\" when the user's latest response asks a question, requests clarification, or otherwise does not satisfy the checkpoint. Do not continue until the required user feedback/confirmation/verification has actually been provided.\nIf the goal says to wait for the goal judge, judge, evaluator, or you to respond, approve, verify, validate, tell the assistant to continue, or otherwise provide the next signal, treat your own decision as that judge response. Verification can be performed by you unless the goal explicitly says it needs human/user verification. Choose \"continue\" when the assistant should proceed to the next step. Do not choose \"waiting\" for judge-controlled checkpoints, because that would mean waiting for yourself.\n\nYour \"reason\" field is sent back to the assistant as guidance when the goal is not yet done — be specific about what still needs to be accomplished. When choosing \"continue\", write the reason as an instruction for what the assistant should do next. When choosing \"waiting\", explain what specific user checkpoint is still outstanding."
+            },
+            {
+              "role": "user",
+              "content": [
+                {
+                  "type": "input_text",
+                  "text": "Goal: The assistant has replied with the word DONE.\n\nLatest user message:\nReply with the single word DONE.\n\nAssistant steps since that user message: 1\n\nLatest assistant message:\nDONE"
+                },
+                {
+                  "type": "input_text",
+                  "text": "Return your response as JSON matching this schema:\n\n{\"$schema\":\"http://json-schema.org/draft-07/schema#\",\"type\":\"object\",\"properties\":{\"decision\":{\"type\":\"string\",\"enum\":[\"done\",\"continue\",\"waiting\"],\"description\":\"Whether the goal is done, should continue autonomously, or is at an explicit user checkpoint required by the goal\"},\"reason\":{\"type\":\"string\",\"description\":\"Brief explanation of what was accomplished or what remains to be done\"}},\"required\":[\"decision\",\"reason\"],\"additionalProperties\":false}\n\nReturn only valid JSON. Do not include markdown or explanatory text."
+                }
+              ]
+            }
+          ],
+          "stream": true
+        },
+        "timestamp": 1792648721589
+      },
+      "response": {
+        "status": 404,
+        "statusText": "Not Found",
+        "headers": {
+          "access-control-expose-headers": "X-Request-ID, CF-Ray, CF-Ray",
+          "alt-svc": "h3=\":443\"; ma=86400",
+          "cf-cache-status": "DYNAMIC",
+          "cf-ray": "a4e6458e8e6bd921-DFW",
+          "connection": "keep-alive",
+          "content-type": "application/json",
+          "date": "Thu, 22 Oct 2026 05:58:41 GMT",
+          "openai-processing-ms": "119",
+          "openai-version": "2020-10-01",
+          "server": "cloudflare",
+          "strict-transport-security": "max-age=31536000; includeSubDomains; preload",
+          "x-content-type-options": "nosniff",
+          "x-request-id": "req_2f84e8e0dd1b46ac994624dc606fd337"
+        },
+        "body": {
+          "error": {
+            "message": "The model `cor-1252-no-such-model` does not exist or you do not have access to it.",
+            "type": "invalid_request_error",
+            "param": null,
+            "code": "model_not_found"
+          }
+        },
+        "isStreaming": false
+      }
+    }
+  ]
+}
