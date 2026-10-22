@@ -1,12 +1,32 @@
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { formatZodError } from '@mastra/server/handlers/error';
-import { isZodError, SERVER_ROUTES } from '@mastra/server/server-adapter';
+import {
+  checkRouteFGA,
+  getEffectivePermission,
+  isZodError,
+  MASTRA_AUTH_MODE_KEY,
+  SERVER_ROUTES,
+} from '@mastra/server/server-adapter';
 import type { ServerRoute, ServerContext, ZodErrorLike } from '@mastra/server/server-adapter';
-import { BadRequestException, Inject, Injectable, Logger } from '@nestjs/common';
+import { BadRequestException, ForbiddenException, HttpException, Inject, Injectable, Logger } from '@nestjs/common';
 
 import { MASTRA, MASTRA_OPTIONS } from '../constants';
 import type { MastraModuleOptions } from '../mastra.module';
+
+type HasPermissionFn = (userPerms: string[], required: string) => boolean;
+let hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
+function loadHasPermission(): Promise<HasPermissionFn | undefined> {
+  hasPermissionPromise ??= import('@mastra/core/auth/ee')
+    .then(m => m.hasPermission)
+    .catch(() => {
+      console.error(
+        '[@mastra/nestjs] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
+      );
+      return undefined;
+    });
+  return hasPermissionPromise;
+}
 
 export interface RouteMatch {
   route: ServerRoute;
@@ -247,6 +267,12 @@ export class RouteHandlerService {
       }
     }
 
+    await this.authorizeRoute(route, params.requestContext, {
+      ...validatedPathParams,
+      ...validatedQueryParams,
+      ...(typeof validatedBody === 'object' && validatedBody !== null ? validatedBody : {}),
+    });
+
     const context: ServerContext = {
       mastra: this.mastra,
       requestContext: params.requestContext,
@@ -272,6 +298,37 @@ export class RouteHandlerService {
       streamFormat: route.streamFormat,
       sseFlushOnConnect: route.sseFlushOnConnect,
     };
+  }
+
+  /**
+   * Enforce the route's RBAC permission and FGA check, matching the other server adapters.
+   * Relies on the auth guard having stored the user, permissions, and auth mode in the request context.
+   */
+  private async authorizeRoute(
+    route: ServerRoute,
+    requestContext: RequestContext,
+    params: Record<string, unknown>,
+  ): Promise<void> {
+    const studio = this.mastra.getStudio?.();
+    const server = this.mastra.getServer();
+    if (studio?.auth || server?.auth) {
+      const rbacProvider =
+        requestContext.get(MASTRA_AUTH_MODE_KEY) === 'studio' ? (studio?.rbac ?? server?.rbac) : server?.rbac;
+      const requiredPermission = rbacProvider ? getEffectivePermission(route) : null;
+      const hasPermission = requiredPermission ? await loadHasPermission() : undefined;
+      if (requiredPermission && hasPermission) {
+        const required = Array.isArray(requiredPermission) ? requiredPermission : [requiredPermission];
+        const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
+        if (!userPermissions || !required.some(permission => hasPermission(userPermissions, permission))) {
+          throw new ForbiddenException(`Missing required permission: ${required.join(' or ')}`);
+        }
+      }
+    }
+
+    const fgaError = await checkRouteFGA(this.mastra, route, requestContext, params);
+    if (fgaError) {
+      throw new HttpException(fgaError.message, fgaError.status);
+    }
   }
 
   private async parseBody(route: ServerRoute, body: unknown): Promise<unknown> {
