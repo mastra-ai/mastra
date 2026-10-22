@@ -4,6 +4,9 @@ import { http, HttpResponse } from 'msw';
 import type { FactoryUserSession } from '../src/ui/domains/workspaces/services/user-sessions';
 import { server } from './ui/msw-server';
 
+const pullRequestUrl = 'https://github.com/mastra-ai/mastra/pull/528';
+const slackThreadUrl = 'https://app.slack.com/client/T123/C123/thread/C123-1791936483.798759';
+
 const sessions: FactoryUserSession[] = [
   ['user/session', 'User session'],
   ['slack/1791936483-798759', 'Slack discussion'],
@@ -64,6 +67,58 @@ test.describe('Factory session navigation', () => {
         }),
       ),
       http.get('*/web/factory/projects/fp-1/sessions', () => HttpResponse.json({ sessions })),
+      http.get('*/web/factory/projects/fp-1/work-items', () =>
+        HttpResponse.json({
+          workItems: [
+            {
+              id: 'slack-item',
+              orgId: 'org-1',
+              createdBy: 'user-1',
+              factoryProjectId: 'fp-1',
+              board: 'review',
+              externalSource: {
+                integrationId: 'slack',
+                type: 'slack-thread',
+                workspaceId: 'T123',
+                externalId: 'slack:C123:1791936483.798759',
+              },
+              parentWorkItemId: null,
+              title: 'Slack source',
+              stages: ['done'],
+              stageHistory: [],
+              sessions: {
+                chat: {
+                  sessionId: 'session-1',
+                  branch: 'slack/1791936483-798759',
+                  threadId: 'session-1',
+                  startedBy: 'user-1',
+                },
+              },
+              metadata: {},
+              revision: 1,
+              createdAt: '2026-10-22T00:00:00.000Z',
+              updatedAt: '2026-10-22T00:00:00.000Z',
+            },
+            {
+              id: 'related-pr',
+              factoryProjectId: 'fp-1',
+              orgId: 'org-1',
+              createdBy: 'user-1',
+              board: 'review',
+              parentWorkItemId: 'slack-item',
+              title: 'Related pull request',
+              externalSource: { integrationId: 'github', type: 'pull-request', externalId: '528', url: pullRequestUrl },
+              stages: ['done'],
+              stageHistory: [],
+              sessions: {},
+              metadata: {},
+              revision: 1,
+              createdAt: '2026-10-22T00:00:00.000Z',
+              updatedAt: '2026-10-22T00:00:00.000Z',
+            },
+          ],
+        }),
+      ),
       http.get('*/web/github/projects/repo-1/issues', () => HttpResponse.json({ issues: [], nextPage: null })),
       http.get('*/web/intake/config', () => HttpResponse.json({ config: {} })),
       http.get('*/web/intake/bindings', () => HttpResponse.json({ bindings: [] })),
@@ -114,20 +169,16 @@ test.describe('Factory session navigation', () => {
     }
   });
 
-  test.describe('when a session menu opens another tab', () => {
-    for (const entry of ['context', 'dropdown']) {
-      test(`the ${entry} menu opens the Slack thread and leaves the current tab in place`, async ({
-        page,
-        context,
-      }) => {
+  for (const menu of ['context', 'dropdown']) {
+    test.describe(`when the ${menu} session menu opens another tab`, () => {
+      test('opens the Factory thread and leaves the current tab in place', async ({ page, context }) => {
         await page.goto('/factories/fp-1/work');
         const row = page.getByRole('link', { name: 'Slack discussion', exact: true });
-        if (entry === 'context') await row.click({ button: 'right' });
+        if (menu === 'context') await row.click({ button: 'right' });
         else {
           await row.hover();
           await page.getByRole('button', { name: 'Session actions for Slack discussion' }).click();
         }
-
         const opened = context.waitForEvent('page');
         await page.getByRole('menuitem', { name: 'Open in new tab' }).click();
         const newTab = await opened;
@@ -135,7 +186,97 @@ test.describe('Factory session navigation', () => {
         await expect(page).toHaveURL(/\/factories\/fp-1\/work$/);
         await newTab.close();
       });
-    }
+
+      for (const { label, url } of [
+        { label: 'Open in Slack', url: slackThreadUrl },
+        { label: 'Open pull request', url: pullRequestUrl },
+      ]) {
+        test(`${label} opens the linked source`, async ({ page, context }) => {
+          await context.route(url, route =>
+            route.fulfill({ contentType: 'text/html', body: '<title>Linked source</title>' }),
+          );
+          await page.goto('/factories/fp-1/work');
+          const row = page.getByRole('link', { name: 'Slack discussion', exact: true });
+          if (menu === 'context') await row.click({ button: 'right' });
+          else {
+            await row.hover();
+            await page.getByRole('button', { name: 'Session actions for Slack discussion' }).click();
+          }
+          const opened = context.waitForEvent('page');
+          await page.getByRole('menuitem', { name: label }).click();
+          const newTab = await opened;
+          await expect(newTab).toHaveURL(url);
+          await expect(page).toHaveURL(/\/factories\/fp-1\/work$/);
+          await newTab.close();
+        });
+      }
+    });
+  }
+
+  test.describe('when right-clicking a second time', () => {
+    test('allows the native browser menu on a link inside the popup', async ({ page }) => {
+      await page.goto('/factories/fp-1/work');
+      await page.evaluate(() => {
+        window.addEventListener(
+          'contextmenu',
+          event => {
+            const href = event.target instanceof Element ? event.target.closest('a')?.getAttribute('href') : undefined;
+            setTimeout(() => {
+              document.documentElement.dataset.lastContextEvent = JSON.stringify({
+                prevented: event.defaultPrevented,
+                href,
+              });
+            }, 0);
+          },
+          true,
+        );
+      });
+      await page.getByRole('link', { name: 'Slack discussion', exact: true }).click({ button: 'right' });
+      await page.getByRole('menuitem', { name: 'Open in Slack' }).click({ button: 'right' });
+      await expect(page.getByRole('menu')).toBeHidden();
+      await expect
+        .poll(() => page.evaluate(() => JSON.parse(document.documentElement.dataset.lastContextEvent ?? 'null')))
+        .toEqual({
+          prevented: false,
+          href: slackThreadUrl,
+        });
+      await expect(page).toHaveURL(/\/factories\/fp-1\/work$/);
+    });
+    test('allows the native browser menu on the original session link', async ({ page }) => {
+      await page.goto('/factories/fp-1/work');
+      await page.evaluate(() => {
+        const events: { prevented: boolean; href: string | null | undefined }[] = [];
+        window.addEventListener(
+          'contextmenu',
+          event => {
+            const href = event.target instanceof Element ? event.target.closest('a')?.getAttribute('href') : undefined;
+            setTimeout(() => {
+              events.push({ prevented: event.defaultPrevented, href });
+              document.documentElement.dataset.contextEvents = JSON.stringify(events);
+            }, 0);
+          },
+          true,
+        );
+      });
+      const row = page.getByRole('link', { name: 'Slack discussion', exact: true });
+      const bounds = await row.boundingBox();
+      if (!bounds) throw new Error('Session link must be visible');
+      const { x, y } = { x: bounds.x + 10, y: bounds.y + 10 };
+      await page.mouse.click(x, y, { button: 'right' });
+      await expect(page.getByRole('menuitem', { name: 'Open in Slack' })).toBeVisible();
+      await page.mouse.click(x, y, { button: 'right' });
+      await expect(page.getByRole('menu')).toBeHidden();
+      await expect
+        .poll(() => page.evaluate(() => JSON.parse(document.documentElement.dataset.contextEvents ?? '[]')))
+        .toEqual([
+          { prevented: true, href: '/factories/fp-1/user/threads/session-1' },
+          { prevented: false, href: '/factories/fp-1/user/threads/session-1' },
+        ]);
+      await expect(page).toHaveURL(/\/factories\/fp-1\/work$/);
+      await page.keyboard.press('Escape');
+      await page.mouse.click(x, y, { button: 'right' });
+      await expect(page.getByRole('menuitem', { name: 'Open in Slack' })).toBeVisible();
+    });
   });
 
   test.describe('when opening another Factory from its switcher', () => {
@@ -157,19 +298,25 @@ test.describe('Factory session navigation', () => {
     { name: 'tablet', width: 820, height: 1180 },
     { name: 'mobile', width: 390, height: 844 },
   ]) {
-    test.describe(`when using the session context menu on ${viewport.name}`, () => {
-      test.use({ viewport: { width: viewport.width, height: viewport.height } });
+    test.describe(`when using the three-dot menu on ${viewport.name}`, () => {
+      test.use({ viewport: { width: viewport.width, height: viewport.height }, hasTouch: viewport.width < 1024 });
 
       test('pins the Slack session and retains it after reloading', async ({ page }, testInfo) => {
         await page.goto('/factories/fp-1/work');
         if (viewport.width < 1024) {
           await page.getByRole('button', { name: 'Open navigation menu' }).click();
         }
-        await page.getByRole('link', { name: 'Slack discussion', exact: true }).click({ button: 'right' });
+        if (viewport.width >= 1024) await page.getByRole('link', { name: 'Slack discussion', exact: true }).hover();
+        const row = await page.getByRole('link', { name: 'Slack discussion', exact: true }).boundingBox();
+        const actions = page.getByRole('button', { name: 'Session actions for Slack discussion' });
+        const button = await actions.boundingBox();
+        if (!row || !button) throw new Error('Session and its actions must be visible');
+        expect(button.y + button.height / 2).toBeCloseTo(row.y + row.height / 2, 0);
+        await actions.click();
         await expect(page.getByRole('menuitem', { name: 'Pin session' })).toBeVisible();
         await expect(page.getByLabel('Slack discussion session details')).toBeHidden();
         await page.screenshot({
-          path: testInfo.outputPath(`session-context-${viewport.name}.png`),
+          path: testInfo.outputPath(`session-menu-${viewport.name}.png`),
           animations: 'disabled',
         });
         await page.getByRole('menuitem', { name: 'Pin session' }).click();

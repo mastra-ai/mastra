@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ContextMenu } from './context-menu';
@@ -8,7 +10,101 @@ afterEach(() => {
   cleanup();
 });
 
+function ControlledMenu() {
+  const [open, setOpen] = useState(false);
+  return (
+    <ContextMenu open={open} onOpenChange={setOpen}>
+      <ContextMenu.Trigger render={<a href="/session" />}>Session</ContextMenu.Trigger>
+      <ContextMenu.Content>
+        <ContextMenu.Item>Pin session</ContextMenu.Item>
+      </ContextMenu.Content>
+    </ContextMenu>
+  );
+}
+
 describe('ContextMenu', () => {
+  it('keeps the app menu open when the browser emits contextmenu for a touch long-press', async () => {
+    render(<ControlledMenu />);
+    const trigger = screen.getByRole('link', { name: 'Session' });
+    fireEvent.contextMenu(trigger);
+    await screen.findByRole('menuitem', { name: 'Pin session' });
+    expect(
+      fireEvent(
+        trigger,
+        new PointerEvent('contextmenu', {
+          pointerType: 'touch',
+          bubbles: true,
+          cancelable: true,
+        }),
+      ),
+    ).toBe(false);
+    expect(screen.getByRole('menuitem', { name: 'Pin session' })).toBeTruthy();
+  });
+
+  it.each(['controlled', 'uncontrolled'])('allows the next right-click to open the native menu (%s)', async mode => {
+    if (mode === 'controlled') render(<ControlledMenu />);
+    else
+      render(
+        <ContextMenu>
+          <ContextMenu.Trigger render={<a href="/session" />}>Session</ContextMenu.Trigger>
+          <ContextMenu.Content>
+            <ContextMenu.Item>Pin session</ContextMenu.Item>
+          </ContextMenu.Content>
+        </ContextMenu>,
+      );
+    const trigger = screen.getByRole('link', { name: 'Session' });
+    expect(fireEvent.contextMenu(trigger)).toBe(false);
+    await screen.findByRole('menuitem', { name: 'Pin session' });
+    expect(fireEvent.contextMenu(trigger)).toBe(true);
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+    // The escape hatch lasts for one gesture; a later right-click opens the app menu again.
+    expect(fireEvent.contextMenu(trigger)).toBe(false);
+    await screen.findByRole('menuitem', { name: 'Pin session' });
+  });
+
+  it('allows a native menu on the popup and does not activate its action', async () => {
+    const onClick = vi.fn();
+    render(
+      <ContextMenu>
+        <ContextMenu.Trigger>Session</ContextMenu.Trigger>
+        <ContextMenu.Content>
+          <ContextMenu.Item onClick={onClick}>Delete session</ContextMenu.Item>
+        </ContextMenu.Content>
+      </ContextMenu>,
+    );
+    fireEvent.contextMenu(screen.getByText('Session'));
+    const item = await screen.findByRole('menuitem', { name: 'Delete session' });
+    expect(fireEvent.contextMenu(item)).toBe(true);
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+    expect(onClick).not.toHaveBeenCalled();
+  });
+
+  it('resets after dismissal and honors canceled opening', async () => {
+    const user = userEvent.setup();
+    render(
+      <ContextMenu
+        onOpenChange={(open, details) => {
+          if (open) details.cancel();
+        }}
+      >
+        <ContextMenu.Trigger>Blocked session</ContextMenu.Trigger>
+        <ContextMenu.Content>
+          <ContextMenu.Item>Pin session</ContextMenu.Item>
+        </ContextMenu.Content>
+      </ContextMenu>,
+    );
+    fireEvent.contextMenu(screen.getByText('Blocked session'));
+    expect(screen.queryByRole('menu')).toBeNull();
+    cleanup();
+    render(<ControlledMenu />);
+    const trigger = screen.getByRole('link', { name: 'Session' });
+    fireEvent.contextMenu(trigger);
+    await screen.findByRole('menu');
+    await user.keyboard('{Escape}');
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+    expect(fireEvent.contextMenu(trigger)).toBe(false);
+    await screen.findByRole('menu');
+  });
   it('renders Label standalone without throwing (no Group ancestor required)', () => {
     expect(() => render(<ContextMenu.Label>Heading</ContextMenu.Label>)).not.toThrow();
   });

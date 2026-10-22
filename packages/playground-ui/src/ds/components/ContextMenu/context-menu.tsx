@@ -2,6 +2,7 @@ import { ContextMenu as ContextMenuPrimitive } from '@base-ui/react/context-menu
 import type { ContextMenuPopupProps, ContextMenuPositionerProps } from '@base-ui/react/context-menu';
 import { CheckIcon, ChevronDown } from 'lucide-react';
 import * as React from 'react';
+import { useNativeContextMenu } from './use-native-context-menu';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
 import {
@@ -262,8 +263,20 @@ function ContextMenu({
   onOpenChange?: ContextMenuPrimitive.Root.Props['onOpenChange'];
   children: React.ReactNode;
 }) {
+  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(defaultOpen ?? false);
+  const isOpen = open ?? uncontrolledOpen;
+  const actions = React.useRef<ContextMenuPrimitive.Root.Actions | null>(null);
+  useNativeContextMenu(isOpen, actions);
+
   return (
-    <ContextMenuRoot open={open} defaultOpen={defaultOpen} onOpenChange={onOpenChange}>
+    <ContextMenuRoot
+      open={isOpen}
+      actionsRef={actions}
+      onOpenChange={(nextOpen, details) => {
+        onOpenChange?.(nextOpen, details);
+        if (!details.isCanceled && open === undefined) setUncontrolledOpen(nextOpen);
+      }}
+    >
       {children}
     </ContextMenuRoot>
   );

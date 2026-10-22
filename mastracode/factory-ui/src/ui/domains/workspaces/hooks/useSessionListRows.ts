@@ -75,6 +75,7 @@ export function useSessionListRows(factoryId: string | undefined): {
     buildUserSessionRow({
       session,
       item: workItemBySessionId.get(session.sessionId)?.item,
+      pullRequest: workItemBySessionId.get(session.sessionId)?.pullRequest,
       factoryId,
       pathname,
       running: runningById[session.sessionId] === true,

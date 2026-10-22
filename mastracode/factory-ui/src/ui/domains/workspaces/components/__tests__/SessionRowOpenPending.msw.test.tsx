@@ -6,7 +6,7 @@
  * brings the session online on mount. No "Opening <name>" spinner is shown and
  * no session-create request is fired from the row.
  */
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
@@ -20,6 +20,13 @@ import { SessionsSection } from '../SessionsSection';
 import { testChatSession } from './fixtures/sessionsSection';
 
 const projectRepositoryId = 'ghp-1';
+const slackSource = {
+  integrationId: 'slack',
+  type: 'slack-thread',
+  workspaceId: 'T123',
+  externalId: 'slack:C123:1791936483.798759',
+};
+const slackThreadUrl = 'https://app.slack.com/client/T123/C123/thread/C123-1791936483.798759';
 
 const existingSession: FactoryUserSession = {
   id: 'row-1',
@@ -90,6 +97,208 @@ function renderSection(initialEntry = '/factories/fp-1') {
 }
 
 describe('Session row open', () => {
+  describe.each(['context', 'dropdown'] as const)('%s menu source links', menu => {
+    it.each([
+      {
+        kind: 'saved permalink',
+        source: { ...slackSource, url: 'https://example.slack.com/archives/C123/p1791936483798759' },
+        expected: 'https://example.slack.com/archives/C123/p1791936483798759',
+      },
+      { kind: 'workspace and thread IDs', source: slackSource, expected: slackThreadUrl },
+      {
+        kind: 'direct message',
+        source: { ...slackSource, externalId: 'slack:D123:' },
+        expected: 'https://app.slack.com/client/T123/D123',
+      },
+      { kind: 'missing workspace', source: { ...slackSource, workspaceId: undefined }, expected: undefined },
+      {
+        kind: 'missing conversation',
+        source: { ...slackSource, externalId: 'slack::1791936483.798759' },
+        expected: undefined,
+      },
+      {
+        kind: 'different source',
+        source: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: '42',
+          url: 'https://github.com/acme/app/issues/42',
+        },
+        expected: undefined,
+      },
+    ])('offers the Slack conversation link for a $kind when available', async ({ source, expected }) => {
+      const session = { ...existingSession, branch: 'slack/1791936483-798759', title: 'Slack discussion' };
+      stubFactoryWithRepository([session]);
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items`, () =>
+          HttpResponse.json({
+            workItems: [
+              {
+                id: 'slack-item',
+                orgId: session.orgId,
+                createdBy: session.userId,
+                factoryProjectId: 'fp-1',
+                externalSource: source,
+                parentWorkItemId: null,
+                title: session.title,
+                stages: ['intake'],
+                stageHistory: [],
+                sessions: {
+                  work: {
+                    sessionId: session.sessionId,
+                    branch: session.branch,
+                    threadId: session.sessionId,
+                    startedBy: session.userId,
+                  },
+                },
+                metadata: {},
+                revision: 1,
+                createdAt: session.createdAt,
+                updatedAt: session.updatedAt,
+              },
+            ],
+          }),
+        ),
+      );
+      const user = userEvent.setup();
+      const { client } = renderSection();
+      await screen.findByRole('link', { name: 'Slack discussion' });
+      await waitFor(() => expect(client.isFetching()).toBe(0));
+      if (menu === 'context') fireEvent.contextMenu(screen.getByRole('link', { name: 'Slack discussion' }));
+      else await user.click(screen.getByRole('button', { name: 'Session actions for Slack discussion' }));
+      await screen.findByRole('menuitem', { name: 'Open in new tab' });
+
+      if (!expected) {
+        expect(screen.queryByRole('menuitem', { name: 'Open in Slack' })).not.toBeInTheDocument();
+        return;
+      }
+      const link = await screen.findByRole('menuitem', { name: 'Open in Slack' });
+      expect(link).toHaveAttribute('href', expected);
+      expect(link).toHaveAttribute('target', '_blank');
+      expect(link).toHaveAttribute('rel', 'noopener noreferrer');
+      expect(screen.getByTestId('pathname')).toHaveTextContent(/^\/factories\/fp-1$/);
+    });
+
+    it.each([
+      {
+        kind: 'GitHub issue and related PR',
+        branch: 'factory/issue-42',
+        source: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: '42',
+          url: 'https://github.com/acme/app/issues/42',
+        },
+        related: true,
+        expected: [
+          ['Open in GitHub', 'https://github.com/acme/app/issues/42'],
+          ['Open pull request', 'https://github.com/acme/app/pull/43'],
+        ],
+      },
+      {
+        kind: 'Slack user session and related PR',
+        branch: 'slack/1791936483-798759',
+        source: slackSource,
+        related: true,
+        expected: [
+          ['Open in Slack', slackThreadUrl],
+          ['Open pull request', 'https://github.com/acme/app/pull/43'],
+        ],
+      },
+      {
+        kind: 'GitHub PR',
+        branch: 'factory/pr-43',
+        source: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: '43',
+          url: 'https://github.com/acme/app/pull/43',
+        },
+        related: false,
+        expected: [['Open pull request', 'https://github.com/acme/app/pull/43']],
+      },
+      {
+        kind: 'GitLab merge request',
+        branch: 'factory/pr-43',
+        source: {
+          integrationId: 'gitlab',
+          type: 'pull-request',
+          externalId: '43',
+          url: 'https://gitlab.com/acme/app/-/merge_requests/43',
+        },
+        related: false,
+        expected: [['Open merge request', 'https://gitlab.com/acme/app/-/merge_requests/43']],
+      },
+      {
+        kind: 'Linear issue',
+        branch: 'factory/issue-42',
+        source: {
+          integrationId: 'linear',
+          type: 'issue',
+          externalId: 'FACT-528',
+          url: 'https://linear.app/acme/issue/FACT-528',
+        },
+        related: false,
+        expected: [['Open in Linear', 'https://linear.app/acme/issue/FACT-528']],
+      },
+    ])(
+      'opens the available source links for a $kind without duplicates',
+      async ({ branch, source, related, expected }) => {
+        const session = { ...existingSession, branch, title: 'Linked session' };
+        stubFactoryWithRepository([session]);
+        const item = {
+          id: 'source-item',
+          factoryProjectId: 'fp-1',
+          orgId: session.orgId,
+          createdBy: session.userId,
+          externalSource: source,
+          parentWorkItemId: null,
+          title: 'Original work item',
+          stages: ['intake'],
+          stageHistory: [],
+          sessions: {
+            work: { sessionId: session.sessionId, branch, threadId: session.sessionId, startedBy: session.userId },
+          },
+          metadata: {},
+          revision: 1,
+          createdAt: session.createdAt,
+          updatedAt: session.updatedAt,
+        };
+        const pullRequest = {
+          ...item,
+          id: 'pull-request',
+          parentWorkItemId: item.id,
+          sessions: {},
+          externalSource: {
+            integrationId: 'github',
+            type: 'pull-request',
+            externalId: '43',
+            url: 'https://github.com/acme/app/pull/43',
+          },
+        };
+        server.use(
+          http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items`, () =>
+            HttpResponse.json({ workItems: related ? [item, pullRequest] : [item] }),
+          ),
+        );
+        const user = userEvent.setup();
+        const { client } = renderSection();
+        const row = await screen.findByRole('link', { name: session.title });
+        await waitFor(() => expect(client.isFetching()).toBe(0));
+        if (menu === 'context') fireEvent.contextMenu(row);
+        else await user.click(screen.getByRole('button', { name: `Session actions for ${session.title}` }));
+        for (const [name, url] of expected) {
+          const links = await screen.findAllByRole('menuitem', { name });
+          expect(links).toHaveLength(1);
+          expect(links[0]).toHaveAttribute('href', url);
+          expect(links[0]).toHaveAttribute('target', '_blank');
+          expect(links[0]).toHaveAttribute('rel', 'noopener noreferrer');
+        }
+        expect(screen.getByTestId('pathname')).toHaveTextContent(/^\/factories\/fp-1$/);
+      },
+    );
+  });
+
   it.each([
     ['user/my-feature', '/factories/fp-1/user/threads/sess-1'],
     ['slack/1791936483-798759', '/factories/fp-1/user/threads/sess-1'],
@@ -122,14 +331,25 @@ describe('Session row open', () => {
     });
   });
 
-  it.each(['context', 'dropdown'])('offers the same session actions in the %s menu', async entry => {
+  it('allows a second right-click to open the native browser menu on session links', async () => {
+    stubFactoryWithRepository([existingSession]);
+    renderSection();
+    const link = await screen.findByRole('link', { name: 'my-feature' });
+
+    expect(fireEvent.contextMenu(link)).toBe(false);
+    await screen.findByRole('menuitem', { name: 'Pin session' });
+    expect(fireEvent.contextMenu(link)).toBe(true);
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+  });
+
+  it.each(['context', 'dropdown'] as const)('offers navigation and session actions in the %s menu', async menu => {
     stubFactoryWithRepository([existingSession]);
     const user = userEvent.setup();
     renderSection();
 
-    const row = await screen.findByRole('link', { name: 'my-feature' });
+    await screen.findByRole('link', { name: 'my-feature' });
     async function openMenu() {
-      if (entry === 'context') await user.pointer({ target: row, keys: '[MouseRight]' });
+      if (menu === 'context') fireEvent.contextMenu(screen.getByRole('link', { name: 'my-feature' }));
       else await user.click(screen.getByRole('button', { name: 'Session actions for my-feature' }));
     }
 
@@ -147,6 +367,7 @@ describe('Session row open', () => {
       '/factories/fp-1/user/threads/sess-1',
     );
     expect(screen.getByRole('menuitem', { name: 'Open in new tab' })).toHaveAttribute('target', '_blank');
+    expect(screen.queryByRole('menuitem', { name: 'Open in Slack' })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('menuitem', { name: 'Pin session' }));
     expect(screen.getByLabelText('my-feature pinned')).toBeInTheDocument();
