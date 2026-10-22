@@ -990,12 +990,14 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           }
 
           // Check FGA authorization (EE feature)
+          // Path params last: the custom handler reads them from the URL, so query/body
+          // values must not be able to change which resource FGA checks.
           const fgaError = await checkRouteFGA(server.mastra, serverRoute, ctx.state.requestContext, {
-            ...(matchedRoute?.params ?? {}),
             ...(ctx.query as Record<string, string>),
             ...(typeof ctx.request.body === 'object' && ctx.request.body !== null
               ? (ctx.request.body as Record<string, unknown>)
               : {}),
+            ...(matchedRoute?.params ?? {}),
           });
           if (fgaError) {
             ctx.status = fgaError.status;

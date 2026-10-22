@@ -772,10 +772,12 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             }
           }
         }
+        // Path params last: the custom handler reads them from the URL, so query/body
+        // values must not be able to change which resource FGA checks.
         const fgaError = await checkRouteFGA(this.mastra, serverRoute, c.get('requestContext'), {
-          ...c.req.param(),
           ...Object.fromEntries(new URL(c.req.url).searchParams.entries()),
           ...bodyParams,
+          ...c.req.param(),
         });
         if (fgaError) {
           return c.json({ error: fgaError.error, message: fgaError.message }, fgaError.status as any);
