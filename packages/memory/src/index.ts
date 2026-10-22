@@ -87,7 +87,15 @@ const observationIndexReceiptSchema = z.object({
   version: z.literal(1),
   recordId: z.string(),
   namespace: z.string(),
-  groups: z.record(z.string(), z.string()),
+  groups: z.record(
+    z.string(),
+    z.object({
+      fingerprint: z.string(),
+      indexName: z.string(),
+      dimension: z.number().int().positive(),
+      chunkCount: z.number().int().positive(),
+    }),
+  ),
 });
 const OBSERVATION_INDEX_RECEIPT_KEY = 'mastra_om_observation_index';
 
@@ -2780,15 +2788,34 @@ Notes:
     await runOMCommit(`observation-index:${resourceId}:${threadId}`, async () => {
       const thread = await store.getThreadById({ threadId });
       const receipt = observationIndexReceiptSchema.safeParse(thread?.metadata?.[OBSERVATION_INDEX_RECEIPT_KEY]);
-      if (
-        receipt.success &&
-        receipt.data.recordId === recordId &&
-        receipt.data.namespace === namespace &&
-        receipt.data.groups[groupId] === fingerprint
-      )
-        return;
+      const indexed =
+        receipt.success && receipt.data.recordId === recordId && receipt.data.namespace === namespace
+          ? receipt.data.groups[groupId]
+          : undefined;
+      if (indexed?.fingerprint === fingerprint) {
+        // Receipts and vectors cannot be committed atomically. Check the destination before
+        // skipping: an overlapping writer may have replaced the vector after this receipt.
+        // Use a unit vector only to satisfy stores that require a vector for filtered reads.
+        try {
+          const rows = await this.vector!.query({
+            indexName: indexed.indexName,
+            queryVector: Array.from({ length: indexed.dimension }, (_, i) => (i === 0 ? 1 : 0)),
+            topK: indexed.chunkCount,
+            filter: { resource_id: resourceId, thread_id: threadId, group_id: groupId },
+          });
+          if (
+            rows.length === indexed.chunkCount &&
+            rows.every(row => row.metadata?.record_id === recordId && row.metadata?.index_revision === fingerprint)
+          )
+            return;
+        } catch (error) {
+          // Missing indexes and adapters with limited filtered reads conservatively reindex.
+          this.logger.debug('Could not verify observation index receipt; retrying the write', { groupId, error });
+        }
+      }
 
-      if (!(await this.writeObservation(observation))) return;
+      const written = await this.writeObservation(observation, fingerprint);
+      if (!written) return;
       // A crash or metadata failure here leaves no acknowledgement: the next cycle repairs it.
       await store.updateThreadMetadata({
         id: threadId,
@@ -2805,7 +2832,7 @@ Notes:
               version: 1,
               recordId,
               namespace,
-              groups: { ...groups, [groupId]: fingerprint },
+              groups: { ...groups, [groupId]: { fingerprint, ...written } },
             },
           };
         },
@@ -2829,20 +2856,15 @@ Notes:
     await this.writeObservation(observation);
   }
 
-  private async writeObservation({
-    text,
-    groupId,
-    range,
-    threadId,
-    resourceId,
-    observedAt,
-    recordId,
-  }: Parameters<Memory['indexObservation']>[0]): Promise<boolean> {
-    if (!this.vector || !this.embedder) return false;
+  private async writeObservation(
+    { text, groupId, range, threadId, resourceId, observedAt, recordId }: Parameters<Memory['indexObservation']>[0],
+    indexRevision?: string,
+  ): Promise<{ indexName: string; dimension: number; chunkCount: number } | undefined> {
+    if (!this.vector || !this.embedder) return;
 
     const embedResult = await this.embedMessageContent(text);
     if (embedResult.embeddings.length === 0 || embedResult.dimension === undefined) {
-      return false;
+      return;
     }
 
     const { indexName } = await this.createObservationEmbeddingIndex(embedResult.dimension);
@@ -2868,6 +2890,7 @@ Notes:
       vectors: embedResult.embeddings,
       metadata: embedResult.chunks.map(chunk => ({
         group_id: groupId,
+        ...(indexRevision ? { index_revision: indexRevision } : {}),
         range,
         thread_id: threadId,
         resource_id: resourceId,
@@ -2876,7 +2899,7 @@ Notes:
         text: chunk,
       })),
     });
-    return true;
+    return { indexName, dimension: embedResult.dimension, chunkCount: embedResult.chunks.length };
   }
 
   /**

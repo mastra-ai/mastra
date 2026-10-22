@@ -2,7 +2,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { InMemoryStore, InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { MastraVector } from '@mastra/core/vector';
-import type { UpsertVectorParams } from '@mastra/core/vector';
+import type { UpsertVectorParams, QueryVectorParams } from '@mastra/core/vector';
 import { describe, expect, it } from 'vitest';
 
 import { Memory } from '../../../index';
@@ -11,6 +11,7 @@ import { parseObservationGroups } from '../observation-groups';
 class CountingVector extends MastraVector {
   writes: NonNullable<UpsertVectorParams['metadata']> = [];
   fail = false;
+  rows = new Map<string, NonNullable<UpsertVectorParams['metadata']>[number]>();
   constructor() {
     super({ id: 'sync-delta-vector' });
   }
@@ -18,10 +19,17 @@ class CountingVector extends MastraVector {
   async upsert({ ids = [], metadata = [] }: UpsertVectorParams) {
     if (this.fail) throw new Error('vector write rejected');
     this.writes.push(...metadata);
+    ids.forEach((id, i) => {
+      const row = metadata[i];
+      if (row) this.rows.set(id, row);
+    });
     return ids;
   }
-  async query() {
-    return [];
+  async query({ filter, topK = 10 }: QueryVectorParams) {
+    return [...this.rows.entries()]
+      .filter(([, row]) => Object.entries(filter ?? {}).every(([key, value]) => row[key] === value))
+      .slice(0, topK)
+      .map(([id, metadata]) => ({ id, metadata, score: 1 }));
   }
   async listIndexes() {
     return [];
@@ -190,6 +198,38 @@ describe('synchronous observation indexing delta (#27930)', () => {
     expect(vector.writes).toHaveLength(1);
     memoryStore.failReceipt = false;
     await observe(open(), 2);
+    expect(vector.writes).toHaveLength(3);
+    await observe(open(), 3);
+    expect(vector.writes).toHaveLength(4);
+  });
+
+  it('repairs a conflicting vector write even when the newer receipt was saved last', async () => {
+    const { memory, open, observe, vector } = await setup();
+    await observe(memory, 1);
+    const original = vector.writes[0];
+    if (!original) throw new Error('Missing original vector');
+    await observe(open(), 2);
+    // The conflicting writer finishes its upsert before the current writer finishes its
+    // receipt: durable metadata still acknowledges current, but the vector is retired.
+    for (const [id, row] of vector.rows) {
+      if (row.group_id === original.group_id) {
+        vector.rows.set(id, { ...row, record_id: 'retired', index_revision: 'retired-revision' });
+      }
+    }
+    await observe(open(), 3);
+    const repaired = [...vector.rows.values()].find(row => row.group_id === original.group_id);
+    expect(repaired?.record_id).toBe(original.record_id);
+    expect(vector.writes.filter(row => row.group_id === original.group_id)).toHaveLength(2);
+    await observe(open(), 4);
+    expect(vector.writes.filter(row => row.group_id === original.group_id)).toHaveLength(2);
+  });
+
+  it('repairs vectors removed externally despite a durable receipt', async () => {
+    const { memory, open, observe, vector } = await setup();
+    await observe(memory, 1);
+    vector.rows.clear();
+    await observe(open(), 2);
+    expect(vector.rows.size).toBe(2);
     expect(vector.writes).toHaveLength(3);
     await observe(open(), 3);
     expect(vector.writes).toHaveLength(4);
