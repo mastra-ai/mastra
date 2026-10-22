@@ -143,9 +143,9 @@ Treat tool annotations from servers you don't control as untrusted hints. Visit 
 
 MCP servers run code and return content on your agent's behalf, so configure them with the same care as any other external dependency:
 
-- **Stdio subprocess environment**: subprocesses inherit only the MCP SDK's curated environment whitelist (for example `PATH` and `HOME` on POSIX), not the full parent environment. Set `inheritDefaultEnv: false` on a server to pass only the variables you list in `env`.
-- **Outbound host restriction**: Set `allowedHosts` when HTTP server URLs come from untrusted configuration to restrict the hosts that the client can contact. The default fetch path also blocks redirect hops before sending them. A custom `fetch` is validated against its final response URL only after the request, so it must enforce its own redirect policy when outbound contact must be prevented.
-- **Tool response trust**: tool results are untrusted model input. Use [input and output processors](/docs/agents/processors) to inspect or sanitize content before it reaches the model, and `requireToolApproval` to gate sensitive tools.
+- **Stdio subprocess environment**: subprocesses inherit only the MCP SDK's curated environment whitelist (for example `PATH` and `HOME` on POSIX), not the full parent environment. Set `inheritDefaultEnv: false` on a server to pass only the variables listed in `env`.
+- **Outbound host restriction**: set `allowedHosts` when HTTP server URLs come from untrusted configuration, to restrict the hosts the client can contact. The default fetch path blocks redirect hops before sending them; a custom `fetch` is validated against its final response URL only after the request, so it must enforce its own redirect policy when outbound contact must be prevented.
+- **Tool response trust**: tool results are untrusted model input. Use [input and output processors](/docs/agents/processors) to sanitize content before it reaches the model, and `requireToolApproval` for sensitive tools.
 
 Visit the [MCPClient security reference](/reference/tools/mcp-client#security) for enforcement details of each option.
 
@@ -264,32 +264,24 @@ import { MCPServer } from '@mastra/mcp'
 import { createTool } from '@mastra/core/tools'
 import { z } from 'zod'
 
-export const calculatorTool = createTool({
+const calculatorTool = createTool({
   id: 'calculatorWithUI',
   description: 'Calculate the sum of two numbers',
-  inputSchema: z.object({
-    num1: z.number(),
-    num2: z.number(),
-  }),
-  mcp: {
-    _meta: { ui: { resourceUri: 'ui://calculator/main' } },
-  },
+  inputSchema: z.object({ num1: z.number(), num2: z.number() }),
+  mcp: { _meta: { ui: { resourceUri: 'ui://calculator/main' } } },
   execute: async ({ num1, num2 }) => ({
     content: [{ type: 'text', text: 'The result is displayed in the calculator app.' }],
     structuredContent: { result: num1 + num2 },
   }),
 })
 
-export const calculatorMcpServer = new MCPServer({
+const calculatorMcpServer = new MCPServer({
   id: 'calculator-app-server',
   name: 'Calculator App Server',
   version: '1.0.0',
   tools: { calculatorTool },
   appResources: {
-    'ui://calculator/main': {
-      name: 'Calculator',
-      htmlPath: './src/mastra/mcp/calculator.html',
-    },
+    'ui://calculator/main': { name: 'Calculator', htmlPath: './src/mastra/mcp/calculator.html' },
   },
 })
 ```
@@ -323,11 +315,6 @@ Use the `App` class from `@modelcontextprotocol/ext-apps` inside the HTML resour
           arguments: toolInput,
         })
         document.querySelector('#result').textContent = JSON.stringify(result)
-
-        await app.sendMessage({
-          role: 'user',
-          content: [{ type: 'text', text: 'Explain the recalculated result.' }],
-        })
       })
 
       await app.connect()
@@ -345,37 +332,11 @@ The guest-side APIs serve different parts of the interaction:
 | `app.sendMessage()` | Add a user message to chat and start a new model turn |
 | `app.connect()` | Connect to the host after registering event handlers |
 
-The interaction follows this sequence:
-
-1. The agent calls the tool.
-1. The tool returns model-facing `content` and UI-facing `structuredContent`.
-1. Studio renders the associated app resource.
-1. The app receives tool input and can call server tools or send chat messages.
-
 Visit the external [`App` API reference](https://apps.extensions.modelcontextprotocol.io/api/classes/app.App.html) for all guest-side methods and lifecycle hooks.
 
 ### Register MCP Apps
 
-For a local app, pass the tool to an agent and register its MCP server on `Mastra`:
-
-```typescript title="src/mastra/index.ts"
-import { Agent } from '@mastra/core/agent'
-import { Mastra } from '@mastra/core/mastra'
-import { calculatorMcpServer, calculatorTool } from './mcp/calculator'
-
-const calculatorAgent = new Agent({
-  id: 'calculator-agent',
-  name: 'Calculator Agent',
-  instructions: 'Use the calculator tool for arithmetic.',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
-  tools: { calculatorTool },
-})
-
-export const mastra = new Mastra({
-  agents: { calculatorAgent },
-  mcpServers: { calculatorMcpServer },
-})
-```
+Register the server on `Mastra` the same way as any other server in [Expose a Mastra MCP server](#expose-a-mastra-mcp-server), and pass its tool to the agent that should render the app.
 
 For an external MCP server that implements MCP Apps, load its tools with `MCPClient.listTools()` and register its proxy so Studio can resolve the remote app resources:
 
