@@ -122,15 +122,15 @@ export function MessageBubble({
   );
   const replyFooter = entry.streaming
     ? undefined
-    : (text: string) => (
-        <>
-          {modelLabel}
+    : (text: string) => ({
+        model: modelLabel,
+        actions: (
           <MessageActions>
             <MessageCopyButton text={text} />
             <MessageTimestamp value={entry.message.createdAt} />
           </MessageActions>
-        </>
-      );
+        ),
+      });
   const messageActions = meta ? (
     <MessageActions>
       <MessageCopyButton text={meta} />

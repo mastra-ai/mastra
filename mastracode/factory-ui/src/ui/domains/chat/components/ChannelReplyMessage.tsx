@@ -5,6 +5,12 @@ import { SlackIcon } from '@mastra/playground-ui/icons/SlackIcon';
 
 export const REPLY_IN_THREAD_TOOL = 'reply_in_thread';
 
+/** The model, then copy and time, around a finished post's "Sent to Slack". */
+export interface ReplyFooter {
+  model?: ReactNode;
+  actions: ReactNode;
+}
+
 type ReplyStatus = 'running' | 'done' | 'error';
 
 /**
@@ -18,7 +24,7 @@ export function ChannelReplyMessage({
 }: {
   text: string;
   status: ReplyStatus;
-  footer?: ReactNode;
+  footer?: ReplyFooter;
 }) {
   // Each post says where it went, so it stays apart from the agent's own text
   // in the same turn, which only the web UI sees.
@@ -27,13 +33,14 @@ export function ChannelReplyMessage({
     <div role="group" aria-label="Reply in Slack thread" className="my-3">
       <MarkdownRenderer streaming={status === 'running'}>{text}</MarkdownRenderer>
       <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-2">
+        {footer?.model}
         <span className="flex items-center gap-1">
           <SlackIcon className="size-3" aria-hidden="true" />
           <Txt as="span" variant="meta" className={status === 'error' ? 'text-destructive-foreground' : undefined}>
             {label}
           </Txt>
         </span>
-        {footer}
+        {footer?.actions}
       </div>
     </div>
   );

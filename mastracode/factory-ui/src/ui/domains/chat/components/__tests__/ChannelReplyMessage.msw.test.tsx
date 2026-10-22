@@ -75,6 +75,8 @@ describe('reply_in_thread in the transcript', () => {
     expect(within(post).getByText('Hello world')).toBeInTheDocument();
     expect(within(post).getByText('Sent to Slack')).toBeInTheDocument();
     expect(within(post).getByText(/^Claude Opus 4\.6/)).toBeInTheDocument();
+    // Model first, like every agent footer, then where it went, then copy and time.
+    expect(post.textContent).toMatch(/Claude Opus 4\.6.*Sent to Slack/);
     expect(post.querySelector('time')?.getAttribute('datetime')).toBe(CREATED_AT.toISOString());
     expect(within(post).queryByText(/I posted hello world/)).not.toBeInTheDocument();
     expect(screen.getAllByText('Sent to Slack')).toHaveLength(1);

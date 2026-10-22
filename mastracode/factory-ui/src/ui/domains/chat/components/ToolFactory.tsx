@@ -7,6 +7,7 @@ import type { ReactNode } from 'react';
 
 import { SkillMessage } from '@mastra/playground-ui/domains/chat/messages/skill-message';
 import { ChannelReplyMessage, REPLY_IN_THREAD_TOOL, replyText } from './ChannelReplyMessage';
+import type { ReplyFooter } from './ChannelReplyMessage';
 import { SubmitPlanCard } from './SubmitPlanCard';
 
 type ToolStatus = 'running' | 'done' | 'error';
@@ -20,7 +21,7 @@ export interface ToolFactoryProps {
   /** The args JSON streamed so far, before `input` is parsed. */
   argsText?: string;
   /** Model, copy and time under a finished `reply_in_thread` post, copying `text`. */
-  replyFooter?: (text: string) => ReactNode;
+  replyFooter?: (text: string) => ReplyFooter;
   output?: unknown;
   status: ToolStatus;
   isSubmitting?: boolean;
