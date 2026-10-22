@@ -105,7 +105,7 @@ describe('NewPage default-model guard', () => {
 });
 
 describe('NewPage credential guard', () => {
-  it('replaces the composer with an actionable empty state when the caller has no credential for the default model provider', async () => {
+  it('asks for a personal key when a chat that runs on personal credentials is missing one, since an org key cannot unblock it', async () => {
     stubFactory({ id: 'fp-1', name: 'Mastra', defaultModelId: 'anthropic/claude-sonnet-4-5' });
     server.use(
       http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
@@ -116,7 +116,12 @@ describe('NewPage credential guard', () => {
     renderNewPage();
 
     expect(await screen.findByRole('heading', { name: "You don't have access to Anthropic" })).toBeInTheDocument();
-    expect(screen.getByText(/ask an org admin to share an org-wide key/)).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        'The Factory default model (anthropic/claude-sonnet-4-5) needs a credential for Anthropic. Add your own key for Anthropic under Personal defaults in Models settings.',
+      ),
+    ).toBeInTheDocument();
+    expect(screen.queryByText(/org admin/)).not.toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open Models settings' })).toHaveAttribute(
       'href',
       '/factories/fp-1/settings/models#personal-defaults',

@@ -169,7 +169,7 @@ function missingCredentialDescription(guard: MissingCredentialGuard, anchor: Mod
   if (anchor === MODEL_DEFAULTS_ANCHORS.factory) {
     return `${requirement} Ask an org admin to add one under ${MODEL_DEFAULTS_LABELS.factory} in Models settings.`;
   }
-  return `${requirement} Add your own key in Models settings, or ask an org admin to share an org-wide key with your team.`;
+  return `${requirement} Add your own key for ${providerName} under ${MODEL_DEFAULTS_LABELS.personal} in Models settings.`;
 }
 
 function MissingCredentialState({ factoryId, guard }: { factoryId: string; guard: MissingCredentialGuard }) {
