@@ -43,6 +43,27 @@ describe('ContextMenu', () => {
     await screen.findByRole('menuitem', { name: 'Pin session' });
   });
 
+  it('allows the next macOS Control-click to open the native menu', async () => {
+    render(<ControlledMenu />);
+    const trigger = screen.getByRole('link', { name: 'Session' });
+    fireEvent.contextMenu(trigger);
+    await screen.findByRole('menuitem', { name: 'Pin session' });
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: true });
+    expect(fireEvent.contextMenu(trigger)).toBe(true);
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+  });
+
+  it('keeps the app menu for a context menu after a plain left-click dismissed it', async () => {
+    render(<ControlledMenu />);
+    const trigger = screen.getByRole('link', { name: 'Session' });
+    fireEvent.contextMenu(trigger);
+    await screen.findByRole('menuitem', { name: 'Pin session' });
+    fireEvent.pointerDown(trigger, { button: 0 });
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+    expect(fireEvent.contextMenu(trigger)).toBe(false);
+    await screen.findByRole('menuitem', { name: 'Pin session' });
+  });
+
   it('allows a native menu on the popup and does not activate its action', async () => {
     const onClick = vi.fn();
     render(

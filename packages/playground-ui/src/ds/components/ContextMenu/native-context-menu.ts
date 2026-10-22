@@ -1,12 +1,17 @@
 import type { ContextMenu as ContextMenuPrimitive } from '@base-ui/react/context-menu';
 
+// macOS reports Control-click as a primary press, then fires contextmenu.
+function isRightPress(event: MouseEvent) {
+  return event.button === 2 || (event.button === 0 && event.ctrlKey);
+}
+
 /**
  * A right-press outside the open menu dismisses it; the contextmenu of that same gesture gets the browser menu
  * instead of Base UI reopening its own and blocking the native one.
  */
 export function allowNativeMenuAfterRightPressOutside(details: ContextMenuPrimitive.Root.ChangeEventDetails) {
   if (details.isCanceled || details.reason !== 'outside-press') return;
-  if (!(details.event instanceof MouseEvent) || details.event.button !== 2) return;
+  if (!(details.event instanceof MouseEvent) || !isRightPress(details.event)) return;
 
   const gesture = new AbortController();
   const options = { capture: true, signal: gesture.signal };
