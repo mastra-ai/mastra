@@ -1102,6 +1102,79 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     expect(shared.owner(key)).toBeUndefined();
   }, 20_000);
 
+  it("never frees a successor's lease when a retake it gave up on settles after the successor took the run", async () => {
+    const thread = 'late-retake-successor-thread';
+    const key = [RESOURCE, thread].join('\u0000');
+    for (let i = 0; i < 100; i++) {
+      llm.on(
+        { userMessage: 'late retake after takeover', sequenceIndex: i },
+        { toolCalls: [{ id: `call_late_takeover_${i}`, name: 'tick', arguments: {} }] },
+      );
+    }
+    const shared = new SharedLeases();
+    /** Once cut, renewals never answer and a retake reaches the backend only after the run gave up on it. */
+    class LateRetakePubSub extends ReplicaPubSub {
+      cut = false;
+      /** Thread-lease acquires that reached the backend after the cut, and those still on their way. */
+      settled = 0;
+      pending = 0;
+      override async renewLease(key: string, owner: string, ttlMs: number) {
+        if (this.cut && key.startsWith(`${RESOURCE}\u0000`)) await new Promise(() => {});
+        return super.renewLease(key, owner, ttlMs);
+      }
+      override async acquireLease(key: string, owner: string, ttlMs: number) {
+        if (!this.cut || !key.startsWith(`${RESOURCE}\u0000`)) return super.acquireLease(key, owner, ttlMs);
+        this.pending++;
+        await new Promise(resolve => setTimeout(resolve, 250));
+        try {
+          return await super.acquireLease(key, owner, ttlMs);
+        } finally {
+          this.pending--;
+          this.settled++;
+        }
+      }
+    }
+    const pubsub = new LateRetakePubSub(shared);
+    const runId = `late-retake-successor-${engine}`;
+    let ticks = 0;
+    const tick = createTool({
+      id: 'tick',
+      description: 'Tick once',
+      inputSchema: z.object({}),
+      execute: async () => {
+        ticks++;
+        await new Promise(resolve => setTimeout(resolve, 20));
+        return 'ticked';
+      },
+    });
+    const { output, drain } = await startStream(
+      replica(shared, new MockMemory(), { tick }, pubsub),
+      'late retake after takeover',
+      { runId, maxSteps: 100, memory: { thread, resource: RESOURCE } },
+    );
+    const done = drain().catch(() => undefined);
+    await vi.waitFor(() => expect(ticks).toBeGreaterThanOrEqual(2), { timeout: 5_000 });
+    pubsub.cut = true;
+    await done;
+    expect(await output.finishReason).toBe('aborted');
+
+    // Another process recovers the same run (a durable recover does this) and takes the thread under the
+    // run's id while this process's abandoned retake is still on its way to the backend.
+    const successor = await new ReplicaPubSub(shared).acquireLease(key, runId, 60_000);
+    expect(successor.acquired).toBe(true);
+
+    // Wait until every acquire the abandoned retake sent has settled, and for what it does after.
+    await vi.waitFor(
+      () => {
+        expect(pubsub.settled).toBeGreaterThan(0);
+        expect(pubsub.pending).toBe(0);
+      },
+      { timeout: 5_000 },
+    );
+    await new Promise(resolve => setTimeout(resolve, 30));
+    expect(shared.owner(key)).toBe(runId);
+  }, 20_000);
+
   it('keeps a run going when a late renewal finds its lease expired and no other run took the thread', async () => {
     const thread = 'late-renewal-expired-thread';
     for (let i = 0; i < 8; i++) {
