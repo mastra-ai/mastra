@@ -433,7 +433,7 @@ export class AgentChannels {
    *
    * @example
    * ```ts
-   * agent.channels.sdk.onReaction((thread, reaction) => {
+   * agent.getChannels()?.sdk?.onReaction((thread, reaction) => {
    *   console.log('Reaction received:', reaction);
    * });
    * ```
