@@ -2,6 +2,7 @@
 //   mastra/restricted-syntax          ESLint's no-restricted-syntax: options are { selector, message } objects
 //   mastra/test-needs-when-describe   every test()/it() inside a describe('when …') block (BDD test layout)
 //   mastra/import-order               eslint-plugin-import-x's `order` rule, without its module resolver
+//   mastra/icon-button-size           a playground-ui <Button> holding only an icon uses an `icon-*` size
 
 import { isBuiltin } from 'node:module';
 import path from 'node:path';
@@ -18,6 +19,72 @@ function restrictedSyntax(context) {
     };
   }
   return handlers;
+}
+
+// --- mastra/icon-button-size ---------------------------------------------------------------------------
+// A text size (`sm`, `md`, `lg`, or none) pads the button for a label, so an icon on its own renders as a
+// pill. `icon-sm|md|lg` is the same height as a square, which the design system rounds into a circle.
+// Only literal sizes are checked: a forwarded `size={size}` is the wrapping component's call to make.
+
+// Components that hold text, so a child of this kind is a label, not an icon.
+const textElementNames = new Set(['Txt', 'Trans', 'Kbd', 'Truncate', 'FormattedMessage']);
+
+function isIconElement(node) {
+  if (node.type !== 'JSXElement') return false;
+  const { name } = node.openingElement;
+  if (name.type === 'JSXMemberExpression') return true;
+  return name.type === 'JSXIdentifier' && /^[A-Z]/.test(name.name) && !textElementNames.has(name.name);
+}
+
+function isIconExpression(node) {
+  if (node.type === 'JSXElement') return isIconElement(node);
+  if (node.type === 'ConditionalExpression')
+    return isIconExpression(node.consequent) && isIconExpression(node.alternate);
+  if (node.type === 'LogicalExpression' && node.operator === '&&') return isIconExpression(node.right);
+  return false;
+}
+
+function hasOnlyIconChildren(children) {
+  const content = children.filter(child => !(child.type === 'JSXText' && !child.value.trim()));
+  return (
+    content.length > 0 &&
+    content.every(child =>
+      child.type === 'JSXExpressionContainer' ? isIconExpression(child.expression) : isIconElement(child),
+    )
+  );
+}
+
+function literalAttribute(value) {
+  if (value?.type === 'Literal') return value.value;
+  if (value?.type === 'JSXExpressionContainer' && value.expression.type === 'Literal') return value.expression.value;
+  return undefined;
+}
+
+function iconButtonSize(context) {
+  const { components = ['Button'] } = context.options[0] ?? {};
+  const names = new Set(components);
+  return {
+    JSXElement(node) {
+      const { openingElement } = node;
+      if (openingElement.name.type !== 'JSXIdentifier' || !names.has(openingElement.name.name)) return;
+      const attributes = new Map();
+      for (const attribute of openingElement.attributes) {
+        // A spread may carry the size; leave those to the component that builds the props.
+        if (attribute.type === 'JSXSpreadAttribute') return;
+        attributes.set(attribute.name.name, attribute.value);
+      }
+      if (attributes.has('icon') || attributes.has('iconEnd')) return;
+      if (literalAttribute(attributes.get('variant')) === 'link') return;
+      if (attributes.has('size') && literalAttribute(attributes.get('size')) === undefined) return;
+      const size = literalAttribute(attributes.get('size')) ?? 'md';
+      if (typeof size !== 'string' || size.startsWith('icon-')) return;
+      if (!hasOnlyIconChildren(node.children)) return;
+      context.report({
+        node: openingElement,
+        message: `This ${openingElement.name.name} holds only an icon: use size="icon-${size}" so it renders as a circle, not a pill.`,
+      });
+    },
+  };
 }
 
 const testFunctionNames = new Set(['test', 'it']);
@@ -329,6 +396,10 @@ const plugin = {
     'restricted-syntax': {
       meta: { type: 'suggestion', schema: false },
       create: restrictedSyntax,
+    },
+    'icon-button-size': {
+      meta: { type: 'suggestion', schema: false },
+      create: iconButtonSize,
     },
     'test-needs-when-describe': {
       meta: { type: 'problem', schema: false },

@@ -289,7 +289,13 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
         {(showCopyButton || canFormat) && (
           <div className="absolute top-2 right-2 z-20 flex gap-1">
             {canFormat && (
-              <Button type="button" size="sm" tooltip="Format JSON" aria-label="Format JSON" onClick={handleFormat}>
+              <Button
+                type="button"
+                size="icon-sm"
+                tooltip="Format JSON"
+                aria-label="Format JSON"
+                onClick={handleFormat}
+              >
                 <Braces />
               </Button>
             )}

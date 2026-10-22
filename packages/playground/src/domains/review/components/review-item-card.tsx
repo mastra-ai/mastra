@@ -110,7 +110,7 @@ export function ReviewItemCard({
             <Button
               tooltip="Good — this result is acceptable"
               variant={item.rating === 'positive' ? 'default' : 'ghost'}
-              size="sm"
+              size="icon-sm"
               onClick={() => onRate(item.rating === 'positive' ? undefined : 'positive')}
               disabled={isCompleted}
             >
@@ -122,7 +122,7 @@ export function ReviewItemCard({
             <Button
               tooltip="Bad — this result needs fixing"
               variant={item.rating === 'negative' ? 'default' : 'ghost'}
-              size="sm"
+              size="icon-sm"
               onClick={() => onRate(item.rating === 'negative' ? undefined : 'negative')}
               disabled={isCompleted}
             >
@@ -168,13 +168,13 @@ export function ReviewItemCard({
           {!isCompleted && (
             <div className="flex items-center gap-0.5">
               {onComplete && (
-                <Button tooltip="Mark as complete" variant="ghost" size="sm" onClick={onComplete}>
+                <Button tooltip="Mark as complete" variant="ghost" size="icon-sm" onClick={onComplete}>
                   <Icon size="xs" className="text-success-indicator">
                     <CheckCircle />
                   </Icon>
                 </Button>
               )}
-              <Button tooltip="Remove from review" variant="ghost" size="sm" onClick={onRemove}>
+              <Button tooltip="Remove from review" variant="ghost" size="icon-sm" onClick={onRemove}>
                 <Icon size="xs" className="text-placeholder hover:text-destructive-foreground">
                   <Trash2 />
                 </Icon>

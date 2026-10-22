@@ -42,6 +42,7 @@ export function SideDialogCodeSection({ codeStr = '', title, icon, simplified = 
           <CopyButton content={codeStr || 'No content'} />
           {hasMultilineText && (
             <Button
+              size="icon-md"
               aria-label={showAsMultilineText ? 'Show escaped newlines' : 'Show multiline text'}
               onClick={() => setShowAsMultilineText(!showAsMultilineText)}
             >

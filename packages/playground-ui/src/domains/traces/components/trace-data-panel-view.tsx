@@ -315,7 +315,7 @@ export function TraceDataPanelView({
     <DropdownMenu>
       <DropdownMenu.Trigger
         render={
-          <Button size="sm" variant="ghost" tooltip="Open trace actions" aria-label="Open trace actions">
+          <Button size="icon-sm" variant="ghost" tooltip="Open trace actions" aria-label="Open trace actions">
             <MoreHorizontalIcon />
           </Button>
         }
@@ -469,6 +469,7 @@ export function TraceDataPanelView({
                     />
                     <ButtonsGroup size="sm" className="shrink-0">
                       <Button
+                        size="icon-md"
                         variant={isTimeline ? 'default' : 'primary'}
                         aria-pressed={!isTimeline}
                         tooltip="Span tree"
@@ -478,6 +479,7 @@ export function TraceDataPanelView({
                         <ListTreeIcon />
                       </Button>
                       <Button
+                        size="icon-md"
                         variant={isTimeline ? 'primary' : 'default'}
                         aria-pressed={isTimeline}
                         tooltip="Timeline"
