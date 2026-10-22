@@ -334,6 +334,7 @@ const properNouns = [
   'Mastra Cloud',
   'Mastra Code',
   'Claude Code',
+  'Mastra Gateway',
   'Mastra',
   'Studio',
   'Trace Intelligence',
@@ -357,6 +358,7 @@ const properNouns = [
   'Sentry',
   'Stripe',
   'Chrome',
+  'Markdown',
 ];
 
 function jsxName(name) {
