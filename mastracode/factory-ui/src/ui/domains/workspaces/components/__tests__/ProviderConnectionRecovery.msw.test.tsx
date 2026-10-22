@@ -81,7 +81,7 @@ describe('provider connection recovery', () => {
       expect(dialog.queryByRole('textbox', { name: 'Authorization code' })).not.toBeInTheDocument();
       expect(dialog.getByText(scope === 'org' ? /Everyone in your organization/ : /only for you/)).toBeVisible();
       expect(starts).toEqual([{ mode: 'device-code', scope }]);
-      expect(await screen.findByRole('combobox')).toHaveTextContent('GPT-5.6 Sol');
+      expect(await screen.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
       await waitForMutationsIdle(client);
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
       expect(polls).toBe(2);
@@ -171,7 +171,7 @@ describe('provider connection recovery', () => {
     expect(screen.getByRole('button', { name: 'Change provider' })).toBeEnabled();
     empty = false;
     await user.click(screen.getByRole('button', { name: 'Retry' }));
-    expect(await screen.findByRole('combobox')).toHaveTextContent('GPT-5.6 Sol');
+    expect(await screen.findByRole('combobox')).toHaveValue('GPT-5.6 Sol');
   });
 
   it('does not present deployment-managed access as a personal API key', async () => {

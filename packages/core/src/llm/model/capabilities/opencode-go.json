@@ -11,9 +11,10 @@
     "kimi-k3",
     "longcat-2.5-preview-free",
     "mimo-v2.5",
-    "mimo-v2.5-pro",
     "mimo-v2.6-flash",
     "mimo-v2.6-pro",
+    "minimax-m3",
+    "minimax-m3.1-flash-free",
     "muse-spark-1.2-contributor",
     "muse-spark-1.3-contributor",
     "qwen3.7-plus",
@@ -35,18 +36,20 @@
     "hy3",
     "hy4-preview",
     "longcat-2.0",
-    "longcat-2.5-preview-free",
     "mimo-v2.5",
     "mimo-v2.5-pro",
     "mimo-v2.6-flash",
     "mimo-v2.6-pro",
     "minimax-m2.7",
     "minimax-m3",
+    "minimax-m3.1-flash-free",
     "muse-spark-1.2-contributor",
     "muse-spark-1.3-contributor",
     "qwen3.7-plus",
     "qwen3.8-flash",
-    "qwen3.8-max"
+    "qwen3.8-max",
+    "step-5-preview",
+    "step-5-preview-free"
   ],
   "structuredOutput": [
     "beam-free",
@@ -71,10 +74,21 @@
     "step-5-preview-free"
   ],
   "reasoning": {
-    "step-5-preview": [
+    "qwen3.8-flash": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["low", "medium", "xhigh"]
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "minimax-m3": [
+      {
+        "type": "toggle"
       }
     ],
     "muse-spark-1.3-contributor": [
@@ -83,16 +97,42 @@
         "values": ["minimal", "low", "medium", "high", "xhigh"]
       }
     ],
+    "minimax-m3.1-flash-free": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "step-5-preview-free": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "longcat-2.5-preview-free": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "hy3": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high"]
+      }
+    ],
+    "claude-haiku-5-5": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "deepseek-v4.1-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "gpt-6-luna": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "muse-spark-1.2-contributor": [
@@ -101,15 +141,72 @@
         "values": ["minimal", "low", "medium", "high", "xhigh"]
       }
     ],
-    "longcat-2.5-preview-free": [
+    "cat-jam-free": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["max"]
+      }
+    ],
+    "gemini-4-argon-contributor": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "gpt-5.6-luna": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "deepseek-v4-pro": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "qwen3.7-plus": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "max": 262144
+      }
+    ],
+    "step-5-preview": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "longcat-2.0": [
       {
         "type": "toggle"
       }
     ],
-    "glm-5.3-flash": [
+    "glm-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "hy4-preview": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ],
     "qwen3.8-max": [
@@ -125,86 +222,16 @@
         "max": 262144
       }
     ],
-    "glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "longcat-2.0": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "minimax-m3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek-v4-pro": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "beam-free": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "qwen3.8-flash": [
-      {
-        "type": "toggle"
-      },
+    "glm-5.3-flash": [
       {
         "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "gpt-5.6-luna": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "hy4-preview": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "step-5-preview-free": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "qwen3.7-plus": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "max": 262144
-      }
-    ],
-    "claude-haiku-5-5": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "high", "max"]
       }
     ],
     "space-bunny": [
@@ -213,28 +240,10 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "kimi-k3": [
+    "gpt-6-luna": [
       {
         "type": "effort",
-        "values": ["max"]
-      }
-    ],
-    "cat-jam-free": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "gemini-4-argon-contributor": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "hy3": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high"]
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "grok-4.7": [

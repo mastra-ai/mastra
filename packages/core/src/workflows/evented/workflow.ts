@@ -311,7 +311,15 @@ export function createStep<const QUESTIONS extends ClassifierQuestions, TStepInp
  * Creates a step from a Processor - wraps a Processor as a workflow step
  * Note: We require at least one processor method to distinguish from StepParams
  */
-export function createStep<TProcessorId extends string>(
+export function createStep<
+  TProcessorId extends string,
+  // Inferred from the previous step when chained, so a processor step accepts another processor step's output.
+  TInput extends
+    | InferStandardSchemaOutput<typeof ProcessorStepSchema>
+    | InferStandardSchemaOutput<typeof ProcessorStepOutputSchema> = InferStandardSchemaOutput<
+    typeof ProcessorStepSchema
+  >,
+>(
   processor:
     | (Processor<TProcessorId> & { processInput: Function })
     | (Processor<TProcessorId> & { processInputStream: Function })
@@ -324,7 +332,7 @@ export function createStep<TProcessorId extends string>(
 ): Step<
   `processor:${TProcessorId}`,
   unknown,
-  InferStandardSchemaOutput<typeof ProcessorStepSchema>,
+  TInput,
   InferStandardSchemaOutput<typeof ProcessorStepOutputSchema>,
   unknown,
   unknown,
@@ -2497,9 +2505,7 @@ export class EventedRun<
     // Validate label exists if provided
     if (params.label && !snapshotResumeLabel) {
       const availableLabels = Object.keys(snapshot?.resumeLabels ?? {});
-      throw new Error(
-        `Resume label "${params.label}" not found. ` + `Available labels: [${availableLabels.join(', ')}]`,
-      );
+      throw new Error(`Resume label "${params.label}" not found. Available labels: [${availableLabels.join(', ')}]`);
     }
 
     // Label takes precedence over step param

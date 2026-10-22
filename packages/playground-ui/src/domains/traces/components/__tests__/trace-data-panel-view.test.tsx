@@ -181,26 +181,6 @@ describe('TraceDataPanelView — className passthrough', () => {
   });
 });
 
-describe('TraceDataPanelView — Add tool mocks to item', () => {
-  it('fires onAddTraceMocksToItem with the traceId when the button is clicked', () => {
-    const onAddTraceMocksToItem = vi.fn();
-    render(<TraceDataPanelView {...baseProps} onAddTraceMocksToItem={onAddTraceMocksToItem} />);
-
-    openTraceActions();
-    fireEvent.click(screen.getByRole('menuitem', { name: /add tool mocks to item/i }));
-
-    expect(onAddTraceMocksToItem).toHaveBeenCalledTimes(1);
-    expect(onAddTraceMocksToItem).toHaveBeenCalledWith({ traceId: 'trace-1' });
-  });
-
-  it('does not render the action when the prop is omitted', () => {
-    render(<TraceDataPanelView {...baseProps} />);
-
-    openTraceActions();
-    expect(screen.queryByRole('menuitem', { name: /add tool mocks to item/i })).toBeNull();
-  });
-});
-
 describe('TraceDataPanelView — header actions', () => {
   it('keeps navigation and close visible while secondary actions stay in the menu', () => {
     render(<TraceDataPanelView {...baseProps} onPrevious={vi.fn()} onNext={vi.fn()} onEvaluateTrace={vi.fn()} />);
@@ -214,20 +194,12 @@ describe('TraceDataPanelView — header actions', () => {
     expect(screen.getByRole('button', { name: /score trace/i })).toBeTruthy();
   });
 
-  it('exposes the dataset and mock actions from the header menu', () => {
-    render(
-      <TraceDataPanelView
-        {...baseProps}
-        onEvaluateTrace={vi.fn()}
-        onSaveAsDatasetItem={vi.fn()}
-        onAddTraceMocksToItem={vi.fn()}
-      />,
-    );
+  it('exposes the dataset action from the header menu', () => {
+    render(<TraceDataPanelView {...baseProps} onEvaluateTrace={vi.fn()} onSaveAsDatasetItem={vi.fn()} />);
 
     openTraceActions();
     expect(screen.getByRole('button', { name: /score trace/i })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: /add full trace to dataset/i })).toBeTruthy();
-    expect(screen.getByRole('menuitem', { name: /add tool mocks to item/i })).toBeTruthy();
   });
 
   it('still saves the dataset item against the root span from the header', () => {
@@ -265,6 +237,34 @@ describe('TraceDataPanelView — trace summary description', () => {
     expect(screen.queryByText('Ended at')).toBeNull();
     expect(screen.queryByText('Trace input tokens')).toBeNull();
     expect(screen.queryByText('Trace est. cost')).toBeNull();
+  });
+});
+
+describe('TraceDataPanelView — trace error', () => {
+  const failedSpans = [
+    { ...rootSpanFixture[0], error: { name: 'AI_APICallError', message: 'Invalid reasoning effort' } },
+  ];
+
+  it("shows the root span's error without opening the span", () => {
+    render(<TraceDataPanelView {...baseProps} spans={failedSpans} />);
+
+    expect(screen.getByText('AI_APICallError')).toBeTruthy();
+    expect(screen.getByText('Invalid reasoning effort')).toBeTruthy();
+  });
+
+  it('opens the failed span from the error', () => {
+    const onSpanSelect = vi.fn();
+    render(<TraceDataPanelView {...baseProps} spans={failedSpans} onSpanSelect={onSpanSelect} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'View details' }));
+
+    expect(onSpanSelect).toHaveBeenLastCalledWith('root');
+  });
+
+  it('shows no error when the trace succeeded', () => {
+    render(<TraceDataPanelView {...baseProps} />);
+
+    expect(screen.queryByRole('button', { name: 'View details' })).toBeNull();
   });
 });
 
@@ -953,7 +953,9 @@ describe('TraceDataPanelView — side column views', () => {
 
     const tabs = screen.getAllByRole('tab');
     expect(tabs.every(tab => sideColumn()?.contains(tab))).toBe(true);
-    expect(tabs[0]?.closest('[role="tablist"]')?.parentElement?.parentElement?.className).toContain('border-b');
+    const bordered = tabs[0]?.closest('.border-b');
+    expect(bordered).not.toBeNull();
+    expect(sideColumn()?.contains(bordered ?? null)).toBe(true);
   });
 
   it('renders no side column when no slot is provided', () => {

@@ -431,7 +431,7 @@ describe('Global search', () => {
     expect(screen.queryByRole('dialog', { name: 'Global search' })).not.toBeInTheDocument();
     await waitFor(() => expect(trigger).toHaveFocus());
 
-    await user.keyboard('{Meta>}k{/Meta}');
+    await user.keyboard('{Control>}k{/Control}');
     expect(await screen.findByRole('dialog', { name: 'Global search' })).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Search MastraCode' })).toHaveFocus();
   });
@@ -1090,5 +1090,30 @@ describe('Global search', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Global search' })).not.toBeInTheDocument());
     await waitFor(() => expect(trigger).toHaveFocus());
     expect(requests.abortRequests).toBe(0);
+  });
+
+  it('aborts a busy run when Escape is pressed while typing in the composer', async () => {
+    const requests = stubSearchApi({ running: true });
+    const user = userEvent.setup();
+    renderSearchRoute(`/factories/${ACTIVE_FACTORY_ID}/workspaces/session-work/threads/thread-work-linked`);
+    await screen.findByRole('button', { name: 'Abort' }, { timeout: 5_000 });
+
+    await user.click(screen.getByRole('textbox', { name: 'Message' }));
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => expect(requests.abortRequests).toBe(1));
+  });
+
+  it('types "?" in the composer instead of opening the shortcuts help', async () => {
+    stubSearchApi();
+    const user = userEvent.setup();
+    renderSearchRoute(`/factories/${ACTIVE_FACTORY_ID}/workspaces/session-work/threads/thread-work-linked`);
+    const composer = await screen.findByRole('textbox', { name: 'Message' }, { timeout: 5_000 });
+
+    await user.click(composer);
+    await user.keyboard('?');
+
+    expect(composer).toHaveValue('?');
+    expect(screen.queryByRole('dialog', { name: 'Keyboard shortcuts' })).not.toBeInTheDocument();
   });
 });

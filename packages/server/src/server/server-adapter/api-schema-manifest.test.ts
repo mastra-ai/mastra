@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildApiSchemaManifest } from './api-schema-manifest';
+import { buildApiSchemaManifest, getApiSchemaPropertyNames } from './api-schema-manifest';
 
 const apiSchemaManifest = buildApiSchemaManifest();
 const routeKeys = apiSchemaManifest.routes.map(route => `${route.method} ${route.path}`);
@@ -76,6 +76,18 @@ describe('apiSchemaManifest', () => {
       route => route.method === 'GET' && route.path === '/agents/:agentId',
     );
     expect(getAgent?.responseShape).toEqual({ kind: 'single' });
+  });
+
+  it('keeps thread-query CLI flags and pagination available for both request contracts', () => {
+    const threads = apiSchemaManifest.routes.find(
+      route => route.method === 'POST' && route.path === '/observability/threads/query',
+    );
+    expect(getApiSchemaPropertyNames(threads?.bodySchema)).toEqual(['orderBy', 'page', 'timeRange', 'traces', 'where']);
+    expect(threads?.responseShape).toEqual({
+      kind: 'object-property',
+      listProperty: 'threads',
+      paginationProperty: 'page',
+    });
   });
 
   it('converts path, query, and body route schemas to JSON Schema', () => {

@@ -5,6 +5,7 @@ import { ChunkFrom } from '../../../../stream/types';
 import type { ChunkType } from '../../../../stream/types';
 import { createTool } from '../../../../tools';
 import {
+  createSharedAgent,
   describeForAllEngines,
   isDurableEngineVariant,
   runLoopScenario,
@@ -28,7 +29,6 @@ import {
  *  - start/finish bracket the entire run
  */
 describeForAllEngines('AIMock loop scenario: text-streaming fidelity', engine => {
-  const itFailsOnInngest = engine === 'inngest' ? it.fails : it;
   const getMock = useLoopScenarioAimock();
 
   it('reassembles multi-delta text in order and matches output.text', async () => {
@@ -154,11 +154,38 @@ describeForAllEngines('AIMock loop scenario: text-streaming fidelity', engine =>
     expect((finish?.payload as { output?: { text?: string } } | undefined)?.output?.text).toBe(finalText);
   });
 
-  // Inngest never emits the opening `start` chunk.
-  itFailsOnInngest('emits text-start/text-end bracketing and step/finish lifecycle chunks in order', async () => {
+  it('generate emits one opening message-identity event before its output chunks', async () => {
+    const scriptedText = 'A generated response with a correlated message.';
+    const llm = getMock();
+    llm.onMessage('Generate a response', { content: scriptedText });
+    const { agent } = await createSharedAgent(llm, { engine });
+    const chunks: ChunkType[] = [];
+
+    const output = await agent.generate('Generate a response', {
+      onChunk: chunk => {
+        chunks.push(chunk);
+      },
+    });
+
+    expect(output.text).toBe(scriptedText);
+    expect(chunks.some(c => c.type === 'text-delta')).toBe(true);
+    // Non-durable generate callbacks expose model chunks, not the stream envelope.
+    if (isDurableEngineVariant(engine)) {
+      expect(chunks[0]?.type).toBe('start');
+      const starts = chunks.filter(c => c.type === 'start');
+      expect(starts).toHaveLength(1);
+      expect(starts[0]).toMatchObject({
+        runId: output.runId,
+        from: ChunkFrom.AGENT,
+        payload: { id: agent.id, messageId: expect.any(String) },
+      });
+    }
+  });
+
+  it('emits text-start/text-end bracketing and step/finish lifecycle chunks in order', async () => {
     const scriptedText = 'Hello world, this is a streaming fidelity test.';
 
-    const { output, chunks } = await runLoopScenario({
+    const { output, chunks, agent } = await runLoopScenario({
       engine,
       llm: getMock(),
       prompt: 'Test chunk ordering.',
@@ -176,8 +203,17 @@ describeForAllEngines('AIMock loop scenario: text-streaming fidelity', engine =>
     // Extract chunk types in order
     const types = chunks.map(c => c.type);
 
-    // Must start with 'start' chunk
+    // COR-1467: consumers need the opening event to identify the streamed message.
     expect(types[0]).toBe('start');
+    const starts = chunks.filter(c => c.type === 'start');
+    expect(starts).toHaveLength(1);
+    const stepStart = chunks.find(c => c.type === 'step-start');
+    expect(starts[0]).toMatchObject({
+      runId: output.runId,
+      from: ChunkFrom.AGENT,
+      payload: { id: agent.id, messageId: expect.any(String) },
+    });
+    expect(starts[0]?.payload.messageId).toBe(stepStart?.payload.messageId);
 
     // Must end with 'finish' chunk
     expect(types[types.length - 1]).toBe('finish');

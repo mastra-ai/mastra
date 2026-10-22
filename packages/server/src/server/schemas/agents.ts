@@ -279,6 +279,10 @@ export const serializedAgentSchema = z.object({
   modelVersion: z.string().optional(),
   supportsMemory: z.boolean().optional(),
   modelList: z.array(modelConfigSchema).optional(),
+  modelListEditable: z
+    .boolean()
+    .optional()
+    .describe('False when the model list comes from a function and cannot be reordered or edited'),
   defaultOptions: defaultOptionsSchema.optional(),
   defaultGenerateOptionsLegacy: z.record(z.string(), z.unknown()).optional(),
   defaultStreamOptionsLegacy: z.record(z.string(), z.unknown()).optional(),
@@ -521,6 +525,8 @@ const toolCallActionBodySchema = z.object({
   format: z.string().optional(),
   providerOptions: z.record(z.string(), z.record(z.string(), jsonValueSchema)).optional(),
   modelSettings: typedPermissive<ModelSettings>(z.unknown()).optional(),
+  // Client tools must be re-sent on resume so the model can call them after the approval decision.
+  clientTools: typedPermissive<ToolsInput>(z.record(z.string(), z.unknown())).optional(),
 });
 const networkToolCallActionBodySchema = z.object({
   runId: z.string(),

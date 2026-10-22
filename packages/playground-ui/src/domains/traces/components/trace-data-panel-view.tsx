@@ -9,7 +9,6 @@ import {
   MessageSquareTextIcon,
   MoreHorizontalIcon,
   SaveIcon,
-  WrenchIcon,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -59,8 +58,6 @@ export interface TraceDataPanelViewProps {
   onEvaluateTrace?: () => void;
   /** When set, an "Add full trace to dataset" button appears; the consumer owns the dialog. */
   onSaveAsDatasetItem?: (args: { traceId: string; rootSpanId: string | undefined }) => void;
-  /** When set, an "Add tool mocks to item" button appears; the consumer owns the dialog. */
-  onAddTraceMocksToItem?: (args: { traceId: string }) => void;
   initialSpanId?: string | null;
   onPrevious?: () => void;
   onNext?: () => void;
@@ -145,7 +142,6 @@ export function TraceDataPanelView({
   onSpanSelect,
   onEvaluateTrace,
   onSaveAsDatasetItem,
-  onAddTraceMocksToItem,
   initialSpanId,
   onPrevious,
   onNext,
@@ -304,6 +300,7 @@ export function TraceDataPanelView({
     () => (anchorSpanId ? spans?.find(s => s.spanId === anchorSpanId) : spans?.find(s => s.parentSpanId == null)),
     [spans, anchorSpanId],
   );
+  const rootError = getSpanError(rootSpan?.error);
   const handleSpanClick = (id: string) => {
     const newId = selectedSpanId === id ? undefined : id;
     setSelectedSpanId(newId);
@@ -328,12 +325,6 @@ export function TraceDataPanelView({
           <DropdownMenu.Item onSelect={() => onSaveAsDatasetItem({ traceId, rootSpanId: rootSpan?.spanId })}>
             <SaveIcon />
             Add full trace to dataset
-          </DropdownMenu.Item>
-        )}
-        {!isOnTracePage && onAddTraceMocksToItem && (
-          <DropdownMenu.Item onSelect={() => onAddTraceMocksToItem({ traceId })}>
-            <WrenchIcon />
-            Add tool mocks to item
           </DropdownMenu.Item>
         )}
         {!isOnTracePage && LinkComponent && traceHref && (
@@ -365,16 +356,20 @@ export function TraceDataPanelView({
           </DataPanel.Header>
         ) : (
           <Tabs<TraceSideView> defaultTab={sideView} value={sideView} onValueChange={handleSideViewChange}>
-            <DataPanel.Header className="border-b border-border">
-              <TabList variant="pill-ghost" size="sm">
-                {sideViews.map(view => (
-                  <Tab key={view.value} value={view.value} tooltip={compactSide ? view.name : undefined}>
-                    {view.label}
-                  </Tab>
-                ))}
-              </TabList>
+            {/* `flex-nowrap` + a shrinkable tab column: the tab list's scroll wrapper is full-width,
+                so in a wrapping row it would push the actions onto a second line. */}
+            <DataPanel.Header className="flex-nowrap border-b border-border">
+              <div className="min-w-0 flex-1">
+                <TabList variant="pill-ghost" size="sm">
+                  {sideViews.map(view => (
+                    <Tab key={view.value} value={view.value} tooltip={compactSide ? view.name : undefined}>
+                      {view.label}
+                    </Tab>
+                  ))}
+                </TabList>
+              </div>
               {sideHeaderActions && (
-                <div className="ml-auto flex shrink-0 items-center whitespace-nowrap">
+                <div className="flex shrink-0 items-center whitespace-nowrap">
                   {sideHeaderActions({ compact: compactSide })}
                 </div>
               )}
@@ -512,18 +507,34 @@ export function TraceDataPanelView({
                   <>
                     {searchHeader}
                     <DataPanel.Content>
-                      {!isOnTracePage &&
-                        !onEvaluateTrace &&
-                        !onSaveAsDatasetItem &&
-                        !onAddTraceMocksToItem &&
-                        showUnavailableFeaturesMsg && (
-                          <Notice variant="info" className="mb-6">
-                            <Notice.Message>
-                              Evaluating traces and saving them as dataset items is available in Mastra Studio (local or
-                              deployed).
-                            </Notice.Message>
-                          </Notice>
-                        )}
+                      {!isOnTracePage && !onEvaluateTrace && !onSaveAsDatasetItem && showUnavailableFeaturesMsg && (
+                        <Notice variant="info" className="mb-6">
+                          <Notice.Message>
+                            Evaluating traces and saving them as dataset items is available in Mastra Studio (local or
+                            deployed).
+                          </Notice.Message>
+                        </Notice>
+                      )}
+
+                      {rootSpan && rootError && (
+                        <Notice
+                          variant="destructive"
+                          title={rootError.name ?? 'Error'}
+                          action={
+                            <Notice.Button
+                              onClick={() => {
+                                setSelectedSpanId(rootSpan.spanId);
+                                onSpanSelect?.(rootSpan.spanId);
+                              }}
+                            >
+                              View details
+                            </Notice.Button>
+                          }
+                          className="mb-4"
+                        >
+                          <Notice.Message className="line-clamp-3">{rootError.message}</Notice.Message>
+                        </Notice>
+                      )}
 
                       {/* Both views share selection + expansion state, and stay mounted with no
                     results because they host the search field: unmounting would strand the
@@ -540,6 +551,15 @@ export function TraceDataPanelView({
       )}
     </DataPanel>
   );
+}
+
+/** The error a span recorded, when it has the `{ name?, message }` shape spans store. */
+function getSpanError(error: unknown): { name?: string; message: string } | undefined {
+  if (typeof error !== 'object' || error === null || !('message' in error) || typeof error.message !== 'string') {
+    return undefined;
+  }
+  const name = 'name' in error && typeof error.name === 'string' ? error.name : undefined;
+  return { name, message: error.message };
 }
 
 /**

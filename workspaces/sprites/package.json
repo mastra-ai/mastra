@@ -1,6 +1,6 @@
 {
   "name": "@mastra/sprites",
-  "version": "0.1.1-alpha.0",
+  "version": "0.1.1",
   "description": "Fly.io Sprites sandbox provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",

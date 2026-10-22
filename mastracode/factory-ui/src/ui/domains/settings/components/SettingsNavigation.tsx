@@ -20,7 +20,8 @@ import { useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
 import { useCloseSettings } from '../hooks/useCloseSettings';
 import { useSettingsSection } from '../hooks/useSettingsSection';
-import { SETTINGS_SECTION_LABELS, settingsSectionPath, type SettingsSection } from '../settingsSections';
+import { SETTINGS_SECTION_LABELS, settingsSectionPath } from '../settingsSections';
+import type { SettingsSection } from '../settingsSections';
 
 type SettingsNavItem = {
   id: SettingsSection;
@@ -69,7 +70,7 @@ export const PERSONAL_SETTINGS_GROUP = {
       id: 'connections',
       label: SETTINGS_SECTION_LABELS.connections,
       icon: Cable,
-      searchText: 'your personal connections connected accounts slack communication integrations',
+      searchText: 'your personal connections connected accounts slack communication integrations mcp claude chatgpt',
     },
   ],
 } satisfies SettingsNavGroup;

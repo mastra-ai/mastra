@@ -47,6 +47,9 @@ export default defineConfig({
   ignorePatterns: ['storybook-static/**'],
   rules: {
     'typescript/no-unnecessary-type-assertion': 'error',
+    'typescript/no-unnecessary-template-expression': 'error',
+    'typescript/no-unnecessary-type-arguments': 'error',
+    'typescript/no-unnecessary-type-parameters': 'error',
     'react/only-export-components': [
       'warn',
       {

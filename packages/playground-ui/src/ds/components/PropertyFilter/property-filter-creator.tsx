@@ -77,7 +77,7 @@ export function PropertyFilterCreator({
     return fields.filter(f => !hidden.has(f.id));
   }, [fields, hiddenFieldIds]);
   const [open, setOpen] = useState(false);
-  const menu = useFluidMenu<HTMLDivElement>();
+  const menu = useFluidMenu();
   const [fieldId, setFieldId] = useState<string | undefined>();
   const [multiValue, setMultiValue] = useState<string[]>([]);
   const [error, setError] = useState<string | undefined>();

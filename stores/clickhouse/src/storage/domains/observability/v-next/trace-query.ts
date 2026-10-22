@@ -10,6 +10,7 @@ import type {
   TraceQueryPredicateField,
   TraceQueryResponse,
   TraceQueryScoreField,
+  TraceQuerySortValue,
   TraceQuerySpanField,
   TraceQueryTenantScope,
   TrustedThreadPredicate,
@@ -49,8 +50,13 @@ export const TRACE_STATUS_SQL = `if(isNotNull(r.error), 'error', 'success')`;
  */
 export const timeToFirstChunkSupported = 'timeToFirstChunkMs' in (coreStorage.TRACE_QUERY_FIELD_REGISTRY?.trace ?? {});
 
+/** Core before the sort rejects `orderBy` on the field, so the sort is only declared when core plans it. */
+const timeToFirstChunkSortSupported = coreStorage.TRACE_QUERY_ORDER_FIELDS?.includes('timeToFirstChunkMs') === true;
+
 export const timeToFirstChunkFeatures = timeToFirstChunkSupported
-  ? (['trace-query-time-to-first-chunk'] as const)
+  ? timeToFirstChunkSortSupported
+    ? (['trace-query-time-to-first-chunk', 'trace-query-time-to-first-chunk-sort'] as const)
+    : (['trace-query-time-to-first-chunk'] as const)
   : ([] as const);
 
 export function durationMsSql(startedAt: string, endedAt: string): string {
@@ -74,8 +80,11 @@ const TRACE_FIELDS = {
   endedAt: { sql: 'r.endedAt', parameterType: "DateTime64(3, 'UTC')" },
   durationMs: { sql: durationMsSql('r.startedAt', 'r.endedAt'), parameterType: 'Float64' },
   timeToFirstChunkMs: { sql: 'r.timeToFirstChunkMs', parameterType: 'Float64' },
+  entityId: { sql: 'r.entityId', parameterType: 'String' },
   entityName: { sql: 'r.entityName', parameterType: 'String' },
   entityType: { sql: 'r.entityType', parameterType: 'String' },
+  name: { sql: 'r.name', parameterType: 'String' },
+  spanType: { sql: 'r.spanType', parameterType: 'String' },
   environment: { sql: 'r.environment', parameterType: 'String' },
   status: { sql: TRACE_STATUS_SQL, parameterType: 'String' },
   tags: { sql: 'r.tags', parameterType: 'String' },
@@ -192,8 +201,8 @@ function fieldDefinition<TField extends string>(
   return definition;
 }
 
-function resolveOrderField(field: string): 'startedAt' | 'endedAt' {
-  if (field === 'startedAt' || field === 'endedAt') return field;
+function resolveOrderField(field: string): TraceOrder['field'] {
+  if (field === 'startedAt' || field === 'endedAt' || field === 'timeToFirstChunkMs') return field;
   throw new Error(`Unsupported trusted trace-query field: ${field}`);
 }
 
@@ -382,11 +391,35 @@ export function compileTenantScope(scope: TraceQueryTenantScope | undefined, par
 }
 
 /**
- * Trace scope options. `queryTraces()` uses all of them; `aggregateTraces()` can opt into `oneRootPerTrace`.
- * - `oneRootPerTrace`: a trace has exactly one root span, so `root_scope` is the window's root rows,
- *   read once without re-deriving a current root from all of a trace's roots. It may hold
- *   unmerged copies of a root, so consumers collapse by `traceId`. A trace written with several
- *   root spans (a writer bug) is listed under one of them.
+ * Order of the versions of one root span, current version first. `mastra_trace_roots` has no
+ * version column, so until a background merge runs, every export of a root is its own row with the
+ * same sort key, and merges never meet versions that ended on different days (it is partitioned by
+ * `endedAt`). The version that ended last is current, as a resumed or completed root is exported
+ * again with a later `endedAt`; a pending copy stores `endedAt = startedAt` and can lack `threadId`,
+ * so a copy with a thread wins an equal-time tie. Remaining ties are broken by insertion order, last
+ * insert first: the part's first block number, then the row's offset in the part. Tied versions
+ * share a partition and sort key, so a merge meets them and keeps the last insert too, and reads
+ * pick the same version before and after it. Both are virtual columns, so the order reads nothing
+ * beyond `endedAt` and `threadId`.
+ *
+ * Merges don't follow this order across `endedAt`: within one day's partition a merge keeps the last
+ * insert, not the version that ended last. If an outdated export of a root is redelivered after its
+ * current version, on the same day, reads pick the current version until a merge, and the outdated
+ * one afterwards (last write wins, as in the PG and DuckDB stores). Making merges keep the version
+ * that ended last needs `ReplacingMergeTree(endedAt)`, a schema change.
+ *
+ * Every root collapse uses this order: trace rows, aggregates, thread rows and the discovery reads.
+ */
+export const ROOT_VERSION_ORDER = `endedAt DESC, isNotNull(threadId) DESC, toUInt64(splitByChar('_', _part)[2]) DESC,
+      _part_offset DESC`;
+
+/**
+ * Trace scope options. `queryTraces()` uses all of them; `aggregateTraces()` uses `oneRootPerTrace`.
+ * Thread qualification and the discovery reads use none: their `root_scope` keeps each trace's
+ * earliest-started root (`current_roots`), re-read across the trace's roots outside the window.
+ * - `oneRootPerTrace`: a trace has exactly one root span, so `root_scope` is collapsed from the
+ *   window's root rows alone, without re-reading the trace's roots outside the window. It holds one
+ *   row per trace. A trace written with several root spans (a writer bug) is listed under one of them.
  * - `spanExistence`: spans are only tested for existence (`traceId IN`), which copies of a span
  *   cannot change, so the span dedupe is skipped.
  */
@@ -435,13 +468,27 @@ function compileClickHouseTraceScope(
   const ctes = options.oneRootPerTrace
     ? [
         ...delta,
-        // A trace has one root span, so the window's root rows are the traces' roots. Unmerged
-        // copies of a root stay; consumers collapse them by traceId.
+        // A trace has one root span, so the window's root rows are the traces' roots; every
+        // version of a root shares its startedAt. Unmerged versions are collapsed to the current
+        // one before any filter, so a filter cannot keep an older version that matches when the
+        // current one does not. The seed conjuncts only choose which traces are collapsed.
         `root_scope AS (
     SELECT *
     FROM ${TABLE_TRACE_ROOTS} r
     WHERE startedAt >= ${from}
-      AND startedAt < ${to}${tenant}${seedFilter}${bound}
+      AND startedAt < ${to}${tenant}${bound}${
+        seedFilter
+          ? `
+      AND traceId IN (
+        SELECT traceId
+        FROM ${TABLE_TRACE_ROOTS} r
+        WHERE startedAt >= ${from}
+          AND startedAt < ${to}${tenant}${seedFilter}
+      )`
+          : ''
+      }
+    ORDER BY startedAt, traceId, spanId, ${ROOT_VERSION_ORDER}
+    LIMIT 1 BY traceId
   )`,
       ]
     : [
@@ -449,8 +496,8 @@ function compileClickHouseTraceScope(
         // traces with a root in the range first. All roots of those traces stay in, so a
         // non-current root inside the range cannot resurrect a trace whose current root is outside it.
         // The re-read carries the tenant scope so it reads only the tenant's rows, and another
-        // tenant's root with the same traceId cannot win the dedupe. One `LIMIT 1 BY traceId`
-        // picks the same root as deduping by dedupeKey first: the lowest dedupeKey of the trace.
+        // tenant's root with the same traceId cannot win the dedupe. The trace's earliest-started
+        // root is kept, in its current version.
         `current_roots AS (
     SELECT *
     FROM ${TABLE_TRACE_ROOTS}
@@ -460,7 +507,7 @@ function compileClickHouseTraceScope(
       WHERE startedAt >= ${from}
         AND startedAt < ${to}${tenant}${seedFilter}
     )${tenant}
-    ORDER BY traceId, dedupeKey
+    ORDER BY traceId, startedAt, spanId, ${ROOT_VERSION_ORDER}
     LIMIT 1 BY traceId
   )`,
         `root_scope AS (
@@ -596,11 +643,10 @@ export function compileClickHouseTraceCandidates(
   parameters: ParameterBuilder,
   options: TraceScopeOptions = {},
 ): string[] {
-  // Top-level `where` conjuncts that only read the root row are copied into the window seed so
-  // the retry-collapse sorts only see traces that can match. This cannot drop a result: a trace's
-  // current root is itself a root row in the window that satisfies the conjunct. `candidates`
-  // still applies the full `where` to the current root, so traces seeded only by an older root
-  // are filtered out there.
+  // Top-level `where` conjuncts that only read the root row seed the root collapse so it only
+  // sorts traces that can match. This cannot drop a result: a trace's current root is itself a
+  // root row in the window that satisfies the conjunct. `candidates` still applies the full
+  // `where` to the current root, so traces seeded only by an older version are filtered out there.
   const rootConjuncts = selection.where
     ? (selection.where.type === 'boolean' && selection.where.operator === 'and'
         ? selection.where.args
@@ -635,7 +681,7 @@ const TRACE_LIST_SELECT = TRACE_SELECT.split('\n')
   .filter(line => !/ AS (metadata|inputPreview|outputPreview|errorPreview),$/.test(line))
   .join('\n');
 
-type TraceOrder = { field: 'startedAt' | 'endedAt'; direction: 'ASC' | 'DESC' };
+type TraceOrder = { field: 'startedAt' | 'endedAt' | 'timeToFirstChunkMs'; direction: 'ASC' | 'DESC' };
 
 function traceOrder(plan: TrustedTraceQueryTracesPlan): TraceOrder {
   return {
@@ -644,28 +690,27 @@ function traceOrder(plan: TrustedTraceQueryTracesPlan): TraceOrder {
   };
 }
 
-/**
- * Keyset cursor on a trace's sort value. Applied after each trace is reduced to one sort value:
- * filtering root rows first would let a trace with several roots (or unmerged copies with
- * different `endedAt`) come back on a later page under a root that sorts after the cursor.
- */
+/** Keyset cursor on a trace's sort value (the current root's), with traceId breaking ties. */
 function keysetCursorCondition(
   plan: TrustedTraceQueryTracesPlan,
   order: TraceOrder,
   parameters: ParameterBuilder,
 ): string {
   if (plan.paginationMode !== 'keyset' || !plan.cursor) return '';
+  // Empty values sort last in both directions: after an empty value only empty values remain.
+  if (plan.cursor.sortValue === null)
+    return `(isNull(sortValue) AND traceId > ${parameters.add(plan.cursor.traceId, 'String')})`;
+  const numeric = order.field === 'timeToFirstChunkMs';
   const comparison = order.direction === 'ASC' ? '>' : '<';
-  const sortValue = parameters.add(plan.cursor.sortValue, "DateTime64(3, 'UTC')");
+  const sortValue = parameters.add(plan.cursor.sortValue, numeric ? 'Float64' : "DateTime64(3, 'UTC')");
   const traceId = parameters.add(plan.cursor.traceId, 'String');
-  return `(sortValue ${comparison} ${sortValue} OR (sortValue = ${sortValue} AND traceId > ${traceId}))`;
+  return `(sortValue ${comparison} ${sortValue} OR (sortValue = ${sortValue} AND traceId > ${traceId})${numeric ? ' OR isNull(sortValue)' : ''})`;
 }
 
 /**
  * First statement of keyset and page mode: the page's traces (after the keyset cursor, `limit + 1`
- * for keyset mode, `perPage` at the page offset for page mode) as root keys, and the
- * number of matching traces on every row. Per trace, the root row that sorts first gives the sort
- * value and the key, so the key always names a row with that sort value. No blob columns are read.
+ * for keyset mode, `perPage` at the page offset for page mode) as keys of their current roots, and
+ * the number of matching traces on every row. No blob columns are read.
  */
 export function compileClickHouseTraceQueryKeys(plan: TrustedTraceQueryTracesPlan): CompiledClickHouseTraceQuery {
   if (plan.paginationMode === 'delta') throw new Error('Delta trace queries have no keys statement');
@@ -673,40 +718,46 @@ export function compileClickHouseTraceQueryKeys(plan: TrustedTraceQueryTracesPla
   const order = traceOrder(plan);
   const ctes = compileClickHouseTraceCandidates(
     plan,
-    'r.traceId AS traceId, r.dedupeKey AS dedupeKey, r.startedAt AS startedAt, r.endedAt AS endedAt',
+    'r.traceId AS traceId, r.dedupeKey AS dedupeKey, r.startedAt AS startedAt, r.endedAt AS endedAt, r.timeToFirstChunkMs AS timeToFirstChunkMs',
     parameters,
     QUERY_TRACES_SCOPE,
   );
   const cursor = keysetCursorCondition(plan, order, parameters);
-  const pick = order.direction === 'DESC' ? 'max' : 'min';
   const limit =
     plan.paginationMode === 'page'
       ? `LIMIT ${parameters.add(plan.perPage, 'UInt64')} OFFSET ${parameters.add(plan.page * plan.perPage, 'UInt64')}`
       : `LIMIT ${parameters.add(plan.limit + 1, 'UInt64')}`;
   return {
-    query: `WITH ${ctes.join(',\n')},
-per_trace AS (
-  SELECT traceId, ${pick}(${order.field}) AS sortValue,
-    ${pick === 'max' ? 'argMax' : 'argMin'}((dedupeKey, startedAt), ${order.field}) AS root
-  FROM candidates
-  GROUP BY traceId${cursor ? `\n  HAVING ${cursor}` : ''}
-)
-SELECT traceId, root.1 AS dedupeKey, sortValue, root.2 AS rootStartedAt, count() OVER () AS __total
-FROM per_trace
-ORDER BY sortValue ${order.direction}, traceId ASC
+    query: `WITH ${ctes.join(',\n')}
+SELECT traceId, dedupeKey, ${order.field} AS sortValue, startedAt AS rootStartedAt, endedAt AS rootEndedAt,
+  count() OVER () AS __total
+FROM candidates${cursor ? `\nWHERE ${cursor}` : ''}
+ORDER BY sortValue ${order.direction} NULLS LAST, traceId ASC
 ${limit}`,
     query_params: parameters.params,
     sharedSnapshot: true,
   };
 }
 
-export type ClickHouseTraceRootKey = { traceId: string; dedupeKey: string; sortValue: string; rootStartedAt: string };
+export type ClickHouseTraceRootKey = {
+  traceId: string;
+  dedupeKey: string;
+  sortValue: TraceQuerySortValue;
+  rootStartedAt: string;
+  rootEndedAt: string;
+};
 
 /**
- * Second statement of keyset and page mode: the rows of the keyed roots, with `metadata`
- * and the stored previews, read by sort-key tuple. Unmerged copies of a root key are redeliveries of one
- * span; the relation-free `where` conjuncts are re-applied so a copy that doesn't match isn't
- * returned, and the copy that sorts first is kept, as in the keys statement.
+ * Second statement of keyset and page mode: the rows of the keyed roots, with `metadata` and the
+ * stored previews, read by sort key and `endedAt`, so only the keyed version's rows match. Versions
+ * that end at the same instant are ordered as in the keys statement (ROOT_VERSION_ORDER). The
+ * relation-free `where` conjuncts are re-applied, so a version written between the two statements
+ * that doesn't match isn't returned.
+ *
+ * Trade-off of matching on `endedAt`: if a newer version is written between the two statements and
+ * a same-day merge then drops the keyed version, the trace has no row and drops off the page. Without
+ * `endedAt` the lookup would find the replacement, but could also return a version other than the
+ * keyed one whenever both are unmerged. The window is the gap between the two statements.
  */
 export function compileClickHouseTraceRowsByKey(
   plan: TrustedTraceQueryTracesPlan,
@@ -715,12 +766,10 @@ export function compileClickHouseTraceRowsByKey(
   const parameters = new ParameterBuilder();
   const order = traceOrder(plan);
   const ts = (value: string) => parameters.add(value, "DateTime64(3, 'UTC')");
-  const byEnd = order.field === 'endedAt';
-  const tuples = keys.map(key => {
-    const started = ts(byEnd ? key.rootStartedAt : key.sortValue);
-    const id = `${parameters.add(key.traceId, 'String')}, ${parameters.add(key.dedupeKey, 'String')}`;
-    return byEnd ? `(${started}, ${id}, ${ts(key.sortValue)})` : `(${started}, ${id})`;
-  });
+  const tuples = keys.map(
+    key =>
+      `(${ts(key.rootStartedAt)}, ${parameters.add(key.traceId, 'String')}, ${parameters.add(key.dedupeKey, 'String')}, ${ts(key.rootEndedAt)})`,
+  );
   const conjuncts = plan.where
     ? (plan.where.type === 'boolean' && plan.where.operator === 'and' ? plan.where.args : [plan.where]).filter(
         conjunct => collectRelationCollections(conjunct).size === 0,
@@ -730,8 +779,8 @@ export function compileClickHouseTraceRowsByKey(
   return {
     query: `SELECT ${TRACE_SELECT}
 FROM ${TABLE_TRACE_ROOTS} r
-WHERE (r.startedAt, r.traceId, r.dedupeKey${byEnd ? ', r.endedAt' : ''}) IN (${tuples.join(', ')})${compileTenantScope(plan.scope, parameters)}${predicate}
-ORDER BY ${order.field} ${order.direction}, traceId ASC
+WHERE (r.startedAt, r.traceId, r.dedupeKey, r.endedAt) IN (${tuples.join(', ')})${compileTenantScope(plan.scope, parameters)}${predicate}
+ORDER BY ${order.field} ${order.direction} NULLS LAST, traceId ASC, ${ROOT_VERSION_ORDER}
 LIMIT 1 BY traceId`,
     query_params: parameters.params,
   };
@@ -753,9 +802,7 @@ FROM candidates`,
 /**
  * The list statement of groups and delta mode (rows without `metadata` and the previews). Keyset
  * and page mode list with compileClickHouseTraceQueryKeys and compileClickHouseTraceRowsByKey.
- * A trace with several candidate rows (several roots, or unmerged copies of one) is listed in delta
- * mode under the row that sorts first in the list order, as in the keys statement; ties go to the
- * lowest dedupeKey, then the latest endedAt, so every poll picks the same row.
+ * Candidates hold one current root per trace, as in the keys statement.
  */
 export function compileClickHouseTraceQuery(
   plan: TrustedTraceQueryPlan,
@@ -785,7 +832,6 @@ LIMIT ${limit}`,
       'Keyset and page trace queries use compileClickHouseTraceQueryKeys and compileClickHouseTraceRowsByKey',
     );
   }
-  const order = traceOrder(plan);
   const watermark = coreStorage.getTraceQueryDeltaWatermark(plan, 'clickhouse');
   const after = watermark ? parseDeltaWatermark(watermark) : { cursorId: '0', traceId: '' };
   const lowerCursor = parameters.add(after.cursorId, 'UInt64');
@@ -806,8 +852,7 @@ LIMIT ${limit}`,
 SELECT c.*, toString(d.latestCursorId) AS __delta_cursor
 FROM candidates c
 INNER JOIN delta_candidates d ON c.traceId = d.traceId
-ORDER BY d.latestCursorId ASC, c.traceId ASC, c.${order.field} ${order.direction}, c.dedupeKey ASC, c.endedAt DESC
-LIMIT 1 BY c.traceId
+ORDER BY d.latestCursorId ASC, c.traceId ASC
 LIMIT ${limit}`,
     query_params: parameters.params,
     sharedSnapshot: true,
@@ -871,6 +916,7 @@ export function compileClickHouseTraceRootPayloads(
     query: `SELECT traceId, spanId AS rootSpanId, dedupeKey, organizationId, resourceId, ${columns === 'payload' ? `metadataRaw AS metadata, ${PREVIEW_COLUMNS.join(', ')}` : 'input, output, error'}
 FROM ${TABLE_TRACE_ROOTS}
 WHERE (startedAt, traceId, dedupeKey, endedAt, ifNull(organizationId, ''), isNull(organizationId), ifNull(resourceId, ''), isNull(resourceId)) IN (${tuples.join(', ')})${compileTenantScope(scope, parameters)}
+ORDER BY ${ROOT_VERSION_ORDER}
 LIMIT 1 BY traceId, dedupeKey, organizationId, resourceId`,
     query_params: parameters.params,
   };
@@ -1020,6 +1066,9 @@ function isClickHouseResourceLimit(error: unknown): boolean {
 export type ClickHouseTraceQueryExecutionLimits = {
   timeoutMs: number;
   memoryLimitBytes?: number;
+  maxThreads?: number;
+  maxBlockSize?: number;
+  spillThresholdBytes?: number;
 };
 
 export async function runWithClickHouseTraceQueryTimeout(
@@ -1039,6 +1088,14 @@ export async function runWithClickHouseTraceQueryTimeout(
         ...CH_SETTINGS,
         max_execution_time: resolvedTimeoutMs / 1000,
         ...(limits.memoryLimitBytes === undefined ? {} : { max_memory_usage: String(limits.memoryLimitBytes) }),
+        ...(limits.maxThreads === undefined ? {} : { max_threads: limits.maxThreads }),
+        ...(limits.maxBlockSize === undefined ? {} : { max_block_size: String(limits.maxBlockSize) }),
+        ...(limits.spillThresholdBytes === undefined
+          ? {}
+          : {
+              max_bytes_before_external_sort: String(limits.spillThresholdBytes),
+              max_bytes_before_external_group_by: String(limits.spillThresholdBytes),
+            }),
         ...(compiled.sharedSnapshot ? { enable_shared_storage_snapshot_in_query: 1 } : {}),
       },
     });
@@ -1218,6 +1275,8 @@ export async function queryTraces(
   // Keyset and page mode: the page's root keys (and the total), then those rows with
   // their payloads.
   const keys = await run(compileClickHouseTraceQueryKeys(plan));
+  const sortValue = (value: unknown): TraceQuerySortValue =>
+    plan.orderBy.field !== 'timeToFirstChunkMs' ? asIsoTimestamp(value) : value == null ? null : Number(value);
   let total = Number(keys[0]?.__total ?? 0);
   if (plan.paginationMode === 'page' && keys.length === 0 && plan.page > 0) {
     const [stats] = await run(compileClickHouseTraceQueryTotal(plan));
@@ -1233,8 +1292,9 @@ export async function queryTraces(
             visible.map(key => ({
               traceId: String(key.traceId),
               dedupeKey: String(key.dedupeKey),
-              sortValue: asIsoTimestamp(key.sortValue),
+              sortValue: sortValue(key.sortValue),
               rootStartedAt: asIsoTimestamp(key.rootStartedAt),
+              rootEndedAt: asIsoTimestamp(key.rootEndedAt),
             })),
           ),
         )
@@ -1255,7 +1315,7 @@ export async function queryTraces(
     });
   }
 
-  // The cursor comes from the keys statement, whose HAVING it is compared against: the rows are
+  // The cursor comes from the keys statement, whose cursor condition it is compared against: the rows are
   // read in a later statement, where a merge can leave the page short or empty.
   const lastKey = visible.at(-1);
   return coreStorage.traceQueryResponseSchema.parse({
@@ -1265,7 +1325,7 @@ export async function queryTraces(
         keys.length > plan.limit && lastKey
           ? coreStorage.encodeTraceQueryCursor(plan, {
               result: 'traces',
-              sortValue: asIsoTimestamp(lastKey.sortValue),
+              sortValue: sortValue(lastKey.sortValue),
               traceId: String(lastKey.traceId),
             })
           : null,
@@ -1293,8 +1353,28 @@ export async function queryThreads(
 }
 
 /** Compile a direct span-query filter using its dedicated field mapping. */
-export function compileSpanQueryPredicate(predicate: TrustedTraceQueryScalarPredicate): SqlFragment {
-  const parameters = new ParameterBuilder();
+export function compileSpanQueryPredicate(
+  predicate: TrustedTraceQueryScalarPredicate,
+  parameters = new ParameterBuilder(),
+): SqlFragment {
   const sql = compileScalarPredicate(predicate, SPAN_QUERY_FIELDS, parameters);
   return { sql, params: parameters.params };
+}
+
+/** Thread filters see full-history representative values, never individual member traces. */
+export function compileThreadQueryPredicate(
+  predicate: TrustedTraceQueryScalarPredicate,
+  parameters = new ParameterBuilder(),
+): SqlFragment {
+  const fields = Object.fromEntries(
+    Object.entries(coreStorage.THREAD_QUERY_FIELD_REGISTRY).map(([field, rule]) => [
+      field,
+      {
+        sql: `s.${field}`,
+        parameterType:
+          rule.valueKind === 'timestamp' ? "DateTime64(3, 'UTC')" : rule.valueKind === 'number' ? 'Float64' : 'String',
+      },
+    ]),
+  ) as Record<string, FieldDefinition>;
+  return { sql: compileScalarPredicate(predicate, fields, parameters), params: parameters.params };
 }

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { buildTraceQueryRequest, TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS } from './trace-query-filters';
+import {
+  buildTraceQueryRequest,
+  resolveTraceQueryTimeRange,
+  TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS,
+} from './trace-query-filters';
 
 const now = new Date('2026-09-15T12:00:00Z');
 
@@ -795,6 +799,25 @@ describe('buildTraceQueryRequest with groups', () => {
         now,
       }).where;
       expect(where).toEqual({ op: 'and', args: [eqStatus] });
+    });
+  });
+});
+
+describe('resolveTraceQueryTimeRange', () => {
+  describe('when the window has no ends', () => {
+    it('covers the last seven days up to now', () => {
+      expect(resolveTraceQueryTimeRange(undefined, undefined, now)).toEqual({
+        from: '2026-09-08T12:00:00.000Z',
+        to: now.toISOString(),
+      });
+    });
+  });
+
+  describe('when the window has both ends', () => {
+    it('uses them', () => {
+      const from = new Date('2026-01-01T00:00:00.000Z');
+      const to = new Date('2026-01-02T00:00:00.000Z');
+      expect(resolveTraceQueryTimeRange(from, to, now)).toEqual({ from: from.toISOString(), to: to.toISOString() });
     });
   });
 });

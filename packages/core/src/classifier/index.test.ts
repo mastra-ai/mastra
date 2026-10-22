@@ -1,11 +1,12 @@
-import {
-  APICallError,
-  type Experimental_DecisionModelV4 as DecisionModelV4,
-  type Experimental_EvaluationModelV4 as EvaluationModelV4,
+import { APICallError } from '@ai-sdk/provider-v7';
+import type {
+  Experimental_DecisionModelV4 as DecisionModelV4,
+  Experimental_EvaluationModelV4 as EvaluationModelV4,
 } from '@ai-sdk/provider-v7';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { MastraBase } from '../base';
+import { EntityType, SpanType } from '../observability/types';
 import * as observabilityUtils from '../observability/utils';
 import { Classifier, MastraDecisionModel, MastraEvaluationModel } from './index';
 
@@ -621,5 +622,42 @@ describe('Classifier', () => {
     expect(childSpan.end).toHaveBeenCalledExactlyOnceWith({
       output: { answers: { unsafe: { type: 'boolean', probability: 0.8 } } },
     });
+  });
+
+  it('tags a nested evaluation span with the classifier entity', async () => {
+    const childSpan = { update: vi.fn(), end: vi.fn(), error: vi.fn() };
+    const parentSpan = { createChildSpan: vi.fn(() => childSpan) };
+    vi.spyOn(observabilityUtils, 'resolveCurrentSpan').mockReturnValue(parentSpan as never);
+    const classifier = new Classifier({ id: 'router', model: createModel(), questions: booleanQuestions });
+
+    await classifier.decide({ state: 'content' });
+
+    expect(parentSpan.createChildSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: SpanType.CLASSIFIER_EVALUATION,
+        entityType: EntityType.CLASSIFIER,
+        entityId: 'router',
+        entityName: 'router',
+      }),
+    );
+  });
+
+  it('tags a root evaluation span started through registered Mastra observability with the classifier entity', async () => {
+    const rootSpan = { update: vi.fn(), end: vi.fn(), error: vi.fn() };
+    const instance = { startSpan: vi.fn(() => rootSpan) };
+    vi.spyOn(observabilityUtils, 'resolveCurrentSpan').mockReturnValue(undefined);
+    const classifier = new Classifier({ id: 'router', model: createModel(), questions: booleanQuestions });
+    classifier.__registerMastra({ observability: { getSelectedInstance: () => instance } } as never);
+
+    await classifier.decide({ state: 'content' });
+
+    expect(instance.startSpan).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: SpanType.CLASSIFIER_EVALUATION,
+        entityType: EntityType.CLASSIFIER,
+        entityId: 'router',
+        entityName: 'router',
+      }),
+    );
   });
 });

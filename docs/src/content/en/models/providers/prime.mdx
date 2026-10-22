@@ -7,7 +7,7 @@ description: "Browse Prime Inference model IDs, capabilities, context windows, a
 
 # <img src="https://models.dev/logos/prime.svg" alt="Prime Inference logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Prime Inference
 
-Access 68 Prime Inference models through Mastra's model router. Authentication is handled automatically using the `PRIME_API_KEY` environment variable.
+Access 69 Prime Inference models through Mastra's model router. Authentication is handled automatically using the `PRIME_API_KEY` environment variable.
 
 Learn more in the [Prime Inference documentation](https://docs.primeintellect.ai).
 
@@ -185,7 +185,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
-    "maxOutput": 943718,
+    "maxOutput": 131072,
     "inputCost": 0.44,
     "outputCost": 1.32
   },
@@ -754,6 +754,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.3
   },
   {
+    "model": "prime/qwen/qwen3-30b-a3b-instruct-2507",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 235929,
+    "inputCost": 0.13,
+    "outputCost": 0.52
+  },
+  {
     "model": "prime/qwen/qwen3-coder-next",
     "imageInput": false,
     "audioInput": false,
@@ -797,7 +809,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1000000,
-    "maxOutput": 235929,
+    "maxOutput": 65536,
     "inputCost": 0.99,
     "outputCost": 3.2
   },

@@ -47,10 +47,10 @@ export const moderatedAgent = new Agent({
   id: 'moderated-agent',
   name: 'moderated-agent',
   instructions: 'You are a helpful assistant',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   inputProcessors: [
     new ModerationProcessor({
-      model: '__GATEWAY_OPENAI_MODEL_MINI__',
+      model: '__GATEWAY_OPENAI_MODEL_LUNA__',
       categories: ['hate', 'harassment', 'violence'],
       threshold: 0.7,
       strategy: 'block',
@@ -106,9 +106,9 @@ const agent = new Agent({
   instructions: '...',
   inputProcessors: [
     new TokenLimiter(4000),
-    new ModerationProcessor({ model: '__GATEWAY_OPENAI_MODEL_NANO__' }),
+    new ModerationProcessor({ model: '__GATEWAY_OPENAI_MODEL_LUNA__' }),
   ],
-  outputProcessors: [new ModerationProcessor({ model: '__GATEWAY_OPENAI_MODEL_NANO__' })],
+  outputProcessors: [new ModerationProcessor({ model: '__GATEWAY_OPENAI_MODEL_LUNA__' })],
   errorProcessors: [new PrefillErrorHandler()],
 })
 ```
@@ -255,7 +255,7 @@ export class DynamicModelProcessor implements Processor {
   }: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
     // Use a fast model for initial response
     if (stepNumber === 0) {
-      return { model: '__GATEWAY_OPENAI_MODEL_MINI__' }
+      return { model: '__GATEWAY_OPENAI_MODEL_LUNA__' }
     }
 
     // Disable tools after 5 steps to force completion
@@ -311,7 +311,7 @@ The `prepareStep()` callback on `generate()` or `stream()` is a shorthand for `p
 await agent.generate('Complex task', {
   prepareStep: async ({ stepNumber, model }) => {
     if (stepNumber === 0) {
-      return { model: '__GATEWAY_OPENAI_MODEL_MINI__' }
+      return { model: '__GATEWAY_OPENAI_MODEL_LUNA__' }
     }
     if (stepNumber > 5) {
       return { toolChoice: 'none' }
@@ -393,17 +393,19 @@ import type { Processor } from '@mastra/core/processors'
 export class ResponseValidator implements Processor {
   id = 'response-validator'
 
-  async processOutputStep({ text, abort, retryCount }) {
+  async processOutputStep({ messages, text, abort, retryCount }) {
     const isValid = await validateResponse(text)
 
     if (!isValid && retryCount < 3) {
       abort('Response did not meet requirements. Try again.', { retry: true })
     }
 
-    return []
+    return messages
   }
 }
 ```
+
+Return `messages` to leave the conversation unchanged. Returning `[]` replaces the message list with an empty array, removing the conversation history and the latest response.
 
 For more on retry behavior, see [Retry mechanism](#retry-mechanism) in Advanced patterns.
 
@@ -881,16 +883,19 @@ const moderationWorkflow = createWorkflow({
   .parallel([
     createStep(
       new PIIDetector({
+        model: '__GATEWAY_OPENAI_MODEL_LUNA__',
         strategy: 'redact',
       }),
     ),
     createStep(
       new PromptInjectionDetector({
+        model: '__GATEWAY_OPENAI_MODEL_LUNA__',
         strategy: 'block',
       }),
     ),
     createStep(
       new ModerationProcessor({
+        model: '__GATEWAY_OPENAI_MODEL_LUNA__',
         strategy: 'block',
       }),
     ),
@@ -925,7 +930,7 @@ import type { Processor } from '@mastra/core/processors'
 export class QualityChecker implements Processor {
   id = 'quality-checker'
 
-  async processOutputStep({ text, abort, retryCount }) {
+  async processOutputStep({ messages, text, abort, retryCount }) {
     const qualityScore = await evaluateQuality(text)
 
     if (qualityScore < 0.7 && retryCount < 3) {
@@ -936,7 +941,7 @@ export class QualityChecker implements Processor {
       })
     }
 
-    return []
+    return messages
   }
 }
 
@@ -970,7 +975,7 @@ All processors expose an `onViolation` property that fires whenever a policy vio
 import { ModerationProcessor, TokenCostControl } from '@mastra/core/processors'
 
 const moderation = new ModerationProcessor({
-  model: '__GATEWAY_OPENAI_MODEL_NANO__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   strategy: 'block',
 })
 

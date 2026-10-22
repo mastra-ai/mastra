@@ -86,13 +86,8 @@ describe('TraceSpanTree — connector lines', () => {
     );
   }
 
-  // Rails repeat on the duration line under the name, so count on the name line only.
-  const guidesIn = (spanName: string) => {
-    const row = screen.getByLabelText(`View details for span ${spanName}`);
-    const nameLine = row.querySelector<HTMLElement>('[data-slot="timeline-name-line"]');
-    if (!nameLine) throw new Error(`No name line rendered for span ${spanName}`);
-    return within(nameLine).queryAllByTestId('timeline-structure-guide');
-  };
+  const guidesIn = (spanName: string) =>
+    within(screen.getByLabelText(`View details for span ${spanName}`)).queryAllByTestId('span-tree-guide');
 
   it('keeps an ancestor level connected while that ancestor still has siblings below', () => {
     const guidesById: Record<string, boolean[]> = {};
@@ -126,18 +121,26 @@ describe('TraceSpanTree — connector lines', () => {
 });
 
 describe('TraceSpanTree — trailing cell', () => {
-  it('shows the span duration as seconds under each span name', () => {
+  it('shows the span duration under each span name', () => {
     render(<Harness />);
 
     // Both fixture spans last exactly one second.
-    const durations = screen.getAllByText(
-      (_, el) => el?.textContent === '1.000 s' && el.tagName === 'SPAN' && el.children.length === 0,
-    );
-    expect(durations).toHaveLength(2);
+    expect(screen.getAllByText('1s')).toHaveLength(2);
     // The duration sits on its own line under the name, inside the same row.
     const root = screen.getByLabelText('View details for span agent run');
     expect(within(root).getByRole('button', { name: /agent run/ }).textContent).toBe('agent run');
-    within(root).getByText('1.000 s');
+    within(root).getByText('1s');
+  });
+
+  it('separates the span kind from its name with a chevron and drops the quotes', () => {
+    const spans = formatHierarchicalSpans(nestedSpanFixture).map(span => ({
+      ...span,
+      name: "agent run: 'chef-agent'",
+    }));
+    render(<TraceSpanTree hierarchicalSpans={spans} onSpanClick={() => {}} />);
+
+    const row = screen.getByLabelText("View details for span agent run: 'chef-agent'");
+    expect(within(row).getByRole('button', { name: /chef-agent/ }).textContent).toBe('agent run›chef-agent');
   });
 
   it('renders a custom trailing cell with the row context', () => {
@@ -147,10 +150,6 @@ describe('TraceSpanTree — trailing cell', () => {
     screen.getByText('root@0');
     screen.getByText('child@1');
     // The duration line is kept alongside the custom trailing cell.
-    expect(
-      screen.getAllByText(
-        (_, el) => el?.textContent === '1.000 s' && el.tagName === 'SPAN' && el.children.length === 0,
-      ),
-    ).toHaveLength(2);
+    expect(screen.getAllByText('1s')).toHaveLength(2);
   });
 });

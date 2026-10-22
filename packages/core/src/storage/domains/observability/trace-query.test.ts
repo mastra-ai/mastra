@@ -48,8 +48,8 @@ import {
   TraceQueryExecutionError,
   TraceQueryResourceLimitError,
   TraceQueryValidationError,
-  type TraceQueryPredicate,
 } from './trace-query';
+import type { TraceQueryPredicate } from './trace-query';
 
 const baseRequest = {
   timeRange: {
@@ -243,6 +243,15 @@ describe('traceQueryRequestSchema', () => {
     expect(oversizedSet.issues).toContainEqual(
       expect.objectContaining({ code: 'invalid_request', path: ['where', 'set'] }),
     );
+    const oversizedRelatedSet = validationError(() =>
+      parsed({
+        ...baseRequest,
+        where: { spans: { some: { op: 'in', value: { path: 'name' }, set: [...values, 'name-over-limit'] } } },
+      }),
+    );
+    expect(oversizedRelatedSet.issues).toContainEqual(
+      expect.objectContaining({ code: 'invalid_request', path: ['where', 'spans', 'some', 'set'] }),
+    );
 
     const maxString = 'é'.repeat(TRACE_QUERY_MAX_STRING_BYTES / 2);
     expect(
@@ -260,6 +269,20 @@ describe('traceQueryRequestSchema', () => {
     expect(oversizedString.issues).toContainEqual(
       expect.objectContaining({ code: 'invalid_request', path: ['where', 'right', 'literal'] }),
     );
+  });
+
+  it('points an oversized membership set nested in other predicates at the set itself', () => {
+    const set = Array.from({ length: TRACE_QUERY_MAX_SET_VALUES + 1 }, (_, index) => `trace-${index}`);
+    const inSet = { op: 'in', value: { path: 'traceId' }, set };
+
+    for (const [where, path] of [
+      [{ op: 'not', arg: inSet }, ['where', 'arg', 'set']],
+      [{ op: 'and', args: [{ op: 'exists', path: 'traceId' }, inSet] }, ['where', 'args', 1, 'set']],
+      [{ spans: { some: inSet } }, ['where', 'spans', 'some', 'set']],
+    ] as const) {
+      const error = validationError(() => parsed({ ...baseRequest, where }));
+      expect(error.issues).toEqual([expect.objectContaining({ code: 'invalid_request', path })]);
+    }
   });
 
   it('bounds raw predicate paths by UTF-8 bytes before allowlist resolution', () => {
@@ -1788,6 +1811,46 @@ describe('trace-query cursors', () => {
     expect(() =>
       planTraceQuery(parsed({ ...baseRequest, where: { op: 'exists', path: 'threadId' }, page: { after: cursor } })),
     ).toThrowError(expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_CONFLICT' }));
+  });
+
+  it('round-trips numeric and empty time to first chunk cursors and rejects other kinds', () => {
+    const request = parsed({ ...baseRequest, orderBy: [{ field: 'timeToFirstChunkMs', direction: 'asc' }] });
+    const plan = planTraceQuery(request);
+    for (const sortValue of [250, 0, null]) {
+      const after = encodeTraceQueryCursor(plan, { result: 'traces', sortValue, traceId: 'trace-3' });
+      expect(planTraceQuery({ ...request, page: { limit: 100, after } })).toMatchObject({
+        cursor: { sortValue, traceId: 'trace-3' },
+      });
+    }
+
+    const forged = encodeTraceQueryCursor(plan, {
+      result: 'traces',
+      sortValue: '2026-08-03T00:00:00.000Z',
+      traceId: 'trace-3',
+    });
+    expect(() => planTraceQuery({ ...request, page: { limit: 100, after: forged } })).toThrowError(
+      expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_MALFORMED' }),
+    );
+    const startedAtPlan = planTraceQuery(parsed());
+    const numeric = encodeTraceQueryCursor(startedAtPlan, { result: 'traces', sortValue: 250, traceId: 'trace-3' });
+    expect(() => planTraceQuery(parsed({ ...baseRequest, page: { after: numeric } }))).toThrowError(
+      expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_MALFORMED' }),
+    );
+  });
+
+  it('rejects a cursor after the sort field or direction changes', () => {
+    const plan = planTraceQuery(
+      parsed({ ...baseRequest, orderBy: [{ field: 'timeToFirstChunkMs', direction: 'asc' }] }),
+    );
+    const after = encodeTraceQueryCursor(plan, { result: 'traces', sortValue: 250, traceId: 'trace-3' });
+    for (const orderBy of [
+      [{ field: 'timeToFirstChunkMs', direction: 'desc' }],
+      [{ field: 'startedAt', direction: 'asc' }],
+    ] as const) {
+      expect(() => planTraceQuery(parsed({ ...baseRequest, orderBy: [...orderBy], page: { after } }))).toThrowError(
+        expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_CONFLICT' }),
+      );
+    }
   });
 
   it('binds established shared authorization state only when supplied', () => {

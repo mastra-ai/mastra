@@ -344,7 +344,7 @@ describe('Board work-item activity', () => {
     expect(requestedBefore).toContain('cursor-2');
   });
 
-  it('filters work cards by teammate and selected relevance types', async () => {
+  it('narrows work cards from anyone involved to one role, then resets', async () => {
     stubBoardEndpoints();
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
@@ -356,7 +356,7 @@ describe('Board work-item activity', () => {
     await waitForMutationsIdle(client);
 
     await screen.findByText('Authored issue');
-    await togglePropertyOption(user, 'Board properties', 'Teammate', /octocat/);
+    await togglePropertyOption(user, 'Board properties', 'Involves', /octocat/);
 
     await waitFor(() => {
       expect(new URLSearchParams(router.state.location.search).get('teammate')).toBe('github:octocat');
@@ -365,23 +365,18 @@ describe('Board work-item activity', () => {
     expect(screen.getByText('Assigned issue')).toBeInTheDocument();
     expect(screen.queryByText('Unrelated issue')).not.toBeInTheDocument();
 
-    await openPropertySubmenu(user, 'Board properties', 'Relevant because');
-    expect(screen.queryByRole('menuitemcheckbox', { name: 'Review requested' })).not.toBeInTheDocument();
-    await closePropertiesMenus(user);
-    await togglePropertyOption(user, 'Board properties', 'Relevant because', 'Authored');
+    await togglePropertyOption(user, 'Board properties', 'Involves', /octocat/);
+    await togglePropertyOption(user, 'Board properties', 'Assignee', /octocat/);
     await waitFor(() => {
-      expect(new URLSearchParams(router.state.location.search).get('relevance')).toBe('worked,assigned');
+      expect(new URLSearchParams(router.state.location.search).get('assignee')).toBe('github:octocat');
     });
-
     expect(screen.queryByText('Authored issue')).not.toBeInTheDocument();
     expect(screen.getByText('Assigned issue')).toBeInTheDocument();
 
     await openPropertiesMenu(user, 'Board properties');
     await user.click(screen.getByRole('menuitem', { name: 'Reset to default' }));
     await waitFor(() => {
-      const params = new URLSearchParams(router.state.location.search);
-      expect(params.get('teammate')).toBeNull();
-      expect(params.get('relevance')).toBeNull();
+      expect(new URLSearchParams(router.state.location.search).get('assignee')).toBeNull();
     });
     expect(screen.getByText('Authored issue')).toBeInTheDocument();
     expect(screen.getByText('Assigned issue')).toBeInTheDocument();
@@ -398,7 +393,7 @@ describe('Board work-item activity', () => {
       ),
     );
 
-    const { client } = renderBoard('work', '?teammate=github%3Aoctocat&relevance=assigned');
+    const { client } = renderBoard('work', '?assignee=github%3Aoctocat');
     await waitForMutationsIdle(client);
 
     expect(await screen.findByText('Assigned issue')).toBeInTheDocument();
@@ -464,7 +459,7 @@ describe('Board work-item activity', () => {
 
     await screen.findByText('Linear planning item');
     await waitFor(() => expect(linearIssuesRequested).toHaveBeenCalled());
-    await togglePropertyOption(user, 'Board properties', 'Teammate', /Linear Ada/i);
+    await togglePropertyOption(user, 'Board properties', 'Author', /Linear Ada/i);
 
     expect(screen.getByText('Linear planning item')).toBeInTheDocument();
   });
@@ -500,7 +495,7 @@ describe('Board work-item activity', () => {
     expect(within(popup).getByText(`Created at: ${createdAt}`)).toHaveAttribute('datetime', reviewItem.createdAt);
   });
 
-  it('filters review cards by teammate and selected relevance types', async () => {
+  it('filters review cards by anyone involved, by reviewer, and by who worked on them', async () => {
     stubBoardEndpoints();
     server.use(
       http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -519,21 +514,22 @@ describe('Board work-item activity', () => {
     await waitForMutationsIdle(client);
 
     await screen.findByText('Authored PR');
-    await togglePropertyOption(user, 'Board properties', 'Teammate', /octocat/);
+    await togglePropertyOption(user, 'Board properties', 'Involves', /octocat/);
 
     expect(screen.getByText('Authored PR')).toBeInTheDocument();
     expect(screen.getByText('Assigned PR')).toBeInTheDocument();
     expect(screen.getByText('Requested PR')).toBeInTheDocument();
     expect(screen.queryByText('Worked PR')).not.toBeInTheDocument();
 
-    await togglePropertyOption(user, 'Board properties', 'Relevant because', 'Authored');
+    await togglePropertyOption(user, 'Board properties', 'Involves', /octocat/);
+    await togglePropertyOption(user, 'Board properties', 'Review requested', /octocat/);
 
     expect(screen.queryByText('Authored PR')).not.toBeInTheDocument();
-    expect(screen.getByText('Assigned PR')).toBeInTheDocument();
+    expect(screen.queryByText('Assigned PR')).not.toBeInTheDocument();
     expect(screen.getByText('Requested PR')).toBeInTheDocument();
 
-    await togglePropertyOption(user, 'Board properties', 'Teammate', /Ada Lovelace/);
-    await togglePropertyOption(user, 'Board properties', 'Teammate', /octocat/);
+    await togglePropertyOption(user, 'Board properties', 'Review requested', /octocat/);
+    await togglePropertyOption(user, 'Board properties', 'Worked on by', /You$/);
 
     expect(screen.getByText('Worked PR')).toBeInTheDocument();
     expect(screen.queryByText('Authored PR')).not.toBeInTheDocument();

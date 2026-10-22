@@ -720,9 +720,13 @@ export function hydrateSerializedStepErrors(steps: WorkflowRunState['context']) 
 function cleanSingleResult(result: Record<string, unknown>): Record<string, unknown> {
   const { __state: _state, __stateDelta: _stateDelta, metadata, ...rest } = result;
 
-  // Strip nestedRunId from metadata but keep other user-defined fields
+  // Strip nested run identities from metadata but keep other user-defined fields
   if (metadata && typeof metadata === 'object' && !Array.isArray(metadata)) {
-    const { nestedRunId: _nestedRunId, ...userMetadata } = metadata as Record<string, unknown>;
+    const {
+      nestedRunId: _nestedRunId,
+      foreachNestedRunIds: _foreachNestedRunIds,
+      ...userMetadata
+    } = metadata as Record<string, unknown>;
     if (Object.keys(userMetadata).length > 0) {
       return { ...rest, metadata: userMetadata };
     }
@@ -778,6 +782,14 @@ export function cleanStepResult(stepResult: unknown): unknown {
 
   const result = stepResult as Record<string, unknown>;
   const cleaned = cleanSingleResult(result);
+
+  // The evented engine persists a running forEach with null slots for unfinished iterations
+  // (they drive storage merges and completion checks). Those are bookkeeping, not output:
+  // like the default engine, a running step exposes no output until it finishes.
+  if (cleaned.status === 'running' && Array.isArray(cleaned.output)) {
+    delete cleaned.output;
+    return cleaned;
+  }
 
   // If output is an array (forEach results), clean each iteration result
   // Iteration results can have __state (for suspended) or metadata.nestedRunId (for nested workflows)

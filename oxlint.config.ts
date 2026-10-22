@@ -41,6 +41,9 @@ export default defineConfig({
     'ee/**',
   ],
   rules: {
+    'no-dupe-keys': 'error',
+    'no-unneeded-ternary': 'error',
+    'no-useless-concat': 'error',
     'no-restricted-globals': ['error', 'global'],
     'no-unexpected-multiline': 'error',
     'no-warning-comments': [
@@ -104,11 +107,11 @@ export default defineConfig({
       },
     },
     {
-      // TODO: meant to be on; off since #20173 broke this override's glob (`?(x)` matched no file).
-      // ~1,155 violations to clean up in follow-up PRs, one rule family each.
+      // TODO: the rules still 'off' here are meant to be on; off since #20173 broke this override's glob
+      // (`?(x)` matched no file). ~500 violations left to clean up in follow-up PRs, one rule family each.
       files: ['**/*.{ts,tsx}'],
       rules: {
-        'import/consistent-type-specifier-style': ['off', 'prefer-top-level'],
+        'import/consistent-type-specifier-style': ['error', 'prefer-top-level'],
         'eslint/no-unused-vars': [
           'off',
           {
@@ -121,14 +124,16 @@ export default defineConfig({
           },
         ],
         'typescript/consistent-type-imports': [
-          'off',
+          'error',
           {
             prefer: 'type-imports',
-            disallowTypeAnnotations: true,
+            // `typeof import('x')` is already type-only; tests use it with vi.importActual.
+            disallowTypeAnnotations: false,
             fixStyle: 'separate-type-imports',
           },
         ],
         'typescript/no-require-imports': 'off',
+        'typescript/prefer-as-const': 'error',
         'typescript/ban-ts-comment': [
           'off',
           {
@@ -150,6 +155,7 @@ export default defineConfig({
     {
       files: ['**/*.{ts,tsx}'],
       rules: {
+        'typescript/no-meaningless-void-operator': 'error',
         'typescript/no-floating-promises': 'error',
         'typescript/no-misused-promises': ['error', { checksVoidReturn: false }],
       },
@@ -177,7 +183,6 @@ export default defineConfig({
         'typescript/no-floating-promises': 'off',
         'typescript/no-for-in-array': 'off',
         'typescript/no-implied-eval': 'off',
-        'typescript/no-meaningless-void-operator': 'off',
         'typescript/no-misused-promises': 'off',
         'typescript/no-misused-spread': 'off',
         'typescript/no-mixed-enums': 'off',
@@ -185,10 +190,7 @@ export default defineConfig({
         'typescript/no-unnecessary-boolean-literal-compare': 'off',
         'typescript/no-unnecessary-condition': 'off',
         'typescript/no-unnecessary-qualifier': 'off',
-        'typescript/no-unnecessary-template-expression': 'off',
-        'typescript/no-unnecessary-type-arguments': 'off',
         'typescript/no-unnecessary-type-conversion': 'off',
-        'typescript/no-unnecessary-type-parameters': 'off',
         'typescript/no-unsafe-argument': 'off',
         'typescript/no-unsafe-assignment': 'off',
         'typescript/no-unsafe-call': 'off',

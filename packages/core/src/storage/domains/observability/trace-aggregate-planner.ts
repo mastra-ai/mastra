@@ -8,7 +8,6 @@ import { isTraceAggregateDimension, parseTraceAggregateMeasure } from './trace-a
 import type {
   TraceAggregateCanonicalMeasure,
   TraceAggregateCountDistinctField,
-  TraceAggregateCountDistinctMeasure,
   TraceAggregateDimension,
 } from './trace-aggregate-registry';
 import {
@@ -53,9 +52,12 @@ export const TRACE_AGGREGATE_INTERVAL_MS: Record<TraceAggregateInterval, number>
   '1d': 24 * 60 * 60_000,
 };
 
-export type TrustedTraceAggregateMeasure =
+/** A trusted measure whose `countDistinct` target is one of the scope's fields `F`. */
+export type TrustedAggregateMeasure<F extends string> =
   | { type: 'canonical'; name: TraceAggregateCanonicalMeasure }
-  | { type: 'countDistinct'; name: TraceAggregateCountDistinctMeasure; field: TraceAggregateCountDistinctField };
+  | { type: 'countDistinct'; name: `${typeof TRACE_AGGREGATE_COUNT_DISTINCT_PREFIX}${F}`; field: F };
+
+export type TrustedTraceAggregateMeasure = TrustedAggregateMeasure<TraceAggregateCountDistinctField>;
 
 /** A measure name that survived allowlisting; narrower than the request-level `TraceAggregateMeasure`. */
 export type TrustedTraceAggregateMeasureName = TrustedTraceAggregateMeasure['name'];
@@ -69,33 +71,36 @@ export type TrustedTraceAggregateMeasureName = TrustedTraceAggregateMeasure['nam
  * membership test against null is UNKNOWN, `not` of UNKNOWN is UNKNOWN, `and` / `or` follow
  * Kleene logic, and a group whose predicate is not TRUE is removed.
  */
-export type TrustedTraceAggregateHavingPredicate =
+export type TrustedTraceAggregateHavingPredicate<M extends string = TrustedTraceAggregateMeasureName> =
   | {
       type: 'comparison';
-      measure: TrustedTraceAggregateMeasureName;
+      measure: M;
       operator: TraceQueryComparisonOperator;
       value: number;
     }
   | {
       type: 'membership';
-      measure: TrustedTraceAggregateMeasureName;
+      measure: M;
       operator: TraceQueryMembershipOperator;
       values: number[];
     }
-  | { type: 'boolean'; operator: 'and' | 'or'; args: TrustedTraceAggregateHavingPredicate[] }
-  | { type: 'not'; arg: TrustedTraceAggregateHavingPredicate };
+  | { type: 'boolean'; operator: 'and' | 'or'; args: TrustedTraceAggregateHavingPredicate<M>[] }
+  | { type: 'not'; arg: TrustedTraceAggregateHavingPredicate<M> };
 
-export type TrustedTraceAggregateOrderBy =
+export type TrustedTraceAggregateOrderBy<
+  M extends string = TrustedTraceAggregateMeasureName,
+  D extends string = TraceAggregateDimension,
+> =
   | {
       target: 'measure';
       /**
        * A requested measure, or `count` (always available). When `count` is not in
        * `measures`, backends compute it for ordering without projecting it into the response.
        */
-      measure: TrustedTraceAggregateMeasureName;
+      measure: M;
       direction: 'asc' | 'desc';
     }
-  | { target: 'dimension'; dimension: TraceAggregateDimension; direction: 'asc' | 'desc' };
+  | { target: 'dimension'; dimension: D; direction: 'asc' | 'desc' };
 
 /**
  * Group semantics every evaluator and store compiler must implement:
@@ -140,17 +145,18 @@ export type TrustedTraceAggregateOrderBy =
  *   `tokens.<x>.sum` sums over the group's usage-bearing traces, `tokens.<x>.avg` divides by
  *   their count, and both are null when the group has none.
  * - **Cost.** Only `TRACE_AGGREGATE_COST_METRIC_NAMES` rows carry cost. Such a row is priced when
- *   it has an `estimatedCost`, a `costUnit`, and no `costMetadata.error`. It failed to price when
- *   `costMetadata.error` is set (including `partial_cost`, even though it carries a partial cost)
- *   or it has a cost without a unit. A row with neither a cost nor an error is neither: when the
- *   provider reports cost, only one of the call's total rows carries it. A trace's cost is the sum
- *   of its priced rows' `estimatedCost`; rows that are not priced contribute nothing to cost or
- *   cost unit. `cost.sum` sums over traces with at least one priced row, `cost.avg` divides by
- *   their count.
+ *   it has an `estimatedCost`, a `costUnit`, and either no `costMetadata.error` or
+ *   `costMetadata.error = 'partial_cost'` (the SDK priced some token types of the call and the cost
+ *   covers those). It failed to price when `costMetadata.error` is set (including `partial_cost`)
+ *   or it has a cost without a unit, so a `partial_cost` row is both priced and failed. A row with
+ *   neither a cost nor an error is neither: when the provider reports cost, only one of the call's
+ *   total rows carries it. A trace's cost is the sum of its priced rows' `estimatedCost`; rows
+ *   that are not priced contribute nothing to cost or cost unit. `cost.sum` sums over traces with
+ *   at least one priced row, `cost.avg` divides by their count.
  * - **Row cost.** Whenever any `cost.*` measure is requested, every row also carries
  *   `cost.coverage` and `cost.unit`. A trace is covered when it has at least one priced row and
  *   no row that failed to price; `cost.coverage` is covered traces ÷ usage-bearing traces, null
- *   when the group has no usage-bearing traces. A trace with partial cost still adds that cost to
+ *   when the group has no usage-bearing traces. A trace with a `partial_cost` row adds that cost to
  *   `cost.sum` but is not covered. `cost.unit` is the priced rows' single `costUnit`, `'mixed'`
  *   when they use more than one, and null exactly when there are no priced rows. `cost.sum` and
  *   `cost.avg` are null when the group has no priced rows or `cost.unit` is `'mixed'`. Row cost
@@ -185,10 +191,10 @@ export function countTraceAggregateBuckets(fromMs: number, toMs: number, interva
 
 type IssuePath = Array<string | number>;
 
-interface HavingState {
+interface HavingState<M extends string> {
   nodes: number;
   issues: TraceQueryIssue[];
-  measureNames: Map<string, TrustedTraceAggregateMeasureName>;
+  measureNames: Map<string, M>;
 }
 
 /**
@@ -202,7 +208,39 @@ export function planTraceAggregate(
   options: Pick<TraceQueryPlanOptions, 'scope'> = {},
 ): TrustedTraceAggregatePlan {
   const issues: TraceQueryIssue[] = [];
+  const where = request.where ? planTraceQuerySelectionPredicate(request.where, issues) : undefined;
+  const plan = planAggregateGroups(request, issues, {
+    isDimension: isTraceAggregateDimension,
+    parseMeasure: parseTraceAggregateMeasure,
+  });
+  return { result: 'aggregate', ...plan, where, scope: normalizeTraceQueryTenantScope(options.scope) };
+}
 
+/** @internal The parts of an aggregate request that trace and span scopes share. */
+export interface AggregateGroupsRequest {
+  timeRange: { from: string; to: string };
+  groupBy: string[];
+  interval?: TraceAggregateInterval;
+  measures: string[];
+  having?: TraceQueryScalarPredicate;
+  orderBy: { field: string; direction: 'asc' | 'desc' };
+  limit: number;
+}
+
+/** @internal How a scope allowlists dimensions and `countDistinct` targets. */
+export interface AggregateScopePolicy<D extends string, F extends string> {
+  isDimension(path: string): path is D;
+  parseMeasure(
+    name: string,
+  ): { type: 'canonical'; measure: TraceAggregateCanonicalMeasure } | { type: 'countDistinct'; field: F } | undefined;
+}
+
+/** @internal Window, bucket and row caps, dimensions, measures, `having` and `orderBy` for any scope. */
+export function planAggregateGroups<D extends string, F extends string>(
+  request: AggregateGroupsRequest,
+  issues: TraceQueryIssue[],
+  policy: AggregateScopePolicy<D, F>,
+) {
   const from = new Date(request.timeRange.from);
   const to = new Date(request.timeRange.to);
   const fromMs = from.getTime();
@@ -235,15 +273,13 @@ export function planTraceAggregate(
     }
   }
 
-  const where = request.where ? planTraceQuerySelectionPredicate(request.where, issues) : undefined;
-
-  const dimensions: TraceAggregateDimension[] = [];
+  const dimensions: D[] = [];
   request.groupBy.forEach((raw, index) => {
     const path: IssuePath = ['groupBy', index];
     const dimension = normalizeTraceQueryPath(raw);
-    if (!isTraceAggregateDimension(dimension)) {
+    if (!policy.isDimension(dimension)) {
       issues.push(
-        dimension.startsWith('metadata.')
+        dimension.startsWith('metadata.') && policy.isDimension('metadata.key')
           ? { code: 'invalid_metadata_key', path, message: 'Metadata dimensions require one non-empty top-level key' }
           : { code: 'field_not_allowed', path, message: 'The field cannot be used as a dimension' },
       );
@@ -256,11 +292,12 @@ export function planTraceAggregate(
     dimensions.push(dimension);
   });
 
-  const measures: TrustedTraceAggregateMeasure[] = [];
-  const measureNames = new Map<string, TrustedTraceAggregateMeasureName>();
+  type Measure = TrustedAggregateMeasure<F>;
+  const measures: Measure[] = [];
+  const measureNames = new Map<string, Measure['name']>();
   request.measures.forEach((raw, index) => {
     const path: IssuePath = ['measures', index];
-    const measure = planMeasure(raw, path, issues);
+    const measure = planMeasure(raw, path, issues, policy);
     if (!measure) return;
     if (measureNames.has(measure.name)) {
       issues.push({ code: 'invalid_request', path, message: 'Measures must be distinct' });
@@ -271,7 +308,7 @@ export function planTraceAggregate(
   });
 
   // `count` is always available to `having` and `orderBy`, requested or not.
-  const referenceable = new Map(measureNames).set('count', 'count');
+  const referenceable = new Map<string, Measure['name']>(measureNames).set('count', 'count');
 
   const having = request.having
     ? planHaving(request.having, ['having'], 1, { nodes: 0, issues, measureNames: referenceable })
@@ -282,10 +319,7 @@ export function planTraceAggregate(
   if (issues.length > 0 || !orderBy) throw new TraceQueryValidationError(issues);
 
   return {
-    result: 'aggregate',
     timeRange: { from: from.toISOString(), to: to.toISOString() },
-    where,
-    scope: normalizeTraceQueryTenantScope(options.scope),
     dimensions,
     interval: request.interval,
     measures,
@@ -306,13 +340,14 @@ function normalizeTraceAggregateMeasureName(raw: string): string {
     : unwrapped;
 }
 
-function planMeasure(
+function planMeasure<F extends string>(
   raw: string,
   path: IssuePath,
   issues: TraceQueryIssue[],
-): TrustedTraceAggregateMeasure | undefined {
+  policy: AggregateScopePolicy<string, F>,
+): TrustedAggregateMeasure<F> | undefined {
   const name = normalizeTraceAggregateMeasureName(raw);
-  const parsed = parseTraceAggregateMeasure(name);
+  const parsed = policy.parseMeasure(name);
   if (parsed?.type === 'canonical') return { type: 'canonical', name: parsed.measure };
   if (parsed?.type === 'countDistinct') {
     return {
@@ -323,7 +358,9 @@ function planMeasure(
   }
   const field = name.slice(TRACE_AGGREGATE_COUNT_DISTINCT_PREFIX.length);
   issues.push(
-    name.startsWith(TRACE_AGGREGATE_COUNT_DISTINCT_PREFIX) && field.startsWith('metadata.')
+    name.startsWith(TRACE_AGGREGATE_COUNT_DISTINCT_PREFIX) &&
+      field.startsWith('metadata.') &&
+      policy.isDimension('metadata.key')
       ? {
           code: 'invalid_metadata_key',
           path,
@@ -334,12 +371,12 @@ function planMeasure(
   return undefined;
 }
 
-function planHaving(
+function planHaving<M extends string>(
   predicate: TraceQueryScalarPredicate,
   path: IssuePath,
   depth: number,
-  state: HavingState,
-): TrustedTraceAggregateHavingPredicate | undefined {
+  state: HavingState<M>,
+): TrustedTraceAggregateHavingPredicate<M> | undefined {
   state.nodes += 1;
   if (depth > TRACE_QUERY_MAX_DEPTH || state.nodes > TRACE_QUERY_MAX_NODES) {
     if (!state.issues.some(issue => issue.code === 'predicate_too_complex')) {
@@ -351,7 +388,7 @@ function planHaving(
   if (predicate.op === 'and' || predicate.op === 'or') {
     const args = predicate.args
       .map((arg, index) => planHaving(arg, [...path, 'args', index], depth + 1, state))
-      .filter((arg): arg is TrustedTraceAggregateHavingPredicate => arg !== undefined);
+      .filter((arg): arg is TrustedTraceAggregateHavingPredicate<M> => arg !== undefined);
     return { type: 'boolean', operator: predicate.op, args };
   }
   if (predicate.op === 'not') {
@@ -432,11 +469,7 @@ function planHaving(
   return { type: 'comparison', measure, operator: comparison.op, value };
 }
 
-function resolveHavingMeasure(
-  raw: string,
-  path: IssuePath,
-  state: HavingState,
-): TrustedTraceAggregateMeasureName | undefined {
+function resolveHavingMeasure<M extends string>(raw: string, path: IssuePath, state: HavingState<M>): M | undefined {
   const name = normalizeTraceAggregateMeasureName(raw);
   const measure = state.measureNames.get(name);
   if (measure) return measure;
@@ -448,12 +481,12 @@ function resolveHavingMeasure(
   return undefined;
 }
 
-function planOrderBy(
-  orderBy: NormalizedTraceAggregateRequest['orderBy'],
-  measureNames: Map<string, TrustedTraceAggregateMeasureName>,
-  dimensions: TraceAggregateDimension[],
+function planOrderBy<M extends string, D extends string>(
+  orderBy: AggregateGroupsRequest['orderBy'],
+  measureNames: Map<string, M>,
+  dimensions: D[],
   issues: TraceQueryIssue[],
-): TrustedTraceAggregateOrderBy | undefined {
+): TrustedTraceAggregateOrderBy<M, D> | undefined {
   const field = normalizeTraceAggregateMeasureName(orderBy.field);
   const measure = measureNames.get(field);
   if (measure) return { target: 'measure', measure, direction: orderBy.direction };

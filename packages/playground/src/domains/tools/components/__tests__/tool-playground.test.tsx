@@ -85,7 +85,12 @@ describe('ToolPlayground', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Run' }));
 
       expect(await screen.findByText('Success')).not.toBeNull();
-      expect(screen.getByText(/"dish": "pasta"/)).not.toBeNull();
+      // Syntax highlighting splits the JSON across token spans, so match the code block's whole text.
+      expect(
+        screen.getByText(
+          (_, element) => element?.tagName === 'PRE' && /"dish": "pasta"/.test(element.textContent ?? ''),
+        ),
+      ).not.toBeNull();
     });
   });
 

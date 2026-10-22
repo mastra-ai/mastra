@@ -19,6 +19,7 @@ import { AccountSettingsSection } from './AccountSettingsSection';
 import { FactoryManagementSection } from './FactoryManagementSection';
 import { FactorySkillsSection } from './FactorySkillsSection';
 import { IntakeSection } from './IntakeSection';
+import { McpClientsSection } from './McpClientsSection';
 import { RepositoriesSection } from './RepositoriesSection';
 import { SettingsSubsection } from './SettingsSubsection';
 import { BehaviorSettings, GeneralSettings } from './SettingsPanel.parts';
@@ -41,13 +42,11 @@ export function SettingsPanel() {
     if (!hash) return;
     document.getElementById(hash.slice(1))?.scrollIntoView?.({ block: 'start' });
   }, [hash, section]);
-  const { resourceId, resourceEnabled, projectPath, baseUrl } = useChatSessionContext();
+  const { sessionId: chatSessionId, resourceEnabled, baseUrl } = useChatSessionContext();
   const { permissions, setPermissionForCategory } = useChatPermissions();
-  const sessionScope = resourceEnabled && projectPath ? projectPath : undefined;
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: sessionScope,
+    sessionId: chatSessionId,
     baseUrl,
     enabled: resourceEnabled,
   };
@@ -60,7 +59,7 @@ export function SettingsPanel() {
   const updateSettingsMutation = useUpdateAgentControllerSettingsMutation(hookArgs);
   const models = modelsQuery.data ?? [];
   const settings = settingsQuery.data ?? null;
-  const sessionResourceId = resourceEnabled ? resourceId : undefined;
+  const sessionId = resourceEnabled ? chatSessionId : undefined;
 
   const onBehaviorChange = (updates: Partial<AgentControllerSessionSettings>) => {
     if (!settings) return Promise.resolve();
@@ -76,13 +75,16 @@ export function SettingsPanel() {
       {section === 'preferences' && <GeneralSettings />}
       {section === 'factory' && <FactoryManagementSection />}
       {section === 'connections' && (
-        <SettingsSubsection
-          scope="personal"
-          title="Connected accounts"
-          description="Connect your account to use Factory from Slack."
-        >
-          <ConnectedAccountsSection />
-        </SettingsSubsection>
+        <div className="flex flex-col gap-8">
+          <SettingsSubsection
+            scope="personal"
+            title="Connected accounts"
+            description="Connect your account to use Factory from Slack."
+          >
+            <ConnectedAccountsSection />
+          </SettingsSubsection>
+          <McpClientsSection />
+        </div>
       )}
       {section === 'repositories' && <RepositoriesSection />}
       {section === 'environment' && <EnvironmentSection />}
@@ -95,8 +97,7 @@ export function SettingsPanel() {
           scope={section === 'factory-memory' ? 'factory' : 'personal'}
           factoryId={factoryId}
           models={models}
-          sessionResourceId={sessionResourceId}
-          sessionScope={sessionScope}
+          sessionId={sessionId}
         />
       )}
       {section === 'skills' && <FactorySkillsSection factoryId={factoryId} />}

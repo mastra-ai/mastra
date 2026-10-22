@@ -40,10 +40,15 @@ export interface ChatChannelRenderContext {
   formatError?: (error: Error) => unknown;
   /** Dialect for the final reply text. Absent means `'markdown'` (driver-level default). */
   textFormat?: 'markdown' | 'plain';
+  /** `'hidden'` keeps reply text out of the channel. Absent means `'show'`. */
+  textDisplay?: 'show' | 'hidden';
   /** Buffered-text behavior on abort. Absent means `'flush'` (driver-level default). */
   onAbort?: 'flush' | 'discard';
   approvalContext?: { toolCallId: string; messageId: string };
 }
+
+/** Chunks that carry reply text, kept out of the channel by `textDisplay: 'hidden'`. */
+const TEXT_CHUNK_TYPES: ReadonlySet<string> = new Set(['text-start', 'text-delta', 'text-end']);
 
 /** Key the processor reads off `requestContext` to locate its render deps. */
 export const CHAT_CHANNEL_RENDER_CONTEXT_KEY = '__mastra_chat_channel_render';
@@ -244,7 +249,10 @@ export class ChatChannelOutputProcessor {
 
   #openSession(render: ChatChannelRenderContext): RenderSession {
     const queue = createChunkQueue();
-    const wrapped = render.wrapStream(queue.iterable);
+    // Hidden text is dropped after the typing-status wrapper, so a run that is
+    // only writing text still shows as typing.
+    const typed = render.wrapStream(queue.iterable);
+    const wrapped = render.textDisplay === 'hidden' ? withoutText(typed) : typed;
 
     // Seed the approval-card stash on resumed runs so the driver can resolve
     // `messageId` for the incoming `tool-result` even though it never saw the
@@ -304,5 +312,11 @@ export class ChatChannelOutputProcessor {
     driverPromise.catch(() => {});
 
     return { queue, driverPromise };
+  }
+}
+
+async function* withoutText(stream: AsyncIterable<AgentChunkType<any>>): AsyncIterable<AgentChunkType<any>> {
+  for await (const chunk of stream) {
+    if (!TEXT_CHUNK_TYPES.has(chunk.type)) yield chunk;
   }
 }

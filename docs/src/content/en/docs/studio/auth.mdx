@@ -32,7 +32,7 @@ import { SimpleAuth } from '@mastra/core/server'
 export const mastra = new Mastra({
   server: {
     auth: new SimpleAuth({
-      users: {
+      tokens: {
         'my-api-key': {
           id: 'user-1',
           name: 'Alice',
@@ -102,7 +102,7 @@ import { StaticRBACProvider, DEFAULT_ROLES } from '@mastra/core/auth/ee'
 export const mastra = new Mastra({
   server: {
     auth: new SimpleAuth({
-      users: {
+      tokens: {
         'admin-key': { id: 'user-1', name: 'Alice', role: 'admin' },
         'viewer-key': { id: 'user-2', name: 'Bob', role: 'viewer' },
       },

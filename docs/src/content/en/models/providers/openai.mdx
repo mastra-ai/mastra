@@ -7,7 +7,7 @@ description: "Browse OpenAI model IDs, capabilities, context windows, and pricin
 
 # <img src="https://models.dev/logos/openai.svg" alt="OpenAI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />OpenAI
 
-Access 53 OpenAI models through Mastra's model router. Authentication is handled automatically using the `OPENAI_API_KEY` environment variable.
+Access 51 OpenAI models through Mastra's model router. Authentication is handled automatically using the `OPENAI_API_KEY` environment variable.
 
 Learn more in the [OpenAI documentation](https://platform.openai.com/docs/models).
 
@@ -660,6 +660,12 @@ const response = await agent.generate("Hello!", {
         "isOptional": true
     },
     {
+        "name": "reasoningEffortUpdate",
+        "type": "\"low\" | \"medium\" | \"high\" | \"xhigh\" | \"max\" | undefined",
+        "description": "",
+        "isOptional": true
+    },
+    {
         "name": "reasoningMode",
         "type": "\"standard\" | \"pro\" | undefined",
         "description": "",
@@ -685,7 +691,7 @@ const response = await agent.generate("Hello!", {
     },
     {
         "name": "serviceTier",
-        "type": "\"auto\" | \"default\" | \"flex\" | \"priority\" | null | undefined",
+        "type": "\"auto\" | \"default\" | \"flex\" | \"priority\" | \"fast\" | \"ultrafast\" | null | undefined",
         "description": "",
         "isOptional": true
     },

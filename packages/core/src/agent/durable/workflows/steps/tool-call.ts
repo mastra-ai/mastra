@@ -41,6 +41,7 @@ import { defineLazyWriter } from '../../../../workflows/utils';
 import { createStep } from '../../../../workflows/workflow';
 import { stopGoalActivity } from '../../../goal';
 import type { MessageList } from '../../../message-list';
+import type { MastraDBMessage } from '../../../message-list/state/types';
 import type { SaveQueueManager } from '../../../save-queue';
 import { resolveDeclineReason } from '../../../tool-approval';
 import { TripWire } from '../../../trip-wire';
@@ -685,16 +686,28 @@ export function createDurableToolCallStep() {
         else await clearAndPublish();
       };
       let resumeMessageList = messageList;
-      // A durable engine can replay the completed LLM step on a cold resume,
-      // so its runtime rehydration never runs before this suspended tool step.
-      // The suspension metadata was flushed to memory before suspending.
-      if (!resumeMessageList && workflowResumeData !== undefined && memory && state?.threadId) {
+      // Observational memory loads history in the LLM step, which a cold resume skips.
+      // Recover the persisted invocation before clearing or replacing its metadata.
+      const hasInvocation = (msg: MastraDBMessage) =>
+        msg.role === 'assistant' &&
+        (msg.content?.parts ?? []).some(
+          part => part?.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCallId,
+        );
+      if (
+        workflowResumeData !== undefined &&
+        memory &&
+        state?.threadId &&
+        !messageList?.get.all.db().some(hasInvocation)
+      ) {
         const { messages } = await memory.recall({
           threadId: state.threadId,
           resourceId: state.resourceId,
           perPage: false,
         });
-        if (messages.length) {
+        if (messageList) {
+          const invocation = [...messages].reverse().find(hasInvocation);
+          if (invocation) messageList.add(invocation, 'memory');
+        } else if (messages.length) {
           resumeMessageList = createRunMessageList({
             mastra,
             threadId: state.threadId,
@@ -726,7 +739,8 @@ export function createDurableToolCallStep() {
       const assertNotSuperseded = () =>
         assertExecutionNotSuperseded({ runId, agentId: initData.agentId, requestContext, mastra: mastra as Mastra });
 
-      const doFlush = async (messagesToFlush = messageList) => {
+      // Remote workers have no registry message list; persist updates through the recovered resume list.
+      const doFlush = async (messagesToFlush = messageList ?? resumeMessageList) => {
         if (
           saveQueueManager &&
           messagesToFlush &&
@@ -802,7 +816,8 @@ export function createDurableToolCallStep() {
         approvalToolName?: string;
         approvalArgs?: unknown;
       }) => {
-        if (!messageList) return;
+        const metadataMessageList = messageList ?? resumeMessageList;
+        if (!metadataMessageList) return;
         const metadataKey = opts.type === 'suspension' ? 'suspendedTools' : 'pendingToolApprovals';
         const entry = {
           toolCallId,
@@ -826,7 +841,7 @@ export function createDurableToolCallStep() {
             (part: any) => part?.type === 'tool-invocation' && part.toolInvocation?.toolCallId === toolCallId,
           );
 
-        const responseMessages = messageList.get.response.db();
+        const responseMessages = metadataMessageList.get.response.db();
         const lastAssistantMessage = [...responseMessages].reverse().find(carriesToolCall);
         if (lastAssistantMessage?.content) {
           let metadata: Record<string, any>;
@@ -851,7 +866,7 @@ export function createDurableToolCallStep() {
         // the entry into the assistant message that carries this tool call via
         // updateMessageMetadataByToolCallId, which also re-marks the message
         // unsaved so the following flush persists this write too.
-        const allMessages = messageList.get.all.db();
+        const allMessages = metadataMessageList.get.all.db();
         const target = [...allMessages].reverse().find(carriesToolCall);
         if (!target?.content) {
           logger?.warn?.(
@@ -864,7 +879,7 @@ export function createDurableToolCallStep() {
             ? (target.content.metadata as Record<string, any>)
             : {};
         const existingEntries = (existingMeta[metadataKey] ?? {}) as Record<string, any>;
-        messageList.updateMessageMetadataByToolCallId(toolCallId, {
+        metadataMessageList.updateMessageMetadataByToolCallId(toolCallId, {
           [metadataKey]: { ...existingEntries, [toolCallId]: entry },
         });
       };
@@ -1235,7 +1250,23 @@ export function createDurableToolCallStep() {
       }
 
       if (isResumingFromSuspension) {
-        const cleanupTarget = isResumableTool ? resolvedSuspensionIdentity : { toolCallId, toolName };
+        // Auto-resume re-calls a plain tool under a new toolCallId and names the original via
+        // `suspendedToolCallId`; resolve it so the original entry is cleared (mirrors tool-call-step.ts).
+        const plainResumeIdentity =
+          !isResumableTool && hasModelResumeData
+            ? resolveFrameworkSuspendedToolIdentity({
+                toolCallId,
+                toolName,
+                resumeSource: 'model',
+                modelSuppliedSuspendedToolCallId: args?.suspendedToolCallId,
+                modelSuppliedSuspendedToolRunId: args?.suspendedToolRunId,
+                suspendData,
+                messages: messageList?.get.all.db() ?? [],
+              })
+            : undefined;
+        const cleanupTarget = isResumableTool
+          ? resolvedSuspensionIdentity
+          : (plainResumeIdentity ?? { toolCallId, toolName });
         if (cleanupTarget) {
           await removeToolMetadata(cleanupTarget, resolvedSuspensionIdentity?.type ?? 'suspension');
         }
@@ -2050,9 +2081,10 @@ export function createDurableToolCallStep() {
                 type: 'tool-result' as const,
                 runId,
                 from: ChunkFrom.AGENT,
-                payload: { toolCallId, toolName, args, result, providerExecuted },
+                payload: { toolCallId, toolName, args, result, providerMetadata, providerExecuted },
               },
               {
+                transformInput: { args, providerMetadata: typedInput.providerMetadata },
                 policy: toolPayloadTransform,
                 toolTransform: (tool as { transform?: any })?.transform,
                 tools: toolsForTransform,
