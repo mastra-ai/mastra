@@ -277,7 +277,7 @@ export async function persistStepUpdate(
     const workflowsStore = await engine.mastra?.getStorage()?.getStore('workflows');
     // A run canceled from another process must not be overwritten. Stores that
     // support it reject the write atomically; others get a status read first.
-    const guardCancellation = workflowStatus !== 'canceled';
+    const guardCancellation = workflowStatus !== 'canceled' && engine.honorsStoredCancellation(runId);
     const atomicGuard = guardCancellation && !!workflowsStore?.supportsGuardedSnapshotWrites?.();
     if (guardCancellation && !atomicGuard && (await isWorkflowRunCanceled(engine, workflowId, runId))) {
       engine.setLastPersistedStatus(runId, 'canceled');

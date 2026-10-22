@@ -147,6 +147,57 @@ describe('workflow sleep cancellation', () => {
     expect(result.status).toBe('canceled');
   });
 
+  it.each([
+    ['cannot be claimed', ({ workflowStatus }: { workflowStatus: string }) => workflowStatus !== 'running'],
+    ['is claimed', () => true],
+  ] as const)('time travels a canceled run whose restart %s', async (_, shouldPersistSnapshot) => {
+    const workflowId = `time-travel-canceled-workflow-${_.replace(' ', '-')}`;
+    const storage = new MockStore();
+    const afterBlockedStep = vi.fn().mockResolvedValue({});
+    let releaseBlockedStep = () => {};
+    let markBlockedStepStarted = () => {};
+    const blockedStepStarted = new Promise<void>(resolve => {
+      markBlockedStepStarted = resolve;
+    });
+    const blockedStepReleased = new Promise<void>(resolve => {
+      releaseBlockedStep = resolve;
+    });
+    const workflow = createWorkflow({
+      id: workflowId,
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+      // Without `running` snapshots time travel cannot claim the run, so its stored
+      // status stays `canceled` while the engine replays it.
+      options: { validateInputs: false, shouldPersistSnapshot },
+    })
+      .then(
+        noopStep('blocked-step', async () => {
+          markBlockedStepStarted();
+          await blockedStepReleased;
+          return {};
+        }),
+      )
+      .then(noopStep('after-blocked-step', afterBlockedStep))
+      .commit();
+    new Mastra({ logger: false, storage, workflows: { [workflowId]: workflow } });
+
+    const run = await workflow.createRun();
+    const resultPromise = run.start({ inputData: {} });
+    await blockedStepStarted;
+    await run.cancel();
+    releaseBlockedStep();
+    expect((await resultPromise).status).toBe('canceled');
+
+    const replay = await workflow.createRun({ runId: run.runId });
+    const result = await replay.timeTravel({ step: 'after-blocked-step', inputData: {} });
+
+    expect(result.status).toBe('success');
+    expect(afterBlockedStep).toHaveBeenCalledOnce();
+    const store = await storage.getStore('workflows');
+    const snapshot = await store?.loadWorkflowSnapshot({ workflowName: workflowId, runId: run.runId });
+    expect(snapshot?.status).toBe('success');
+  });
+
   it('completes a sleep normally when the run is not canceled', async () => {
     const afterSleep = vi.fn().mockResolvedValue({});
     const workflow = createWorkflow({

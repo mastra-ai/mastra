@@ -112,6 +112,19 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   /** Clears the last-persisted-status entry for a run (used on run cleanup). */
   clearLastPersistedStatus(runId: string): void {
     this.lastPersistedStatusByRun.delete(runId);
+    this.replayedCanceledRuns.delete(runId);
+  }
+
+  /**
+   * Runs time traveled while their stored status was already `canceled` (the
+   * claim that flips it to `running` was skipped). That status is the run's
+   * starting point, not a cancellation of this execution, so it is not honored.
+   */
+  protected replayedCanceledRuns = new Set<string>();
+
+  /** Whether stored `canceled` status should stop this run's execution. */
+  honorsStoredCancellation(runId: string): boolean {
+    return !this.replayedCanceledRuns.has(runId);
   }
 
   /** Returns the current step's zero-based retry attempt, or zero outside an attempt. */
@@ -805,6 +818,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       throw empty_graph_error;
     }
 
+    this.replayedCanceledRuns.delete(runId);
+    if (timeTravel && (await isWorkflowRunCanceled(this, workflowId, runId))) {
+      this.replayedCanceledRuns.add(runId);
+    }
+
     let startIdx = 0;
     let entryRestart = restart;
     if (timeTravel) {
@@ -991,7 +1009,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
       // Checked before the next entry is dispatched, so a run canceled from another
       // process stops here. A step write the store rejected already recorded it.
-      if (this.getLastPersistedStatus(runId) === 'canceled' || (await isWorkflowRunCanceled(this, workflowId, runId))) {
+      if (
+        this.honorsStoredCancellation(runId) &&
+        (this.getLastPersistedStatus(runId) === 'canceled' || (await isWorkflowRunCanceled(this, workflowId, runId)))
+      ) {
         lastOutput.result = { status: 'canceled' };
       }
 
