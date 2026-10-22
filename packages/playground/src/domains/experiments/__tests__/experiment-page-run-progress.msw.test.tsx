@@ -113,16 +113,26 @@ describe('Experiment page — run progress', () => {
     });
 
     it('rotates through what the run is busy with', async () => {
+      const runningMessages = [
+        'Calling your target…',
+        'Working through the items…',
+        'Consulting the scorers…',
+        'Tallying the results…',
+      ];
+      const shownMessage = () => runningMessages.find(message => screen.queryByText(message));
       renderExperimentRoute();
 
-      expect(await screen.findByText('Calling your target…')).toBeTruthy();
+      await screen.findByText('2 / 3 items finished');
+      const first = shownMessage();
+      expect(first).toBeDefined();
 
       await act(async () => {
         await vi.advanceTimersByTimeAsync(3000);
       });
 
-      expect(screen.queryByText('Calling your target…')).toBeNull();
-      expect(screen.getByText('Working through the items…')).toBeTruthy();
+      const next = shownMessage();
+      expect(next).toBeDefined();
+      expect(next).not.toBe(first);
     });
 
     it('holds back the partial KPIs and results', async () => {

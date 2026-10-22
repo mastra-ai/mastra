@@ -2,7 +2,7 @@
 '@mastra/playground-ui': minor
 ---
 
-Added `RotatingText`, a styleless component that cycles through a list of messages. Use it to show what a long-running task is busy with, for example in an empty state.
+Added `RotatingText`, a styleless component that shows a list of messages one at a time in random order. Use it to show what a long-running task is busy with, for example in an empty state.
 
 ```tsx
 import { RotatingText } from '@mastra/playground-ui/components/RotatingText';
