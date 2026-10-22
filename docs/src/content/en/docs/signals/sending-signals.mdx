@@ -8,7 +8,7 @@ packages:
 
 # Sending signals
 
-Signals are how new input reaches a thread. You send input into the thread, and a subscription to that thread's stream carries the output back. Everything on this page follows that shape, from a plain user message through a queued follow-up, context supplied by a background system, and the durable notification and state paths.
+Signals are how new input reaches a thread. You send input into the thread, and a subscription to that thread's [stream](/docs/signals/thread-streams) carries the output back. The [overview quickstart](/docs/signals/overview#quickstart) shows that subscribe-then-send flow. Everything on this page follows the same shape, from a plain user message through a queued follow-up, context supplied by a background system, and the durable notification and state paths.
 
 The examples call an `Agent`; from a server, use the [client SDK](/reference/client-js/agents) or [server routes](/reference/server/routes#agent-message-routes). The [Agent reference](/reference/agents/agent#thread-signals) is canonical for signatures.
 
