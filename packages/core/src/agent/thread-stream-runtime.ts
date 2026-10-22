@@ -1028,24 +1028,39 @@ export class AgentThreadStreamRuntime {
     const inFlight = state.leaseRetakes.get(runId);
     if (inFlight) return inFlight;
     const sentAt = Date.now();
+    // The run ended meanwhile: don't hold its thread for a TTL. A later registration of the run keeps its own.
+    const releaseIfEnded = () => {
+      if (state.leaseRenewalTimers.has(runId)) return;
+      void this.#getLeaseProvider(pubsub)
+        .releaseLease(key, runId)
+        .catch(() => {});
+    };
     const retake = (async () => {
       let giveUp: ReturnType<typeof setTimeout> | undefined;
+      let gaveUp = false;
+      const acquiring = this.#getLeaseProvider(pubsub)
+        .acquireLease(key, runId, AGENT_THREAD_LEASE_TTL_MS)
+        .catch(() => undefined);
       const lease = await Promise.race([
-        this.#getLeaseProvider(pubsub)
-          .acquireLease(key, runId, AGENT_THREAD_LEASE_TTL_MS)
-          .catch(() => undefined),
+        acquiring,
         new Promise<undefined>(
-          resolve => (giveUp = setTimeout(() => resolve(undefined), AGENT_THREAD_LEASE_RENEW_INTERVAL_MS)),
+          resolve =>
+            (giveUp = setTimeout(() => {
+              gaveUp = true;
+              resolve(undefined);
+            }, AGENT_THREAD_LEASE_RENEW_INTERVAL_MS)),
         ),
       ]).finally(() => clearTimeout(giveUp));
+      if (gaveUp) {
+        // The run stops now, but the backend may still grant the acquire. Nothing would renew that lease.
+        void acquiring.then(late => {
+          if (late?.acquired) releaseIfEnded();
+        });
+        return false;
+      }
       if (!lease?.acquired) return false;
       if (state.leaseRenewalTimers.get(runId) !== timer) {
-        // The run ended meanwhile: don't hold its thread for a TTL. A later registration of the run keeps its own.
-        if (!state.leaseRenewalTimers.has(runId)) {
-          void this.#getLeaseProvider(pubsub)
-            .releaseLease(key, runId)
-            .catch(() => {});
-        }
+        releaseIfEnded();
         return false;
       }
       this.#armLeaseDeadline(pubsub, key, runId, sentAt);
@@ -3244,6 +3259,8 @@ export class AgentThreadStreamRuntime {
     state.pendingIdleSignalsByThread.clear();
     state.sweptLeasedRunIds.clear();
     state.pendingLeaseRenewals.clear();
+    state.leaseRetakes.clear();
+    state.leaseLostRunIds.clear();
     state.drainingPendingSignalsByThread.clear();
     state.pendingContinuationsByThread.clear();
     state.claimedThreadOwnerDiscoveries.clear();
