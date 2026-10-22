@@ -1142,17 +1142,22 @@ export const useChat = ({
     const agent = baseClient?.getAgent(agentId);
     const threadSubscription = _threadSubscriptionRef.current;
     const streamAbort = _streamAbortRef.current;
+    const cancellationAbort = new AbortController();
+    const timeout = setTimeout(
+      () => cancellationAbort.abort(new Error('Agent run cancellation was not acknowledged')),
+      10_000,
+    );
     // Stop execution explicitly: aborting the HTTP request only detaches a durable observer.
     const cancellation = (async () => {
       if (agent && runId) {
-        const deadline = Date.now() + 10_000;
         while (true) {
+          cancellationAbort.signal.throwIfAborted();
+          const options = { signal: cancellationAbort.signal };
           const result = threadId
-            ? await agent.abortThread({ threadId, resourceId: resourceId || agentId, expectedRunId: runId })
-            : await agent.abortRun(runId);
+            ? await agent.abortThread({ threadId, resourceId: resourceId || agentId, expectedRunId: runId }, options)
+            : await agent.abortRun(runId, options);
           if (result.aborted) return;
           // Stop can overtake stream registration. Keep the request alive until cancellation is applied.
-          if (Date.now() >= deadline) throw new Error('Agent run cancellation was not acknowledged');
           await new Promise(resolve => setTimeout(resolve, 100));
         }
       }
@@ -1164,6 +1169,7 @@ export const useChat = ({
         throw error;
       })
       .finally(() => {
+        clearTimeout(timeout);
         streamAbort?.abort();
         if (_streamAbortRef.current === streamAbort) _streamAbortRef.current = null;
       });

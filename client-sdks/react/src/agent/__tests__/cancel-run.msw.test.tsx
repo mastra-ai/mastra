@@ -10,6 +10,55 @@ import { useChat } from '../hooks';
 // Durable execution outlives the streaming request. Stop must send an explicit
 // cancellation request, using the run ID rather than cancelling a newer turn.
 describe.each([undefined, 'thread-1'])('useChat Stop with thread %s (COR-1489)', threadId => {
+  it('bounds Stop when the cancellation endpoint never responds', async () => {
+    const release = Promise.withResolvers<void>();
+    let streamSignal: AbortSignal | undefined;
+    let cancellationSignal: AbortSignal | undefined;
+    let sending: Promise<void> | undefined;
+    let cancellation: Promise<void> | undefined;
+    let settled = false;
+    server.use(
+      http.post<never, StreamParams>(`${TEST_BASE_URL}/api/agents/agent-1/stream`, async ({ request }) => {
+        streamSignal = request.signal;
+        await release.promise;
+        return new HttpResponse(null, { headers: { 'content-type': 'text/event-stream' } });
+      }),
+      http.post(
+        `${TEST_BASE_URL}/api/agents/agent-1/${threadId ? 'threads/abort' : 'runs/:runId/abort'}`,
+        async ({ request }) => {
+          cancellationSignal = request.signal;
+          await release.promise;
+          return HttpResponse.json({ aborted: true });
+        },
+      ),
+    );
+    const { result } = renderHookWithProviders(() =>
+      useChat({ agentId: 'agent-1', resourceId: 'resource-1', threadId }),
+    );
+    try {
+      act(() => {
+        sending = result.current.sendMessage({ message: 'Stop a slow run', threadId }).catch(() => {});
+      });
+      await waitFor(() => expect(streamSignal).toBeDefined());
+      act(() => {
+        cancellation = result.current
+          .cancelRun()
+          ?.catch(() => {})
+          .finally(() => {
+            settled = true;
+          });
+      });
+      await waitFor(() => expect(cancellationSignal).toBeDefined());
+      await waitFor(() => expect(settled).toBe(true), { timeout: 11_000 });
+      expect(cancellationSignal?.aborted).toBe(true);
+      expect(streamSignal?.aborted).toBe(true);
+    } finally {
+      release.resolve();
+      await cancellation;
+      await sending;
+    }
+  }, 13_000);
+
   it('keeps cancelling when the observer ends without acknowledgement', async () => {
     let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
     let sending: Promise<void> | undefined;
