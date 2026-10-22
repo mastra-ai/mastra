@@ -91,6 +91,7 @@ interface ExternalWorkItemSource {
   integrationId: string;
   type: string;
   externalId: string;
+  workspaceId?: string;
   url?: string;
 }
 
@@ -171,6 +172,16 @@ function toWireCreateInput(input: CreateWorkItemInput): WireCreateWorkItemInput 
   return { ...rest, ...(externalSource ? { externalSource } : {}) };
 }
 
+function externalSourceUrl(source: ExternalWorkItemSource | null): string | null {
+  if (source?.url) return source.url;
+  if (source?.integrationId !== 'slack' || source.type !== 'slack-thread' || !source.workspaceId) return null;
+
+  const [, channelId, threadTs] = /^slack:([^:]+):(\d+\.\d+)?$/.exec(source.externalId) ?? [];
+  if (!channelId) return null;
+  const channelUrl = `https://app.slack.com/client/${encodeURIComponent(source.workspaceId)}/${encodeURIComponent(channelId)}`;
+  return threadTs ? `${channelUrl}/thread/${encodeURIComponent(`${channelId}-${threadTs}`)}` : channelUrl;
+}
+
 function fromWireWorkItem(item: WireWorkItem): WorkItem {
   const { factoryProjectId, externalSource, metadata, commentCount, feedActivityAt, triageType, acceptedAt, ...rest } =
     item;
@@ -179,7 +190,7 @@ function fromWireWorkItem(item: WireWorkItem): WorkItem {
     githubProjectId: factoryProjectId,
     source: sourceFromExternalSource(externalSource),
     sourceKey: externalSource?.externalId ?? null,
-    url: externalSource?.url ?? null,
+    url: externalSourceUrl(externalSource),
     metadata: metadata ?? {},
     commentCount: commentCount ?? 0,
     feedActivityAt: feedActivityAt ?? null,

@@ -1,10 +1,10 @@
 import type { InstalledBoardInfo } from '../../../../api/types';
 import type { WorkspacePullRequestTarget } from '../../../../hooks/useWorkspacePullRequestMerges';
-import { changeRequestNumberForItem, pullRequestStatusForItem } from '../../factory/boardItems';
+import { changeRequestNumberForItem, externalLinkLabel, pullRequestStatusForItem } from '../../factory/boardItems';
 import { itemBoard } from '../../factory/boardStages';
 import type { ChangeRequestProvider } from '../../factory/services/githubSubscriptions';
 import { relationshipLabel } from '../../factory/services/relationships';
-import type { WorkItem } from '../../factory/services/workItems';
+import type { WorkItem, WorkItemSource } from '../../factory/services/workItems';
 import { isTerminalStage } from '../../factory/stages';
 import type { SessionPreviewDetails } from '../components/SessionPreviewCard';
 import {
@@ -54,6 +54,12 @@ export interface SessionPullRequest {
   knownMerged: boolean;
 }
 
+export interface SessionExternalLink {
+  url: string;
+  source: WorkItemSource;
+  label: string;
+}
+
 export interface SessionListRow {
   session: FactoryUserSession;
   origin: 'factory' | 'user';
@@ -63,6 +69,7 @@ export interface SessionListRow {
   name: string;
   url: string;
   openPath: string;
+  externalLinks: readonly SessionExternalLink[];
   active: boolean;
   status: SessionActivityStatus;
   owner: SessionOwnerDetails;
@@ -115,6 +122,21 @@ function factorySessionName(session: FactoryUserSession, item: WorkItem | undefi
   if (session.title !== undefined) return session.title;
   if (session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX) && item?.title !== undefined) return item.title;
   return session.branch;
+}
+
+function sessionExternalLinkLabel(source: WorkItemSource): string {
+  if (source === 'github-pr') return 'Open pull request';
+  if (source === 'gitlab-pr') return 'Open merge request';
+  return externalLinkLabel(source);
+}
+
+function sessionExternalLinks(item: WorkItem | undefined, pullRequest?: WorkItem): SessionExternalLink[] {
+  const links: SessionExternalLink[] = [];
+  for (const candidate of [item, pullRequest]) {
+    if (!candidate?.url || links.some(link => link.url === candidate.url)) continue;
+    links.push({ url: candidate.url, source: candidate.source, label: sessionExternalLinkLabel(candidate.source) });
+  }
+  return links;
 }
 
 function isSettled(
@@ -175,6 +197,7 @@ export function buildFactorySessionRow({
     name: factorySessionName(session, item),
     url,
     openPath: `${url}/threads/${session.sessionId}`,
+    externalLinks: sessionExternalLinks(item, pullRequest),
     active: session.sessionId === routeSessionId,
     status: sessionActivityStatus({
       initializing: !session.materializedAt,
@@ -197,8 +220,9 @@ export function buildFactorySessionRow({
 
 export interface UserSessionRowInput {
   session: FactoryUserSession;
-  /** The work item a Slack-origin user session is bound to, if loaded. */
+  /** The work item a user session is bound to, if loaded. */
   item?: WorkItem;
+  pullRequest?: WorkItem;
   factoryId: string;
   pathname: string;
   running: boolean;
@@ -209,6 +233,7 @@ export interface UserSessionRowInput {
 export function buildUserSessionRow({
   session,
   item,
+  pullRequest,
   factoryId,
   pathname,
   running,
@@ -227,6 +252,7 @@ export function buildUserSessionRow({
     name: (fromSlack && !session.title?.trim() && item?.title.trim()) || getUserSessionLabel(session),
     url,
     openPath: url,
+    externalLinks: sessionExternalLinks(item, pullRequest),
     active: pathname === url,
     status: sessionActivityStatus({
       initializing: !session.materializedAt,

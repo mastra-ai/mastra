@@ -4,9 +4,13 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { ExternalLink, Lock, Pin, PinOff, RefreshCw, Trash2, Users } from 'lucide-react';
 import { Link } from 'react-router';
 
+import { SourceIcon } from '../../factory/components/BoardIcons';
+import type { SessionExternalLink } from '../services/sessionRows';
+
 export function SessionMenuItems({
   menu,
   url,
+  externalLinks,
   pinned,
   onPinChange,
   onDelete,
@@ -18,6 +22,7 @@ export function SessionMenuItems({
 }: {
   menu: 'context' | 'dropdown';
   url: string;
+  externalLinks: readonly SessionExternalLink[];
   pinned: boolean;
   onPinChange: (pinned: boolean) => void;
   onDelete?: () => void;
@@ -35,6 +40,12 @@ export function SessionMenuItems({
         <ExternalLink />
         Open in new tab
       </Menu.Item>
+      {externalLinks.map(link => (
+        <Menu.Item key={link.url} render={<a href={link.url} target="_blank" rel="noopener noreferrer" />}>
+          <SourceIcon source={link.source} />
+          {link.label}
+        </Menu.Item>
+      ))}
       <Menu.Separator />
       <Menu.Item onClick={() => onPinChange(!pinned)}>
         {pinned ? <PinOff /> : <Pin />}

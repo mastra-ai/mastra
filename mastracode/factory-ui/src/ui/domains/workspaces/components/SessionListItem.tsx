@@ -40,6 +40,7 @@ export function SessionListItem({
     <SessionNavRow
       name={row.name}
       url={row.openPath}
+      externalLinks={row.externalLinks}
       from={row.origin === 'factory' ? location : undefined}
       source={row.source}
       active={row.active}
