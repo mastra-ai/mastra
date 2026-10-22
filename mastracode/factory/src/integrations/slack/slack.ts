@@ -1052,15 +1052,14 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
       // thread without the bot replying. Word boundary so messages that
       // merely start with "aside..." (e.g. "asides can wait") still route.
       if (/^aside\b/i.test(message.text)) return ingestAside(thread, message, deps);
-      const command = message.isMention ? muteCommand(message) : undefined;
-      if (command) return setThreadMuted(thread, message, ctx, command === 'mute');
       // A muted thread ignores everything that doesn't tag the bot, and the
       // skipped messages never reach the session.
       if (!message.isMention && (await isThreadMuted(thread, ctx))) return;
       // A subscribed follow-up from an unlinked sender must not run either
       // (e.g. the link was removed mid-conversation), and it must still
       // resolve a factory (e.g. the default was cleared or its factory
-      // deleted mid-conversation).
+      // deleted mid-conversation). Mute and unmute pass the same gate, so only
+      // someone allowed to prompt this session can change what it listens to.
       try {
         const gate = await gateDispatch(thread, message, deps, ctx, { requireInternalThread: true });
         if (!gate) return;
@@ -1068,6 +1067,8 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
         await reportPreDispatchError(thread, message, ctx, error);
         return;
       }
+      const command = message.isMention ? muteCommand(message) : undefined;
+      if (command) return setThreadMuted(thread, message, ctx, command === 'mute');
       acknowledgeReceipt(thread, deps);
       await defaultHandler(thread, message);
     },
@@ -1109,9 +1110,8 @@ async function isThreadMuted(thread: HandlerThread, ctx: ChannelHandlerContext):
 
 /**
  * Stored on the Mastra thread next to `channel_subscribed`, so a mute holds
- * across deploys and replicas. Anyone in the thread may mute or unmute: it
- * only changes what the bot listens to, and every run still goes through the
- * sender's link gate. A reaction confirms it without posting.
+ * across deploys and replicas. Callers run the sender's link and session
+ * access gate first. A reaction confirms it without posting.
  */
 async function setThreadMuted(
   thread: HandlerThread,
