@@ -650,3 +650,63 @@ describe('InngestExecutionEngine span hooks without observability (#24731)', () 
     expect(inngestStep.run).not.toHaveBeenCalled();
   });
 });
+
+describe('InngestExecutionEngine restart checkpoints (#26214)', () => {
+  it('keeps one step-update operation per step in parallel blocks and foreach', async () => {
+    const { Mastra } = await import('@mastra/core/mastra');
+    const { MockStore } = await import('@mastra/core/storage');
+    const { createStep, createWorkflow } = await import('@mastra/core/workflows');
+
+    const operationIds: string[] = [];
+    const inngestStep = {
+      run: vi.fn(async (id: string, fn: () => Promise<unknown>) => {
+        operationIds.push(id);
+        return fn();
+      }),
+      sleep: vi.fn(),
+      sleepUntil: vi.fn(),
+    };
+    const engine = new InngestExecutionEngine(undefined as any, inngestStep as any, 0, {
+      shouldPersistSnapshot: () => true,
+      validateInputs: true,
+    } as any);
+
+    const anySchema = z.any();
+    const double = createStep({
+      id: 'double',
+      inputSchema: anySchema,
+      outputSchema: anySchema,
+      execute: async ({ inputData }) => inputData * 2,
+    });
+    const left = createStep({ id: 'left', inputSchema: anySchema, outputSchema: anySchema, execute: async () => 1 });
+    const right = createStep({ id: 'right', inputSchema: anySchema, outputSchema: anySchema, execute: async () => 2 });
+    const workflow = createWorkflow({
+      id: 'inngest-checkpoints',
+      inputSchema: anySchema,
+      outputSchema: anySchema,
+      executionEngine: engine,
+    } as any)
+      .foreach(double, { concurrency: 2 })
+      .parallel([left, right])
+      .commit();
+    new Mastra({ logger: false, storage: new MockStore(), workflows: { wf: workflow } });
+
+    const result = await (await workflow.createRun()).start({ inputData: [1, 2, 3, 4] });
+    expect(result.status).toBe('success');
+
+    // Inngest memoizes step.run() by position, so these must match main (ffda90fdba) exactly:
+    // one start write per foreach item and parallel arm, no per-item or per-arm checkpoints.
+    const stepUpdates = operationIds.filter(id => id.includes('.stepUpdate')).map(id => id.split('.path.')[1]);
+    expect(stepUpdates).toEqual([
+      '[0].stepUpdate.start',
+      '[0].stepUpdate.start',
+      '[0].stepUpdate.start',
+      '[0].stepUpdate.start',
+      '[0].stepUpdate.entry-end',
+      '[1,0].stepUpdate.start',
+      '[1,1].stepUpdate.start',
+      '[1].stepUpdate.entry-end',
+      '[1].stepUpdate.workflow-end',
+    ]);
+  });
+});
