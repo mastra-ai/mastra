@@ -12,7 +12,7 @@ A thread stream is the ordered output for a [thread](/docs/memory/message-histor
 
 ## Quickstart
 
-Subscribe before you send input. A run starts in response to a signal, so a subscription created afterward misses the beginning of the stream. If an existing subscription's connection drops, reconnect can resume output that's still retained. See [Reconnect](#reconnect). This example uses the JavaScript client SDK against a running Mastra server. If your code owns the `Agent` instance, see the [Agent example](/docs/signals/overview#use-an-agent).
+Subscribe before you send input. A run starts in response to a signal, so a subscription created afterward misses the beginning of the stream. If an existing subscription's connection drops, reconnect can resume output that's still retained. See [Reconnect](#reconnect). This example uses the JavaScript client SDK against a running Mastra server, so the [Memory](/docs/memory/overview) that stores thread history belongs to the server's agent. If your code owns the `Agent` instance, see the [Agent example](/docs/signals/overview#use-an-agent), which configures Memory alongside the agent.
 
 ```typescript title="src/app/chat.ts"
 import { MastraClient } from '@mastra/client-js'
