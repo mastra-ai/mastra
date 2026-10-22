@@ -13,6 +13,7 @@ import {
   isSafeObjectKey,
   isZodError,
   normalizeQueryParams,
+  propagateRequestAbort,
   redactStreamChunk,
   serializeStreamChunk,
 } from '@mastra/server/server-adapter';
@@ -517,6 +518,10 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
             error: e instanceof Error ? { message: e.message, stack: e.stack } : e,
           });
         });
+
+      // `createForwardRequest` rebuilds the Request without a signal, so listen on the
+      // original one: a client disconnect must abort the in-flight MCP request.
+      propagateRequestAbort((request.request as Request).signal, res);
 
       const mcpResponse = await toFetchResponse(res);
       const headers = new Headers(mcpResponse.headers);
