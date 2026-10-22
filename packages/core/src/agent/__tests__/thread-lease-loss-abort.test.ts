@@ -1037,11 +1037,13 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     await vi.waitFor(() => expect(ticks).toBeGreaterThanOrEqual(2), { timeout: 5_000 });
 
     // A backend this slow can't show the run still holds the thread before another process could take it.
+    const cutAt = Date.now();
     pubsub.cut = true;
     await done;
 
     expect(await output.finishReason).toBe('aborted');
-    expect(ticks).toBeLessThan(100);
+    // Within a renewal interval of the cut (100ms here), not after a later, unrelated abort.
+    expect(Date.now() - cutAt).toBeLessThan(2_000);
   }, 20_000);
 
   it('keeps a run going when a late renewal finds its lease expired and no other run took the thread', async () => {
