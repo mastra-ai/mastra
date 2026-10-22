@@ -1,3 +1,4 @@
+import { registerApiRoute } from '@mastra/core/server';
 import { createDefaultTestContext } from '@mastra/server-adapters-test-suite';
 import type { AdapterTestContext } from '@mastra/server-adapters-test-suite';
 import type { INestApplication } from '@nestjs/common';
@@ -98,6 +99,43 @@ describe('NestJS Adapter - per-route RBAC, FGA, and studio auth', () => {
     expect((await get('/api/tools')).status).toBe(200);
     expect((await get('/api/agents/test-agent')).status).toBe(200);
     expect(check).not.toHaveBeenCalled();
+  });
+
+  it('enforces requiresPermission on custom API routes', async () => {
+    const apiRoutes = [
+      registerApiRoute('/secret', {
+        method: 'GET',
+        requiresPermission: 'secrets:read',
+        handler: async c => c.json({ ok: true }),
+      }),
+    ];
+    await start({ server: { auth: roleAuth, rbac: roleRbac, apiRoutes } });
+
+    const denied = await get('/secret', { authorization: 'Bearer viewer' });
+    expect(denied.status).toBe(403);
+    expect(denied.body).toMatchObject({ error: 'Missing required permission: secrets:read' });
+    expect((await get('/secret', { authorization: 'Bearer admin' })).status).toBe(200);
+  });
+
+  it('enforces fga on custom API routes', async () => {
+    const check = vi.fn(async (_user: unknown, { resource }: { resource: { id: string } }) => resource.id === 'open');
+    const apiRoutes = [
+      registerApiRoute('/docs/:docId', {
+        method: 'GET',
+        fga: { resourceType: 'doc', resourceIdParam: 'docId', permission: 'docs:read' },
+        handler: async c => c.json({ ok: true }),
+      }),
+    ];
+    await start({ server: { auth: roleAuth, rbac: roleRbac, fga: { check }, apiRoutes } });
+
+    const denied = await get('/docs/locked', { authorization: 'Bearer admin' });
+    expect(denied.status).toBe(403);
+    expect(denied.body.error).toBe('FGA authorization denied: cannot docs:read on doc:locked');
+    expect((await get('/docs/open', { authorization: 'Bearer admin' })).status).toBe(200);
+    expect(check).toHaveBeenCalledWith(
+      expect.objectContaining({ id: 'user_admin' }),
+      expect.objectContaining({ resource: { type: 'doc', id: 'locked' } }),
+    );
   });
 
   it('allows the request when the FGA provider grants the resource', async () => {
