@@ -1,6 +1,7 @@
 import type { MessageList } from '../agent/message-list';
 import { createSignal } from '../agent/signals';
 import type { AgentSignalInput, CreatedAgentSignal } from '../agent/signals';
+import { createRunScopeKey } from '../mastra/run-scope';
 import type { ProcessorStreamWriter } from './index';
 
 /**
@@ -12,6 +13,8 @@ export interface ProcessorLateSignalSink {
   isClosed(): boolean;
   send(signalInput: AgentSignalInput): Promise<CreatedAgentSignal>;
 }
+
+export const PROCESSOR_LATE_SIGNAL_SINK = createRunScopeKey<ProcessorLateSignalSink>('processor-late-signal-sink');
 
 export function createProcessorSendSignal(args: {
   messageList: MessageList;

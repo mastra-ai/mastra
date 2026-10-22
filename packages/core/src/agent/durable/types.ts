@@ -911,6 +911,8 @@ export interface RunRegistryEntry {
    * MessageList has already been serialized. In-process only like the drain.
    */
   enqueuePendingSignal?: (signalInput: AgentSignalInput) => Promise<CreatedAgentSignal>;
+  /** Process-local reminders for runs without a memory thread. Drained by the next LLM step. */
+  pendingProcessorSignals?: CreatedAgentSignal[];
   /** Owner-queue notifications, in-process only like the drain closure. */
   subscribePendingSignals?: (listener: () => void) => () => void;
   /** Releases the latest LLM step's pending-signal listener, whichever way that step exited. */

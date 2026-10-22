@@ -45,6 +45,7 @@ import {
   findOwnModelStepSpan,
 } from '../../processors/runner';
 import type { ProcessorLateSignalSink } from '../../processors/send-signal';
+import { PROCESSOR_LATE_SIGNAL_SINK } from '../../processors/send-signal';
 import {
   resolveProcessorSpanAttributes,
   resolveProcessorSpanName,
@@ -847,7 +848,17 @@ function createStepFromProcessor<TProcessorId extends string>(
     outputSchema: toStandardSchema(ProcessorStepOutputSchema) as StandardSchemaWithJSON<
       z.infer<typeof ProcessorStepOutputSchema>
     >,
-    execute: async ({ inputData, requestContext, outputWriter, tracing, tracingContext, loggerVNext, metrics }) => {
+    execute: async ({
+      inputData,
+      requestContext,
+      outputWriter,
+      tracing,
+      tracingContext,
+      loggerVNext,
+      metrics,
+      mastra,
+      runId: workflowRunId,
+    }) => {
       const observabilityContext = resolveObservabilityContext({ tracing, tracingContext, loggerVNext, metrics });
       // Cast to output type for easier property access - the discriminated union
       // ensures type safety at the schema level, but inside the execute function
@@ -1170,7 +1181,7 @@ function createStepFromProcessor<TProcessorId extends string>(
                 messageList: processorMessageList,
                 writer: processorWriter,
                 rotateResponseMessageId: rotateCurrentResponseMessageId,
-                lateSink: lateSignalSink,
+                lateSink: mastra?.__getRunScope(workflowRunId)?.get(PROCESSOR_LATE_SIGNAL_SINK) ?? lateSignalSink,
               }),
             }
           : {}),

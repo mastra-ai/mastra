@@ -59,6 +59,7 @@ async function runDeployWithReminder(
   duringInput = false,
   processorKind: 'direct' | 'workflow' = 'direct',
   duringStorage = false,
+  withoutThread = false,
 ) {
   const threadId = 'signal-during-tool-thread';
   const resourceId = 'signal-during-tool-user';
@@ -139,10 +140,8 @@ async function runDeployWithReminder(
     tools: { deploy },
     inputProcessors: [processor],
     ...(duringStorage ? { outputProcessors: [snapshotProcessor] } : {}),
-    memory,
+    ...(withoutThread ? {} : { memory, threadId, resourceId }),
     collectChunks: true,
-    threadId,
-    resourceId,
     stopWhen: stepCountIs(5),
     fixtures: mock => {
       mock.on(
@@ -153,8 +152,10 @@ async function runDeployWithReminder(
     },
   });
   const text = await output.text;
-  const { messages } = await memory.recall({ threadId, resourceId, hideSignals: false });
-  return { text, requests, messages, signalSent, chunks, sentSignal };
+  const { messages } = withoutThread
+    ? { messages: [] }
+    : await memory.recall({ threadId, resourceId, hideSignals: false });
+  return { text, requests, messages, signalSent, chunks, sentSignal, heldSendSignal };
 }
 
 describeForAllEngines('AIMock scenario: signal arrives while a tool is running', engine => {
@@ -194,6 +195,31 @@ describeForAllEngines('AIMock scenario: signal arrives while a tool is running',
       ),
     ).toBe(true);
   });
+
+  it.each(['direct', 'workflow'] as const)(
+    'delivers a retained processor reminder without a memory thread (%s) (#27457)',
+    async processorKind => {
+      const { text, requests, chunks, sentSignal, heldSendSignal } = await runDeployWithReminder(
+        engine,
+        getMock(),
+        false,
+        processorKind,
+        false,
+        true,
+      );
+      expect(text).toContain('The api service is deployed.');
+      expect(requests).toHaveLength(2);
+      expect(JSON.stringify(requestMessages(requests[1])).split(REMINDER)).toHaveLength(2);
+      const result = requestMessages(requests[1]).find(m => m.role === 'tool' && m.tool_call_id === 'call_deploy');
+      expect(JSON.parse(result.content)).toEqual({ deployed: 'api' });
+      expect(chunks?.filter(chunk => chunk.type === 'data-signal')).toEqual([
+        expect.objectContaining({ data: expect.objectContaining({ id: sentSignal?.id, contents: REMINDER }) }),
+      ]);
+      if (engine === 'durable' || engine === 'evented' || engine === 'inngest') {
+        await expect(heldSendSignal?.({ type: 'reactive', contents: 'Too late' })).rejects.toThrow();
+      }
+    },
+  );
 
   // This boundary is native workflow-state dehydration; Inngest stores the
   // transcript in step payloads and does not perform this verification read.

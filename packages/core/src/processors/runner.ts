@@ -30,7 +30,7 @@ import type { LanguageModelUsage, ProviderMetadata } from '../stream/types';
 import type { OutputWriter } from '../workflows/types';
 import type { AnyWorkspace } from '../workspace/workspace';
 import { isProcessorWorkflow } from './is-processor-workflow';
-import { createProcessorSendSignal } from './send-signal';
+import { createProcessorSendSignal, PROCESSOR_LATE_SIGNAL_SINK } from './send-signal';
 import type { ProcessorLateSignalSink } from './send-signal';
 import { resolveProcessorSpanAttributes, resolveProcessorSpanName } from './span-declaration';
 import {
@@ -714,12 +714,17 @@ export class ProcessorRunner {
           }
         : undefined,
     );
-    const result = await run.start({
-      inputData,
-      ...observabilityContext,
-      requestContext,
-      outputWriter,
-    });
+    // Workflow schemas strip unknown fields. Keep the live callback off
+    // step payloads so chained processors can recover it from their run.
+    const scope = this.lateSignalSink ? workflow.mastra?.__createRunScope(run.runId) : undefined;
+    if (this.lateSignalSink) scope?.set(PROCESSOR_LATE_SIGNAL_SINK, this.lateSignalSink);
+    const result = await (async () => {
+      try {
+        return await run.start({ inputData, ...observabilityContext, requestContext, outputWriter });
+      } finally {
+        if (scope) workflow.mastra?.__releaseRunScope(run.runId);
+      }
+    })();
 
     // Check for tripwire status - this means a processor in the workflow called abort()
     if (result.status === 'tripwire') {

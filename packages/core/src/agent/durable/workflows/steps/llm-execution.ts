@@ -73,7 +73,7 @@ import { TripWire } from '../../../trip-wire';
 import { isSupportedLanguageModel } from '../../../utils';
 import { ensureRemoteAbortListener } from '../../abort-transport';
 import { DurableStepIds } from '../../constants';
-import { getExecutionOwnershipGuard } from '../../execution-fence';
+import { ExecutionFence, getExecutionOwnershipGuard } from '../../execution-fence';
 import { endRunSpansWithError, getRunRegistryEntry, markRunActive } from '../../run-registry';
 import { emitChunkEvent, emitStepStartEvent } from '../../stream-adapter';
 import type { DurableAgenticWorkflowInput, DurableLLMStepOutput, DurableToolCallInput } from '../../types';
@@ -317,9 +317,30 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         stepLifetime.closed = true;
         return storeMessageListState(params, messageList.serialize());
       };
-      const enqueuePendingSignal = getRunRegistryEntry(runId, mastra as Mastra | undefined)?.enqueuePendingSignal;
+      const signalOwner = getRunRegistryEntry(runId, mastra as Mastra | undefined);
+      const enqueuePendingSignal = signalOwner?.enqueuePendingSignal;
       const lateSignalSink: ProcessorLateSignalSink | undefined = enqueuePendingSignal
-        ? { isClosed: () => stepLifetime.closed, send: enqueuePendingSignal }
+        ? {
+            isClosed: () => stepLifetime.closed,
+            send: async signalInput => {
+              // Threadless runs have no thread-runtime queue. Keep their signals
+              // on the live run entry; the next LLM step drains it identically.
+              if (
+                !signalOwner ||
+                getRunRegistryEntry(runId, mastra as Mastra | undefined) !== signalOwner ||
+                !signalOwner.executionFence ||
+                ExecutionFence.getLocalActive(runId) !== signalOwner.executionFence ||
+                signalOwner.executionFence.isLost() ||
+                signalOwner.abortSignal?.aborted
+              ) {
+                throw new Error(`Cannot send processor signal: run ${runId} is no longer active`);
+              }
+              if (typedInput.state?.threadId && typedInput.state?.resourceId) return enqueuePendingSignal(signalInput);
+              const signal = createSignal(signalInput);
+              (signalOwner.pendingProcessorSignals ??= []).push(signal);
+              return signal;
+            },
+          }
         : undefined;
 
       // 1a-bis. Become responsive to abort requests from other processes. The
@@ -623,6 +644,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       const queuedSignals = [
         ...((inputData.stepIndex ?? 0) === 0 ? (signalRegistry?.drainPendingSignals?.('pre-run') ?? []) : []),
         ...(isFirstRequest ? [] : (signalRegistry?.drainPendingSignals?.('pending') ?? [])),
+        ...(signalRegistry?.pendingProcessorSignals?.splice(0) ?? []),
       ];
       if (queuedSignals.length) rotateResponseMessageId();
       const admittedSignals = queuedSignals.map(signal => messageList.addSignal(signal));
