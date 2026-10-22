@@ -1732,12 +1732,7 @@ ${workingMemory}`;
       // System messages are runtime instructions and should never be stored in memory.
       // Transient signals (`transient: true`) are delivery-only and must never be stored.
       // Then strip working memory tags from all persistable messages.
-      const updatedMessages = messages
-        .filter(m => m.role !== 'system' && !isTransientSignalMessage(m))
-        .map(m => {
-          return this.updateMessageToHideWorkingMemoryV2(m);
-        })
-        .filter((m): m is MastraDBMessage => Boolean(m));
+      const updatedMessages = this.prepareMessagesForPersistence(messages);
 
       const config = this.getMergedThreadConfig(memoryConfig);
 
@@ -1915,6 +1910,13 @@ ${workingMemory}`;
     }
   }
 
+  private prepareMessagesForPersistence(messages: MastraDBMessage[]): MastraDBMessage[] {
+    return messages
+      .filter(m => m.role !== 'system' && !isTransientSignalMessage(m))
+      .map(m => this.updateMessageToHideWorkingMemoryV2(m))
+      .filter((m): m is MastraDBMessage => m !== null);
+  }
+
   protected updateMessageToHideWorkingMemoryV2(message: MastraDBMessage): MastraDBMessage | null {
     const newMessage = { ...message };
     // Only spread content if it's a proper V2 object to avoid corrupting non-object content
@@ -1930,16 +1932,38 @@ ${workingMemory}`;
       if (Array.isArray(newMessage.content.toolInvocations)) {
         newMessage.content.toolInvocations = removeWorkingMemoryToolInvocations(newMessage.content.toolInvocations);
       }
-      newMessage.content.parts = removeWorkingMemoryToolInvocationParts(newMessage.content.parts).map(part => {
-        if (part?.type === 'text') {
-          const text = typeof part.text === 'string' ? part.text : '';
-          return {
-            ...part,
-            text: removeWorkingMemoryTags(text).trim(),
+      const lastOriginalPart = newMessage.content.parts.at(-1);
+      const sealMetadata = lastOriginalPart && 'metadata' in lastOriginalPart ? lastOriginalPart.metadata : undefined;
+      newMessage.content.parts = removeWorkingMemoryToolInvocationParts(newMessage.content.parts)
+        .filter(part => part?.type !== 'tool-invocation' || part.toolInvocation.state !== 'partial-call')
+        .map(part => {
+          if (part?.type === 'text') {
+            const text = typeof part.text === 'string' ? part.text : '';
+            return {
+              ...part,
+              text: removeWorkingMemoryTags(text).trim(),
+            };
+          }
+          return part;
+        });
+
+      // The last part can be a hidden tool call. Retain its seal boundary on the
+      // last surviving part without changing the live message used by the observer.
+      const lastIndex = newMessage.content.parts.length - 1;
+      const lastPart = newMessage.content.parts[lastIndex];
+      if (lastPart && sealMetadata && typeof sealMetadata === 'object' && 'mastra' in sealMetadata) {
+        const mastra = sealMetadata.mastra;
+        if (mastra && typeof mastra === 'object' && 'sealedAt' in mastra && typeof mastra.sealedAt === 'number') {
+          const existingMetadata = 'metadata' in lastPart ? lastPart.metadata : undefined;
+          const metadata = existingMetadata && typeof existingMetadata === 'object' ? existingMetadata : {};
+          const existingMastra =
+            'mastra' in metadata && metadata.mastra && typeof metadata.mastra === 'object' ? metadata.mastra : {};
+          newMessage.content.parts[lastIndex] = {
+            ...lastPart,
+            ...{ metadata: { ...metadata, mastra: { ...existingMastra, sealedAt: mastra.sealedAt } } },
           };
         }
-        return part;
-      });
+      }
 
       // If all parts were filtered out (e.g., only contained updateWorkingMemory tool calls),
       // only skip the message when it also has no text content left.
@@ -2334,13 +2358,13 @@ ${workingMemory}`;
   }
 
   /**
-   * Raw message upsert — persist messages to storage without embedding or working memory processing.
+   * Raw message upsert — apply the persistence projection without embedding or extracting working memory.
    * Used by the processor to save sealed messages before firing a background buffer operation.
    */
   async persistMessages(messages: MastraDBMessage[]): Promise<void> {
     if (messages.length === 0) return;
 
-    const persistableMessages = messages.filter(m => m.role !== 'system' && !isTransientSignalMessage(m));
+    const persistableMessages = this.prepareMessagesForPersistence(messages);
     if (persistableMessages.length === 0) return;
 
     const memoryStore = await this.getMemoryStore();
@@ -3118,16 +3142,40 @@ Notes:
     const memoryStore = await this.getMemoryStore();
     const config = this.getMergedThreadConfig(memoryConfig);
 
+    const contentUpdateIds = new Set(messages.filter(m => m.content !== undefined).map(m => m.id));
+    // Stores merge partial content updates. Project that effective content so an
+    // omitted parts/text field cannot bypass filtering or be accidentally erased.
+    const existing = await memoryStore.listMessagesById({ messageIds: messages.map(m => m.id) });
+    const existingById = new Map(existing.messages.map(m => [m.id, m]));
+    messages = messages.flatMap(update => {
+      const stored = existingById.get(update.id);
+      if (!stored) return [];
+      const effective = {
+        ...stored,
+        ...update,
+        content:
+          update.content === undefined
+            ? stored.content
+            : {
+                ...stored.content,
+                ...update.content,
+                metadata: { ...stored.content.metadata, ...update.content.metadata },
+              },
+      };
+      const [projected] = this.prepareMessagesForPersistence([effective]);
+      if (!projected) return [];
+      existingById.set(update.id, projected);
+      return [{ ...update, content: projected.content }];
+    });
+    if (messages.length === 0) return [];
+
     // Update vector database if semantic recall is enabled and any messages have content updates
     if (this.vector && config.semanticRecall) {
-      const messagesWithContent = messages.filter(m => m.content !== undefined);
+      const messagesWithContent = messages.filter(m => contentUpdateIds.has(m.id));
 
       if (messagesWithContent.length > 0) {
-        // Get existing messages to obtain threadId and resourceId for vector metadata
-        const existingMessagesResult = await memoryStore.listMessagesById({
-          messageIds: messagesWithContent.map(m => m.id),
-        });
-        const existingMessagesMap = new Map(existingMessagesResult.messages.map(m => [m.id, m]));
+        // Reuse the pre-update rows for vector metadata.
+        const existingMessagesMap = new Map(existing.messages.map(m => [m.id, m]));
 
         // Collect embeddings for messages with new text content
         const embeddingData: Array<{
