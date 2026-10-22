@@ -490,14 +490,14 @@ describe('Traces page view switch', () => {
       expect(screen.getByRole('checkbox', { name: 'Auto refresh' }).closest('main')).not.toBeNull();
     });
 
-    it('gives both switch buttons the same borderless box, so the current one does not shift its neighbour', async () => {
+    it('shows each view with its icon', async () => {
       setTracePageHandlers(traceQueryCapabilities);
 
       renderPage();
 
       const views = await screen.findByRole('navigation', { name: 'Observability views' });
-      for (const link of within(views).getAllByRole('link')) {
-        expect(link.className).toContain('border-0');
+      for (const tab of within(views).getAllByRole('tab')) {
+        expect(tab.querySelector('svg')).not.toBeNull();
       }
     });
 
@@ -507,8 +507,8 @@ describe('Traces page view switch', () => {
       renderPage();
 
       const views = within(await screen.findByRole('navigation', { name: 'Observability views' }));
-      expect(views.getByRole('link', { name: 'Traces' }).getAttribute('aria-current')).toBe('page');
-      expect(views.getByRole('link', { name: 'Spans' }).getAttribute('aria-current')).toBeNull();
+      expect(views.getByRole('tab', { name: 'Traces' }).getAttribute('aria-selected')).toBe('true');
+      expect(views.getByRole('tab', { name: 'Spans' }).getAttribute('aria-selected')).toBe('false');
     });
   });
 
@@ -554,7 +554,7 @@ describe('Traces page view switch', () => {
 
       renderPage();
       const views = within(await screen.findByRole('navigation', { name: 'Observability views' }));
-      fireEvent.click(views.getByRole('link', { name: 'Spans' }));
+      fireEvent.click(views.getByRole('tab', { name: 'Spans' }));
 
       await waitFor(() => expect(screen.getByTestId('pathname').textContent).toBe('/spans'));
     });

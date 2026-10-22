@@ -1,45 +1,48 @@
-import { Button } from '@mastra/playground-ui/components/Button';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { Link } from 'react-router';
+import { Tab, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Icon } from '@mastra/playground-ui/icons/Icon';
+import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
+import { ChartNoAxesGantt } from 'lucide-react';
+import { useNavigate } from 'react-router';
 
 type ObservabilityView = 'traces' | 'spans';
 
-const VIEWS: { id: ObservabilityView; label: string; to: string }[] = [
-  { id: 'traces', label: 'Traces', to: '/traces' },
-  { id: 'spans', label: 'Spans', to: '/spans' },
-];
+const VIEW_PATHS: Record<ObservabilityView, string> = { traces: '/traces', spans: '/spans' };
 
-const SWITCH_CLASS = 'flex shrink-0 items-center gap-1';
-
-export function TracesSpansSwitch({ current }: { current: ObservabilityView }) {
+function ViewTab({ value, icon, label }: { value: ObservabilityView; icon: React.ReactNode; label: string }) {
   return (
-    <nav aria-label="Observability views" className={SWITCH_CLASS}>
-      {VIEWS.map(view => {
-        const isCurrent = view.id === current;
-        return (
-          <Button
-            key={view.id}
-            render={<Link to={view.to} />}
-            size="sm"
-            // Both borderless (unlike `ghost`), so the selected one keeps the same box and nothing shifts.
-            variant={isCurrent ? 'subtle' : 'default'}
-            aria-current={isCurrent ? 'page' : undefined}
-          >
-            {view.label}
-          </Button>
-        );
-      })}
+    <Tab value={value}>
+      <Icon size="xs">{icon}</Icon>
+      <Txt variant="caption" className="text-inherit">
+        {label}
+      </Txt>
+    </Tab>
+  );
+}
+
+/** Page tabs between the traces and spans lists, built like the agent and workflow page tabs. */
+export function TracesSpansSwitch({ current }: { current: ObservabilityView }) {
+  const navigate = useNavigate();
+
+  return (
+    <nav aria-label="Observability views">
+      <Tabs value={current} defaultTab={current} onValueChange={view => navigate(VIEW_PATHS[view])}>
+        <TabList variant="pill-ghost">
+          <ViewTab value="traces" icon={<TraceIcon />} label="Traces" />
+          <ViewTab value="spans" icon={<ChartNoAxesGantt />} label="Spans" />
+        </TabList>
+      </Tabs>
     </nav>
   );
 }
 
-/** Holds the switch's place while the store capabilities that decide whether it shows are loading. */
+/** Holds the tabs' place while the store capabilities that decide whether they show are loading. */
 export function TracesSpansSwitchSkeleton() {
   return (
-    <div role="status" aria-label="Loading views" className={SWITCH_CLASS}>
-      {VIEWS.map(view => (
-        <Skeleton key={view.id} className="h-control-sm w-16 rounded-full" />
-      ))}
+    <div role="status" aria-label="Loading views" className="flex min-h-control-md items-center gap-0.5">
+      <Skeleton className="h-control-md w-20 rounded-full" />
+      <Skeleton className="h-control-md w-20 rounded-full" />
     </div>
   );
 }

@@ -5,7 +5,7 @@ import { focusManager } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { delay, http, HttpResponse } from 'msw';
 import { useEffect, useImperativeHandle } from 'react';
-import { useLocation } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import SpansPage from '..';
 import {
@@ -38,6 +38,9 @@ const LocationProbe = () => {
   return <div data-testid="location">{`${location.pathname}${location.search}`}</div>;
 };
 
+/** Leaves the open span by pointing the URL back at the bare page, as a bookmark or pasted link would. */
+const BarePageLink = () => <Link to="/spans">Open bare spans page</Link>;
+
 const panelHandle: CollapsiblePanelHandle = { collapse: vi.fn(), expand: vi.fn(), toggle: vi.fn() };
 
 /** Stands in for the layout's resizable side panel: binds the shared handle and reports it open. */
@@ -56,6 +59,7 @@ const renderPage = (initialEntry = '/spans') =>
         <SpansPage />
         <RouteSidePanelSlot data-testid="side-panel" />
         <LocationProbe />
+        <BarePageLink />
       </RouteSidePanelProvider>
     </TestLinkProvider>,
     { router: { initialEntries: [initialEntry] } },
@@ -234,14 +238,14 @@ describe('Spans page', () => {
       expect(filterInput.closest('main')).not.toBeNull();
     });
 
-    it('gives both switch buttons the same borderless box, so the current one does not shift its neighbour', async () => {
+    it('shows each view with its icon', async () => {
       setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
 
       renderPage();
 
       const views = await screen.findByRole('navigation', { name: 'Observability views' });
-      for (const link of within(views).getAllByRole('link')) {
-        expect(link.className).toContain('border-0');
+      for (const tab of within(views).getAllByRole('tab')) {
+        expect(tab.querySelector('svg')).not.toBeNull();
       }
     });
 
@@ -251,8 +255,8 @@ describe('Spans page', () => {
       renderPage();
 
       const views = within(await screen.findByRole('navigation', { name: 'Observability views' }));
-      expect(views.getByRole('link', { name: 'Spans' }).getAttribute('aria-current')).toBe('page');
-      expect(views.getByRole('link', { name: 'Traces' }).getAttribute('aria-current')).toBeNull();
+      expect(views.getByRole('tab', { name: 'Spans' }).getAttribute('aria-selected')).toBe('true');
+      expect(views.getByRole('tab', { name: 'Traces' }).getAttribute('aria-selected')).toBe('false');
     });
 
     it('lists the spans of the first page', async () => {
@@ -273,7 +277,7 @@ describe('Spans page', () => {
 
       renderPage();
       const views = within(await screen.findByRole('navigation', { name: 'Observability views' }));
-      fireEvent.click(views.getByRole('link', { name: 'Traces' }));
+      fireEvent.click(views.getByRole('tab', { name: 'Traces' }));
 
       await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/traces'));
     });
@@ -321,7 +325,7 @@ describe('Spans page', () => {
       renderPage('/spans?traceId=trace-1&spanId=span-2');
       const panel = within(getSidePanel());
       await panel.findByText('Weather API timed out');
-      fireEvent.click(screen.getByRole('link', { name: 'Spans' }));
+      fireEvent.click(screen.getByRole('link', { name: 'Open bare spans page' }));
 
       await waitFor(() => expect(panel.queryByRole('region', { name: 'Span details' })).toBeNull());
       expect(screen.getByTestId('location').textContent).toBe('/spans');
@@ -490,12 +494,33 @@ describe('Spans page', () => {
   });
 
   describe('when the span query returns no spans', () => {
-    it('shows the empty list message', async () => {
+    it('shows the same empty state as the traces page, naming spans and the time range', async () => {
       setSpansHandlers(spanQueryCapabilities, { first: emptySpans });
 
       renderPage();
 
-      expect(await screen.findByText('No traces found yet')).toBeTruthy();
+      expect(await screen.findByRole('heading', { name: 'No spans for the last 7 days' })).toBeTruthy();
+      expect(
+        screen.getByText('Pick a wider time range — older spans may fall outside the current window.'),
+      ).toBeTruthy();
+    });
+
+    it('drops the empty list in favour of that empty state', async () => {
+      setSpansHandlers(spanQueryCapabilities, { first: emptySpans });
+
+      renderPage();
+
+      await screen.findByRole('heading', { name: 'No spans for the last 7 days' });
+      expect(screen.queryByText('Primitive type')).toBeNull();
+    });
+
+    it('keeps the filter bar so the time range can be widened', async () => {
+      setSpansHandlers(spanQueryCapabilities, { first: emptySpans });
+
+      renderPage();
+
+      await screen.findByRole('heading', { name: 'No spans for the last 7 days' });
+      expect(screen.getByPlaceholderText('Filter spans…')).toBeTruthy();
     });
   });
 

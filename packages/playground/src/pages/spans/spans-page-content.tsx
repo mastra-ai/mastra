@@ -3,6 +3,7 @@ import type { DataListSort } from '@mastra/playground-ui/components/DataList';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { SpansFilterBar } from '@mastra/playground-ui/domains/spans/components/spans-filter-bar';
 import { buildSpanQueryWhere } from '@mastra/playground-ui/domains/spans/span-filters';
+import { NoTracesInfo } from '@mastra/playground-ui/domains/traces/components/no-traces-info';
 import { TracesErrorContent } from '@mastra/playground-ui/domains/traces/components/traces-error-content';
 import {
   DEFAULT_TRACES_FILTERS,
@@ -147,7 +148,10 @@ export function SpansPageContent() {
   const showTrace = ({ traceId, spanId }: SpanSelection) =>
     navigate(`/traces?${new URLSearchParams({ traceId, spanId })}`);
 
-  const filtersApplied = tokens.length > 0 || groups.length > 0 || datePreset !== DEFAULT_DATE_PRESET;
+  const contentFiltersApplied = tokens.length > 0 || groups.length > 0;
+  const filtersApplied = contentFiltersApplied || datePreset !== DEFAULT_DATE_PRESET;
+  // Same rule as /traces: an empty window without filters gets the full-page empty state.
+  const showEmptyState = !isLoading && !isError && rows.length === 0 && !contentFiltersApplied && !selection;
 
   return (
     <PageLayout
@@ -178,6 +182,8 @@ export function SpansPageContent() {
             <div className="flex h-full items-center justify-center">
               <TracesErrorContent error={error} resource="spans" errorTitle="Failed to load spans" />
             </div>
+          ) : showEmptyState ? (
+            <NoTracesInfo resource="spans" datePreset={datePreset} dateFrom={dateFrom} dateTo={dateTo} />
           ) : (
             <TracesListView
               listId="all-spans"
@@ -187,6 +193,7 @@ export function SpansPageContent() {
               hasNextPage={hasNextPage}
               setEndOfListElement={setEndOfListElement}
               filtersApplied={filtersApplied}
+              resource="spans"
               isBranchesMode
               createdSort={sort}
               onSortChange={setSort}
