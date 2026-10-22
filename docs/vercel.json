@@ -16,6 +16,16 @@
   ],
   "redirects": [
     {
+      "source": "/docs/mastra-platform/connect/end-user-connections",
+      "destination": "/docs/mastra-platform/connect/overview",
+      "permanent": false
+    },
+    {
+      "source": "/reference/connect/user-connect-routes",
+      "destination": "/reference/connect/tools",
+      "permanent": false
+    },
+    {
       "source": "/docs/workspace/overview",
       "destination": "/docs/sandbox/overview",
       "permanent": true
@@ -2259,6 +2269,16 @@
       "source": "/docs/harness/signal-providers",
       "destination": "/docs/signals/signal-providers",
       "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/connect/end-user-connections/llms.txt",
+      "destination": "/docs/mastra-platform/connect/overview/llms.txt",
+      "permanent": false
+    },
+    {
+      "source": "/reference/connect/user-connect-routes/llms.txt",
+      "destination": "/reference/connect/tools/llms.txt",
+      "permanent": false
     },
     {
       "source": "/docs/workspace/overview/llms.txt",
