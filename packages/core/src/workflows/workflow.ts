@@ -50,6 +50,7 @@ import {
   findOwnModelStepSpan,
 } from '../processors/runner';
 import { createProcessorSendSignal } from '../processors/send-signal';
+import type { ProcessorLateSignalSink } from '../processors/send-signal';
 import {
   resolveProcessorSpanAttributes,
   resolveProcessorSpanName,
@@ -836,6 +837,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
         llmRequestProcessorIds?: ReadonlySet<string>;
         abortSignal?: AbortSignal;
         agent?: Agent;
+        lateSignalSink?: ProcessorLateSignalSink;
       };
       const {
         phase,
@@ -879,6 +881,8 @@ export function createStepFromProcessor<TProcessorId extends string>(
         abortSignal,
         // Agent reference so processors can access the running agent (e.g. on signal/schedule wake)
         agent,
+        // Receives sendSignal calls made after the creating durable step returned
+        lateSignalSink,
       } = input;
 
       // Create a minimal abort function that throws TripWire
@@ -1158,6 +1162,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
                 messageList: processorMessageList,
                 writer: processorWriter,
                 rotateResponseMessageId: rotateCurrentResponseMessageId,
+                lateSink: lateSignalSink,
               }),
             }
           : {}),
@@ -1166,6 +1171,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
       // Pass-through data that should flow to the next processor in a chain
       // This enables processor workflows to use .then(), .parallel(), .branch(), etc.
       const passThrough = {
+        lateSignalSink,
         phase,
         runId: agentRunId,
         // Auto-create MessageList from messages if not provided

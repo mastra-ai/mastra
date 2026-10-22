@@ -40,6 +40,7 @@ import type { MessageListInput } from '../message-list';
 import { SaveQueueManager } from '../save-queue';
 import type { AgentScopesSnapshot } from '../scopes';
 import { applyResolvedAgentScopes, resolveAgentScopes, restoreRunAgentScopes } from '../scopes';
+import type { AgentSignalInput } from '../signals';
 import { AgentThreadLeaseConflictError, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import type { AgentThreadRunRegistration } from '../thread-stream-runtime';
 import type { AgentAbortThreadOptions, AgentModelManagerConfig, ToolsInput } from '../types';
@@ -1655,6 +1656,8 @@ export class DurableAgent<
       processorStates,
       drainPendingSignals: (scope?: 'pending' | 'pre-run') => wrapped.__getDrainPendingSignals()(runId, scope),
       subscribePendingSignals: (listener: () => void) => wrapped.__getSubscribePendingSignals()(runId, listener),
+      enqueuePendingSignal: (signalInput: AgentSignalInput) =>
+        wrapped.__getEnqueuePendingSignal()({ runId, resourceId, threadId }, signalInput),
       cleanup: () => {},
     };
     this.#installAbortWithTotalTimeout(registryEntry as unknown as RunRegistryEntry, abortController);

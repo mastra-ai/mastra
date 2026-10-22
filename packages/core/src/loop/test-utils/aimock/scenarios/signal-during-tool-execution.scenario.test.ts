@@ -15,12 +15,19 @@ import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import type { AgentSignalInput, CreatedAgentSignal } from '../../../../agent/signals';
 import { MockMemory } from '../../../../memory/mock';
-import type { InputProcessor } from '../../../../processors';
+import type { InputProcessor, OutputProcessor } from '../../../../processors';
+import { ProcessorStepInputSchema, ProcessorStepOutputSchema } from '../../../../processors';
+import { createStep, createWorkflow } from '../../../../workflows';
+import { InMemoryStore } from '../../../../storage';
+import { InMemoryDB } from '../../../../storage/domains/inmemory-db';
+import { InMemoryMemory } from '../../../../storage/domains/memory/inmemory';
+import type { MastraDBMessage } from '../../../../agent/message-list';
 import { createTool } from '../../../../tools';
 import {
   runLoopScenario,
   useLoopScenarioAimock,
   describeForAllEngines,
+  isDurableEngineVariant,
 } from '../aimock-scenario';
 import type { EngineVariant } from '../types';
 
@@ -38,7 +45,26 @@ function toolInvocationsFor(messages: any[], toolCallId: string) {
   );
 }
 
-async function runDeployWithReminder(engine: EngineVariant, llm: ReturnType<ReturnType<typeof useLoopScenarioAimock>>, duringInput = false) {
+// Real in-memory storage with a controllable read boundary. The callback runs
+// after the LLM step serialized its transcript, while dehydration awaits I/O.
+class SignalDuringMemoryRead extends InMemoryMemory {
+  beforeRead?: () => Promise<void>;
+
+  override async listMessagesById(args: Parameters<InMemoryMemory['listMessagesById']>[0]) {
+    const beforeRead = this.beforeRead;
+    this.beforeRead = undefined;
+    await beforeRead?.();
+    return super.listMessagesById(args);
+  }
+}
+
+async function runDeployWithReminder(
+  engine: EngineVariant,
+  llm: ReturnType<ReturnType<typeof useLoopScenarioAimock>>,
+  duringInput = false,
+  processorKind: 'direct' | 'workflow' = 'direct',
+  duringStorage = false,
+) {
   const threadId = 'signal-during-tool-thread';
   const resourceId = 'signal-during-tool-user';
 
@@ -54,6 +80,20 @@ async function runDeployWithReminder(engine: EngineVariant, llm: ReturnType<Retu
     },
   };
 
+  const workflowOptions = {
+    id: 'reminder-workflow',
+    inputSchema: ProcessorStepInputSchema,
+    outputSchema: ProcessorStepOutputSchema,
+  };
+  const passThroughProcessor: InputProcessor = { id: 'before-reminder', processInputStep: async () => {} };
+  const processor =
+    processorKind === 'direct'
+      ? reminderProcessor
+      : createWorkflow(workflowOptions)
+          .then(createStep(passThroughProcessor))
+          .then(createStep(reminderProcessor))
+          .commit();
+
   let signalSent = false;
   const deploy = createTool({
     id: 'deploy',
@@ -61,7 +101,7 @@ async function runDeployWithReminder(engine: EngineVariant, llm: ReturnType<Retu
     inputSchema: z.object({ service: z.string() }),
     execute: async ({ service }, context) => {
       // The reminder fires from background work while the deploy is in flight.
-      if (!duringInput) {
+      if (!duringInput && !duringStorage) {
         if (!heldSendSignal) throw new Error('Input processor did not provide sendSignal');
         sentSignal = await heldSendSignal({ type: 'reactive', contents: REMINDER });
       }
@@ -71,13 +111,39 @@ async function runDeployWithReminder(engine: EngineVariant, llm: ReturnType<Retu
     },
   });
 
-  const memory = new MockMemory();
+  const storage = new InMemoryStore();
+  const memoryStore = new SignalDuringMemoryRead({ db: new InMemoryDB() });
+  storage.stores.memory = memoryStore;
+  const memory = new MockMemory({ storage });
+  const snapshotProcessor: OutputProcessor = {
+    id: 'recall-before-snapshot',
+    processOutputStep: async ({ messageList, stepNumber }) => {
+      if (stepNumber !== 0) return;
+      // A processor can add recalled context. The first dehydration must read
+      // this saved row to verify that it can replace it with a memory ref.
+      const recalled: MastraDBMessage = {
+        id: 'snapshot-context',
+        role: 'user',
+        createdAt: new Date(),
+        threadId,
+        resourceId,
+        content: { format: 2, parts: [{ type: 'text', text: 'Deployment context from memory.' }] },
+      };
+      await memory.saveMessages({ messages: [recalled] });
+      messageList.add([recalled], 'memory');
+      memoryStore.beforeRead = async () => {
+        if (!heldSendSignal) throw new Error('Input processor did not provide sendSignal');
+        sentSignal = await heldSendSignal({ type: 'reactive', contents: REMINDER });
+      };
+    },
+  };
   const { output, requests, chunks } = await runLoopScenario({
     engine,
     llm,
     prompt: 'Deploy the api service.',
     tools: { deploy },
-    inputProcessors: [reminderProcessor],
+    inputProcessors: [processor],
+    ...(duringStorage ? { outputProcessors: [snapshotProcessor] } : {}),
     memory,
     collectChunks: true,
     threadId,
@@ -134,19 +200,51 @@ describeForAllEngines('AIMock scenario: signal arrives while a tool is running',
     ).toBe(true);
   });
 
-  it.each([false, true])('delivers the reminder exactly once (during input: %s) (#27457)', async duringInput => {
-    const { requests, messages, chunks, sentSignal } = await runDeployWithReminder(engine, getMock(), duringInput);
-    expect(requests).toHaveLength(2);
-    expect(JSON.stringify(requestMessages(requests[1])).split(REMINDER)).toHaveLength(2);
-    expect(JSON.stringify(requestMessages(requests[1]))).toContain('call_deploy');
-    expect(JSON.stringify(requestMessages(requests[1]))).toContain('deployed');
-    if (duringInput) expect(JSON.stringify(requestMessages(requests[0]))).toContain(REMINDER);
+  if (isDurableEngineVariant(engine)) {
+    it('delivers a signal while the serialized transcript awaits storage (#27457)', async () => {
+      const { requests, messages, chunks, sentSignal } = await runDeployWithReminder(
+        engine,
+        getMock(),
+        false,
+        'direct',
+        true,
+      );
+      expect(sentSignal).toBeDefined();
+      expect(JSON.stringify(requestMessages(requests[1])).split(REMINDER)).toHaveLength(2);
+      expect(toolInvocationsFor(messages, 'call_deploy')[0]?.invocation.result).toEqual({ deployed: 'api' });
+      expect(messages.filter(message => JSON.stringify(message.content.parts).includes(REMINDER))).toHaveLength(1);
+      expect(chunks?.filter(chunk => chunk.type === 'data-signal')).toEqual([
+        expect.objectContaining({ data: expect.objectContaining({ id: sentSignal?.id, contents: REMINDER }) }),
+      ]);
+    });
+  }
 
-    const reminders = messages.filter(message => message.id === sentSignal?.id);
-    expect(reminders).toHaveLength(1);
-    expect(JSON.stringify(reminders[0])).toContain(REMINDER);
-    const echoes = chunks?.filter(chunk => chunk.type === 'data-signal');
-    expect(echoes).toHaveLength(1);
-    expect(echoes?.[0]).toMatchObject({ data: { id: sentSignal?.id, contents: REMINDER } });
-  });
+  it.each([
+    { duringInput: false, processorKind: 'direct' },
+    { duringInput: true, processorKind: 'direct' },
+    { duringInput: false, processorKind: 'workflow' },
+    { duringInput: true, processorKind: 'workflow' },
+  ] as const)(
+    'delivers the reminder exactly once ($processorKind, during input: $duringInput) (#27457)',
+    async ({ duringInput, processorKind }) => {
+      const { requests, messages, chunks, sentSignal } = await runDeployWithReminder(
+        engine,
+        getMock(),
+        duringInput,
+        processorKind,
+      );
+      expect(requests).toHaveLength(2);
+      expect(JSON.stringify(requestMessages(requests[1])).split(REMINDER)).toHaveLength(2);
+      expect(JSON.stringify(requestMessages(requests[1]))).toContain('call_deploy');
+      expect(JSON.stringify(requestMessages(requests[1]))).toContain('deployed');
+      if (duringInput) expect(JSON.stringify(requestMessages(requests[0]))).toContain(REMINDER);
+
+      const reminders = messages.filter(message => JSON.stringify(message.content.parts).includes(REMINDER));
+      expect(reminders).toHaveLength(1);
+      expect(reminders[0]?.id).toBe(sentSignal?.id);
+      const echoes = chunks?.filter(chunk => chunk.type === 'data-signal');
+      expect(echoes).toHaveLength(1);
+      expect(echoes?.[0]).toMatchObject({ data: { id: sentSignal?.id, contents: REMINDER } });
+    },
+  );
 });
