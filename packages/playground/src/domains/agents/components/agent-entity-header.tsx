@@ -29,7 +29,7 @@ export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
             <button
               type="button"
               onClick={handleCopy}
-              aria-label="Copy Agent ID for use in code"
+              aria-label="Copy agent ID for use in code"
               className="group/agent-title flex max-w-full min-w-0 cursor-pointer items-center gap-2 text-foreground"
               data-testid="agent-entity-header-copy-id"
             >

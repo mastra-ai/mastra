@@ -58,6 +58,7 @@ export default defineConfig({
     ],
     'react/rules-of-hooks': 'error',
     'react/exhaustive-deps': 'warn',
+    'mastra/sentence-case-labels': 'error',
     'typescript/no-non-null-assertion': 'error',
     // Tailwind (oxlint-tailwindcss; class order is oxfmt's sortTailwindcss)
     'tailwindcss/no-conflicting-classes': [
@@ -92,6 +93,11 @@ export default defineConfig({
     {
       files: ['src/**/*.test.*', 'src/**/*.stories.*'],
       rules: { 'mastra/restricted-syntax': 'off' },
+    },
+    {
+      // Test stubs aren't UI people see.
+      files: ['src/**/*.test.*', 'src/**/__tests__/**'],
+      rules: { 'mastra/sentence-case-labels': 'off' },
     },
     {
       files: ['**/*.stories.tsx'],

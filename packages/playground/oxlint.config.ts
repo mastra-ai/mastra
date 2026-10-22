@@ -153,6 +153,7 @@ export default defineConfig({
     ],
     'react/rules-of-hooks': 'error',
     'react/exhaustive-deps': 'warn',
+    'mastra/sentence-case-labels': 'error',
     'no-restricted-imports': [
       'error',
       {
@@ -197,6 +198,11 @@ export default defineConfig({
     {
       files: ['src/**/*.{test,spec}.*', 'src/**/*.stories.*', 'src/**/__tests__/**'],
       rules: { 'mastra/restricted-syntax': ['error', ...restrictedPlaygroundUiBroadImportSelectors] },
+    },
+    {
+      // Test stubs aren't UI people see.
+      files: ['src/**/*.{test,spec}.*', 'src/**/__tests__/**'],
+      rules: { 'mastra/sentence-case-labels': 'off' },
     },
     {
       files: ['src/**/*.{test,spec}.{ts,tsx}'],

@@ -2,6 +2,7 @@
 //   mastra/restricted-syntax          ESLint's no-restricted-syntax: options are { selector, message } objects
 //   mastra/test-needs-when-describe   every test()/it() inside a describe('when …') block (BDD test layout)
 //   mastra/import-order               eslint-plugin-import-x's `order` rule, without its module resolver
+//   mastra/sentence-case-labels       button, menu item and tab labels in sentence case ("Add credits", not "Add Credits")
 
 import { isBuiltin } from 'node:module';
 import path from 'node:path';
@@ -319,6 +320,140 @@ function importOrder(context) {
   };
 }
 
+// --- mastra/sentence-case-labels -----------------------------------------------------------------------
+// Action labels use sentence case: only the first word and proper nouns are capitalized ("Create dataset",
+// "Open in Studio"). Checks the static text of buttons, menu items and tabs, and the `aria-label`, `tooltip`
+// and confirm-dialog `*Label` props of any element. Labels built at runtime (variables, ternaries) aren't seen.
+// Options: { elements?: string[], properNouns?: string[] } add label elements and proper nouns to the defaults below.
+
+// Elements whose text is a label: `button`, any component named like a button, dialog action or tab
+// (`Button`, `CopyButton`, `DialogAction`, `AlertDialog.Cancel`, `MetricsCard.Tab`), and menu items.
+const labelElementPattern = /(?:^button|Button|Action|Cancel|Tab|\.Item|\.CheckboxItem|\.RadioItem|\.SubTrigger)$/;
+const labelProps = new Set(['aria-label', 'tooltip', 'confirmLabel', 'cancelLabel', 'submitLabel', 'actionLabel']);
+const properNouns = [
+  'Mastra Cloud',
+  'Mastra Code',
+  'Claude Code',
+  'Mastra',
+  'Studio',
+  'Trace Intelligence',
+  'Factory',
+  'GitHub',
+  'GitLab',
+  'Google',
+  'Gemini',
+  'Claude',
+  'Anthropic',
+  'OpenAI',
+  'Slack',
+  'Discord',
+  'Linear',
+  'Vercel',
+  'Cloudflare',
+  'Netlify',
+  'LiveKit',
+  'Langfuse',
+  'Datadog',
+  'Sentry',
+  'Stripe',
+  'Chrome',
+];
+
+function jsxName(name) {
+  if (name.type === 'JSXIdentifier') return name.name;
+  if (name.type === 'JSXMemberExpression') return `${jsxName(name.object)}.${name.property.name}`;
+  return '';
+}
+
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// The first capitalized word after the first word of a sentence, ignoring proper nouns and acronyms.
+function titleCaseWord(text, properNounPattern) {
+  const words = text.replace(/&\w+;/g, ' ').replace(properNounPattern, 'x').trim().split(/\s+/);
+  let sentenceStart = true;
+  for (const word of words) {
+    // Skip expressions and symbols ("{icon} Decline", "← Back"): they don't start the sentence.
+    if (!/[A-Za-z]/.test(word)) continue;
+    if (!sentenceStart && /^[A-Z][a-z]/.test(word)) return word.replace(/[^A-Za-z]+$/, '');
+    sentenceStart = /[.!?:]$/.test(word);
+  }
+  return null;
+}
+
+// Text runs of a JSX element: a nested element starts a new run (its text is checked on its own), an
+// expression is skipped ("Delete {count} items" checks "Delete items"), and each branch of a conditional
+// (`{open ? 'Hide details' : <>Show details</>}`) is checked as its own run.
+function textRuns(node, runs = ['']) {
+  for (const child of node.children) {
+    if (child.type === 'JSXText') runs[runs.length - 1] += child.value;
+    else if (child.type === 'JSXExpressionContainer') {
+      const text = staticString(child);
+      if (text != null) runs[runs.length - 1] += text;
+      else if (child.expression.type !== 'JSXEmptyExpression') {
+        runs[runs.length - 1] += ' {} ';
+        for (const branch of branches(child.expression)) {
+          runs.push('');
+          if (branch.type === 'JSXElement' || branch.type === 'JSXFragment') textRuns(branch, runs);
+          else runs[runs.length - 1] += staticString(branch) ?? '';
+          runs.push('');
+        }
+      }
+    } else if (child.type === 'JSXElement' || child.type === 'JSXFragment') {
+      runs.push('');
+      textRuns(child, runs);
+      runs.push('');
+    }
+  }
+  return runs;
+}
+
+// The values a JSX expression can render: `a ? b : c` and `a && b` render their branches.
+function branches(expression) {
+  if (expression.type === 'ConditionalExpression')
+    return [...branches(expression.consequent), ...branches(expression.alternate)];
+  if (expression.type === 'LogicalExpression') return branches(expression.right);
+  return [expression];
+}
+
+// A string literal, either bare or in a JSX expression container (`"Save"`, `{'Save'}`, `` {`Save`} ``).
+function staticString(node) {
+  if (node?.type === 'JSXExpressionContainer') return staticString(node.expression);
+  if (node?.type === 'Literal' && typeof node.value === 'string') return node.value;
+  if (node?.type === 'TemplateLiteral' && node.expressions.length === 0) return node.quasis[0].value.cooked;
+  return null;
+}
+
+function sentenceCaseLabels(context) {
+  const options = context.options[0] ?? {};
+  const elements = new Set(options.elements ?? []);
+  const isLabelElement = name => labelElementPattern.test(name) || elements.has(name);
+  const nouns = [...properNouns, ...(options.properNouns ?? [])].sort((a, b) => b.length - a.length);
+  const properNounPattern = new RegExp(`\\b(?:${nouns.map(escapeRegExp).join('|')})\\b`, 'g');
+  const check = (node, text) => {
+    const word = text && titleCaseWord(text, properNounPattern);
+    if (!word) return;
+    context.report({
+      node,
+      message: `Use sentence case for "${text.trim().replace(/\s+/g, ' ')}": lowercase "${word}" unless it's a proper noun (add it to properNouns).`,
+    });
+  };
+  return {
+    JSXElement(node) {
+      const opening = node.openingElement;
+      const name = jsxName(opening.name);
+      for (const attribute of opening.attributes) {
+        if (attribute.type !== 'JSXAttribute' || attribute.name.type !== 'JSXIdentifier') continue;
+        const attributeName = attribute.name.name;
+        if (labelProps.has(attributeName)) check(attribute, staticString(attribute.value));
+      }
+      if (!isLabelElement(name)) return;
+      for (const run of textRuns(node)) check(node, run);
+    },
+  };
+}
+
 const plugin = {
   meta: { name: 'mastra' },
   rules: {
@@ -329,6 +464,10 @@ const plugin = {
     'restricted-syntax': {
       meta: { type: 'suggestion', schema: false },
       create: restrictedSyntax,
+    },
+    'sentence-case-labels': {
+      meta: { type: 'suggestion', schema: false },
+      create: sentenceCaseLabels,
     },
     'test-needs-when-describe': {
       meta: { type: 'problem', schema: false },

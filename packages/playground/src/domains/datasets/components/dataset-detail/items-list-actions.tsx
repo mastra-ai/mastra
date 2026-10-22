@@ -57,7 +57,7 @@ export function ActionsMenu({
             onClick={() => handleAction(onCreateDatasetClick)}
             icon={<FolderPlus />}
           >
-            Create Dataset
+            Create dataset
           </Button>
           <Button
             variant="destructive-ghost"

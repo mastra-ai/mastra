@@ -1363,7 +1363,7 @@ describe('Standalone thread page', () => {
       // Base UI hides slider thumbs until layout measurement, which jsdom cannot provide.
       const temperature = screen.getAllByRole('slider', { hidden: true })[0];
       fireEvent.change(temperature, { target: { value: '0.2' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Advanced Settings' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Advanced settings' }));
       fireEvent.change(await screen.findByLabelText('Max Steps'), { target: { value: '8' } });
       fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
       fireEvent.keyDown(screen.getByTestId('composer-model-settings-trigger'), { key: 'Escape' });

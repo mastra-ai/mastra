@@ -193,7 +193,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
             disabled={executeProcessor.isPending || selectedPhase === 'outputStream' || selectedPhase === 'llmRequest'}
             className="w-full"
           >
-            {executeProcessor.isPending ? 'Running...' : 'Run Processor'}
+            {executeProcessor.isPending ? 'Running...' : 'Run processor'}
           </Button>
 
           {selectedPhase === 'outputStream' && (

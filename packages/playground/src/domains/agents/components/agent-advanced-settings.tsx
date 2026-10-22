@@ -222,7 +222,7 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
                     type="button"
                     onClick={formatProviderOptions}
                     className={buttonClass}
-                    aria-label="Format Provider Options"
+                    aria-label="Format provider options"
                   >
                     <Icon>
                       <Braces />
@@ -234,7 +234,7 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
 
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button type="button" onClick={handleCopy} className={buttonClass} aria-label="Copy Provider Options">
+                  <button type="button" onClick={handleCopy} className={buttonClass} aria-label="Copy provider options">
                     <Icon>
                       <CopyIcon />
                     </Icon>
@@ -250,7 +250,7 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
                       type="button"
                       onClick={saveProviderOptions}
                       className={buttonClass}
-                      aria-label="Save Provider Options"
+                      aria-label="Save provider options"
                     >
                       <Icon>{saved ? <CheckIcon /> : <SaveIcon />}</Icon>
                     </button>
