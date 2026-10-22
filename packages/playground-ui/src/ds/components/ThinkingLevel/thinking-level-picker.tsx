@@ -44,6 +44,7 @@ export function ThinkingLevelUnavailable<T extends string>({
   reason,
   value,
 }: ThinkingLevelUnavailableProps<T>) {
+  const levelInEffect = options.find(option => option.value === value)?.label;
   return (
     <Tooltip>
       <TooltipTrigger
@@ -52,7 +53,7 @@ export function ThinkingLevelUnavailable<T extends string>({
             role="button"
             tabIndex={0}
             aria-disabled="true"
-            aria-label={`${label}: unavailable. ${reason}`}
+            aria-label={`${label}: ${levelInEffect ?? 'unavailable'}. ${reason}`}
             className={cn(
               'inline-flex h-control-sm shrink-0 cursor-not-allowed items-center rounded-full border border-transparent px-2.5 text-placeholder',
               focusRing,

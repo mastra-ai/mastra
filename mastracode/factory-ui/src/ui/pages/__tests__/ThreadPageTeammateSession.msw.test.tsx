@@ -221,7 +221,7 @@ describe("a teammate's Factory session", () => {
 
       const model = await screen.findByRole('button', { name: `Session model: GPT-4o Mini. ${lockedReason}` });
       expect(model).toHaveAttribute('aria-disabled', 'true');
-      const thinking = await screen.findByRole('button', { name: `Thinking: unavailable. ${lockedReason}` });
+      const thinking = await screen.findByRole('button', { name: `Thinking: Medium. ${lockedReason}` });
       expect(thinking).toHaveAttribute('aria-disabled', 'true');
 
       await user.hover(model);
