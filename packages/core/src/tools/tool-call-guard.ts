@@ -11,24 +11,41 @@ const TOOL_CALL_GUARD = Symbol.for('mastra.tool.callGuard');
 const DEFAULT_MAX_CONSECUTIVE_DENIALS = 3;
 const DEFAULT_MAX_TOTAL_DENIALS = 20;
 
+/** Key under which the guard's counters are saved in a tool-call suspend payload. */
+export const TOOL_CALL_GUARD_SUSPEND_KEY = '__toolCallGuard';
+
+export type ToolCallGuardDeclines = { consecutive: number; total: number };
+
 /**
- * A `guardToolCall` hook plus the denial counters it accumulates over one run. One state is
- * shared by every tool converted for the run, so denials of different tools count together.
+ * Options and denial counters for one run. Shared by every tool converted for the run, so
+ * denials from the agent guard and from tool guards count together.
  */
-export interface ToolCallGuardState {
-  guard: ToolCallGuard;
+export interface ToolCallGuardRun {
   options?: ToolCallGuardOptions;
-  declines: { consecutive: number; total: number };
+  declines: ToolCallGuardDeclines;
 }
+
+/** Guards that decide calls to one tool, plus the run they count against. */
+export interface ToolCallGuardState {
+  /** The agent's `guardToolCall` hook. */
+  agentGuard?: ToolCallGuard;
+  /** The tool's own `guard`. */
+  toolGuard?: ToolCallGuard;
+  run: ToolCallGuardRun;
+}
+
+export type ToolCallGuardSource = 'agent' | 'tool';
 
 /** Verdict the runtime acts on, after escalation. */
 export type ResolvedToolCallGuardVerdict = ToolCallGuardVerdict & {
+  /** Which guard produced the verdict. */
+  decidedBy: ToolCallGuardSource;
   /** True when the guard said `deny` but the denial threshold turned it into `ask`. */
   escalated?: boolean;
 };
 
-export function createToolCallGuardState(guard: ToolCallGuard, options?: ToolCallGuardOptions): ToolCallGuardState {
-  return { guard, options, declines: { consecutive: 0, total: 0 } };
+export function createToolCallGuardRun(options?: ToolCallGuardOptions): ToolCallGuardRun {
+  return { options, declines: { consecutive: 0, total: 0 } };
 }
 
 export function attachToolCallGuard(tool: object, state: ToolCallGuardState): void {
@@ -40,8 +57,68 @@ export function getToolCallGuardState(tool: unknown): ToolCallGuardState | undef
   return (tool as Record<symbol, ToolCallGuardState | undefined>)[TOOL_CALL_GUARD];
 }
 
+/** True when an agent or tool guard decides calls to this tool. */
 export function hasToolCallGuard(tool: unknown): boolean {
-  return getToolCallGuardState(tool) !== undefined;
+  const state = getToolCallGuardState(tool);
+  return !!(state?.agentGuard || state?.toolGuard);
+}
+
+/** Reads a tool's own `guard` function, if present. */
+export function getToolGuardFn(tool: unknown): ToolCallGuard | undefined {
+  if (typeof tool !== 'object' || tool === null) return undefined;
+  const fn = (tool as { guard?: unknown }).guard;
+  return typeof fn === 'function' ? (fn as ToolCallGuard) : undefined;
+}
+
+/** The run's guard state, read from any guarded tool in the step's tool set. */
+export function findToolCallGuardRun(tools: Record<string, unknown> | undefined): ToolCallGuardRun | undefined {
+  for (const tool of Object.values(tools ?? {})) {
+    const run = getToolCallGuardState(tool)?.run;
+    if (run) return run;
+  }
+  return undefined;
+}
+
+/**
+ * Suspend-payload entry that carries the run's denial counters across a suspend/resume, and
+ * whether the suspension is a guard `ask` (so a human's answer resets the consecutive count).
+ */
+export function toolCallGuardSuspendEntry(
+  run: ToolCallGuardRun | undefined,
+  verdict?: ResolvedToolCallGuardVerdict,
+): Record<string, unknown> {
+  if (!run) return {};
+  return {
+    [TOOL_CALL_GUARD_SUSPEND_KEY]: {
+      declines: { ...run.declines },
+      ...(verdict?.action === 'ask' ? { asked: true } : {}),
+    },
+  };
+}
+
+/**
+ * Restores the counters a suspend payload saved into the resumed run. When the suspension was
+ * a guard `ask` and a person answered it, the consecutive count resets; the total never does.
+ */
+export function restoreToolCallGuardFromSuspend(
+  run: ToolCallGuardRun | undefined,
+  suspendData: unknown,
+  humanAnswered: boolean,
+): void {
+  if (!run || !suspendData || typeof suspendData !== 'object') return;
+  const saved = (suspendData as Record<string, unknown>)[TOOL_CALL_GUARD_SUSPEND_KEY] as
+    | { declines?: Partial<ToolCallGuardDeclines>; asked?: boolean }
+    | undefined;
+  const consecutive = saved?.declines?.consecutive;
+  const total = saved?.declines?.total;
+  if (typeof consecutive !== 'number' || typeof total !== 'number') return;
+  const { declines } = run;
+  // Several calls of one step can resume in turn; never move the counters backwards.
+  if (total >= declines.total) {
+    declines.total = total;
+    declines.consecutive = consecutive;
+  }
+  if (saved?.asked && humanAnswered) declines.consecutive = 0;
 }
 
 function normalizeVerdict(verdict: unknown): ToolCallGuardVerdict | undefined {
@@ -55,12 +132,13 @@ function normalizeVerdict(verdict: unknown): ToolCallGuardVerdict | undefined {
 }
 
 /**
- * Runs the guard for one tool call and updates the run's denial counters.
+ * Runs the guards for one tool call and updates the run's denial counters.
  *
- * A guard that throws or returns something other than a verdict yields `ask`, so a broken
- * guard falls back to a person rather than silently running or blocking the call. Once the
- * run reaches the configured consecutive or total denial count, a further `deny` becomes
- * `ask` (`escalated: true`).
+ * The agent guard decides first; a `deny` or `ask` from it is final. The tool's own guard then
+ * decides calls the agent guard allowed. A guard that throws or returns something other than a
+ * verdict yields `ask`, so a broken guard falls back to a person rather than silently running
+ * or blocking the call. Once the run reaches the configured consecutive or total denial count,
+ * a further `deny` becomes `ask` (`escalated: true`). Returns undefined when no guard applies.
  */
 export async function evaluateToolCallGuard({
   state,
@@ -72,7 +150,7 @@ export async function evaluateToolCallGuard({
   workspace,
   logger,
 }: {
-  state: ToolCallGuardState;
+  state: ToolCallGuardState | undefined;
   toolName: string;
   toolCallId: string;
   args: unknown;
@@ -80,53 +158,64 @@ export async function evaluateToolCallGuard({
   requestContext?: RequestContext;
   workspace?: Workspace;
   logger?: IMastraLogger;
-}): Promise<ResolvedToolCallGuardVerdict> {
-  const { guard, options, declines } = state;
+}): Promise<ResolvedToolCallGuardVerdict | undefined> {
+  if (!state || (!state.agentGuard && !state.toolGuard)) return undefined;
+  const { options, declines } = state.run;
 
-  let verdict: ToolCallGuardVerdict | undefined;
-  try {
-    verdict = normalizeVerdict(
-      await guard({
-        toolName,
-        toolCallId,
-        args,
-        userMessages: messages.filter(message => message.role === 'user'),
-        ...(options?.includeUntrustedContext ? { messages } : {}),
-        requestContext: requestContext ?? new RequestContext(),
-        workspace,
-        declines: { ...declines },
-      }),
-    );
-    if (!verdict) logger?.error(`guardToolCall returned an invalid verdict for tool ${toolName}; asking for approval`);
-  } catch (error) {
-    logger?.error(`Error calling guardToolCall for tool ${toolName}; asking for approval:`, error);
-  }
-
-  if (verdict?.action === 'allow') {
-    declines.consecutive = 0;
-    return verdict;
-  }
-  if (verdict?.action !== 'deny') {
-    declines.consecutive = 0;
+  const runGuard = async (guard: ToolCallGuard, source: ToolCallGuardSource): Promise<ToolCallGuardVerdict> => {
+    const label = source === 'agent' ? 'guardToolCall' : `guard of tool ${toolName}`;
+    try {
+      const verdict = normalizeVerdict(
+        await guard({
+          toolName,
+          toolCallId,
+          args,
+          userMessages: messages.filter(message => message.role === 'user'),
+          ...(options?.includeUntrustedContext ? { messages } : {}),
+          requestContext: requestContext ?? new RequestContext(),
+          workspace,
+          declines: { ...declines },
+        }),
+      );
+      if (verdict) return verdict;
+      logger?.error(`${label} returned an invalid verdict for tool ${toolName}; asking for approval`);
+    } catch (error) {
+      logger?.error(`Error calling ${label} for tool ${toolName}; asking for approval:`, error);
+    }
     return { action: 'ask' };
+  };
+
+  let verdict: ToolCallGuardVerdict = { action: 'allow' };
+  let decidedBy: ToolCallGuardSource = 'agent';
+  if (state.agentGuard) verdict = await runGuard(state.agentGuard, 'agent');
+  if (verdict.action === 'allow' && state.toolGuard) {
+    verdict = await runGuard(state.toolGuard, 'tool');
+    decidedBy = 'tool';
   }
+
+  if (verdict.action === 'allow') {
+    declines.consecutive = 0;
+    return { ...verdict, decidedBy };
+  }
+  // `ask` leaves the counters alone; the consecutive count resets once a person answers.
+  if (verdict.action === 'ask') return { action: 'ask', decidedBy };
 
   const maxConsecutive = options?.escalation?.consecutive ?? DEFAULT_MAX_CONSECUTIVE_DENIALS;
   const maxTotal = options?.escalation?.total ?? DEFAULT_MAX_TOTAL_DENIALS;
   if (declines.consecutive >= maxConsecutive || declines.total >= maxTotal) {
-    declines.consecutive = 0;
-    return { action: 'ask', escalated: true };
+    return { action: 'ask', decidedBy, escalated: true };
   }
 
   declines.consecutive++;
   declines.total++;
-  return verdict;
+  return { ...verdict, decidedBy };
 }
 
 /** Span attributes describing a guard verdict. */
 export function toolCallGuardAttributes(verdict: ResolvedToolCallGuardVerdict): ToolCallGuardAttributes {
   return {
     action: verdict.action,
+    decidedBy: verdict.decidedBy,
     ...(verdict.action === 'deny' ? { reason: verdict.reason } : {}),
     ...(verdict.escalated ? { escalated: true } : {}),
   };

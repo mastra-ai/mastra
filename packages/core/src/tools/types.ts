@@ -867,6 +867,14 @@ export interface ToolAction<
    */
   beforeApproval?: BeforeApprovalFn<TSchemaIn>;
   /**
+   * Decides each call to this tool: `allow` runs it, `deny` refuses it and returns `reason` to
+   * the model, and `ask` sends it to human approval. Same contract as the agent's
+   * `guardToolCall` hook. Approval rules (`requireApproval`, `needsApprovalFn`, the agent's
+   * `requireToolApproval`) run first and skip the guard; an agent `guardToolCall` that denies
+   * or asks wins over this guard. Denials count toward the agent's escalation thresholds.
+   */
+  guard?: ToolCallGuard;
+  /**
    * Enables strict tool input generation for providers that support it.
    * When enabled, supported providers will attempt to generate arguments
    * that exactly match the tool schema.

@@ -24,7 +24,7 @@ import { SCENARIO_MODEL_ID } from '../types';
 
 const PROMPT = 'Clean up the build output in this repo.';
 
-function shellTools(opts: { requireApproval?: boolean } = {}) {
+function shellTools(opts: { requireApproval?: boolean; guard?: ToolCallGuard } = {}) {
   const executed: string[] = [];
   const runShell = createTool({
     id: 'runShell',
@@ -32,6 +32,7 @@ function shellTools(opts: { requireApproval?: boolean } = {}) {
     inputSchema: z.object({ command: z.string() }),
     outputSchema: z.object({ stdout: z.string() }),
     ...(opts.requireApproval ? { requireApproval: true } : {}),
+    ...(opts.guard ? { guard: opts.guard } : {}),
     execute: async ({ command }) => {
       executed.push(`runShell:${command}`);
       return { stdout: `ran ${command}` };
@@ -275,6 +276,212 @@ describeForAllEngines('AIMock loop scenario: guardToolCall', engine => {
     const ctx = guard.mock.calls[0]![0] as ToolCallGuardContext;
     expect(ctx.messages).toBeDefined();
     expect(JSON.stringify(ctx.messages)).toContain(PROMPT);
+  });
+
+  /** Resumes the suspended call with a person answer and drains the resumed stream. */
+  async function answer(agent: Agent, runId: string, toolCallId: string, approved: boolean) {
+    const resumed = approved
+      ? await (agent as any).approveToolCall({ runId, toolCallId })
+      : await (agent as any).declineToolCall({ runId, toolCallId, reason: 'Not that.' });
+    const chunks: any[] = [];
+    for await (const chunk of resumed.fullStream) chunks.push(chunk);
+    return chunks;
+  }
+
+  it('keeps the run denial total across a suspend and resume, so the total threshold still applies', async () => {
+    const { tools, executed } = shellTools();
+    const guard = vi.fn(shellGuard);
+    const shared = buildGuardedAgent(getMock(), {
+      tools,
+      hooks: { guardToolCall: guard, guardToolCallOptions: { escalation: { total: 1 } } },
+    });
+
+    const { output, chunks } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      sharedAgent: shared,
+      prompt: PROMPT,
+      stopWhen: stepCountIs(6),
+      collectChunks: true,
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat', hasToolResult: false }, { toolCalls: [shell('call-root-1', 'rm -rf /')] });
+        llm.on(
+          { endpoint: 'chat', toolCallId: 'call-root-1', hasToolResult: true },
+          { toolCalls: [shell('call-clean', 'git clean -fdx')] },
+        );
+        llm.on(
+          { endpoint: 'chat', toolCallId: 'call-clean', hasToolResult: true },
+          { toolCalls: [shell('call-root-2', 'rm -rf /*')] },
+        );
+        llm.on({ endpoint: 'chat', toolCallId: 'call-root-2', hasToolResult: true }, { content: 'Done.' });
+      },
+    });
+
+    expect(chunks!.filter(c => c.type === 'tool-output-denied').map(c => (c as any).payload.toolCallId)).toEqual([
+      'call-root-1',
+    ]);
+    expect(chunks!.find(c => c.type === 'tool-call-approval')?.payload).toMatchObject({ toolCallId: 'call-clean' });
+
+    const resumedChunks = await answer(shared.agent, output.runId, 'call-clean', true);
+
+    expect(executed).toEqual(['runShell:git clean -fdx']);
+    // One denial already happened before the suspend; the next refused call goes to a person.
+    expect(resumedChunks.some(c => c.type === 'tool-output-denied')).toBe(false);
+    expect(resumedChunks.find(c => c.type === 'tool-call-approval')?.payload).toMatchObject({
+      toolCallId: 'call-root-2',
+    });
+    // The person answered the `ask`, so only the consecutive count reset.
+    expect((guard.mock.calls.at(-1)![0] as ToolCallGuardContext).declines).toEqual({ consecutive: 0, total: 1 });
+  });
+
+  it('resets only the consecutive count once a person answers an ask', async () => {
+    const { tools, executed } = shellTools();
+    const guard = vi.fn(shellGuard);
+    const shared = buildGuardedAgent(getMock(), {
+      tools,
+      hooks: { guardToolCall: guard, guardToolCallOptions: { escalation: { consecutive: 1 } } },
+    });
+
+    const { output, chunks } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      sharedAgent: shared,
+      prompt: PROMPT,
+      stopWhen: stepCountIs(6),
+      collectChunks: true,
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat', hasToolResult: false }, { toolCalls: [shell('call-root-1', 'rm -rf /')] });
+        llm.on(
+          { endpoint: 'chat', toolCallId: 'call-root-1', hasToolResult: true },
+          { toolCalls: [shell('call-root-2', 'rm -rf /*')] },
+        );
+        llm.on(
+          { endpoint: 'chat', toolCallId: 'call-root-2', hasToolResult: true },
+          { toolCalls: [shell('call-root-3', 'rm -rf /')] },
+        );
+        llm.on({ endpoint: 'chat', toolCallId: 'call-root-3', hasToolResult: true }, { content: 'Done.' });
+      },
+    });
+
+    // The second refusal in a row escalated to a person.
+    expect(chunks!.find(c => c.type === 'tool-call-approval')?.payload).toMatchObject({ toolCallId: 'call-root-2' });
+
+    const resumedChunks = await answer(shared.agent, output.runId, 'call-root-2', false);
+
+    expect(executed).toEqual([]);
+    // After the person answered, the next refusal is a plain deny again, and the total kept counting.
+    expect(resumedChunks.some(c => c.type === 'tool-call-approval')).toBe(false);
+    const denied = resumedChunks.filter(c => c.type === 'tool-output-denied').map(c => c.payload.toolCallId);
+    expect(denied).toContain('call-root-3');
+    expect((guard.mock.calls.at(-1)![0] as ToolCallGuardContext).declines).toEqual({ consecutive: 0, total: 1 });
+  });
+
+  it('lets a tool guard alone allow, deny with a reason, or ask', async () => {
+    const { tools, executed } = shellTools({ guard: shellGuard });
+    const llm = getMock();
+
+    const { chunks } = await runLoopScenario({
+      engine,
+      llm,
+      sharedAgent: buildGuardedAgent(llm, { tools }),
+      prompt: PROMPT,
+      stopWhen: stepCountIs(5),
+      collectChunks: true,
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          {
+            toolCalls: [shell('call-rm-dist', 'rm -rf dist'), shell('call-rm-root', 'rm -rf /')],
+          },
+        );
+        llm.on(
+          { endpoint: 'chat', toolCallId: 'call-rm-root', hasToolResult: true },
+          { toolCalls: [shell('call-clean', 'git clean -fdx')] },
+        );
+      },
+    });
+
+    expect(executed).toEqual(['runShell:rm -rf dist']);
+    const denied = chunks!.find(c => c.type === 'tool-output-denied') as any;
+    expect(denied?.payload).toMatchObject({
+      toolCallId: 'call-rm-root',
+      approval: { approved: false, reason: 'Deleting the filesystem root is not allowed.' },
+    });
+    expect(chunks!.find(c => c.type === 'tool-call-approval')?.payload).toMatchObject({ toolCallId: 'call-clean' });
+  });
+
+  it('lets an agent guard deny override a tool guard that would allow', async () => {
+    const toolGuard = vi.fn<ToolCallGuard>(() => ({ action: 'allow' }));
+    const { tools, executed } = shellTools({ guard: toolGuard });
+
+    const { chunks } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      sharedAgent: buildGuardedAgent(getMock(), {
+        tools,
+        hooks: { guardToolCall: () => ({ action: 'deny', reason: 'The agent forbids shell access.' }) },
+      }),
+      prompt: PROMPT,
+      stopWhen: stepCountIs(5),
+      collectChunks: true,
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat', hasToolResult: false }, { toolCalls: [shell('call-rm-dist', 'rm -rf dist')] });
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Done.' });
+      },
+    });
+
+    expect(executed).toEqual([]);
+    expect((chunks!.find(c => c.type === 'tool-output-denied') as any)?.payload.approval.reason).toBe(
+      'The agent forbids shell access.',
+    );
+    expect(toolGuard).not.toHaveBeenCalled();
+  });
+
+  it('lets a tool guard deny a call the agent guard allowed', async () => {
+    const { tools, executed } = shellTools({ guard: shellGuard });
+    const agentGuard = vi.fn<ToolCallGuard>(() => ({ action: 'allow' }));
+
+    const { chunks } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      sharedAgent: buildGuardedAgent(getMock(), { tools, hooks: { guardToolCall: agentGuard } }),
+      prompt: PROMPT,
+      stopWhen: stepCountIs(5),
+      collectChunks: true,
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat', hasToolResult: false }, { toolCalls: [shell('call-rm-root', 'rm -rf /')] });
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Done.' });
+      },
+    });
+
+    expect(agentGuard).toHaveBeenCalledTimes(1);
+    expect(executed).toEqual([]);
+    expect((chunks!.find(c => c.type === 'tool-output-denied') as any)?.payload.approval.reason).toBe(
+      'Deleting the filesystem root is not allowed.',
+    );
+  });
+
+  it('skips a tool guard when an approval rule already requires a person', async () => {
+    const toolGuard = vi.fn(shellGuard);
+    const { tools, executed } = shellTools({ requireApproval: true, guard: toolGuard });
+
+    const { chunks } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      sharedAgent: buildGuardedAgent(getMock(), { tools }),
+      prompt: PROMPT,
+      stopWhen: stepCountIs(5),
+      collectChunks: true,
+      fixtures: llm => {
+        llm.on({ endpoint: 'chat', hasToolResult: false }, { toolCalls: [shell('call-rm-root', 'rm -rf /')] });
+        llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Done.' });
+      },
+    });
+
+    expect(chunks!.find(c => c.type === 'tool-call-approval')?.payload).toMatchObject({ toolCallId: 'call-rm-root' });
+    expect(chunks!.some(c => c.type === 'tool-output-denied')).toBe(false);
+    expect(executed).toEqual([]);
+    expect(toolGuard).not.toHaveBeenCalled();
   });
 
   // Durable and evented drop all per-execution hooks: Agent.getToolsForExecution never forwards

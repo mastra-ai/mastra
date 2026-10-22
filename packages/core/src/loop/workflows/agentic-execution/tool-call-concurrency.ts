@@ -1,11 +1,9 @@
 import type { ToolSet } from '@internal/ai-sdk-v5';
-import type { MastraDBMessage } from '../../../agent/message-list';
 import type { IMastraLogger } from '../../../logger';
 import type { RequestContext } from '../../../request-context';
 import type { RequireToolApproval } from '../../../tools';
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
-import { evaluateToolCallGuard, getToolCallGuardState, hasToolCallGuard } from '../../../tools/tool-call-guard';
-import type { ResolvedToolCallGuardVerdict } from '../../../tools/tool-call-guard';
+import { hasToolCallGuard } from '../../../tools/tool-call-guard';
 import { getNeedsApprovalFn } from '../../../tools/toolchecks';
 import type { ToolApprovalContext } from '../../../tools/types';
 import type { ToolCallConcurrency, ToolCallConcurrencyStrategy } from '../../types';
@@ -96,15 +94,16 @@ export function effectiveToolSetRequiresSequentialExecution({
     if (maybeTool.hasSuspendSchema) {
       return true;
     }
+    // A guard decides each call as it runs and may send it to approval; guarded tools run one
+    // at a time so the run's denial counters (and escalation) follow call order.
+    if (hasToolCallGuard(tool)) {
+      return true;
+    }
     // An unevaluated `needsApprovalFn` may require approval, so stay sequential.
     if (getNeedsApprovalFn(tool)) {
       return !dynamicApprovalEvaluated;
     }
-    if (maybeTool.requireApproval) {
-      return true;
-    }
-    // Likewise an unevaluated `guardToolCall` hook may answer `ask` and suspend for approval.
-    return hasToolCallGuard(tool) && !dynamicApprovalEvaluated;
+    return Boolean(maybeTool.requireApproval);
   });
 }
 
@@ -153,8 +152,6 @@ export function updateToolCallForeachConcurrency(
 export async function resolveEmittedToolCallConcurrency({
   toolCalls,
   approvalVerdicts,
-  guardVerdicts,
-  getMessages,
   requestContext,
   workspace,
   logger,
@@ -162,10 +159,6 @@ export async function resolveEmittedToolCallConcurrency({
 }: Parameters<typeof resolveToolCallConcurrency>[0] & {
   toolCalls: readonly { toolCallId?: string; toolName: string; args?: unknown }[];
   approvalVerdicts?: Map<string, boolean>;
-  /** Receives the `guardToolCall` verdict of each call that rules left open, keyed by toolCallId. */
-  guardVerdicts?: Map<string, ResolvedToolCallGuardVerdict>;
-  /** Conversation passed to `guardToolCall`. */
-  getMessages?: () => MastraDBMessage[];
   requestContext?: RequestContext;
   workspace?: ToolApprovalContext['workspace'];
   logger?: IMastraLogger;
@@ -179,26 +172,23 @@ export async function resolveEmittedToolCallConcurrency({
     return 1;
   }
 
-  const findTool = (toolName: string) =>
-    args.tools?.[toolName] ||
-    findProviderToolByName(args.tools, toolName) ||
-    Object.values(args.tools || {}).find(t => 'id' in t && t.id === toolName);
-  const stripResumeData = (toolArgs: unknown) =>
-    typeof toolArgs === 'object' && toolArgs !== null
-      ? (({ resumeData: _resumeData, ...rest }) => rest)(toolArgs as Record<string, unknown>)
-      : (toolArgs as ToolApprovalContext['args']);
-
   const verdicts = await Promise.all(
     toolCalls.map(async toolCall => {
       // Mirror the tool-call step's lookup (key, provider name, then tool id).
-      const tool = findTool(toolCall.toolName);
+      const tool =
+        args.tools?.[toolCall.toolName] ||
+        findProviderToolByName(args.tools, toolCall.toolName) ||
+        Object.values(args.tools || {}).find(t => 'id' in t && t.id === toolCall.toolName);
       if (!tool) {
         return true;
       }
       if ((tool as { hasSuspendSchema?: unknown }).hasSuspendSchema) {
         return true;
       }
-      const toolArgs = stripResumeData(toolCall.args);
+      const toolArgs =
+        typeof toolCall.args === 'object' && toolCall.args !== null
+          ? (({ resumeData: _resumeData, ...rest }) => rest)(toolCall.args as Record<string, unknown>)
+          : (toolCall.args as ToolApprovalContext['args']);
       const verdict = await resolveToolApprovalVerdict({
         tool,
         requireToolApproval: args.requireToolApproval,
@@ -213,47 +203,9 @@ export async function resolveEmittedToolCallConcurrency({
       if (toolCall.toolCallId) {
         approvalVerdicts?.set(toolCall.toolCallId, verdict);
       }
-      return verdict;
+      return verdict || hasToolCallGuard(tool);
     }),
   );
 
-  if (verdicts.some(Boolean)) {
-    return 1;
-  }
-
-  // Rules left every call open, so each guarded call is decided by its guard. Guards run one
-  // at a time in emission order so the run's denial counters (and escalation) are deterministic.
-  // A call the guard sends to approval must suspend, which requires sequential execution.
-  let anyAsk = false;
-  let messages: MastraDBMessage[] | undefined;
-  for (const toolCall of toolCalls) {
-    const tool = findTool(toolCall.toolName);
-    const guardState = getToolCallGuardState(tool);
-    if (!guardState) {
-      continue;
-    }
-    // Without somewhere to hand the verdict to the tool-call step, leave the guard to run
-    // there instead (evaluating it twice would double-count denials) and stay sequential.
-    if (!guardVerdicts || !toolCall.toolCallId) {
-      anyAsk = true;
-      continue;
-    }
-    messages ??= getMessages?.() ?? [];
-    const verdict = await evaluateToolCallGuard({
-      state: guardState,
-      toolName: toolCall.toolName,
-      toolCallId: toolCall.toolCallId,
-      args: stripResumeData(toolCall.args),
-      messages,
-      requestContext,
-      workspace,
-      logger,
-    });
-    guardVerdicts?.set(toolCall.toolCallId, verdict);
-    if (verdict.action === 'ask') {
-      anyAsk = true;
-    }
-  }
-
-  return anyAsk ? 1 : args.configuredConcurrency;
+  return verdicts.some(Boolean) ? 1 : args.configuredConcurrency;
 }

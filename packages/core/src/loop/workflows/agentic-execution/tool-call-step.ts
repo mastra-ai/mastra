@@ -17,8 +17,11 @@ import {
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
 import {
   evaluateToolCallGuard,
+  findToolCallGuardRun,
   getToolCallGuardState,
   recordToolCallGuardSpan,
+  restoreToolCallGuardFromSuspend,
+  toolCallGuardSuspendEntry,
   toolCallGuardAttributes,
 } from '../../../tools/tool-call-guard';
 import { getToolTitle } from '../../../tools/tool-title';
@@ -49,7 +52,6 @@ import {
   THREAD_EXISTS_KEY,
   THREAD_ID_KEY,
   TOOL_APPROVAL_VERDICTS_KEY,
-  TOOL_GUARD_VERDICTS_KEY,
   TOOL_PAYLOAD_TRANSFORM_KEY,
 } from '../../run-scope-keys';
 import { approvalResumeSchema } from '../../shared/approval-schema';
@@ -548,19 +550,19 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // resumeData is untrusted and cannot grant or decline consent.
         const isFreshCall = suspendData === undefined;
 
-        // Rules first: `guardToolCall` only decides fresh calls that no approval rule already
-        // sends to a person. The verdict is usually reached while scheduling the step (so
-        // guards run in emission order); fall back to evaluating it here. A resumed call never
-        // re-runs the guard: an `ask` suspended as an ordinary approval, which the suspend
-        // payload records.
-        const guardVerdicts = readScoped(scopeCtx, TOOL_GUARD_VERDICTS_KEY, 'toolGuardVerdicts');
-        const cachedGuardVerdict = guardVerdicts?.get(inputData.toolCallId);
-        guardVerdicts?.delete(inputData.toolCallId);
+        // Rules first: guards only decide fresh calls that no approval rule already sends to a
+        // person. A resumed call never re-runs a guard: an `ask` suspended as an ordinary
+        // approval. The run's denial counters ride on every suspend payload, so a resumed (or
+        // cold-resumed) run picks them up; a person answering a guard `ask` resets the
+        // consecutive count.
+        const guardRun = findToolCallGuardRun(stepTools as Record<string, unknown> | undefined);
+        if (!isFreshCall) {
+          restoreToolCallGuardFromSuspend(guardRun, suspendData, suspendedForApproval && !!approvalDecision);
+        }
         const guardState = getToolCallGuardState(tool);
         const guardVerdict =
-          guardState && isFreshCall && !isDelegatedApproval && !toolRequiresApproval
-            ? (cachedGuardVerdict ??
-              (await evaluateToolCallGuard({
+          isFreshCall && !isDelegatedApproval && !toolRequiresApproval
+            ? await evaluateToolCallGuard({
                 state: guardState,
                 toolName: inputData.toolName,
                 toolCallId: inputData.toolCallId,
@@ -569,7 +571,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 requestContext,
                 workspace: approvalWorkspace,
                 logger,
-              })))
+              })
             : undefined;
         if (guardVerdict && guardVerdict.action !== 'allow') {
           recordToolCallGuardSpan({
@@ -677,6 +679,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 // whose resume adopts the supplied scopes instead of rejecting them.
                 __resolvedScopes: resolvedScopes ?? [],
                 ...(returnScorerData !== undefined ? { __returnScorerData: returnScorerData } : {}),
+                ...toolCallGuardSuspendEntry(guardRun),
                 // Persist the inner suspended run id in the workflow snapshot, partitioned per
                 // tool call (resumeLabel = toolCallId). Persisted message metadata exposes the
                 // same id as delegatedRunId for cold reloads, while the snapshot remains the
@@ -729,6 +732,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 // whose resume adopts the supplied scopes instead of rejecting them.
                 __resolvedScopes: resolvedScopes ?? [],
                 ...(returnScorerData !== undefined ? { __returnScorerData: returnScorerData } : {}),
+                ...toolCallGuardSuspendEntry(guardRun),
                 toolCallId: inputData.toolCallId,
                 toolName: inputData.toolName,
                 resumeLabel: options?.resumeLabel,
@@ -824,6 +828,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 // whose resume adopts the supplied scopes instead of rejecting them.
                 __resolvedScopes: resolvedScopes ?? [],
                 ...(returnScorerData !== undefined ? { __returnScorerData: returnScorerData } : {}),
+                ...toolCallGuardSuspendEntry(guardRun, guardVerdict),
               },
               {
                 resumeLabel: inputData.toolCallId,

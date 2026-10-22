@@ -450,13 +450,15 @@ export interface ToolCallAttributes extends AIBaseAttributes {
   success?: boolean;
   /** True when a dataset experiment tool mock intercepted the call (served, mismatched, exhausted or denied) and the tool never ran */
   mocked?: boolean;
-  /** Verdict of the agent's `guardToolCall` hook for this call, when one ran */
+  /** Verdict of the agent's `guardToolCall` hook or the tool's `guard` for this call, when one ran */
   guard?: ToolCallGuardAttributes;
 }
 
-/** Verdict of an agent's `guardToolCall` hook, recorded on tool-call spans */
+/** Verdict of an agent's `guardToolCall` hook or a tool's `guard`, recorded on tool-call spans */
 export interface ToolCallGuardAttributes {
   action: 'allow' | 'deny' | 'ask';
+  /** Which guard produced the verdict: the agent's `guardToolCall` or the tool's own `guard` */
+  decidedBy: 'agent' | 'tool';
   reason?: string;
   /** True when a denial over the escalation threshold was turned into `ask` */
   escalated?: boolean;

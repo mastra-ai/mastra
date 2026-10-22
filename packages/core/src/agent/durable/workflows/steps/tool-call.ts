@@ -35,9 +35,12 @@ import { findProviderToolByName } from '../../../../tools/provider-tool-utils';
 import { ToolStream } from '../../../../tools/stream';
 import {
   evaluateToolCallGuard,
+  findToolCallGuardRun,
   getToolCallGuardState,
   recordToolCallGuardSpan,
+  restoreToolCallGuardFromSuspend,
   toolCallGuardAttributes,
+  toolCallGuardSuspendEntry,
 } from '../../../../tools/tool-call-guard';
 import { getToolTitle } from '../../../../tools/tool-title';
 import { resolveToolOutputValidationSchema, validateToolOutput } from '../../../../tools/validation';
@@ -1039,6 +1042,13 @@ export function createDurableToolCallStep() {
       // Rules first: `guardToolCall` only decides fresh calls no approval rule already gates.
       // A resumed call never re-runs the guard — an `ask` suspends as an ordinary approval.
       const guardState = getToolCallGuardState(tool);
+      // Denial counters live on the run, which a resume (or a cold worker) rebuilds from scratch;
+      // the suspend payload carries them over. A person answering a guard `ask` resets the
+      // consecutive count; the total never resets within a run.
+      const guardRun = guardState?.run ?? findToolCallGuardRun(registryEntry?.tools ?? rebuiltTools);
+      if (!isFreshCall) {
+        restoreToolCallGuardFromSuspend(guardRun, suspendData, suspendedForApproval && !!approvalDecision);
+      }
       const guardVerdict =
         guardState && isFreshCall && !requiresApproval
           ? await evaluateToolCallGuard({
@@ -1185,6 +1195,7 @@ export function createDurableToolCallStep() {
             toolCallId,
             toolName,
             args,
+            ...toolCallGuardSuspendEntry(guardRun, guardVerdict),
           },
           {
             resumeLabel: toolCallId,
@@ -1489,6 +1500,7 @@ export function createDurableToolCallStep() {
                 // partitioned per tool call (resumeLabel = toolCallId), so the
                 // resume leg can recover it even if message metadata is stale.
                 ...(delegatedRunId ? { suspendedToolRunId: delegatedRunId } : {}),
+                ...toolCallGuardSuspendEntry(guardRun),
               },
               { resumeLabel: toolCallId },
             );
@@ -1547,6 +1559,7 @@ export function createDurableToolCallStep() {
                 toolCallId,
                 toolName,
                 resumeLabel: suspendOptions?.resumeLabel,
+                ...toolCallGuardSuspendEntry(guardRun),
                 // Persist the inner suspended run id in the workflow snapshot,
                 // partitioned per tool call (resumeLabel = toolCallId), so the
                 // resume leg continues the delegate's suspended run instead of

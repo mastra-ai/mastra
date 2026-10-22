@@ -141,7 +141,7 @@ import { createTool } from '../tools';
 import { createWebSearchProviderTool, isWebSearchTool, normalizeWebSearchProvider } from '../tools/builtin/web-search';
 import { normalizeToolPayloadTransformPolicy } from '../tools/payload-transform';
 import type { ToolToConvert } from '../tools/tool-builder/builder';
-import { attachToolCallGuard, createToolCallGuardState } from '../tools/tool-call-guard';
+import { attachToolCallGuard, createToolCallGuardRun, getToolGuardFn } from '../tools/tool-call-guard';
 import type { ToolCallGuardState } from '../tools/tool-call-guard';
 import { isMastraTool, isProviderTool, isApprovalExempt, markApprovalExempt } from '../tools/toolchecks';
 import type {
@@ -7402,18 +7402,21 @@ export class Agent<
   }
 
   private wrapToolsWithHooks(tools: Record<string, CoreTool>, hooks?: ToolHooks): Record<string, CoreTool> {
-    if (!hooks?.beforeToolCall && !hooks?.afterToolCall && !hooks?.guardToolCall) return tools;
+    const anyToolGuard = Object.values(tools).some(tool => getToolGuardFn(tool));
+    if (!hooks?.beforeToolCall && !hooks?.afterToolCall && !hooks?.guardToolCall && !anyToolGuard) return tools;
 
-    // One guard state per conversion (one run), so denial counters span every tool in the run.
-    const guardState = hooks.guardToolCall
-      ? createToolCallGuardState(hooks.guardToolCall, hooks.guardToolCallOptions)
-      : undefined;
+    // One guard run per conversion (one run), so denial counters span every tool and guard in the run.
+    const guardRun =
+      hooks?.guardToolCall || anyToolGuard ? createToolCallGuardRun(hooks?.guardToolCallOptions) : undefined;
 
     return Object.fromEntries(
-      Object.entries(tools).map(([toolName, tool]) => [
-        toolName,
-        this.wrapToolWithHooks(toolName, tool, hooks, guardState),
-      ]),
+      Object.entries(tools).map(([toolName, tool]) => {
+        const agentGuard = hooks?.guardToolCall;
+        const toolGuard = getToolGuardFn(tool);
+        const guardState: ToolCallGuardState | undefined =
+          guardRun && (agentGuard || toolGuard) ? { agentGuard, toolGuard, run: guardRun } : undefined;
+        return [toolName, this.wrapToolWithHooks(toolName, tool, hooks ?? {}, guardState)];
+      }),
     );
   }
 

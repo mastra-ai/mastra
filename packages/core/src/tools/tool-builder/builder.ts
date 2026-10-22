@@ -39,11 +39,12 @@ import {
 } from '../../tools/toolchecks';
 import type { ToolOptions } from '../../utils';
 import { isZodObject, safeExtendZodObject } from '../../utils/zod-utils';
-
 import type { SuspendOptions } from '../../workflows';
+
 import { markBuilderValidatedInput } from '../builder-validation-context';
 import { createToolObserve } from '../observe';
 import { ToolStream } from '../stream';
+import { getToolGuardFn } from '../tool-call-guard';
 import type {
   BeforeApprovalContext,
   BeforeApprovalFn,
@@ -1236,6 +1237,7 @@ export class CoreToolBuilder extends MastraBase {
       requireApproval,
       needsApprovalFn,
       beforeApproval,
+      guard: getToolGuardFn(this.originalTool),
       validateInput: (input: unknown) => {
         const validation = validateToolInput(
           (inputValidationSchema ?? originalSchema) as StandardSchemaWithJSON | undefined,

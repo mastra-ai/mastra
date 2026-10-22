@@ -156,6 +156,13 @@ Mastra streams the tool call and returns `{ acknowledged: true }` as its result,
     isOptional: true,
   },
   {
+    name: 'guard',
+    type: '(context: ToolCallGuardContext) => ToolCallGuardVerdict | Promise<ToolCallGuardVerdict>',
+    description:
+      "Decides each call to this tool before it runs, with the same context and verdicts as the agent [`guardToolCall`](/docs/agents/human-in-the-loop#guard-tool-calls-with-guardtoolcall) hook: `{ action: 'allow' }`, `{ action: 'deny', reason }`, or `{ action: 'ask' }`. Skipped when an approval rule already requires approval. When the agent also has `guardToolCall`, it runs first and its `deny` or `ask` wins. Denials count toward the agent escalation thresholds. A guarded tool runs one call at a time.",
+    isOptional: true,
+  },
+  {
     name: 'mcp',
     type: 'MCPToolProperties',
     description:

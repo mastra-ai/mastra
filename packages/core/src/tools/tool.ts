@@ -11,6 +11,7 @@ import type {
   MCPToolProperties,
   NeedsApprovalFn,
   ToolAction,
+  ToolCallGuard,
   ToolExecuteFunction,
   ToolExecutionContext,
   ToolPayloadTransform,
@@ -290,6 +291,12 @@ export class Tool<
   >;
 
   /**
+   * Decides each call to this tool: allow, deny with a reason returned to the model, or ask a
+   * person. Runs after approval rules and after the agent's `guardToolCall`.
+   */
+  guard?: ToolCallGuard;
+
+  /**
    * Enables strict tool input generation for providers that support it.
    */
   strict?: boolean;
@@ -410,6 +417,7 @@ export class Tool<
     this.mastra = opts.mastra;
     this.requireApproval = opts.requireApproval || false;
     this.beforeApproval = opts.beforeApproval;
+    this.guard = opts.guard;
     this.strict = opts.strict;
     this.outputValidation = opts.outputValidation;
     this.providerOptions = opts.providerOptions;
