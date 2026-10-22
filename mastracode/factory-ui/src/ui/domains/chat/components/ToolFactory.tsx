@@ -114,7 +114,7 @@ function ToolFactoryComponent({
         <ChannelReplyMessage
           text={text}
           status={replyStatus}
-          footer={status === 'done' ? replyFooter?.(text) : undefined}
+          footer={replyStatus === 'done' ? replyFooter?.(text) : undefined}
         />
       );
   }
