@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -838,6 +838,35 @@ describe('Sidebar', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Back to main navigation: Account settings' }));
     await screen.findByText('Grouped navigation');
     await waitFor(() => expect(screen.queryByText('Account navigation')).toBeNull());
+  });
+
+  it('keeps an exiting takeover page mounted until its exit transition finishes', async () => {
+    mockMatchMedia(false);
+    let finishExit = () => {};
+    const exit = { transitionProperty: 'opacity', finished: new Promise<void>(resolve => (finishExit = resolve)) };
+    const endless = { finished: new Promise<void>(() => {}) };
+    const getAnimations = vi.fn(() => [exit, endless] as unknown as Animation[]);
+    const original = Object.getOwnPropertyDescriptor(Element.prototype, 'getAnimations');
+    Object.defineProperty(Element.prototype, 'getAnimations', { configurable: true, value: getAnimations });
+
+    try {
+      render(
+        <Sidebar.Provider storageKey="sidebar-exit-test">
+          <SidebarStackFixture />
+        </Sidebar.Provider>,
+      );
+
+      fireEvent.click(screen.getByRole('button', { name: 'Open account settings' }));
+      await screen.findByText('Account navigation');
+      await waitFor(() => expect(getAnimations).toHaveBeenCalled());
+      expect(screen.getByText('Grouped navigation')).toBeDefined();
+
+      await act(async () => finishExit());
+      expect(screen.queryByText('Grouped navigation')).toBeNull();
+    } finally {
+      if (original) Object.defineProperty(Element.prototype, 'getAnimations', original);
+      else delete (Element.prototype as { getAnimations?: unknown }).getAnimations;
+    }
   });
 
   it('closes an active takeover with Escape and returns focus', async () => {

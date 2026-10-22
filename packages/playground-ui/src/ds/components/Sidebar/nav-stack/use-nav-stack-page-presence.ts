@@ -22,16 +22,15 @@ export function useNavStackPagePresence(active: boolean) {
   useEffect(() => {
     if (active || !present) return;
 
-    // Resolves at once when nothing animates (reduced motion, jsdom). A transition reversed by
-    // re-activating the page rejects `finished`, and the cleanup has already cancelled the unmount.
+    // Waits only for the page's own transitions, so an endless animation passed in `className`
+    // can't hold it mounted. Resolves at once when nothing transitions (reduced motion, jsdom).
+    // A cancelled transition settles too; one reversed by re-activating the page is ignored
+    // because the cleanup has already cancelled the unmount.
     let cancelled = false;
-    const transitions = ref.current?.getAnimations?.() ?? [];
-    Promise.all(transitions.map(animation => animation.finished)).then(
-      () => {
-        if (!cancelled) setPresent(false);
-      },
-      () => {},
-    );
+    const transitions = (ref.current?.getAnimations?.() ?? []).filter(animation => 'transitionProperty' in animation);
+    void Promise.allSettled(transitions.map(animation => animation.finished)).then(() => {
+      if (!cancelled) setPresent(false);
+    });
 
     return () => {
       cancelled = true;
