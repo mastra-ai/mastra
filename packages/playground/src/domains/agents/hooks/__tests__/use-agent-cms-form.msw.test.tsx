@@ -688,7 +688,39 @@ describe('useAgentCmsForm — file-based agent', () => {
   };
 
   describe('when the first override is saved', () => {
-    it('creates the stored override, then updates it on the next save', async () => {
+    it('creates the stored override', async () => {
+      const saves = captureFsAgentSaves();
+
+      const { result } = renderHook(
+        () =>
+          useAgentCmsForm({
+            mode: 'edit',
+            agentId: fsAgent.id,
+            dataSource: fsDataSource,
+            isCodeAgentOverride: isCodeBackedAgent(fsAgent),
+            hasStoredOverride: false,
+            editorConfig: fsAgent.editor,
+            onSuccess: () => {},
+          }),
+        { wrapper: makeWrapper() },
+      );
+
+      editInstructions(result.current.form, 'First Studio draft');
+      await act(async () => {
+        await result.current.handleSaveDraft();
+      });
+      await waitFor(() => expect(saves).toHaveLength(1));
+      expect(saves[0]).toMatchObject({
+        method: 'POST',
+        body: {
+          id: fsAgent.id,
+          autoPublish: false,
+          instructions: [{ type: 'prompt_block', content: 'First Studio draft' }],
+        },
+      });
+    });
+
+    it('updates the override on the next save', async () => {
       const saves = captureFsAgentSaves();
 
       const { result } = renderHook(
@@ -715,14 +747,6 @@ describe('useAgentCmsForm — file-based agent', () => {
       });
 
       await waitFor(() => expect(saves).toHaveLength(2));
-      expect(saves[0]).toMatchObject({
-        method: 'POST',
-        body: {
-          id: fsAgent.id,
-          autoPublish: false,
-          instructions: [{ type: 'prompt_block', content: 'First Studio draft' }],
-        },
-      });
       expect(saves[1]).toMatchObject({
         method: 'PATCH',
         body: { instructions: [{ type: 'prompt_block', content: 'Second Studio draft' }] },
@@ -731,8 +755,8 @@ describe('useAgentCmsForm — file-based agent', () => {
   });
 
   describe('when the page reloads with a saved draft', () => {
-    it('loads the draft instructions and updates the existing override', async () => {
-      const saves = captureFsAgentSaves();
+    it('loads the saved draft instructions', async () => {
+      captureFsAgentSaves();
 
       const { result } = renderHook(
         () =>
@@ -752,6 +776,24 @@ describe('useAgentCmsForm — file-based agent', () => {
         expect(result.current.form.getValues('instructionBlocks')).toMatchObject([
           { content: 'Saved draft instructions.' },
         ]),
+      );
+    });
+
+    it('updates the existing override after reload', async () => {
+      const saves = captureFsAgentSaves();
+
+      const { result } = renderHook(
+        () =>
+          useAgentCmsForm({
+            mode: 'edit',
+            agentId: fsAgent.id,
+            dataSource: fsAgentOverride,
+            isCodeAgentOverride: isCodeBackedAgent(fsAgent),
+            hasStoredOverride: true,
+            editorConfig: fsAgent.editor,
+            onSuccess: () => {},
+          }),
+        { wrapper: makeWrapper() },
       );
 
       editInstructions(result.current.form, 'Edited after reload');

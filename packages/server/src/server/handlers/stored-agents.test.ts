@@ -1,4 +1,5 @@
-import type { Mastra } from '@mastra/core';
+import { Mastra } from '@mastra/core';
+import { Agent } from '@mastra/core/agent';
 import { RequestContext } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
@@ -772,6 +773,100 @@ describe('Stored Agents Handlers', () => {
     });
   });
 
+  describe.each(['code', 'fs'] as const)('description-only %s overrides', source => {
+    const toolRules = { operator: 'AND' as const, conditions: [] };
+    const toolMap = {
+      weatherTool: { description: 'Edited weather description', rules: toolRules },
+      selectionOnly: {},
+      rulesOnly: { rules: toolRules },
+    };
+
+    describe.each([false, true])('when tools are conditional: %s', conditional => {
+      const tools = conditional ? [{ value: toolMap, rules: toolRules }] : toolMap;
+      const expectedTools = conditional
+        ? [{ value: { weatherTool: { description: 'Edited weather description' } } }]
+        : { weatherTool: { description: 'Edited weather description' } };
+
+      const setup = () => {
+        const storage = new InMemoryStore();
+        const agent = new Agent({
+          id: 'description-only',
+          name: 'Description Only',
+          instructions: 'Instructions owned by the project',
+          model: 'openai/gpt-4o-mini',
+          editor: { tools: { description: true } },
+        });
+        agent.source = source;
+        const mastra = new Mastra({ storage, agents: { agent } });
+        const context = {
+          mastra,
+          requestContext: new RequestContext(),
+          abortSignal: new AbortController().signal,
+        } satisfies ServerContext;
+        const payload = {
+          tools,
+          integrationTools: { external: { tools: toolMap } },
+          mcpClients: { external: { tools: toolMap } },
+          toolProviders: { external: { tools: toolMap, connections: {} } },
+        };
+        return { storage, context, payload };
+      };
+
+      it('exports only descriptions without tool selection, rules, or sources', async () => {
+        const { context, payload } = setup();
+        const result = await EXPORT_STORED_AGENT_ROUTE.handler({
+          ...context,
+          storedAgentId: 'description-only',
+          ...payload,
+        });
+        expect(result.config).toEqual({ tools: expectedTools });
+      });
+
+      it('persists only descriptions when creating an override', async () => {
+        const { storage, context, payload } = setup();
+        await CREATE_STORED_AGENT_ROUTE.handler({
+          ...context,
+          id: 'description-only',
+          name: 'Description Only',
+          instructions: [],
+          model: { provider: 'openai', name: 'gpt-4o-mini' },
+          autoPublish: false,
+          ...payload,
+        });
+        const store = await storage.getStore('agents');
+        const saved = await store.getByIdResolved('description-only', { status: 'draft' });
+        expect(saved?.tools).toEqual(expectedTools);
+        expect(saved?.integrationTools).toBeUndefined();
+        expect(saved?.mcpClients).toBeUndefined();
+        expect(saved?.toolProviders).toBeUndefined();
+      });
+
+      it('persists only descriptions when updating an override', async () => {
+        const { storage, context, payload } = setup();
+        const store = await storage.getStore('agents');
+        await store.create({
+          agent: {
+            id: 'description-only',
+            name: 'Description Only',
+            instructions: 'Project instructions',
+            model: { provider: 'openai', name: 'gpt-4o-mini' },
+          },
+        });
+        await useRealAutoVersioningOnce();
+        await UPDATE_STORED_AGENT_ROUTE.handler({
+          ...context,
+          storedAgentId: 'description-only',
+          ...payload,
+        });
+        const saved = await store.getByIdResolved('description-only', { status: 'draft' });
+        expect(saved?.tools).toEqual(expectedTools);
+        expect(saved?.integrationTools).toBeUndefined();
+        expect(saved?.mcpClients).toBeUndefined();
+        expect(saved?.toolProviders).toBeUndefined();
+      });
+    });
+  });
+
   describe('EXPORT_STORED_AGENT_ROUTE', () => {
     it('should export deterministic JSON for a code agent override', async () => {
       mockMastra = createMockMastra({
@@ -800,13 +895,11 @@ describe('Stored Agents Handlers', () => {
         agentId: 'code-agent',
         fileName: 'agents/code-agent.json',
         config: {
-          integrationTools: { composio: { type: 'composio' } },
           instructions: 'Stored instructions',
-          mcpClients: { local: { type: 'mcp' } },
           tools: { weatherTool: { description: 'Check weather' } },
         },
         content:
-          '{\n  "instructions": "Stored instructions",\n  "integrationTools": {\n    "composio": {\n      "type": "composio"\n    }\n  },\n  "mcpClients": {\n    "local": {\n      "type": "mcp"\n    }\n  },\n  "tools": {\n    "weatherTool": {\n      "description": "Check weather"\n    }\n  }\n}\n',
+          '{\n  "instructions": "Stored instructions",\n  "tools": {\n    "weatherTool": {\n      "description": "Check weather"\n    }\n  }\n}\n',
       });
     });
 

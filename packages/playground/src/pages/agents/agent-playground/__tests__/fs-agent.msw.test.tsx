@@ -9,7 +9,24 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import AgentPlayground from '..';
-import { AGENT_ID, makeFsAgent, noVersions } from './fixtures/fs-agent';
+import {
+  AGENT_ID,
+  makeFsAgent,
+  noVersions,
+  memoryStatus,
+  memoryConfig,
+  makeSystemPackages,
+  builderSettings,
+  availableModels,
+  agentProviders,
+  voiceSpeakers,
+  browserSession,
+  authCapabilities,
+  threadSubscription,
+  availableTools,
+  datasets,
+  channelPlatforms,
+} from './fixtures/fs-agent';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -45,22 +62,19 @@ const registerHandlers = ({
   server.use(
     http.get(`${BASE_URL}/api/agents/${AGENT_ID}`, () => HttpResponse.json(makeFsAgent(editor))),
     http.get(`${BASE_URL}/api/stored/agents/${AGENT_ID}/versions`, () => HttpResponse.json(noVersions)),
-    http.get(`${BASE_URL}/api/memory/status`, () => HttpResponse.json({ result: false })),
-    http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json({ config: {} })),
-    http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json({ packages: [], editorSource })),
-    http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json({ enabled: false })),
-    http.get(`${BASE_URL}/api/editor/builder/models/available`, () => HttpResponse.json({ providers: [] })),
-    http.get(`${BASE_URL}/api/agents/providers`, () => HttpResponse.json({ providers: [] })),
-    http.get(`${BASE_URL}/api/agents/${AGENT_ID}/voice/speakers`, () => HttpResponse.json([])),
-    http.get(`${BASE_URL}/api/agents/${AGENT_ID}/browser/session`, () =>
-      HttpResponse.json({ hasSession: false, screencastAvailable: false }),
-    ),
-    http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json({ enabled: false, login: null })),
-    http.post(`${BASE_URL}/api/agents/${AGENT_ID}/threads/subscribe`, () => HttpResponse.json({ ok: true })),
-    http.get(`${BASE_URL}/api/tools`, () => HttpResponse.json({ tools: {} })),
-    http.get(`${BASE_URL}/api/datasets`, () => HttpResponse.json({ datasets: [], total: 0, page: 1, perPage: 50 })),
-    http.get(`${BASE_URL}/api/mcp/servers`, () => HttpResponse.json({ servers: {} })),
-    http.get(`${BASE_URL}/api/channels/platforms`, () => HttpResponse.json([])),
+    http.get(`${BASE_URL}/api/memory/status`, () => HttpResponse.json(memoryStatus)),
+    http.get(`${BASE_URL}/api/memory/config`, () => HttpResponse.json(memoryConfig)),
+    http.get(`${BASE_URL}/api/system/packages`, () => HttpResponse.json(makeSystemPackages(editorSource))),
+    http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json(builderSettings)),
+    http.get(`${BASE_URL}/api/editor/builder/models/available`, () => HttpResponse.json(availableModels)),
+    http.get(`${BASE_URL}/api/agents/providers`, () => HttpResponse.json(agentProviders)),
+    http.get(`${BASE_URL}/api/agents/${AGENT_ID}/voice/speakers`, () => HttpResponse.json(voiceSpeakers)),
+    http.get(`${BASE_URL}/api/agents/${AGENT_ID}/browser/session`, () => HttpResponse.json(browserSession)),
+    http.get(`${BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(authCapabilities)),
+    http.post(`${BASE_URL}/api/agents/${AGENT_ID}/threads/subscribe`, () => HttpResponse.json(threadSubscription)),
+    http.get(`${BASE_URL}/api/tools`, () => HttpResponse.json(availableTools)),
+    http.get(`${BASE_URL}/api/datasets`, () => HttpResponse.json(datasets)),
+    http.get(`${BASE_URL}/api/channels/platforms`, () => HttpResponse.json(channelPlatforms)),
   );
 };
 

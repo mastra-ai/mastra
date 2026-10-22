@@ -21,6 +21,7 @@ import {
   previewInstructionsBodySchema,
   previewInstructionsResponseSchema,
 } from '../schemas/stored-agents';
+import type { toolsConfigSchema } from '../schemas/stored-agents';
 import type { ServerRoute, RouteSchemas, InferParams } from '../server-adapter/routes';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import { assertStoredResourceScope, getStoredResourceScope, scopeStoredResourceMetadata, toSlug } from '../utils';
@@ -137,6 +138,24 @@ function getCodeAgentOwnership(editorConfig: unknown): {
   return { ownsInstructions, ownsTools, ownsToolDescriptionsOnly };
 }
 
+type StoredTools = z.infer<typeof updateStoredAgentBodySchema>['tools'];
+
+/** Keep description overrides from changing tool availability or conditional rules. */
+function toolDescriptionsOnly(tools: StoredTools): StoredTools {
+  const descriptions = (value: z.infer<typeof toolsConfigSchema>) =>
+    Object.fromEntries(
+      Object.entries(value)
+        .filter(([, config]) => config.description !== undefined)
+        .map(([id, config]) => [id, { description: config.description }]),
+    );
+
+  if (tools === undefined) return undefined;
+  if (Array.isArray(tools)) {
+    return tools.map(variant => ({ value: descriptions(variant.value) }));
+  }
+  return descriptions(tools);
+}
+
 function hasNonEmptyInstructions(value: unknown): boolean {
   if (typeof value === 'string') {
     return value.trim().length > 0;
@@ -200,12 +219,15 @@ function buildExportConfig(
       if (
         (field === 'tools' || field === 'integrationTools' || field === 'mcpClients') &&
         !ownership.ownsTools &&
-        !ownership.ownsToolDescriptionsOnly
+        (field !== 'tools' || !ownership.ownsToolDescriptionsOnly)
       ) {
         continue;
       }
     }
-    config[field] = input[field];
+    config[field] =
+      field === 'tools' && ownership?.ownsToolDescriptionsOnly && !ownership.ownsTools
+        ? toolDescriptionsOnly(updateStoredAgentBodySchema.shape.tools.parse(input[field]))
+        : input[field];
   }
 
   return sortForStableJson(config) as Record<string, unknown>;
@@ -637,6 +659,7 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
       let createTools = tools;
       let createIntegrationTools = integrationTools;
       let createMcpClients = mcpClients;
+      let createToolProviders = toolProviders;
       let codeAgentForCreate: { __getEditorConfig?: () => unknown; source?: string } | undefined;
       try {
         codeAgentForCreate = mastra.getAgentById?.(id) as typeof codeAgentForCreate;
@@ -650,10 +673,11 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
         } else {
           createInstructions = undefined;
         }
-        if (!ownership.ownsTools && !ownership.ownsToolDescriptionsOnly) {
-          createTools = undefined;
+        if (!ownership.ownsTools) {
+          createTools = ownership.ownsToolDescriptionsOnly ? toolDescriptionsOnly(createTools) : undefined;
           createIntegrationTools = undefined;
           createMcpClients = undefined;
+          createToolProviders = undefined;
         }
       }
 
@@ -677,7 +701,7 @@ export const CREATE_STORED_AGENT_ROUTE: ServerRoute<
         workflows,
         agents,
         integrationTools: createIntegrationTools,
-        toolProviders,
+        toolProviders: createToolProviders,
         mcpClients: createMcpClients,
         inputProcessors,
         outputProcessors,
@@ -865,10 +889,11 @@ export const UPDATE_STORED_AGENT_ROUTE: ServerRoute<
           instructions = undefined;
           shouldValidateStoredInstructions = false;
         }
-        if (!ownership.ownsTools && !ownership.ownsToolDescriptionsOnly) {
-          tools = undefined;
+        if (!ownership.ownsTools) {
+          tools = ownership.ownsToolDescriptionsOnly ? toolDescriptionsOnly(tools) : undefined;
           integrationTools = undefined;
           mcpClients = undefined;
+          toolProviders = undefined;
         }
       }
 
