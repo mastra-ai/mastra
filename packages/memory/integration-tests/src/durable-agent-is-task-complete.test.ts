@@ -87,7 +87,10 @@ describe.each(Object.entries(PROVIDERS))('T3 is-task-complete — %s', (provider
         name: 't3',
         model,
         memory: cell.memory,
-        instructions: 'Answer briefly.',
+        // The variant tag keeps each cell's first request distinct. Recordings that share a
+        // request hash replay in record order, so a shared hash would hand `failonce` the
+        // response recorded for `pass` whenever a single variant is replayed with `-t`.
+        instructions: `Answer briefly. Variant: ${variant}.`,
         defaultOptions: {
           isTaskComplete: {
             scorers: [scorer(scores)],

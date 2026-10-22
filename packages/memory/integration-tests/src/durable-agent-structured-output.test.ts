@@ -84,7 +84,10 @@ describe.each(Object.entries(PROVIDERS))('T15 structured output — %s', (provid
         name: 't15',
         model,
         memory: cell.memory,
-        instructions: 'Answer briefly. Always respect the requested structure.',
+        // The variant tag keeps each cell's first request distinct. Recordings that share a
+        // request hash replay in record order, so a shared hash would hand `failonce` the
+        // response recorded for `pass` whenever a single variant is replayed with `-t`.
+        instructions: `Answer briefly. Always respect the requested structure. Variant: ${variant}.`,
         ...(withFailingScorer
           ? { defaultOptions: { isTaskComplete: { scorers: [createScorerThatFailsOnce(scores)] } } }
           : {}),
