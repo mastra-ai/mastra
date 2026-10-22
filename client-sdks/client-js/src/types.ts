@@ -2115,7 +2115,7 @@ export type TriggerDatasetExperimentParams = PathParams<'POST /datasets/:dataset
   WithoutIndexSignatures<GeneratedRequest<Body<'POST /datasets/:datasetId/experiments'>>>;
 
 export type CreateDatasetExperimentParams = PathParams<'POST /datasets/:datasetId/experiments'> &
-  WithoutIndexSignatures<GeneratedRequest<Body<'POST /datasets/:datasetId/experiments'>>>;
+  Omit<WithoutIndexSignatures<GeneratedRequest<Body<'POST /datasets/:datasetId/experiments'>>>, 'agentModel'>;
 
 export type CreateDatasetExperimentResponse = GeneratedResponse<'POST /datasets/:datasetId/experiments'>;
 

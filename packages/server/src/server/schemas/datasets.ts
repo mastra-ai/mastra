@@ -417,63 +417,89 @@ export const updateExperimentBodySchema = z
   })
   .strict();
 
-export const triggerExperimentBodySchema = z.object({
-  start: z
-    .boolean()
-    .optional()
-    .describe(
-      'When true (default), spawns the in-process runner. When false, creates the experiment without running it: the caller drives the loop via run-item (targeted) or result submission (target-less).',
-    ),
-  targetType: z
-    .enum(['agent', 'workflow', 'scorer'])
-    .optional()
-    .describe('Type of target to run against. Required when start is true. Optional for create-only experiments.'),
-  targetId: z.string().optional().describe('ID of the target. Required when targetType is set.'),
-  id: z
-    .string()
-    .optional()
-    .describe(
-      'Caller-supplied experiment id (e.g. a workflow run id) for idempotent create-only requests. Ignored when start is true.',
-    ),
-  name: z.string().optional().describe('Name of the experiment'),
-  description: z.string().optional().describe('Description of the experiment'),
-  metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
-  scorerIds: z.array(z.string()).optional().describe('IDs of scorers to apply'),
-  version: z.coerce.number().int().optional().describe('Pin to specific dataset version'),
-  agentVersion: z.string().optional().describe('Agent version ID to use for experiment'),
-  maxConcurrency: z.number().optional().describe('Maximum concurrent executions'),
-  provenance: z
-    .object({
-      source: z.string().optional(),
-      sourceId: z.string().optional(),
-      sourceVersion: z.string().optional(),
-      metadata: z.record(z.string(), z.unknown()).optional(),
-    })
-    .optional()
-    .describe('Caller-provided provenance claims for the experiment execution'),
-  grouping: z
-    .object({
-      experimentSetId: z.string().optional(),
-      comparisonId: z.string().optional(),
-      variantId: z.string().optional(),
-      trialIndex: z.number().int().min(0).optional(),
-    })
-    .optional()
-    .describe('Stable grouping dimensions for comparisons and repeated trials'),
-  requestContext: z.record(z.string(), z.unknown()).optional().describe('Global request context passed to the target'),
-  versions: z
-    .object({
-      agents: z
-        .record(
-          z.string(),
-          z.union([z.object({ versionId: z.string() }), z.object({ status: z.enum(['draft', 'published']) })]),
-        )
-        .optional(),
-      defaultStatus: z.enum(['draft', 'published']).optional(),
-    })
-    .optional()
-    .describe('Version overrides for sub-agent delegation during experiment execution'),
-});
+export const triggerExperimentBodySchema = z
+  .object({
+    start: z
+      .boolean()
+      .optional()
+      .describe(
+        'When true (default), spawns the in-process runner. When false, creates the experiment without running it: the caller drives the loop via run-item (targeted) or result submission (target-less).',
+      ),
+    targetType: z
+      .enum(['agent', 'workflow', 'scorer'])
+      .optional()
+      .describe('Type of target to run against. Required when start is true. Optional for create-only experiments.'),
+    targetId: z.string().optional().describe('ID of the target. Required when targetType is set.'),
+    id: z
+      .string()
+      .optional()
+      .describe(
+        'Caller-supplied experiment id (e.g. a workflow run id) for idempotent create-only requests. Ignored when start is true.',
+      ),
+    name: z.string().optional().describe('Name of the experiment'),
+    description: z.string().optional().describe('Description of the experiment'),
+    metadata: z.record(z.string(), z.unknown()).optional().describe('Additional metadata'),
+    scorerIds: z.array(z.string()).optional().describe('IDs of scorers to apply'),
+    version: z.coerce.number().int().optional().describe('Pin to specific dataset version'),
+    agentVersion: z.string().optional().describe('Agent version ID to use for experiment'),
+    agentModel: z
+      .object({
+        provider: z.string().min(1).describe('Model provider, e.g. "openai"'),
+        modelId: z.string().min(1).describe('Model ID, e.g. "gpt-4.1"'),
+      })
+      .optional()
+      .describe(
+        "Run the agent target on this model instead of its configured one. The registered agent's model is not changed. Agent targets only; requires start to be true.",
+      ),
+    maxConcurrency: z.number().optional().describe('Maximum concurrent executions'),
+    provenance: z
+      .object({
+        source: z.string().optional(),
+        sourceId: z.string().optional(),
+        sourceVersion: z.string().optional(),
+        metadata: z.record(z.string(), z.unknown()).optional(),
+      })
+      .optional()
+      .describe('Caller-provided provenance claims for the experiment execution'),
+    grouping: z
+      .object({
+        experimentSetId: z.string().optional(),
+        comparisonId: z.string().optional(),
+        variantId: z.string().optional(),
+        trialIndex: z.number().int().min(0).optional(),
+      })
+      .optional()
+      .describe('Stable grouping dimensions for comparisons and repeated trials'),
+    requestContext: z
+      .record(z.string(), z.unknown())
+      .optional()
+      .describe('Global request context passed to the target'),
+    versions: z
+      .object({
+        agents: z
+          .record(
+            z.string(),
+            z.union([z.object({ versionId: z.string() }), z.object({ status: z.enum(['draft', 'published']) })]),
+          )
+          .optional(),
+        defaultStatus: z.enum(['draft', 'published']).optional(),
+      })
+      .optional()
+      .describe('Version overrides for sub-agent delegation during experiment execution'),
+  })
+  .superRefine((body, ctx) => {
+    if (!body.agentModel) return;
+    if (body.start === false) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['agentModel'],
+        message: 'agentModel requires start: true; create-only experiments do not keep a model override',
+      });
+    }
+    if (body.targetType !== 'agent') {
+      ctx.addIssue({ code: 'custom', path: ['agentModel'], message: 'agentModel is only supported for agent targets' });
+    }
+  });
 
 export const runExperimentItemBodySchema = z.object({
   attempt: z.number().int().min(0).optional().describe('Zero-based repetition index. Defaults to 0.'),
