@@ -34,7 +34,7 @@ const MENU_ITEM_OVERRIDES = cn(
   '[&>span]:truncate',
   // Button pulls iconed labels toward its pill edge. A menu uses the same inset
   // with or without an icon, so labels and submenu values follow a stable grid.
-  'has-[>svg]:pl-2 has-[>svg]:pr-2',
+  'has-[>svg]:px-2',
 );
 
 export const menuItemClass = cn(buttonVariants({ variant: 'ghost', size: 'md' }), MENU_ITEM_OVERRIDES);
@@ -42,7 +42,7 @@ export const menuItemClass = cn(buttonVariants({ variant: 'ghost', size: 'md' })
 export const menuItemDestructiveClass = cn(
   buttonVariants({ variant: 'destructive-ghost', size: 'md' }),
   MENU_ITEM_OVERRIDES,
-  'text-destructive-foreground [&>svg]:text-destructive-foreground not-disabled:hover:text-destructive-foreground',
+  'text-destructive-foreground not-disabled:hover:text-destructive-foreground [&>svg]:text-destructive-foreground',
   'data-highlighted:text-destructive-foreground data-selected:text-destructive-foreground data-[popup-open]:text-destructive-foreground',
 );
 
