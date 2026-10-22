@@ -80,7 +80,7 @@ export function SettingsPanel() {
         <MemorySettings
           factoryId={factoryId}
           sessionId={sessionId}
-          threadId={sessionThreadId}
+          threadId={sessionId ? (sessionThreadId ?? sessionId) : undefined}
           resourceId={resourceId}
         />
       )}
