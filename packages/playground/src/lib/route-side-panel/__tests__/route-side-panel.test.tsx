@@ -1,8 +1,8 @@
 import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useImperativeHandle } from 'react';
-import { describe, expect, it, vi } from 'vitest';
-import { RouteSidePanel, RouteSidePanelProvider, RouteSidePanelSlot } from '../route-side-panel';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { RouteSidePanel, RouteSidePanelDrawer, RouteSidePanelProvider, RouteSidePanelSlot } from '../route-side-panel';
 import { useRouteSidePanel } from '../use-route-side-panel';
 
 function PanelProbe() {
@@ -123,5 +123,52 @@ describe('RouteSidePanel', () => {
     expect(screen.getByTestId('has-panel').textContent).toBe('false');
     expect(screen.getByTestId('is-collapsed').textContent).toBe('true');
     fireEvent.click(screen.getByText('toggle'));
+  });
+});
+
+describe('RouteSidePanelDrawer', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  describe('when the screen is narrow', () => {
+    function ConfigToggle() {
+      const { isOpen, toggle } = useRouteSidePanel();
+      return (
+        <button type="button" aria-pressed={isOpen} onClick={toggle}>
+          Config
+        </button>
+      );
+    }
+
+    it('reports the drawer closed again after the real drawer is dismissed', async () => {
+      vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
+        matches: true,
+        media: query,
+        onchange: null,
+        addListener: vi.fn(),
+        removeListener: vi.fn(),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn(),
+        dispatchEvent: () => false,
+      }));
+      render(
+        <RouteSidePanelProvider>
+          <ConfigToggle />
+          <RouteSidePanelDrawer label="Open details panel" />
+          <RouteSidePanel owner="agent-detail">Agent panel</RouteSidePanel>
+        </RouteSidePanelProvider>,
+      );
+      const toggle = screen.getByRole('button', { name: 'Config' });
+
+      fireEvent.click(toggle);
+      const dialog = await screen.findByRole('dialog');
+      await waitFor(() => expect(dialog.textContent).toContain('Agent panel'));
+      expect(toggle.getAttribute('aria-pressed')).toBe('true');
+
+      fireEvent.keyDown(dialog, { key: 'Escape' });
+
+      await waitFor(() => expect(toggle.getAttribute('aria-pressed')).toBe('false'));
+    });
   });
 });
