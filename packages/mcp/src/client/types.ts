@@ -1,6 +1,8 @@
 import type { IOType } from 'node:child_process';
 import type { RequestContext } from '@mastra/core/di';
+import type { Tool } from '@mastra/core/tools';
 import type {
+  CallToolResult,
   StreamableHTTPClientTransportOptions,
   ClientCapabilities,
   ElicitRequestParams,
@@ -11,6 +13,56 @@ import type {
   jsonSchemaValidator,
 } from '@modelcontextprotocol/client';
 import type { MCPTraceContext } from '../shared/trace-context';
+import type { EventsWebhookSetup } from './events/types';
+
+/** Published tool input and structured-output snapshot for each configured server. */
+export type MCPServerMap = Record<string, { tools: Record<string, { input: unknown; output: unknown }> }>;
+
+/**
+ * Constraint for a supplied server snapshot. Mapping over the given keys lets concrete
+ * generated interfaces satisfy it without declaring an index signature.
+ */
+export type MCPClientServers<TServers> = { [Server in keyof TServers]: MCPServerMap[string] };
+
+type MCPClientTool<Input, Output> = Omit<Tool<Input, Output | CallToolResult, any, any>, 'execute'> & {
+  execute?: (
+    input: Input,
+    context?: Parameters<NonNullable<Tool<Input, Output | CallToolResult, any, any>['execute']>>[1],
+  ) => ReturnType<NonNullable<Tool<Input, Output | CallToolResult, any, any>['execute']>>;
+};
+
+/** Flat discovery remains partial because servers and tools may be unavailable. */
+export type MCPClientTools<TServers extends MCPClientServers<TServers>> =
+  string extends keyof TServers
+    ? Record<string, Tool<any, any, any, any>>
+    : Partial<{
+        [
+          Entry in {
+            [Server in keyof TServers & string]: {
+              [Name in keyof TServers[Server]['tools'] & string]: {
+                key: `${Server}_${Name}`;
+                tool: MCPClientTool<
+                  TServers[Server]['tools'][Name]['input'],
+                  TServers[Server]['tools'][Name]['output']
+                >;
+              };
+            }[keyof TServers[Server]['tools'] & string];
+          }[keyof TServers & string] as Entry['key']
+        ]: Entry['tool'];
+      }>;
+
+/** Grouped discovery preserves raw tool names and potentially absent servers. */
+export type MCPClientToolsets<TServers extends MCPClientServers<TServers>> =
+  string extends keyof TServers
+    ? Record<string, Record<string, Tool<any, any, any, any>>>
+    : Partial<{
+        [Server in keyof TServers]: Partial<{
+          [Name in keyof TServers[Server]['tools'] & string]: MCPClientTool<
+            TServers[Server]['tools'][Name]['input'],
+            TServers[Server]['tools'][Name]['output']
+          >;
+        }>;
+      }>;
 
 // FetchLike is used internally when wrapping MastraFetchLike for transport compatibility
 export type { FetchLike } from '@modelcontextprotocol/client';
@@ -293,9 +345,11 @@ export type BaseServerOptions = {
    * - `'throw'` (default): surface the failure on Mastra's failed-tool-call path
    *   by throwing a `MastraError` that carries the server's `content` text. Tool
    *   spans, stream chunks, scorers, and persisted message parts then reflect the
-   *   failure, and the model sees the error text so it can self-correct.
-   * - `'return'`: resolve successfully with the raw result (or `structuredContent`),
-   *   ignoring `isError`.
+   *   failure, and the model sees the error text so it can self-correct. Any
+   *   `structuredContent` is kept on `error.details.structuredContent` as a JSON string.
+   * - `'return'`: resolve successfully with the full `CallToolResult` envelope
+   *   (`isError`, `content`, and `structuredContent`), so callers can still tell the
+   *   call failed.
    *
    * @default 'throw'
    */
@@ -519,6 +573,8 @@ export type InternalMastraMCPClientOptions = {
   clientInfo?: MCPClientInfo;
   /** Optional timeout in milliseconds */
   timeout?: number;
+  /** Webhook settings and receiver shared by the owning `MCPClient`'s servers. */
+  webhook?: EventsWebhookSetup;
 };
 
 /**

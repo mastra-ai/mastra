@@ -5,8 +5,8 @@ import { useLocation, useNavigate } from 'react-router';
 
 import { useSendAgentControllerMessageMutation } from '../../../../hooks/useAgentControllerRunMutations';
 import { useSwitchAgentControllerModelMutation } from '../../../../hooks/useAgentControllerStateMutations';
-import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatCommands } from '../context/ChatCommandsProvider';
+import { useChatSessionContext } from '../context/useChatSessionContext';
 import { useChatTranscript } from '../context/useChatTranscript';
 import { useComposerImagesState } from '../context/useComposerImagesState';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
@@ -46,27 +46,27 @@ function readHandoffPrompt(state: unknown): string | undefined {
   return typeof value === 'string' ? value : undefined;
 }
 
-const pendingHandoffKey = (resourceId: string) => `factory-pending-handoff:${resourceId}`;
+const pendingHandoffKey = (sessionId: string) => `factory-pending-handoff:${sessionId}`;
 
-function storePendingHandoff(resourceId: string, prompt: string): void {
+function storePendingHandoff(sessionId: string, prompt: string): void {
   try {
-    sessionStorage.setItem(pendingHandoffKey(resourceId), prompt);
+    sessionStorage.setItem(pendingHandoffKey(sessionId), prompt);
   } catch {
     // Browser storage can be unavailable; the current tab can still send.
   }
 }
 
-function readPendingHandoff(resourceId: string): string | null {
+function readPendingHandoff(sessionId: string): string | null {
   try {
-    return sessionStorage.getItem(pendingHandoffKey(resourceId));
+    return sessionStorage.getItem(pendingHandoffKey(sessionId));
   } catch {
     return null;
   }
 }
 
-export function clearPendingHandoff(resourceId: string): void {
+export function clearPendingHandoff(sessionId: string): void {
   try {
-    sessionStorage.removeItem(pendingHandoffKey(resourceId));
+    sessionStorage.removeItem(pendingHandoffKey(sessionId));
   } catch {
     // Storage can be unavailable; the message is already sent.
   }
@@ -75,14 +75,13 @@ export function clearPendingHandoff(resourceId: string): void {
 export function useHandoffPrompt(): void {
   const location = useLocation();
   const navigate = useNavigate();
-  const { resourceId, projectPath, baseUrl, sessionEnabled } = useChatSessionContext();
+  const { sessionId, baseUrl, sessionEnabled } = useChatSessionContext();
   const { localUser, clearPending, pushNotice } = useChatTranscript();
   const { prefillComposer } = useChatCommands();
   const { setImages } = useComposerImagesState();
   const mutationArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: projectPath,
+    sessionId,
     baseUrl,
     enabled: sessionEnabled,
   };
@@ -101,7 +100,7 @@ export function useHandoffPrompt(): void {
     if (prompt === undefined) {
       if (recovered.current) return;
       recovered.current = true;
-      const interruptedPrompt = readPendingHandoff(resourceId);
+      const interruptedPrompt = readPendingHandoff(sessionId);
       if (interruptedPrompt) {
         prefillComposer(interruptedPrompt);
         pushNotice('The previous message may not have been sent. Check the transcript before retrying.', 'error');
@@ -109,10 +108,10 @@ export function useHandoffPrompt(): void {
       return;
     }
     handedOff.current = true;
-    const files = takeHandoffFiles(resourceId);
+    const files = takeHandoffFiles(sessionId);
     // Keep a recoverable draft before dropping history state. Never auto-resend
     // after an interruption: the server may already have accepted the message.
-    storePendingHandoff(resourceId, prompt);
+    storePendingHandoff(sessionId, prompt);
     void navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null });
     if (!prompt && files.length === 0) return;
     const outgoing = files.map(f => ({ data: f.data, mediaType: f.mediaType, filename: f.filename }));
@@ -124,12 +123,21 @@ export function useHandoffPrompt(): void {
         );
       }
       await sendMessage(outgoing.length ? { text: prompt, files: outgoing } : prompt);
-      clearPendingHandoff(resourceId);
+      clearPendingHandoff(sessionId);
     })().catch(error => {
       prefillComposer(prompt);
       setImages(current => [...files, ...current]);
       clearPending();
-      pushNotice(error instanceof Error ? error.message : 'The message could not be sent.', 'error');
+      const reason = error instanceof Error ? error.message : 'The message could not be sent.';
+      // A 4xx means the server refused the message. Anything else (network
+      // failure, 5xx) can come after the server accepted it, so warn before a
+      // retry posts it twice.
+      pushNotice(
+        isRejectedRequest(error)
+          ? reason
+          : `${reason} The message may have been sent. Check the transcript before retrying.`,
+        'error',
+      );
     });
   }, [
     clearPending,
@@ -141,11 +149,16 @@ export function useHandoffPrompt(): void {
     prefillComposer,
     prompt,
     pushNotice,
-    resourceId,
+    sessionId,
     sendMessage,
     sessionEnabled,
     setImages,
     switchModel,
     thinkingLevel,
   ]);
+}
+
+function isRejectedRequest(error: unknown): boolean {
+  const status = typeof error === 'object' && error !== null ? (error as { status?: unknown }).status : undefined;
+  return typeof status === 'number' && status >= 400 && status < 500;
 }

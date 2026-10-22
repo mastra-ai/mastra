@@ -97,10 +97,10 @@ describe('Sessions sidebar owner filter', () => {
 
     const work = await screen.findByRole('region', { name: 'Work sessions' });
     const userGroup = await screen.findByRole('region', { name: 'User sessions' });
-    expect(await within(work).findByRole('button', { name: 'factory/issue-20001' })).toBeInTheDocument();
-    expect(within(userGroup).getByRole('button', { name: 'task-20002' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'factory/issue-20003' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'task-20005' })).not.toBeInTheDocument();
+    expect(await within(work).findByRole('link', { name: 'factory/issue-20001' })).toBeInTheDocument();
+    expect(within(userGroup).getByRole('link', { name: 'task-20002' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'factory/issue-20003' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'task-20005' })).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Review sessions' })).not.toBeInTheDocument();
     expect(sessionPropertiesTrigger()).toBeInTheDocument();
   });
@@ -121,16 +121,16 @@ describe('Sessions sidebar owner filter', () => {
 
     const rendered = renderSection();
     await waitForMutationsIdle(rendered.client);
-    await screen.findByRole('button', { name: 'factory/issue-20001' });
+    await screen.findByRole('link', { name: 'factory/issue-20001' });
 
     await pickSessionProperty(user, 'Owner', 'All owners');
 
     const work = await screen.findByRole('region', { name: 'Work sessions' });
     const review = await screen.findByRole('region', { name: 'Review sessions' });
     const userGroup = screen.getByRole('region', { name: 'User sessions' });
-    expect(within(work).getByRole('button', { name: 'factory/issue-20003' })).toBeInTheDocument();
-    expect(within(review).getByRole('button', { name: 'factory/pr-20004' })).toBeInTheDocument();
-    expect(within(userGroup).getByRole('button', { name: 'task-20005' })).toBeInTheDocument();
+    expect(within(work).getByRole('link', { name: 'factory/issue-20003' })).toBeInTheDocument();
+    expect(within(review).getByRole('link', { name: 'factory/pr-20004' })).toBeInTheDocument();
+    expect(within(userGroup).getByRole('link', { name: 'task-20005' })).toBeInTheDocument();
     expect(sessionPropertiesTrigger(1)).toBeInTheDocument();
   });
 
@@ -143,7 +143,7 @@ describe('Sessions sidebar owner filter', () => {
 
     await pickSessionProperty(user, 'Owner', 'All owners');
 
-    expect(await screen.findByRole('button', { name: 'factory/pr-20004' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'factory/pr-20004' })).toBeInTheDocument();
     expect(sessionPropertiesTrigger(1)).toBeInTheDocument();
   });
 });

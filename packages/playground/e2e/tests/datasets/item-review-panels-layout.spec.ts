@@ -131,6 +131,8 @@ test.describe('Item and review panel layout', () => {
       await page.goto('/datasets/ds-1/items/item-a');
       const panel = datasetItem(page, 'item-a');
       await expect(panel.getByRole('button', { name: 'Close Panel', exact: true })).toBeVisible();
+      // Payloads are clipped until expanded, so open one to overflow the card.
+      await panel.getByRole('region', { name: 'Input' }).getByRole('button', { name: 'Expand' }).click();
       const contentScrollTop = await scrollCardContent(page, panel, true);
       await expect.poll(contentScrollTop).toBeGreaterThan(0);
       expect(await panel.evaluate(element => element.scrollTop)).toBe(0);
@@ -185,10 +187,10 @@ test.describe('Item and review panel layout', () => {
       const trace = page.getByRole('dialog', { name: /^Trace / });
       await expect(trace).toBeVisible();
       await trace.getByText('Experiment tool call', { exact: true }).click();
-      await expect(trace.getByRole('heading', { name: /span-child/ })).toBeVisible();
+      await expect(trace.getByRole('heading', { name: /child1/ })).toBeVisible();
       // The span column has no close button: clicking the selected span again toggles it off.
       await trace.getByText('Experiment tool call', { exact: true }).click();
-      await expect(trace.getByRole('heading', { name: /span-child/ })).toBeHidden();
+      await expect(trace.getByRole('heading', { name: /child1/ })).toBeHidden();
       await trace.getByRole('button', { name: 'Close trace', exact: true }).click();
       await expect(trace).toBeHidden();
       await expect(panel.getByText('first question', { exact: false })).toBeVisible();

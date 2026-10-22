@@ -1,4 +1,5 @@
 import { ReadableStream } from 'node:stream/web';
+import { expandDurableSteps } from '@internal/core/durable';
 import { MastraError } from '../../error';
 import { withAck } from '../../events/acking-callback';
 import type { PubSub } from '../../events/pubsub';
@@ -21,6 +22,7 @@ import type {
   LanguageModelUsage,
   StepStartPayload,
   ToolCallChunk,
+  ToolResultChunk,
 } from '../../stream/types';
 import type { AgentExecutionOptionsBase } from '../agent.types';
 import { MessageList } from '../message-list';
@@ -32,6 +34,7 @@ import type {
   AgentChunkEventData,
   AgentStepFinishEventData,
   DurableAgentStepFinishResult,
+  DurableToolCallOutput,
   AgentFinishEventData,
   AgentErrorEventData,
   AgentSuspendedEventData,
@@ -104,6 +107,7 @@ async function withBufferedStepResponses(
 ): Promise<unknown[]> {
   const buffered = ((await output.steps.catch(() => undefined)) ?? []) as Record<string, unknown>[];
   if (!runSteps?.length) return buffered;
+  runSteps = expandDurableSteps(runSteps);
   // An aborted run ends with a step that never finished, so it was never buffered.
   const trailingAborted =
     (runSteps.at(-1) as { finishReason?: string } | undefined)?.finishReason === 'abort' &&
@@ -280,6 +284,8 @@ export interface DurableAgentStreamResult<OUTPUT = undefined> {
   fail: (error: Error) => Promise<void>;
   /** Wait for pubsub events already delivered to this adapter to finish processing. */
   waitForEventDelivery: () => Promise<void>;
+  /** Accepted deliveries, including hidden ownership markers, for observation reconciliation. */
+  readonly activityVersion: number;
   /** Promise that resolves when subscription is established */
   ready: Promise<void>;
 }
@@ -502,6 +508,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     }
   };
   let onChunkDelivery = Promise.resolve();
+  let activityVersion = 0;
 
   const handleEvent = async (event: Event) => {
     // After a terminal event the stream is closed and its callbacks have fired.
@@ -520,6 +527,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
       if (!controller || terminated) return;
     }
     if (!keep) return;
+    activityVersion++;
 
     // Any event proves the producer is alive — restart the idle countdown.
     armIdleTimer();
@@ -584,6 +592,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             payload: {
               output: data.output,
               stepResult: data.stepResult,
+              ...(data.messages ? { messages: data.messages } : {}),
             },
           } as ChunkType<OUTPUT>);
           safeClose(controller);
@@ -620,7 +629,28 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             }
           } else if (onFinish) {
             try {
-              const steps = (await withBufferedStepResponses(data.output?.steps, output)) as any[];
+              const steps = ((await withBufferedStepResponses(data.output?.steps, output)) as any[]).map(step => ({
+                ...step,
+                // Persisted step records store raw results; only the public callback exposes chunks.
+                toolResults: (step?.toolResults ?? []).map(
+                  (toolResult: DurableToolCallOutput | ToolResultChunk): ToolResultChunk =>
+                    'payload' in toolResult
+                      ? toolResult
+                      : {
+                          type: 'tool-result',
+                          runId,
+                          from: ChunkFrom.AGENT,
+                          payload: {
+                            toolCallId: toolResult.toolCallId,
+                            toolName: toolResult.toolName,
+                            args: toolResult.args,
+                            result: toolResult.result,
+                            providerExecuted: toolResult.providerExecuted,
+                            providerMetadata: toolResult.providerMetadata,
+                          },
+                        },
+                ),
+              }));
               const allToolResults = steps.flatMap((s: any) => s?.toolResults ?? []);
               const allToolCalls = steps.flatMap((s: any) => s?.toolCalls ?? []);
               // The structured object is parsed while the output drains the (now closed) chunk
@@ -635,8 +665,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
                 object,
                 usedFallbackValue: output.usedFallbackValue,
                 error: output.error,
-                // Every step's streamed text, retried attempts included — matches the main loop,
-                // whose onFinish text is everything the run streamed.
+                // Aggregate accepted step text, excluding rejected attempts, like the main loop.
                 text: steps.length > 0 ? steps.map((s: any) => s?.text ?? '').join('') : (data.output?.text ?? ''),
                 steps,
                 toolResults: allToolResults,
@@ -685,6 +714,10 @@ export function createDurableAgentStream<OUTPUT = undefined>(
 
         case AgentStreamEventTypes.SUSPENDED: {
           const data = streamEvent.data as AgentSuspendedEventData;
+          // Let earlier chunk callbacks finish first, as FINISH does, so onSuspended
+          // sees every chunk that preceded the suspension.
+          await onChunkDelivery;
+          if (!controller || terminated) return;
           // By default we leave the stream open on suspend so a later resume can
           // keep streaming chunks (the watchdog stays armed; a suspended-but-live
           // run reads as attachable via isAlive). `generate()`/`resumeGenerate()`
@@ -912,6 +945,9 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     detach,
     fail,
     waitForEventDelivery,
+    get activityVersion() {
+      return activityVersion;
+    },
     ready,
   };
 }

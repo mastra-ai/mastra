@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-speechify",
-  "version": "0.14.2-alpha.0",
+  "version": "0.14.2",
   "description": "Mastra Speechify voice integration",
   "type": "module",
   "files": [
@@ -25,8 +25,8 @@
     "build": "tsdown --silent --config tsdown.config.ts",
     "prepack": "tsx ../../scripts/generate-package-docs.ts",
     "build:watch": "tsdown --watch --silent --config tsdown.config.ts",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix .",
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix .",
     "test": "vitest run"
   },
   "license": "Apache-2.0",
@@ -37,11 +37,10 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@internal/voice": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.20.5",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.7.0",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

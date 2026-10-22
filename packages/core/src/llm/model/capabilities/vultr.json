@@ -39,7 +39,50 @@
     "qwen3.8-flash-next"
   ],
   "reasoning": {
+    "glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "laguna-s-2.1": [
+      {
+        "type": "toggle"
+      }
+    ],
     "mimo-v2.6-pro-rl": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "glm-5.x-menthol": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "muse-glimmer-30b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "mimo-v2.6-flash-rl": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "minimax-m3": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nemotron-3-nano-omni-30b-a3b-reasoning": [
       {
         "type": "toggle"
       }
@@ -53,7 +96,7 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "glm-5.3-flash": [
+    "glm-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -68,10 +111,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "muse-glimmer-30b": [
+    "qwen3.8-flash-next": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
+        "values": ["low", "medium", "xhigh"]
       }
     ],
     "deepseek-v4.1-flash": [
@@ -83,52 +126,9 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "laguna-s-2.1": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "glm-5.x-menthol": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "nemotron-3-nano-omni-30b-a3b-reasoning": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "mimo-v2.6-flash-rl": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "minimax-m3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen3.8-flash-next": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      }
-    ],
-    "glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
     "nemotron-3.5-content-safety": [
       {
         "type": "toggle"
-      }
-    ],
-    "glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ]
   }

@@ -2,4 +2,4 @@
 '@mastra/code-sdk': patch
 ---
 
-The observation activation buffer is now a shared constant, so the smallest usable observational memory threshold is defined in one place.
+Fixed saved thread-scope observation thresholds at or below 2,000 tokens stopping observational memory from starting. Resource scope still uses its saved threshold because it has no activation buffer.

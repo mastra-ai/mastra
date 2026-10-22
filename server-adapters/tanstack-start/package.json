@@ -1,6 +1,6 @@
 {
   "name": "@mastra/tanstack-start",
-  "version": "0.2.37-alpha.3",
+  "version": "0.2.37",
   "description": "Mastra TanStack Start server adapter — drop your Mastra instance into a TanStack Start app",
   "type": "module",
   "main": "dist/index.js",
@@ -22,8 +22,8 @@
     "build": "tsdown --silent --config tsdown.config.ts",
     "build:watch": "pnpm build --watch",
     "test": "vitest run",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix ."
   },
   "license": "Apache-2.0",
   "dependencies": {
@@ -34,10 +34,9 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.20.1",
-    "eslint": "^10.7.0",
+    "@types/node": "22.20.5",
     "hono": "^4.13.7",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

@@ -17,6 +17,9 @@ const stringDimension = (): TraceAggregateDimensionRule => ({ valueKind: 'string
 export const TRACE_AGGREGATE_DIMENSION_REGISTRY = {
   entityType: stringDimension(),
   entityName: stringDimension(),
+  name: stringDimension(),
+  spanType: stringDimension(),
+  entityId: stringDimension(),
   environment: stringDimension(),
   status: stringDimension(),
   serviceName: stringDimension(),

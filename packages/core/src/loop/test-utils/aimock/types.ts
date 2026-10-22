@@ -1,5 +1,6 @@
 import type { JournalEntry, LLMock } from '@copilotkit/aimock';
 import type { AgentConfig, ToolsInput } from '../../../agent';
+import type { MessageListInput } from '../../../agent/message-list';
 import type { PubSub } from '../../../events/pubsub';
 import type { MastraMemory } from '../../../memory';
 import type { RequestContext } from '../../../request-context';
@@ -122,8 +123,8 @@ export interface RunLoopScenarioOptions {
    * Runs once before the loop starts.
    */
   fixtures: (llm: LLMock) => void;
-  /** The user prompt that kicks off the loop. */
-  prompt: string;
+  /** The input that kicks off the loop: a user prompt, or messages (e.g. ending on an assistant prefill). */
+  prompt: string | MessageListInput;
   /**
    * Default options for the agent (e.g. `autoResumeSuspendedTools`).
    * Applied to the Agent constructor via `defaultOptions` config.
@@ -356,6 +357,8 @@ export interface RunLoopScenarioOptions {
    * activeTools/messages per step and assert the change lands in the request.
    */
   prepareStep?: any;
+  /** Tool payload transform policy forwarded to `agent.stream({ transform })`. */
+  transform?: any;
   /**
    * Memory instance attached to the agent. Combine with `threadId`/`resourceId`
    * to exercise conversation-history recall and working memory across turns.
@@ -371,6 +374,8 @@ export interface RunLoopScenarioOptions {
    * or `semanticRecall` (enable/disable semantic recall).
    */
   memoryOptions?: { lastMessages?: number | false; semanticRecall?: boolean };
+  /** Forwarded to `agent.stream({ memory: { onTitleGenerated } })`. */
+  onTitleGenerated?: (title: string) => void | Promise<void>;
   /**
    * Workspace attached to the agent. Passed into tool execution context so tools
    * can read `workspace.filesystem` / `workspace.sandbox` mid-loop.

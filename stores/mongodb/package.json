@@ -1,7 +1,8 @@
 {
   "name": "@mastra/mongodb",
-  "version": "1.24.0-alpha.1",
+  "version": "1.24.0",
   "description": "MongoDB provider for Mastra - includes vector store capabilities",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -31,8 +32,8 @@
     "pretest:watch": "docker compose up -d",
     "test:watch": "vitest watch",
     "posttest:watch": "docker compose down -v",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix ."
   },
   "dependencies": {
     "@lukeed/uuid": "^2.0.1",
@@ -45,12 +46,11 @@
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/memory": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.20.5",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "dotenv": "^17.4.2",
-    "eslint": "^10.7.0",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

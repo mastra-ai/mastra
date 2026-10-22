@@ -7,8 +7,8 @@ import type { OMResponse, UpdateOMResponse } from '../api/types';
 /**
  * Observational Memory config (mirrors the TUI `/om` command). Settings are
  * persisted per user and can be managed without an active chat session. When a
- * session is available, resourceId and scope let the server apply changes to it
- * immediately as well. When `factoryId` is set, the hooks address the factory
+ * session is available, its sessionId and threadId let the server resolve the
+ * same credential policy as its next reply. When `factoryId` is set, the hooks address the factory
  * project's shared settings row (used by board runs and channel sessions)
  * instead of the caller's personal row.
  *
@@ -16,16 +16,16 @@ import type { OMResponse, UpdateOMResponse } from '../api/types';
  * straight into the cache via `setQueryData` instead of triggering a refetch —
  * preserving the single-response UX the section relies on.
  */
-export function useOMQuery(resourceId: string | undefined, scope?: string, factoryId?: string, threadId?: string) {
+export function useOMQuery(sessionId: string | undefined, factoryId?: string, threadId?: string, resourceId?: string) {
   const { client } = useApiConfig();
   return useQuery<OMResponse>({
-    queryKey: queryKeys.om(resourceId, scope, factoryId, threadId),
+    queryKey: queryKeys.om(sessionId, factoryId, threadId, resourceId),
     queryFn: () => {
       const params = new URLSearchParams();
-      if (resourceId) params.set('resourceId', resourceId);
-      if (scope) params.set('scope', scope);
+      if (sessionId) params.set('sessionId', sessionId);
       if (factoryId) params.set('factoryId', factoryId);
       if (threadId) params.set('threadId', threadId);
+      if (resourceId) params.set('resourceId', resourceId);
       const query = params.size > 0 ? `?${params.toString()}` : '';
       return client.get<OMResponse>(`/web/config/om${query}`);
     },
@@ -39,25 +39,25 @@ export interface UpdateOMModelArgs {
 }
 
 export function useUpdateOMModel(
-  resourceId: string | undefined,
+  sessionId: string | undefined,
   role: OMRole,
-  scope?: string,
   factoryId?: string,
   threadId?: string,
+  resourceId?: string,
 ) {
   const { client } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ modelId }: UpdateOMModelArgs) =>
       client.put<UpdateOMResponse>(`/web/config/om/${role}/model`, {
-        resourceId,
+        sessionId,
         modelId,
-        scope,
         factoryId,
         threadId,
+        resourceId,
       }),
     onSuccess: res =>
-      queryClient.setQueryData<OMResponse>(queryKeys.om(resourceId, scope, factoryId, threadId), {
+      queryClient.setQueryData<OMResponse>(queryKeys.om(sessionId, factoryId, threadId, resourceId), {
         config: res.config,
       }),
   });
@@ -69,18 +69,24 @@ export interface UpdateOMThresholdsArgs {
 }
 
 export function useUpdateOMThresholds(
-  resourceId: string | undefined,
-  scope?: string,
+  sessionId: string | undefined,
   factoryId?: string,
   threadId?: string,
+  resourceId?: string,
 ) {
   const { client } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (args: UpdateOMThresholdsArgs) =>
-      client.put<UpdateOMResponse>('/web/config/om/thresholds', { resourceId, scope, factoryId, threadId, ...args }),
+      client.put<UpdateOMResponse>('/web/config/om/thresholds', {
+        sessionId,
+        factoryId,
+        threadId,
+        resourceId,
+        ...args,
+      }),
     onSuccess: res =>
-      queryClient.setQueryData<OMResponse>(queryKeys.om(resourceId, scope, factoryId, threadId), {
+      queryClient.setQueryData<OMResponse>(queryKeys.om(sessionId, factoryId, threadId, resourceId), {
         config: res.config,
       }),
   });
@@ -91,24 +97,24 @@ export interface UpdateOMObserveAttachmentsArgs {
 }
 
 export function useUpdateOMObserveAttachments(
-  resourceId: string | undefined,
-  scope?: string,
+  sessionId: string | undefined,
   factoryId?: string,
   threadId?: string,
+  resourceId?: string,
 ) {
   const { client } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ value }: UpdateOMObserveAttachmentsArgs) =>
       client.put<UpdateOMResponse>('/web/config/om/observe-attachments', {
-        resourceId,
+        sessionId,
         value,
-        scope,
         factoryId,
         threadId,
+        resourceId,
       }),
     onSuccess: res =>
-      queryClient.setQueryData<OMResponse>(queryKeys.om(resourceId, scope, factoryId, threadId), {
+      queryClient.setQueryData<OMResponse>(queryKeys.om(sessionId, factoryId, threadId, resourceId), {
         config: res.config,
       }),
   });

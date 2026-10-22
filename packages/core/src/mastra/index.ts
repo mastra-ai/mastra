@@ -24,7 +24,7 @@ import { isRunLocalTopic } from '../events/topics';
 import type { Event, EventCallback } from '../events/types';
 import type { Harness } from '../harness';
 import { AvailableHooks, deregisterHook, registerHook } from '../hooks';
-import { Knowledge } from '../knowledge';
+import type { Knowledge } from '../knowledge';
 import { LicenseClient } from '../license';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
 import { getGatewayId } from '../llm/model/gateways';
@@ -4237,20 +4237,71 @@ export class Mastra<
     if (runs.length > 0) {
       this.#logger.debug(`Restarting ${runs.length} active workflow run${runs.length > 1 ? 's' : ''}`);
     }
-    await runWithConcurrency(runs, this.#recoveryConfig.workflowConcurrency, async runSnapshot => {
-      try {
-        const workflow = this.getWorkflowById(runSnapshot.workflowName);
-        const run = await workflow.createRun({ runId: runSnapshot.runId });
-        await run.restart();
-        this.#logger.debug('Restarted workflow run', { workflow: runSnapshot.workflowName, runId: runSnapshot.runId });
-      } catch (error) {
-        this.#logger.error('Failed to restart workflow run', {
-          workflow: runSnapshot.workflowName,
-          runId: runSnapshot.runId,
-          error,
+    await runWithConcurrency(runs, this.#recoveryConfig.workflowConcurrency, runSnapshot =>
+      this.#restartWorkflowRun(runSnapshot.workflowName, runSnapshot.runId),
+    );
+  }
+
+  /**
+   * Restarts one active run. A run whose ownership lease is still live belongs to another
+   * process (or to this one before a crash), so it is skipped and re-checked once the lease
+   * could have lapsed: a live owner keeps renewing it, an orphaned run is then recovered.
+   * A re-check that throws is retried with backoff; `recheck.failures` counts the
+   * consecutive ones.
+   */
+  async #restartWorkflowRun(workflowName: string, runId: string, recheck?: { failures: number }): Promise<void> {
+    try {
+      const workflow = this.getWorkflowById(workflowName);
+      const run = await workflow.createRun({ runId });
+      // A re-check can find the run already settled or suspended by its owner.
+      if (recheck && run.workflowRunStatus !== 'running' && run.workflowRunStatus !== 'waiting') return;
+      await run.restart();
+      this.#logger.debug('Restarted workflow run', { workflow: workflowName, runId });
+    } catch (error) {
+      if (error instanceof MastraError && error.id === 'WORKFLOW_RESTART_RUN_OWNED') {
+        this.#logger.debug('Skipped restarting workflow run owned by a live process', {
+          workflow: workflowName,
+          runId,
         });
+        const leaseExpiresAt = error.details?.leaseExpiresAt;
+        const retryAt = typeof leaseExpiresAt === 'string' ? Date.parse(leaseExpiresAt) : NaN;
+        this.#scheduleWorkflowRecoveryRecheck(workflowName, runId, Number.isNaN(retryAt) ? Date.now() : retryAt);
+        return;
       }
-    });
+      const context = { workflow: workflowName, runId, error };
+      if (!recheck) {
+        this.#logger.error('Failed to restart workflow run', context);
+        return;
+      }
+      if (recheck.failures >= DURABLE_RECOVERY_RECHECK_MAX_RETRIES) {
+        this.#logger.error(
+          'Failed to re-check workflow run for recovery; leaving it for the next boot or a manual restart()',
+          context,
+        );
+        return;
+      }
+      this.#logger.warn('Failed to re-check workflow run for recovery; retrying', context);
+      this.#scheduleWorkflowRecoveryRecheck(
+        workflowName,
+        runId,
+        Date.now() + DURABLE_RECOVERY_RECHECK_RETRY_BASE_MS * 2 ** recheck.failures,
+        recheck.failures + 1,
+      );
+    }
+  }
+
+  #scheduleWorkflowRecoveryRecheck(workflowName: string, runId: string, retryAt: number, failures = 0): void {
+    if (this.#shuttingDown) return;
+    const key = JSON.stringify(['workflow', workflowName, runId]);
+    clearTimeout(this.#durableRecoveryRechecks.get(key));
+    const delay = Math.max(0, retryAt - Date.now()) + Math.random() * DURABLE_RECOVERY_RECHECK_JITTER_MS;
+    const timer = setTimeout(() => {
+      this.#durableRecoveryRechecks.delete(key);
+      if (this.#shuttingDown) return;
+      void this.#trackDurableRecovery(this.#restartWorkflowRun(workflowName, runId, { failures }));
+    }, delay);
+    timer.unref?.();
+    this.#durableRecoveryRechecks.set(key, timer);
   }
 
   /**
@@ -4325,8 +4376,8 @@ export class Mastra<
         let failed = 0;
         let skipped = 0;
 
-        for (const agent of durableAgents) {
-          if (this.#shuttingDown) break;
+        await runWithConcurrency(durableAgents, DEFAULT_RESTART_CONCURRENCY, async agent => {
+          if (this.#shuttingDown) return;
           try {
             const result = await agent.recoverActiveRuns();
             for (const run of result.recovered) {
@@ -4345,7 +4396,7 @@ export class Mastra<
               error,
             });
           }
-        }
+        });
 
         return { agents: durableAgents.length, recovered, succeeded, failed, skipped };
       })(),
@@ -4370,10 +4421,11 @@ export class Mastra<
   }
 
   /**
-   * Re-check a run another execution drove when it was skipped, once that
-   * execution's claim could have lapsed. Runs this process drives carry no
-   * `retryAt` and are not re-checked. A re-check that throws is retried with
-   * backoff; `failures` counts the consecutive ones.
+   * Re-check skipped runs after a foreign claim could have lapsed or a
+   * recovery wait timed out. Timed-out originals keep their ownership and
+   * defer rechecks until settlement without starting duplicate executions.
+   * A re-check that throws is retried with backoff; `failures` counts the
+   * consecutive ones.
    */
   #scheduleDurableRecoveryRecheck(
     agent: DurableAgentLike,
@@ -5616,6 +5668,8 @@ export class Mastra<
       tools[tool.id] = schemas;
     }
     const classifiers: NonNullable<WorkflowRegistryIndex['classifiers']> = {};
+    const refusedAnswerDescription =
+      "When the model refuses the question, the answer is { type: 'refusal' } with no choice, score, probability, or probabilities.";
     for (const [key, classifier] of Object.entries(this.listClassifiers() ?? {})) {
       const questions = classifier.questions
         ? Object.fromEntries(
@@ -5629,6 +5683,8 @@ export class Mastra<
             ]),
           )
         : undefined;
+      // A decision model may refuse any question. A refused answer is `{ type: 'refusal' }`
+      // with no payload fields, so only `type` is required.
       const answerProperties = questions
         ? Object.fromEntries(
             Object.entries(questions).map(([questionId, question]) => [
@@ -5637,7 +5693,7 @@ export class Mastra<
                 ? {
                     type: 'object',
                     properties: {
-                      type: { type: 'string', enum: ['choice'] },
+                      type: { type: 'string', enum: ['choice', 'refusal'] },
                       choice: { type: 'string', enum: question.choices },
                       probabilities: {
                         type: 'object',
@@ -5645,13 +5701,14 @@ export class Mastra<
                         additionalProperties: false,
                       },
                     },
-                    required: ['type', 'choice'],
+                    required: ['type'],
+                    description: refusedAnswerDescription,
                   }
                 : question.type === 'score'
                   ? {
                       type: 'object',
                       properties: {
-                        type: { type: 'string', enum: ['score'] },
+                        type: { type: 'string', enum: ['score', 'refusal'] },
                         score: { type: 'number', minimum: question.min, maximum: question.max },
                         probabilities: {
                           type: 'object',
@@ -5664,15 +5721,17 @@ export class Mastra<
                           additionalProperties: false,
                         },
                       },
-                      required: ['type', 'score'],
+                      required: ['type'],
+                      description: refusedAnswerDescription,
                     }
                   : {
                       type: 'object',
                       properties: {
-                        type: { type: 'string', enum: ['boolean'] },
+                        type: { type: 'string', enum: ['boolean', 'refusal'] },
                         probability: { type: 'number', minimum: 0, maximum: 1 },
                       },
-                      required: ['type', 'probability'],
+                      required: ['type'],
+                      description: refusedAnswerDescription,
                     },
             ]),
           )

@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react';
+import { act, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
+import type { FactoryProjectPayload } from '../domains/workspaces/services/github';
+import { pickModel } from '../domains/settings/components/models/defaults/__tests__/default-model-test-utils';
 import { createAppRoutes } from '../router';
 import {
   settingsFactory,
@@ -18,10 +20,15 @@ import {
 const PROVIDERS_URL = `${TEST_BASE_URL}/web/config/providers`;
 const OM_URL = `${TEST_BASE_URL}/web/config/om`;
 
-function renderSettings(section: string) {
+function renderSettings(section: string, { hash = '', search = '' } = {}) {
   const router = createMemoryRouter(createAppRoutes(), {
     initialEntries: [
-      { pathname: `/factories/fp-1/settings/${section}`, state: { settingsReturnTo: '/factories/fp-1/work' } },
+      {
+        pathname: `/factories/fp-1/settings/${section}`,
+        hash,
+        search,
+        state: { settingsReturnTo: '/factories/fp-1/work' },
+      },
     ],
   });
   renderWithProviders(<RouterProvider router={router} />);
@@ -29,6 +36,7 @@ function renderSettings(section: string) {
 }
 
 beforeEach(() => {
+  window.history.replaceState(null, '', '/');
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
@@ -48,36 +56,7 @@ beforeEach(() => {
 });
 
 describe('Settings ownership', () => {
-  it('keeps personal models separate and writes a personal key even when an org key exists', async () => {
-    let keyBody: unknown;
-    server.use(
-      http.put(`${PROVIDERS_URL}/openai/key`, async ({ request }) => {
-        keyBody = await request.json();
-        return HttpResponse.json({ ok: true });
-      }),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
-        HttpResponse.json({ project: { ...settingsFactory, modelScope: 'factory' } }),
-      ),
-    );
-    const user = userEvent.setup();
-    renderSettings('personal-models');
-
-    expect(await screen.findByText('Your defaults')).toBeInTheDocument();
-    expect(await screen.findByText('This Factory uses organization credentials only')).toBeInTheDocument();
-    expect(screen.queryByText('Factory defaults')).not.toBeInTheDocument();
-    expect(screen.queryByText('Chat defaults')).not.toBeInTheDocument();
-    expect(screen.queryByText('Custom providers')).not.toBeInTheDocument();
-    expect(screen.getByText('The model new chats start on.')).toBeInTheDocument();
-    await user.click(screen.getByRole('tab', { name: 'Connect with API key' }));
-    expect(await screen.findByRole('button', { name: 'Add API key for OpenAI' })).toBeInTheDocument();
-    expect(screen.queryByText('Covered by org')).not.toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Add API key for OpenAI' }));
-    await user.type(screen.getByPlaceholderText('Paste API key'), 'sk-personal');
-    await user.click(screen.getByRole('button', { name: 'Save' }));
-    await waitFor(() => expect(keyBody).toEqual({ key: 'sk-personal', scope: 'user' }));
-  });
-
-  it('keeps shared defaults in Factory models and writes organization credentials', async () => {
+  it('writes organization credentials from Factory defaults', async () => {
     let keyBody: unknown;
     server.use(
       http.put(`${PROVIDERS_URL}/openai/key`, async ({ request }) => {
@@ -88,99 +67,144 @@ describe('Settings ownership', () => {
     const user = userEvent.setup();
     renderSettings('models');
 
-    expect(await screen.findByText('Factory defaults')).toBeInTheDocument();
-    expect(await screen.findByRole('group', { name: 'Model and thinking' })).toBeInTheDocument();
-    expect(screen.queryByText('Chat defaults')).not.toBeInTheDocument();
-    expect(screen.queryByText('Thinking defaults')).not.toBeInTheDocument();
-    expect(screen.queryByText('Your defaults')).not.toBeInTheDocument();
-    await user.click(screen.getByRole('tab', { name: 'Connect with API key' }));
-    await user.click(await screen.findByRole('button', { name: 'Update key for OpenAI' }));
+    const factoryDefaults = await screen.findByRole('region', { name: 'Factory defaults' });
+    await user.click(await within(factoryDefaults).findByRole('button', { name: 'OpenAI actions' }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Update key' }));
     await user.type(screen.getByPlaceholderText('Paste API key'), 'sk-shared');
     await user.click(screen.getByRole('button', { name: 'Save' }));
     await waitFor(() => expect(keyBody).toEqual({ key: 'sk-shared', scope: 'org' }));
   });
 
-  it('lets members inspect shared provider settings and explains why edits require an admin', async () => {
-    server.use(http.get(PROVIDERS_URL, () => HttpResponse.json({ ...settingsProviders, orgKeyAdmin: false })));
+  it('writes a personal key from personal defaults even when an org key exists', async () => {
+    let keyBody: unknown;
+    server.use(
+      http.put(`${PROVIDERS_URL}/openai/key`, async ({ request }) => {
+        keyBody = await request.json();
+        return HttpResponse.json({ ok: true });
+      }),
+    );
     const user = userEvent.setup();
     renderSettings('models');
 
-    expect(await screen.findByText('Only organization admins can manage org-wide credentials.')).toBeInTheDocument();
-    await user.click(screen.getByRole('tab', { name: 'Connect with API key' }));
-    expect(await screen.findByText('Key saved')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Update key for OpenAI' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Remove key for OpenAI' })).toBeDisabled();
+    const personalDefaults = await screen.findByRole('region', { name: 'Personal defaults' });
+    expect(within(personalDefaults).queryByText('OpenAI')).not.toBeInTheDocument();
+    await user.click(await within(personalDefaults).findByRole('button', { name: 'Add provider' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Add provider' });
+    await user.type(within(dialog).getByLabelText('Search providers'), 'openai');
+    await user.click(within(dialog).getByRole('button', { name: 'Add API key for OpenAI' }));
+    await user.type(await screen.findByPlaceholderText('Paste API key'), 'sk-personal');
+    await user.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(keyBody).toEqual({ key: 'sk-personal', scope: 'user' }));
   });
 
-  it('preserves the caller memory scope when editing Your memory', async () => {
-    let body: unknown;
-    let requestedFactoryId: string | null | undefined;
+  it('addresses personal memory by the active chat thread and Factory memory by the Factory', async () => {
+    const reads: Array<Record<string, string>> = [];
+    const bodies: unknown[] = [];
     server.use(
+      http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/thread-1`, () =>
+        HttpResponse.json({ ...settingsSession, sessionId: 'thread-1', resourceId: 'thread-1', threadId: 'thread-1' }),
+      ),
+      http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/thread-1/permissions`, () =>
+        HttpResponse.json({ categories: {}, tools: {} }),
+      ),
       http.get(OM_URL, ({ request }) => {
-        requestedFactoryId = new URL(request.url).searchParams.get('factoryId');
+        reads.push(Object.fromEntries(new global.URL(request.url).searchParams));
         return HttpResponse.json({ config: settingsMemory });
       }),
       http.put(`${OM_URL}/thresholds`, async ({ request }) => {
-        body = await request.json();
-        return HttpResponse.json({ ok: true, config: { ...settingsMemory, observationThreshold: 3000 } });
+        bodies.push(await request.json());
+        return HttpResponse.json({ ok: true, config: settingsMemory });
       }),
     );
+    window.history.replaceState(null, '', '/?sessionId=thread-1');
     const user = userEvent.setup();
-    renderSettings('memory');
-    const input = await screen.findByDisplayValue('1,000');
-    expect(requestedFactoryId).toBeNull();
-    await user.clear(input);
-    await user.type(input, '3000');
-    await user.tab();
-    await waitFor(() => expect(body).toEqual({ resourceId: 'fp-1', observationThreshold: 3000 }));
-  });
+    renderSettings('memory', { search: '?sessionId=thread-1' });
 
-  it('preserves the Factory memory scope when navigating from Your memory', async () => {
-    let body: unknown;
-    const requestedFactoryIds: Array<string | null> = [];
-    server.use(
-      http.get(OM_URL, ({ request }) => {
-        requestedFactoryIds.push(new URL(request.url).searchParams.get('factoryId'));
-        return HttpResponse.json({ config: settingsMemory });
-      }),
-      http.put(`${OM_URL}/thresholds`, async ({ request }) => {
-        body = await request.json();
-        return HttpResponse.json({ ok: true, config: { ...settingsMemory, observationThreshold: 4000 } });
-      }),
-    );
-    const user = userEvent.setup();
-    renderSettings('memory');
-    await screen.findByDisplayValue('1,000');
-    await user.click(screen.getByRole('link', { name: 'Factory memory' }));
-    const input = await screen.findByDisplayValue('1,000');
-    await waitFor(() => expect(requestedFactoryIds).toContain('fp-1'));
-    expect(screen.queryByRole('group', { name: 'Who these settings apply to' })).not.toBeInTheDocument();
-    await user.clear(input);
-    await user.type(input, '4000');
-    await user.tab();
-    await waitFor(() => expect(body).toEqual({ factoryId: 'fp-1', observationThreshold: 4000 }));
-  });
+    for (const [memory, threshold] of [
+      ['Personal memory', '3000'],
+      ['Factory memory', '4000'],
+    ]) {
+      const card = await screen.findByRole('region', { name: memory });
+      const input = await within(card).findByRole('textbox', { name: 'Observe after' });
+      await user.clear(input);
+      await user.type(input, threshold);
+      await user.tab();
+    }
 
-  it('keeps legacy model settings deep links working with the return location and hash', async () => {
-    const router = createMemoryRouter(createAppRoutes(), {
-      initialEntries: [
-        {
-          pathname: '/factories/fp-1/settings/models',
-          hash: '#model-packs',
-          search: '?from=chat',
-          state: { settingsReturnTo: '/factories/fp-1/work' },
-        },
-      ],
+    await waitFor(() => {
+      expect(reads).toEqual(
+        expect.arrayContaining([
+          { sessionId: 'thread-1', threadId: 'thread-1', resourceId: 'thread-1' },
+          { factoryId: 'fp-1' },
+        ]),
+      );
+      expect(reads.filter(read => read.sessionId).every(read => read.threadId === 'thread-1')).toBe(true);
+      expect(bodies).toEqual([
+        { sessionId: 'thread-1', threadId: 'thread-1', resourceId: 'thread-1', observationThreshold: 3000 },
+        { factoryId: 'fp-1', observationThreshold: 4000 },
+      ]);
     });
-    renderWithProviders(<RouterProvider router={router} />);
-    expect(await screen.findByText('Your defaults')).toBeInTheDocument();
+  });
+
+  it.each([
+    { section: 'personal-models', hash: '' },
+    { section: 'models', hash: '#model-packs' },
+  ])('sends $section$hash to Models #personal-defaults, keeping search and return state', async ({ section, hash }) => {
+    const router = renderSettings(section, { hash, search: '?from=chat' });
+
+    expect(await screen.findByRole('region', { name: 'Personal defaults' })).toBeInTheDocument();
     expect(router.state.location).toMatchObject({
-      pathname: '/factories/fp-1/settings/personal-models',
-      hash: '#default-model',
+      pathname: '/factories/fp-1/settings/models',
+      hash: '#personal-defaults',
       search: '?from=chat',
       state: { settingsReturnTo: '/factories/fp-1/work' },
     });
-    const personal = screen.getByRole('region', { name: 'Your settings' });
-    expect(within(personal).getByRole('link', { name: 'Your models' })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: 'Models' })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('sends retired Factory memory links to Memory', async () => {
+    const router = renderSettings('factory-memory');
+
+    expect(await screen.findByRole('region', { name: 'Factory memory' })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/factories/fp-1/settings/memory');
+    expect(screen.getByRole('link', { name: 'Memory' })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('lets a Personal-routed Factory with no Factory default start chats once the user picks a personal default', async () => {
+    const project: FactoryProjectPayload = { ...settingsFactory, modelScope: 'user', defaultModelId: null };
+    let personalDefaultModelId: string | null = null;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () => HttpResponse.json({ project })),
+      http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+        HttpResponse.json({ modelId: personalDefaultModelId }),
+      ),
+      http.put<never, { modelId: string }>(`${TEST_BASE_URL}/web/config/default-model`, async ({ request }) => {
+        personalDefaultModelId = (await request.json()).modelId;
+        return HttpResponse.json({ ok: true, modelId: personalDefaultModelId });
+      }),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items`, () => HttpResponse.json({ workItems: [] })),
+      http.get(PROVIDERS_URL, () =>
+        HttpResponse.json({
+          ...settingsProviders,
+          providers: [{ provider: 'openai', source: 'stored-user', userCredential: 'api_key' }],
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+        HttpResponse.json({
+          models: [{ id: 'openai/gpt-5', provider: 'openai', modelName: 'gpt-5', hasApiKey: true }],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    const router = createMemoryRouter(createAppRoutes(), { initialEntries: ['/factories/fp-1/new'] });
+    renderWithProviders(<RouterProvider router={router} />);
+
+    await user.click(await screen.findByRole('link', { name: 'Open Models settings' }));
+    expect(router.state.location.hash).toBe('#personal-defaults');
+    await pickModel(user, 'Personal default model', 'openai/gpt-5');
+    await waitFor(() => expect(personalDefaultModelId).toBe('openai/gpt-5'));
+    await act(() => router.navigate(-1));
+
+    expect(await screen.findByLabelText('Message')).toBeInTheDocument();
   });
 });

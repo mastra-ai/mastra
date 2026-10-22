@@ -74,6 +74,16 @@ export interface ChannelAdapterBaseConfig {
   textFormat?: 'markdown' | 'plain';
 
   /**
+   * Whether the agent's reply text is posted to the channel.
+   * - `'show'` (default) - reply text streams (or posts) to the thread as it does today.
+   * - `'hidden'` - reply text is never posted. The agent's own messages reach the
+   *   channel only through tools you give it (for example a reply tool that posts to the thread).
+   *
+   * Tool display, approval prompts, error messages, and typing status are unaffected.
+   */
+  textDisplay?: 'show' | 'hidden';
+
+  /**
    * What to do with buffered (not-yet-posted) reply text when a run is aborted.
    * Only affects the static (non-streaming) driver.
    * - `'flush'` (default) — post the partial buffered text before stopping.
@@ -221,6 +231,7 @@ export type ToolDisplayEvent =
    * Fired once after the user approves an approval card. Only `post` results
    * are honored: the returned message replaces the approval card in place.
    * Returning nothing (or a blank message) keeps the default "Approved" card.
+   * `byUser` is the approving user's name, or undefined in DMs.
    */
   | {
       kind: 'approved';
@@ -229,6 +240,7 @@ export type ToolDisplayEvent =
       displayName: string;
       argsSummary: string;
       args: unknown;
+      byUser?: string;
     }
   /**
    * Fired once after the user denies an approval card. Only `post` results

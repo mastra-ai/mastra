@@ -629,9 +629,8 @@ describe('DurableAgent FGA checks', () => {
     try {
       await (durableAgent as any)[method]({ runId: 'run-1', toolCallId: 'tool-call-1' });
       expect(resumeGenerate).toHaveBeenCalledWith(
-        'run-1',
         { approved },
-        expect.objectContaining({ toolCallId: 'tool-call-1' }),
+        expect.objectContaining({ runId: 'run-1', toolCallId: 'tool-call-1' }),
       );
     } finally {
       await pubsub.close();

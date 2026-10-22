@@ -509,30 +509,53 @@ jobs:
           PR_TITLE: ${{ github.event.pull_request.title }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          # A cancelled run says nothing about whether the suite is red or green.
-          if [ "$FAILED" != "true" ] && [ "$CANCELLED" = "true" ]; then
+          # A cancelled run was usually superseded by a newer push, which reports instead.
+          # Failures seen before the cancel would otherwise alert once per superseded run.
+          if [ "$CANCELLED" = "true" ]; then
             echo "Run was cancelled; leaving the alert state unchanged."
             exit 0
           fi
+
+          # Judge earlier runs by their test jobs, the same way this run is judged. The run
+          # conclusion is not usable: a newer push marks a run cancelled even when every job
+          # already passed, so a green run would be skipped and each later green push would
+          # alert "green again" against the last red one.
+          # Prints failure, success, or nothing when the run was cancelled or unreadable.
+          job_state() {
+            local conclusions
+            conclusions=$(gh api --paginate "$1?per_page=100" \
+              --jq '.jobs[] | select(.name | startswith("Notify Slack") | not) | .conclusion' 2>/dev/null) || return 0
+            if grep -qxE 'failure|timed_out' <<< "$conclusions"; then
+              echo failure
+            elif [ -n "$conclusions" ] && ! grep -qx cancelled <<< "$conclusions"; then
+              echo success
+            fi
+          }
 
           # A re-run keeps its run ID, so its previous state is the earlier attempt of this run.
           # Cancelled attempts are skipped, so walk back to the newest one that finished.
           previous=''
           attempt=$((GITHUB_RUN_ATTEMPT - 1))
           while [ -z "$previous" ] && [ "$attempt" -ge 1 ]; do
-            previous=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$attempt" \
-              --jq '.conclusion // ""' 2>/dev/null || true)
-            [ "$previous" = "cancelled" ] && previous=''
+            previous=$(job_state "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/attempts/$attempt/jobs")
             attempt=$((attempt - 1))
           done
 
           # Otherwise this run is still in progress, so the newest completed run is the previous one.
-          if [ -z "$previous" ] && ! previous=$(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/prebuild.yml/runs" \
-            -f branch="$BRANCH" -f event=pull_request -f status=completed -F per_page=20 \
-            --jq "[.workflow_runs[] | select(.id != $GITHUB_RUN_ID and .conclusion != \"cancelled\")][0].conclusion // \"none\""); then
-            echo "::warning::Could not read the previous run; alerting on failure only."
-            previous=unknown
+          # Most release PR runs are cancelled by newer pushes, so walk past them.
+          if [ -z "$previous" ]; then
+            if ! runs=$(gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/prebuild.yml/runs" \
+              -f branch="$BRANCH" -f event=pull_request -f status=completed -F per_page=50 \
+              --jq ".workflow_runs[] | select(.id != $GITHUB_RUN_ID) | \"\(.id)/attempts/\(.run_attempt)\""); then
+              echo "::warning::Could not read the previous run; alerting on failure only."
+              previous=unknown
+            fi
+            for run in $runs; do
+              previous=$(job_state "repos/$GITHUB_REPOSITORY/actions/runs/$run/jobs")
+              [ -n "$previous" ] && break
+            done
           fi
+          previous=${previous:-none}
           echo "Previous release PR run: $previous; this run failed: $FAILED"
 
           pr="<$PR_URL|#$PR_NUMBER $PR_TITLE>"

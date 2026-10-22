@@ -1,7 +1,8 @@
 {
   "name": "@mastra/google-cloud-pubsub",
-  "version": "1.1.4-alpha.0",
+  "version": "1.1.4",
   "description": "Mastra Google Cloud PubSub integration",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -25,8 +26,8 @@
     "build": "tsdown --silent --config tsdown.config.ts",
     "build:watch": "tsdown --watch --silent --config tsdown.config.ts",
     "test": "vitest run --bail=1",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix ."
   },
   "dependencies": {
     "@google-cloud/pubsub": "^5.3.1",
@@ -36,7 +37,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.115",
+    "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.135",
     "@copilotkit/aimock": "^1.29.0",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/lint": "workspace:*",
@@ -44,12 +45,11 @@
     "@mastra/core": "workspace:*",
     "@mastra/deployer": "workspace:*",
     "@mastra/libsql": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.20.5",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "ai": "^4.3.19",
-    "eslint": "^10.7.0",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

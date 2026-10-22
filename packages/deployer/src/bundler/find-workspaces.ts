@@ -99,11 +99,19 @@ export async function findWorkspaces(
     ignore: ['**/node_modules/**'],
   });
 
+  // `find-workspaces` globbed directories, so the root was only a member when a
+  // pattern resolved to the root itself (`.`, `./`, `{.,packages/*}`). Manifest
+  // globs also match the root for `**`, which a directory glob never did.
+  const includesRoot = isRootWorkspace(root.globs);
+
+  const locations = manifests.map(manifest => toPosix(parentDirectory(manifest)));
+  // tinyglobby does not match the root manifest for brace alternatives such as
+  // `{.}` or `{.,packages/*}`, so add the root explicitly when it is declared.
+  if (includesRoot && !locations.includes(root.location)) locations.push(root.location);
+
   const workspaces: Workspace[] = [];
-  for (const manifest of manifests) {
-    const location = toPosix(parentDirectory(manifest));
-    // A `**` glob also matches the root manifest; the root itself is not a workspace package.
-    if (location === root.location) continue;
+  for (const location of locations) {
+    if (location === root.location && !includesRoot) continue;
     const pkg = readJsonFile(location, 'package.json');
     if (isObject(pkg) && typeof pkg.name === 'string') {
       workspaces.push({ location, package: pkg as WorkspacePackageJson });
@@ -127,6 +135,62 @@ function toManifestGlobs(globs: string[]): string[] {
     const base = (negated ? pattern.slice(1) : pattern).replace(/[\\/]+$/, '');
     return `${negated ? '!' : ''}${base}/package.json`;
   });
+}
+
+/**
+ * Whether the workspace globs declare the root directory itself as a member. A
+ * pattern matches the root when nothing is left after removing `.` segments, so
+ * `.`, `./`, `.//` and `./.` do, while `**`, `*` and `packages/*` do not. A negated
+ * root pattern wins.
+ */
+function isRootWorkspace(globs: string[]): boolean {
+  let included = false;
+  let excluded = false;
+  for (const pattern of globs) {
+    if (!isRootPattern(pattern.replace(/^!/, ''))) continue;
+    if (pattern.startsWith('!')) excluded = true;
+    else included = true;
+  }
+  return included && !excluded;
+}
+
+function isRootPattern(pattern: string): boolean {
+  return braceAlternatives(pattern).some(alternative => isRootPath(alternative));
+}
+
+/**
+ * Split the first brace group of a glob into its comma-separated alternatives, so
+ * `{.,packages/*}` yields `.` and `packages/*`. Nested groups stay intact; only the
+ * top level of the first group is split, which is enough to spot a root alternative.
+ */
+function braceAlternatives(pattern: string): string[] {
+  if (!pattern.startsWith('{')) return [pattern];
+
+  let depth = 0;
+  let close = -1;
+  for (let i = 0; i < pattern.length; i++) {
+    if (pattern[i] === '{') depth++;
+    else if (pattern[i] === '}' && --depth === 0) {
+      close = i;
+      break;
+    }
+  }
+  if (close === -1) return [pattern];
+
+  const rest = pattern.slice(close + 1);
+  return pattern
+    .slice(1, close)
+    .split(',')
+    .map(alternative => alternative + rest);
+}
+
+function isRootPath(pattern: string): boolean {
+  return (
+    pattern
+      .split(/[\\/]/)
+      .filter(segment => segment !== '' && segment !== '.')
+      .join('/') === ''
+  );
 }
 
 function findRoot(dir: string, stopDir: string, cache?: WorkspacesCache): WorkspacesRoot | null {

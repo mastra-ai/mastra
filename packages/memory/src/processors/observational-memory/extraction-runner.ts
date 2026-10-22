@@ -6,7 +6,8 @@ import { z } from 'zod';
 
 import type { Extractor, ExtractorSource } from './extractor';
 import { buildExtractorPriorLines } from './extractor';
-import { hasAbortInChain, isTransientLLMError, withRetry } from './retry';
+import { hasAbortInChain, isTransientLLMError, RETRY_CONFIG, withRetry } from './retry';
+import type { OnAttemptActivity } from './retry';
 
 export interface StructuredExtractionResult {
   values: Record<string, unknown>;
@@ -78,17 +79,23 @@ ${extractorInstructions}${priorLines.length > 0 ? `\n\n## Prior Extracted Values
     // OM agents pin model-level `maxRetries: 0`. Extraction failures are tolerated
     // (returned as `failures`), so use a small fixed budget rather than the
     // Observer/Reflector `maxRetries`, which only governs the stage's model call.
-    withRetry(() => streamOnce(jsonPromptInjection), {
+    withRetry((attemptSignal, onActivity) => streamOnce(jsonPromptInjection, attemptSignal, onActivity), {
       label: `om-${opts.source}-structured-extraction`,
       abortSignal: opts.abortSignal,
       maxRetries: 1,
+      idleTimeoutMs: RETRY_CONFIG.modelCallIdleTimeoutMs,
     });
 
-  const streamOnce = async (jsonPromptInjection?: boolean | 'system' | 'inline') => {
+  const streamOnce = async (
+    jsonPromptInjection: boolean | 'system' | 'inline' | undefined,
+    abortSignal: AbortSignal,
+    onActivity: OnAttemptActivity,
+  ) => {
     const output = await opts.agent.stream(prompt, {
       structuredOutput: { schema, ...(jsonPromptInjection ? { jsonPromptInjection } : {}) },
       ...(opts.memory ? { memory: opts.memory } : {}),
-      ...(opts.abortSignal ? { abortSignal: opts.abortSignal } : {}),
+      abortSignal,
+      onChunk: onActivity,
       ...(opts.requestContext ? { requestContext: opts.requestContext } : {}),
       ...opts.observabilityContext,
     });

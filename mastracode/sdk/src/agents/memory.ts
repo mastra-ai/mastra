@@ -3,14 +3,9 @@ import type { Knowledge } from '@mastra/core/knowledge';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraCompositeStore } from '@mastra/core/storage';
 import type { MastraVector } from '@mastra/core/vector';
-import { fastembed } from '@mastra/fastembed';
+import type { fastembed } from '@mastra/fastembed';
 import { Memory, Subconscious } from '@mastra/memory';
-import {
-  DEFAULT_OBS_THRESHOLD,
-  DEFAULT_REF_THRESHOLD,
-  MIN_OBSERVATION_THRESHOLD,
-  OBSERVATION_ACTIVATION_TOKENS,
-} from '../constants.js';
+import { DEFAULT_OBS_THRESHOLD, DEFAULT_REF_THRESHOLD, MIN_OBSERVATION_THRESHOLD } from '../constants.js';
 import { LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeScopeIdentity } from '../knowledge-scope.js';
 import { MASTRACODE_AUTO_OM_MODELS, resolveAutoOMModelId } from '../onboarding/packs.js';
 import { loadSettings } from '../onboarding/settings.js';
@@ -18,6 +13,22 @@ import { ANTHROPIC_PROMPT_CACHE_TTL } from '../providers/anthropic-prompt-cache.
 import type { MastraCodeState } from '../schema.js';
 import { getOmScope } from '../utils/project.js';
 import { canUseProvider, getActiveMemoryRoute, resolveModel } from './model.js';
+
+/**
+ * `fastembed.small`, loaded on the first embedding. Importing `@mastra/fastembed` up front loads ONNX
+ * Runtime and a native tokenizer (~11 MB) into every session, including ones that never embed.
+ */
+const lazyFastembedSmall: typeof fastembed.small = {
+  specificationVersion: 'v3',
+  provider: 'fastembed',
+  modelId: 'bge-small-en-v1.5',
+  maxEmbeddingsPerCall: 256,
+  supportsParallelCalls: true,
+  async doEmbed(options) {
+    const { fastembed } = await import('@mastra/fastembed');
+    return fastembed.small.doEmbed(options);
+  },
+};
 
 /** Route-backed OM fallback entry. */
 type MemoryModelRouteEntry = { id: string; model: ReturnType<typeof resolveModel> };
@@ -311,9 +322,12 @@ export function getDynamicMemory(
 
     const subconsciousAvailable = subconsciousEnabled && !orgUnresolvedRefusal;
 
-    const omScope = state?.omScope ?? getOmScope(state?.projectPath);
-    // Async buffering is not supported with resource scope, so no activation
-    // buffer is configured there and thresholds below it stay valid.
+    // Factory sessions share a memory resource across a Factory's runs and a
+    // user's sessions, so their scope is fixed to thread: one shared record would
+    // hand every run the others' work and invalidate their prompt caches. Recall
+    // search still reaches the whole resource. Neither session state, the env
+    // var, nor a repository's database.json can switch it.
+    const omScope = isFactory ? 'thread' : (state?.omScope ?? getOmScope(state?.projectPath));
     const isResourceScope = omScope === 'resource';
 
     // The Factory row is authoritative and read per invocation, so a stored
@@ -322,11 +336,9 @@ export function getDynamicMemory(
     const factorySettingsUnavailable =
       isFactoryMemorySettingsUnavailable(factorySettingsContext) || (factorySettingsContext === undefined && isFactory);
     const factorySettings = factorySettingsUnavailable ? null : factorySettingsContext;
-    // A row saved before the thresholds route enforced the activation floor can
-    // still hold a value at or below it. `@mastra/memory` rejects that config at
-    // init, and the rejection is unhandled, so one stale row takes the process
-    // down rather than failing a single run: read it up to a usable threshold.
-    // Resource scope sets no activation buffer, so it keeps lower values.
+    // Rows saved before validation can still hold a thread-scope threshold that
+    // @mastra/memory refuses because it does not exceed the activation buffer.
+    // Resource scope has no activation buffer and keeps its saved value.
     const storedObsThreshold =
       factorySettings !== undefined
         ? (factorySettings?.observationThreshold ?? DEFAULT_OBS_THRESHOLD)
@@ -372,7 +384,7 @@ export function getDynamicMemory(
       storage,
       ...(knowledge ? { knowledge } : {}),
       vector: vector || false,
-      embedder: vector ? fastembed.small : undefined,
+      embedder: vector ? lazyFastembedSmall : undefined,
       options: {
         // Generate a durable title from the first user message. Every client uses
         // the same title in its thread list and active-session chrome. Title
@@ -418,7 +430,7 @@ export function getDynamicMemory(
                 activateOnProviderChange: true,
                 observation: {
                   bufferTokens: isResourceScope ? false : 1 / 5,
-                  bufferActivation: isResourceScope ? undefined : OBSERVATION_ACTIVATION_TOKENS,
+                  bufferActivation: isResourceScope ? undefined : 2000,
                   model: getObserverModel,
                   messageTokens: obsThreshold,
                   blockAfter: 2,

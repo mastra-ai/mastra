@@ -10,6 +10,7 @@ import type * as CoreLlm from '@mastra/core/llm';
 import type { ModelReasoningOption } from '@mastra/core/llm';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { z } from 'zod';
 
 import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
@@ -34,14 +35,15 @@ function makeAuthStorage(opts: { loggedIn?: string[]; storedKeys?: string[] }): 
 }
 
 function makeAgentController(models: { provider: string; hasApiKey: boolean; apiKeyEnvVar?: string }[]) {
-  return { listAvailableModels: async () => models };
+  return { listAvailableModels: async () => models.map(model => ({ modelName: `${model.provider}-model`, ...model })) };
 }
 
 describe('GET /web/config/features', () => {
   it.each([
-    { features: undefined, expected: false },
-    { features: { knowledge: true }, expected: true },
-  ])('reports the server-side knowledge gate as $expected', async ({ features, expected }) => {
+    { features: undefined, expected: { knowledge: false, mcp: false } },
+    { features: { knowledge: true }, expected: { knowledge: true, mcp: false } },
+    { features: { knowledge: false, mcp: true }, expected: { knowledge: false, mcp: true } },
+  ])('reports the server-side feature gates as $expected', async ({ features, expected }) => {
     const app = new Hono();
     mountApiRoutes(
       app as never,
@@ -55,7 +57,7 @@ describe('GET /web/config/features', () => {
     const response = await app.request('/web/config/features');
 
     expect(response.status).toBe(200);
-    expect(await response.json()).toEqual({ knowledge: expected });
+    expect(await response.json()).toEqual(expected);
   });
 });
 
@@ -551,7 +553,7 @@ describe('GET /web/config/models', () => {
       listAvailableModels: async () => [
         { id: 'anthropic/claude-fable-5', modelName: 'claude-fable-5', provider: 'anthropic', hasApiKey: true },
         { id: 'openai/gpt-5.6', modelName: 'gpt-5.6', provider: 'openai', hasApiKey: false },
-        { provider: 'google', hasApiKey: true }, // no id — dropped
+        { modelName: 'gemini', provider: 'google', hasApiKey: true }, // no id — dropped
       ],
     };
     const app = new Hono();
@@ -607,6 +609,8 @@ describe('GET /web/config/models', () => {
           modelName: 'claude-fable-5',
           hasApiKey: true,
           reasoningOptions: fableReasoning,
+          credentialLabel: 'Claude Pro/Max',
+          credentialHolder: 'personal',
         },
       ],
     });
@@ -654,6 +658,53 @@ describe('GET /web/config/models', () => {
     expect((await app.request('/web/config/models?factoryId=missing')).status).toBe(404);
   });
 
+  it('names the credential and its holder from the scope a reply will use, not a personal login that shadows it', async () => {
+    const seed = await createFactoryStorageForTests();
+    await seed.credentials.setCredential({ orgId: 'org1', userId: 'user-a' }, 'anthropic', {
+      type: 'oauth',
+      refresh: 'refresh',
+      access: 'access',
+      expires: Date.now() + 60_000,
+    });
+    await seed.credentials.setCredential({ orgId: 'org1' }, 'anthropic', { type: 'api_key', key: 'sk-org' });
+    const orgProject = await seed.projects.create({ orgId: 'org1', userId: 'user-a', input: { name: 'Org' } });
+    const controller = {
+      listAvailableModels: async () => [
+        { id: 'anthropic/claude-fable-5', modelName: 'claude-fable-5', provider: 'anthropic', hasApiKey: false },
+      ],
+    };
+    const app = new Hono<{ Variables: { factoryAuthUser: { workosId: string; organizationId: string } } }>();
+    app.use('*', async (c, next) => {
+      c.set('factoryAuthUser', { workosId: 'user-a', organizationId: 'org1' });
+      await next();
+    });
+    mountApiRoutes(
+      app,
+      new ConfigRoutes({
+        auth: fakeRouteAuth(),
+        controller,
+        modelCredentials: seed.credentials,
+        factoryProjects: seed.projects,
+      }).routes(),
+    );
+    const catalog = z.object({
+      models: z.array(z.object({ credentialLabel: z.string().optional(), credentialHolder: z.string().optional() })),
+    });
+    const credential = async (query: string) => {
+      const res = await app.request(`/web/config/models${query}`);
+      return catalog.parse(await res.json()).models[0];
+    };
+
+    expect(await credential(`?factoryId=${orgProject.id}`)).toEqual({
+      credentialLabel: 'Anthropic API key',
+      credentialHolder: 'organization',
+    });
+    expect(await credential('?scope=user')).toEqual({
+      credentialLabel: 'Claude Pro/Max',
+      credentialHolder: 'personal',
+    });
+  });
+
   it('includes Bedrock models for a tenant only when the deployment opted in', async () => {
     const seed = await createFactoryStorageForTests();
     const controller = {
@@ -692,6 +743,7 @@ describe('GET /web/config/models', () => {
           provider: 'amazon-bedrock',
           modelName: 'anthropic.claude-x',
           hasApiKey: true,
+          credentialHolder: 'deployment',
         },
       ],
     });
@@ -728,7 +780,9 @@ describe('GET /web/config/models', () => {
     const res = await app.request('/web/config/models');
     expect(res.status).toBe(200);
     expect(await res.json()).toEqual({
-      models: [{ id: 'acme/fast-1', provider: 'acme', modelName: 'fast-1', hasApiKey: true }],
+      models: [
+        { id: 'acme/fast-1', provider: 'acme', modelName: 'fast-1', hasApiKey: true, credentialHolder: 'organization' },
+      ],
     });
   });
 
@@ -863,6 +917,55 @@ describe('default model routes with a tenant', () => {
     expect(await seed.modelDefaults.get({ orgId: 'org1', userId: 'user-a' })).toBeNull();
   });
 
+  it('switches only the caller’s live user sessions without starting dormant sessions', async () => {
+    await seed.projects.create({ orgId: 'org1', userId: 'user-a', input: { name: 'Team' } });
+    await putDefault(buildApp(userA), { modelId: 'openai/gpt-5.6' });
+    const settings = new Map<string, string>();
+    const rows = [
+      { sessionId: 'live', userId: 'user-a', originSessionId: null },
+      { sessionId: 'dormant', userId: 'user-a', originSessionId: null },
+      { sessionId: 'other-user', userId: 'user-b', originSessionId: null },
+      { sessionId: 'side-session', userId: 'user-a', originSessionId: 'live' },
+    ];
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('factoryAuthUser' as never, userA as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as never,
+      new ConfigRoutes({
+        auth: fakeRouteAuth(),
+        modelDefaults: seed.modelDefaults,
+        factoryProjects: seed.projects,
+        workItems: seed.workItems,
+        sourceControls: [{ sessions: { listByProject: async () => rows } }] as never,
+        controller: {
+          ...controller,
+          getSession: async (id: string) =>
+            id === 'live'
+              ? {
+                  model: {
+                    get: () => settings.get('currentModelId') ?? '',
+                    switch: async (modelId: string) => void settings.set('currentModelId', modelId),
+                  },
+                  thread: { getId: () => 'thread-live' },
+                }
+              : undefined,
+        },
+      }).routes(),
+    );
+
+    const response = await app.request('/web/config/default-model/apply', { method: 'POST' });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({
+      modelId: 'openai/gpt-5.6',
+      applied: ['live'],
+      skipped: [{ sessionId: 'dormant', reason: 'not-running' }],
+    });
+    expect(settings.get('currentModelId')).toBe('openai/gpt-5.6');
+  });
+
   it('uses the local sentinel org and user when auth is disabled', async () => {
     const app = new Hono();
     mountApiRoutes(
@@ -953,7 +1056,7 @@ describe('OM routes with a tenant', () => {
     const controller = {
       ...makeAgentController([{ provider: opts.provider ?? 'anthropic', hasApiKey: true }]),
       listModes: () => [{ id: 'build', defaultModelId: opts.defaultModelId }],
-      getSessionByResource: async () => session ?? undefined,
+      getSession: async (sessionId: string) => (sessionId === 'r1' ? (session ?? undefined) : undefined),
     };
     const app = new Hono();
     if (opts.authEnabled !== false) {
@@ -1092,7 +1195,12 @@ describe('OM routes with a tenant', () => {
       userId: 'user-a',
       input: { name: 'Hybrid', modelScope: 'hybrid', defaultModelId: 'anthropic/claude-opus-5' },
     });
-    const app = buildApp(null, { defaultModelId: 'anthropic/claude-opus-5' });
+    const app = buildApp(null, {
+      defaultModelId: 'anthropic/claude-opus-5',
+      sourceSessions: {
+        r1: { orgId: 'org1', userId: 'user-a', visibility: 'shared', factoryProjectId: factory.id },
+      },
+    });
 
     // The Factory settings page: no session, so this is what work items get.
     const workItems = await app.request(`/web/config/om?factoryId=${factory.id}`);
@@ -1100,7 +1208,7 @@ describe('OM routes with a tenant', () => {
     expect((await workItems.json()).config.observer.effectiveModelId).toMatch(/^anthropic\/claude-haiku/);
 
     // A chat in the same Factory: its owner's credentials, so Auto picks differently.
-    const session = await app.request(`/web/config/om?factoryId=${factory.id}&resourceId=r1`);
+    const session = await app.request(`/web/config/om?factoryId=${factory.id}&sessionId=r1&threadId=t1`);
     expect(session.status).toBe(200);
     const { config } = await session.json();
     expect(config.observer).toMatchObject({ model: 'auto', providerStatus: 'available' });
@@ -1129,13 +1237,19 @@ describe('OM routes with a tenant', () => {
       runBinding: { factoryProjectId: factory.id },
     });
 
-    const bound = await app.request(`/web/config/om?factoryId=${factory.id}&resourceId=r1&threadId=t1`);
+    const bound = await app.request(`/web/config/om?factoryId=${factory.id}&sessionId=r1&threadId=t1`);
     expect(bound.status).toBe(200);
     expect((await bound.json()).config.observer.effectiveModelId).toMatch(/^anthropic\/claude-haiku/);
 
-    // Same session, same resource: without the bound thread it is an ordinary chat,
-    // so the owner's own credentials are what a run would use.
-    const unbound = await app.request(`/web/config/om?factoryId=${factory.id}&resourceId=r1`);
+    // The same session on an unbound thread is an ordinary chat, so the owner's
+    // own credentials are what a run would use.
+    const unboundApp = buildApp(null, {
+      defaultModelId: 'anthropic/claude-opus-5',
+      sourceSessions: {
+        r1: { orgId: 'org1', userId: 'user-a', visibility: 'shared', factoryProjectId: factory.id },
+      },
+    });
+    const unbound = await unboundApp.request(`/web/config/om?factoryId=${factory.id}&sessionId=r1&threadId=t2`);
     expect(unbound.status).toBe(200);
     expect((await unbound.json()).config.observer.effectiveModelId).toMatch(/^google\/gemini/);
   });
@@ -1164,7 +1278,7 @@ describe('OM routes with a tenant', () => {
       },
     });
 
-    const res = await app.request(`/web/config/om?factoryId=${factory.id}&resourceId=r1`);
+    const res = await app.request(`/web/config/om?factoryId=${factory.id}&sessionId=r1&threadId=t1`);
     expect(res.status).toBe(200);
     const { config } = await res.json();
     expect(config.observer).toMatchObject({ model: 'auto', providerStatus: 'available' });
@@ -1180,19 +1294,19 @@ describe('OM routes with a tenant', () => {
     const app = buildApp(makeOmSession());
 
     const rejected = await putJson(app, '/web/config/om/thresholds', {
-      resourceId: 'r1',
+      sessionId: 'r1',
       observationThreshold: 500,
     });
     expect(rejected.status).toBe(400);
     expect((await rejected.json()).error).toMatch(/greater than 2000 tokens/);
     // The buffer is an absolute 2000 tokens, so the boundary value fails a run too.
     expect(
-      (await putJson(app, '/web/config/om/thresholds', { resourceId: 'r1', observationThreshold: 2000 })).status,
+      (await putJson(app, '/web/config/om/thresholds', { sessionId: 'r1', observationThreshold: 2000 })).status,
     ).toBe(400);
     await expect(seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).resolves.toBeNull();
 
     expect(
-      (await putJson(app, '/web/config/om/thresholds', { resourceId: 'r1', observationThreshold: 2001 })).status,
+      (await putJson(app, '/web/config/om/thresholds', { sessionId: 'r1', observationThreshold: 2001 })).status,
     ).toBe(200);
     await expect(seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).resolves.toMatchObject({
       observationThreshold: 2001,
@@ -1210,7 +1324,7 @@ describe('OM routes with a tenant', () => {
     });
 
     const app = buildApp(makeOmSession());
-    const res = await app.request('/web/config/om?resourceId=r1');
+    const res = await app.request('/web/config/om?sessionId=r1');
 
     expect(res.status).toBe(200);
     expect((await res.json()).config.observationThreshold).toBe(2001);
@@ -1227,7 +1341,7 @@ describe('OM routes with a tenant', () => {
     });
     const session = makeOmSession({ currentModelId: 'deepseek/deepseek-v4-pro' });
     const res = await buildApp(session, { defaultModelId: 'anthropic/claude-opus-5' }).request(
-      '/web/config/om?resourceId=r1',
+      '/web/config/om?sessionId=r1',
     );
 
     expect(res.status).toBe(200);
@@ -1252,7 +1366,7 @@ describe('OM routes with a tenant', () => {
       key: 'sk-deepseek',
     });
     const session = makeOmSession({ currentModelId: 'mastra/deepseek/deepseek-v4-pro' });
-    const res = await buildApp(session).request('/web/config/om?resourceId=r1');
+    const res = await buildApp(session).request('/web/config/om?sessionId=r1');
 
     expect(res.status).toBe(200);
     expect((await res.json()).config.observer).toMatchObject({
@@ -1264,7 +1378,7 @@ describe('OM routes with a tenant', () => {
   it('reports a gateway route available when only the Mastra gateway key is configured', async () => {
     vi.spyOn(MastraCodeGateway, 'getMastraGatewayApiKey').mockReturnValue('mg-test');
     const session = makeOmSession({ currentModelId: 'mastra/deepseek/deepseek-v4-pro' });
-    const res = await buildApp(session).request('/web/config/om?resourceId=r1');
+    const res = await buildApp(session).request('/web/config/om?sessionId=r1');
 
     expect(res.status).toBe(200);
     expect((await res.json()).config.observer).toMatchObject({
@@ -1275,7 +1389,7 @@ describe('OM routes with a tenant', () => {
 
   it('reports a gateway route unavailable without a gateway key or provider credential', async () => {
     const session = makeOmSession({ currentModelId: 'mastra/deepseek/deepseek-v4-pro' });
-    const res = await buildApp(session).request('/web/config/om?resourceId=r1');
+    const res = await buildApp(session).request('/web/config/om?sessionId=r1');
 
     expect(res.status).toBe(200);
     expect((await res.json()).config.observer).toMatchObject({
@@ -1320,7 +1434,7 @@ describe('OM routes with a tenant', () => {
     expect(read.status).toBe(404);
 
     const write = await putJson(app, '/web/config/om/observer/model', {
-      resourceId: 'r1',
+      sessionId: 'r1',
       modelId: 'anthropic/claude-fable-5',
       factoryId: foreign.id,
     });
@@ -1333,7 +1447,7 @@ describe('OM routes with a tenant', () => {
   it('persists a role model switch without materializing the other auto role', async () => {
     const session = makeOmSession();
     const res = await putJson(buildApp(session), '/web/config/om/observer/model', {
-      resourceId: 'r1',
+      sessionId: 'r1',
       modelId: 'anthropic/claude-fable-5',
     });
     expect(res.status).toBe(200);
@@ -1350,13 +1464,13 @@ describe('OM routes with a tenant', () => {
     const app = buildApp(makeOmSession());
 
     const unknownRole = await putJson(app, '/web/config/om/scribe/model', {
-      resourceId: 'r1',
+      sessionId: 'r1',
       modelId: 'anthropic/claude-fable-5',
     });
     expect(unknownRole.status).toBe(400);
     expect((await unknownRole.json()).error).toBe('Unknown OM role "scribe"');
 
-    const missing = await putJson(app, '/web/config/om/observer/model', { resourceId: 'r1' });
+    const missing = await putJson(app, '/web/config/om/observer/model', { sessionId: 'r1' });
     expect(missing.status).toBe(400);
     expect((await missing.json()).error).toBe('Missing required field: modelId');
     await expect(seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' })).resolves.toBeNull();
@@ -1372,7 +1486,7 @@ describe('OM routes with a tenant', () => {
     await session.om.observer.switchModel({ modelId: 'session-only/observer' });
 
     const res = await putJson(buildApp(session), '/web/config/om/observer/model', {
-      resourceId: 'r1',
+      sessionId: 'r1',
       modelId: 'auto',
     });
 
@@ -1387,8 +1501,8 @@ describe('OM routes with a tenant', () => {
   it('keeps independently selected role models on later switches', async () => {
     const session = makeOmSession();
     const app = buildApp(session);
-    await putJson(app, '/web/config/om/reflector/model', { resourceId: 'r1', modelId: 'openai/gpt-5.6' });
-    await putJson(app, '/web/config/om/observer/model', { resourceId: 'r1', modelId: 'anthropic/claude-fable-5' });
+    await putJson(app, '/web/config/om/reflector/model', { sessionId: 'r1', modelId: 'openai/gpt-5.6' });
+    await putJson(app, '/web/config/om/observer/model', { sessionId: 'r1', modelId: 'anthropic/claude-fable-5' });
 
     const stored = await seed.memorySettings.get({ orgId: 'org1', userId: 'user-a' });
     expect(stored).toMatchObject({
@@ -1399,7 +1513,7 @@ describe('OM routes with a tenant', () => {
 
   it('persists thresholds to the memory-settings domain', async () => {
     const res = await putJson(buildApp(makeOmSession()), '/web/config/om/thresholds', {
-      resourceId: 'r1',
+      sessionId: 'r1',
       observationThreshold: 25000,
       reflectionThreshold: 45000,
     });
@@ -1411,7 +1525,7 @@ describe('OM routes with a tenant', () => {
 
   it('persists observe-attachments to the memory-settings domain', async () => {
     const res = await putJson(buildApp(makeOmSession()), '/web/config/om/observe-attachments', {
-      resourceId: 'r1',
+      sessionId: 'r1',
       value: false,
     });
     expect(res.status).toBe(200);
@@ -1459,21 +1573,21 @@ describe('OM routes with a tenant', () => {
     });
   });
 
-  it('falls back to the stored row when the resourceId has no live session', async () => {
+  it('falls back to the stored row when the session is not live', async () => {
     const app = buildApp(null);
 
-    const initial = await app.request('/web/config/om?resourceId=r1');
+    const initial = await app.request('/web/config/om?sessionId=r1');
     expect(initial.status).toBe(200);
     expect((await initial.json()).config.observerModelId).toBe(DEFAULT_OM_MODEL_ID);
 
     expect(
-      (await putJson(app, '/web/config/om/observer/model', { resourceId: 'r1', modelId: 'anthropic/claude-fable-5' }))
+      (await putJson(app, '/web/config/om/observer/model', { sessionId: 'r1', modelId: 'anthropic/claude-fable-5' }))
         .status,
     ).toBe(200);
     expect(
-      (await putJson(app, '/web/config/om/thresholds', { resourceId: 'r1', observationThreshold: 25000 })).status,
+      (await putJson(app, '/web/config/om/thresholds', { sessionId: 'r1', observationThreshold: 25000 })).status,
     ).toBe(200);
-    expect((await putJson(app, '/web/config/om/observe-attachments', { resourceId: 'r1', value: false })).status).toBe(
+    expect((await putJson(app, '/web/config/om/observe-attachments', { sessionId: 'r1', value: false })).status).toBe(
       200,
     );
 
@@ -1486,7 +1600,7 @@ describe('OM routes with a tenant', () => {
 
   it('returns 503 when tenant mode has no memory-settings storage', async () => {
     const res = await putJson(buildApp(makeOmSession(), { withStorage: false }), '/web/config/om/thresholds', {
-      resourceId: 'r1',
+      sessionId: 'r1',
       observationThreshold: 25000,
     });
     expect(res.status).toBe(503);
@@ -1501,7 +1615,7 @@ describe('OM routes with a tenant', () => {
     });
 
     const session = makeOmSession();
-    const res = await buildApp(session).request('/web/config/om?resourceId=r1');
+    const res = await buildApp(session).request('/web/config/om?sessionId=r1');
     expect(res.status).toBe(200);
     const { config } = await res.json();
     expect(config.observerModelId).toBe('openai/gpt-5.6');
@@ -1516,7 +1630,7 @@ describe('OM routes with a tenant', () => {
     await session.om.observer.switchModel({ modelId: 'alibaba-token-plan/deepseek-v4-flash' });
     session.state.set({ observationThreshold: 99000 });
 
-    const res = await buildApp(session).request('/web/config/om?resourceId=r1');
+    const res = await buildApp(session).request('/web/config/om?sessionId=r1');
     expect(res.status).toBe(200);
     const { config } = await res.json();
     expect(config.observerModelId).toBe(DEFAULT_OM_MODEL_ID);
@@ -1529,7 +1643,7 @@ describe('OM routes with a tenant', () => {
   it('uses a sentinel local row when auth is disabled — never settings.json', async () => {
     const session = makeOmSession();
     const app = buildApp(session, { authEnabled: false });
-    const res = await putJson(app, '/web/config/om/thresholds', { resourceId: 'r1', observationThreshold: 7000 });
+    const res = await putJson(app, '/web/config/om/thresholds', { sessionId: 'r1', observationThreshold: 7000 });
     expect(res.status).toBe(200);
 
     const stored = await seed.memorySettings.get({ orgId: 'local', userId: 'local' });
