@@ -1165,7 +1165,7 @@ For the streaming version of the same chunk shape, see the [ChunkType reference]
     name: 'finishReason',
     type: 'string',
     description:
-      "The reason generation finished. Values include 'stop' (normal completion), 'tool-calls' (ended with tool calls), 'suspended' (waiting for tool approval), or 'error' (error occurred).",
+      "The reason generation finished. Values include 'stop' (normal completion), 'tool-calls' (ended with tool calls), 'suspended' (paused for tool approval or because a tool called `suspend()`), or 'error' (error occurred).",
   },
   {
     name: 'response',
@@ -1296,7 +1296,7 @@ For the streaming version of the same chunk shape, see the [ChunkType reference]
     type: 'object',
     isOptional: true,
     description:
-      "Present when `finishReason` is 'suspended'. Contains tool call details needed to approve or decline the pending tool call.",
+      "Present when `finishReason` is 'suspended'. Contains details about the pending tool call. For tool approval, use `toolCallId` with `approveToolCallGenerate()` or `declineToolCallGenerate()`. For a tool that called `suspend()`, `suspendPayload` holds the data the tool passed to `suspend()`, and you resume with `resumeGenerate()`.",
     properties: [
       {
         type: 'object',
@@ -1326,6 +1326,28 @@ For the streaming version of the same chunk shape, see the [ChunkType reference]
           },
         ],
       },
+      {
+        parameters: [
+          {
+            name: 'suspendPayload',
+            type: 'any',
+            isOptional: true,
+            description:
+              "Only when a tool called `suspend()`. Contains the data the tool passed to `suspend()`, matching the tool's `suspendSchema`.",
+          },
+        ],
+      },
+      {
+        parameters: [
+          {
+            name: 'resumeSchema',
+            type: 'string',
+            isOptional: true,
+            description:
+              'JSON Schema, serialized as a string, describing the data `resumeGenerate()` or `resumeStream()` expects.',
+          },
+        ],
+      },
     ],
   },
   {
@@ -1333,7 +1355,7 @@ For the streaming version of the same chunk shape, see the [ChunkType reference]
     type: 'string',
     isOptional: true,
     description:
-      'Unique identifier for this execution run. Required when calling `approveToolCallGenerate()` or `declineToolCallGenerate()` to resume a suspended execution.',
+      'Unique identifier for this execution run. Required when resuming a suspended execution with `approveToolCallGenerate()`, `declineToolCallGenerate()`, `resumeGenerate()`, or their streaming equivalents.',
   },
   {
     name: 'traceId',
@@ -1381,6 +1403,35 @@ For the streaming version of the same chunk shape, see the [ChunkType reference]
 />
 
 ## More examples
+
+### Resuming a suspended generation
+
+`generate()` returns `finishReason: 'suspended'` in two cases: a tool requires approval (see [`requireToolApproval`](#parameters)), or a tool's `execute` function calls `suspend()`. For a tool that calls `suspend()`, `suspendPayload.suspendPayload` contains the data the tool passed to `suspend()`.
+
+Resume the run with `resumeGenerate()`, passing the data described by the tool's `resumeSchema` and the suspended `runId`:
+
+```typescript
+const output = await agent.generate("What's the weather in London?")
+
+if (output.finishReason === 'suspended') {
+  console.log(output.suspendPayload.toolCallId)
+  console.log(output.suspendPayload.suspendPayload) // { reason: 'Approval required.' }
+
+  const resumed = await agent.resumeGenerate(
+    { approved: true },
+    {
+      runId: output.runId!,
+      // Pass per-call options again, for example requestContext or onStepFinish.
+    },
+  )
+
+  console.log(resumed.text)
+}
+```
+
+If the resume data doesn't match the tool's `resumeSchema`, `resumeGenerate()` throws an error with the id `AGENT_RESUME_INVALID_DATA` and the run stays suspended, so you can retry with corrected data. When more than one tool call is suspended, pass `toolCallId` to resume a specific one.
+
+For tool approval, use `approveToolCallGenerate()` and `declineToolCallGenerate()` instead, as shown in [human-in-the-loop](/docs/agents/human-in-the-loop#tool-approval-with-generate).
 
 ### With model settings
 
