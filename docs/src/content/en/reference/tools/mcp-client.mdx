@@ -929,7 +929,7 @@ Notes:
 
 ### `events` Property (experimental)
 
-The `events` property lists and subscribes to server events from servers that implement the [MCP Events extension (SEP-3415)](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/3415). Use it to react to things that happen on the server, such as a push to a repository, without polling a tool.
+The `events` property lists and subscribes to server events from servers that implement the [MCP Events extension (SEP-3415)](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/3415). Use it to react to things that happen on the server, such as a push to a repository, without polling a tool. Delivery is at least once. After a reconnect or a resume, the server can resend an occurrence, and the client drops repeats by `eventId` within `dedupWindow` of recent ids.
 
 For an end-to-end walkthrough, see the [MCP events guide](/docs/guides/mcp-events).
 
@@ -968,7 +968,7 @@ The client doesn't receive notifications when the server's event list changes ye
 
 #### `events.subscribe(serverName, eventName, args?, options?)`
 
-Starts a subscription and resolves once the server confirms it. Errors such as an unknown event, invalid arguments, or a forbidden subscription reject the returned promise.
+Starts a subscription and resolves once the server confirms it. Errors such as an unknown event, invalid arguments, or a forbidden subscription reject the returned promise. A new subscription starts from now, so occurrences emitted before the promise resolves are not delivered unless `options.cursor` resumes from an earlier position.
 
 ```typescript oxfmt:false
 async subscribe(
@@ -1152,7 +1152,7 @@ export const mastra = new Mastra({
 ]}
 />
 
-The client refreshes each subscription before it expires by repeating `events/subscribe` with the latest cursor. When the server reports failing delivery in `deliveryStatus`, for example because your endpoint timed out, `onError` receives `MCP_EVENTS_WEBHOOK_DELIVERY_FAILING` with `lastError` in its details. The next refresh resumes a suspended subscription. `cancel()` sends `events/unsubscribe`.
+The client refreshes each subscription before it expires by repeating `events/subscribe` with the latest cursor. When the server reports failing delivery in `deliveryStatus`, for example because your endpoint timed out, `onError` receives `MCP_EVENTS_WEBHOOK_DELIVERY_FAILING` with `lastError` in its details. The `cursor` in each webhook delivery only covers occurrences your endpoint has acknowledged, so resuming from a saved cursor can deliver the last handled occurrence again. The next refresh resumes a suspended subscription. `cancel()` sends `events/unsubscribe`.
 
 Webhook state lives in this process: run the receiving route in the same process as the `MCPClient` that subscribed.
 
