@@ -516,11 +516,6 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
             if (messagesToSave.length > 0) {
               await this.engine.persistMessages(messagesToSave, context.threadId, context.resourceId);
             }
-          } catch (error) {
-            if (args.abortSignal?.aborted) throw error;
-            args.agent
-              ?.__getLogger()
-              .warn('Observational memory could not persist messages after input failure', error);
           } finally {
             state.__omInputFailed = undefined;
           }
@@ -567,7 +562,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     const { error, messageList, requestContext, stepNumber, state } = args;
 
     if (!this.engine.getObservationConfig().observeOnContextOverflow) return;
-    if (state[GATEWAY_STATE_KEY]) return;
+    if (state[GATEWAY_STATE_KEY] || state.__omInputFailed) return;
     // One recovery per step: if the retry overflows again, observing more won't help.
     if (state[CONTEXT_OVERFLOW_STEP_KEY] === stepNumber) return;
     if (!isContextOverflowError(error)) return;

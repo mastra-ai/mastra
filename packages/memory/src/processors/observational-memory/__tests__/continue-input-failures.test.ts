@@ -28,6 +28,7 @@ function setup(
   storage = new InMemoryStore(),
   hooks?: { afterObservation: () => Promise<never> },
   failurePolicy: 'abort' | 'continue' = 'continue',
+  overflowAfterTool = false,
 ) {
   const openai = createOpenAI({ apiKey: 'test', baseURL: `${mock.url.replace(/\/+$/, '')}/v1` });
   const memory = new Memory({
@@ -42,6 +43,7 @@ function setup(
           bufferTokens: false,
           maxRetries: 0,
           failurePolicy,
+          observeOnContextOverflow: overflowAfterTool,
         },
         reflection: { model: openai.chat('observer'), observationTokens: 100_000 },
       },
@@ -66,6 +68,15 @@ function setup(
     { endpoint: 'chat', model: 'actor', predicate: req => req.messages.at(-1)?.role === 'user' },
     { toolCalls: [{ id: 'lookup-call', name: 'lookup', arguments: '{"orderId":"4471"}' }] },
   );
+  if (overflowAfterTool) {
+    mock.on(
+      { endpoint: 'chat', model: 'actor', predicate: req => JSON.stringify(req.messages).includes('SHIPPED') },
+      {
+        error: { message: 'prompt is too long: 210345 tokens > 200000 maximum', code: 'context_length_exceeded' },
+        status: 400,
+      },
+    );
+  }
   mock.on({ endpoint: 'chat', model: 'actor' }, { content: 'The order shipped.' });
   return agent;
 }
@@ -121,6 +132,61 @@ describe('OM continue policy for input failures', () => {
     expect(result.tripwire?.reason).toContain('observation transform failed');
     const requests = mock.getRequests().filter(entry => (entry.body as { model?: string }).model === 'actor');
     expect(requests).toHaveLength(1);
+  });
+
+  it.each(['generate', 'stream'] as const)(
+    'does not report a successful %s turn when saving its final response fails',
+    async method => {
+      mock.on(
+        { endpoint: 'chat', model: 'observer' },
+        { content: '<observations>\n## October 22, 2026\n- User asked for order status\n</observations>' },
+      );
+      const storage = new InMemoryStore();
+      const store = (await storage.getStore('memory'))!;
+      const save = store.saveMessages.bind(store);
+      vi.spyOn(store, 'saveMessages').mockImplementation(async args => {
+        if (JSON.stringify(args.messages).includes('The order shipped.')) {
+          throw new Error('final write unavailable');
+        }
+        return save(args);
+      });
+      const agent = setup(storage, {
+        afterObservation: async () => {
+          throw new Error('observation transform failed');
+        },
+      });
+      const options = { memory: { thread: `write-failure-${method}`, resource: 'r' }, maxSteps: 3 };
+      if (method === 'generate') {
+        await expect(agent.generate('Find order 4471', options)).rejects.toThrow('final write unavailable');
+      } else {
+        const result = await (await agent.stream('Find order 4471', options)).getFullOutput();
+        expect(JSON.stringify(result)).toContain('final write unavailable');
+      }
+      const { messages } = await store.listMessages({ threadId: `write-failure-${method}` });
+      expect(JSON.stringify(messages)).not.toContain('The order shipped.');
+    },
+  );
+
+  it('does not re-enter observation to recover a context overflow after input OM failed', async () => {
+    mock.on(
+      { endpoint: 'chat', model: 'observer' },
+      { content: '<observations>\n## October 22, 2026\n- User asked for order status\n</observations>' },
+    );
+    const afterObservation = vi.fn(async () => {
+      throw new Error('observation transform failed');
+    });
+    const agent = setup(new InMemoryStore(), { afterObservation }, 'continue', true);
+    await expect(
+      agent.generate('Find order 4471', {
+        memory: { thread: 'overflow-after-failure', resource: 'r' },
+        maxSteps: 3,
+      }),
+    ).rejects.toThrow('prompt is too long');
+    const observerRequests = mock
+      .getRequests()
+      .filter(entry => (entry.body as { model?: string }).model === 'observer');
+    expect(observerRequests).toHaveLength(1);
+    expect(afterObservation).toHaveBeenCalledOnce();
   });
 
   it('continues when loading the observation record fails', async () => {
