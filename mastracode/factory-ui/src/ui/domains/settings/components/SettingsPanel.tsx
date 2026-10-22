@@ -1,6 +1,5 @@
 import type { AgentControllerSessionSettings } from '@mastra/client-js';
-import { useEffect } from 'react';
-import { useLocation, useParams } from 'react-router';
+import { useParams } from 'react-router';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 
 import { useChatPermissions } from '../../chat/context/useChatPermissions';
@@ -32,13 +31,7 @@ function getSettingsUpdateErrorMessage(error: unknown): string {
 
 export function SettingsPanel() {
   const section = useSettingsSection();
-  const { hash } = useLocation();
   const { factoryId } = useParams<{ factoryId: string }>();
-
-  useEffect(() => {
-    if (!hash) return;
-    document.getElementById(hash.slice(1))?.scrollIntoView?.({ block: 'start' });
-  }, [hash, section]);
   const { sessionId: chatSessionId, resourceEnabled, baseUrl } = useChatSessionContext();
   const { permissions, setPermissionForCategory } = useChatPermissions();
   const hookArgs = {

@@ -1,6 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
+import { MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../../e2e/ui/msw-server';
@@ -27,13 +28,20 @@ function stubFactory(modelScope: FactoryModelScope, patchStatus = 200) {
   return patchedBodies;
 }
 
+const renderRoutingSection = () =>
+  renderWithProviders(
+    <MemoryRouter initialEntries={['/factories/fp-1/settings/models']}>
+      <ModelRoutingSection factoryId="fp-1" />
+    </MemoryRouter>,
+  );
+
 const routing = (label: string) => screen.getByRole('radio', { name: label });
 const region = (label: string) => screen.getByRole('region', { name: label });
 
 describe('ModelRoutingSection', () => {
   it('routes chats to personal defaults and work-item runs to Factory defaults in a hybrid Factory', async () => {
     stubFactory('hybrid');
-    renderWithProviders(<ModelRoutingSection factoryId="fp-1" />);
+    renderRoutingSection();
 
     await waitFor(() => expect(routing('Hybrid')).toBeChecked());
     expect(routing('Personal')).not.toBeChecked();
@@ -51,7 +59,7 @@ describe('ModelRoutingSection', () => {
   it('saves a new routing and collapses the defaults it leaves unused', async () => {
     const patchedBodies = stubFactory('user');
     const user = userEvent.setup();
-    const { client } = renderWithProviders(<ModelRoutingSection factoryId="fp-1" />);
+    const { client } = renderRoutingSection();
 
     await waitFor(() => expect(routing('Personal')).toBeChecked());
     expect(within(region('Factory defaults')).getByText('Not used in this scope')).toBeInTheDocument();
@@ -71,7 +79,7 @@ describe('ModelRoutingSection', () => {
   it('keeps the saved routing when a change is rejected', async () => {
     stubFactory('hybrid', 403);
     const user = userEvent.setup();
-    const { client } = renderWithProviders(<ModelRoutingSection factoryId="fp-1" />);
+    const { client } = renderRoutingSection();
 
     await waitFor(() => expect(routing('Hybrid')).toBeChecked());
     await user.click(routing('Factory'));
@@ -83,7 +91,7 @@ describe('ModelRoutingSection', () => {
 
   it('offers no routing to pick when the Factory cannot be loaded', async () => {
     server.use(http.get(FACTORY_URL, () => HttpResponse.json({ error: 'unavailable' }, { status: 503 })));
-    renderWithProviders(<ModelRoutingSection factoryId="fp-1" />);
+    renderRoutingSection();
 
     expect(await screen.findByRole('alert')).toBeInTheDocument();
     expect(screen.queryByRole('radiogroup', { name: 'Model routing' })).not.toBeInTheDocument();

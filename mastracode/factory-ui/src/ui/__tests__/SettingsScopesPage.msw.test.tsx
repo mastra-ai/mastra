@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { beforeEach, describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, onTestFinished } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
@@ -18,10 +18,10 @@ import {
 const PROVIDERS_URL = `${TEST_BASE_URL}/web/config/providers`;
 const OM_URL = `${TEST_BASE_URL}/web/config/om`;
 
-function renderSettings(section: string) {
+function renderSettings(section: string, hash = '') {
   const router = createMemoryRouter(createAppRoutes(), {
     initialEntries: [
-      { pathname: `/factories/fp-1/settings/${section}`, state: { settingsReturnTo: '/factories/fp-1/work' } },
+      { pathname: `/factories/fp-1/settings/${section}`, hash, state: { settingsReturnTo: '/factories/fp-1/work' } },
     ],
   });
   renderWithProviders(<RouterProvider router={router} />);
@@ -168,5 +168,26 @@ describe('Settings ownership', () => {
     expect(await screen.findByRole('region', { name: 'Factory memory' })).toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/factories/fp-1/settings/memory');
     expect(screen.getByRole('link', { name: 'Memory' })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('scrolls a cold-loaded defaults link to its card once the card renders', async () => {
+    const scrolledIds: string[] = [];
+    const scrollIntoView = Element.prototype.scrollIntoView;
+    Element.prototype.scrollIntoView = function (this: Element) {
+      scrolledIds.push(this.id);
+    };
+    onTestFinished(() => {
+      Element.prototype.scrollIntoView = scrollIntoView;
+    });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () =>
+        HttpResponse.json({ project: { ...settingsFactory, modelScope: 'factory' } }),
+      ),
+    );
+
+    renderSettings('models', '#factory-defaults');
+
+    expect(await screen.findByRole('region', { name: 'Factory defaults' })).toBeInTheDocument();
+    await waitFor(() => expect(scrolledIds).toEqual(['factory-defaults']));
   });
 });

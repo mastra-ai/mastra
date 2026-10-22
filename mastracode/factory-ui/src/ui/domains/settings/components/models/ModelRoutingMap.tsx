@@ -8,7 +8,8 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { AppWindow, Building2, CircleUserRound, MessagesSquare, SquareKanban } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router';
 
 import { GitLabIcon, IncidentIoIcon, JiraIcon } from '../../../../ui/icons';
 import type { FactoryModelScope } from '../../../workspaces/services/github';
@@ -181,10 +182,20 @@ function DefaultsNode({
   model: ReactNode;
 }) {
   const Icon = DEFAULTS_ICONS[defaults];
+  const anchor = MODEL_DEFAULTS_ANCHORS[defaults];
+  const { hash } = useLocation();
+  const isLinkTarget = hash === `#${anchor}`;
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (isLinkTarget) cardRef.current?.scrollIntoView?.({ block: 'start' });
+  }, [isLinkTarget]);
+
   return (
     <Card
+      ref={cardRef}
       as="section"
-      id={MODEL_DEFAULTS_ANCHORS[defaults]}
+      id={anchor}
       aria-label={MODEL_DEFAULTS_LABELS[defaults]}
       className={cn('scroll-mt-4', !inUse && 'opacity-60')}
     >
