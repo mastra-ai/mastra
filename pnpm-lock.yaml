@@ -8094,8 +8094,8 @@ importers:
   stores/spanner:
     dependencies:
       '@google-cloud/spanner':
-        specifier: ^8.10.0
-        version: 8.10.0(supports-color@10.2.2)
+        specifier: ^8.13.0
+        version: 8.13.0(supports-color@10.2.2)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -9832,7 +9832,7 @@ importers:
     dependencies:
       files-sdk:
         specifier: ^1.9.0
-        version: 1.9.0(7874cd01acdaa9a9708a237b51ad56ed)
+        version: 1.9.0(56aa0f08e817c141ac7b1a0f131dd9f8)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -9862,8 +9862,8 @@ importers:
   workspaces/gcs:
     dependencies:
       '@google-cloud/storage':
-        specifier: ^7.21.0
-        version: 7.21.0(encoding@0.1.13)(supports-color@10.2.2)
+        specifier: ^7.22.0
+        version: 7.22.0(encoding@0.1.13)(supports-color@10.2.2)
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -14498,17 +14498,21 @@ packages:
     resolution: {integrity: sha512-xXAQBVVrFviWz8L8yDKEqv1ziVw/gMSpYHt3IxSYRSY0fTyjis+xOrKJILj8dd8PAUHGnGiAIYuTprflkE9jsQ==}
     engines: {node: '>=18'}
 
-  '@google-cloud/spanner@8.10.0':
-    resolution: {integrity: sha512-BvFYGKzvxZlLcJWBKuZagpcel6xIiu3Ai8K11OG4SddMA3eqWLCW958N+fZSFVCsnrZtL+zdAf3gIwhEl9k4IQ==}
+  '@google-cloud/spanner-api@0.2.0':
+    resolution: {integrity: sha512-aWvKaAUtc2qWyfZ0bARWEe9YYDraZPAjbvcjerw4d5DiMMkDoybOyPHai1hVP5JL/7oPjtjAUvmHuMn/STdXtA==}
+    engines: {node: '>=18'}
+
+  '@google-cloud/spanner@8.13.0':
+    resolution: {integrity: sha512-qwfwJIvTozjMvLeSawtR9G/pic69+T5+YcI64nojZwZZ+8dZWB049R2tvYrXAugqfX0ceuDtDjz25mQmmYxugQ==}
     engines: {node: '>=18'}
 
   '@google-cloud/speech@7.5.0':
     resolution: {integrity: sha512-Tvn9yvNNTGj+AcUVtTBgOASXuUfwqU3L2ugHAORhzPtj0G/Bxstlut9WhDl96FR/rihbJ6mvTMEijsbuOREDPA==}
     engines: {node: '>=18'}
 
-  '@google-cloud/storage@7.21.0':
-    resolution: {integrity: sha512-l+IFTkd+6Y5LoAuXyYCKNAKtw/Ci+rAMqgdTB1jv4iZiLhw0rtq+0qjIRbBizXkNzEFmXiXUW0H7sZQQvk1ffA==}
-    engines: {node: '>=14'}
+  '@google-cloud/storage@7.22.0':
+    resolution: {integrity: sha512-W98gTQOAntEeEQ7/pZxSQXxfUO5CiQcXJRsxBpUa6UU25n8YN/VtogPBi0H+MAmUrn/6bY/sBhFansoWEsr2/g==}
+    engines: {node: '>=18'}
 
   '@google-cloud/storage@8.2.0':
     resolution: {integrity: sha512-7ckgSjeEprV92VrlLjpYFA3PFerflvFtF7Ea86oQXGNCprGZq5rtpAVK0zgWnCy+44mLjms42M7MiWa433gz2A==}
@@ -22457,9 +22461,6 @@ packages:
   async@0.2.10:
     resolution: {integrity: sha512-eAkdoKxU6/LkKDBzLpT+t6Ff5EtfSF4wx1WfJiPEEV7WNLnDaRXk0oVysiEPm262roaachGexwUv94WhSgN5TQ==}
 
-  async@2.6.4:
-    resolution: {integrity: sha512-mzo5dfJYwAn29PeiJ0zvwTo04zj8HDJj0Mn8TD7sno7q12prdbnasKJHhkm2c1LgrhlJ0teaea8860oxi51mGA==}
-
   async@3.2.6:
     resolution: {integrity: sha512-htCUDlxyyCLMgaM3xXg0C0LW2xqfuQ6p05pCEIsXuyQ+a1koYKTuBMzRNwmybfLgvJDMd0r1LTn4+E0Ti6C2AA==}
 
@@ -23013,9 +23014,6 @@ packages:
   check-error@2.1.1:
     resolution: {integrity: sha512-OAlb+T7V4Op9OwdkjmguYRqncdlx5JiofwOAUkmTF+jNdHwzTaTs4sRAGpzLF3oOz5xAyDGrPgeIDFQmDOTiJw==}
     engines: {node: '>= 16'}
-
-  checkpoint-stream@0.1.2:
-    resolution: {integrity: sha512-eYXIcydL3mPjjEVLxHdi1ISgTwmxGJZ8vyJ3lYVvFTDRyTOZMTbKZdRJqiA7Gi1rPcwOyyzcrZmGLL8ff7e69w==}
 
   cheerio-select@2.1.0:
     resolution: {integrity: sha512-9v9kG0LvzrlcungtnJtpGNxY+fzECQKhK4EGJX2vByejiMX84MFNQw4UxPJl3bFbTMw+Dfs37XaIkCwTZfLh4g==}
@@ -24718,9 +24716,6 @@ packages:
 
   eventemitter3@5.0.4:
     resolution: {integrity: sha512-mlsTRyGaPBjPedk6Bvw+aqbsXDtoAyAzm5MO7JgU+yVRyMQ5O8bD4Kcci7BS85f93veegeCPkL8R4GLClnjLFw==}
-
-  events-intercept@2.0.0:
-    resolution: {integrity: sha512-blk1va0zol9QOrdZt0rFXo5KMkNPVSp92Eju/Qz8THwKWKRKeE0T8Br/1aW6+Edkyq9xHYgYxn2QtOnUKPUp+Q==}
 
   events-universal@1.0.1:
     resolution: {integrity: sha512-LUd5euvbMLpwOF8m6ivPCbhQeSiYVNb8Vs0fQ8QjXo0JTkEHpz8pxdQf0gStltaPpw0Cca8b39KxvK9cfKRiAw==}
@@ -30445,12 +30440,6 @@ packages:
   spdy@4.0.2:
     resolution: {integrity: sha512-r46gZQZQV+Kl9oItvl1JZZqJKGr+oEkB08A6BzkiR7593/7IbtuncXHd2YoYeTsG4157ZssMu9KYvUHLcjcDoA==}
     engines: {node: '>=6.0.0'}
-
-  split-array-stream@1.0.3:
-    resolution: {integrity: sha512-yGY35QmZFzZkWZ0eHE06RPBi63umym8m+pdtuC/dlO1ADhdKSfCj0uNn87BYCXBBDFxyTq4oTw0BgLYT0K5z/A==}
-
-  split-array-stream@2.0.0:
-    resolution: {integrity: sha512-hmMswlVY91WvGMxs0k8MRgq8zb2mSen4FmDNc5AFiTWtrBpdZN6nwD6kROVe4vNL+ywrvbCKsWVCnEd4riELIg==}
 
   split-ca@1.0.1:
     resolution: {integrity: sha512-Q5thBSxp5t8WPTTJQS59LrGqOZqOsrhDGDVm8azCqIBjSBd7nd9o2PM+mDulQQkh8h//4U6hFZnc/mul8t5pWQ==}
@@ -37975,7 +37964,13 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@google-cloud/spanner@8.10.0(supports-color@10.2.2)':
+  '@google-cloud/spanner-api@0.2.0(supports-color@10.2.2)':
+    dependencies:
+      google-gax: 5.0.6(supports-color@10.2.2)
+    transitivePeerDependencies:
+      - supports-color
+
+  '@google-cloud/spanner@8.13.0(supports-color@10.2.2)':
     dependencies:
       '@babel/core': 8.0.1
       '@babel/helpers': 7.27.6
@@ -37985,6 +37980,7 @@ snapshots:
       '@google-cloud/opentelemetry-resource-util': 2.4.0(@opentelemetry/resources@1.30.1(@opentelemetry/api@1.9.1))(supports-color@10.2.2)
       '@google-cloud/precise-date': 5.0.0
       '@google-cloud/promisify': 5.0.0
+      '@google-cloud/spanner-api': 0.2.0(supports-color@10.2.2)
       '@grpc/grpc-js': 1.14.5
       '@grpc/proto-loader': 0.8.1
       '@opentelemetry/api': 1.9.1
@@ -37996,19 +37992,15 @@ snapshots:
       '@types/big.js': 6.2.2
       '@types/stack-trace': 0.0.33
       big.js: 7.0.1
-      checkpoint-stream: 0.1.2
       duplexify: 4.1.3
-      events-intercept: 2.0.0
       extend: 3.0.2
       google-auth-library: 10.9.1(supports-color@10.2.2)
       google-gax: 5.0.6(supports-color@10.2.2)
       grpc-gcp: 1.0.1
       lodash.snakecase: 4.1.1
-      merge-stream: 2.0.0
       p-queue: 6.6.2
       protobufjs: 8.8.0
       retry-request: 8.0.2(supports-color@10.2.2)
-      split-array-stream: 2.0.0
       stack-trace: 0.0.10
       stream-events: 1.0.5
       teeny-request: 10.1.0(supports-color@10.2.2)
@@ -38027,7 +38019,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@google-cloud/storage@7.21.0(encoding@0.1.13)(supports-color@10.2.2)':
+  '@google-cloud/storage@7.22.0(encoding@0.1.13)(supports-color@10.2.2)':
     dependencies:
       '@google-cloud/paginator': 5.0.2
       '@google-cloud/projectify': 4.0.0
@@ -46583,10 +46575,6 @@ snapshots:
 
   async@0.2.10: {}
 
-  async@2.6.4:
-    dependencies:
-      lodash: 4.18.1
-
   async@3.2.6: {}
 
   asyncbox@3.0.0:
@@ -47192,14 +47180,6 @@ snapshots:
       - supports-color
 
   check-error@2.1.1: {}
-
-  checkpoint-stream@0.1.2:
-    dependencies:
-      '@types/pumpify': 1.4.4
-      events-intercept: 2.0.0
-      pumpify: 1.5.1
-      split-array-stream: 1.0.3
-      through2: 2.0.5
 
   cheerio-select@2.1.0:
     dependencies:
@@ -49127,8 +49107,6 @@ snapshots:
 
   eventemitter3@5.0.4: {}
 
-  events-intercept@2.0.0: {}
-
   events-universal@1.0.1:
     dependencies:
       bare-events: 2.9.1
@@ -49534,7 +49512,7 @@ snapshots:
   file-uri-to-path@1.0.0:
     optional: true
 
-  files-sdk@1.9.0(7874cd01acdaa9a9708a237b51ad56ed):
+  files-sdk@1.9.0(56aa0f08e817c141ac7b1a0f131dd9f8):
     dependencies:
       commander: 15.0.0
       picomatch: 4.0.7
@@ -49545,7 +49523,7 @@ snapshots:
       '@azure/core-auth': 1.11.0(supports-color@10.2.2)
       '@azure/identity': 4.13.1(supports-color@10.2.2)
       '@azure/storage-blob': 12.34.0(supports-color@10.2.2)
-      '@google-cloud/storage': 7.21.0(encoding@0.1.13)(supports-color@10.2.2)
+      '@google-cloud/storage': 7.22.0(encoding@0.1.13)(supports-color@10.2.2)
       '@modelcontextprotocol/sdk': 1.32.1(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.7)
       '@openai/agents': 0.11.6(@aws-sdk/credential-provider-node@3.972.78)(@cfworker/json-schema@4.1.1)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.6.12)(bufferutil@4.1.0)(supports-color@10.2.2)(ws@8.21.3(bufferutil@4.1.0))(zod@4.6.7)
       '@opentelemetry/api': 1.9.1
@@ -56580,15 +56558,6 @@ snapshots:
       spdy-transport: 3.0.0(supports-color@10.2.2)
     transitivePeerDependencies:
       - supports-color
-
-  split-array-stream@1.0.3:
-    dependencies:
-      async: 2.6.4
-      is-stream-ended: 0.1.4
-
-  split-array-stream@2.0.0:
-    dependencies:
-      is-stream-ended: 0.1.4
 
   split-ca@1.0.1: {}
 
