@@ -1046,6 +1046,62 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     expect(Date.now() - cutAt).toBeLessThan(2_000);
   }, 20_000);
 
+  it('frees the thread when a retake it gave up on is granted after the run stopped', async () => {
+    const thread = 'late-retake-grant-thread';
+    const key = [RESOURCE, thread].join('\u0000');
+    for (let i = 0; i < 100; i++) {
+      llm.on(
+        { userMessage: 'late retake grant', sequenceIndex: i },
+        { toolCalls: [{ id: `call_late_grant_${i}`, name: 'tick', arguments: {} }] },
+      );
+    }
+    const shared = new SharedLeases();
+    /** Once cut, renewals never answer and a retake is granted only after the run gave up on it. */
+    class LateGrantPubSub extends ReplicaPubSub {
+      cut = false;
+      grantedLate = false;
+      override async renewLease(key: string, owner: string, ttlMs: number) {
+        if (this.cut && key.startsWith(`${RESOURCE}\u0000`)) await new Promise(() => {});
+        return super.renewLease(key, owner, ttlMs);
+      }
+      override async acquireLease(key: string, owner: string, ttlMs: number) {
+        if (!this.cut || !key.startsWith(`${RESOURCE}\u0000`)) return super.acquireLease(key, owner, ttlMs);
+        await new Promise(resolve => setTimeout(resolve, 250));
+        const lease = await super.acquireLease(key, owner, ttlMs);
+        this.grantedLate = lease.acquired;
+        return lease;
+      }
+    }
+    const pubsub = new LateGrantPubSub(shared);
+    let ticks = 0;
+    const tick = createTool({
+      id: 'tick',
+      description: 'Tick once',
+      inputSchema: z.object({}),
+      execute: async () => {
+        ticks++;
+        await new Promise(resolve => setTimeout(resolve, 20));
+        return 'ticked';
+      },
+    });
+    const { output, drain } = await startStream(
+      replica(shared, new MockMemory(), { tick }, pubsub),
+      'late retake grant',
+      { maxSteps: 100, memory: { thread, resource: RESOURCE } },
+    );
+    const done = drain().catch(() => undefined);
+    await vi.waitFor(() => expect(ticks).toBeGreaterThanOrEqual(2), { timeout: 5_000 });
+    pubsub.cut = true;
+    await done;
+    expect(await output.finishReason).toBe('aborted');
+
+    // The backend granted the abandoned retake to a run that no longer exists. Nothing renews that lease,
+    // so the thread must be freed at once rather than stay held for a TTL.
+    await vi.waitFor(() => expect(pubsub.grantedLate).toBe(true), { timeout: 5_000 });
+    await new Promise(resolve => setTimeout(resolve, 30));
+    expect(shared.owner(key)).toBeUndefined();
+  }, 20_000);
+
   it('keeps a run going when a late renewal finds its lease expired and no other run took the thread', async () => {
     const thread = 'late-renewal-expired-thread';
     for (let i = 0; i < 8; i++) {
