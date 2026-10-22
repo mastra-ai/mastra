@@ -7,7 +7,7 @@ description: "Browse Scaleway model IDs, capabilities, context windows, and pric
 
 # <img src="https://models.dev/logos/scaleway.svg" alt="Scaleway logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Scaleway
 
-Access 16 Scaleway models through Mastra's model router. Authentication is handled automatically using the `SCALEWAY_API_KEY` environment variable.
+Access 17 Scaleway models through Mastra's model router. Authentication is handled automatically using the `SCALEWAY_API_KEY` environment variable.
 
 Learn more in the [Scaleway documentation](https://www.scaleway.com/en/docs/generative-apis/).
 
@@ -128,6 +128,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": 0.168225,
     "outputCost": 0.6729
+  },
+  {
+    "model": "scaleway/lightonocr-3-0.8b",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 262144,
+    "maxOutput": 16384,
+    "inputCost": 2.464,
+    "outputCost": null
   },
   {
     "model": "scaleway/llama-3.3-70b-instruct",

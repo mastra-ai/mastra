@@ -194,43 +194,72 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "ByteDance/Seed-2.0-code": [
+    "moonshotai/Kimi-K3": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["low", "high", "max"]
       }
     ],
-    "Qwen/Qwen3.8-2.4T-A95B": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      }
-    ],
-    "Qwen/Qwen3.8-27B": [
+    "moonshotai/Kimi-K2.7-Code": [
       {
         "type": "toggle"
-      },
+      }
+    ],
+    "moonshotai/Kimi-K2.5": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "moonshotai/Kimi-K2.6": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "openai/gpt-oss-20b": [
       {
         "type": "effort",
-        "values": ["low", "medium", "xhigh"]
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "anthropic/claude-fable-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "XiaomiMiMo/MiMo-V2.5-Pro": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "XiaomiMiMo/MiMo-V2.5": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "XiaomiMiMo/MiMo-V2.6-Pro": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "XiaomiMiMo/MiMo-V2.6-Flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "tencent/Hy4-preview": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
       }
     ],
     "zai-org/GLM-5": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "zai-org/GLM-5.1": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "zai-org/GLM-4.7": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "zai-org/GLM-4.6": [
       {
         "type": "toggle"
       }
@@ -250,16 +279,25 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "zai-org/GLM-5.1": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "zai-org/GLM-4.7": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "zai-org/GLM-4.6": [
+      {
+        "type": "toggle"
+      }
+    ],
     "zai-org/GLM-5.3-Flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "anthropic/claude-fable-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "stepfun-ai/Step-5-Preview": [
@@ -268,30 +306,18 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "tencent/Hy4-preview": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
     "nvidia/Nemotron-3-Nano-30B-A3B": [
       {
         "type": "toggle"
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp": [
+    "deepseek-ai/DeepSeek-V4.1-Flash-1017": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "deepseek-ai/DeepSeek-V4.1-Flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "xhigh", "max"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4.1-Flash-1017": [
+    "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
@@ -306,32 +332,9 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-ai/DeepSeek-V3.1": [
-      {
-        "type": "toggle"
-      }
-    ],
     "deepseek-ai/DeepSeek-V3.2": [
       {
         "type": "toggle"
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4-Pro-0813": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4-Flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ],
     "deepseek-ai/DeepSeek-V4-Pro": [
@@ -343,22 +346,57 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "XiaomiMiMo/MiMo-V2.6-Pro": [
+    "deepseek-ai/DeepSeek-V3.1": [
       {
         "type": "toggle"
       }
     ],
-    "XiaomiMiMo/MiMo-V2.5-Pro": [
+    "deepseek-ai/DeepSeek-V4-Flash": [
       {
         "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
-    "XiaomiMiMo/MiMo-V2.6-Flash": [
+    "deepseek-ai/DeepSeek-V4-Pro-0813": [
       {
         "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
-    "XiaomiMiMo/MiMo-V2.5": [
+    "deepseek-ai/DeepSeek-V4.1-Flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "xhigh", "max"]
+      }
+    ],
+    "Qwen/Qwen3.8-27B": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "Qwen/Qwen3.8-2.4T-A95B": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "ByteDance/Seed-2.0-code": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "google/gemma-4-31B-it": [
       {
         "type": "toggle"
       }
@@ -369,44 +407,6 @@
       }
     ],
     "google/gemma-4-E4B-it": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "google/gemma-4-31B-it": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "openai/gpt-oss-20b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "openai/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "moonshotai/Kimi-K2.7-Code": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "moonshotai/Kimi-K3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "moonshotai/Kimi-K2.5": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "moonshotai/Kimi-K2.6": [
       {
         "type": "toggle"
       }
