@@ -99,11 +99,15 @@ export async function findWorkspaces(
     ignore: ['**/node_modules/**'],
   });
 
+  // `find-workspaces` globbed directories, so the root was only a member when a
+  // pattern resolved to the root itself (`.`, `./`). Manifest globs also match the
+  // root for `**`, which a directory glob never did.
+  const includesRoot = isRootWorkspace(root.globs);
+
   const workspaces: Workspace[] = [];
   for (const manifest of manifests) {
     const location = toPosix(parentDirectory(manifest));
-    // A `**` glob also matches the root manifest; the root itself is not a workspace package.
-    if (location === root.location) continue;
+    if (location === root.location && !includesRoot) continue;
     const pkg = readJsonFile(location, 'package.json');
     if (isObject(pkg) && typeof pkg.name === 'string') {
       workspaces.push({ location, package: pkg as WorkspacePackageJson });
@@ -127,6 +131,32 @@ function toManifestGlobs(globs: string[]): string[] {
     const base = (negated ? pattern.slice(1) : pattern).replace(/[\\/]+$/, '');
     return `${negated ? '!' : ''}${base}/package.json`;
   });
+}
+
+/**
+ * Whether the workspace globs declare the root directory itself as a member. A
+ * pattern matches the root when nothing is left after removing `.` segments, so
+ * `.`, `./`, `.//` and `./.` do, while `**`, `*` and `packages/*` do not. A negated
+ * root pattern wins.
+ */
+function isRootWorkspace(globs: string[]): boolean {
+  let included = false;
+  let excluded = false;
+  for (const pattern of globs) {
+    if (!isRootPattern(pattern.replace(/^!/, ''))) continue;
+    if (pattern.startsWith('!')) excluded = true;
+    else included = true;
+  }
+  return included && !excluded;
+}
+
+function isRootPattern(pattern: string): boolean {
+  return (
+    pattern
+      .split(/[\\/]/)
+      .filter(segment => segment !== '' && segment !== '.')
+      .join('/') === ''
+  );
 }
 
 function findRoot(dir: string, stopDir: string, cache?: WorkspacesCache): WorkspacesRoot | null {
