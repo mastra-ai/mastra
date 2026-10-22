@@ -738,6 +738,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     initialState,
     initialToolCalls,
     finishUsageIsTotal,
+    onFinishComplete,
   }: {
     model: {
       modelId: string | undefined;
@@ -751,6 +752,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     initialState?: any;
     initialToolCalls?: ToolCallChunk[];
     finishUsageIsTotal?: boolean;
+    /** @internal Successful loop cleanup, after the agent's awaited final memory save. */
+    onFinishComplete?: () => Promise<void>;
   }) {
     super({ component: 'LLM', name: 'MastraModelOutput' });
     if (options.logger) {
@@ -1664,6 +1667,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               };
 
               let outputResultTripwire: StepTripwireData | undefined;
+              let outputResultError: Error | undefined;
               try {
                 if (self.processorRunner && !self.#options.isLLMExecutionStep) {
                   // Run output processors when NOT in LLM execution step context
@@ -1864,6 +1868,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   self.#error = getErrorFromUnknown(error, {
                     fallbackMessage: 'Unknown error in stream',
                   });
+                  outputResultError = self.#error;
                   self.resolvePromises({
                     finishReason: 'error',
                     text: '',
@@ -1914,7 +1919,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   providerMetadata: baseFinishStep.providerMetadata ?? finalProviderMetadata,
                   text: self.#bufferedText.join(''),
                   warnings: baseFinishStep.warnings ?? [],
-                  finishReason: chunk.payload.stepResult.reason,
+                  finishReason: outputResultError ? 'error' : chunk.payload.stepResult.reason,
                   content: messageList.get.response.aiV5.stepContent(),
                   request: await self.request,
                   error: self.error,
@@ -1972,6 +1977,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 }
               }
 
+              // Output processors may perform the final memory write. A rejected write
+              // must not turn into a clean finish or trigger successful snapshot cleanup.
+              if (outputResultError) throw outputResultError;
+              await onFinishComplete?.();
               self.#closeTransportIfNeeded();
 
               // A `processOutputResult` tripwire rejects the run: end the stream with a

@@ -344,6 +344,7 @@ export async function runDurableFinishSideEffects({
 
       await saveQueueManager.flushMessages(messageList, durableState.threadId, durableState.memoryConfig, {
         beforePersist: assertOwned,
+        throwOnError: true,
       });
     } catch (error) {
       if (isExecutionFenceError(error)) throw error;
@@ -352,6 +353,7 @@ export async function runDurableFinishSideEffects({
         threadId: durableState.threadId,
         error,
       });
+      throw error;
     }
   }
 
