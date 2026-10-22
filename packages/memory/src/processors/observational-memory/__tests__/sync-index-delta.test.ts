@@ -234,4 +234,26 @@ describe('synchronous observation indexing delta (#27930)', () => {
     await observe(open(), 3);
     expect(vector.writes).toHaveLength(4);
   });
+
+  it('repairs embeddings from a conflicting model even when content and record are unchanged', async () => {
+    const { memory, open, observe, vector, memoryStore, threadId } = await setup();
+    await observe(memory, 1);
+    const original = vector.writes[0];
+    const thread = await memoryStore.getThreadById({ threadId });
+    if (!original || !thread) throw new Error('Missing indexed thread');
+    const receipt = thread.metadata?.mastra_om_observation_index;
+    await observe(open({ modelId: 'conflicting-model' }), 2);
+    // The original writer's delayed acknowledgement lands after the competing model's
+    // upsert. Both writes target identical group IDs, content, range and generation.
+    const current = await memoryStore.getThreadById({ threadId });
+    await memoryStore.patchThread({
+      id: threadId,
+      metadata: { ...current?.metadata, mastra_om_observation_index: receipt },
+    });
+    await observe(open(), 3);
+    const writes = vector.writes.filter(row => row.group_id === original.group_id);
+    expect(writes).toHaveLength(3);
+    expect(writes[1]?.index_revision).not.toBe(original.index_revision);
+    expect(writes[2]?.index_revision).toBe(original.index_revision);
+  });
 });

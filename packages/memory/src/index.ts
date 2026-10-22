@@ -2782,7 +2782,7 @@ Notes:
     ]);
     // observedAt belongs to the observation's first write. The cycle timestamp passed for
     // retained groups is not a content change and must not force a rewrite every cycle.
-    const fingerprint = await hash([resourceId, text, range]);
+    const fingerprint = await hash([namespace, resourceId, text, range]);
 
     // Serialize the vector write and its acknowledgement across Memory instances in this process.
     await runOMCommit(`observation-index:${resourceId}:${threadId}`, async () => {
