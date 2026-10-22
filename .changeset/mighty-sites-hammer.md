@@ -1,5 +1,4 @@
 ---
-'@mastra/playground-ui': patch
 '@mastra/factory': patch
 ---
 
