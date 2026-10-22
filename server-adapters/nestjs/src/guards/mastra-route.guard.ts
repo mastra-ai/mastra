@@ -1,4 +1,7 @@
-import { Inject, Injectable, Scope } from '@nestjs/common';
+import type { RequestContext } from '@mastra/core/request-context';
+import { getEffectivePermission, MASTRA_AUTH_MODE_KEY } from '@mastra/server/server-adapter';
+import type { ServerRoute } from '@mastra/server/server-adapter';
+import { ForbiddenException, Inject, Injectable, Scope } from '@nestjs/common';
 import type { CanActivate, ExecutionContext } from '@nestjs/common';
 import type { Request, Response } from 'express';
 
@@ -45,6 +48,11 @@ export class MastraRouteGuard implements CanActivate {
       if (user !== undefined) {
         this.requestContext.setUser(user);
       }
+
+      const permissionError = await this.checkRoutePermission(matchResult.route, this.requestContext.requestContext);
+      if (permissionError) {
+        throw new ForbiddenException(permissionError.message);
+      }
     }
 
     // Apply rate limiting to matched Mastra routes.
@@ -55,4 +63,45 @@ export class MastraRouteGuard implements CanActivate {
 
     return true;
   }
+
+  /** Mirrors `MastraServer.checkRoutePermission`, which this adapter cannot inherit. */
+  private async checkRoutePermission(
+    route: ServerRoute,
+    requestContext: RequestContext,
+  ): Promise<{ message: string } | null> {
+    const server = this.options.mastra.getServer();
+    const rbac =
+      requestContext.get(MASTRA_AUTH_MODE_KEY) === 'studio'
+        ? (this.options.mastra.getStudio?.()?.rbac ?? server?.rbac)
+        : server?.rbac;
+    if (!rbac) return null;
+
+    const required = getEffectivePermission(route);
+    if (!required) return null;
+
+    const hasPermission = await loadHasPermission();
+    if (!hasPermission) return null;
+
+    const permissions = Array.isArray(required) ? required : [required];
+    const userPermissions = requestContext.get('userPermissions') as string[] | undefined;
+    if (userPermissions && permissions.some(permission => hasPermission(userPermissions, permission))) return null;
+
+    return {
+      message: `Missing required permission: ${permissions.join(' or ')}`,
+    };
+  }
+}
+
+type HasPermissionFn = (userPerms: string[], required: string) => boolean;
+let hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
+function loadHasPermission(): Promise<HasPermissionFn | undefined> {
+  hasPermissionPromise ??= import('@mastra/core/auth/ee')
+    .then(m => m.hasPermission)
+    .catch(() => {
+      console.error(
+        '[@mastra/nestjs] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
+      );
+      return undefined;
+    });
+  return hasPermissionPromise;
 }
