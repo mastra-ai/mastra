@@ -10,7 +10,7 @@ import { Mastra } from '../../../../mastra';
 import { InMemoryStore } from '../../../../storage';
 import { createTool } from '../../../../tools';
 import type { ToolHooks } from '../../../../tools/types';
-import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
+import { createSharedAgent, runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 import { SCENARIO_MODEL_ID } from '../types';
 
 /**
@@ -271,6 +271,67 @@ describeForAllEngines('AIMock loop scenario: tool lifecycle hooks', engine => {
     expect(execute).toHaveBeenCalledTimes(1);
     expect(JSON.stringify(requests[1]!.body.messages)).toContain('call-only');
   });
+
+  if (engine === 'durable' || engine === 'evented') {
+    it('uses hooks supplied only on warm resume for a suspended tool', async () => {
+      const llm = getMock();
+      const defaultBefore = vi.fn();
+      const resumeBefore = vi.fn(() => ({ proceed: false as const, output: { value: 'blocked-on-resume' } }));
+      const execute = vi.fn(async (_input: { key: string }, context) => {
+        if (!context?.agent?.resumeData) return context?.agent?.suspend({ waiting: true });
+        return { value: 'executed-on-resume' };
+      });
+      const tool = createTool({
+        id: 'guarded_tool',
+        description: 'A tool suspended before resuming.',
+        inputSchema: z.object({ key: z.string() }),
+        suspendSchema: z.object({ waiting: z.boolean() }),
+        resumeSchema: z.object({ approved: z.boolean() }),
+        execute,
+      });
+      const shared = await createSharedAgent(llm, {
+        engine,
+        tools: { guarded_tool: tool },
+        defaultOptions: { hooks: { beforeToolCall: defaultBefore } },
+      });
+      const { output, chunks } = await runLoopScenario({
+        engine,
+        llm,
+        sharedAgent: shared,
+        prompt: 'Call the guarded tool.',
+        collectChunks: true,
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', hasToolResult: false },
+            { toolCalls: [{ id: 'call_guarded', name: 'guarded_tool', arguments: { key: 'alpha' } }] },
+          );
+          llm.on({ endpoint: 'chat', toolCallId: 'call_guarded', hasToolResult: true }, { content: 'Done.' });
+        },
+      });
+      expect(chunks?.some(chunk => chunk.type === 'tool-call-suspended')).toBe(true);
+      expect(execute).toHaveBeenCalledTimes(1);
+      expect(defaultBefore).toHaveBeenCalledTimes(1);
+
+      const resumed = await shared.agent.resumeStream(
+        { approved: true },
+        {
+          runId: output.runId,
+          hooks: { beforeToolCall: resumeBefore },
+        },
+      );
+      for await (const _chunk of resumed.fullStream) {
+        /* drain */
+      }
+
+      expect(resumeBefore).toHaveBeenCalledWith(
+        expect.objectContaining({ toolName: 'guarded_tool', input: { key: 'alpha' } }),
+      );
+      expect(defaultBefore).toHaveBeenCalledTimes(1);
+      expect(execute).toHaveBeenCalledTimes(1);
+      expect(JSON.stringify(llm.getRequests()[1]?.body.messages)).toContain('blocked-on-resume');
+      expect(JSON.stringify(llm.getRequests()[1]?.body.messages)).not.toContain('executed-on-resume');
+    });
+  }
 
   it('feeds the per-execution hook result back to the model through the assembled agent', async () => {
     const execute = vi.fn(async () => ({ value: 'unprotected-result' }));

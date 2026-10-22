@@ -3569,12 +3569,12 @@ export class DurableAgent<
       /* errors already handled by the prior segment */
     });
     // A warm resume reuses the tools built for the first request, which close
-    // over its request context and delegation hooks (#25960). Rebuild them for
+    // over its request context, delegation hooks, and tool hooks (#25960). Rebuild them for
     // this call and swap in only entries still holding a request-built tool, so
     // tools a processor added or replaced are kept. Processor-added tools are
     // rebuilt for this call's request context instead (#27544). Cold resumes already
     // rebuilt everything in prepare() above.
-    if (!coldSnapshot && (options?.requestContext || options?.delegation)) {
+    if (!coldSnapshot && (options?.requestContext || options?.delegation || options?.hooks)) {
       try {
         const requestTools = await this.#wrappedAgent.getToolsForExecution({
           toolsets: resolvedOptions.toolsets,
@@ -3586,6 +3586,7 @@ export class DurableAgent<
           memoryConfig: resolvedOptions.memory?.options,
           autoResumeSuspendedTools: resolvedOptions.autoResumeSuspendedTools,
           delegation: resolvedOptions.delegation,
+          hooks: resolvedOptions.hooks,
           methodType: resolvedOptions.closeOnSuspend ? 'generate' : 'stream',
           backgroundTaskEnabled: Boolean(entry.backgroundTaskManager),
           backgroundTaskPolicy: resolvedOptions.backgroundTaskPolicy,
