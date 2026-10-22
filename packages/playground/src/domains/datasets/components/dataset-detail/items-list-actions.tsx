@@ -1,7 +1,6 @@
 'use client';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';
-import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { MoreVertical, Download, FolderPlus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -33,10 +32,8 @@ export function ActionsMenu({
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="sm" disabled={disabled} aria-label="Actions menu">
-          <Icon>
-            <MoreVertical className="h-4 w-4" />
-          </Icon>
+        <Button variant="ghost" size="icon-sm" disabled={disabled} aria-label="Actions menu">
+          <MoreVertical />
         </Button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-48 p-1">
