@@ -1242,7 +1242,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
         const response = await executeHttpRequest(setup.app, {
           method: 'POST',
           path: `/api/datasets/${dataset.id}/items`,
-          body: { input: { question: { marker: 'submitted-secret-value' } } },
+          body: { input: { question: { marker: 'rejected-secret-value' }, note: 'submitted-secret-value' } },
         });
 
         expect(response.status).toBe(400);
@@ -1250,6 +1250,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
         expect(cause?.field).toBe('input');
         expect(cause?.errors).toEqual([{ path: '/question', message: expect.any(String) }]);
         expect(JSON.stringify(response.data)).not.toContain('submitted-secret-value');
+        expect(JSON.stringify(response.data)).not.toContain('rejected-secret-value');
       });
 
       it('strips anything but path and message from validation errors', async () => {
