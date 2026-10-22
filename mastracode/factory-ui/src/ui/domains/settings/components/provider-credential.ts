@@ -23,3 +23,7 @@ export function credentialAt(provider: ProviderInfo, scope: CredentialScope): Pr
   if (provider.source === 'stored' || provider.source === 'stored-user') return 'api_key';
   return undefined;
 }
+
+export function isConnectedAt(provider: ProviderInfo, scope: CredentialScope): boolean {
+  return credentialAt(provider, scope) !== undefined || SHARED_SOURCE[provider.source] !== undefined;
+}

@@ -12,6 +12,7 @@ import { useDefaultModelQuery } from '../../hooks/use-default-model';
 import { useProvidersQuery } from '../../hooks/use-providers';
 import { useUserSessionQuery } from '../../hooks/useWorkspaces';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
+import { isConnectedAt } from '../domains/settings/components/provider-credential';
 import { MODEL_DEFAULTS_LABELS } from '../domains/settings/components/models/routing/model-routes';
 import {
   MODEL_DEFAULTS_ANCHORS,
@@ -47,8 +48,9 @@ export function NewPage() {
   const chatModelProvider = chatModelId
     ? providersQuery.data?.find(entry => entry.provider === chatModelId.split('/')[0])
     : undefined;
+  const chatCredentialScope = projectQuery.data?.modelScope === 'factory' ? 'org' : 'user';
   const missingCredential =
-    chatModelSettled && chatModelId && chatModelProvider?.source === 'none'
+    chatModelSettled && chatModelId && chatModelProvider && !isConnectedAt(chatModelProvider, chatCredentialScope)
       ? { modelId: chatModelId, provider: chatModelProvider.provider }
       : undefined;
   const configurationError = projectQuery.error ?? providersQuery.error ?? undefined;

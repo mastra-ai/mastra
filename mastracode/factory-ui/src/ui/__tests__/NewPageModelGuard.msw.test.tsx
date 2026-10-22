@@ -107,10 +107,12 @@ describe('NewPage default-model guard', () => {
 
 describe('NewPage credential guard', () => {
   it('asks for a personal key when a chat that runs on personal credentials is missing one, since an org key cannot unblock it', async () => {
-    stubFactory({ id: 'fp-1', name: 'Mastra', defaultModelId: 'anthropic/claude-sonnet-4-5' });
+    stubFactory({ id: 'fp-1', name: 'Mastra', modelScope: 'hybrid', defaultModelId: 'anthropic/claude-sonnet-4-5' });
     server.use(
       http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
-        HttpResponse.json({ providers: [{ provider: 'anthropic', source: 'none', orgKey: false }] }),
+        HttpResponse.json({
+          providers: [{ provider: 'anthropic', source: 'stored-org', orgKey: true, orgCredential: 'api_key' }],
+        }),
       ),
     );
 
@@ -152,11 +154,13 @@ describe('NewPage credential guard', () => {
     expect(screen.queryByText(/Add your own key/)).not.toBeInTheDocument();
   });
 
-  it('renders the composer when the caller has a shared org credential for the default model provider', async () => {
-    stubFactory({ id: 'fp-1', name: 'Mastra', defaultModelId: 'anthropic/claude-sonnet-4-5' });
+  it('renders the composer when a Factory-routed chat has a shared org credential for its model provider', async () => {
+    stubFactory({ id: 'fp-1', name: 'Mastra', modelScope: 'factory', defaultModelId: 'anthropic/claude-sonnet-4-5' });
     server.use(
       http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
-        HttpResponse.json({ providers: [{ provider: 'anthropic', source: 'stored-org', orgKey: true }] }),
+        HttpResponse.json({
+          providers: [{ provider: 'anthropic', source: 'stored-org', orgKey: true, orgCredential: 'api_key' }],
+        }),
       ),
     );
 
