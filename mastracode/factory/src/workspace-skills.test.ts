@@ -1,7 +1,7 @@
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { LocalSkillSource } from '@mastra/core/workspace';
+import { LocalSkillSource, Workspace } from '@mastra/core/workspace';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { BUNDLED_FACTORY_SKILLS_PATH, FactorySkillSource, resolveLocalFactorySkillsPath } from './workspace.js';
 
@@ -20,7 +20,10 @@ describe('deployed Factory skills', () => {
       '---\nname: factory-triage\ndescription: Project triage\n---\nFollow the project triage rules.\n';
     for (const name of ['factory-triage', 'factory-review', 'project-skill']) {
       await mkdir(path.join(skillsRoot, name), { recursive: true });
-      await writeFile(path.join(skillsRoot, name, 'SKILL.md'), customTriage);
+      await writeFile(
+        path.join(skillsRoot, name, 'SKILL.md'),
+        customTriage.replace('name: factory-triage', `name: ${name}`),
+      );
     }
     // Factory remains installed separately, with its own stock instructions.
     expect(BUNDLED_FACTORY_SKILLS_PATH.startsWith(consumerRoot)).toBe(false);
@@ -38,6 +41,11 @@ describe('deployed Factory skills', () => {
     expect(String(await source.readFile(path.join(mount, 'factory-triage', 'SKILL.md')))).toBe(customTriage);
     const names = (await source.readdir(mount)).map(entry => entry.name);
     expect(names).toContain('project-skill');
+    const workspace = new Workspace({ skillSource: source, skills: [mount] });
+    await expect(workspace.skills?.get('project-skill')).resolves.toMatchObject({
+      name: 'project-skill',
+      instructions: 'Follow the project triage rules.',
+    });
     expect(names.filter(name => name === 'factory-triage')).toHaveLength(1);
     expect(names).toContain('factory-plan');
     expect(names).not.toContain('factory-review');
