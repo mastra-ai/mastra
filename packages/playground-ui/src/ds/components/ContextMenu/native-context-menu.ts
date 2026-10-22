@@ -1,8 +1,9 @@
 import type { ContextMenu as ContextMenuPrimitive } from '@base-ui/react/context-menu';
+import { isMacPlatform } from '@/lib/platform';
 
-// macOS reports Control-click as a primary press, then fires contextmenu.
+// Only macOS turns a Control-click into contextmenu; it reports the press as primary.
 function isRightPress(event: MouseEvent) {
-  return event.button === 2 || (event.button === 0 && event.ctrlKey);
+  return event.button === 2 || (event.button === 0 && event.ctrlKey && isMacPlatform());
 }
 
 /**
