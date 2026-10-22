@@ -1142,7 +1142,7 @@ async function getAgentForModelListMutation({
     requestContext,
     versionOptions: { status: 'draft' },
   });
-  return draftAgent.__fork();
+  return draftAgent === publishedAgent ? draftAgent.__fork() : draftAgent;
 }
 
 async function formatAgent({

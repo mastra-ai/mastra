@@ -1077,6 +1077,52 @@ describe('Agent Handlers', () => {
   });
 
   describe('model list edits', () => {
+    it('should preserve an earlier draft toggle when the model list is reordered', async () => {
+      const agent = makeMockAgent({
+        id: 'editor-owned-models',
+        model: [
+          { id: 'primary', model: 'openai/gpt-4o' },
+          { id: 'secondary', model: 'openai/gpt-4o-mini' },
+        ],
+        editor: { model: true },
+      });
+      const draftAgent = agent.__fork();
+      draftAgent.__updateModel({
+        model: [
+          { id: 'primary', model: 'openai/gpt-4o', enabled: true },
+          { id: 'secondary', model: 'openai/gpt-4o-mini', enabled: false },
+        ],
+      });
+      const mastra = makeMastraMock({ agents: { 'editor-owned-models': agent } });
+      const update = vi.fn().mockResolvedValue(draftAgent);
+      vi.spyOn(mastra, 'getEditor').mockReturnValue({
+        agent: {
+          applyStoredOverrides: vi
+            .fn()
+            .mockImplementation((_agent, options) => (options?.status === 'draft' ? draftAgent : agent)),
+          update,
+        },
+      } as never);
+      vi.spyOn(mastra, 'getStorage').mockReturnValue({
+        getStore: vi.fn().mockResolvedValue({ getById: vi.fn().mockResolvedValue({ id: 'editor-owned-models' }) }),
+      } as never);
+
+      await REORDER_AGENT_MODEL_LIST_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        agentId: 'editor-owned-models',
+        reorderedModelIds: ['secondary', 'primary'],
+        requestContext,
+      });
+
+      expect(update).toHaveBeenCalledWith({
+        id: 'editor-owned-models',
+        modelList: [
+          { id: 'secondary', provider: 'openai', modelId: 'gpt-4o-mini', enabled: false, maxRetries: 0 },
+          { id: 'primary', provider: 'openai', modelId: 'gpt-4o', enabled: true, maxRetries: 0 },
+        ],
+      });
+    });
+
     it('should mutate published sub-agent model lists when Editor does not own them', async () => {
       const subAgent = makeMockAgent({
         id: 'sub-agent',
