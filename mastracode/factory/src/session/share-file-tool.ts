@@ -48,7 +48,7 @@ function missingScopeError(error: unknown, platform: string): Error | undefined 
  * run. A forked subagent's thread carries no channel metadata, so forks get
  * nothing here and never post to the platform.
  */
-async function resolveRenderContext(
+export async function resolveRenderContext(
   requestContext: RequestContext,
   deps: ShareFileToolDeps,
 ): Promise<ChatChannelRenderContext | undefined> {

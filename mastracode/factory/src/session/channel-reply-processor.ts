@@ -1,5 +1,8 @@
 import type { ProcessInputStepArgs, Processor } from '@mastra/core/processors';
 
+/** Mirrors `REPLY_TOOL_NAME` in `reply-tool.ts`, which imports this module. */
+const REPLY_TOOL = 'reply_in_thread';
+
 const ID = 'factory-channel-reply';
 
 export const SESSION_LINK_LABEL = 'Open session ↗';
@@ -13,24 +16,42 @@ export const SESSION_LINK_LABEL = 'Open session ↗';
  * the tool widget, so the instruction and the rendering agree. The session
  * link is not the model's job: `FactoryChannelSessionLinkProcessor` appends it
  * to the first reply of a new session, so it is there whether or not the
- * model judged the request worth an opener. No-op for runs without channel
- * context (Studio, API, boards).
+ * model judged the request worth an opener. A run on a Slack-linked session
+ * that didn't start from Slack gets a shorter note on when to post there; runs
+ * with no channel at all (Studio, API, boards) get nothing.
  */
 export class FactoryChannelReplyProcessor implements Processor {
   readonly id = ID;
 
-  processInputStep({ messageList, requestContext }: ProcessInputStepArgs) {
-    if (!requestContext?.get('channel')) return undefined;
-    messageList.addSystem(
-      {
-        role: 'system',
-        content: [
-          'When a request will take tools or more than a moment to answer, reply first with one short line that says what you are about to do — "On it — <the task in a few words>." — then do the work; the opener posts as its own message before any progress is shown. Give direct answers and trivial replies without an opener.',
-          'Finish with the outcome, not a replay of the steps.',
-        ].join('\n'),
-      },
-      ID,
-    );
+  processInputStep({ messageList, requestContext, tools }: ProcessInputStepArgs) {
+    if (!requestContext?.get('channel')) {
+      // A run on a Slack-linked session that didn't start from a Slack message
+      // (a web prompt, a woken run) still has the reply tool; core's channel
+      // prompt says the thread is linked, this says how to use it.
+      if (!tools || !(REPLY_TOOL in tools)) return undefined;
+      messageList.addSystem(
+        {
+          role: 'system',
+          content: `Post to that thread with \`${REPLY_TOOL}\`. This request came from outside it, so don't post an opener or progress there; post the outcome when the people in the thread asked for this work or are waiting on it, or when you're asked to. Don't write a note about what you posted.`,
+        },
+        ID,
+      );
+      return { messageList };
+    }
+    // With reply text hidden the thread only sees what the reply tool posts,
+    // so the opener advice becomes advice about when to call it.
+    const content =
+      tools && REPLY_TOOL in tools
+        ? [
+            `Only messages you send with \`${REPLY_TOOL}\` reach this thread; your other text stays in the session. Don't write a note about what you posted. After a reply, either keep working or end your turn with an empty message; any text you write after posting is wasted.`,
+            `When a request will take tools or more than a moment, post one short line first that says what you are about to do, then do the work and post the outcome when you finish — not a replay of the steps.`,
+            `Post again in between only when you need an answer or have news the people in the thread would want. When a message needs nothing from you, don't call it.`,
+          ]
+        : [
+            'When a request will take tools or more than a moment to answer, reply first with one short line that says what you are about to do — "On it — <the task in a few words>." — then do the work; the opener posts as its own message before any progress is shown. Give direct answers and trivial replies without an opener.',
+            'Finish with the outcome, not a replay of the steps.',
+          ];
+    messageList.addSystem({ role: 'system', content: content.join('\n') }, ID);
     return { messageList };
   }
 }

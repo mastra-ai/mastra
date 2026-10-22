@@ -22,9 +22,10 @@ import type { TypingStatusFn } from '@mastra/core/channels';
 import type { ApiRoute } from '@mastra/core/server';
 import type { SlackAdapterChannelConfig } from '@mastra/slack';
 
+import { REPLY_TOOL_NAME } from '../../session/reply-tool.js';
 import type { WorkItemFeedPublisher } from '../../storage/domains/comments/feed-sync.js';
-import type { FactoryChannelsConfig, FactoryIntegration, IntegrationContext } from '../base.js';
 
+import type { FactoryChannelsConfig, FactoryIntegration, IntegrationContext } from '../base.js';
 import { createSlackConnectRoutes } from './connect-route.js';
 import { SlackFeedPublisher } from './feed-publisher.js';
 import { createSlackChannelsConfig } from './slack.js';
@@ -94,13 +95,25 @@ function describeToolCall(args: unknown): string | undefined {
   return `is ${/^[A-Z][a-z]/.test(text) ? text.charAt(0).toLowerCase() + text.slice(1) : text}`;
 }
 
-const factoryTypingStatus: TypingStatusFn = chunk => {
+/**
+ * With reply text hidden, streamed text never reaches the thread, so it gets
+ * no status: an "is typing..." set after the reply tool's post would sit on
+ * the thread with nothing coming, and race the clear at the end of the run.
+ */
+const factoryTypingStatus =
+  (textDisplay: SlackAdapterChannelConfig['textDisplay']): TypingStatusFn =>
+  chunk => {
   switch (chunk.type) {
     case 'reasoning-delta':
       return 'is thinking...';
     case 'text-delta':
-      return 'is typing...';
+      return textDisplay === 'hidden' ? undefined : 'is typing...';
+    // The reply tool's text streams into the thread as the model writes it.
+    case 'tool-call-input-streaming-start':
+      return chunk.payload.toolName === REPLY_TOOL_NAME ? 'is typing...' : undefined;
     case 'tool-call':
+      // Still finishing the streamed reply; don't flip to "is working...".
+      if (chunk.payload.toolName === REPLY_TOOL_NAME) return 'is typing...';
       return describeToolCall(chunk.payload.args) ?? 'is working...';
     default:
       return undefined;
@@ -126,7 +139,8 @@ function adapterOverrides(options: SlackAdapterChannelConfig | undefined): Slack
  * who want Slack's "Thinking Steps" widget.
  */
 function factoryAdapterOptions(overrides: SlackAdapterChannelConfig): SlackAdapterChannelConfig {
-  return { typingStatus: factoryTypingStatus, toolDisplay: 'hidden', ...overrides };
+  const textDisplay = overrides.textDisplay ?? 'hidden';
+  return { typingStatus: factoryTypingStatus(textDisplay), toolDisplay: 'hidden', textDisplay, ...overrides };
 }
 
 export class SlackIntegration implements FactoryIntegration {
