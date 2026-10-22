@@ -191,6 +191,8 @@ export type CodeEditorProps = {
   lineWrapping?: boolean;
   /** When false, makes the editor read-only */
   editable?: boolean;
+  /** Extra CodeMirror extensions, added after the built-in ones. Memoize them to avoid reconfiguring on every render. */
+  extensions?: Extension[];
 } & VariantProps<typeof codeEditorVariants> &
   Omit<HTMLAttributes<HTMLDivElement>, 'onChange'>;
 
@@ -212,6 +214,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       lineNumbers = true,
       lineWrapping = true,
       editable,
+      extensions: extraExtensions,
       variant,
       id,
       'aria-label': ariaLabelProp,
@@ -275,8 +278,13 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
         exts.push(EditorState.readOnly.of(true));
       }
 
+      if (extraExtensions) {
+        exts.push(...extraExtensions);
+      }
+
       return exts;
     }, [
+      extraExtensions,
       language,
       highlightVariables,
       schema,
