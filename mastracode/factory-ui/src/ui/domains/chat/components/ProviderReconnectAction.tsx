@@ -4,7 +4,7 @@ import { Link, useLocation } from 'react-router';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import type { FactoryAuthState } from '../../auth/services/auth';
-import { settingsSectionPath } from '../../settings/settingsSections';
+import { sessionDefaultsAnchor, settingsSectionPath } from '../../settings/settingsSections';
 import { useChatModelScope } from '../context/useChatModelScope';
 import { useChatSessionContext } from '../context/useChatSessionContext';
 import type { ThreadOwner } from '../services/reply-credential';
@@ -30,9 +30,15 @@ export function ProviderReconnectAction() {
   const teammate = teammatePayingForSession(modelScope, owner, authQuery.data);
   if (teammate) return <span>{teammate.name ?? 'The session owner'} needs to reconnect</span>;
 
-  const section = modelScope === 'factory' ? 'models' : 'personal-models';
   return (
-    <Notice.Button render={<Link to={settingsSectionPath(factoryId, section)} state={{ from: location }} />}>
+    <Notice.Button
+      render={
+        <Link
+          to={settingsSectionPath(factoryId, 'models', sessionDefaultsAnchor(modelScope))}
+          state={{ from: location }}
+        />
+      }
+    >
       Login <ArrowRight aria-hidden="true" />
     </Notice.Button>
   );
