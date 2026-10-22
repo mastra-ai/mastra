@@ -18,6 +18,8 @@ const SHARED_ID = '00000000-0000-4000-8000-0000000000a2';
 const UNMOVED_SHARED_ID = '00000000-0000-4000-8000-0000000000a3';
 /** From before resources were shared: runs on its own id. */
 const LEGACY_PRIVATE_ID = '00000000-0000-4000-8000-0000000000a4';
+/** From before resources were shared, and visible to the org: runs on its own id. */
+const LEGACY_SHARED_ID = '00000000-0000-4000-8000-0000000000a5';
 const FACTORY_ID = 'factory-1';
 const OTHER_FACTORY_ID = 'factory-2';
 
@@ -30,6 +32,7 @@ const rows = new Map([
   [SHARED_ID, row(SHARED_ID, 'org')],
   [UNMOVED_SHARED_ID, row(UNMOVED_SHARED_ID, 'org')],
   [LEGACY_PRIVATE_ID, row(LEGACY_PRIVATE_ID, 'private')],
+  [LEGACY_SHARED_ID, row(LEGACY_SHARED_ID, 'org')],
 ]);
 
 // Each session's own thread (thread id === session id) and the resource it sits on.
@@ -235,6 +238,21 @@ describe('createSessionAccessGuard', () => {
 
     await alias.thread.create();
     expect((await post(app, aliasPath('model'), switchModel)).status).toBe(200);
+  });
+
+  it("403s a second session on an owner's thread that carries no stamp, while the owner still switches", async () => {
+    const live = await liveController();
+    await live.createSession({ id: LEGACY_SHARED_ID, resourceId: LEGACY_SHARED_ID, threadId: 'legacy-side-thread' });
+    await live.createSession({ id: 'legacy-alias', resourceId: LEGACY_SHARED_ID, threadId: 'legacy-side-thread' });
+    await live.createSession({ id: SHARED_ID, resourceId: FACTORY_ID, threadId: 'factory-side-thread' });
+    await live.createSession({ id: 'factory-alias', resourceId: FACTORY_ID, threadId: 'factory-side-thread' });
+    const asTeammate = buildApp({ workosId: 'teammate', organizationId: 'org-1' }, { controller: live });
+    const asOwner = buildApp({ workosId: 'owner', organizationId: 'org-1' }, { controller: live });
+    const switchModel = { modelId: 'openai/gpt-5-mini' };
+
+    expect((await post(asTeammate, sessionPath('legacy-alias', 'model'), switchModel)).status).toBe(403);
+    expect((await post(asTeammate, sessionPath('factory-alias', 'model'), switchModel)).status).toBe(403);
+    expect((await post(asOwner, sessionPath(LEGACY_SHARED_ID, 'model'), switchModel)).status).toBe(200);
   });
 
   it('reads a multipart body the way the server adapter does, so form fields cannot slip past the checks', async () => {

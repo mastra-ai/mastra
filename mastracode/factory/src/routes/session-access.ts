@@ -199,19 +199,25 @@ export function createSessionAccessGuard({
   };
 
   /**
-   * A model change lands on the session's live thread, so the Factory session that thread belongs to (its own id
-   * or `factorySessionId` stamp) must allow it too: a second session bound to the owner's thread would otherwise
-   * switch the owner's model. A forged stamp only adds a session to check, so every stamp counts.
+   * A model change lands on the session's live thread, so every Factory session tied to that thread must allow it:
+   * the thread's id, its `factorySessionId` stamp, or a pre-sharing session running on the thread's resource. A thread
+   * nothing ties to a session is refused, unless it is the session's own or sits on the caller's own memory: otherwise
+   * a second session could switch the model on an owner's unstamped thread.
    */
   const canSwitchModelThrough = async (sessionId: string, viewer: Viewer): Promise<boolean> => {
     const lookup = controller();
     const threadId = (await lookup?.getSession(sessionId))?.thread.getId() ?? sessionId;
-    const stamp = (await lookup?.queryThreadById({ threadId }))?.metadata?.factorySessionId;
-    for (const claimant of new Set([sessionId, threadId, ...(typeof stamp === 'string' ? [stamp] : [])])) {
-      const session = await sessions.getBySessionId(claimant);
-      if (session && !canSwitchSessionModel(session, viewer)) return false;
-    }
-    return true;
+    const thread = await lookup?.queryThreadById({ threadId });
+    const stamp = thread?.metadata?.factorySessionId;
+    const stampedSessionId = typeof stamp === 'string' ? stamp : undefined;
+    const claimants = await Promise.all(
+      [sessionId, threadId, stampedSessionId, thread?.resourceId].map(id => (id ? sessions.getBySessionId(id) : null)),
+    );
+    if (claimants.some(session => session && !canSwitchSessionModel(session, viewer))) return false;
+    const [, threadSession, , resourceSession] = claimants;
+    const ownThread = threadId === sessionId;
+    const onViewerMemory = thread?.resourceId === viewer.userId;
+    return ownThread || onViewerMemory || Boolean(stampedSessionId || threadSession || resourceSession);
   };
 
   return async (c, next) => {
