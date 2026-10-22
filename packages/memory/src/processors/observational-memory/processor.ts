@@ -528,9 +528,10 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     // threshold. Activate buffered observations and observe what's left regardless of it; the
     // retry's input step then drops the observed messages from the prompt.
     const { threadId, resourceId } = context;
-    await this.engine.waitForBuffering(threadId, resourceId);
+    await this.engine.waitForBuffering(threadId, resourceId, undefined, args.abortSignal);
     const messages = getObservableMessages(messageList);
     const { activated } = await this.engine.activate({
+      abortSignal: args.abortSignal,
       threadId,
       resourceId,
       messages,

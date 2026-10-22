@@ -6,6 +6,7 @@
  * 2. OM-level: withAbortCheck detects the abort and throws AbortError
  */
 
+import { APICallError } from '@internal/ai-sdk-v5';
 import type { LanguageModelV2StreamPart } from '@internal/ai-sdk-v5';
 import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import type { MastraDBMessage } from '@mastra/core/agent';
@@ -15,6 +16,7 @@ import { describe, it, expect } from 'vitest';
 
 import { Memory } from '../../../index';
 import { runOMCommit, waitingOMCommits } from '../commit-queue';
+import { ObservationalMemoryProcessor } from '../processor';
 
 // =============================================================================
 // Slow model that takes a long time to respond (simulates real LLM latency)
@@ -855,4 +857,221 @@ it('does not apply activation hints after an aborted thread read (#27792)', asyn
     storage.releaseRead.resolve();
     await activation;
   }
+});
+
+it('settles cancellation during stale buffer flag recovery', async () => {
+  const provider = createLatchedModel('<observations>\n- Seen\n</observations>');
+  const store = new InMemoryStore();
+  const memory = new Memory({
+    storage: store,
+    options: {
+      observationalMemory: {
+        enabled: true,
+        observation: { model: provider.model, messageTokens: 1000, bufferTokens: 10 },
+        reflection: { model: provider.model, observationTokens: 100000 },
+      },
+    },
+  });
+  const engine = (await memory.omEngine)!;
+  const storage = (await store.getStore('memory'))!;
+  const threadId = 'review-stale-flag';
+  const record = await engine.getOrCreateRecord(threadId, 'resource');
+  await storage.setBufferingObservationFlag(record.id, true);
+  const staleRecord = (await engine.getRecord(threadId, 'resource'))!;
+  const entered = Promise.withResolvers<void>();
+  const release = Promise.withResolvers<void>();
+  const blocker = runOMCommit(engine.buffering.getLockKey(threadId, 'resource'), async () => {
+    entered.resolve();
+    await release.promise;
+  });
+  await entered.promise;
+  const controller = new AbortController();
+  let settled = false;
+  const operation = engine
+    .buffer({ threadId, resourceId: 'resource', record: staleRecord, messages: [], abortSignal: controller.signal })
+    .finally(() => {
+      settled = true;
+    });
+  try {
+    await new Promise<void>(resolve => setImmediate(resolve));
+    controller.abort();
+    await new Promise<void>(resolve => setImmediate(resolve));
+    expect(settled).toBe(true);
+  } finally {
+    release.resolve();
+    provider.release();
+    await Promise.all([blocker, operation]);
+    await engine.settled();
+  }
+});
+
+it('does not suppress future buffering after cancelling a queued buffer', async () => {
+  const provider = createLatchedModel('<observations>\n- Seen\n</observations>');
+  const store = new InMemoryStore();
+  const memory = new Memory({
+    storage: store,
+    options: {
+      observationalMemory: {
+        enabled: true,
+        observation: { model: provider.model, messageTokens: 1000, bufferTokens: 10 },
+        reflection: { model: provider.model, observationTokens: 100000 },
+      },
+    },
+  });
+  const engine = (await memory.omEngine)!;
+  const threadId = 'review-cancelled-boundary';
+  const resourceId = 'resource';
+  const record = { ...(await engine.getOrCreateRecord(threadId, resourceId)) };
+  const message: MastraDBMessage = {
+    id: 'request',
+    threadId,
+    resourceId,
+    role: 'user',
+    createdAt: new Date(),
+    content: { format: 2, parts: [{ type: 'text', text: 'Remember this request. '.repeat(20) }] },
+  };
+  await engine.persistMessages([message], threadId, resourceId);
+  const owner = new AbortController();
+  const cancelled = new AbortController();
+  const first = engine.buffer({
+    threadId,
+    resourceId,
+    messages: [message],
+    record: { ...record },
+    pendingTokens: 100,
+    abortSignal: owner.signal,
+    skipMinimumTokenCheck: true,
+  });
+  let second: Promise<unknown> | undefined;
+  try {
+    await provider.started;
+    second = Promise.all(
+      [500, 600].map(pendingTokens =>
+        engine.buffer({
+          threadId,
+          resourceId,
+          messages: [message],
+          record: { ...record },
+          pendingTokens,
+          abortSignal: cancelled.signal,
+        }),
+      ),
+    );
+    cancelled.abort();
+    await second;
+    owner.abort();
+    await first;
+    await engine.settled();
+    const status = await engine.getStatus({ threadId, resourceId, messages: [message] });
+    expect(status.bufferedChunkCount).toBe(0);
+    expect(status.pendingTokens).toBeGreaterThan(10);
+    expect(status.shouldBuffer).toBe(true);
+  } finally {
+    owner.abort();
+    cancelled.abort();
+    provider.release();
+    await Promise.allSettled([first, ...(second ? [second] : [])]);
+    await engine.settled();
+  }
+});
+
+it.each(['shared buffer', 'queued activation'] as const)('cancels context-overflow recovery during %s', async mode => {
+  const provider = createLatchedModel('<observations>\n- Prior observation\n</observations>');
+  const store = new InMemoryStore();
+  const memory = new Memory({
+    storage: store,
+    options: {
+      observationalMemory: {
+        enabled: true,
+        observation: { model: provider.model, messageTokens: 1000, bufferTokens: 10 },
+        reflection: { model: provider.model, observationTokens: 100_000 },
+      },
+    },
+  });
+  const engine = (await memory.omEngine)!;
+  const storage = (await store.getStore('memory'))!;
+  const threadId = `overflow-abort-${mode}`;
+  const resourceId = 'overflow-resource';
+  const message: MastraDBMessage = {
+    id: `request-${mode}`,
+    threadId,
+    resourceId,
+    role: 'user',
+    createdAt: new Date(),
+    content: { format: 2, parts: [{ type: 'text', text: 'Keep the accepted request.' }] },
+  };
+  await engine.persistMessages([message], threadId, resourceId);
+  const record = await engine.getOrCreateRecord(threadId, resourceId);
+  if (mode === 'queued activation')
+    await storage.updateBufferedObservations({
+      id: record.id,
+      chunk: {
+        cycleId: 'overflow-buffer',
+        observations: '- Prior observation',
+        tokenCount: 5,
+        messageTokens: 100,
+        messageIds: ['prior'],
+        lastObservedAt: new Date(0),
+        threadTitle: 'Late title',
+      },
+    });
+  const release = Promise.withResolvers<void>();
+  const entered = Promise.withResolvers<void>();
+  const background =
+    mode === 'shared buffer'
+      ? engine.buffer({ threadId, resourceId, messages: [message], skipMinimumTokenCheck: true })
+      : runOMCommit(engine.buffering.getLockKey(threadId, resourceId), async () => {
+          entered.resolve();
+          await release.promise;
+        });
+  if (mode === 'shared buffer') await provider.started;
+  else await entered.promise;
+  const controller = new AbortController();
+  const processor = new ObservationalMemoryProcessor(engine, memory);
+  const messageList = new MessageList({ threadId, resourceId });
+  messageList.add([message], 'input');
+  let settled = false;
+  const recovery = processor
+    .processAPIError({
+      error: new APICallError({
+        message: 'prompt is too long: 210345 tokens > 200000 maximum',
+        url: 'https://api.example.com/v1/messages',
+        requestBodyValues: {},
+        statusCode: 400,
+      }),
+      messageList,
+      messages: [message],
+      stepNumber: 0,
+      steps: [],
+      state: {},
+      retryCount: 0,
+      abortSignal: controller.signal,
+      abort: reason => {
+        throw new Error(reason);
+      },
+    })
+    .then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+  try {
+    await new Promise<void>(resolve => setImmediate(resolve));
+    controller.abort();
+    await new Promise<void>(resolve => setImmediate(resolve));
+    expect(settled).toBe(true);
+    expect(provider.cancelled).toBe(false);
+  } finally {
+    controller.abort();
+    release.resolve();
+    provider.release();
+    await Promise.allSettled([background, recovery]);
+    await engine.settled();
+  }
+  const after = await engine.getRecord(threadId, resourceId);
+  expect(after?.activeObservations ?? '').toBe('');
+  expect((await storage.listMessagesById({ messageIds: [message.id] })).messages).toHaveLength(1);
 });

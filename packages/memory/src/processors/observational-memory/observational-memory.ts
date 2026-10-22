@@ -3598,39 +3598,62 @@ ${formattedMessages}
     // shouldTriggerAsyncObservation from triggering again on the next step.
     // This MUST happen before the first await when buffer() is called fire-and-forget.
     // The op owns the boundary until anything else writes it (see recordBufferedChunk).
+    const existingOp = BufferingCoordinator.asyncBufferingOps.get(bufferKey);
+    const predecessorBoundaryOwner = BufferingCoordinator.observationBoundaryOwners.get(bufferKey);
     const boundaryOwner = Symbol('observation-boundary');
-    BufferingCoordinator.setObservationBoundary(bufferKey, currentTokens, boundaryOwner);
+    // A queued caller must leave the active predecessor's boundary and cleanup ownership intact.
+    if (!existingOp) BufferingCoordinator.setObservationBoundary(bufferKey, currentTokens, boundaryOwner);
 
     // Queue behind any existing buffering operation (mutex behavior). Reading the previous op and
     // registering this one happen before any await, so concurrent calls form a chain instead of
     // all seeing the same predecessor and then observing the same messages in parallel.
-    const existingOp = BufferingCoordinator.asyncBufferingOps.get(bufferKey);
     let resolveOp: () => void;
     const completed = new Promise<void>(resolve => {
       resolveOp = resolve;
     });
     const opPromise = existingOp ? existingOp.catch(() => {}).then(() => completed) : completed;
     BufferingCoordinator.asyncBufferingOps.set(bufferKey, opPromise);
+    // Cancelled successors can restore this barrier after its caller has returned.
+    void opPromise.then(() => {
+      if (BufferingCoordinator.asyncBufferingOps.get(bufferKey) === opPromise) {
+        BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
+      }
+    });
 
-    // Clear stale flag if it was set by a crashed process (non-blocking)
-    if (record.isBufferingObservation) {
-      await runOMCommit(lockKey, () => this.storage.setBufferingObservationFlag(record.id, false)).catch(() => {});
+    try {
+      // Cleanup must still run if the owner cancels while waiting for the commit queue.
+      if (record.isBufferingObservation) {
+        const cleanup = this.trackBackgroundWork(
+          runOMCommit(lockKey, () => this.storage.setBufferingObservationFlag(record.id, false)).catch(() => {}),
+          lockKey,
+        );
+        await waitWithAbort(cleanup, opts.abortSignal);
+      }
+      if (existingOp) await waitWithAbort(existingOp, opts.abortSignal);
+      opts.abortSignal?.throwIfAborted();
+    } catch (error) {
+      if (opts.abortSignal?.aborted) {
+        // Keep the predecessor as the queue barrier; later callers must not overtake it.
+        if (BufferingCoordinator.asyncBufferingOps.get(bufferKey) === opPromise) {
+          if (existingOp) BufferingCoordinator.asyncBufferingOps.set(bufferKey, existingOp);
+          else BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
+        }
+        if (BufferingCoordinator.ownsObservationBoundary(bufferKey, boundaryOwner)) {
+          BufferingCoordinator.setObservationBoundary(bufferKey, 0);
+        }
+        resolveOp!();
+        return { buffered: false, record };
+      }
+      // Previous op failed, continue with new one.
     }
 
-    if (existingOp) {
-      try {
-        await waitWithAbort(existingOp, opts.abortSignal);
-      } catch (error) {
-        if (opts.abortSignal?.aborted) {
-          // Keep the predecessor as the queue barrier; later callers must not overtake it.
-          if (BufferingCoordinator.asyncBufferingOps.get(bufferKey) === opPromise) {
-            BufferingCoordinator.asyncBufferingOps.set(bufferKey, existingOp);
-          }
-          resolveOp!();
-          return { buffered: false, record };
-        }
-        // Previous op failed, continue with new one.
-      }
+    if (
+      existingOp &&
+      predecessorBoundaryOwner &&
+      BufferingCoordinator.ownsObservationBoundary(bufferKey, predecessorBoundaryOwner) &&
+      BufferingCoordinator.asyncBufferingOps.get(bufferKey) === opPromise
+    ) {
+      BufferingCoordinator.setObservationBoundary(bufferKey, currentTokens, boundaryOwner);
     }
 
     // Set persistent flag and register op. Unregister under the same id: `record` is replaced by the
