@@ -1,10 +1,11 @@
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
-import { TracesExplorer } from '@mastra/playground-ui/domains/traces/components/traces-explorer';
+import { TracesExplorer, useTracesConfig } from '@mastra/playground-ui/domains/traces/components/traces-explorer';
 import { memo } from 'react';
 import { useNavigate } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { CreateDatasetDialog } from '@/domains/datasets/components/create-dataset-dialog';
 import { navCrumb } from '@/domains/navigation/crumbs';
+import { TracesSpansSwitch, TracesSpansSwitchSkeleton } from '@/domains/traces/components/traces-spans-switch';
 import { LiveKitRecordingReview } from '@/domains/voice/components/livekit-recording-review';
 import { traceScoreLink } from '@/lib/app-routing';
 
@@ -14,19 +15,26 @@ const crumbs = [navCrumb('/traces')];
 // context slice changed, not the whole tree.
 export const TracesPageContent = memo(function TracesPageContent({ isScoped }: { isScoped: boolean }) {
   const navigate = useNavigate();
+  const { withSpanQuery, isCapabilitiesLoading } = useTracesConfig();
+
+  // Scoped instances render inside another page (e.g. the agent Traces tab) that already owns the header.
+  let tabs;
+  if (!isScoped) {
+    if (isCapabilitiesLoading) tabs = <TracesSpansSwitchSkeleton />;
+    else if (withSpanQuery) tabs = <TracesSpansSwitch current="traces" />;
+  }
 
   return (
     <TracesExplorer.Layout
-      // Scoped instances render inside another page (e.g. the agent Traces tab) that already owns the header.
       breadcrumbs={isScoped ? undefined : <PageBreadcrumbs crumbs={crumbs} />}
-      actionRow={
+      tabs={tabs}
+      toolbar={
         <ActionRow>
           <ActionRow.Start>
             <TracesExplorer.FilterBar />
           </ActionRow.Start>
           <ActionRow.End>
             <TracesExplorer.ColumnsMenu />
-            <TracesExplorer.AutoRefresh />
           </ActionRow.End>
         </ActionRow>
       }

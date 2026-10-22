@@ -173,6 +173,13 @@ The constructor accepts an `MCPServerConfig` object with the following propertie
       "Cache hints (`ttlMs` / `cacheScope`) advertised on cacheable results, keyed by operation: 'tools/list', 'prompts/list', 'resources/list', 'resources/templates/list', 'resources/read' and 'server/discover'.",
   },
   {
+    name: 'legacy',
+    type: "'reject' | 'stateless'",
+    isOptional: true,
+    description:
+      "How HTTP requests from 2025-era clients (those that open with `initialize`, such as VS Code and Cursor) are served. `'reject'` (default) answers them with an unsupported-protocol-version error. `'stateless'` answers each request without a session: listing and calling tools, reading resources and getting prompts work, `GET` and `DELETE` session requests get `405`, and features that need 2026-07-28 (suspend/resume, `subscriptions/listen`, events) aren't available to these clients.",
+  },
+  {
     name: 'jsonSchemaValidator',
     type: 'jsonSchemaValidator',
     isOptional: true,

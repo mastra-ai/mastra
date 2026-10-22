@@ -87,6 +87,8 @@ export type TracesListViewProps = {
   hasNextPage?: boolean;
   setEndOfListElement?: (element: HTMLDivElement | null) => void;
   filtersApplied?: boolean;
+  /** What the rows hold, named in the empty messages. Defaults to `traces`. */
+  resource?: 'traces' | 'spans';
   /** Currently featured/selected trace — its row gets the highlighted background. */
   featuredTraceId?: string | null;
   /**
@@ -127,6 +129,7 @@ export function TracesListView({
   hasNextPage,
   setEndOfListElement,
   filtersApplied,
+  resource = 'traces',
   featuredTraceId,
   featuredSpanId,
   isBranchesMode,
@@ -250,7 +253,7 @@ export function TracesListView({
         <DataListSkeletonRows columnCount={splitColumns(columns).length} />
       ) : traces.length === 0 ? (
         <TracesDataList.NoMatch
-          message={filtersApplied ? 'No traces found for applied filters' : 'No traces found yet'}
+          message={filtersApplied ? `No ${resource} found for applied filters` : `No ${resource} found yet`}
         />
       ) : (
         <>
