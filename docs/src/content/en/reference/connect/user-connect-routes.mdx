@@ -1,0 +1,107 @@
+---
+title: 'Reference: userConnectRoutes() | Connect'
+description: "API reference for userConnectRoutes() in @mastra/connect: mountable API routes that let your application's end users connect their own provider accounts."
+packages:
+  - '@mastra/connect'
+---
+
+# userConnectRoutes()
+
+Returns API routes that let your application's authenticated users connect their own provider accounts as [end-user connections](/docs/mastra-platform/connect/end-user-connections). Spread the result into the server's `apiRoutes`:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { userConnectRoutes } from '@mastra/connect'
+
+export const mastra = new Mastra({
+  server: {
+    auth: {
+      authenticateToken: async token => verifyToken(token),
+      mapUserToResourceId: user => user.id,
+    },
+    apiRoutes: [...userConnectRoutes({ providers: ['linear', 'slack'] })],
+  },
+})
+```
+
+Returns: `ApiRoute[]` for the server's `apiRoutes` option.
+
+The routes do no authentication of their own: the server's auth pipeline authenticates each request, and `mapUserToResourceId` establishes the resource ID the routes are gated on. A request without a resolvable resource ID is rejected with a 401 on every route. All platform calls happen server-side with your platform token. The browser only ever talks to these routes.
+
+## Parameters
+
+<PropertiesTable
+  content={[
+  {
+    name: 'providers',
+    type: 'string[]',
+    description:
+      "Allowlist of provider IDs available for new end-user connections. Provider-specific routes outside this set return 404, while existing connections remain visible and manageable. Overrides the project's endUserProviders configuration in Mastra Platform. When omitted, an unset project configuration exposes the full catalog, a list restricts providers, and an empty list disables new connections. An explicit empty code array is rejected.",
+    isOptional: true,
+  },
+  {
+    name: 'resourceId',
+    type: '(ctx: { requestContext?, user? }) => string | undefined | Promise<string | undefined>',
+    description:
+      "Derives the caller's resource ID per request, overriding the default. Defaults to the server-derived resource ID that mapUserToResourceId sets after authentication. A request where the callback returns a falsy value or throws is rejected with 401.",
+    isOptional: true,
+  },
+  {
+    name: 'basePath',
+    type: 'string',
+    description: "Mount prefix for every route. Default '/connect'.",
+    isOptional: true,
+  },
+  {
+    name: 'projectId',
+    type: 'string',
+    description: 'Platform project the routes act on. Falls back to MASTRA_PROJECT_ID.',
+    isOptional: true,
+  },
+  {
+    name: 'client',
+    type: 'ConnectClientOptions',
+    description:
+      'Platform client overrides. See ConnectClientOptions in tools(). client.resourceId is rejected: the routes scope each request to the calling user.',
+    isOptional: true,
+  },
+  {
+    name: 'returnTo',
+    type: '{ allowedOrigins?: string[] }',
+    description:
+      'Origins (for example https://app.example.com) allowed as absolute returnTo redirect targets on the hosted page. Relative paths are always allowed; all other values are rejected.',
+    isOptional: true,
+  },
+]}
+/>
+
+## Routes
+
+All routes are gated on the caller's resource ID and respond with `Cache-Control: no-store`. Paths below use the default `/connect` base path.
+
+| Route | Description |
+| - | - |
+| `GET /connect/providers` | The connectable providers under the effective provider policy: `{ providers: [{ id, displayName, logoUrl, authType, authFields }] }`. The code allowlist overrides the project's `endUserProviders` configuration. When neither is configured, the route returns the full catalog; an empty project list returns no providers. |
+| `GET /connect/connections` | Global connections plus the caller's own: `{ connections: [{ id, integrationId, displayName, logoUrl, status, accountLabel, scope }] }` where `scope` is `'global'` or `'user'`. Not filtered to the allowlist, because the provider policy gates new connects, not existing connections. `displayName` and `logoUrl` are resolved from the full catalog so rows for providers outside the allowlist still render. |
+| `POST /connect/:provider/sessions` | Creates a connect session owned by the caller: `{ connectionId, integrationId, launchUrl, expiresAt }`. `launchUrl` is a server-relative path to the launch route; neither the provider's authorization URL nor the vendor session token is returned to the browser. Providers outside the effective policy or unknown to the catalog return 404. |
+| `GET /connect/connections/:id/status` | Poll target for a visible (global or own) connection: `{ id, status, scope }`. An invisible connection returns the same 404 as an unknown ID. |
+| `DELETE /connect/connections/:id` | Disconnects the caller's own connection (204). Global connections return 403. |
+| `GET /connect/connections/:id/launch` | Launch gate for a pending session. Verifies the caller owns the session, then responds with a 302 redirect to the provider's authorization flow, or, with `Accept: application/json`, returns `{ sessionToken, expiresAt }` so the owner's browser can run headless authorization through the provider's own consent popup. A session owned by another user, an expired session, or an unknown ID all return the same 404, so a leaked launch URL can't bind someone else's account. |
+| `GET /connect/:provider?returnTo=...` | Hosted connect page: a Connect button opens the provider's authorization flow in a popup, polls the status route, and redirects to the validated `returnTo` with `connectionId` and `status` query parameters. Loaded by top-level navigation, so it requires [cookie-based auth](/docs/mastra-platform/connect/end-user-connections#let-users-connect-their-accounts); with token-only auth it returns 401 and the JSON routes are the alternative. |
+
+## Error responses
+
+Errors are JSON: `{ error: { code, message } }`. Platform failure details don't reach the end user, with one exception: 409 conflict details describe the caller's own connection state (for example a per-resource connection limit), so they're forwarded as the message.
+
+| Status | Code | When |
+| - | - | - |
+| 401 | `unauthorized` | No resolvable resource ID for the request |
+| 400 | `invalid_return_to` | `returnTo` isn't a relative path or an allowlisted origin |
+| 403 | `forbidden` | Deleting a global connection |
+| 404 | `provider_not_found`, `connection_not_found` | Provider outside the effective code or project policy, provider unknown to the catalog, or an invisible connection |
+| 409 | `conflict` | The platform refused the request as conflicting (for example the per-resource connection limit); the message carries the platform's actionable detail |
+| 429 | `rate_limited` | The platform rate-limited the request |
+| 500 | `misconfigured` | Missing platform token or other configuration problem |
+| 502 | `platform_error` | The platform request failed |
+
+Configuration problems detectable up front (an empty `providers` allowlist, a missing project ID, an invalid `basePath`, `client.resourceId`) throw a `MastraConnectError` from `userConnectRoutes()` itself.

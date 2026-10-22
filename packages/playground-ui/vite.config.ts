@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { existsSync, readdirSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync } from 'node:fs';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, relative, resolve } from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
@@ -154,6 +154,31 @@ const typeDeclarations = (): Plugin => {
   };
 };
 
+const readWrittenOutput = (path: string) => {
+  try {
+    return readFileSync(path, 'utf8');
+  } catch {
+    return undefined;
+  }
+};
+
+// Watch rebuilds rewrite every output file; each identical rewrite still reaches consuming dev servers as an HMR update.
+const skipUnchangedWrites = (): Plugin => ({
+  name: 'skip-unchanged-writes',
+  enforce: 'post',
+  generateBundle: {
+    order: 'post',
+    handler({ dir }, bundle) {
+      if (!dir) return;
+
+      for (const [fileName, output] of Object.entries(bundle)) {
+        const content = output.type === 'chunk' ? output.code : output.source;
+        if (readWrittenOutput(resolve(dir, fileName)) === content) delete bundle[fileName];
+      }
+    },
+  },
+});
+
 const appPlugins = [react(), tailwindcss()];
 
 const baseConfig: UserConfig = {
@@ -168,7 +193,13 @@ const baseConfig: UserConfig = {
 // Watch builds reuse the previous full build declarations.
 const createLibConfig = (isProduction: boolean): UserConfig => ({
   ...baseConfig,
-  plugins: [...appPlugins, isProduction && typeDeclarations(), libInjectCss(), nodeExternals()],
+  plugins: [
+    ...appPlugins,
+    isProduction && typeDeclarations(),
+    libInjectCss(),
+    nodeExternals(),
+    !isProduction && skipUnchangedWrites(),
+  ],
   build: {
     emptyOutDir: isProduction,
     lib: {
@@ -200,6 +231,8 @@ const createLibConfig = (isProduction: boolean): UserConfig => ({
     rolldownOptions: {
       output: {
         hoistTransitiveImports: false,
+        // Stable module URLs let React Fast Refresh retain state across watch builds.
+        ...(!isProduction && { chunkFileNames: '[name].[format].js' }),
       },
     },
   },

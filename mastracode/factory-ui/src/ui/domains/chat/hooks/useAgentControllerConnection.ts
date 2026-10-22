@@ -20,8 +20,10 @@ function nextSseConnectionState(previous: SseConnectionState, connected: boolean
 
 interface UseAgentControllerConnectionArgs {
   agentControllerId: string;
+  sessionId: string;
+  /** Memory resource the session is created under (see ChatSessionContextApi). */
   resourceId: string;
-  scope?: string;
+  threadTags?: Record<string, string>;
   /** Exact thread id to bind on session creation (see ChatSessionContextApi). */
   sessionThreadId?: string;
   factorySessionState?: FactorySessionState;
@@ -32,8 +34,9 @@ interface UseAgentControllerConnectionArgs {
 
 export function useAgentControllerConnection({
   agentControllerId,
+  sessionId,
   resourceId,
-  scope,
+  threadTags,
   sessionThreadId,
   factorySessionState,
   baseUrl = '',
@@ -49,15 +52,15 @@ export function useAgentControllerConnection({
   const hasEverConnected = sseConnectionState !== 'never';
   const { session } = createAgentControllerClient({
     agentControllerId,
-    resourceId,
-    scope,
+    sessionId,
     baseUrl,
     enabled,
   });
   const initQuery = useAgentControllerSessionInit({
     agentControllerId,
+    sessionId,
     resourceId,
-    scope,
+    threadTags,
     sessionThreadId,
     factorySessionState,
     baseUrl,
@@ -65,8 +68,7 @@ export function useAgentControllerConnection({
   });
   const syncQuery = useAgentControllerSessionSync({
     agentControllerId,
-    resourceId,
-    scope,
+    sessionId,
     threadId: sessionThreadId,
     baseUrl,
     enabled: enabled && initQuery.isSuccess,
@@ -74,19 +76,19 @@ export function useAgentControllerConnection({
     liveEventGeneration,
     liveState,
   });
-  const observedRun = useRef<{ resourceId: string; running?: boolean }>({ resourceId });
+  const observedRun = useRef<{ sessionId: string; running?: boolean }>({ sessionId });
   useEffect(() => {
     const running = syncQuery.data?.running;
     const previous = observedRun.current;
-    observedRun.current = { resourceId, running };
-    if (previous.resourceId !== resourceId || previous.running !== true || running !== false) return;
+    observedRun.current = { sessionId, running };
+    if (previous.sessionId !== sessionId || previous.running !== true || running !== false) return;
     // A state poll can discover completion even when the connected SSE stream
     // missed the final message. Recover that persisted message through the
     // existing window merge rather than waiting for a manual page refresh.
     void queryClient.invalidateQueries({
-      queryKey: queryKeys.agentControllerResourceThreadMessages(agentControllerId, resourceId),
+      queryKey: queryKeys.agentControllerSessionThreadMessages(agentControllerId, sessionId),
     });
-  }, [agentControllerId, queryClient, resourceId, syncQuery.data?.running]);
+  }, [agentControllerId, queryClient, sessionId, syncQuery.data?.running]);
   const handleConnectedChange = (connected: boolean) => {
     // Ref mirrors the state so back-to-back events see the true previous value
     // even when React batches the renders in between.
@@ -103,14 +105,14 @@ export function useAgentControllerConnection({
     // session is bound to its thread, so a read that raced that binding works now.
     const reconnected = previous === 'dropped';
     void queryClient.invalidateQueries({
-      queryKey: queryKeys.agentControllerResourceThreadMessages(agentControllerId, resourceId),
+      queryKey: queryKeys.agentControllerSessionThreadMessages(agentControllerId, sessionId),
       predicate: query => reconnected || query.state.status === 'error',
     });
     // The gap can also have eaten agent_start/agent_end, so the cached state
     // snapshot is refetched the same way.
     if (reconnected) {
       void queryClient.invalidateQueries({
-        queryKey: queryKeys.agentControllerConnectionState(agentControllerId, resourceId, scope, sessionThreadId),
+        queryKey: queryKeys.agentControllerConnectionState(agentControllerId, sessionId, sessionThreadId),
         exact: true,
       });
     }
@@ -135,12 +137,7 @@ export function useAgentControllerConnection({
         ...(typeof running === 'boolean' ? { running } : {}),
         ...(tasks ? { tasks } : {}),
       };
-      const stateQueryKey = queryKeys.agentControllerConnectionState(
-        agentControllerId,
-        resourceId,
-        scope,
-        sessionThreadId,
-      );
+      const stateQueryKey = queryKeys.agentControllerConnectionState(agentControllerId, sessionId, sessionThreadId);
       const updatedAt = queryClient.getQueryState(stateQueryKey)?.dataUpdatedAt;
       queryClient.setQueryData<AgentControllerSessionState>(
         stateQueryKey,

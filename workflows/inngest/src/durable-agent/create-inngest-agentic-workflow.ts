@@ -219,6 +219,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           ...toolCall,
           stepSpanData: llmOutput.stepSpanData,
           completionStartTime: llmOutput.completionStartTime,
+          stepUsage: llmOutput.stepResult?.totalUsage,
         })) as DurableToolCallInput[];
       },
       { id: 'extract-tool-calls' },

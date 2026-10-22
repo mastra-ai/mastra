@@ -8,6 +8,7 @@ import {
   getFactoryAuthUserId,
 } from '../auth.js';
 import type { SourceControlSessionLookup } from '../session/factory-session.js';
+import { isWorkerSession } from '../session/session-threads.js';
 import { auditActorProfile } from '../storage/domains/audit/base.js';
 import type { AuditActorProfileInput } from '../storage/domains/audit/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
@@ -24,8 +25,9 @@ export interface FactoryToolScope {
   factoryProjectId: string;
   /** The signed-in caller for a user session; the session row's owner for a worker. */
   userId: string;
-  /** The source-control session id; equal to the controller resourceId. */
+  /** The source-control session id. */
   sessionId: string;
+  /** The memory resource the session runs under. */
   resourceId: string;
   threadId: string;
   /** `worker` sessions are bound to a work item run; only `user` sessions manage the Factory. */
@@ -62,9 +64,10 @@ export async function resolveFactoryToolScope({
 }: ResolveFactoryToolScopeOptions): Promise<FactoryToolScope | null> {
   if (typeof requestContext?.get !== 'function') return null;
   const controller = requestContext.get('controller') as AgentControllerRequestContext<unknown> | undefined;
+  const sessionId = controller?.sessionId;
   const resourceId = controller?.resourceId;
   const threadId = controller?.threadId;
-  if (!resourceId || !threadId) return null;
+  if (!sessionId || !resourceId || !threadId) return null;
 
   let caller: { orgId: string; userId: string; actorProfile?: AuditActorProfileInput } | null = null;
   if (authEnabled) {
@@ -79,24 +82,16 @@ export async function resolveFactoryToolScope({
     caller = { orgId: 'local', userId: 'local' };
   }
 
-  const row = await sessions.getBySessionId(resourceId);
+  const row = await sessions.getBySessionId(sessionId);
   if (!row?.factoryProjectId) return null;
   // A caller from another org never acts here, worker or not.
   if (caller && row.orgId !== caller.orgId) return null;
 
-  // A side session works for the session that started it. Otherwise any
-  // binding, active or revoked, on any thread: a session that ever ran a role stays a worker.
   const origin =
     row.originSessionId && row.originThreadId
       ? { sessionId: row.originSessionId, threadId: row.originThreadId }
       : undefined;
-  const worker =
-    origin !== undefined ||
-    (await workItems.hasRunBindingForSession({
-      orgId: row.orgId,
-      factoryProjectId: row.factoryProjectId,
-      sessionId: row.sessionId,
-    }));
+  const worker = await isWorkerSession(row, workItems);
 
   // A worker acts as its session row: dispatcher-driven runs carry no signed-in user.
   // A user session acts as the signed-in caller, who must be able to see it.

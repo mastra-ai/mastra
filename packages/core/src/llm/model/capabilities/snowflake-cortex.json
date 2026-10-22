@@ -11,7 +11,6 @@
     "claude-sonnet-4-6",
     "claude-sonnet-5",
     "gemini-3.1-pro",
-    "mistral-large2",
     "openai-gpt-4.1",
     "openai-gpt-5",
     "openai-gpt-5-mini",
@@ -40,6 +39,16 @@
     "snowflake-llama3.3-70b"
   ],
   "structuredOutput": [
+    "claude-fable-5",
+    "claude-haiku-4-5",
+    "claude-opus-4-5",
+    "claude-opus-4-6",
+    "claude-opus-4-7",
+    "claude-opus-4-8",
+    "claude-opus-5",
+    "claude-sonnet-4-5",
+    "claude-sonnet-4-6",
+    "claude-sonnet-5",
     "gemini-3.1-pro",
     "openai-gpt-4.1",
     "openai-gpt-5",
@@ -54,12 +63,6 @@
     "openai-gpt-5.6-terra"
   ],
   "reasoning": {
-    "openai-gpt-5.1": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
-      }
-    ],
     "claude-opus-4-5": [
       {
         "type": "budget_tokens"
@@ -71,7 +74,29 @@
         "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
+    "claude-haiku-4-5": [
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "openai-gpt-5.5": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high"]
+      }
+    ],
     "openai-gpt-5.6-terra": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high"]
+      }
+    ],
+    "claude-sonnet-4-6": [
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "openai-gpt-5.2": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high"]
@@ -83,15 +108,21 @@
         "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
-    "openai-gpt-5.2": [
+    "claude-sonnet-4-5": [
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "openai-gpt-5.1": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
-    "claude-opus-4-6": [
+    "openai-gpt-5.4": [
       {
-        "type": "budget_tokens"
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
     "openai-gpt-5": [
@@ -112,29 +143,7 @@
         "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
-    "claude-sonnet-4-6": [
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "openai-gpt-5.5": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
-      }
-    ],
-    "openai-gpt-5.4": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
-      }
-    ],
-    "claude-haiku-4-5": [
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "claude-sonnet-4-5": [
+    "claude-opus-4-6": [
       {
         "type": "budget_tokens"
       }

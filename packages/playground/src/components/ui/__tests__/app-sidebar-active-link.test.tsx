@@ -29,4 +29,14 @@ describe('getIsLinkActive', () => {
       expect(getIsLinkActive(reviewQueue, '/experiments', siblings)).toBe(false);
     });
   });
+
+  describe('when on the spans page', () => {
+    it('has no Spans entry of its own', () => {
+      expect(findNavItem('/spans')).toBeUndefined();
+    });
+
+    it('activates Traces, the page the Traces/Spans switch lives on', () => {
+      expect(getIsLinkActive(findNavItem('/traces')!, '/spans')).toBe(true);
+    });
+  });
 });

@@ -991,8 +991,9 @@ describe('GithubRules', () => {
     }
 
     const controller = {
+      queryThreadById: vi.fn(async () => null),
       createSession: vi.fn(async ({ id, threadId }: { id: string; threadId: string }) => makeSession(id, threadId)),
-      getSessionByResource: vi.fn(async (resourceId: string) => sessions.get(resourceId)),
+      getSession: vi.fn(async (sessionId: string) => sessions.get(sessionId)),
     };
     await sourceControl.sessions.create({
       sessionId: 'session-issue-42',
@@ -1060,7 +1061,9 @@ describe('GithubRules', () => {
     expect(deliveredSignals).toEqual([
       expect.objectContaining({
         threadId: 'session-issue-42',
-        contents: expect.stringContaining('<skill name="factory-triage">'),
+        type: 'reactive',
+        tagName: 'skill',
+        attributes: { name: 'factory-triage' },
         user: { workosId: 'user-1', organizationId: 'org-1' },
       }),
     ]);
@@ -1217,7 +1220,7 @@ describe('GithubRules', () => {
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      controller: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
@@ -1296,7 +1299,7 @@ describe('GithubRules', () => {
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      controller: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
@@ -1601,7 +1604,7 @@ describe('GithubRules', () => {
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      controller: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
@@ -1692,7 +1695,7 @@ describe('GithubRules', () => {
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      controller: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
@@ -1780,7 +1783,7 @@ describe('GithubRules', () => {
     });
     const configVersion = 'factory-config-v1';
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      controller: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({ storage: workItems, configVersion, boards: createBoardRegistry() }),
       storage: workItems,
       boards: createBoardRegistry(),
@@ -2436,8 +2439,9 @@ describe('GithubRules', () => {
       ),
     };
     const controller = {
+      queryThreadById: vi.fn(async () => null),
       createSession: vi.fn(async () => session),
-      getSessionByResource: vi.fn(async () => session),
+      getSession: vi.fn(async () => session),
     };
     await sourceControl.sessions.create({
       sessionId: 'session-work-42',
@@ -2752,7 +2756,7 @@ describe('GithubRules', () => {
       configVersion: 'factory-config-v1',
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      controller: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion: 'factory-config-v1',
@@ -2943,7 +2947,7 @@ describe('GithubRules', () => {
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      controller: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
@@ -3396,6 +3400,92 @@ describe('GithubRules label routes', () => {
     const { service } = await setupRoutes('release');
     await expect(service.ingest(issueLabels('labeled', ['release']))).resolves.toEqual({ status: 'ignored' });
     const onPullRequest = issueLabels('labeled', ['release'], 'pr-labeled');
+    (onPullRequest.payload.issue as Record<string, unknown>).pull_request = { url: 'x' };
+    await expect(service.ingest(onPullRequest)).resolves.toEqual({ status: 'ignored' });
+  });
+
+  function issueAssignees(action: 'assigned' | 'unassigned', assignees: string[], deliveryId = `assignee-${action}`) {
+    const ingress = issueLabels('labeled', [], deliveryId);
+    (ingress.payload as Record<string, unknown>).action = action;
+    (ingress.payload.issue as Record<string, unknown>).assignees = assignees.map(login => ({ login }));
+    return ingress;
+  }
+
+  it.each([
+    { action: 'assigned', before: [], after: ['alice', 'bob'] },
+    { action: 'unassigned', before: ['alice', 'bob'], after: ['bob'] },
+    { action: 'unassigned', before: ['bob'], after: [] },
+  ] as const)(
+    'mirrors $action from $before to $after onto the linked issue card without moving it or proposing runs',
+    async ({ action, before, after }) => {
+      const { service, workItems, project } = await setupRoutes('release');
+      const created = await createLinkedIssue(workItems, project.id);
+      const item = (await workItems.update({
+        orgId: 'org-1',
+        id: created.id,
+        userId: 'user-1',
+        patch: { metadata: { assignees: [...before] } },
+      }))!.item;
+
+      await expect(service.ingest(issueAssignees(action, [...after]))).resolves.toEqual({ status: 'committed' });
+      expect(await workItems.get({ orgId: 'org-1', id: item.id })).toMatchObject({
+        board: item.board,
+        stages: ['planning'],
+        metadata: { assignees: [...after] },
+      });
+      expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+    },
+  );
+
+  it('keeps the newer assignees when an older assigned payload arrives after a newer unassigned one', async () => {
+    const { service, workItems, project } = await setupRoutes('release');
+    const created = await createLinkedIssue(workItems, project.id);
+    await workItems.update({
+      orgId: 'org-1',
+      id: created.id,
+      userId: 'user-1',
+      patch: { metadata: { assignees: ['alice'] } },
+    });
+    const newer = issueAssignees('unassigned', [], 'assignee-newer');
+    (newer.payload.issue as Record<string, unknown>).updated_at = '2030-01-01T00:00:02Z';
+    const older = issueAssignees('assigned', ['alice'], 'assignee-older');
+    (older.payload.issue as Record<string, unknown>).updated_at = '2030-01-01T00:00:01Z';
+
+    await expect(service.ingest(newer)).resolves.toEqual({ status: 'committed' });
+    await expect(service.ingest(older)).resolves.toEqual({ status: 'ignored' });
+    expect((await workItems.get({ orgId: 'org-1', id: created.id }))?.metadata).toMatchObject({
+      assignees: [],
+      githubAssigneesUpdatedAt: '2030-01-01T00:00:02Z',
+    });
+  });
+
+  it('advances the stored time on a newer no-op so a delayed older unassigned cannot overwrite it', async () => {
+    const { service, workItems, project } = await setupRoutes('release');
+    const created = await createLinkedIssue(workItems, project.id);
+    await workItems.update({
+      orgId: 'org-1',
+      id: created.id,
+      userId: 'user-1',
+      patch: { metadata: { assignees: ['alice'], githubAssigneesUpdatedAt: '2030-01-01T00:00:01Z' } },
+    });
+    const newerNoop = issueAssignees('assigned', ['alice'], 'assignee-t3');
+    (newerNoop.payload.issue as Record<string, unknown>).updated_at = '2030-01-01T00:00:03Z';
+    const delayed = issueAssignees('unassigned', [], 'assignee-t2');
+    (delayed.payload.issue as Record<string, unknown>).updated_at = '2030-01-01T00:00:02Z';
+
+    await expect(service.ingest(newerNoop)).resolves.toEqual({ status: 'committed' });
+    await expect(service.ingest(delayed)).resolves.toEqual({ status: 'ignored' });
+    expect((await workItems.get({ orgId: 'org-1', id: created.id }))?.metadata).toMatchObject({
+      assignees: ['alice'],
+      githubAssigneesUpdatedAt: '2030-01-01T00:00:03Z',
+    });
+  });
+
+  it('ignores assignee changes for issues without a card and on pull requests', async () => {
+    const { service, workItems, project } = await setupRoutes('release');
+    await expect(service.ingest(issueAssignees('assigned', ['alice']))).resolves.toEqual({ status: 'ignored' });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+    const onPullRequest = issueAssignees('assigned', ['alice'], 'pr-assigned');
     (onPullRequest.payload.issue as Record<string, unknown>).pull_request = { url: 'x' };
     await expect(service.ingest(onPullRequest)).resolves.toEqual({ status: 'ignored' });
   });

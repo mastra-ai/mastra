@@ -39,28 +39,10 @@
     "o4-mini"
   ],
   "reasoning": {
-    "o4-mini": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "xhigh"]
-      }
-    ],
-    "claude-opus-4.8": [
+    "claude-fable-5": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "gpt-5.4-mini": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
       }
     ],
     "gpt-5.4-nano": [
@@ -69,10 +51,43 @@
         "values": ["minimal", "low", "medium", "high"]
       }
     ],
+    "glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "xhigh"]
+      }
+    ],
+    "deepseek-v4-pro": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "gpt-5": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "claude-opus-4.8": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "gpt-5.4": [
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "o4-mini": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "gpt-5.5": [
@@ -87,37 +102,22 @@
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "claude-fable-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "claude-sonnet-5": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "gpt-5": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
     "claude-haiku-4.5": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "deepseek-v4-pro": [
-      {
-        "type": "toggle"
-      },
+    "gpt-5.4-mini": [
       {
         "type": "effort",
-        "values": ["high", "max"]
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "claude-sonnet-5": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ]
   }

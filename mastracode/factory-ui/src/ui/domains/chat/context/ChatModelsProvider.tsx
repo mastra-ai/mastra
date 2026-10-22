@@ -45,7 +45,7 @@ function DraftChatModelsProvider({ children }: ChatModelsProviderProps) {
 }
 
 function LiveChatModelsProvider({ children }: ChatModelsProviderProps) {
-  const { resourceId, projectPath, baseUrl, sessionEnabled } = useChatSessionContext();
+  const { sessionId, baseUrl, sessionEnabled } = useChatSessionContext();
   const { state } = useChatConnection();
   const { projectQuery, modelScope, sessionModelsQuery } = useChatModelScope();
   const defaultModelQuery = useDefaultModelQuery();
@@ -57,8 +57,7 @@ function LiveChatModelsProvider({ children }: ChatModelsProviderProps) {
     : undefined;
   const { mutateAsync: switchModel } = useSwitchAgentControllerModelMutation({
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: projectPath,
+    sessionId,
     baseUrl,
     enabled: sessionEnabled,
   });

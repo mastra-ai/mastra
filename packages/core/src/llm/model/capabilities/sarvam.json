@@ -3,11 +3,17 @@
   "reasoning": {
     "sarvam-105b": [
       {
+        "type": "toggle"
+      },
+      {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
     "sarvam-30b": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
         "values": ["low", "medium", "high"]

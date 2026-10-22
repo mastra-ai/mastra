@@ -19,7 +19,7 @@
         "type": "toggle"
       }
     ],
-    "qwen3.5-plus": [
+    "qwen3.6-plus": [
       {
         "type": "toggle"
       }
@@ -39,7 +39,7 @@
         "type": "toggle"
       }
     ],
-    "qwen3.6-plus": [
+    "qwen3.5-plus": [
       {
         "type": "toggle"
       }

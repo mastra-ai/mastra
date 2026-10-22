@@ -115,6 +115,46 @@ describe('observeSessionRunReports', () => {
     ]);
   });
 
+  it('reports a usage-limit rejection from the provider body instead of Bad Request', () => {
+    const session = fakeSession();
+    const report = vi.fn(async () => {});
+    observeSessionRunReports(session, report);
+    const error = new Error('Bad Request');
+    Object.assign(error, {
+      statusCode: 400,
+      responseBody: JSON.stringify({
+        error: { message: 'You have exceeded your current quota, please check your plan.' },
+      }),
+    });
+
+    session.emit({ type: 'error', error } as AgentControllerEvent);
+    session.emit(end('error'));
+
+    expect(report).toHaveBeenCalledWith(
+      {
+        status: 'failed',
+        reason: 'the run ended in error: You have exceeded your current quota, please check your plan.',
+      },
+      expect.any(Date),
+    );
+  });
+
+  it('leaves a plain Bad Request unchanged when the provider body has no usage-limit reason', () => {
+    const session = fakeSession();
+    const report = vi.fn(async () => {});
+    observeSessionRunReports(session, report);
+    const error = new Error('Bad Request');
+    Object.assign(error, { statusCode: 400, responseBody: JSON.stringify({ error: { message: 'Invalid model id' } }) });
+
+    session.emit({ type: 'error', error } as AgentControllerEvent);
+    session.emit(end('error'));
+
+    expect(report).toHaveBeenCalledWith(
+      { status: 'failed', reason: 'the run ended in error: Bad Request' },
+      expect.any(Date),
+    );
+  });
+
   it('keeps listening when a report fails', async () => {
     const session = fakeSession();
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
@@ -159,6 +199,50 @@ describe('createSessionRunEndReporter', () => {
     await reporter({ sessionId: 'mine', threadId: 'thread', outcome: { status: 'done' }, since: new Date() });
 
     expect(reporting).not.toHaveBeenCalled();
+  });
+
+  it("reports a finished run kept on its own resource to its item's followers", async () => {
+    const since = new Date('2026-10-01T00:00:00.000Z');
+    // A run on untrusted content records its own session id as the binding's resource.
+    const findRunBindingBySession = vi.fn(async ({ resourceId }: { resourceId: string }) =>
+      resourceId === 'run'
+        ? {
+            orgId: 'org-1',
+            factoryProjectId: 'project-1',
+            workItemId: 'item-1',
+            role: 'reviewer',
+            threadId: 'run',
+            revokedAt: new Date('2026-10-01T00:05:00.000Z'),
+          }
+        : null,
+    );
+    const listWorkItemSubscribers = vi.fn(async () => []);
+    const reporter = createSessionRunEndReporter({
+      sessions: {
+        getBySessionId: async () =>
+          ({
+            sessionId: 'run',
+            orgId: 'org-1',
+            factoryProjectId: 'project-1',
+            userId: 'user-1',
+            originSessionId: null,
+            originThreadId: null,
+            title: null,
+          }) as never,
+      },
+      workItems: {
+        findActiveRunBindingForSession: async () => null,
+        findRunBindingBySession,
+        listWorkItemSubscribers,
+        getForProject: vi.fn(),
+      } as never,
+      reporting: async () => ({ deliver: vi.fn(), notifications: new InMemoryNotificationsStorage() }),
+    });
+
+    await reporter({ sessionId: 'run', threadId: 'run', outcome: { status: 'done' }, since });
+
+    expect(findRunBindingBySession).toHaveBeenCalledWith(expect.objectContaining({ resourceId: 'run' }));
+    expect(listWorkItemSubscribers).toHaveBeenCalledWith(expect.objectContaining({ workItemId: 'item-1' }));
   });
 
   function sideReporter(originMutedAt: Date | null) {

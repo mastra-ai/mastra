@@ -22,6 +22,7 @@
     "mistral-small-latest",
     "pixtral-12b",
     "pixtral-large-latest",
+    "voxtral-mini-latest",
     "voxtral-small-2507",
     "voxtral-small-latest"
   ],
@@ -92,28 +93,10 @@
         "values": ["none", "high", "max"]
       }
     ],
-    "mistral-large-4": [
+    "labs-leanstral-1-5-1": [
       {
         "type": "effort",
         "values": ["none", "high"]
-      }
-    ],
-    "mistral-medium-latest": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "mistral-medium-2604": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "glm-5-2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
       }
     ],
     "zai-glm-5-3": [
@@ -122,7 +105,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "magistral-medium-latest": [
+    "mistral-small-2603": [
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -134,13 +117,31 @@
         "values": ["none", "high"]
       }
     ],
-    "labs-leanstral-1-5-1": [
+    "magistral-medium-latest": [
       {
         "type": "effort",
         "values": ["none", "high"]
       }
     ],
-    "mistral-small-2603": [
+    "glm-5-2": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "mistral-medium-2604": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "mistral-large-4": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "mistral-medium-latest": [
       {
         "type": "effort",
         "values": ["none", "high"]

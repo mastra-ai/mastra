@@ -15,6 +15,9 @@ const ROW = {
   projectRepositoryId: 'repo-link-1',
 } as SourceControlSession;
 
+// The target is a run: its run binding lets it run on the Factory's resource.
+const RUNS = { hasRunBindingForSession: vi.fn(async () => true) };
+
 const MESSAGE = { kind: 'message', summary: 'Can you check the failing test?', priority: 'medium' as const };
 
 function fakeSession(currentThreadId: string, running = false) {
@@ -27,7 +30,12 @@ function fakeSession(currentThreadId: string, running = false) {
 }
 
 function setup({
-  thread = { id: 'thread-stored', resourceId: 'session-b' } as { id: string; resourceId: string } | null,
+  // Sessions share their Factory's resource; the stamp ties the thread to its session.
+  thread = { id: 'thread-stored', resourceId: 'project-1', metadata: { factorySessionId: 'session-b' } } as {
+    id: string;
+    resourceId: string;
+    metadata?: Record<string, unknown>;
+  } | null,
   offline = false,
   row = ROW as SourceControlSession | null,
   action = 'deliver',
@@ -46,7 +54,7 @@ function setup({
   const controller = {
     queryThreadById: vi.fn(async () => thread),
     queryThreads: vi.fn(async () => []),
-    getSessionByResource: vi.fn(async () => live),
+    getSession: vi.fn(async () => live),
     createSession: vi.fn(async () => {
       calls.push('create');
       return created;
@@ -65,6 +73,7 @@ function setup({
       deliverFactorySessionNotification({
         controller: controller as unknown as FactoryDeliveryController,
         sessions,
+        runs: RUNS,
         target: { sessionId: 'session-b', threadId: 'thread-stored' },
         notification: MESSAGE,
         ...options,
@@ -81,7 +90,7 @@ describe('deliverFactorySessionNotification', () => {
     expect(agent.sendNotificationSignal).toHaveBeenCalledTimes(1);
     expect(agent.sendNotificationSignal).toHaveBeenCalledWith(
       { ...MESSAGE, source: 'factory-session' },
-      { resourceId: 'session-b', threadId: 'thread-stored' },
+      { resourceId: 'project-1', threadId: 'thread-stored' },
     );
     expect(live?.sendNotificationSignal).not.toHaveBeenCalled();
     expect(live?.thread.switch).not.toHaveBeenCalled();
@@ -103,7 +112,17 @@ describe('deliverFactorySessionNotification', () => {
       thread: { id: 'thread-stored', resourceId: 'session-victim' },
     });
     await expect(deliver()).resolves.toEqual({ delivered: 'skipped', reason: 'thread-not-owned' });
-    expect(controller.getSessionByResource).not.toHaveBeenCalled();
+    expect(controller.getSession).not.toHaveBeenCalled();
+    expect(controller.createSession).not.toHaveBeenCalled();
+    expect(agent.sendNotificationSignal).not.toHaveBeenCalled();
+  });
+
+  it("refuses another session's thread in the same Factory resource", async () => {
+    const { agent, controller, deliver } = setup({
+      offline: true,
+      thread: { id: 'thread-stored', resourceId: 'project-1', metadata: { factorySessionId: 'session-victim' } },
+    });
+    await expect(deliver()).resolves.toEqual({ delivered: 'skipped', reason: 'thread-not-owned' });
     expect(controller.createSession).not.toHaveBeenCalled();
     expect(agent.sendNotificationSignal).not.toHaveBeenCalled();
   });
@@ -118,7 +137,7 @@ describe('deliverFactorySessionNotification', () => {
       expect.objectContaining({
         id: 'session-b',
         ownerId: 'user-b',
-        resourceId: 'session-b',
+        resourceId: 'project-1',
         threadId: 'thread-stored',
         tags: { factoryProjectId: 'project-1', projectRepositoryId: 'repo-link-1' },
       }),
@@ -128,7 +147,7 @@ describe('deliverFactorySessionNotification', () => {
     expect(created.state.set).toHaveBeenCalledWith(expect.objectContaining({ factoryOrgId: 'org-1' }));
     expect(controller.getCurrentAgent).toHaveBeenCalledWith(created);
     expect(agent.sendNotificationSignal).toHaveBeenCalledWith(expect.anything(), {
-      resourceId: 'session-b',
+      resourceId: 'project-1',
       threadId: 'thread-stored',
     });
   });
@@ -136,20 +155,63 @@ describe('deliverFactorySessionNotification', () => {
   it('skips a missing thread without creating or sending', async () => {
     const { controller, agent, deliver } = setup({ thread: null, offline: true });
     await expect(deliver()).resolves.toEqual({ delivered: 'skipped', reason: 'thread-not-found' });
-    expect(controller.getSessionByResource).not.toHaveBeenCalled();
+    expect(controller.getSession).not.toHaveBeenCalled();
+    expect(controller.createSession).not.toHaveBeenCalled();
+    expect(agent.sendNotificationSignal).not.toHaveBeenCalled();
+  });
+
+  it("skips a thread another resource stamped with the target's session id", async () => {
+    const { controller, agent, deliver } = setup({
+      thread: { id: 'thread-forged', resourceId: 'user-atk', metadata: { factorySessionId: 'session-b' } },
+    });
+    await expect(deliver()).resolves.toEqual({ delivered: 'skipped', reason: 'thread-not-owned' });
+    expect(controller.createSession).not.toHaveBeenCalled();
+    expect(agent.sendNotificationSignal).not.toHaveBeenCalled();
+  });
+
+  it("skips a thread created with the target's session id under another resource", async () => {
+    const { controller, agent, deliver } = setup({ thread: { id: 'session-b', resourceId: 'user-atk' } });
+    await expect(deliver()).resolves.toEqual({ delivered: 'skipped', reason: 'thread-not-owned' });
+    expect(controller.createSession).not.toHaveBeenCalled();
+    expect(agent.sendNotificationSignal).not.toHaveBeenCalled();
+  });
+
+  it("skips a thread under the Factory stamped with a private run's session id", async () => {
+    // Any org member can stamp a Factory thread; a private run's stamp doesn't count there.
+    const { controller, agent, deliver } = setup({
+      row: { ...ROW, visibility: 'private' } as SourceControlSession,
+      thread: { id: 'thread-stamped', resourceId: 'project-1', metadata: { factorySessionId: 'session-b' } },
+    });
+    await expect(deliver()).resolves.toEqual({ delivered: 'skipped', reason: 'thread-not-owned' });
+    expect(controller.createSession).not.toHaveBeenCalled();
+    expect(agent.sendNotificationSignal).not.toHaveBeenCalled();
+  });
+
+  it('skips a thread under the Factory for a session no run is bound to', async () => {
+    // A person's session runs under its owner, so a thread under the Factory isn't its own.
+    RUNS.hasRunBindingForSession.mockResolvedValueOnce(false);
+    const { controller, agent, deliver } = setup({ thread: { id: 'session-b', resourceId: 'project-1' } });
+    await expect(deliver()).resolves.toEqual({ delivered: 'skipped', reason: 'thread-not-owned' });
     expect(controller.createSession).not.toHaveBeenCalled();
     expect(agent.sendNotificationSignal).not.toHaveBeenCalled();
   });
 
   it('skips an offline target with no Factory session row without creating or sending', async () => {
-    const { controller, agent, deliver } = setup({ offline: true, row: null });
+    const { controller, agent, deliver } = setup({
+      offline: true,
+      row: null,
+      thread: { id: 'session-b', resourceId: 'session-b' },
+    });
     await expect(deliver()).resolves.toEqual({ delivered: 'skipped', reason: 'session-not-found' });
     expect(controller.createSession).not.toHaveBeenCalled();
     expect(agent.sendNotificationSignal).not.toHaveBeenCalled();
   });
 
   it('with onlyIfLive, skips an offline target without creating or sending', async () => {
-    const { controller, sessions, agent, deliver } = setup({ offline: true });
+    const { controller, sessions, agent, deliver } = setup({
+      offline: true,
+      thread: { id: 'session-b', resourceId: 'session-b' },
+    });
     await expect(deliver({ onlyIfLive: true })).resolves.toEqual({ delivered: 'skipped', reason: 'offline' });
     expect(sessions.getBySessionId).not.toHaveBeenCalled();
     expect(controller.createSession).not.toHaveBeenCalled();
@@ -186,9 +248,13 @@ describe('deliverFactorySessionNotification', () => {
     new Mastra({ agents: { agent }, storage, logger: false });
     const live = fakeSession('thread-other');
     const controller = {
-      queryThreadById: vi.fn(async () => ({ id: 'thread-stored', resourceId: 'session-b' })),
+      queryThreadById: vi.fn(async () => ({
+        id: 'thread-stored',
+        resourceId: 'project-1',
+        metadata: { factorySessionId: 'session-b' },
+      })),
       queryThreads: vi.fn(),
-      getSessionByResource: vi.fn(async () => live),
+      getSession: vi.fn(async () => live),
       createSession: vi.fn(),
       getCurrentAgent: vi.fn(() => agent),
     };
@@ -196,7 +262,8 @@ describe('deliverFactorySessionNotification', () => {
     // `low` is always summarized later, so nothing runs and no model is needed.
     const result = await deliverFactorySessionNotification({
       controller: controller as unknown as FactoryDeliveryController,
-      sessions: { getBySessionId: vi.fn() },
+      sessions: { getBySessionId: vi.fn(async () => ROW) },
+      runs: RUNS,
       target: { sessionId: 'session-b', threadId: 'thread-stored' },
       notification: { ...MESSAGE, priority: 'low', attributes: { 'from-session': 'session-a' } },
     });
@@ -208,7 +275,7 @@ describe('deliverFactorySessionNotification', () => {
     expect(records[0]).toMatchObject({
       id: result.notificationId,
       threadId: 'thread-stored',
-      resourceId: 'session-b',
+      resourceId: 'project-1',
       source: 'factory-session',
       kind: 'message',
       attributes: { 'from-session': 'session-a' },
@@ -225,11 +292,12 @@ describe('resolveSessionThread', () => {
   } = {}) {
     return resolveSessionThread({
       controller: {
-        getSessionByResource: vi.fn(async () => (current ? fakeSession(current) : undefined)),
+        getSession: vi.fn(async () => (current ? fakeSession(current) : undefined)),
+        queryThreadById: vi.fn(async () => null),
         queryThreads: vi.fn(async () => threads),
       } as unknown as FactoryDeliveryController,
       sessions: { getBySessionId: vi.fn(async () => ROW) },
-      workItems: { findActiveRunBindingForSession: vi.fn(async () => binding) } as never,
+      workItems: { findActiveRunBindingForSession: vi.fn(async () => binding), ...RUNS } as never,
       sessionId: 'session-b',
     });
   }

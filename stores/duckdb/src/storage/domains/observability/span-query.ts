@@ -14,15 +14,8 @@ import { buildSpanQueryResponse, missingPreviewSql, readPreview } from './previe
 import { compileSpanQueryPredicate } from './trace-query';
 
 const identityFields = ['organizationId', 'resourceId', 'traceId', 'spanId'] as const;
-const missingFields = new Set([
-  'parentEntityType',
-  'parentEntityId',
-  'parentEntityName',
-  'rootEntityType',
-  'rootEntityId',
-  'rootEntityName',
-  'executionSource',
-]);
+/** Span rows store the execution source as `source`. */
+const columnSql = (field: string) => (field === 'executionSource' ? 'e.source AS executionSource' : `e.${field}`);
 const identities = identityFields.join(', ');
 const fields = [
   ...identityFields,
@@ -93,7 +86,14 @@ function afterCursor(plan: TrustedSpanQueryPlan): { sql: string; values: unknown
   return { sql: `(${comparisons.join(' OR ')})`, values };
 }
 
-export function compileDuckDBSpanQuery(plan: TrustedSpanQueryPlan) {
+/**
+ * The spans `querySpans()` selects, as CTEs ending in `selected`: the current completed copy of
+ * each span that started in the window and matches `where`. Values are in placeholder order.
+ */
+export function compileDuckDBSpanSelection(plan: Pick<TrustedSpanQueryPlan, 'timeRange' | 'scope' | 'where'>): {
+  ctes: string[];
+  values: unknown[];
+} {
   const values: unknown[] = [plan.timeRange.from, plan.timeRange.to];
   const scope: string[] = [];
   if (plan.scope) {
@@ -105,33 +105,48 @@ export function compileDuckDBSpanQuery(plan: TrustedSpanQueryPlan) {
     }
   }
   const predicate = plan.where ? compileSpanQueryPredicate(plan.where) : { sql: 'TRUE', values: [] };
-  const after = afterCursor(plan);
-  values.push(plan.timeRange.from, plan.timeRange.to, ...predicate.values, ...after.values, plan.limit + 1);
+  values.push(plan.timeRange.from, plan.timeRange.to, ...predicate.values);
   const join = identityFields.map(field => `e.${field} IS NOT DISTINCT FROM c.${field}`).join(' AND ');
+  const partition = identityFields.map(field => `e.${field}`).join(', ');
   // Preserve predicates accepted by older core without adding JSON work to the new contract.
   const legacyModelFields = coreStorage.SPAN_QUERY_FIELD_REGISTRY
     ? ''
     : `CASE WHEN json_type(e.attributes, '$.model') = 'VARCHAR' THEN json_extract_string(e.attributes, '$.model') END AS model,
        CASE WHEN json_type(e.attributes, '$.provider') = 'VARCHAR' THEN json_extract_string(e.attributes, '$.provider') END AS provider,`;
   // Start timestamps select identities; all events for those identities participate in reconstruction.
-  const sql = `WITH candidates AS MATERIALIZED (
+  const ctes = [
+    `candidates AS MATERIALIZED (
     SELECT ${identities} FROM span_events
     WHERE eventType = 'start' AND timestamp >= CAST(? AS TIMESTAMP) AND timestamp < CAST(? AS TIMESTAMP)
       ${scope.length ? `AND ${scope.join(' AND ')}` : ''}
     GROUP BY ${identities}
-  ), ranked AS (
-    SELECT ${fields.map(field => (missingFields.has(field) ? `CAST(NULL AS VARCHAR) AS ${field}` : `e.${field}`)).join(', ')},
-      min(e.timestamp) FILTER (WHERE e.eventType = 'start') OVER (PARTITION BY ${identityFields.map(field => `e.${field}`).join(', ')}) AS startedAt, e.endedAt, e.cursorId,
+  )`,
+    `span_versions AS (
+    SELECT ${fields.map(columnSql).join(', ')},
+      min(e.timestamp) FILTER (WHERE e.eventType = 'start') OVER (PARTITION BY ${partition}) AS startedAt, e.endedAt, e.cursorId,
       ${legacyModelFields}
-      date_diff('millisecond', min(e.timestamp) FILTER (WHERE e.eventType = 'start') OVER (PARTITION BY ${identityFields.map(field => `e.${field}`).join(', ')}), e.endedAt) AS durationMs,
+      date_diff('millisecond', min(e.timestamp) FILTER (WHERE e.eventType = 'start') OVER (PARTITION BY ${partition}), e.endedAt) AS durationMs,
       CASE WHEN e.error IS NULL THEN 'success' ELSE 'error' END AS status,
       CASE WHEN e.error IS NULL THEN NULL ELSE 'error' END AS error,
-      row_number() OVER (PARTITION BY ${identityFields.map(field => `e.${field}`).join(', ')}
+      row_number() OVER (PARTITION BY ${partition}
         ORDER BY CASE WHEN e.endedAt IS NULL THEN 1 ELSE 0 END, e.cursorId DESC NULLS LAST, e.endedAt DESC) AS rank
     FROM span_events e INNER JOIN candidates c ON ${join}
-  )
+  )`,
+    `selected AS (
+    SELECT * FROM span_versions s
+    WHERE rank = 1 AND endedAt IS NOT NULL AND startedAt >= CAST(? AS TIMESTAMP) AND startedAt < CAST(? AS TIMESTAMP) AND (${predicate.sql})
+  )`,
+  ];
+  return { ctes, values };
+}
+
+export function compileDuckDBSpanQuery(plan: TrustedSpanQueryPlan) {
+  const { ctes, values } = compileDuckDBSpanSelection(plan);
+  const after = afterCursor(plan);
+  values.push(...after.values, plan.limit + 1);
+  const sql = `WITH ${ctes.join(', ')}
   SELECT ${[...fields, 'startedAt', 'endedAt', 'durationMs', 'status', 'cursorId'].map(field => `s.${field}`).join(', ')}
-  FROM ranked s WHERE rank = 1 AND endedAt IS NOT NULL AND startedAt >= CAST(? AS TIMESTAMP) AND startedAt < CAST(? AS TIMESTAMP) AND (${predicate.sql}) AND ${after.sql}
+  FROM selected s WHERE ${after.sql}
   ORDER BY s.${plan.orderBy.field} ${plan.orderBy.direction === 'asc' ? 'ASC' : 'DESC'} NULLS LAST, ${identityFields.map(field => `s.${field} ASC NULLS LAST`).join(', ')}
   LIMIT ?`;
   return { sql, values };

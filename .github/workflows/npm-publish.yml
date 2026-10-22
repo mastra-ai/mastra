@@ -67,7 +67,7 @@ jobs:
       - name: Setup Node.js 24.x
         uses: actions/setup-node@04be95cf3511ea51ebf9f224ddfb99cc7ab87cd4
         with:
-          node-version: 24.18.0
+          node-version: 24.22.0
           registry-url: 'https://registry.npmjs.org'
           cache: 'pnpm'
           package-manager-cache: false
@@ -304,7 +304,7 @@ jobs:
       - name: Setup Node.js 24.x
         uses: actions/setup-node@04be95cf3511ea51ebf9f224ddfb99cc7ab87cd4
         with:
-          node-version: 24.18.0
+          node-version: 24.22.0
           registry-url: 'https://registry.npmjs.org'
           cache: 'pnpm'
           package-manager-cache: false
@@ -492,7 +492,7 @@ jobs:
       - name: Setup Node.js 24.x
         uses: actions/setup-node@04be95cf3511ea51ebf9f224ddfb99cc7ab87cd4
         with:
-          node-version: 24.18.0
+          node-version: 24.22.0
           registry-url: 'https://registry.npmjs.org'
           cache: 'pnpm'
           package-manager-cache: false
@@ -555,7 +555,7 @@ jobs:
       - name: Setup Node.js 24.x
         uses: actions/setup-node@04be95cf3511ea51ebf9f224ddfb99cc7ab87cd4
         with:
-          node-version: 24.18.0
+          node-version: 24.22.0
           registry-url: 'https://registry.npmjs.org'
           cache: 'pnpm'
           package-manager-cache: false
@@ -677,7 +677,7 @@ jobs:
       - name: Setup Node.js 24.x
         uses: actions/setup-node@04be95cf3511ea51ebf9f224ddfb99cc7ab87cd4
         with:
-          node-version: 24.18.0
+          node-version: 24.22.0
           registry-url: 'https://registry.npmjs.org'
           cache: 'pnpm'
           package-manager-cache: false

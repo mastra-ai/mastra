@@ -24,25 +24,7 @@
     "muse-wonder-1.0"
   ],
   "reasoning": {
-    "muse-wonder-1.0": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "muse-spark-1.2-contributor": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "muse-spark-1.3": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "muse-spark-1.3-contributor": [
+    "muse-spark-1.1": [
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high", "xhigh"]
@@ -54,10 +36,28 @@
         "values": ["minimal", "low", "medium", "high", "xhigh"]
       }
     ],
-    "muse-spark-1.1": [
+    "muse-spark-1.3": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "muse-spark-1.2-contributor": [
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "muse-spark-1.3-contributor": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "muse-wonder-1.0": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ]
   }

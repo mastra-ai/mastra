@@ -119,6 +119,15 @@ type SignalRuntimeOptionsEntry = {
 
 const SIGNAL_RUNTIME_OPTIONS_TTL_MS = 5 * 60 * 1000;
 const signalRuntimeOptionsByRunId = new Map<string, SignalRuntimeOptionsEntry>();
+
+/**
+ * Client tools a resume request can execute, keyed by run. The stream that stayed open from
+ * before the suspension must not run those tools again, but it must run any resumed client tool
+ * the resume request cannot execute (a server-side approve sends no client tools). Held until the
+ * last stream of the run closes, which is after the resume request returns.
+ */
+const resumingClientToolNamesByRunKey = new Map<string, Map<string, number>>();
+const openStreamCountByRunKey = new Map<string, number>();
 const latestSignalRuntimeOptionsByThread = new Map<string, SignalRuntimeOptionsEntry>();
 
 const createSignalRuntimeOptionsEntry = (
@@ -435,6 +444,63 @@ export class Agent extends BaseResource {
 
   private getSignalRuntimeRunKey(runId: string): string {
     return `${this.options.baseUrl}|${this.apiPrefix}|${this.agentId}|${runId}`;
+  }
+
+  /**
+   * Records that `runId` is being resumed by a request that can execute these client tools, so the
+   * stream that is still open from before the suspension skips them. Released when the last stream
+   * of the run closes, which is after this request returns.
+   */
+  private holdResumingClientTools(
+    runId: string,
+    clientTools: ToolsInput | undefined,
+  ): (options?: { force?: boolean }) => void {
+    const names = Object.entries(clientTools ?? {})
+      .filter(([, tool]) => typeof (tool as { execute?: unknown }).execute === 'function')
+      .map(([name]) => name);
+    if (names.length === 0) return () => {};
+
+    const key = this.getSignalRuntimeRunKey(runId);
+    const held = resumingClientToolNamesByRunKey.get(key) ?? new Map<string, number>();
+    for (const name of names) held.set(name, (held.get(name) ?? 0) + 1);
+    resumingClientToolNamesByRunKey.set(key, held);
+
+    // A generate resume opens no stream, so nothing else would drop this hold. A stream resume
+    // leaves it: the open first stream still needs it after this request returns, and drops it
+    // when that stream closes.
+    let released = false;
+    // force drops the hold even while a stream is tracking the run. A rejected resume request
+    // never resumes the run, so the open stream must not treat a later retry as already covered.
+    return ({ force = false }: { force?: boolean } = {}) => {
+      if (released || (!force && openStreamCountByRunKey.has(key))) return;
+      released = true;
+      const current = resumingClientToolNamesByRunKey.get(key);
+      if (!current) return;
+      for (const name of names) {
+        const count = (current.get(name) ?? 1) - 1;
+        if (count > 0) current.set(name, count);
+        else current.delete(name);
+      }
+      if (current.size === 0) resumingClientToolNamesByRunKey.delete(key);
+    };
+  }
+
+  /** Drops the held tool names when the last stream of the run closes. */
+  private trackOpenStream(runId: string): () => void {
+    const key = this.getSignalRuntimeRunKey(runId);
+    openStreamCountByRunKey.set(key, (openStreamCountByRunKey.get(key) ?? 0) + 1);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      const remaining = (openStreamCountByRunKey.get(key) ?? 1) - 1;
+      if (remaining > 0) {
+        openStreamCountByRunKey.set(key, remaining);
+        return;
+      }
+      openStreamCountByRunKey.delete(key);
+      resumingClientToolNamesByRunKey.delete(key);
+    };
   }
 
   private getSignalRuntimeThreadKey({
@@ -2274,6 +2340,12 @@ export class Agent extends BaseResource {
       // run restores the conversation from its snapshot, so this is the only place a stateless
       // client can recover it for a client-tool continuation.
       let finishedHistory: unknown[] | undefined;
+      // A durable run keeps this stream open across a suspension, so it also carries the
+      // resumed continuation. Its client tools are run by the request that resumed the run
+      // (approve/decline/resume), so this stream must not run them again.
+      let suspended = false;
+      const resumedToolCallIds = new Set<string>();
+      const releaseOpenStream = streamRunId ? this.trackOpenStream(streamRunId) : () => {};
 
       // Use tee() to split the stream into two branches
       const [streamForController, streamForProcessing] = response.body.tee();
@@ -2396,6 +2468,14 @@ export class Agent extends BaseResource {
             }
 
             const executableToolCalls = [...toolInvocationsById.values()].filter(toolCall => {
+              // A resumed call is skipped only when the request that resumed the run can execute
+              // that tool. A server-side approve sends no client tools, so the call must run here.
+              if (resumedToolCallIds.has(toolCall.toolCallId)) {
+                const held = streamRunId
+                  ? resumingClientToolNamesByRunKey.get(this.getSignalRuntimeRunKey(streamRunId))
+                  : undefined;
+                if (held?.has(toolCall.toolName)) return false;
+              }
               const clientTool = processedParams.clientTools?.[toolCall.toolName] as Tool;
               return Boolean(clientTool?.execute);
             });
@@ -2409,6 +2489,7 @@ export class Agent extends BaseResource {
                     payload: {
                       toolCallId: string;
                       toolName: string;
+                      args: unknown;
                       result: unknown;
                       isError: boolean;
                       providerExecuted: false;
@@ -2471,6 +2552,7 @@ export class Agent extends BaseResource {
                     payload: {
                       toolCallId: toolCall.toolCallId,
                       toolName: toolCall.toolName,
+                      args: toolCall.args,
                       result,
                       isError: false,
                       providerExecuted: false,
@@ -2612,6 +2694,17 @@ export class Agent extends BaseResource {
           if (!streamRunId && typeof chunk.runId === 'string') {
             streamRunId = chunk.runId;
           }
+          if (chunk.type === 'tool-call-approval' || chunk.type === 'tool-call-suspended') {
+            suspended = true;
+          } else if (suspended && chunk.type === 'tool-call' && typeof chunk.payload?.toolCallId === 'string') {
+            const toolName = chunk.payload.toolName;
+            const held = streamRunId
+              ? resumingClientToolNamesByRunKey.get(this.getSignalRuntimeRunKey(streamRunId))
+              : undefined;
+            if (typeof toolName === 'string' && held?.has(toolName)) {
+              resumedToolCallIds.add(chunk.payload.toolCallId);
+            }
+          }
         },
         lastMessage: undefined,
       })
@@ -2629,6 +2722,7 @@ export class Agent extends BaseResource {
         })
         .finally(() => {
           signal?.removeEventListener('abort', onAbort);
+          releaseOpenStream();
         });
     } catch (error) {
       if (!isAbortError(error)) {
@@ -3077,17 +3171,27 @@ export class Agent extends BaseResource {
     }
   > {
     const { requestContext, ...rest } = params;
+    const executableClientTools = params.clientToolsResolver?.() ?? params.clientTools;
+    const releaseHold = this.holdResumingClientTools(rest.runId, executableClientTools);
     const processedParams = {
       ...rest,
       requestContext: parseClientRequestContext(requestContext),
-      clientTools: processClientTools(params.clientToolsResolver?.() ?? params.clientTools),
+      clientTools: processClientTools(executableClientTools),
     };
 
     // Create a manually controlled readable stream
     const { readable, controller: readableController, signal } = this.createCancellableStream(params.abortSignal);
 
-    // Start processing the response in the background
-    const response = await this.processStreamResponse(processedParams, readableController, 'approve-tool-call', signal);
+    // A rejected request never resumes the run, so drop the hold even if the original stream is open.
+    const response = await this.processStreamResponse(
+      processedParams,
+      readableController,
+      'approve-tool-call',
+      signal,
+    ).catch(error => {
+      releaseHold({ force: true });
+      throw error;
+    });
 
     // Create a new response with the readable stream
     const streamResponse = new Response(readable, {
@@ -3161,17 +3265,27 @@ export class Agent extends BaseResource {
     }
   > {
     const { requestContext, ...rest } = params;
+    const executableClientTools = params.clientToolsResolver?.() ?? params.clientTools;
+    const releaseHold = this.holdResumingClientTools(rest.runId, executableClientTools);
     const processedParams = {
       ...rest,
       requestContext: parseClientRequestContext(requestContext),
-      clientTools: processClientTools(params.clientToolsResolver?.() ?? params.clientTools),
+      clientTools: processClientTools(executableClientTools),
     };
 
     // Create a manually controlled readable stream
     const { readable, controller: readableController, signal } = this.createCancellableStream(params.abortSignal);
 
-    // Start processing the response in the background
-    const response = await this.processStreamResponse(processedParams, readableController, 'decline-tool-call', signal);
+    // A rejected request never resumes the run, so drop the hold even if the original stream is open.
+    const response = await this.processStreamResponse(
+      processedParams,
+      readableController,
+      'decline-tool-call',
+      signal,
+    ).catch(error => {
+      releaseHold({ force: true });
+      throw error;
+    });
 
     // Create a new response with the readable stream
     const streamResponse = new Response(readable, {
@@ -3283,11 +3397,13 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   > {
+    const executableClientTools = options.clientToolsResolver?.() ?? options.clientTools;
+    const releaseHold = this.holdResumingClientTools(options.runId, executableClientTools);
     const processedParams = {
       ...options,
       resumeData,
       requestContext: parseClientRequestContext(options.requestContext),
-      clientTools: processClientTools(options.clientToolsResolver?.() ?? options.clientTools),
+      clientTools: processClientTools(executableClientTools),
       structuredOutput: options.structuredOutput
         ? {
             ...options.structuredOutput,
@@ -3298,7 +3414,15 @@ export class Agent extends BaseResource {
 
     const { readable, controller: readableController, signal } = this.createCancellableStream(options.abortSignal);
 
-    const response = await this.processStreamResponse(processedParams, readableController, 'resume-stream', signal);
+    const response = await this.processStreamResponse(
+      processedParams,
+      readableController,
+      'resume-stream',
+      signal,
+    ).catch(error => {
+      releaseHold({ force: true });
+      throw error;
+    });
 
     const streamResponse = new Response(readable, {
       status: response.status,
@@ -3404,11 +3528,13 @@ export class Agent extends BaseResource {
       }) => Promise<void>;
     }
   > {
+    const executableClientTools = options.clientToolsResolver?.() ?? options.clientTools;
+    const releaseHold = this.holdResumingClientTools(options.runId, executableClientTools);
     const processedParams = {
       ...options,
       resumeData,
       requestContext: parseClientRequestContext(options.requestContext),
-      clientTools: processClientTools(options.clientToolsResolver?.() ?? options.clientTools),
+      clientTools: processClientTools(executableClientTools),
       structuredOutput: options.structuredOutput
         ? {
             ...options.structuredOutput,
@@ -3424,7 +3550,10 @@ export class Agent extends BaseResource {
       readableController,
       'resume-stream-until-idle',
       signal,
-    );
+    ).catch(error => {
+      releaseHold({ force: true });
+      throw error;
+    });
 
     const streamResponse = new Response(readable, {
       status: response.status,
@@ -3470,18 +3599,37 @@ export class Agent extends BaseResource {
     },
   ): Promise<ToolCallGenerateResponse> {
     const { requestContext, clientTools, clientToolsResolver, memory, ...rest } = params;
-    const response: ToolCallGenerateResponse = await this.request(
-      `/agents/${this.agentId}/approve-tool-call-generate`,
-      {
+    // The open first stream receives the resumed call while this request is in flight. Hold before
+    // the request so that stream skips tools this request can execute. A generate resume opens no
+    // stream of its own, so release the hold here unless a stream is still tracking the run.
+    const executableClientTools = clientToolsResolver?.() ?? clientTools;
+    const releaseHold = this.holdResumingClientTools(rest.runId, executableClientTools);
+    let response: ToolCallGenerateResponse;
+    try {
+      response = await this.request(`/agents/${this.agentId}/approve-tool-call-generate`, {
         method: 'POST',
         body: {
           ...rest,
           requestContext: parseClientRequestContext(requestContext),
-          clientTools: processClientTools(clientToolsResolver?.() ?? clientTools),
+          clientTools: processClientTools(executableClientTools),
         },
-      },
-    );
-    return this.continueResumedGenerate(response, { requestContext, clientTools, clientToolsResolver, memory });
+      });
+    } catch (error) {
+      // The server rejected the resume, so it never happened. Drop the hold even if a stream is open.
+      releaseHold({ force: true });
+      throw error;
+    }
+    try {
+      return await this.continueResumedGenerate(response, {
+        requestContext,
+        clientTools: executableClientTools,
+        clientToolsResolver,
+        memory,
+      });
+    } finally {
+      // The resume was accepted. Leave the hold while a stream is still tracking the run.
+      releaseHold();
+    }
   }
 
   /**
@@ -3502,18 +3650,37 @@ export class Agent extends BaseResource {
     },
   ): Promise<ToolCallGenerateResponse> {
     const { requestContext, clientTools, clientToolsResolver, memory, ...rest } = params;
-    const response: ToolCallGenerateResponse = await this.request(
-      `/agents/${this.agentId}/decline-tool-call-generate`,
-      {
+    // The open first stream receives the resumed call while this request is in flight. Hold before
+    // the request so that stream skips tools this request can execute. A generate resume opens no
+    // stream of its own, so release the hold here unless a stream is still tracking the run.
+    const executableClientTools = clientToolsResolver?.() ?? clientTools;
+    const releaseHold = this.holdResumingClientTools(rest.runId, executableClientTools);
+    let response: ToolCallGenerateResponse;
+    try {
+      response = await this.request(`/agents/${this.agentId}/decline-tool-call-generate`, {
         method: 'POST',
         body: {
           ...rest,
           requestContext: parseClientRequestContext(requestContext),
-          clientTools: processClientTools(clientToolsResolver?.() ?? clientTools),
+          clientTools: processClientTools(executableClientTools),
         },
-      },
-    );
-    return this.continueResumedGenerate(response, { requestContext, clientTools, clientToolsResolver, memory });
+      });
+    } catch (error) {
+      // The server rejected the resume, so it never happened. Drop the hold even if a stream is open.
+      releaseHold({ force: true });
+      throw error;
+    }
+    try {
+      return await this.continueResumedGenerate(response, {
+        requestContext,
+        clientTools: executableClientTools,
+        clientToolsResolver,
+        memory,
+      });
+    } finally {
+      // The resume was accepted. Leave the hold while a stream is still tracking the run.
+      releaseHold();
+    }
   }
 
   /**

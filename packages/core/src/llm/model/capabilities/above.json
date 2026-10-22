@@ -5,7 +5,8 @@
     "glm-5.3-flash",
     "mimo-v2.6-flash",
     "mimo-v2.6-pro",
-    "mimo-v2.6-pro-ultraspeed"
+    "mimo-v2.6-pro-ultraspeed",
+    "qwen3.8-max"
   ],
   "temperature": [
     "deepseek-v4-flash",
@@ -28,30 +29,10 @@
     "glm-5.3-flash"
   ],
   "reasoning": {
-    "deepseek-v4-flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "glm-5.2": [
       {
         "type": "effort",
         "values": ["none", "high", "max"]
-      }
-    ],
-    "glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "mimo-v2.6-pro": [
-      {
-        "type": "toggle"
       }
     ],
     "qwen3.8-max": [
@@ -59,15 +40,22 @@
         "type": "toggle"
       }
     ],
-    "mimo-v2.6-pro-ultraspeed": [
+    "deepseek-v4-pro": [
       {
         "type": "toggle"
-      }
-    ],
-    "glm-5.2-fast": [
+      },
       {
         "type": "effort",
-        "values": ["none", "high", "max"]
+        "values": ["high", "max"]
+      }
+    ],
+    "deepseek-v4-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "deepseek-v4.1-flash": [
@@ -79,13 +67,26 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-v4-pro": [
+    "mimo-v2.6-pro": [
       {
         "type": "toggle"
-      },
+      }
+    ],
+    "glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["high", "max"]
+      }
+    ],
+    "glm-5.2-fast": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "mimo-v2.6-pro-ultraspeed": [
+      {
+        "type": "toggle"
       }
     ],
     "mimo-v2.6-flash": [

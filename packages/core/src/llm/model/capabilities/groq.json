@@ -1,5 +1,5 @@
 {
-  "attachment": ["qwen/qwen3.6-27b", "qwen/qwen3.8-27b"],
+  "attachment": ["qwen/qwen3.6-27b", "qwen/qwen3.8-27b", "whisper-large-v3", "whisper-large-v3-turbo"],
   "temperature": [
     "allam-2-7b",
     "groq/compound",
@@ -22,12 +22,6 @@
     "qwen/qwen3.8-27b"
   ],
   "reasoning": {
-    "openai/gpt-oss-20b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "openai/gpt-oss-safeguard-20b": [
       {
         "type": "effort",
@@ -35,6 +29,12 @@
       }
     ],
     "openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "openai/gpt-oss-20b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]

@@ -24,6 +24,11 @@
   --text-lead--font-weight: 400;
   --text-lead--letter-spacing: 0.01em;
 
+  --text-display-lg: 1.75rem;
+  --text-display-lg--line-height: 127%;
+  --text-display-lg--font-weight: 500;
+  --text-display-lg--letter-spacing: -0.01em;
+
   --text-display: 1.375rem; /* 22px — onboarding hero */
   --text-display--line-height: 127%;
   --text-display--font-weight: 500;

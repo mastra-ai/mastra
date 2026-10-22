@@ -1,6 +1,6 @@
 {
   "name": "@mastra/isolated-vm",
-  "version": "0.1.3-alpha.0",
+  "version": "0.1.3",
   "description": "In-process V8 isolate Code Mode transport for Mastra, backed by isolated-vm",
   "type": "module",
   "main": "dist/index.js",
@@ -37,9 +37,9 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.20.5",
     "@vitest/coverage-v8": "catalog:",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

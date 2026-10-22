@@ -43,30 +43,7 @@
     "zai-org/GLM-5.2-FP8"
   ],
   "reasoning": {
-    "stepfun/step-3.7-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "xiaomi/mimo-v2.5": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "z-ai/glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "ambient/large": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "minimax/minimax-m3": [
       {
         "type": "toggle"
       }
@@ -89,6 +66,35 @@
         "values": ["high", "max"]
       }
     ],
+    "zai-org/GLM-5.2-FP8": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "z-ai/glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "minimax/minimax-m3": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "ambient/large": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "stepfun/step-3.7-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
     "qwen/qwen3.6-27b": [
       {
         "type": "toggle"
@@ -101,12 +107,6 @@
       {
         "type": "effort",
         "values": ["low", "medium", "xhigh"]
-      }
-    ],
-    "zai-org/GLM-5.2-FP8": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
       }
     ]
   }
