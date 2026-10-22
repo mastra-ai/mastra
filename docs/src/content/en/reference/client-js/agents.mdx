@@ -416,7 +416,7 @@ The subscription also exposes `abort(options?)` and `unsubscribe()`. `await subs
 
 ### `abortRun(runId)`
 
-Requests cancellation of a durable run by its ID, including a run without a memory thread. Closing the HTTP stream or aborting its client-side `abortSignal` only disconnects the observer from durable execution. Use `abortRun()` to stop execution instead.
+Requests cancellation of a durable run by its ID, including a run without a memory thread. Cancelling the response body or aborting the client-wide `abortSignal` only disconnects the observer from durable execution. A per-call `abortSignal` passed to a streaming method requests cancellation for you. Use `abortRun()` to stop a run without that signal.
 
 ```typescript
 const runId = crypto.randomUUID()
