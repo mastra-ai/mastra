@@ -1476,7 +1476,7 @@ export class MastraFactory {
         },
         outputProcessors: [
           new FactoryChannelSessionLinkProcessor(),
-          new FactoryReplyStreamProcessor(),
+          new FactoryReplyStreamProcessor({ channels: () => this.#prepared?.base.controller.getChannels() }),
           new FactoryReplyCredentialProcessor(),
         ],
         ...(vector ? { vector } : {}),
