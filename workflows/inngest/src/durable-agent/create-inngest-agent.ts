@@ -39,6 +39,7 @@
 import type { Agent, AgentExecutionOptions, StructuredOutputOptions } from '@mastra/core/agent';
 import {
   AGENT_STREAM_TOPIC,
+  DurableStepIds,
   agentThreadStreamRuntime,
   prepareForDurableExecution,
   createDurableAgentStream,
@@ -64,7 +65,13 @@ import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { ChunkFrom } from '@mastra/core/stream';
-import type { MastraModelOutput, ChunkType, FullOutput, MastraOnFinishCallback } from '@mastra/core/stream';
+import type {
+  MastraModelOutput,
+  ChunkType,
+  FullOutput,
+  MastraOnFinishCallback,
+  ToolCallChunk,
+} from '@mastra/core/stream';
 import { deepMerge } from '@mastra/core/utils';
 import type { ShouldPersistSnapshotFn, Workflow } from '@mastra/core/workflows';
 import { NonRetriableError } from 'inngest';
@@ -1268,6 +1275,46 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       });
       validateModelTimeoutSettings(callbackOptions.modelSettings?.timeout);
       const resumeOffset = await getPubsubOffset(runId);
+      const { snapshot: suspendedSnapshot } = await resumableSnapshot;
+      const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
+      const suspendedToolIds = Object.keys(suspendedSnapshot?.resumeLabels ?? {});
+      const loadIteration = async () =>
+        workflowsStore?.loadWorkflowSnapshot({ workflowName: InngestDurableStepIds.AGENTIC_EXECUTION, runId });
+      let iterationSnapshot = await loadIteration();
+      // The outer suspension can be persisted before the nested run's latest
+      // snapshot. Do not seed output metadata from an earlier iteration.
+      const deadline = Date.now() + RESUME_SNAPSHOT_WAIT_MS;
+      while (
+        suspendedToolIds.length &&
+        !suspendedToolIds.every(id => iterationSnapshot?.resumeLabels?.[id]) &&
+        Date.now() < deadline
+      ) {
+        await new Promise(resolve => setTimeout(resolve, RESUME_SNAPSHOT_POLL_MS));
+        iterationSnapshot = await loadIteration();
+      }
+      const llmStep = iterationSnapshot?.context?.[DurableStepIds.LLM_EXECUTION];
+      if (suspendedToolIds.length && !suspendedToolIds.every(id => iterationSnapshot?.resumeLabels?.[id])) {
+        throw new Error(`Inngest nested snapshot for run ${runId} did not contain the suspended tool calls`);
+      }
+      const previousToolCalls = [
+        ...(iterationSnapshot?.context?.input?.accumulatedSteps ?? []).flatMap(
+          (step: { toolCalls?: ToolCallChunk['payload'][] }) => step.toolCalls ?? [],
+        ),
+        ...(llmStep?.status === 'success' ? (llmStep.output?.toolCalls ?? []) : []),
+      ];
+      const initialToolCalls: ToolCallChunk[] = previousToolCalls.map((toolCall: ToolCallChunk['payload']) => ({
+        type: 'tool-call',
+        runId,
+        from: ChunkFrom.AGENT,
+        payload: {
+          toolCallId: toolCall.toolCallId,
+          toolName: toolCall.toolName,
+          args: toolCall.args,
+          providerMetadata: toolCall.providerMetadata,
+          providerExecuted: toolCall.providerExecuted,
+          output: toolCall.output,
+        },
+      }));
 
       // Install a fresh abort controller scoped to the resumed segment and
       // attach it to the run-registry entry so the durable LLM step (when
@@ -1325,6 +1372,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         pubsub: getPubsub(),
         runId,
         offset: resumeOffset,
+        initialToolCalls,
         messageId: crypto.randomUUID(),
         model: {
           modelId: undefined,
