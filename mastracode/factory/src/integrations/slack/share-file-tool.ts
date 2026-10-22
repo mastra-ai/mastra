@@ -44,8 +44,8 @@ function missingScopeError(error: unknown, platform: string): Error | undefined 
  * such entry even though its thread is still channel-backed — and that is
  * exactly the run that ends a long job with a file to hand back. Rebuild the
  * context from the thread's persisted channel coordinates the same way
- * `ChatChannelOutputProcessor` does, so the tool is offered on both kinds of
- * run. A forked subagent's thread carries no channel metadata, so forks get
+ * `ChatChannelOutputProcessor` does, so the tools post on both kinds of run.
+ * A forked subagent's thread carries no channel metadata, so forks get
  * nothing here and never post to the platform.
  */
 export async function resolveRenderContext(
