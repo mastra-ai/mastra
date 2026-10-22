@@ -13,6 +13,7 @@ import type { Context } from 'hono';
 
 import { createBoardRegistry } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import type { BoardResolver } from '../boards/resolver.js';
 import { EXTERNAL_SOURCE_MISSING_KEY } from '../integrations/issue-reconciler.js';
 import { decisionRetryable, overtakenDecisionIds } from '../rules/decision-applicability.js';
 import type {
@@ -60,6 +61,8 @@ export interface WorkItemRoutesDeps extends RouteDependencies {
   workItems: WorkItemsStorage;
   /** Boards installed for this Factory instance. */
   boardRegistry?: BoardRegistry;
+  /** Each project's boards (stored + code); catalog, create and board moves use it when set. */
+  boardResolver?: BoardResolver;
   /** Comments domain — backs the mention attention provider. */
   comments: WorkItemCommentsStorage;
   /** Per-project queue-health threshold config. */
@@ -209,6 +212,10 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
     return this.deps.boardRegistry ?? (this.#defaultBoards ??= createBoardRegistry());
   }
 
+  async #projectBoards(scope: { orgId: string; factoryProjectId: string }): Promise<BoardRegistry> {
+    return this.deps.boardResolver ? this.deps.boardResolver.forProject(scope) : this.#boards;
+  }
+
   /** Resolve the `(orgId, userId)` tenant or a ready-to-return error response. */
   async #resolveTenant(c: Context): Promise<{ orgId: string; userId: string } | { response: Response }> {
     await this.deps.auth.ensureUser(c);
@@ -329,7 +336,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           const resolved = await this.#resolveProject(loose(c));
           if ('response' in resolved) return resolved.response;
           return c.json({
-            boards: [...this.#boards].map(([id, board]) => ({
+            boards: [...(await this.#projectBoards(resolved))].map(([id, board]) => ({
               id,
               title: board.title,
               initialPhase: board.initialPhase,
@@ -498,7 +505,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           try {
             const created = await createFactoryWorkItem({
               workItems,
-              boards: this.#boards,
+              boards: await this.#projectBoards(resolved),
               transitionService,
               audit: auditInput => audit.emit({ context: loose(c), input: auditInput }),
               orgId: resolved.orgId,
@@ -635,7 +642,7 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           const existing = await workItems.get({ orgId: tenant.orgId, id });
           if (!existing) return c.json({ error: 'Work item not found' }, 404);
           if (patch.board !== undefined) {
-            const board = this.#boards.get(patch.board);
+            const board = (await this.#projectBoards(existing)).get(patch.board);
             const stage = patch.stages?.length === 1 ? patch.stages[0] : undefined;
             if (existing.board !== null) {
               return c.json({ error: 'board_already_assigned' }, 409);

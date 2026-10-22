@@ -48,9 +48,10 @@ import { createFactorySecretEncryption } from './secret-encryption.js';
 import { FactoryChannelReplyProcessor } from './session/channel-reply-processor.js';
 import { FactoryEnvironmentStateProcessor } from './session/environment-state-processor.js';
 import type * as resourceMigrationModule from './session/resource-migration.js';
+import type { BoardsStorage } from './storage/domains/boards/base.js';
 import type { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
 import type { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
-import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
+import { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import type { SourceControlStorage } from './storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
 import type * as reportsModule from './tools/reports.js';
@@ -783,6 +784,40 @@ describe('MastraFactory.prepare', () => {
     ]);
     expect(storage.domainNames().every(name => storage.isDomainReady(name))).toBe(true);
   });
+
+  it.each([
+    { includeDefaultBoards: undefined, revision: 1 },
+    { includeDefaultBoards: false, revision: 0 },
+  ])(
+    'seeds stored boards for projects that predate them (includeDefaultBoards: $includeDefaultBoards)',
+    async ({ includeDefaultBoards, revision }) => {
+      const dir = mkdtempSync(join(tmpdir(), 'factory-board-seed-'));
+      onTestFinished(() => rmSync(dir, { recursive: true, force: true }));
+      const url = `file:${join(dir, 'factory.db')}`;
+      const earlier = new LibSQLFactoryStorage({ url, id: 'factory-test-storage' });
+      const projects = earlier.registerDomain(new FactoryProjectsStorage());
+      await earlier.init();
+      const project = await projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Old project' } });
+      await earlier.close();
+
+      const storage = new LibSQLFactoryStorage({ url, id: 'factory-test-storage' });
+      onTestFinished(() => storage.close());
+      await prepareFactory({
+        storage,
+        ...(includeDefaultBoards === false ? { includeDefaultBoards, boards: [createTestBoard()] } : {}),
+      });
+      const boards = storage.getDomain<BoardsStorage>('boards');
+      const scope = { orgId: 'org-1', factoryProjectId: project.id };
+      await vi.waitFor(async () => expect(await boards.getRevision(scope)).toBe(revision));
+      if (revision === 0) {
+        // Give the background pass time it would need to write.
+        await new Promise(resolve => setTimeout(resolve, 50));
+        expect(await boards.getRevision(scope)).toBe(0);
+      } else {
+        expect((await boards.getConfig(scope)).updatedBy).toBe('user-1');
+      }
+    },
+  );
 
   it('passes no sandbox callback when the slot is omitted', async () => {
     const ctx = await prepareIntegrationContext({ storage: fakeStorage() });

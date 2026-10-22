@@ -13,6 +13,7 @@ import type {
 
 import { boardForWorkItem, resolveBoardToolRule, workItemPhaseSemantics } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import type { BoardResolver } from '../boards/resolver.js';
 import type { FactoryRunBindingRecord, WorkItemsStorage, WorkItemRow } from '../storage/domains/work-items/base.js';
 import { findSessionRunBinding, getFactorySessionCoordinates } from './binding-context.js';
 import type { FactoryTransitionService } from './transition-service.js';
@@ -271,6 +272,8 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       configVersion: string;
       storage: WorkItemsStorage;
       boards: BoardRegistry;
+      /** Resolves each project's boards (stored + code); `boards` is used when unset. */
+      resolver?: BoardResolver;
       loadMemorySettings?: (args: {
         requestContext: ProcessInputStepArgs['requestContext'];
         binding: FactoryRunBindingRecord | null;
@@ -373,6 +376,10 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     }
   }
 
+  private boardsFor(scope: { orgId: string; factoryProjectId: string }): Promise<BoardRegistry> | BoardRegistry {
+    return this.options.resolver ? this.options.resolver.forProject(scope) : this.options.boards;
+  }
+
   async computeStateSignal(args: ComputeStateSignalArgs): Promise<ComputeStateSignalResult> {
     const address = getFactorySessionCoordinates(args.requestContext);
     if (!address) return;
@@ -396,7 +403,8 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     }
 
     const item = await this.options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
-    const stage = ruleStage(this.options.boards, item);
+    const boards = await this.boardsFor(binding);
+    const stage = ruleStage(boards, item);
     if (!item || !stage) return;
     const allItems = await this.options.storage.list({
       orgId: binding.orgId,
@@ -433,7 +441,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     const linkedText = linked.length
       ? `\nLinked items: ${linked.map(candidate => `${workItemSource(candidate.externalSource)} ${candidate.title}`).join('; ')}`
       : '';
-    const phaseLabel = this.options.boards.get(board)?.phases[stage]?.title ?? stage;
+    const phaseLabel = boards.get(board)?.phases[stage]?.title ?? stage;
     const runtime =
       value.modelId && value.thinkingLevel ? { modelId: value.modelId, thinkingLevel: value.thinkingLevel } : null;
     const snapshotContents =
@@ -481,7 +489,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     // single rule stage would ingest nothing, so skip the cursor and message
     // reads entirely instead of paying them on every walk.
     const item = await this.options.storage.get({ orgId: binding.orgId, id: binding.workItemId });
-    if (!itemInRuleStage(this.options.boards, item)) return;
+    if (!itemInRuleStage(await this.boardsFor(binding), item)) return;
     const cursor = await this.options.storage.getToolResultCursor(binding.orgId, binding.factoryProjectId, binding.id);
     let page = 0;
     while (true) {
@@ -517,7 +525,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     preloadedItem?: WorkItemRow,
   ): Promise<void> {
     const item = preloadedItem ?? (await this.options.storage.get({ orgId: binding.orgId, id: binding.workItemId }));
-    if (!itemInRuleStage(this.options.boards, item)) return;
+    if (!itemInRuleStage(await this.boardsFor(binding), item)) return;
     for (const message of messages) {
       for (const toolResult of completedToolResults(message)) {
         if (toolCallIds && !toolCallIds.has(toolResult.toolCallId)) continue;
@@ -546,7 +554,8 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     toolResult: CompletedToolResult,
   ): Promise<void> {
     const board = boardForWorkItem(item);
-    const rule = resolveBoardToolRule(this.options.boards, board, toolResult.toolName);
+    const boards = await this.boardsFor(binding);
+    const rule = resolveBoardToolRule(boards, board, toolResult.toolName);
     if (!rule) return;
     const ingressId = JSON.stringify([
       binding.id,
@@ -596,7 +605,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
         outcome = { status: 'rejected', code: decision.code, reason: decision.reason };
       } else if (decision) {
         const validated = validateFactoryRuleDecisions([decision]);
-        for (const entry of validated) assertFactoryDecisionTarget(entry, this.options.boards, board);
+        for (const entry of validated) assertFactoryDecisionTarget(entry, boards, board);
         decisions = validated;
       }
     } catch (error) {

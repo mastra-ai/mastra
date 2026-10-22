@@ -197,6 +197,11 @@ export interface ProjectRoutesDeps extends RouteDependencies {
   sandbox?: FactorySandbox;
   /** Environment builds, present only when the sandbox has a `builds` capability. */
   environmentBuilds?: EnvironmentBuildRunner;
+  /**
+   * Writes a new project's default boards. A failure leaves the project on the
+   * code boards until the next boot seeds it, so it never fails the create.
+   */
+  seedProjectBoards?: (scope: { orgId: string; factoryProjectId: string; userId: string }) => Promise<unknown>;
 }
 
 /** Provider output is shown to the user; strip any clone credential from it first. */
@@ -538,6 +543,9 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           const project = await (
             await this.#projects()
           ).create({ orgId: tenant.orgId, userId: tenant.userId, input: parsed.data });
+          await this.deps
+            .seedProjectBoards?.({ orgId: tenant.orgId, factoryProjectId: project.id, userId: tenant.userId })
+            .catch(error => console.warn(`[factory] could not seed boards for project ${project.id}:`, error));
           return context.json({ project }, 201);
         },
       }),

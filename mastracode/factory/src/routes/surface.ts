@@ -8,6 +8,7 @@ import type { FactorySandbox } from '@mastra/core/workspace';
 
 import { boardForWorkItem } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import type { BoardResolver } from '../boards/resolver.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationHooks } from '../integrations/base.js';
 import { getGithubFeatureDiagnostics } from '../integrations/github/config.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
@@ -127,6 +128,8 @@ export interface FactoryApiRoutesDeps {
   configVersion: string;
   /** Boards installed for this Factory instance. */
   boardRegistry: BoardRegistry;
+  /** Each project's boards (stored + code). */
+  boardResolver?: BoardResolver;
   /** Work-item feed service, handed to integrations that ingest platform messages. */
   feed: CommentsDomain;
   factoryTransitionService?: FactoryTransitionService;
@@ -446,6 +449,7 @@ export function buildIntegrationContext(
     onRepositoryPush?: IntegrationHooks['onRepositoryPush'];
     configVersion: string;
     boardRegistry: BoardRegistry;
+    boardResolver?: BoardResolver;
     factoryReady: boolean;
     /** Work-item feed service, so a channel integration can ingest platform messages. */
     feed: CommentsDomain;
@@ -488,7 +492,12 @@ export function buildIntegrationContext(
     ...(deps.factoryReady ? { workItems: deps.domains.workItems, feed: deps.feed } : {}),
     ...(deps.factoryReady
       ? {
-          runtime: { configVersion: deps.configVersion, workItems: deps.domains.workItems, boards: deps.boardRegistry },
+          runtime: {
+            configVersion: deps.configVersion,
+            workItems: deps.domains.workItems,
+            boards: deps.boardRegistry,
+            ...(deps.boardResolver ? { boardResolver: deps.boardResolver } : {}),
+          },
         }
       : {}),
     ...(deps.emitAudit || deps.onRepositoryPush
@@ -680,6 +689,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       new FactoryTransitionService({
         configVersion: deps.configVersion,
         boards: deps.boardRegistry,
+        resolver: deps.boardResolver,
         storage: deps.domains.workItems,
         audit: deps.audit,
       }))
@@ -808,6 +818,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           projects: deps.domains.projects,
           workItems: deps.domains.workItems,
           boardRegistry: deps.boardRegistry,
+          boardResolver: deps.boardResolver,
           comments: deps.domains.comments,
           queueHealth: deps.domains.queueHealth,
           transitionService,

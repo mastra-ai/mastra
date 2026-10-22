@@ -9,7 +9,9 @@ import {
   workItemPhaseSemantics,
 } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
+import { matchIntakeRoute } from '../../boards/intake-routing.js';
 import { cardLabels, moveCardToBoard } from '../../boards/relocate.js';
+import type { BoardResolver } from '../../boards/resolver.js';
 import { selectEventRule } from '../../rules/event-rules.js';
 import type {
   FactoryGithubEventName,
@@ -291,6 +293,8 @@ export interface GithubRulesOptions {
   storage: WorkItemsStorage;
   configVersion: string;
   boards: BoardRegistry;
+  /** Each project's boards and stored intake routes; `boards` and the legacy intake rows are used without it. */
+  boardResolver?: BoardResolver;
   /**
    * Decides which installed board an issue lands on: a label route first, then the repository's
    * intake source binding. Absent means Work.
@@ -345,22 +349,46 @@ export class GithubRules {
   }
 
   /**
-   * Board an issue lands on: the one its labels select under the project's label routes, else the
-   * board the repository's intake source binding names. Only installed boards count. Undefined
-   * leaves built-in routing (Work) in charge.
+   * Board and phase an issue lands on. Stored intake routes with a condition go first, then the
+   * project's label routes, then the board the repository's intake source binding names, then a
+   * stored fallback route. Only installed boards count. Undefined leaves built-in routing (Work)
+   * in charge.
    */
   async #intakeTarget(
     project: ExternalRepositoryProjectTarget,
     repositoryName: string,
     labels: readonly string[],
   ): Promise<{ board: string; initialPhase: string } | undefined> {
-    const intake = this.options.intake;
-    if (!intake) return undefined;
     const { orgId, factoryProjectId } = project;
+    const resolver = this.options.boardResolver;
+    const boards = resolver ? await resolver.forProject(project) : this.options.boards;
+    const stored = resolver ? await resolver.intakeRoutes(project) : [];
+    const facts = {
+      'source.kind': 'issue',
+      'source.integration': 'github',
+      'source.repository': repositoryName,
+      'item.labels': labels,
+    };
+    const routed = matchIntakeRoute(
+      stored.filter(route => route.when),
+      facts,
+      boards,
+    );
+    if (routed) return { board: routed.board, initialPhase: routed.phase };
+    const fallback = () => {
+      const target = matchIntakeRoute(
+        stored.filter(route => !route.when),
+        facts,
+        boards,
+      );
+      return target ? { board: target.board, initialPhase: target.phase } : undefined;
+    };
+    const intake = this.options.intake;
+    if (!intake) return fallback();
     if (labels.length > 0) {
       const routes = await intake.listLabelRoutes({ orgId, factoryProjectId, integrationId: 'github' });
       const route = resolveIntakeLabelRoute(routes, labels);
-      const board = route ? this.options.boards.get(route.board) : undefined;
+      const board = route ? boards.get(route.board) : undefined;
       if (board) return { board: board.id, initialPhase: board.initialPhase };
     }
     // GitHub bindings are keyed by the internal repository id; the slug is accepted too since the
@@ -371,8 +399,8 @@ export class GithubRules {
         candidate.factoryProjectId === factoryProjectId &&
         (candidate.sourceId === project.projectRepository.repositoryId || candidate.sourceId.toLowerCase() === slug),
     );
-    const board = binding?.board ? this.options.boards.get(binding.board) : undefined;
-    return board ? { board: board.id, initialPhase: board.initialPhase } : undefined;
+    const board = binding?.board ? boards.get(binding.board) : undefined;
+    return board ? { board: board.id, initialPhase: board.initialPhase } : fallback();
   }
 
   /**
@@ -426,7 +454,9 @@ export class GithubRules {
     const target = await this.#intakeTarget(project, repositoryName, labels);
     const outcome = await moveCardToBoard({
       workItems: this.options.storage,
-      boardRegistry: this.options.boards,
+      boardRegistry: this.options.boardResolver
+        ? await this.options.boardResolver.forProject(project)
+        : this.options.boards,
       userId: LABEL_ROUTE_USER_ID,
       item,
       targetBoard: target?.board ?? 'work',
@@ -1680,6 +1710,7 @@ export function githubRulesOptions(
     storage: context.runtime.workItems,
     configVersion: context.runtime.configVersion,
     boards: context.runtime.boards,
+    ...(context.runtime.boardResolver ? { boardResolver: context.runtime.boardResolver } : {}),
     intake: context.storage.intake,
     ...(context.hooks?.onRepositoryPush ? { onRepositoryPush: context.hooks.onRepositoryPush } : {}),
   };

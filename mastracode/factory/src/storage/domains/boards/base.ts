@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { FactoryStorageDomain, UniqueViolationError } from '@mastra/core/storage';
+import { defaultProjectBoardConfig } from '../../../boards/templates/work.js';
 import type { RuleGroup } from '../../../rules/rule-group.js';
 import {
   BOARD_DEFINITION_COLLECTIONS,
@@ -136,7 +137,8 @@ const where = (scope: BoardScope) => ({ org_id: scope.orgId, factory_project_id:
 
 /**
  * Boards, phases and routes a Factory project defines in its database. The
- * runtime does not read these yet; code-installed boards stay authoritative.
+ * runtime compiles them per project (`boards/resolver.ts`); code-installed
+ * boards (`config.boards`) live beside them.
  */
 export class BoardsStorage extends FactoryStorageDomain {
   constructor() {
@@ -165,6 +167,22 @@ export class BoardsStorage extends FactoryStorageDomain {
   }
 
   /** The project's stored boards and routes, read as one consistent snapshot. */
+  /**
+   * Writes the default Work board and routes when the project has never saved
+   * boards. Safe to race: the losing writer sees a revision conflict and
+   * leaves the winner's rows alone. Returns whether this call wrote them.
+   */
+  async seedDefaults(scope: BoardScope & { userId: string }): Promise<boolean> {
+    if ((await this.getRevision(scope)) !== 0) return false;
+    try {
+      await this.saveConfig({ ...scope, expectedRevision: 0, config: defaultProjectBoardConfig });
+      return true;
+    } catch (error) {
+      if (error instanceof BoardRevisionConflictError) return false;
+      throw error;
+    }
+  }
+
   async getConfig(scope: BoardScope): Promise<ProjectBoardConfig> {
     return this.storage.withTransaction(
       async ops => {

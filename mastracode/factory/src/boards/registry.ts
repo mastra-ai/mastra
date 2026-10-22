@@ -30,6 +30,11 @@ export function createBoardRegistry(
     registry.set(board.id, board);
   }
 
+  return freezeRegistry(registry);
+}
+
+/** Read-only registry view over a map of boards keyed by id. */
+export function freezeRegistry(registry: Map<string, InstalledBoard>): BoardRegistry {
   return Object.freeze({
     size: registry.size,
     get: registry.get.bind(registry),

@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry, defineBoard } from '../../boards/index.js';
+import { BoardResolver } from '../../boards/resolver.js';
+import { defaultProjectBoardConfig } from '../../boards/templates/work.js';
 import { createTestBoard } from '../../boards/test-utils.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../../rules/start-coordinator.js';
@@ -69,6 +71,7 @@ async function setup(permission: string | undefined, rules?: GithubRuleOverrides
     workItems,
     projects: seeded.projects,
     intake: seeded.intake,
+    boardDefinitions: seeded.boardDefinitions,
     project,
     projectRepository,
     github,
@@ -3280,6 +3283,105 @@ describe('GithubRules label routes', () => {
     });
     return { ...base, service };
   }
+
+  describe('with stored intake routes', () => {
+    async function setupStored(storedRoute: boolean, legacyRoute?: string) {
+      const base = await setupRoutes(legacyRoute);
+      const scope = { orgId: 'org-1', factoryProjectId: base.project.id };
+      await base.boardDefinitions.saveConfig({
+        ...scope,
+        userId: 'user-1',
+        expectedRevision: 0,
+        config: {
+          ...defaultProjectBoardConfig,
+          intakeRoutes: [
+            ...(storedRoute
+              ? [
+                  {
+                    when: {
+                      operator: 'AND' as const,
+                      conditions: [{ field: 'item.labels', operator: 'contains' as const, value: 'Hotfix' }],
+                    },
+                    boardKey: 'work',
+                    phaseKey: 'planning',
+                  },
+                ]
+              : []),
+            ...defaultProjectBoardConfig.intakeRoutes,
+          ],
+        },
+      });
+      const boards = createBoardRegistry({ boards: [createTestBoard(), createTestBoard({ id: 'triage' })] });
+      const resolver = new BoardResolver({
+        codeBoards: boards,
+        installedBoardIds: new Set(['release', 'triage']),
+        storage: base.boardDefinitions,
+      });
+      const service = new GithubRules({
+        github: base.github,
+        sourceControl: base.sourceControl,
+        integrationStorage: base.integrationStorage,
+        projects: base.projects,
+        storage: base.workItems,
+        boards,
+        boardResolver: resolver,
+        configVersion: 'factory-config-v1',
+        intake: base.intake,
+      });
+      const transitionService = new FactoryTransitionService({
+        storage: base.workItems,
+        configVersion: 'factory-config-v1',
+        resolver,
+      });
+      const dispatcher = new FactoryDecisionDispatcher({
+        controller: {} as never,
+        transitionService,
+        storage: base.workItems,
+        resolver,
+        isAutoRunEnabled: async () => false,
+        ownerId: 'worker-routes',
+      });
+      return { ...base, service, dispatcher };
+    }
+
+    it('files a matching issue on the route board and moves it into the route phase, running that phase', async () => {
+      const { service, dispatcher, workItems, project } = await setupStored(true);
+      const ingress = issueOpened('stored-route-open');
+      (ingress.payload.issue as Record<string, unknown>).labels = [{ name: 'hotfix' }];
+      await expect(service.ingest(ingress)).resolves.toEqual({ status: 'committed' });
+      const [decision] = await workItems.listDeferredDecisions('org-1', project.id);
+      expect(decision?.decision).toMatchObject({ type: 'upsertLinkedWorkItem', board: 'work', stage: 'planning' });
+
+      await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
+      const [item] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
+      expect(item).toMatchObject({ board: 'work', stages: ['planning'] });
+      expect(item!.stageHistory.map(entry => entry.stage)).toEqual(['intake', 'planning']);
+      // Planning's runner proposed the planning run.
+      expect((await workItems.listDeferredDecisions('org-1', project.id)).map(record => record.decision)).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({ type: 'invokeSkill', skillName: 'factory-plan', role: 'plan' }),
+        ]),
+      );
+    });
+
+    it('lets a legacy label route win over the stored fallback route', async () => {
+      const { service, workItems, project } = await setupStored(false, 'release');
+      const ingress = issueOpened('legacy-route-open');
+      (ingress.payload.issue as Record<string, unknown>).labels = [{ name: 'release' }];
+      await expect(service.ingest(ingress)).resolves.toEqual({ status: 'committed' });
+      const [decision] = await workItems.listDeferredDecisions('org-1', project.id);
+      expect(decision?.decision).toMatchObject({ board: 'release', stage: 'queued' });
+    });
+
+    it('sends an issue no route matches to the stored fallback route', async () => {
+      const { service, workItems, project } = await setupStored(true, 'release');
+      const ingress = issueOpened('fallback-open');
+      (ingress.payload.issue as Record<string, unknown>).labels = [{ name: 'bug' }];
+      await expect(service.ingest(ingress)).resolves.toEqual({ status: 'committed' });
+      const [decision] = await workItems.listDeferredDecisions('org-1', project.id);
+      expect(decision?.decision).toMatchObject({ board: 'work', stage: 'intake' });
+    });
+  });
 
   it('materializes a labelled issue on the routed board at its initial phase', async () => {
     const { service, workItems, project } = await setupRoutes('Release');

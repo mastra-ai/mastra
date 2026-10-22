@@ -6,6 +6,8 @@ import {
   withBoardClosure,
 } from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
+import { matchIntakeRoute } from '../../boards/intake-routing.js';
+import type { BoardResolver } from '../../boards/resolver.js';
 import { hasExplicitRuleOverride, selectEventRule } from '../../rules/event-rules.js';
 import type {
   FactoryGitLabEventName,
@@ -166,6 +168,8 @@ interface GitLabRulesOptions {
   intake: IntakeStorage;
   configVersion: string;
   boards: BoardRegistry;
+  /** Each project's boards and stored intake routes; `boards` and the binding's board are used without it. */
+  boardResolver?: BoardResolver;
 }
 
 interface ProjectTarget {
@@ -194,6 +198,44 @@ export class GitLabRules {
     if (results.some(result => result.status === 'committed')) return { status: 'committed' };
     if (results.some(result => result.status === 'replayed')) return { status: 'replayed' };
     return results[0] ?? { status: 'ignored' };
+  }
+
+  /**
+   * Board and phase a new issue lands on. Stored intake routes with a condition go first, then the
+   * board the intake binding names, then a stored fallback route, then Work. Undefined when the
+   * chosen board is not installed.
+   */
+  async #intakeTarget(
+    scope: ExternalRepositoryProjectTarget,
+    boundBoard: string | null | undefined,
+    projectPath: string,
+    parsed: ParsedGitLabWebhook,
+  ): Promise<{ board: string; initialPhase: string } | undefined> {
+    const resolver = this.options.boardResolver;
+    const boards = resolver ? await resolver.forProject(scope) : this.options.boards;
+    const stored = resolver ? await resolver.intakeRoutes(scope) : [];
+    const facts = {
+      'source.kind': 'issue',
+      'source.integration': 'gitlab',
+      'source.repository': projectPath,
+      'item.labels': labelNames(parsed.payload.labels),
+    };
+    const routed =
+      matchIntakeRoute(
+        stored.filter(route => route.when),
+        facts,
+        boards,
+      ) ??
+      (boundBoard
+        ? undefined
+        : matchIntakeRoute(
+            stored.filter(route => !route.when),
+            facts,
+            boards,
+          ));
+    if (routed) return { board: routed.board, initialPhase: routed.phase };
+    const board = boards.get(boundBoard ?? 'work');
+    return board ? { board: board.id, initialPhase: board.initialPhase } : undefined;
   }
 
   async #targets(repositoryExternalId: string, host: string): Promise<ProjectTarget[]> {
@@ -254,8 +296,8 @@ export class GitLabRules {
       candidate => candidate.sourceId === sourceId && candidate.factoryProjectId === target.target.factoryProjectId,
     );
     if (!binding) return { status: 'ignored' };
-    const board = this.options.boards.get(binding.board ?? 'work');
-    if (!board) return { status: 'ignored' };
+    const intakeTarget = await this.#intakeTarget(target.target, binding.board, projectPath, parsed);
+    if (!intakeTarget) return { status: 'ignored' };
 
     const connectionIds = [
       ...new Set(
@@ -399,7 +441,7 @@ export class GitLabRules {
           orgId: target.target.orgId,
           factoryProjectId: target.target.factoryProjectId,
           factoryProject,
-          board: { board: board.id, initialPhase: board.initialPhase },
+          board: intakeTarget,
           issue,
           issueAuthor,
           issueAuthorTrusted,
@@ -418,7 +460,9 @@ export class GitLabRules {
           // and that authoring item, which its board may react to. The second
           // evaluation runs only the board handler, under an id-suffixed
           // identity so it is not dropped as a replay of the first.
-          ...(event === 'mergeRequestOpened' ? { mergeRequestOpenedScope: index ? ('board' as const) : ('intake' as const) } : {}),
+          ...(event === 'mergeRequestOpened'
+            ? { mergeRequestOpenedScope: index ? ('board' as const) : ('intake' as const) }
+            : {}),
         }),
       );
     }
@@ -738,6 +782,7 @@ export function attachGitLabRules(
     projects: context.storage.projects,
     storage: context.runtime.workItems,
     intake: context.storage.intake,
+    ...(context.runtime.boardResolver ? { boardResolver: context.runtime.boardResolver } : {}),
     configVersion: context.runtime.configVersion,
     boards: context.runtime.boards,
   });

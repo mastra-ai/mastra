@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { BoardDefinition } from '../boards/define-board.js';
 import { createBoardRegistry, defineBoard, workBoard } from '../boards/index.js';
+import { BoardResolver } from '../boards/resolver.js';
+import { defaultProjectBoardConfig, workBoardTemplate } from '../boards/templates/work.js';
 import { createTestBoard } from '../boards/test-utils.js';
 import type { BoardTransitionPolicy } from '../boards/transition-policy.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
@@ -1334,6 +1336,56 @@ describe('FactoryTransitionService', () => {
         'The Review board does not allow moving from review to planning. Next stages declared from review: intake, done, canceled.',
     });
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['review']);
+  });
+
+  it("enforces a stored board's nextPhases for agents and people alike", async () => {
+    const seeded = await createFactoryStorageForTests();
+    const storage = seeded.workItems;
+    const scope = { orgId: 'org-1', factoryProjectId: PROJECT_ID };
+    await seeded.boardDefinitions.saveConfig({
+      ...scope,
+      userId: 'user-1',
+      expectedRevision: 0,
+      config: {
+        ...defaultProjectBoardConfig,
+        boards: [
+          {
+            ...workBoardTemplate,
+            phases: workBoardTemplate.phases.map(phase =>
+              phase.key === 'planning' ? { ...phase, nextPhases: ['execute'] } : phase,
+            ),
+          },
+        ],
+      },
+    });
+    const item = await createItem(storage, { stages: ['planning'] });
+    const service = new FactoryTransitionService({
+      storage,
+      configVersion: 'rules-v1',
+      resolver: new BoardResolver({ codeBoards: createBoardRegistry(), storage: seeded.boardDefinitions }),
+    });
+    const reason =
+      'The Work board does not allow moving from planning to done. Next stages declared from planning: execute.';
+
+    expect(
+      await service.transition({
+        ...request(item, { stage: 'done' }),
+        actor: { type: 'agent', bindingId: 'planner', role: 'plan' },
+        ingress: { type: 'agent', identity: 'agent-done' },
+      }),
+    ).toMatchObject({ status: 'rejected', code: 'invalid_transition', reason });
+    expect(await service.transition(request(item, { stage: 'done', identity: 'person-done' }))).toMatchObject({
+      status: 'rejected',
+      code: 'invalid_transition',
+      reason,
+    });
+    expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['planning']);
+
+    // The code Work board, which every unseeded project still runs, allows the same move.
+    const unseeded = new FactoryTransitionService({ storage, configVersion: 'rules-v1' });
+    expect(await unseeded.transition(request(item, { stage: 'done', identity: 'code-done' }))).toMatchObject({
+      status: 'accepted',
+    });
   });
 
   it('names the declared next stages when the requested stage is not a phase', async () => {

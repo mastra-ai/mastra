@@ -31,6 +31,46 @@ const projectRoutes = (
   }).routes();
 
 describe('ProjectRoutes', () => {
+  it('seeds the stored Work board when a project is created, and still creates the project if seeding fails', async () => {
+    const seed = await createFactoryStorageForTests();
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    let failSeeding = false;
+    mountApiRoutes(
+      app as never,
+      projectRoutes(seed, undefined, undefined, undefined, {
+        seedProjectBoards: scope => {
+          if (failSeeding) return Promise.reject(new Error('boards storage down'));
+          return seed.boardDefinitions.seedDefaults(scope);
+        },
+      }),
+    );
+    const create = async (name: string) => {
+      const response = await app.request('/web/factory/projects', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+      expect(response.status).toBe(201);
+      return ((await response.json()) as { project: { id: string } }).project.id;
+    };
+
+    const seeded = await create('Seeded');
+    const config = await seed.boardDefinitions.getConfig({ orgId: 'org-1', factoryProjectId: seeded });
+    expect(config).toMatchObject({ revision: 1, updatedBy: 'user-1' });
+    expect(config.boards.map(board => board.key)).toEqual(['work']);
+
+    failSeeding = true;
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const unseeded = await create('Unseeded');
+    expect(await seed.boardDefinitions.getRevision({ orgId: 'org-1', factoryProjectId: unseeded })).toBe(0);
+    expect(warn).toHaveBeenCalledWith(`[factory] could not seed boards for project ${unseeded}:`, expect.any(Error));
+    warn.mockRestore();
+  });
+
   it('creates, lists, reads, updates, and deletes a project without integrations', async () => {
     const seed = await createFactoryStorageForTests();
     const app = new Hono();

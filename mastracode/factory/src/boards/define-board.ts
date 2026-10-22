@@ -25,7 +25,7 @@ import { IDENTIFIER_RE, isBoardIdentifier, MAX_ROLE_LENGTH, MAX_TOOL_NAME_LENGTH
 import type { BoardTransitionPolicy } from './transition-policy.js';
 
 type BoardPhaseHandlers = Partial<Record<FactoryRuleSource, FactoryRuleHandler<FactoryStageRuleContext>>>;
-type ReadonlyBoardPhaseHandlers = Readonly<BoardPhaseHandlers>;
+export type ReadonlyBoardPhaseHandlers = Readonly<BoardPhaseHandlers>;
 
 /** Runs when an agent seated on this board completes the named tool. */
 export type BoardToolResultRuleHandler = FactoryRuleHandler<FactoryToolResultRuleContext>;

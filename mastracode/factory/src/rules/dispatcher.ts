@@ -11,6 +11,7 @@ import {
 } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { moveCardToBoard } from '../boards/relocate.js';
+import type { BoardResolver } from '../boards/resolver.js';
 import {
   FACTORY_OPEN_RUN_STALE_MS,
   heartbeatSessionOpenRun,
@@ -379,6 +380,8 @@ export interface FactoryDecisionDispatcherOptions {
   storage: WorkItemsStorage;
   /** Installed boards; defaults to the built-in Work and Review boards. */
   boards?: BoardRegistry;
+  /** Resolves each project's boards (stored + code). When set, decisions run against their project's boards. */
+  resolver?: BoardResolver;
   ownerId?: string;
   /** `false` parks `invokeSkill` effects as `proposed`; every other effect still runs. */
   isAutoRunEnabled: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
@@ -578,6 +581,7 @@ export class FactoryDecisionDispatcher {
   readonly #controller: FactoryController;
   readonly #transitionService: Pick<FactoryTransitionService, 'transition' | 'configVersion'>;
   readonly #boards: BoardRegistry;
+  readonly #resolver: BoardResolver | undefined;
   readonly #storage: WorkItemsStorage;
   readonly #ownerId: string;
   readonly #isAutoRunEnabled: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
@@ -611,7 +615,8 @@ export class FactoryDecisionDispatcher {
     this.#audit = options.audit;
     this.#controller = options.controller;
     this.#transitionService = options.transitionService;
-    this.#boards = options.boards ?? createBoardRegistry();
+    this.#resolver = options.resolver;
+    this.#boards = options.boards ?? options.resolver?.code ?? createBoardRegistry();
     this.#storage = options.storage;
     this.#ownerId = options.ownerId ?? `factory-dispatcher:${globalThis.crypto.randomUUID()}`;
     this.#isAutoRunEnabled = options.isAutoRunEnabled;
@@ -841,11 +846,15 @@ export class FactoryDecisionDispatcher {
    * card as superseded; a failure landing after the card settled would otherwise page a person
    * until the next restart.
    */
+  #boardsFor(scope: { orgId: string; factoryProjectId: string }): Promise<BoardRegistry> | BoardRegistry {
+    return this.#resolver ? this.#resolver.forProject(scope) : this.#boards;
+  }
+
   async #supersedeFailureOnSettledCard(record: FactoryDeferredDecisionRecord): Promise<void> {
     if (!record.workItemId) return;
     try {
       const item = await this.#storage.get({ orgId: record.orgId, id: record.workItemId });
-      if (!item || workItemPhaseSemantics(this.#boards, item)?.kind !== 'terminal') return;
+      if (!item || workItemPhaseSemantics(await this.#boardsFor(record), item)?.kind !== 'terminal') return;
       await this.#storage.supersedeDecisionsForWorkItem({
         orgId: record.orgId,
         factoryProjectId: record.factoryProjectId,
@@ -884,7 +893,7 @@ export class FactoryDecisionDispatcher {
   // Effects a person owns: starting a run (compute + code execution), and an
   // external event pulling a card back into a working lane.
   async #needsApproval(record: FactoryDeferredDecisionRecord, decision: FactoryCommitDecision): Promise<boolean> {
-    if (record.approvedAt !== null || !requestsConsent(this.#boards, record, decision)) return false;
+    if (record.approvedAt !== null || !requestsConsent(await this.#boardsFor(record), record, decision)) return false;
     // Withholding auto-run decides what the Factory may pick up on its own, not
     // whether it may finish work a person already handed it. Once someone starts
     // an item, the runs that carry it to review are that same request continuing.
@@ -912,7 +921,7 @@ export class FactoryDecisionDispatcher {
           record.factoryProjectId,
           `decision:${record.idempotencyKey}`,
         );
-        if (!replay) assertFactoryDecisionTarget(decision, this.#boards, item.board ?? undefined);
+        if (!replay) assertFactoryDecisionTarget(decision, await this.#boardsFor(record), item.board ?? undefined);
         const result = await this.#transitionService.transition({
           orgId: record.orgId,
           factoryProjectId: record.factoryProjectId,
@@ -1309,8 +1318,9 @@ export class FactoryDecisionDispatcher {
         if (replay?.status === 'accepted' && replay.stage === decision.stage) return;
       }
     }
-    assertFactoryDecisionTarget(decision, this.#boards);
-    const definition = this.#boards.get(decision.board);
+    const boards = await this.#boardsFor(record);
+    assertFactoryDecisionTarget(decision, boards);
+    const definition = boards.get(decision.board);
     if (!definition) throw new Error('Factory decision target board is not installed.');
     const initialPhase = definition.initialPhase;
     // `skipRules` files the card at the stage the decision names, as its first
@@ -1407,7 +1417,7 @@ export class FactoryDecisionDispatcher {
       if (!result.created) {
         await moveCardToBoard({
           workItems: this.#storage,
-          boardRegistry: this.#boards,
+          boardRegistry: boards,
           userId: 'factory-rule-dispatcher',
           item: result.item,
           targetBoard: decision.board,
@@ -1521,7 +1531,7 @@ export class FactoryDecisionDispatcher {
       this.#storage.get({ orgId: record.orgId, id: record.workItemId }),
       this.#storage.listDecisionsForEvaluations(record.orgId, record.factoryProjectId, [record.evaluationId]),
     ]);
-    return decisionOvertaken({ boards: this.#boards, item, record, role, siblings });
+    return decisionOvertaken({ boards: await this.#boardsFor(record), item, record, role, siblings });
   }
 
   async #roleSuperseded(record: FactoryDeferredDecisionRecord, role: string): Promise<boolean> {
@@ -1536,7 +1546,7 @@ export class FactoryDecisionDispatcher {
     // out from under the run by terminal-stage cleanup. Treat the decision as
     // superseded so it stops retrying to MAX_ATTEMPTS as `session_unavailable`.
     const item = await this.#storage.get({ orgId: record.orgId, id: record.workItemId }).catch(() => null);
-    if (item && workItemPhaseSemantics(this.#boards, item)?.kind === 'terminal') return true;
+    if (item && workItemPhaseSemantics(await this.#boardsFor(record), item)?.kind === 'terminal') return true;
     return own.some(
       revoked =>
         revoked.revokedAt !== null &&

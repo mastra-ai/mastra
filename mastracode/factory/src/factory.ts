@@ -50,6 +50,7 @@ import {
 } from './auth.js';
 import { createBoardRegistry, isTerminalWorkItem } from './boards/index.js';
 import type { BoardRegistry, InstalledBoard } from './boards/index.js';
+import { BoardResolver } from './boards/resolver.js';
 import { boardForWorkItem } from './boards/semantics.js';
 import { EnvironmentBuildRunner } from './environment/build-runner.js';
 import { ENVIRONMENT_BUILD_WORKFLOW_ID } from './environment/build-workflow.js';
@@ -480,6 +481,8 @@ export class MastraFactory {
   #sandbox: FactorySandbox | undefined;
   #sandboxDescription: FactorySandboxDescription | undefined;
   readonly #boards: BoardRegistry;
+  /** Each project's boards (stored + code), set by `prepare()`. */
+  #boardResolver: BoardResolver | undefined;
   readonly #configVersion: string;
   #prepared: Awaited<ReturnType<typeof prepareAgentControllerMount>> | undefined;
   #dispatcher: FactoryDecisionDispatcher | undefined;
@@ -634,7 +637,9 @@ export class MastraFactory {
     const auditStorage = storage.registerDomain(new AuditStorage());
     const workItemsStorage = storage.registerDomain(new WorkItemsStorage());
     workItemsStorage.onAttentionChanged(scope => touchFeed(eventBus, scope));
-    workItemsStorage.useTerminalPhasePredicate(item => isTerminalWorkItem(this.#boards, item));
+    workItemsStorage.useTerminalPhasePredicate(item =>
+      isTerminalWorkItem(this.#boardResolver?.peek(item) ?? this.#boards, item),
+    );
     const modelCredentialsStorage = storage.registerDomain(new ModelCredentialsStorage(secretEncryption));
     const modelDefaultsStorage = storage.registerDomain(new ModelDefaultsStorage());
     const memorySettingsStorage = storage.registerDomain(new MemorySettingsStorage());
@@ -650,8 +655,20 @@ export class MastraFactory {
     // tenant, so inbound channel events can resolve the sender's model creds.
     const channelIdentityStorage = storage.registerDomain(new ChannelIdentityStorage());
     const workItemCommentsStorage = storage.registerDomain(new WorkItemCommentsStorage());
-    // Stored board definitions. Nothing reads them yet; boards still come from code.
+    // Stored board definitions, compiled per project beside the code boards.
     const boardsStorage = storage.registerDomain(new BoardsStorage());
+    const boardResolver = new BoardResolver({
+      codeBoards: this.#boards,
+      installedBoardIds: new Set((this.#config.boards ?? []).map(board => board.id)),
+      storage: boardsStorage,
+      storageReady: () => storage.isDomainReady('boards'),
+    });
+    this.#boardResolver = boardResolver;
+    // `includeDefaultBoards: false` opts out of the stored Work board too.
+    const seedsBoards = this.#config.includeDefaultBoards !== false;
+    const seedProjectBoards = seedsBoards
+      ? (scope: { orgId: string; factoryProjectId: string; userId: string }) => boardsStorage.seedDefaults(scope)
+      : undefined;
     // Every app-table domain handle the route builders and integrations need,
     // threaded explicitly (no service locator).
     const domains = {
@@ -826,6 +843,26 @@ export class MastraFactory {
         }
       });
     }
+    // Projects created before stored boards get the Work board seeded in the background; until then
+    // they run the code boards, which compile to the same thing. Seeding is idempotent, so a failed
+    // pass is retried next start.
+    if (seedsBoards && storage.isDomainReady('boards') && storage.isDomainReady('projects')) {
+      void timedPhase('background.seed.boards', async () => {
+        try {
+          for (const project of await factoryProjectsStorage.listAll()) {
+            await boardsStorage.seedDefaults({
+              orgId: project.orgId,
+              factoryProjectId: project.id,
+              userId: project.createdBy,
+            });
+          }
+        } catch (error) {
+          console.warn(
+            `[factory] seeding project boards stopped early: ${error instanceof Error ? error.message : error}`,
+          );
+        }
+      });
+    }
     const knowledgeEnabled =
       this.#config.knowledge !== undefined || process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1';
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
@@ -987,6 +1024,7 @@ export class MastraFactory {
       ? new FactoryTransitionService({
           configVersion,
           boards: this.#boards,
+          resolver: this.#boardResolver,
           storage: workItemsStorage,
           audit: auditDomain,
           autoApprovePlans: async ({ orgId, factoryProjectId }) => {
@@ -1065,6 +1103,7 @@ export class MastraFactory {
     const environmentBuilds = this.#environmentBuilds;
     const projectRoutes = new ProjectRoutes({
       auth: routeAuth,
+      ...(seedProjectBoards ? { seedProjectBoards } : {}),
       sandbox: this.#sandbox,
       ...(environmentBuilds ? { environmentBuilds } : {}),
       projects: factoryProjectsStorage,
@@ -1204,6 +1243,7 @@ export class MastraFactory {
           configVersion,
           storage: workItemsStorage,
           boards: this.#boards,
+          resolver: this.#boardResolver,
           loadMemorySettings,
           factoryThinkingLevel: factoryProjectId => readFactoryThinkingLevel(factoryProjectsStorage, factoryProjectId),
           ...(transitionService ? { transitionService } : {}),
@@ -1734,6 +1774,7 @@ export class MastraFactory {
             knowledgeKey: this.#config.knowledge?.key,
             configVersion,
             boardRegistry: this.#boards,
+            boardResolver: this.#boardResolver,
             factoryTransitionService: transitionService,
             onFactoryRuntime: ({ transitionService: runtimeTransitionService, startCoordinator, prepareBinding }) => {
               this.#startCoordinator = startCoordinator;
@@ -1743,6 +1784,7 @@ export class MastraFactory {
                 storage: storage.getDomain<WorkItemsStorage>('work-items'),
                 audit: auditDomain,
                 boards: this.#boards,
+                resolver: this.#boardResolver,
                 maxInFlight: this.#config.dispatcher?.maxInFlight,
                 isAutoRunEnabled: async ({ orgId, factoryProjectId }) => {
                   await factoryProjectsStorage.ensureReady();
@@ -1994,6 +2036,7 @@ export class MastraFactory {
           integrations: integrationRegistrations,
           configVersion,
           boardRegistry: this.#boards,
+          boardResolver: this.#boardResolver,
           factoryReady,
           domains,
           feed: commentsDomain,
@@ -2026,6 +2069,7 @@ export class MastraFactory {
           integrations: integrationRegistrations,
           configVersion,
           boardRegistry: this.#boards,
+          boardResolver: this.#boardResolver,
           factoryReady,
           domains,
           feed: commentsDomain,
@@ -2060,6 +2104,7 @@ export class MastraFactory {
               integrations: integrationRegistrations,
               configVersion,
               boardRegistry: this.#boards,
+              boardResolver: this.#boardResolver,
               factoryReady,
               domains,
               feed: commentsDomain,
