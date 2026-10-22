@@ -212,7 +212,23 @@ describe("a teammate's Factory session", () => {
   });
 
   describe('when a teammate tries to change its model', () => {
-    it("shows the owner's model without a picker, and refuses /model and /think", async () => {
+    const lockedReason = 'Only Ward Peeters can change this session’s model or thinking level.';
+
+    it('shows the model and thinking level disabled, with who can change them', async () => {
+      serveModelCatalogs({ sessionScope: 'user', viewerModels: [openAIKeyModel] });
+      openWardSessionAs('user-damien');
+      const user = userEvent.setup();
+
+      const model = await screen.findByRole('button', { name: `Session model: GPT-4o Mini. ${lockedReason}` });
+      expect(model).toHaveAttribute('aria-disabled', 'true');
+      const thinking = await screen.findByRole('button', { name: `Thinking: unavailable. ${lockedReason}` });
+      expect(thinking).toHaveAttribute('aria-disabled', 'true');
+
+      await user.hover(model);
+      expect(await screen.findByRole('tooltip')).toHaveTextContent(lockedReason);
+    });
+
+    it('refuses /model and /think without changing the session', async () => {
       const modelSwitches: unknown[] = [];
       const stateWrites: unknown[] = [];
       server.use(
@@ -229,10 +245,6 @@ describe("a teammate's Factory session", () => {
       openWardSessionAs('user-damien');
       const user = userEvent.setup();
 
-      expect(await screen.findByText('You’re steering Ward Peeters’s session')).toBeInTheDocument();
-      expect(await screen.findByTitle('openai/gpt-4o-mini')).toHaveTextContent('GPT-4o Mini');
-      expect(screen.queryByRole('button', { name: 'Session model' })).not.toBeInTheDocument();
-
       const input = await screen.findByRole('textbox', { name: 'Message' });
       await waitFor(() => expect(input).toBeEnabled());
       await user.type(input, '/model openai/gpt-5-mini');
@@ -240,8 +252,7 @@ describe("a teammate's Factory session", () => {
       await user.type(input, '/think high');
       await user.keyboard('{Enter}');
 
-      const refusal = 'Only Ward Peeters can change this session’s model or thinking level.';
-      await waitFor(() => expect(screen.getAllByText(refusal)).toHaveLength(2));
+      await waitFor(() => expect(screen.getAllByText(lockedReason)).toHaveLength(2));
       expect(modelSwitches).toEqual([]);
       expect(stateWrites).not.toContainEqual({ state: { thinkingLevel: 'high' } });
     });

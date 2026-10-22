@@ -34,12 +34,15 @@ export interface ThinkingLevelUnavailableProps<T extends string> {
   options: readonly ThinkingLevelOption<T>[];
   label: string;
   reason: string;
+  /** The level still in effect, when the control is locked rather than unsupported. */
+  value?: T;
 }
 
 export function ThinkingLevelUnavailable<T extends string>({
   options,
   label,
   reason,
+  value,
 }: ThinkingLevelUnavailableProps<T>) {
   return (
     <Tooltip>
@@ -57,7 +60,7 @@ export function ThinkingLevelUnavailable<T extends string>({
           />
         }
       >
-        <ThinkingLevelBars options={options} value={undefined} />
+        <ThinkingLevelBars options={options} value={value} />
       </TooltipTrigger>
       <TooltipContent side="top" className="max-w-64">
         {reason}

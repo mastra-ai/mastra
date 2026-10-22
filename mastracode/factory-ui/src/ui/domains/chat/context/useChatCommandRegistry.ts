@@ -46,7 +46,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   const factoryQuery = useFactoryQuery(factoryId);
   const navigate = useNavigate();
   const location = useLocation();
-  const { sessionId, sessionEnabled, baseUrl, owner, modelLocked } = useChatSessionContext();
+  const { sessionId, sessionEnabled, baseUrl, modelLockedReason } = useChatSessionContext();
   const { transcript, busy, localUser, pushNotice } = useChatTranscript();
   const { usage, omPhase } = useChatRuntime();
   const { activeModelId, setModel } = useChatModels();
@@ -101,12 +101,6 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
     return result.data;
   };
 
-  const refuseLockedModel = () =>
-    pushNotice(
-      `Only ${owner?.name ?? 'the session owner'} can change this session’s model or thinking level.`,
-      'error',
-    );
-
   const commandsWithoutHelp: SlashCommand[] = [
     {
       name: 'model',
@@ -115,7 +109,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
       requiresSession: true,
       execute: async rawArguments => {
         if (!rawArguments) return;
-        if (modelLocked) return refuseLockedModel();
+        if (modelLockedReason) return pushNotice(modelLockedReason);
         await setModel(rawArguments);
       },
     },
@@ -209,7 +203,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
             return;
           }
           const changesThinkingLevel = action.kind === 'set' || action.kind === 'clear';
-          if (modelLocked && changesThinkingLevel) return refuseLockedModel();
+          if (modelLockedReason && changesThinkingLevel) return pushNotice(modelLockedReason);
           if (action.kind === 'set') {
             await ensureSettings();
             await updateSettingsMutation.mutateAsync({ thinkingLevel: action.level });

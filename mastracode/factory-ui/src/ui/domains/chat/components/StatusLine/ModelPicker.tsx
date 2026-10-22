@@ -27,6 +27,7 @@ import type { ChatSessionContextApi } from '../../context/ChatSessionContext';
 import { useChatModels } from '../../context/useChatModels';
 import { useChatSessionContext } from '../../context/useChatSessionContext';
 import { settingsSectionPath } from '../../../settings/settingsSections';
+import { LockedModelControls } from './LockedModelControls';
 import { ModelScopeFooter, useOrganizationScopedFactory } from './ModelScopeFooter';
 import { SessionThinkingControl } from './SessionThinkingControl';
 
@@ -44,16 +45,16 @@ function canSwitchModel({
   kind,
   draftSessionId,
   sessionEnabled,
-  modelLocked,
-}: Pick<ChatSessionContextApi, 'kind' | 'draftSessionId' | 'sessionEnabled' | 'modelLocked'>): boolean {
-  if (modelLocked) return false;
+  modelLockedReason,
+}: Pick<ChatSessionContextApi, 'kind' | 'draftSessionId' | 'sessionEnabled' | 'modelLockedReason'>): boolean {
+  if (modelLockedReason) return false;
   if (kind === 'user' && draftSessionId) return true;
   return sessionEnabled;
 }
 
 export function ModelPicker() {
   const chatSession = useChatSessionContext();
-  const { kind } = chatSession;
+  const { kind, modelLockedReason } = chatSession;
   const { status } = useChatConnection();
   const { activeModelId, defaultModelId, setModel, isLoading, error } = useChatModels();
   const { factoryId } = useParams<{ factoryId: string }>();
@@ -76,6 +77,10 @@ export function ModelPicker() {
         Model unavailable
       </span>
     );
+  }
+
+  if (modelLockedReason && activeModelId) {
+    return <LockedModelControls modelId={activeModelId} reason={modelLockedReason} />;
   }
 
   const label = selectedModelId ? formatModelName(selectedModelId) : 'No model';
