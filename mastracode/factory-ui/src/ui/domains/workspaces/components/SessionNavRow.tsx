@@ -57,7 +57,7 @@ export function SessionNavRow({
   /** Hover tooltip, typically the branch name. */
   title?: string;
   url: string;
-  externalLinks?: readonly SessionExternalLink[];
+  externalLinks: readonly SessionExternalLink[];
   /** Leading icon: a user session, or the source of the session's work item. */
   source?: SessionSource;
   active: boolean;

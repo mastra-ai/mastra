@@ -22,7 +22,7 @@ export function SessionMenuItems({
 }: {
   menu: 'context' | 'dropdown';
   url: string;
-  externalLinks?: readonly SessionExternalLink[];
+  externalLinks: readonly SessionExternalLink[];
   pinned: boolean;
   onPinChange: (pinned: boolean) => void;
   onDelete?: () => void;
@@ -40,7 +40,7 @@ export function SessionMenuItems({
         <ExternalLink />
         Open in new tab
       </Menu.Item>
-      {externalLinks?.map(link => (
+      {externalLinks.map(link => (
         <Menu.Item key={link.url} render={<a href={link.url} target="_blank" rel="noopener noreferrer" />}>
           <SourceIcon source={link.source} />
           {link.label}

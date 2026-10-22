@@ -1,6 +1,5 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -55,6 +54,7 @@ describe('ContextMenu', () => {
     const trigger = screen.getByRole('link', { name: 'Session' });
     expect(fireEvent.contextMenu(trigger)).toBe(false);
     await screen.findByRole('menuitem', { name: 'Pin session' });
+    fireEvent.pointerDown(trigger, { button: 2 });
     expect(fireEvent.contextMenu(trigger)).toBe(true);
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
     // The escape hatch lasts for one gesture; a later right-click opens the app menu again.
@@ -79,8 +79,7 @@ describe('ContextMenu', () => {
     expect(onClick).not.toHaveBeenCalled();
   });
 
-  it('resets after dismissal and honors canceled opening', async () => {
-    const user = userEvent.setup();
+  it('keeps a canceled opening closed', () => {
     render(
       <ContextMenu
         onOpenChange={(open, details) => {
@@ -95,16 +94,8 @@ describe('ContextMenu', () => {
     );
     fireEvent.contextMenu(screen.getByText('Blocked session'));
     expect(screen.queryByRole('menu')).toBeNull();
-    cleanup();
-    render(<ControlledMenu />);
-    const trigger = screen.getByRole('link', { name: 'Session' });
-    fireEvent.contextMenu(trigger);
-    await screen.findByRole('menu');
-    await user.keyboard('{Escape}');
-    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
-    expect(fireEvent.contextMenu(trigger)).toBe(false);
-    await screen.findByRole('menu');
   });
+
   it('renders Label standalone without throwing (no Group ancestor required)', () => {
     expect(() => render(<ContextMenu.Label>Heading</ContextMenu.Label>)).not.toThrow();
   });

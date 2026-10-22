@@ -12,43 +12,37 @@ export function useNativeContextMenu(open: boolean, actions: RefObject<ContextMe
   useEffect(() => {
     if (!open) return;
     nativeGesture.current?.abort();
+    const listeners = new AbortController();
 
     function allowNativeMenu(event: Event) {
-      // A touch long-press can fire contextmenu after Base UI's long-press
-      // timer opened the popup. That is still the first gesture.
+      // A touch long-press fires contextmenu after Base UI already opened the menu: still the first gesture.
       if (event instanceof PointerEvent && event.pointerType === 'touch') return;
-      // Base UI also prevents contextmenu on document. Stop propagation, but
-      // leave the browser default intact; synthetic events cannot open it.
+      // Skips Base UI's document listener that prevents the native menu; the browser default stays intact.
       event.stopImmediatePropagation();
       actions.current?.close();
     }
 
     function handlePointerDown(event: PointerEvent) {
-      if (event.button !== 2) return;
-      // Keep a popup link under the pointer until contextmenu is dispatched.
-      if (
-        event.target instanceof Element &&
-        event.target.closest('[data-slot="context-menu-content"], [data-slot="context-menu-sub-content"]')
-      )
-        return;
+      if (event.button !== 2 || isInsideMenuPopup(event.target)) return;
       event.stopImmediatePropagation();
-      const controller = new AbortController();
-      nativeGesture.current = controller;
-      document.addEventListener('contextmenu', event => allowNativeMenu(event), {
-        capture: true,
-        once: true,
-        signal: controller.signal,
-      });
-      // Remove the backdrop before the browser targets mousedown/contextmenu,
-      // so right-clicking a link still offers the browser's link actions.
+      const gesture = new AbortController();
+      nativeGesture.current = gesture;
+      // On window: closing below tears down this effect's document listeners before contextmenu fires.
+      window.addEventListener('contextmenu', allowNativeMenu, { capture: true, once: true, signal: gesture.signal });
+      // The backdrop must be gone when the browser hit-tests contextmenu, or the native menu loses link actions.
       flushSync(() => actions.current?.close());
     }
 
-    document.addEventListener('pointerdown', handlePointerDown, true);
-    document.addEventListener('contextmenu', allowNativeMenu, true);
-    return () => {
-      document.removeEventListener('pointerdown', handlePointerDown, true);
-      document.removeEventListener('contextmenu', allowNativeMenu, true);
-    };
+    document.addEventListener('pointerdown', handlePointerDown, { capture: true, signal: listeners.signal });
+    document.addEventListener('contextmenu', allowNativeMenu, { capture: true, signal: listeners.signal });
+    return () => listeners.abort();
   }, [open, actions]);
+}
+
+/** A right-click on a popup item keeps it under the pointer, so a link item gets the browser's link actions. */
+function isInsideMenuPopup(target: EventTarget | null): boolean {
+  return (
+    target instanceof Element &&
+    target.closest('[data-slot="context-menu-content"], [data-slot="context-menu-sub-content"]') !== null
+  );
 }
