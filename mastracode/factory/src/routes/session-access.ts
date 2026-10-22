@@ -53,13 +53,30 @@ const ACTIVE_RUNS_PATH = /\/agent-controller\/[^/]+\/active-runs\/?$/;
 const SWITCH_MODEL_PATH = /\/agent-controller\/[^/]+\/sessions\/[^/]+\/model\/?$/;
 const SET_STATE_PATH = /\/agent-controller\/[^/]+\/sessions\/[^/]+\/state\/?$/;
 
-async function bodyValue(c: Context, field: string): Promise<unknown> {
+/** A form field as the server adapter reads it: JSON when it parses, else the raw text. */
+function parseFormField(value: string): unknown {
+  try {
+    return JSON.parse(value);
+  } catch {
+    return value;
+  }
+}
+
+/** The body a handler can see: a multipart form parsed field by field as the server adapter does, else JSON. */
+async function requestBody(c: Context): Promise<unknown> {
   // Read a clone: the Mastra adapter clones `c.req.raw` again to parse params,
   // which throws once anything has consumed the original body.
-  const body = await c.req.raw
-    .clone()
-    .json()
-    .catch(() => undefined);
+  const request = c.req.raw.clone();
+  if (!c.req.header('content-type')?.includes('multipart/form-data')) return request.json().catch(() => undefined);
+  const form = await request.formData().catch(() => undefined);
+  if (!form) return undefined;
+  return Object.fromEntries(
+    [...form].map(([name, value]) => [name, typeof value === 'string' ? parseFormField(value) : value]),
+  );
+}
+
+async function bodyValue(c: Context, field: string): Promise<unknown> {
+  const body = await requestBody(c);
   return (body as Record<string, unknown> | undefined)?.[field];
 }
 
