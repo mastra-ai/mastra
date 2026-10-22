@@ -9166,6 +9166,12 @@ importers:
       '@ai-sdk/openai':
         specifier: ^1.3.24
         version: 1.3.24(zod@4.6.7)
+      '@ai-sdk/openai-v5':
+        specifier: npm:@ai-sdk/openai@^2.0.135
+        version: '@ai-sdk/openai@2.0.135(zod@4.6.7)'
+      '@copilotkit/aimock':
+        specifier: ^1.29.0
+        version: 1.29.0(vitest@4.1.11)
       '@hono/node-server':
         specifier: 2.1.3
         version: 2.1.3(hono@4.13.13)
