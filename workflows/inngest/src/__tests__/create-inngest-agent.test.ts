@@ -219,7 +219,7 @@ describe('createInngestAgent factory function', () => {
 
       const result = await mastra.recoverAllDurableAgents();
 
-      expect(result).toEqual({ agents: 1, recovered: 0, succeeded: 0, failed: 0 });
+      expect(result).toEqual({ agents: 1, recovered: 0, succeeded: 0, failed: 0, skipped: 0 });
       expect(errorSpy).not.toHaveBeenCalled();
     });
   });
@@ -1061,7 +1061,10 @@ describe('InngestAgent parity surface', () => {
         await vi.waitFor(() => expect(sendSpy).toHaveBeenCalled());
         await publishStepAndFinish(durableAgent, runId);
         await vi.waitFor(() => expect(fired).toEqual(['onFinish:acme']));
-        expect(loadWorkflowSnapshot).toHaveBeenCalledTimes(2);
+        const outerReads = loadWorkflowSnapshot.mock.calls.filter(
+          ([args]) => args.workflowName === InngestDurableStepIds.AGENTIC_LOOP,
+        );
+        expect(outerReads).toHaveLength(2);
       } finally {
         result.cleanup();
         sendSpy.mockRestore();
@@ -1425,10 +1428,10 @@ describe('InngestAgent parity surface', () => {
       expect(sendSpy).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            requestContext: {
+            requestContext: expect.objectContaining({
               userId: 'user-1',
               organizationId: 'org-1',
-            },
+            }),
           }),
         }),
       );
@@ -1675,6 +1678,115 @@ describe('InngestAgent parity surface', () => {
       globalRunRegistry.delete(runId);
       sendSpy.mockRestore();
     }
+  });
+
+  describe('pre-approval text restore (#27504)', () => {
+    // These tests only control storage write ordering, which a model fixture can't
+    // reach, so no model is involved: the resumed stream is driven over pubsub.
+    const outerSnapshot = {
+      value: {},
+      context: {},
+      status: 'suspended',
+      suspendedPaths: { 'agentic-loop': ['agentic-loop'] },
+      resumeLabels: { 'approval-call': { stepId: 'agentic-loop' } },
+    };
+    // The previous iteration's snapshot: written before the approval tool call suspended.
+    const staleIteration = {
+      context: { 'durable-llm-execution': { status: 'running' } },
+      resumeLabels: {},
+    };
+    const suspendedIteration = {
+      context: {
+        input: { accumulatedSteps: [] },
+        'durable-llm-execution': { status: 'success', output: { text: 'Checking. ' } },
+      },
+      resumeLabels: { 'approval-call': { stepId: 'tool-call' } },
+    };
+
+    // Backs both snapshot read APIs with one sequence, so the lag is visible
+    // whichever one resume uses.
+    function setLaggingStore(durableAgent: ReturnType<typeof makeIsolatedAgent>, staleReads: number) {
+      let iterationReads = 0;
+      const load = vi.fn(async ({ workflowName }: { workflowName: string }) => {
+        if (workflowName === InngestDurableStepIds.AGENTIC_LOOP) return outerSnapshot;
+        return iterationReads++ < staleReads ? staleIteration : suspendedIteration;
+      });
+      const getWorkflowRunById = vi.fn(async (args: { workflowName: string }) => ({ snapshot: await load(args) }));
+      (durableAgent as any).__setMastra({
+        getStorage: () => ({ getStore: async () => ({ loadWorkflowSnapshot: load, getWorkflowRunById }) }),
+      });
+      return load;
+    }
+
+    it('waits for the suspended iteration snapshot before restoring pre-approval text', async () => {
+      const durableAgent = makeIsolatedAgent('resume-lagging-iteration');
+      const load = setLaggingStore(durableAgent, 3);
+      const runId = 'resume-lagging-iteration-run';
+      const sendSpy = vi.spyOn(inngest as any, 'send').mockImplementation(async () => {
+        for (const data of [
+          { type: 'text-start', payload: { id: 'resumed-text' } },
+          { type: 'text-delta', payload: { id: 'resumed-text', text: 'Done.' } },
+          { type: 'text-end', payload: { id: 'resumed-text' } },
+          {
+            type: 'step-finish',
+            payload: {
+              output: { steps: [], usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+              stepResult: { reason: 'stop', warnings: [] },
+              metadata: {},
+            },
+          },
+        ]) {
+          await publishStreamEvent(durableAgent, runId, { type: AgentStreamEventTypes.CHUNK, data });
+        }
+        await publishStreamEvent(durableAgent, runId, {
+          type: AgentStreamEventTypes.FINISH,
+          data: {
+            output: { text: 'Done.', steps: [], usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+            stepResult: { reason: 'stop' },
+          },
+        });
+      });
+
+      try {
+        const result = await durableAgent.resumeGenerate({ approved: true }, {
+          runId,
+          toolCallId: 'approval-call',
+        } as any);
+        expect(result.text).toBe('Checking. Done.');
+        const iterationReads = load.mock.calls.filter(
+          ([args]) => args.workflowName === InngestDurableStepIds.AGENTIC_EXECUTION,
+        );
+        expect(iterationReads).toHaveLength(4);
+      } finally {
+        globalRunRegistry.delete(runId);
+        sendSpy.mockRestore();
+      }
+    });
+
+    it('rejects resume without dispatching when the iteration snapshot never catches up', async () => {
+      vi.useFakeTimers();
+      const durableAgent = makeIsolatedAgent('resume-iteration-never-ready');
+      setLaggingStore(durableAgent, Number.POSITIVE_INFINITY);
+      const sendSpy = stubInngestSend();
+      const publishSpy = vi.spyOn(durableAgent.pubsub, 'publish');
+      const runId = 'resume-iteration-never-ready-run';
+
+      try {
+        const assertion = expect(
+          durableAgent.resume(runId, { approved: true }, { toolCallId: 'approval-call' }),
+        ).rejects.toThrow(/nested iteration snapshot does not contain suspended tool calls approval-call/);
+        await vi.advanceTimersByTimeAsync(11_000);
+        await assertion;
+        expect(sendSpy).not.toHaveBeenCalled();
+        // The run is still parked and resumable; only this caller is rejected.
+        expect(publishSpy.mock.calls.some(([, event]: any[]) => event?.type === 'error')).toBe(false);
+        expect(globalRunRegistry.get(runId)).toBeUndefined();
+      } finally {
+        vi.useRealTimers();
+        publishSpy.mockRestore();
+        sendSpy.mockRestore();
+      }
+    });
   });
 
   it('forwards the per-call actor signal into the workflow trigger event', async () => {

@@ -1268,40 +1268,55 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         ]),
       });
       validateModelTimeoutSettings(callbackOptions.modelSettings?.timeout);
-      // The resumed segment only receives new pubsub chunks. Restore text from the
-      // suspended iteration so output.text includes what streamed before approval.
-      const outerSnapshot = (await resumableSnapshot.catch(() => undefined))?.snapshot;
-      let resumedText: { priorText: string; stepText: string } | undefined;
-      try {
+      // The resumed segment only receives new pubsub chunks, so output state from
+      // before the suspension is restored from the suspended iteration's snapshot.
+      // The outer suspension can be persisted before the nested iteration snapshot
+      // catches up, so wait until it carries every suspended tool call; seeding
+      // from an earlier iteration would silently drop the pre-approval text.
+      let iterationNotReady = false;
+      const suspendedIteration = resumableSnapshot.then(async ({ hasStore, snapshot: outerSnapshot }) => {
+        if (!hasStore || outerSnapshot?.status !== 'suspended') return undefined;
         const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
         const nestedRunId =
-          outerSnapshot?.context?.[InngestDurableStepIds.AGENTIC_EXECUTION]?.metadata?.nestedRunId ?? runId;
-        const nestedRun = await workflowsStore?.getWorkflowRunById?.({
-          runId: nestedRunId,
-          workflowName: InngestDurableStepIds.AGENTIC_EXECUTION,
-        });
-        const nestedSnapshot =
-          typeof nestedRun?.snapshot === 'string' ? JSON.parse(nestedRun.snapshot) : nestedRun?.snapshot;
-        const llmStep = nestedSnapshot?.context?.[DurableStepIds.LLM_EXECUTION];
-        const accumulatedSteps: Array<{ text?: string; finishReason?: string }> =
-          nestedSnapshot?.context?.input?.accumulatedSteps ?? [];
-        if (llmStep?.status === 'success') {
-          resumedText = {
-            priorText: accumulatedSteps
-              .filter(step => step.finishReason !== 'retry')
-              .map(step => step.text ?? '')
-              .join(''),
-            stepText: llmStep.output.text ?? '',
-          };
+          outerSnapshot.context?.[InngestDurableStepIds.AGENTIC_EXECUTION]?.metadata?.nestedRunId ?? runId;
+        const loadIteration = async (): Promise<any> =>
+          workflowsStore?.loadWorkflowSnapshot({
+            workflowName: InngestDurableStepIds.AGENTIC_EXECUTION,
+            runId: nestedRunId,
+          });
+        const suspendedToolIds = Object.keys(outerSnapshot.resumeLabels ?? {});
+        const isCaughtUp = (s: any) => suspendedToolIds.every(id => s?.resumeLabels?.[id]);
+        let iteration = await loadIteration();
+        const deadline = Date.now() + RESUME_SNAPSHOT_WAIT_MS;
+        while (!isCaughtUp(iteration) && Date.now() < deadline) {
+          await new Promise(resolve => setTimeout(resolve, RESUME_SNAPSHOT_POLL_MS));
+          iteration = await loadIteration();
         }
-      } catch (error) {
-        // Snapshot text is best-effort; a failed metadata read must not block tool approval.
-        mastra?.getLogger?.()?.warn?.('Failed to restore Inngest approval text from snapshot', {
-          agentId,
-          runId,
-          error: error instanceof Error ? error.message : String(error),
-        });
-      }
+        if (!isCaughtUp(iteration)) {
+          iterationNotReady = true;
+          throw new Error(
+            `Cannot resume run ${runId}: the nested iteration snapshot does not contain suspended tool calls ` +
+              `${suspendedToolIds.join(', ')}.`,
+          );
+        }
+        return iteration;
+      });
+      // Read failures surface through dispatch; don't let them go unhandled meanwhile.
+      suspendedIteration.catch(() => {});
+      const iterationSnapshot = await suspendedIteration.catch(() => undefined);
+      const llmStep = iterationSnapshot?.context?.[DurableStepIds.LLM_EXECUTION];
+      const accumulatedSteps: Array<{ text?: string; finishReason?: string }> =
+        iterationSnapshot?.context?.input?.accumulatedSteps ?? [];
+      const resumedText =
+        llmStep?.status === 'success'
+          ? {
+              priorText: accumulatedSteps
+                .filter(step => step.finishReason !== 'retry')
+                .map(step => step.text ?? '')
+                .join(''),
+              stepText: llmStep.output.text ?? '',
+            }
+          : undefined;
       const resumeOffset = await getPubsubOffset(runId);
 
       // Install a fresh abort controller scoped to the resumed segment and
@@ -1431,6 +1446,14 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             `Cannot resume run ${runId}: it is not suspended` +
               (snapshot?.status ? ` (status: ${snapshot.status}).` : ' (no snapshot found).'),
           );
+        }
+        try {
+          await suspendedIteration;
+        } catch (error) {
+          // A lagging iteration snapshot leaves the run parked and resumable, so this
+          // rejection belongs to this caller and must not close the run's shared stream.
+          notResumable = iterationNotReady;
+          throw error;
         }
 
         // Resolve which suspended leaf to resume. `resume.steps` is a path: the outer
