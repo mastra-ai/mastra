@@ -544,6 +544,19 @@ export class WorkflowsPG extends WorkflowsStorage {
         // Merge the new step result using element-wise array merging
         // (critical for concurrent foreach iteration results)
         mergeWorkflowStepResult({ snapshot, stepId, result, requestContext, state });
+        const previous = startGuard?.previousStep;
+        const previousResult = previous && snapshot.context[previous.stepId];
+        if (
+          previous &&
+          previous.stepId !== stepId &&
+          previousResult?.status === 'success' &&
+          previousResult.metadata?.startedBy === previous.eventId
+        ) {
+          snapshot.context[previous.stepId] = {
+            ...previous.result,
+            metadata: { ...previousResult.metadata, ...previous.result.metadata, __continuationStarted: true },
+          };
+        }
 
         // Upsert the snapshot within the same transaction
         const now = new Date();

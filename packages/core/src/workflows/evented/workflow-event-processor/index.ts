@@ -1802,6 +1802,14 @@ export class WorkflowEventProcessor extends EventProcessor {
         if (snapshot?.status === 'suspended' && (snapshot.context as any)?.[leafId]?.status === 'suspended') {
           return;
         }
+        const previousEventId = prevResult.metadata?.startedBy;
+        const previousStep =
+          guardStart && workflow?.options?.pruneSnapshot && executionPath.length === 1 && previousEventId
+            ? Object.entries(stepResults ?? {}).find(
+                ([id, result]) =>
+                  id !== leafId && result?.status === 'success' && result.metadata?.startedBy === previousEventId,
+              )
+            : undefined;
         const runningResult = {
           ...omitPriorCompletionFields((stepResults?.[leafId] ?? {}) as Record<string, unknown>),
           payload: prevResult.status === 'success' ? prevResult.output : undefined,
@@ -1813,6 +1821,7 @@ export class WorkflowEventProcessor extends EventProcessor {
                   ...stepResults[leafId]?.metadata,
                   startedBy: args.eventId,
                   __restartPending: undefined,
+                  __continuationStarted: undefined,
                   loopCondition: undefined,
                 },
               }
@@ -1830,6 +1839,19 @@ export class WorkflowEventProcessor extends EventProcessor {
                   startGuard: {
                     eventId: args.eventId!,
                     expectedStartedBy: stepResults[leafId]?.metadata?.startedBy,
+                    ...(previousStep && {
+                      previousStep: {
+                        stepId: previousStep[0],
+                        eventId: previousEventId,
+                        result: this.pruneStepResultForPersist({
+                          ...args,
+                          state: currentState,
+                          stepResults: { ...snapshot?.context, [leafId]: runningResult },
+                          stepId: previousStep[0],
+                          storedResult: previousStep[1],
+                        }),
+                      },
+                    }),
                   },
                 }
               : {}),
@@ -3416,31 +3438,30 @@ export class WorkflowEventProcessor extends EventProcessor {
       // surfaced to users.
       let storedResult = branchStateDelta ? { ...prevResult, __stateDelta: branchStateDelta } : prevResult;
 
-      // This merge write bypasses the workflow's `pruneSnapshot` hook, so prune
-      // the completed step's result here and persist it in the same atomic
-      // write (COR-1431): a separate post-merge full-row write could erase a
-      // concurrent step's result. Parallel branches are pruned once instead, by
-      // `aggregateBranchResults`.
-      const persistedResult = isParallelBranch
-        ? storedResult
-        : this.pruneStepResultForPersist({
-            workflow,
-            runId,
-            state: currentState,
-            stepId,
-            storedResult,
-            stepResults,
-            executionPath,
-            activeStepsPath,
-          });
+      const startedBy = stepResults[stepId]?.metadata?.startedBy ?? prevResult?.metadata?.startedBy;
+      const guardCompletion =
+        startedBy && workflowsStore?.supportsWorkflowStepGuards() && !restart && !timeTravel && !resumeSteps?.length;
+      // Guarded completions retain the continuation input until the successor
+      // starts. Its guarded start prunes the predecessor in the same transaction.
+      // Other adapters still prune inline to avoid historical growth (COR-1431).
+      const persistedResult =
+        isParallelBranch || guardCompletion
+          ? storedResult
+          : this.pruneStepResultForPersist({
+              workflow,
+              runId,
+              state: currentState,
+              stepId,
+              storedResult,
+              stepResults,
+              executionPath,
+              activeStepsPath,
+            });
 
       // Record the workflow state in the same write as a sequential step's result, so a
       // restart after this point resumes with the state this step produced. Branches of a
       // parallel/conditional entry skip it: their full state would clobber sibling updates;
       // aggregateBranchResults records the merged state instead.
-      const startedBy = stepResults[stepId]?.metadata?.startedBy ?? prevResult?.metadata?.startedBy;
-      const guardCompletion =
-        startedBy && workflowsStore?.supportsWorkflowStepGuards() && !restart && !timeTravel && !resumeSteps?.length;
       let newStepResults;
       try {
         newStepResults = await workflowsStore?.updateWorkflowResults({

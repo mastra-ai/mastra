@@ -204,12 +204,21 @@ describe('Postgres evented occurrence replay', () => {
     }
   }, 8_000);
 
-  it.each(['run', 'end'] as const)(
-    'continues a saved linear result after losing its continuation and reclaiming step.%s',
-    async delivery => {
+  it.each([
+    ['run', false],
+    ['end', false],
+    ['run', true],
+    ['end', true],
+  ] as const)(
+    'continues a saved linear result after reclaiming step.%s with pruning %s',
+    async (delivery, prune) => {
       const driver = new RedeliveryDriver();
       const schema = z.object({ n: z.number() });
       const calls: string[] = [];
+      let releaseSecond!: () => void;
+      const secondGate = new Promise<void>(resolve => {
+        releaseSecond = resolve;
+      });
       const first = createStep({
         id: 'first',
         inputSchema: schema,
@@ -229,6 +238,7 @@ describe('Postgres evented occurrence replay', () => {
           calls.push('second');
           expect(requestContext.get('committed')).toBe(true);
           expect(state).toEqual({ n: 1 });
+          await secondGate;
           return { n: inputData.n + 1 };
         },
       });
@@ -237,6 +247,19 @@ describe('Postgres evented occurrence replay', () => {
         inputSchema: schema,
         outputSchema: schema,
         stateSchema: schema,
+        options: prune
+          ? {
+              pruneSnapshot: ({ snapshot }) => ({
+                ...snapshot,
+                context: {
+                  ...snapshot.context,
+                  ...(snapshot.context.first?.status === 'success'
+                    ? { first: { ...snapshot.context.first, output: {} } }
+                    : {}),
+                },
+              }),
+            }
+          : undefined,
       })
         .then(first)
         .then(second)
@@ -263,6 +286,10 @@ describe('Postgres evented occurrence replay', () => {
           delivery === 'run'
             ? driver.stepRuns({ spec: '0', runId: run.runId })[0]!
             : driver.events.find(event => event.type === 'workflow.step.end' && event.runId === run.runId)!;
+        const store = (await storage.getStore('workflows'))!;
+        expect(
+          (await store.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId }))?.context.first,
+        ).toMatchObject({ status: 'success', output: { n: 1 } });
         interrupted.mockRestore();
         const leaseKey = `workflow-step-run:${run.runId}:${original.id}`;
         await driver.pubsub.releaseLease(leaseKey, (await driver.pubsub.getLeaseOwner(leaseKey))!);
@@ -280,9 +307,21 @@ describe('Postgres evented occurrence replay', () => {
             : original,
         );
         await expect.poll(() => calls, { timeout: 1_500 }).toEqual(['first', 'second']);
+        if (prune) {
+          const snapshot = await store.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
+          expect(snapshot?.context.first).toMatchObject({ output: {}, metadata: { __continuationStarted: true } });
+          expect(snapshot?.context.second).toMatchObject({ status: 'running', payload: { n: 1 } });
+          const owner = await driver.pubsub.getLeaseOwner(leaseKey);
+          if (owner) await driver.pubsub.releaseLease(leaseKey, owner);
+          const deliveries = driver.deliveryCount({ spec: '1', runId: run.runId });
+          await driver.redeliverEvent(original);
+          expect(driver.deliveryCount({ spec: '1', runId: run.runId })).toBe(deliveries);
+        }
+        releaseSecond();
         expect(await result).toMatchObject({ status: 'success', result: { n: 2 } });
         expect(calls).toEqual(['first', 'second']);
       } finally {
+        releaseSecond();
         interrupted.mockRestore();
         await mastra.stopWorkers();
         driver.dispose();

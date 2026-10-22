@@ -1,6 +1,11 @@
 import type { StepResult, WorkflowRunState } from '../workflows';
 
-export type WorkflowStepStartGuard = { eventId: string; expectedStartedBy?: string };
+export type WorkflowStepStartGuard = {
+  eventId: string;
+  expectedStartedBy?: string;
+  /** Prune the predecessor only after this delivery has durably claimed its input. */
+  previousStep?: { stepId: string; eventId: string; result: StepResult<any, any, any, any> };
+};
 export type WorkflowStepCompletionGuard = { eventId: string };
 
 export class WorkflowStepConflictError extends Error {
@@ -42,6 +47,7 @@ export function assertWorkflowStepGuard({
   const eventId = (startGuard ?? completionGuard)!.eventId;
   if (startedBy === eventId) {
     if (stored?.status === 'running') return;
+    if (stored?.metadata?.__continuationStarted) throw new WorkflowStepConflictError('stale', stored);
     throw new WorkflowStepConflictError('completed', stored, snapshot.requestContext, snapshot);
   }
   if (startGuard) {

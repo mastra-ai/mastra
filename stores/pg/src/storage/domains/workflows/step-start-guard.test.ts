@@ -144,6 +144,39 @@ describe('Postgres workflow occurrence guards', () => {
     expect((await load())!.context.step.metadata?.__restartPending).toBeUndefined();
   });
 
+  it('prunes a predecessor only when its successor claims the full input atomically', async () => {
+    const { a, b, runId, write, finish, load } = await setup();
+    await write(a, 'first');
+    await finish('first', 1);
+    const predecessor = (await load())!.context.step;
+    const claim = (eventId: string) =>
+      b!.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'next',
+        requestContext: { n: 1 },
+        result: { status: 'running', startedAt: 3, payload: 1, metadata: { startedBy: eventId } },
+        startGuard: {
+          eventId,
+          previousStep: { stepId: 'step', eventId: 'first', result: { ...predecessor, output: undefined } },
+        },
+      });
+    await claim('next-first');
+    const before = await load();
+    expect(before!.context.step.output).toBeUndefined();
+    expect(before!.context.next).toMatchObject({ status: 'running', payload: 1 });
+    await expect(write(a, 'first')).rejects.toMatchObject({ reason: 'stale' });
+    await expect(finish('first', 999)).rejects.toMatchObject({ reason: 'stale' });
+    await expect(claim('next-competing')).rejects.toMatchObject({ reason: 'stale' });
+    expect(await load()).toEqual(before);
+
+    // An old successor redelivery must not prune a newer occurrence of its predecessor.
+    await write(a, 'second', 'first');
+    await finish('second', 2);
+    await claim('next-first');
+    expect((await load())!.context.step).toMatchObject({ output: 2, metadata: { startedBy: 'second' } });
+  });
+
   it('fails explicitly rather than executing a guarded step without its run snapshot', async () => {
     const worker = await stores[0]!.getStore('workflows');
     await expect(
