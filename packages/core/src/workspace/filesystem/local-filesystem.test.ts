@@ -117,6 +117,24 @@ describe('LocalFilesystem', () => {
       );
     });
 
+    it.each(['writeFile', 'appendFile', 'copyFile'] as const)(
+      'rejects %s to an existing outside symlink target despite an inside decoy',
+      async operation => {
+        const { workspace, outside } = await setupDestination();
+        await fs.mkdir(path.join(outside, 'deep'));
+        await fs.writeFile(path.join(outside, 'existing.txt'), 'outside');
+        await fs.writeFile(path.join(workspace, 'existing.txt'), 'decoy');
+        await fs.symlink(path.join(outside, 'deep'), path.join(workspace, 'pivot'), 'dir');
+        await fs.symlink('pivot/../existing.txt', path.join(workspace, 'alias.txt'));
+        const filesystem = new LocalFilesystem({ basePath: workspace });
+
+        await expect(runOperation(operation, filesystem, 'alias.txt')).rejects.toThrow(PermissionError);
+
+        expect(await fs.readFile(path.join(outside, 'existing.txt'), 'utf-8')).toBe('outside');
+        expect(await fs.readFile(path.join(workspace, 'existing.txt'), 'utf-8')).toBe('decoy');
+      },
+    );
+
     describe.each(['inside/new.txt', 'internal-pivot/../new.txt'])('in-root dangling target %s', target => {
       it.each(['writeFile', 'appendFile', 'copyFile'] as const)(
         'allows %s through a dangling symlink to an in-root file',

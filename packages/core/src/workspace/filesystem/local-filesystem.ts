@@ -238,7 +238,7 @@ export class LocalFilesystem extends MastraFilesystem {
 
   private _resolvePathForContainment(absolutePath: string): string | undefined {
     try {
-      return realpathSync(absolutePath);
+      return realpathSync.native(absolutePath);
     } catch (error: unknown) {
       if (!isEnoentError(error)) throw error;
     }
@@ -255,7 +255,7 @@ export class LocalFilesystem extends MastraFilesystem {
       if (!component) continue;
       if (currentIsDirectory === false) {
         // Preserve the native ENOTDIR error, including for `file/..`.
-        realpathSync(`${currentPath}${nodePath.sep}${component}`);
+        realpathSync.native(`${currentPath}${nodePath.sep}${component}`);
       }
       if (component === '.') continue;
       if (component === '..') {
