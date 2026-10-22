@@ -6,7 +6,11 @@ export type WorkflowStepStartGuard = {
   /** Prune the predecessor only after this delivery has durably claimed its input. */
   previousStep?: { stepId: string; eventId: string; result: StepResult<any, any, any, any> };
 };
-export type WorkflowStepCompletionGuard = { eventId: string };
+export type WorkflowStepCompletionGuard = {
+  eventId: string;
+  /** The continuation event durably holds the full input; only prune its predecessor. */
+  pruneOnly?: boolean;
+};
 
 export class WorkflowStepConflictError extends Error {
   readonly code = 'WORKFLOW_STEP_CONFLICT';
@@ -46,6 +50,10 @@ export function assertWorkflowStepGuard({
   if (stored && !startedBy) throw new WorkflowStepConflictError('legacy', stored);
   const eventId = (startGuard ?? completionGuard)!.eventId;
   if (startedBy === eventId) {
+    if (completionGuard?.pruneOnly) {
+      if (stored?.status === 'success') return;
+      throw new WorkflowStepConflictError('stale', stored);
+    }
     if (stored?.status === 'running') return;
     if (stored?.metadata?.__continuationStarted) throw new WorkflowStepConflictError('stale', stored);
     throw new WorkflowStepConflictError('completed', stored, snapshot.requestContext, snapshot);

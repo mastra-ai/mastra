@@ -330,6 +330,166 @@ describe('Postgres evented occurrence replay', () => {
     8_000,
   );
 
+  it.each([
+    ['terminal', false],
+    ['terminal', true],
+    ['foreach', false],
+    ['parallel', false],
+    ['conditional', false],
+    ['foreach', true],
+    ['parallel', true],
+    ['conditional', true],
+  ] as const)(
+    'prunes completed results at a %s boundary with continuation replay %s',
+    async (boundary, replay) => {
+      const driver = new RedeliveryDriver();
+      const item = z.object({ n: z.number() });
+      const items = z.array(item);
+      let release!: () => void;
+      const gate = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      const first = createStep({
+        id: 'first',
+        inputSchema: items,
+        outputSchema: items,
+        execute: async ({ inputData }) => inputData.map(({ n }) => ({ n: n + 1 })),
+      });
+      const second = createStep({
+        id: 'second',
+        inputSchema: items,
+        outputSchema: items,
+        execute: async ({ inputData }) => {
+          expect(inputData).toEqual([{ n: 1 }]);
+          await gate;
+          return [{ n: 2 }];
+        },
+      });
+      const each = createStep({
+        id: 'each',
+        inputSchema: item,
+        outputSchema: item,
+        execute: async ({ inputData }) => {
+          expect(inputData).toEqual({ n: 1 });
+          await gate;
+          return { n: 2 };
+        },
+      });
+      const third = createStep({
+        id: 'third',
+        inputSchema: items,
+        outputSchema: items,
+        execute: async ({ inputData }) => inputData.map(({ n }) => ({ n: n + 1 })),
+      });
+      const builder = createWorkflow({
+        id: `prune-${boundary}-${randomUUID()}`,
+        inputSchema: items,
+        outputSchema: z.any(),
+        options: {
+          pruneSnapshot: ({ snapshot }) => ({
+            ...snapshot,
+            context: Object.fromEntries(
+              Object.entries(snapshot.context).map(([id, result]) => [
+                id,
+                result?.status === 'success' ? { ...result, output: { pruned: true } } : result,
+              ]),
+            ),
+          }),
+        },
+      }).then(first);
+      const workflow =
+        boundary === 'foreach'
+          ? builder.foreach(each).commit()
+          : boundary === 'parallel'
+            ? builder.parallel([second]).commit()
+            : boundary === 'conditional'
+              ? builder.branch([[async () => true, second]]).commit()
+              : builder.then(second).then(third).commit();
+      const mastra = new Mastra({ storage, pubsub: driver.pubsub, workflows: { [workflow.id]: workflow } });
+      const store = (await storage.getStore('workflows'))!;
+      const persist = store.persistWorkflowSnapshot.bind(store);
+      let terminalWriteFailed = false;
+      const failedPrune =
+        boundary === 'terminal' && replay
+          ? vi.spyOn(store, 'persistWorkflowSnapshot').mockImplementation(async args => {
+              if (!terminalWriteFailed && args.snapshot.status === 'success') {
+                terminalWriteFailed = true;
+                throw new Error('Terminal prune write interrupted');
+              }
+              return persist(args);
+            })
+          : undefined;
+      const publish = driver.pubsub.publish.bind(driver.pubsub);
+      const interrupted = replay
+        ? vi.spyOn(driver.pubsub, 'publish').mockImplementation(async (topic, event, options) => {
+            if (event.type === 'workflow.step.run' && event.data.executionPath?.[0] === 1) return;
+            return publish(topic, event, options);
+          })
+        : undefined;
+      await mastra.startWorkers();
+      try {
+        const run = await workflow.createRun();
+        const result = run.start({ inputData: [{ n: 0 }] });
+        if (replay) {
+          const committed = await driver.waitForStepEnd({ spec: '0', runId: run.runId });
+          await expect
+            .poll(() =>
+              interrupted!.mock.calls.some(
+                ([, event]) => event.type === 'workflow.step.run' && event.data.executionPath?.[0] === 1,
+              ),
+            )
+            .toBe(true);
+          interrupted!.mockRestore();
+          await driver.redeliverEvent(committed);
+        }
+        await expect
+          .poll(async () => {
+            const snapshot = await store.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
+            return snapshot?.context.first?.output;
+          })
+          .toEqual({ pruned: true });
+        release();
+        if (failedPrune) {
+          await expect.poll(() => terminalWriteFailed).toBe(true);
+          const terminalEnd = driver.events.find(event => event.type === 'workflow.end' && event.runId === run.runId)!;
+          const replayed = await driver.redeliverEvent(terminalEnd);
+          expect(replayed.handled[0]?.result).toEqual({ ok: true });
+        }
+        expect(await result).toMatchObject({
+          status: 'success',
+          result: boundary === 'terminal' ? [{ n: 3 }] : boundary === 'foreach' ? [{ n: 2 }] : { second: [{ n: 2 }] },
+        });
+        const finalId = boundary === 'terminal' ? 'third' : boundary === 'foreach' ? 'each' : 'second';
+        await expect
+          .poll(async () => {
+            const snapshot = await store.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
+            return snapshot?.context[finalId];
+          })
+          .toMatchObject({ status: 'success', output: { pruned: true } });
+        if (boundary === 'terminal') {
+          const terminalEnds = driver.events.filter(event => event.type === 'workflow.end').length;
+          const terminalRun = driver.stepRuns({ spec: '2', runId: run.runId })[0]!;
+          const terminalEnd = await driver.waitForStepEnd({ spec: '2', runId: run.runId });
+          const leaseKey = `workflow-step-run:${run.runId}:${terminalRun.id}`;
+          const owner = await driver.pubsub.getLeaseOwner(leaseKey);
+          if (owner) await driver.pubsub.releaseLease(leaseKey, owner);
+          await driver.redeliverEvent(terminalRun);
+          await driver.redeliverEvent(terminalEnd);
+          expect(driver.events.filter(event => event.type === 'workflow.end')).toHaveLength(terminalEnds);
+          const completed = await store.loadWorkflowSnapshot({ workflowName: workflow.id, runId: run.runId });
+          expect(completed?.result).toMatchObject({ status: 'success', output: [{ n: 3 }] });
+        }
+      } finally {
+        failedPrune?.mockRestore();
+        interrupted?.mockRestore();
+        release();
+        await mastra.stopWorkers();
+        driver.dispose();
+      }
+    },
+    8_000,
+  );
+
   it('restarts a completed boundary whose successor reuses the step ID on Postgres', async () => {
     const driver = new RedeliveryDriver();
     const schema = z.object({ n: z.number() });

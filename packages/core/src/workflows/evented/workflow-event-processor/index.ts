@@ -388,10 +388,12 @@ export class WorkflowEventProcessor extends EventProcessor {
     workflow,
     workflowId,
     runId,
+    terminalHandoff = false,
   }: {
     workflow: Workflow | undefined;
     workflowId: string;
     runId: string;
+    terminalHandoff?: boolean;
   }): Promise<void> {
     const pruneSnapshot = workflow?.options?.pruneSnapshot;
     if (!pruneSnapshot) return;
@@ -401,7 +403,20 @@ export class WorkflowEventProcessor extends EventProcessor {
       const run = await workflowsStore.getWorkflowRunById({ runId, workflowName: workflowId });
       const snapshot = run?.snapshot;
       if (!snapshot || typeof snapshot === 'string') return;
-      const pruned = pruneSnapshot({ snapshot, workflowStatus: snapshot.status });
+      let pruned: WorkflowRunState;
+      try {
+        pruned = pruneSnapshot({ snapshot, workflowStatus: snapshot.status });
+      } catch (error) {
+        this.mastra.getLogger()?.warn?.(`Failed to prune workflow snapshot for run ${runId}: ${error}`);
+        return;
+      }
+      if (terminalHandoff && workflowsStore.supportsWorkflowStepGuards()) {
+        for (const result of Object.values(pruned.context)) {
+          if (result?.metadata?.startedBy) {
+            result.metadata = { ...result.metadata, __continuationStarted: true };
+          }
+        }
+      }
       await workflowsStore.persistWorkflowSnapshot({
         workflowName: workflowId,
         runId,
@@ -409,7 +424,8 @@ export class WorkflowEventProcessor extends EventProcessor {
         snapshot: pruned,
       });
     } catch (error) {
-      // Pruning is a size optimization — never fail the suspension over it.
+      // Retry terminal storage failures before notifying the parent or finish topic.
+      if (terminalHandoff) throw error;
       this.mastra.getLogger()?.warn?.(`Failed to prune workflow snapshot for run ${runId}: ${error}`);
     }
   }
@@ -1021,6 +1037,25 @@ export class WorkflowEventProcessor extends EventProcessor {
       workflowId,
     } = args;
 
+    // workflow.end durably carries the full result, so the snapshot no longer
+    // needs to retain the terminal step's unpruned continuation input.
+    if (deleteSnapshotAfterEnd !== true && !perStep) {
+      let workflow: Workflow | undefined = args.workflow;
+      if (!workflow) {
+        try {
+          workflow = this.#resolveLiveWorkflow(args) ?? undefined;
+        } catch {
+          workflow = this.#tryResolveWorkflow(workflowId);
+        }
+      }
+      await this.pruneAndRepersistSnapshot({
+        workflow,
+        workflowId,
+        runId,
+        terminalHandoff: true,
+      });
+    }
+
     // Extract final state from stepResults or args
     const finalState = resolveCurrentState({ stepResults, state });
 
@@ -1458,6 +1493,44 @@ export class WorkflowEventProcessor extends EventProcessor {
           category: ErrorCategory.SYSTEM,
         }),
       );
+    }
+
+    // Control entries have no guarded leaf start. Their durable step.run event
+    // already holds the full input, so prune the predecessor without changing state.
+    if (
+      executionPath.length === 1 &&
+      (!isExecutableStep(rawStep) || rawStep.type === 'foreach') &&
+      workflow.options?.pruneSnapshot &&
+      !restart &&
+      !timeTravel &&
+      !resumeSteps?.length
+    ) {
+      const previousEventId = prevResult.metadata?.startedBy;
+      const previous =
+        previousEventId &&
+        Object.entries(stepResults ?? {}).find(
+          ([, result]) => result?.status === 'success' && result.metadata?.startedBy === previousEventId,
+        );
+      const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
+      if (previous && workflowsStore?.supportsWorkflowStepGuards()) {
+        await workflowsStore.updateWorkflowResults({
+          workflowName: workflowId,
+          runId,
+          stepId: previous[0],
+          result: this.pruneStepResultForPersist({
+            workflow,
+            runId,
+            state: currentState,
+            stepId: previous[0],
+            storedResult: previous[1],
+            stepResults,
+            executionPath,
+            activeStepsPath,
+          }),
+          requestContext: {},
+          completionGuard: { eventId: previousEventId, pruneOnly: true },
+        });
+      }
     }
 
     // Keep the raw declarative entry. Control structures are routed below; a
@@ -3441,11 +3514,11 @@ export class WorkflowEventProcessor extends EventProcessor {
       const startedBy = stepResults[stepId]?.metadata?.startedBy ?? prevResult?.metadata?.startedBy;
       const guardCompletion =
         startedBy && workflowsStore?.supportsWorkflowStepGuards() && !restart && !timeTravel && !resumeSteps?.length;
-      // Guarded completions retain the continuation input until the successor
-      // starts. Its guarded start prunes the predecessor in the same transaction.
-      // Other adapters still prune inline to avoid historical growth (COR-1431).
+      // Top-level continuations retain their full input until a guarded successor
+      // starts, a control entry receives its durable event, or workflow.end runs.
+      const retainContinuation = guardCompletion && executionPath.length === 1;
       const persistedResult =
-        isParallelBranch || guardCompletion
+        isParallelBranch || retainContinuation
           ? storedResult
           : this.pruneStepResultForPersist({
               workflow,

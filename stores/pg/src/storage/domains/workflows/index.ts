@@ -541,9 +541,16 @@ export class WorkflowsPG extends WorkflowsStorage {
           typeof existingSnapshot === 'string' ? JSON.parse(existingSnapshot) : existingSnapshot;
         assertWorkflowStepGuard({ snapshot, stepId, startGuard, completionGuard });
 
-        // Merge the new step result using element-wise array merging
-        // (critical for concurrent foreach iteration results)
-        mergeWorkflowStepResult({ snapshot, stepId, result, requestContext, state });
+        if (completionGuard?.pruneOnly) {
+          snapshot.context[stepId] = {
+            ...result,
+            metadata: { ...snapshot.context[stepId]?.metadata, ...result.metadata, __continuationStarted: true },
+          };
+        } else {
+          // Merge the new step result using element-wise array merging
+          // (critical for concurrent foreach iteration results)
+          mergeWorkflowStepResult({ snapshot, stepId, result, requestContext, state });
+        }
         const previous = startGuard?.previousStep;
         const previousResult = previous && snapshot.context[previous.stepId];
         if (

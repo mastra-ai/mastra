@@ -112,6 +112,44 @@ describe('Postgres workflow occurrence guards', () => {
     expect(await load()).toEqual(before);
   });
 
+  it('prunes a control predecessor without rewinding newer state or accepting an older occurrence', async () => {
+    const { a, b, runId, write, finish, load } = await setup();
+    await write(a, 'first');
+    await finish('first', 1);
+    const predecessor = (await load())!.context.step;
+    await a!.updateWorkflowResults({
+      workflowName,
+      runId,
+      stepId: 'later',
+      result: { status: 'success', payload: {}, output: 2, startedAt: 1, endedAt: 2 },
+      requestContext: { n: 2 },
+      state: { n: 2 },
+    });
+    const prune = () =>
+      b!.updateWorkflowResults({
+        workflowName,
+        runId,
+        stepId: 'step',
+        result: { ...predecessor, output: undefined },
+        requestContext: { n: 999 },
+        state: { n: 999 },
+        completionGuard: { eventId: 'first', pruneOnly: true },
+      });
+    await prune();
+    const pruned = await load();
+    expect(pruned!.context.step).toMatchObject({ metadata: { __continuationStarted: true } });
+    expect(pruned!.context.step.output).toBeUndefined();
+    expect(pruned!.context.__state).toEqual({ n: 2 });
+    expect(pruned!.requestContext).toEqual({ n: 2 });
+    await prune();
+    expect(await load()).toEqual(pruned);
+    await expect(finish('first', 999)).rejects.toMatchObject({ reason: 'stale' });
+    await write(a, 'second', 'first');
+    const newer = await load();
+    await expect(prune()).rejects.toMatchObject({ reason: 'stale' });
+    expect(await load()).toEqual(newer);
+  });
+
   it('does not let a fresh delivery replace an occurrence still executing on another worker', async () => {
     const { a, b, write, load } = await setup();
     await write(a, 'first');
