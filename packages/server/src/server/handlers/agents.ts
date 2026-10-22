@@ -34,6 +34,7 @@ import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 import {
   agentIdPathParams,
+  agentRunPathParams,
   agentSkillPathParams,
   agentVersionQuerySchema,
   listAgentsResponseSchema,
@@ -2290,6 +2291,76 @@ export const QUEUE_AGENT_SIGNAL_ROUTE = createRoute({
       });
     } catch (error) {
       return handleSignalRoutingError(error, 'error queueing agent signal');
+    }
+  },
+});
+
+export const ABORT_AGENT_RUN_ROUTE = createRoute({
+  method: 'POST',
+  path: '/agents/:agentId/runs/:runId/abort',
+  responseType: 'json',
+  pathParamSchema: agentRunPathParams,
+  responseSchema: abortAgentThreadResponseSchema,
+  summary: 'Abort an agent run',
+  description: 'Explicitly stop a durable run, including runs without a memory thread',
+  tags: ['Agents'],
+  requiresAuth: true,
+  requiresPermission: MastraFGAPermissions.AGENTS_EXECUTE,
+  handler: async ({ mastra, agentId, runId, requestContext }) => {
+    try {
+      const agent = await getAgentFromSystem({ mastra, agentId });
+      if (!isDurableAgentLike(agent)) {
+        throw new HTTPException(501, { message: 'Run-scoped cancellation requires a durable agent' });
+      }
+      const workflows = await mastra.getStorage()?.getStore('workflows');
+      const run = await workflows?.getWorkflowRunById({ workflowName: getDurableLoopWorkflowName(agent), runId });
+      if (!run) return { aborted: false };
+      await validateRunOwnership(run, getContextResourceId(requestContext), mastra);
+      const ownershipSchema = z.object({
+        context: z.object({
+          input: z.object({
+            agentId: z.string(),
+            state: z.object({ threadId: z.string().optional() }).optional(),
+          }),
+        }),
+      });
+      let parsed = ownershipSchema.safeParse(
+        typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot,
+      );
+      if (!parsed.success) {
+        // Active local runs may not checkpoint the outer input until the segment finishes.
+        const execution = await workflows?.getWorkflowRunById({
+          workflowName: getDurableLoopWorkflowName(agent).replace(
+            DurableStepIds.AGENTIC_LOOP,
+            DurableStepIds.AGENTIC_EXECUTION,
+          ),
+          runId,
+        });
+        await validateRunOwnership(execution, getContextResourceId(requestContext), mastra);
+        parsed = ownershipSchema.safeParse(
+          typeof execution?.snapshot === 'string' ? JSON.parse(execution.snapshot) : execution?.snapshot,
+        );
+      }
+      // Stop can arrive before either workflow has checkpointed its input. Do not cancel an unverified run.
+      if (!parsed.success) return { aborted: false };
+      if (parsed.data.context.input.agentId !== agent.id) {
+        throw new HTTPException(403, { message: 'Access denied: run does not belong to this agent' });
+      }
+      const threadId = parsed.data.context.input.state?.threadId;
+      if (threadId) {
+        const memory = await agent.getMemory();
+        const thread = await memory?.getThreadById({ threadId });
+        await enforceThreadAccess({
+          mastra,
+          requestContext,
+          threadId,
+          thread,
+          permission: MastraFGAPermissions.MEMORY_WRITE,
+        });
+      }
+      return { aborted: await agent.abortRunStream(runId) };
+    } catch (error) {
+      return handleError(error, 'error aborting agent run');
     }
   },
 });

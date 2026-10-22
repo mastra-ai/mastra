@@ -1045,6 +1045,14 @@ export class Agent extends BaseResource {
     return streamResponse;
   }
 
+  /** Stops execution of a run, including runs without a memory thread. */
+  async abortRun(runId: string): Promise<RouteResponse<'POST /agents/:agentId/runs/:runId/abort'>> {
+    return this.request<RouteResponse<'POST /agents/:agentId/runs/:runId/abort'>>(
+      `/agents/${this.agentId}/runs/${encodeURIComponent(runId)}/abort`,
+      { method: 'POST' },
+    );
+  }
+
   async abortThread(params: AbortAgentThreadParams): Promise<RouteResponse<'POST /agents/:agentId/threads/abort'>> {
     const { resourceId, threadId, clearPendingSignals, expectedRunId } = params;
     return this.request<RouteResponse<'POST /agents/:agentId/threads/abort'>>(`/agents/${this.agentId}/threads/abort`, {

@@ -62,8 +62,11 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
       'approve-tool-call',
       'decline-tool-call',
     ] as const) {
-      for (const explicitAbort of [false, true]) {
-        it(`${route}: disconnect ${explicitAbort ? 'then explicit abort stops execution' : 'preserves durable execution and replay'}`, async () => {
+      for (const explicitAbort of [false, true, 'run', 'threadless'] as const) {
+        if (typeof explicitAbort === 'string' && (kind === 'plain' || !['stream', 'stream-alias'].includes(route)))
+          continue;
+        const threadless = explicitAbort === 'threadless';
+        it(`${route}: disconnect ${explicitAbort ? `then explicit ${explicitAbort === true ? 'thread' : explicitAbort} abort stops execution` : 'preserves durable execution and replay'}`, async () => {
           fixture = await config.setupModel();
           const entered = deferred();
           const gate = deferred();
@@ -117,7 +120,7 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
             name: 'Disconnect agent',
             instructions: 'Execute three steps.',
             model: fixture.model,
-            memory,
+            ...(threadless ? {} : { memory }),
             tools: { slow, research, authorize },
             backgroundTasks: { tools: { research: true } },
           });
@@ -127,8 +130,16 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
               : kind === 'evented'
                 ? createEventedAgent({ agent: inner })
                 : inner;
+          const otherAgent = createDurableAgent({
+            agent: new Agent({
+              id: 'other-agent',
+              name: 'Other agent',
+              instructions: 'Do not run.',
+              model: fixture.model,
+            }),
+          });
           mastra = new Mastra({
-            agents: { agent },
+            agents: { agent, otherAgent },
             storage,
             logger: false,
             backgroundTasks: { enabled: true, globalConcurrency: 5, perAgentConcurrency: 3 },
@@ -173,7 +184,7 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
             body: JSON.stringify({
               ...(resumed ? { resumeData: { approved: true }, toolCallId: 'authorize-1' } : { messages: 'Start' }),
               runId,
-              memory: thread,
+              ...(threadless ? {} : { memory: thread }),
               maxSteps: 6,
               ...(['stream-alias', 'resume-alias'].includes(route) ? { untilIdle: true } : {}),
             }),
@@ -191,12 +202,24 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
             await disconnected.promise;
             await request;
             if (kind !== 'plain' && explicitAbort) {
-              const response = await fetch(`${base}/threads/abort`, {
+              const runScoped = typeof explicitAbort === 'string';
+              if (runScoped) {
+                const denied = await fetch(`${server.baseUrl}/api/agents/otherAgent/runs/${runId}/abort`, {
+                  method: 'POST',
+                });
+                expect(denied.status).toBe(403);
+                expect(toolSignal?.aborted).toBe(false);
+              }
+              const response = await fetch(`${base}/${runScoped ? `runs/${runId}/abort` : 'threads/abort'}`, {
                 method: 'POST',
                 headers: { 'content-type': 'application/json' },
-                body: JSON.stringify({ threadId: runId, resourceId: thread.resource, expectedRunId: runId }),
+                ...(runScoped
+                  ? {}
+                  : { body: JSON.stringify({ threadId: runId, resourceId: thread.resource, expectedRunId: runId }) }),
               });
+              const result = await response.json();
               expect(response.status).toBe(200);
+              expect(result).toEqual({ aborted: true });
             }
             const completes = kind !== 'plain' && !explicitAbort;
             if (!completes) await vi.waitFor(() => expect(toolSignal?.aborted).toBe(true));
@@ -245,6 +268,10 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
               }).then(response => response.text());
               expect(replay).toContain('done: 3 results');
               expect(replay).toContain('finish');
+              const lateAbort = await fetch(`${base}/runs/${runId}/abort`, { method: 'POST' });
+              expect(lateAbort.status).toBe(200);
+              expect(await lateAbort.json()).toEqual({ aborted: false });
+              expect(fixture.getRequestCount()).toBe(offset + 4);
             }
           } finally {
             gate.resolve();

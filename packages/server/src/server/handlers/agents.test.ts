@@ -53,6 +53,7 @@ import {
   SEND_AGENT_MESSAGE_ROUTE,
   SEND_AGENT_SIGNAL_ROUTE,
   ABORT_AGENT_THREAD_ROUTE,
+  ABORT_AGENT_RUN_ROUTE,
   CANCEL_AGENT_PENDING_SIGNALS_ROUTE,
   SUBSCRIBE_AGENT_THREAD_ROUTE,
   OBSERVE_AGENT_STREAM_ROUTE,
@@ -2292,26 +2293,32 @@ describe('Agent Routes Authorization', () => {
       runId,
       resourceId,
       status = 'running',
+      inputCheckpointed = true,
+      workflowName = 'durable-agentic-loop',
     }: {
       runId: string;
       resourceId?: string;
       status?: 'running' | 'suspended' | 'pending';
+      inputCheckpointed?: boolean;
+      workflowName?: string;
     }) {
       const workflowsStore = await storage.getStore('workflows');
       await workflowsStore?.persistWorkflowSnapshot({
-        workflowName: 'durable-agentic-loop',
+        workflowName,
         runId,
         resourceId,
         snapshot: {
           runId,
           status,
           value: {},
-          context: {
-            input: {
-              agentId: 'test-durable-agent',
-              __workflowKind: 'durable-agent',
-            },
-          } as any,
+          context: (inputCheckpointed
+            ? {
+                input: {
+                  agentId: 'test-durable-agent',
+                  __workflowKind: 'durable-agent',
+                },
+              }
+            : {}) as any,
           activePaths: [],
           activeStepsPath: {},
           serializedStepGraph: [],
@@ -2322,6 +2329,64 @@ describe('Agent Routes Authorization', () => {
         },
       });
     }
+
+    it.each(['', 'inngest:'])('aborts an active run using its %s execution checkpoint', async prefix => {
+      Object.defineProperty(mockDurableAgent, 'durableLoopWorkflowName', { value: `${prefix}durable-agentic-loop` });
+      const abort = vi.spyOn(mockDurableAgent, 'abortRunStream').mockResolvedValue(true);
+      await persistDurableAgenticLoopRun({
+        runId: 'abort-active',
+        workflowName: `${prefix}durable-agentic-loop`,
+        inputCheckpointed: false,
+      });
+      await persistDurableAgenticLoopRun({
+        runId: 'abort-active',
+        workflowName: `${prefix}durable-agentic-execution`,
+      });
+      await expect(
+        ABORT_AGENT_RUN_ROUTE.handler({
+          mastra,
+          agentId: 'test-durable-agent',
+          runId: 'abort-active',
+          requestContext: createContextWithReservedKeys({}),
+        }),
+      ).resolves.toEqual({ aborted: true });
+      expect(abort).toHaveBeenCalledWith('abort-active');
+    });
+
+    it('does not acknowledge run abort before ownership has been checkpointed', async () => {
+      const abort = vi.spyOn(mockDurableAgent, 'abortRunStream');
+      await persistDurableAgenticLoopRun({ runId: 'abort-registering', status: 'pending', inputCheckpointed: false });
+      await expect(
+        ABORT_AGENT_RUN_ROUTE.handler({
+          mastra,
+          agentId: 'test-durable-agent',
+          runId: 'abort-registering',
+          requestContext: createContextWithReservedKeys({}),
+        }),
+      ).resolves.toEqual({ aborted: false });
+      expect(abort).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['another resource', 'user-a', 'user-b'],
+      ['an ownerless run', 'user-a', undefined],
+      ['an unscoped caller without FGA', undefined, 'user-b'],
+    ])('run-scoped abort rejects %s before cancellation', async (_case, caller, owner) => {
+      vi.spyOn(mastra, 'getServer').mockReturnValue({
+        auth: { mapUserToResourceId: (user: { id: string }) => user.id },
+      } as any);
+      const abort = vi.spyOn(mockDurableAgent, 'abortRunStream');
+      await persistDurableAgenticLoopRun({ runId: 'abort-ownership', resourceId: owner });
+      await expect(
+        ABORT_AGENT_RUN_ROUTE.handler({
+          mastra,
+          agentId: 'test-durable-agent',
+          runId: 'abort-ownership',
+          requestContext: createContextWithReservedKeys({ resourceId: caller }),
+        }),
+      ).rejects.toMatchObject({ status: 403 });
+      expect(abort).not.toHaveBeenCalled();
+    });
 
     it('should return 400 when runId is missing', async () => {
       const requestContext = createContextWithReservedKeys({});

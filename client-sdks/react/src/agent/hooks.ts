@@ -924,6 +924,7 @@ export const useChat = ({
 
     const streamWithLegacyRoute = async () => {
       const runId = uuid();
+      _currentRunId.current = runId;
       const response = await agent.stream(coreUserMessages, {
         model,
         runId,
@@ -1137,12 +1138,36 @@ export const useChat = ({
   };
 
   const handleCancelRun = () => {
-    _streamAbortRef.current?.abort();
-    _streamAbortRef.current = null;
+    const runId = _currentRunId.current;
+    const agent = baseClient?.getAgent(agentId);
     const threadSubscription = _threadSubscriptionRef.current;
-    void Promise.resolve(threadSubscription?.abort?.()).catch(error => {
-      console.error('[useChat] Failed to abort thread subscription', error);
-    });
+    const streamAbort = _streamAbortRef.current;
+    // Stop execution explicitly: aborting the HTTP request only detaches a durable observer.
+    const cancellation = (async () => {
+      if (agent && runId) {
+        const deadline = Date.now() + 10_000;
+        while (true) {
+          const result = threadId
+            ? await agent.abortThread({ threadId, resourceId: resourceId || agentId, expectedRunId: runId })
+            : await agent.abortRun(runId);
+          if (result.aborted) return;
+          // Stop can overtake stream registration. Keep the request alive until cancellation is applied.
+          if (Date.now() >= deadline) throw new Error('Agent run cancellation was not acknowledged');
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
+      }
+      await threadSubscription?.abort?.();
+    })()
+      .catch(error => {
+        // Non-durable agents still stop when their HTTP request is aborted.
+        if (isObject(error) && error.status === 501) return;
+        throw error;
+      })
+      .finally(() => {
+        streamAbort?.abort();
+        if (_streamAbortRef.current === streamAbort) _streamAbortRef.current = null;
+      });
+    void cancellation.catch(error => console.error('[useChat] Failed to abort agent run', error));
     closeThreadSubscription();
     setMessages(prev => finishStreamingAssistantMessage(prev));
     liveRunFinished.current = true;
@@ -1154,6 +1179,7 @@ export const useChat = ({
     _networkRunId.current = undefined;
     _onNetworkChunk.current = undefined;
     _activeContinuation.current = {};
+    return cancellation;
   };
 
   const approveToolCall = async (toolCallId: string, resumeData?: unknown) => {
