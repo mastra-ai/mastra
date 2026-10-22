@@ -7,6 +7,7 @@
 
 import { constants as fsConstants, realpathSync } from 'node:fs';
 import * as fs from 'node:fs/promises';
+import type { FileHandle } from 'node:fs/promises';
 import * as nodePath from 'node:path';
 import type { RequestContext } from '../../request-context';
 import {
@@ -34,7 +35,15 @@ import type {
   RemoveOptions,
   CopyOptions,
 } from './filesystem';
-import { expandTilde, fsExists, fsStat, isEnoentError, isEexistError, resolveToBasePath } from './fs-utils';
+import {
+  expandTilde,
+  fsExists,
+  fsStat,
+  getMimeType,
+  isEnoentError,
+  isEexistError,
+  resolveToBasePath,
+} from './fs-utils';
 import { MastraFilesystem } from './mastra-filesystem';
 import type { MastraFilesystemOptions } from './mastra-filesystem';
 import type { FilesystemMountConfig } from './mount';
@@ -385,27 +394,47 @@ export class LocalFilesystem extends MastraFilesystem {
     }
   }
 
+  private async openContainedPath(absolutePath: string): Promise<{ handle: FileHandle; canonicalPath: string }> {
+    await this.assertPathContained(absolutePath);
+    const handle = await fs.open(absolutePath, 'r');
+    try {
+      const opened = await handle.stat();
+      const canonicalPath = await fs.realpath(absolutePath);
+      await this.assertPathContained(canonicalPath);
+      const current = await fs.stat(canonicalPath);
+      if (opened.dev !== current.dev || opened.ino !== current.ino) {
+        throw new PermissionError(absolutePath, 'access');
+      }
+      return { handle, canonicalPath };
+    } catch (error) {
+      await handle.close();
+      throw error;
+    }
+  }
+
   async readFile(inputPath: string, options?: ReadOptions): Promise<string | Buffer> {
     this.logger.debug('Reading file', { path: inputPath, encoding: options?.encoding });
     await this.ensureReady();
     const absolutePath = this.resolvePath(inputPath);
-    await this.assertPathContained(absolutePath);
 
     try {
+      if (this._contained) {
+        const { handle } = await this.openContainedPath(absolutePath);
+        try {
+          if ((await handle.stat()).isDirectory()) throw new IsDirectoryError(inputPath);
+          return options?.encoding ? await handle.readFile({ encoding: options.encoding }) : await handle.readFile();
+        } finally {
+          await handle.close();
+        }
+      }
       const stats = await fs.stat(absolutePath);
-      if (stats.isDirectory()) {
-        throw new IsDirectoryError(inputPath);
-      }
-
-      if (options?.encoding) {
-        return await fs.readFile(absolutePath, { encoding: options.encoding });
-      }
-      return await fs.readFile(absolutePath);
+      if (stats.isDirectory()) throw new IsDirectoryError(inputPath);
+      return options?.encoding
+        ? await fs.readFile(absolutePath, { encoding: options.encoding })
+        : await fs.readFile(absolutePath);
     } catch (error: unknown) {
       if (error instanceof IsDirectoryError) throw error;
-      if (isEnoentError(error)) {
-        throw new FileNotFoundError(inputPath);
-      }
+      if (isEnoentError(error)) throw new FileNotFoundError(inputPath);
       throw error;
     }
   }
@@ -680,19 +709,32 @@ export class LocalFilesystem extends MastraFilesystem {
     this.logger.debug('Reading directory', { path: inputPath, recursive: options?.recursive });
     await this.ensureReady();
     const absolutePath = this.resolvePath(inputPath);
-    await this.assertPathContained(absolutePath);
+    let directoryHandle: FileHandle | undefined;
 
     try {
-      const stats = await fs.stat(absolutePath);
+      if (this._contained) {
+        directoryHandle = (await this.openContainedPath(absolutePath)).handle;
+      }
+      const stats = directoryHandle ? await directoryHandle.stat() : await fs.stat(absolutePath);
       if (!stats.isDirectory()) {
         throw new NotDirectoryError(inputPath);
       }
 
-      const entries = await fs.readdir(absolutePath, { withFileTypes: true });
+      // Anchor directory enumeration and entry metadata to the verified descriptor.
+      // Windows has no fd-backed pathname; revalidate there before returning.
+      const directoryPath = directoryHandle
+        ? process.platform === 'linux'
+          ? `/proc/self/fd/${directoryHandle.fd}`
+          : process.platform === 'darwin'
+            ? `/dev/fd/${directoryHandle.fd}`
+            : absolutePath
+        : absolutePath;
+      const entries = await fs.readdir(directoryPath, { withFileTypes: true });
       const result: FileEntry[] = [];
 
       for (const entry of entries) {
         const entryPath = nodePath.join(absolutePath, entry.name);
+        const entryDiskPath = nodePath.join(directoryPath, entry.name);
 
         if (options?.extension) {
           const extensions = Array.isArray(options.extension) ? options.extension : [options.extension];
@@ -712,9 +754,9 @@ export class LocalFilesystem extends MastraFilesystem {
         if (isSymlink) {
           try {
             // Get the symlink target path
-            symlinkTarget = await fs.readlink(entryPath);
+            symlinkTarget = await fs.readlink(entryDiskPath);
             // Determine the type of the target (follow the symlink)
-            const targetStat = await fs.stat(entryPath);
+            const targetStat = await fs.stat(entryDiskPath);
             resolvedType = targetStat.isDirectory() ? 'directory' : 'file';
           } catch {
             // If we can't read the symlink target or it's broken, treat as file
@@ -733,7 +775,7 @@ export class LocalFilesystem extends MastraFilesystem {
 
         if (resolvedType === 'file' && !isSymlink) {
           try {
-            const stat = await fs.stat(entryPath);
+            const stat = await fs.stat(entryDiskPath);
             fileEntry.size = stat.size;
           } catch {
             // Ignore
@@ -758,6 +800,17 @@ export class LocalFilesystem extends MastraFilesystem {
         }
       }
 
+      if (directoryHandle && directoryPath === absolutePath) {
+        const current = await this.openContainedPath(absolutePath);
+        try {
+          const currentStat = await current.handle.stat();
+          if (stats.dev !== currentStat.dev || stats.ino !== currentStat.ino) {
+            throw new PermissionError(absolutePath, 'access');
+          }
+        } finally {
+          await current.handle.close();
+        }
+      }
       return result;
     } catch (error: unknown) {
       if (error instanceof NotDirectoryError) throw error;
@@ -765,33 +818,60 @@ export class LocalFilesystem extends MastraFilesystem {
         throw new DirectoryNotFoundError(inputPath);
       }
       throw error;
+    } finally {
+      await directoryHandle?.close();
     }
   }
 
   async exists(inputPath: string): Promise<boolean> {
     await this.ensureReady();
     const absolutePath = this.resolvePath(inputPath);
-    await this.assertPathContained(absolutePath);
-    return fsExists(absolutePath);
+    if (!this._contained) return fsExists(absolutePath);
+    try {
+      const { handle } = await this.openContainedPath(absolutePath);
+      await handle.close();
+      return true;
+    } catch (error) {
+      if (isEnoentError(error)) return false;
+      throw error;
+    }
   }
 
   async stat(inputPath: string): Promise<FileStat> {
     await this.ensureReady();
     const absolutePath = this.resolvePath(inputPath);
-    await this.assertPathContained(absolutePath);
-    const result = await fsStat(absolutePath, inputPath);
-    return {
-      ...result,
-      path: this.toRelativePath(absolutePath),
-    };
+    if (!this._contained) {
+      const result = await fsStat(absolutePath, inputPath);
+      return { ...result, path: this.toRelativePath(absolutePath) };
+    }
+    try {
+      const { handle } = await this.openContainedPath(absolutePath);
+      try {
+        const stats = await handle.stat();
+        return {
+          name: nodePath.basename(absolutePath),
+          path: this.toRelativePath(absolutePath),
+          type: stats.isDirectory() ? 'directory' : 'file',
+          size: stats.size,
+          createdAt: stats.birthtime,
+          modifiedAt: stats.mtime,
+          mimeType: stats.isFile() ? getMimeType(absolutePath) : undefined,
+        };
+      } finally {
+        await handle.close();
+      }
+    } catch (error) {
+      if (isEnoentError(error)) throw new FileNotFoundError(inputPath);
+      throw error;
+    }
   }
 
   async realpath(inputPath: string): Promise<string> {
     await this.ensureReady();
     const absolutePath = this.resolvePath(inputPath);
-    await this.assertPathContained(absolutePath);
-
-    const canonicalPath = await fs.realpath(absolutePath);
+    if (!this._contained) return this.toRelativePath(await fs.realpath(absolutePath));
+    const { handle, canonicalPath } = await this.openContainedPath(absolutePath);
+    await handle.close();
     return this.toRelativePath(canonicalPath);
   }
 
