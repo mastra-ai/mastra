@@ -48,6 +48,14 @@ export async function isRunBound(session: FactorySessionOwnership, runs: Session
   });
 }
 
+/**
+ * A side session works for the session that started it. Otherwise any binding,
+ * active or revoked, on any thread: a session that ever ran a role stays a worker.
+ */
+export async function isWorkerSession(session: FactorySessionOwnership, runs: SessionRunBindings | undefined) {
+  return Boolean(session.originSessionId) || isRunBound(session, runs);
+}
+
 /** {@link sessionMemoryResourceId} for a caller that already loaded the session's own thread. */
 export function memoryResourceOf(
   session: FactorySessionOwnership,

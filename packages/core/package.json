@@ -975,7 +975,7 @@
     "@internal/test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@internal/voice": "workspace:*",
-    "@modelcontextprotocol/server": "2.2.0",
+    "@modelcontextprotocol/server": "2.3.1",
     "@openrouter/ai-sdk-provider": "^0.7.5",
     "@openrouter/ai-sdk-provider-v5": "npm:@openrouter/ai-sdk-provider@1.5.4",
     "@openrouter/ai-sdk-provider-v6": "npm:@openrouter/ai-sdk-provider@2.10.0",
@@ -995,10 +995,10 @@
     "tsdown": "0.22.9",
     "tsx": "catalog:",
     "typescript": "catalog:",
-    "valibot": "^1.4.1",
+    "valibot": "^1.5.0",
     "vitest": "catalog:",
     "vscode-jsonrpc": "^8.2.1",
-    "vscode-languageserver-protocol": "^3.17.5",
+    "vscode-languageserver-protocol": "^3.18.4",
     "zod": "catalog:"
   },
   "engines": {

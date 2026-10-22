@@ -350,6 +350,18 @@ describe('theme.css export', () => {
     expect(declared.toSorted()).toEqual([...TextRoles].toSorted());
   });
 
+  it('keeps display-lg a complete fixed-size role without changing display', () => {
+    const variables = parseVariables(themeCss);
+    expect(variables.get('text-display-lg')).toBe('1.75rem');
+    expect(variables.get('text-display-lg--line-height')).toBe('127%');
+    expect(variables.get('text-display-lg--font-weight')).toBe('500');
+    expect(variables.get('text-display-lg--letter-spacing')).toBe('-0.01em');
+    expect(variables.get('text-display')).toBe('1.375rem');
+    expect(variables.get('text-display--line-height')).toBe('127%');
+    expect(variables.get('text-display--font-weight')).toBe('500');
+    expect(variables.get('text-display--letter-spacing')).toBe('-0.01em');
+  });
+
   it('generates the field and dialog fill utilities', async () => {
     const compiler = await compileStylesheet(productionCss, resolve(pkgRoot, 'src'));
     const output = compiler.build(['bg-field', 'bg-field-disabled', 'bg-dialog']);

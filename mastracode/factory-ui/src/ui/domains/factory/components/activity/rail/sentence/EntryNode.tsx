@@ -10,6 +10,7 @@ import {
   Inbox,
   ListFilter,
   MapIcon,
+  MessageSquare,
   Play,
   SquarePen,
   X,
@@ -37,6 +38,7 @@ const DEED_GLYPHS: Record<AuditNamespace, LucideIcon> = {
   agent: Bot,
   intake: Inbox,
   work_item: SquarePen,
+  session: MessageSquare,
 };
 
 function entryTone(entry: ActivityEntry): BadgeVariant {

@@ -57,6 +57,7 @@ import CmsPromptBlocksCreatePage from './pages/cms/prompt-blocks/create';
 import CmsPromptBlocksEditPage from './pages/cms/prompt-blocks/edit';
 import CmsScorersCreatePage from './pages/cms/scorers/create';
 import CmsScorersEditPage from './pages/cms/scorers/edit';
+import ConnectionsPage from './pages/connections';
 import Datasets from './pages/datasets';
 import DatasetPage from './pages/datasets/dataset';
 import EditDatasetPage from './pages/datasets/dataset/edit';
@@ -390,6 +391,11 @@ export const routes: RouteObject[] = [
       {
         path: '/integrations',
         element: <IntegrationsPage />,
+      },
+
+      {
+        path: '/connections',
+        element: <ConnectionsPage />,
       },
 
       { path: '/processors', element: <Processors /> },
