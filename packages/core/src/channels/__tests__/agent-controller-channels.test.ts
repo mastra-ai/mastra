@@ -1266,6 +1266,64 @@ describe('AgentControllerChannels', () => {
       expect(adapter.addReaction).toHaveBeenCalledWith('discord:t-react', 'm-1', 'eyes');
     }, 30_000);
 
+    it('reacts from an agent run that a prompt outside the channel started', async () => {
+      // Inbound runs answer with text; the later prompt answers with a reaction.
+      let react = false;
+      let call = 0;
+      const model = new MockLanguageModelV2({
+        doStream: async options => {
+          call += 1;
+          const reacting = react && !options.prompt.some(m => m.role === 'tool');
+          if (!reacting) return createTextStreamModel('ok').doStream(options);
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: `id-${call}`, modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'react-1',
+                toolName: 'add_reaction',
+                input: '{"messageId":"m-1","emoji":"eyes"}',
+                providerExecuted: false,
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              },
+            ]),
+          };
+        },
+      });
+      // Like a host that mounts `channels.getTools()` on its agent.
+      let channelTools: Record<string, unknown> = {};
+      const { adapter, controller, mastra, channels } = await createSetup({
+        model,
+        tools: (() => channelTools) as any,
+      });
+      channelTools = channels.getTools();
+      const chatThread = createChatThread(adapter, 'discord:t-react-run');
+      await (channels as any).processChatMessage(
+        chatThread,
+        createMessage('m-1', 'hello'),
+        mastra,
+        new RequestContext(),
+      );
+      await waitFor(() => postedText(chatThread).includes('ok'), { what: 'the inbound reply' });
+      expect(adapter.addReaction).not.toHaveBeenCalled();
+
+      // A Studio or API prompt on the same session: no inbound message, no `channel`.
+      react = true;
+      const session = (await controller.getSession('channel:discord:t-react-run'))!;
+      await session.permissions.setForTool({ toolName: 'add_reaction', policy: 'allow' });
+      await session.sendMessage({ content: 'react to the last message' });
+
+      await waitFor(() => adapter.addReaction.mock.calls.length > 0, { what: 'the reaction from the agent run' });
+      expect(adapter.addReaction).toHaveBeenCalledWith('discord:t-react-run', 'm-1', 'eyes');
+    }, 30_000);
+
     it('still fails clearly when the thread is not in a channel', async () => {
       const { adapter, tools } = await mappedThread();
 
