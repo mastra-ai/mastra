@@ -7,7 +7,7 @@ packages:
 
 # Saved Views API
 
-A saved view stores how a Studio page looks so you can come back to it, such as its filters, time range, sort, and columns. Views live in the `savedViews` domain of your [Mastra storage](/reference/storage/overview), and everyone who can open Studio sees every view.
+A saved view stores how a Studio page looks so you can come back to it, such as its filters, time range, sort, and columns. Studio uses saved views on the **Traces** page. Views live in the `savedViews` domain of your [Mastra storage](/reference/storage/overview), and everyone who can open Studio sees every view.
 
 Saved views need a storage adapter with the `savedViews` domain: `@mastra/pg`, `@mastra/libsql`, `@mastra/mongodb`, `@mastra/mysql`, `@mastra/spanner`, or the in-memory store. Other stores answer `501`, and servers that predate saved views answer `404`.
 
@@ -115,6 +115,30 @@ await mastraClient.deleteSavedView('view-id')
   state: { version: number; [key: string]: unknown };
   createdAt: string;        // ISO timestamp
   updatedAt: string;        // ISO timestamp
+}
+```
+
+## React hooks
+
+`@mastra/react/hooks/saved-views` wraps these methods for React Query:
+
+- `useSavedViews({ page })`: Lists one page's views. It never retries a `404` or `501`.
+- `useCreateSavedView()`, `useUpdateSavedView()`, and `useDeleteSavedView()`: Mutations that refresh every saved-views list when they succeed. `useUpdateSavedView` takes `{ savedViewId, ...changes }`.
+- `isSavedViewsUnavailableError(error)`: Returns `true` for a `404` or `501`, so you can hide saved views instead of showing an error.
+
+```tsx
+import { isSavedViewsUnavailableError, useSavedViews } from '@mastra/react/hooks/saved-views'
+
+function TraceViewNames() {
+  const { data: views = [], error } = useSavedViews({ page: 'traces' })
+  if (isSavedViewsUnavailableError(error)) return null
+  return (
+    <ul>
+      {views.map(view => (
+        <li key={view.id}>{view.name}</li>
+      ))}
+    </ul>
+  )
 }
 ```
 
