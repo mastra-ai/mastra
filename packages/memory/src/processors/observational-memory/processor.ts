@@ -191,6 +191,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       rotateResponseMessageId,
     } = args;
     const state = _state ?? ({} as Record<string, unknown>);
+    if (state.__omInputFailed) return messageList;
 
     omDebug(
       `[OM:processInputStep:ENTER] step=${stepNumber}, hasMastraMemory=${!!requestContext?.get('MastraMemory')}, hasMemoryInfo=${!!messageList?.serialize()?.memoryInfo?.threadId}`,
@@ -269,184 +270,220 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         return messageList;
       }
 
+      // A failed observation may have pruned messages or sealed a response before throwing.
+      // Restore pre-step message-list state when continuing without OM.
+      const preStepMessages =
+        this.engine.config.observation.failurePolicy === 'continue' ? messageList.serialize() : undefined;
+      let previousRecord: ObservationalMemoryRecord | undefined;
+      const continueWithoutObservation = async (error: unknown) => {
+        const err = error instanceof Error ? error : new Error(String(error));
+        if (this.engine.config.observation.failurePolicy !== 'continue' || abortSignal?.aborted) {
+          const failedTurn = this.turn;
+          await failedTurn?.end().catch(() => {});
+          if (this.turn === failedTurn) this.turn = undefined;
+          state.__omTurn = undefined;
+          if (typeof abort === 'function') {
+            abort(
+              abortSignal?.aborted
+                ? 'Agent execution was aborted'
+                : `Encountered error during memory observation: ${err.message}`,
+            );
+          }
+          throw err;
+        }
+
+        this.turn = undefined;
+        state.__omTurn = undefined;
+        state.__omInputFailed = true;
+        messageList.deserialize(preStepMessages!);
+        args.agent
+          ?.__getLogger()
+          .warn(`Observational memory input failed; continuing without observation: ${err.message}`);
+        if (previousRecord) {
+          try {
+            const systemMessages = await this.engine.buildContextSystemMessages({
+              threadId,
+              resourceId,
+              record: previousRecord,
+            });
+            injectObservationContextMessages({
+              messageList,
+              systemMessages,
+              continuationMessage: undefined,
+              threadId,
+              resourceId,
+            });
+          } catch (contextError) {
+            args.agent
+              ?.__getLogger()
+              .warn('Observational memory could not restore prior context after input failure', contextError);
+          }
+        }
+        return messageList;
+      };
+
       // ── Create turn on first step (or when state is reset) ──
       // The turn is stashed in customState so that the output processor instance
       // (which is a separate ObservationalMemoryProcessor) can retrieve it in
       // processOutputResult. In production, getInputProcessors() and
       // getOutputProcessors() each call createOMProcessor(), producing two
       // different instances that share only the processorStates map.
-      const activeTurn = asLiveTurn(state.__omTurn) ?? this.turn;
-      if (activeTurn && activeTurn.messageList !== messageList) {
-        // Durable runs may deserialize a fresh MessageList between loop iterations. End the
-        // old turn first so any messages tracked on that list are flushed before OM moves on.
-        await activeTurn.end().catch(() => {});
-        if (this.turn === activeTurn) {
-          this.turn = undefined;
-        }
-        state.__omTurn = undefined;
-      }
-
-      // A turn can be sealed before the loop reaches its next step — for example when a
-      // sub-agent's `finish` / `step-finish` chunks are forwarded into the parent writer.
-      // Reusing an ended turn throws "Turn already ended" from `step()` below, so discard it
-      // and let beginTurn() start a fresh one, mirroring the message-list cleanup above.
-      if (activeTurn?.ended || this.turn?.ended) {
-        if (this.turn?.ended) {
-          this.turn = undefined;
-        }
-        state.__omTurn = undefined;
-      }
-
-      let responseMessageId = messageId;
-      if (!this.turn || !state.__omTurn) {
-        // End previous turn if state was reset mid-flow
-        if (this.turn && !state.__omTurn) {
-          await this.turn.end().catch(() => {});
-        }
-        this.turn = this.engine.beginTurn({
-          threadId,
-          resourceId,
-          messageList,
-          agent: args.agent,
-          observabilityContext: getOmObservabilityContext(args),
-          hooks: {
-            onBufferChunkSealed: rotateResponseMessageId,
-            onSyncObservationComplete: rotateResponseMessageId,
-          },
-        });
-        this.turn.writer = writer;
-        this.turn.sendSignal = args.sendSignal;
-        this.turn.sendStateSignal = args.sendStateSignal;
-        this.turn.agent = args.agent;
-        this.turn.requestContext = requestContext;
-        await this.turn.start(this.memory, runState);
-        // A run recovered by another worker can continue a response message that the dead
-        // worker already observed. That worker rotated the id in memory, but the rotation was
-        // lost with it. Seal and rotate again so the rest of the turn isn't merged into the observed message.
-        // observedMessageIds alone misses responses observed before an activation or a reflection,
-        // neither of which keeps their ids. What survives is on the message itself: buffering
-        // persists OM's seal before the Observer runs, and sync observation persists its end
-        // marker on the observed message before it may reflect.
-        // When only the ids say so, persist the seal too: a later reflection drops the ids, and
-        // the message would otherwise look unobserved if this worker also dies.
-        const observedIds = this.turn.record.observedMessageIds;
-        const response = messageId ? messageList.get.all.db().find(message => message.id === messageId) : undefined;
-        const responseSealed =
-          (response?.content?.metadata as { mastra?: { sealed?: boolean } } | undefined)?.mastra?.sealed === true;
-        const responseObserved =
-          responseSealed ||
-          (!!response && findLastCompletedObservationBoundary(response) >= 0) ||
-          (!!messageId && Array.isArray(observedIds) && observedIds.includes(messageId));
-        if (messageId && responseObserved) {
-          if (response && !responseSealed) {
-            // Persist first, and fail the step rather than continue: without the stored seal, a later
-            // reflection erases the only evidence, and the next recovery would merge into this message.
-            await this.engine.persistMessageSeal(response);
-            this.engine.sealMessagesForBuffering([response]);
-          }
-          responseMessageId = rotateResponseMessageId?.() ?? messageId;
-        }
-        if (stepNumber === 0 && this.temporalMarkers) {
-          await insertTemporalGapMarkers({ messageList, sendSignal: args.sendSignal });
-        }
-        state.__omTurn = this.turn;
-      }
-
-      this.turn.addHooks({
-        onBufferChunkSealed: rotateResponseMessageId,
-        onSyncObservationComplete: rotateResponseMessageId,
-      });
-
-      const observabilityContext = getOmObservabilityContext(args);
-      state.__omObservabilityContext = observabilityContext;
-      this.turn.observabilityContext = observabilityContext;
-      this.turn.actorModelContext = actorModelContext;
-      this.turn.responseMessageId = responseMessageId;
-
-      // ── Run step preparation (activation, threshold, observation, filtering) ──
-      {
-        const step = this.turn.step(stepNumber);
-        let ctx;
-        try {
-          ctx = await step.prepare();
-        } catch (error) {
-          // Map observation errors through abort (processor-specific concern)
-          const err = error instanceof Error ? error : new Error(String(error));
-          const abortMessage = abortSignal?.aborted
-            ? 'Agent execution was aborted'
-            : `Encountered error during memory observation: ${err.message}`;
-          // A tripwire skips output processors, so end the turn here to save the user message and
-          // finished steps. The step that failed never reached the model, so nothing blocked is saved.
-          const failedTurn = this.turn;
-          await failedTurn.end().catch(() => {});
-          if (this.turn === failedTurn) {
+      try {
+        const activeTurn = asLiveTurn(state.__omTurn) ?? this.turn;
+        if (activeTurn && activeTurn.messageList !== messageList) {
+          // Durable runs may deserialize a fresh MessageList between loop iterations. End the
+          // old turn first so any messages tracked on that list are flushed before OM moves on.
+          await activeTurn.end().catch(() => {});
+          if (this.turn === activeTurn) {
             this.turn = undefined;
           }
           state.__omTurn = undefined;
-          if (typeof abort === 'function') {
-            abort(abortMessage);
+        }
+
+        // A turn can be sealed before the loop reaches its next step — for example when a
+        // sub-agent's `finish` / `step-finish` chunks are forwarded into the parent writer.
+        // Reusing an ended turn throws "Turn already ended" from `step()` below, so discard it
+        // and let beginTurn() start a fresh one, mirroring the message-list cleanup above.
+        if (activeTurn?.ended || this.turn?.ended) {
+          if (this.turn?.ended) {
+            this.turn = undefined;
           }
-          throw err;
+          state.__omTurn = undefined;
         }
 
-        // Inject system messages (one per cache-stable chunk) + continuation
-        injectObservationContextMessages({
-          messageList,
-          systemMessages: ctx.systemMessage,
-          continuationMessage: this.turn.context.continuation,
-          threadId,
-          resourceId,
-        });
-
-        // ── Progress emission (processor-specific) ──────────
-        const turnRecord = this.turn.record;
-        await this.engine.emitProgress({
-          record: turnRecord,
-          stepNumber,
-          pendingTokens: ctx.status.pendingTokens,
-          threshold: ctx.status.threshold,
-          effectiveObservationTokensThreshold: ctx.status.effectiveObservationTokensThreshold,
-          currentObservationTokens: turnRecord.observationTokenCount ?? 0,
-          writer,
-          threadId,
-          resourceId,
-        });
-
-        // ── Token persistence (processor-specific) ──────────
-        // prepare() already counted the current unobserved window and resource context.
-        const finalTotalPending = ctx.status.pendingTokens;
-        try {
-          await runOMCommit(this.engine.buffering.getLockKey(threadId, resourceId), () =>
-            this.engine.getStorage().setPendingMessageTokens(turnRecord.id, finalTotalPending),
-          );
-          this.turn.patchRecord({ pendingMessageTokens: finalTotalPending });
-        } catch {
-          // Token persistence is intentionally non-fatal for streaming UX.
-        }
-
-        // ── Repro capture (processor-specific) ──────────────
-        if (reproCaptureEnabled) {
-          writeProcessInputStepReproCapture({
+        let responseMessageId = messageId;
+        if (!this.turn || !state.__omTurn) {
+          // End previous turn if state was reset mid-flow
+          if (this.turn && !state.__omTurn) {
+            await this.turn.end().catch(() => {});
+          }
+          this.turn = this.engine.beginTurn({
             threadId,
             resourceId,
-            stepNumber,
-            args,
-            preRecord: preRecordSnapshot!,
-            postRecord: safeCaptureJson(turnRecord) as ObservationalMemoryRecord,
-            preMessages: preMessagesSnapshot!,
-            preBufferedChunks: [],
-            preContextTokenCount: 0,
-            preSerializedMessageList: preSerializedMessageList!,
-            postBufferedChunks: [],
-            postContextTokenCount: finalTotalPending,
             messageList,
-            details: {},
-            observerExchange: ctx.observerExchange,
+            agent: args.agent,
+            observabilityContext: getOmObservabilityContext(args),
+            hooks: {
+              onBufferChunkSealed: rotateResponseMessageId,
+              onSyncObservationComplete: rotateResponseMessageId,
+            },
           });
+          this.turn.writer = writer;
+          this.turn.sendSignal = args.sendSignal;
+          this.turn.sendStateSignal = args.sendStateSignal;
+          this.turn.agent = args.agent;
+          this.turn.requestContext = requestContext;
+          await this.turn.start(this.memory, runState);
+          // A run recovered by another worker can continue a response message that the dead
+          // worker already observed. That worker rotated the id in memory, but the rotation was
+          // lost with it. Seal and rotate again so the rest of the turn isn't merged into the observed message.
+          // observedMessageIds alone misses responses observed before an activation or a reflection,
+          // neither of which keeps their ids. What survives is on the message itself: buffering
+          // persists OM's seal before the Observer runs, and sync observation persists its end
+          // marker on the observed message before it may reflect.
+          // When only the ids say so, persist the seal too: a later reflection drops the ids, and
+          // the message would otherwise look unobserved if this worker also dies.
+          const observedIds = this.turn.record.observedMessageIds;
+          const response = messageId ? messageList.get.all.db().find(message => message.id === messageId) : undefined;
+          const responseSealed =
+            (response?.content?.metadata as { mastra?: { sealed?: boolean } } | undefined)?.mastra?.sealed === true;
+          const responseObserved =
+            responseSealed ||
+            (!!response && findLastCompletedObservationBoundary(response) >= 0) ||
+            (!!messageId && Array.isArray(observedIds) && observedIds.includes(messageId));
+          if (messageId && responseObserved) {
+            if (response && !responseSealed) {
+              // Persist the seal before rotation so a later reflection cannot erase the only
+              // evidence of the observed boundary. On failure, the input fallback stops OM for this turn.
+              await this.engine.persistMessageSeal(response);
+              this.engine.sealMessagesForBuffering([response]);
+            }
+            responseMessageId = rotateResponseMessageId?.() ?? messageId;
+          }
+          if (stepNumber === 0 && this.temporalMarkers) {
+            await insertTemporalGapMarkers({ messageList, sendSignal: args.sendSignal });
+          }
+          state.__omTurn = this.turn;
         }
-      }
 
-      return messageList;
+        this.turn.addHooks({
+          onBufferChunkSealed: rotateResponseMessageId,
+          onSyncObservationComplete: rotateResponseMessageId,
+        });
+
+        const observabilityContext = getOmObservabilityContext(args);
+        state.__omObservabilityContext = observabilityContext;
+        this.turn.observabilityContext = observabilityContext;
+        this.turn.actorModelContext = actorModelContext;
+        this.turn.responseMessageId = responseMessageId;
+
+        // ── Run step preparation (activation, threshold, observation, filtering) ──
+        {
+          previousRecord = { ...this.turn.record };
+          const step = this.turn.step(stepNumber);
+          const ctx = await step.prepare();
+
+          // Inject system messages (one per cache-stable chunk) + continuation
+          injectObservationContextMessages({
+            messageList,
+            systemMessages: ctx.systemMessage,
+            continuationMessage: this.turn.context.continuation,
+            threadId,
+            resourceId,
+          });
+
+          // ── Progress emission (processor-specific) ──────────
+          const turnRecord = this.turn.record;
+          await this.engine.emitProgress({
+            record: turnRecord,
+            stepNumber,
+            pendingTokens: ctx.status.pendingTokens,
+            threshold: ctx.status.threshold,
+            effectiveObservationTokensThreshold: ctx.status.effectiveObservationTokensThreshold,
+            currentObservationTokens: turnRecord.observationTokenCount ?? 0,
+            writer,
+            threadId,
+            resourceId,
+          });
+
+          // ── Token persistence (processor-specific) ──────────
+          // prepare() already counted the current unobserved window and resource context.
+          const finalTotalPending = ctx.status.pendingTokens;
+          try {
+            await runOMCommit(this.engine.buffering.getLockKey(threadId, resourceId), () =>
+              this.engine.getStorage().setPendingMessageTokens(turnRecord.id, finalTotalPending),
+            );
+            this.turn.patchRecord({ pendingMessageTokens: finalTotalPending });
+          } catch {
+            // Token persistence is intentionally non-fatal for streaming UX.
+          }
+
+          // ── Repro capture (processor-specific) ──────────────
+          if (reproCaptureEnabled) {
+            writeProcessInputStepReproCapture({
+              threadId,
+              resourceId,
+              stepNumber,
+              args,
+              preRecord: preRecordSnapshot!,
+              postRecord: safeCaptureJson(turnRecord) as ObservationalMemoryRecord,
+              preMessages: preMessagesSnapshot!,
+              preBufferedChunks: [],
+              preContextTokenCount: 0,
+              preSerializedMessageList: preSerializedMessageList!,
+              postBufferedChunks: [],
+              postContextTokenCount: finalTotalPending,
+              messageList,
+              details: {},
+              observerExchange: ctx.observerExchange,
+            });
+          }
+        }
+
+        return messageList;
+      } catch (error) {
+        return continueWithoutObservation(error);
+      }
     });
   }
 
@@ -470,6 +507,25 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         if (memoryContext?.memoryConfig?.readOnly) return messageList;
 
         const persistenceMessageList = messageList.cloneForPersistence();
+        if (state.__omInputFailed) {
+          try {
+            const messagesToSave = [
+              ...persistenceMessageList.get.input.db(),
+              ...persistenceMessageList.get.response.db(),
+            ];
+            if (messagesToSave.length > 0) {
+              await this.engine.persistMessages(messagesToSave, context.threadId, context.resourceId);
+            }
+          } catch (error) {
+            if (args.abortSignal?.aborted) throw error;
+            args.agent
+              ?.__getLogger()
+              .warn('Observational memory could not persist messages after input failure', error);
+          } finally {
+            state.__omInputFailed = undefined;
+          }
+          return messageList;
+        }
 
         // Retrieve the turn from shared processor state — in production, the input
         // and output processors are separate instances (see comment in processInputStep).
