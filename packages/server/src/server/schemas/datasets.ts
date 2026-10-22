@@ -441,6 +441,15 @@ export const triggerExperimentBodySchema = z.object({
   scorerIds: z.array(z.string()).optional().describe('IDs of scorers to apply'),
   version: z.coerce.number().int().optional().describe('Pin to specific dataset version'),
   agentVersion: z.string().optional().describe('Agent version ID to use for experiment'),
+  agentModel: z
+    .object({
+      provider: z.string().min(1).describe('Model provider, e.g. "openai"'),
+      modelId: z.string().min(1).describe('Model ID, e.g. "gpt-4.1"'),
+    })
+    .optional()
+    .describe(
+      "Run the agent target on this model instead of its configured one. The registered agent's model is not changed. Agent targets only; requires start to be true.",
+    ),
   maxConcurrency: z.number().optional().describe('Maximum concurrent executions'),
   provenance: z
     .object({

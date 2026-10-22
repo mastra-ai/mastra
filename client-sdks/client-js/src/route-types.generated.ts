@@ -20828,6 +20828,15 @@ export type PostDatasetsDatasetIdExperiments_Body = {
   version?: number | undefined;
   /** Agent version ID to use for experiment */
   agentVersion?: string | undefined;
+  /** Run the agent target on this model instead of its configured one. The registered agent's model is not changed. Agent targets only; requires start to be true. */
+  agentModel?:
+    | {
+        /** Model provider, e.g. "openai" */
+        provider: string;
+        /** Model ID, e.g. "gpt-4.1" */
+        modelId: string;
+      }
+    | undefined;
   /** Maximum concurrent executions */
   maxConcurrency?: number | undefined;
   /** Caller-provided provenance claims for the experiment execution */

@@ -897,6 +897,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         scorerIds,
         version,
         agentVersion,
+        agentModel,
         maxConcurrency,
         provenance,
         grouping,
@@ -913,6 +914,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         scorerIds?: string[];
         version?: number;
         agentVersion?: string;
+        agentModel?: { provider: string; modelId: string };
         maxConcurrency?: number;
         provenance?: {
           source?: string;
@@ -929,6 +931,14 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         requestContext?: Record<string, unknown> | RequestContext;
         versions?: { agents?: Record<string, { versionId: string } | { status: 'draft' | 'published' }> };
       };
+      if (agentModel && start === false) {
+        throw new HTTPException(400, {
+          message: 'agentModel requires start: true; create-only experiments do not keep a model override',
+        });
+      }
+      if (agentModel && targetType !== 'agent') {
+        throw new HTTPException(400, { message: 'agentModel is only supported for agent targets' });
+      }
       // The adapter middleware merges body + query requestContext into a RequestContext instance.
       // startExperimentAsync expects a plain Record, so convert it.
       const requestContext = rawRequestContext instanceof RequestContext ? rawRequestContext.all : rawRequestContext;
@@ -970,6 +980,7 @@ export const TRIGGER_EXPERIMENT_ROUTE = createRoute({
         scorers: scorerIds,
         version,
         agentVersion,
+        agentModel: agentModel ? `${agentModel.provider}/${agentModel.modelId}` : undefined,
         maxConcurrency,
         provenance,
         grouping,

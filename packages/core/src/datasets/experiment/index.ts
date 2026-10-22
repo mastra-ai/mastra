@@ -1,3 +1,4 @@
+import type { Agent } from '../../agent';
 import { MastraError } from '../../error/index.js';
 import type { MastraScorer } from '../../evals/base';
 import type { TrajectoryExpectation } from '../../evals/types';
@@ -6,7 +7,7 @@ import type { DatasetRecord } from '../../storage/types';
 import { ExperimentEventDispatcher, createItemCompletedEvent, toExperimentJsonValue } from './events';
 import { executeTarget } from './executor';
 import type { ExecutionResult } from './executor';
-import { resolveTarget } from './resolve-target';
+import { forkAgentWithModel, resolveTarget } from './resolve-target';
 import {
   createItemScorerResolver,
   EXPERIMENT_ITEM_SCORER_NOT_FOUND,
@@ -142,6 +143,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
     grouping,
     requestContext: globalRequestContext,
     agentVersion,
+    agentModel,
     versions,
     persistence,
     beforeAll,
@@ -308,6 +310,11 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
   let execFn: (item: ExperimentItem, signal?: AbortSignal) => Promise<ExecutionResult>;
 
   try {
+    if (agentModel !== undefined && targetType !== 'agent') {
+      throw new Error(
+        `agentModel is only supported for an agent target (got ${config.task ? 'task' : (targetType ?? 'none')})`,
+      );
+    }
     if (config.task) {
       // Inline task path
       const taskFn = config.task;
@@ -338,7 +345,8 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
       if (!resolved) {
         throw new Error(`Target not found: ${targetType}/${targetId}`);
       }
-      const { target } = resolved;
+      const target =
+        agentModel !== undefined ? forkAgentWithModel(resolved.target as Agent, agentModel) : resolved.target;
       execFn = (item, itemSignal) => {
         // Merge global request context with per-item request context (item takes precedence)
         const mergedRequestContext =

@@ -1,3 +1,5 @@
+import type { Agent } from '../../agent';
+import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { Mastra } from '../../mastra';
 import type { Target } from './executor';
 
@@ -68,4 +70,17 @@ export async function resolveTarget(
   }
 
   return resolved ? { target: resolved } : null;
+}
+
+/**
+ * Fork an agent onto another model for an experiment, leaving the registered
+ * agent untouched. The fork is marked stored-version-applied so per-call
+ * `versions` selectors can't swap it back to a stored version's model;
+ * `agentVersion` is honored because it is resolved before forking.
+ */
+export function forkAgentWithModel(agent: Agent, model: MastraModelConfig): Agent {
+  const fork = agent.__fork();
+  fork.__updateModel({ model });
+  fork.__markStoredVersionApplied();
+  return fork;
 }

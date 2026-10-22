@@ -2,6 +2,7 @@ import type { AgentScorerConfig, WorkflowScorerConfig } from '../../evals';
 import type { MastraScorer, ScorerStepName } from '../../evals/base';
 import type { NotScorableOutcome } from '../../evals/not-scorable';
 import type { TrajectoryExpectation } from '../../evals/types';
+import type { MastraModelConfig } from '../../llm/model/shared.types';
 import type { Mastra } from '../../mastra';
 import type { VersionOverrides } from '../../mastra/types';
 import type {
@@ -274,6 +275,13 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
   requestContext?: Record<string, unknown>;
   /** Agent version ID to record against the experiment */
   agentVersion?: string;
+  /**
+   * Run the agent target on this model instead of its configured one, e.g.
+   * `'openai/gpt-4.1'`. The experiment runs a fork of the agent, so the
+   * registered agent keeps its own model. Applied after `agentVersion`; only
+   * valid for agent targets.
+   */
+  agentModel?: MastraModelConfig;
   /** Version overrides for sub-agent delegation during experiment execution */
   versions?: VersionOverrides;
   /**
