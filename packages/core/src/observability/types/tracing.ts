@@ -1624,6 +1624,12 @@ export interface SpanData<TType extends SpanType> extends BaseSpan<TType> {
 export interface ExportedSpan<TType extends SpanType> extends SpanData<TType> {
   /** Set when the span is internal, so `rebuildSpan()` can restore its internal status */
   isInternal?: boolean;
+  /**
+   * The trace-level rules this span ran under (`requestContextKeys`, `hideInput`,
+   * `hideOutput`, `nestedUnderParent`), so `rebuildSpan()` can restore them and
+   * spans created under the rebuilt span keep honouring them.
+   */
+  traceState?: TraceState;
 }
 
 /**

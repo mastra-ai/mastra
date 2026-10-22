@@ -571,6 +571,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       isEvent: this.isEvent,
       isRootSpan: this.isRootSpan,
       ...(this.isInternal ? { isInternal: true } : {}),
+      ...(this.traceState ? { traceState: this.traceState } : {}),
       parentSpanId: this.getParentSpanId(includeInternalSpans),
       externalParentSpanId: this.getExportedExternalParentSpanId(includeInternalSpans),
       ...(nestedUnderParent ? { nestedUnderParent: true } : {}),

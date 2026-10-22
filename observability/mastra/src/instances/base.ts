@@ -362,13 +362,25 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       entityId: cached.entityId,
       entityName: cached.entityName,
       tracingPolicy: cached.isInternal ? { internal: InternalSpans.ALL } : undefined,
-      traceState: cached.nestedUnderParent ? { requestContextKeys: [], nestedUnderParent: true } : undefined,
+      traceState: this.rebuildTraceState(cached),
     });
 
     // Wire up lifecycle events (but skip SPAN_STARTED since it was already emitted)
     this.wireSpanLifecycle(span);
 
     return span;
+  }
+
+  /**
+   * Restore the trace-level rules for a rebuilt span. Spans exported before
+   * `traceState` was serialized fall back to the instance's configured keys, so
+   * an in-flight durable run keeps at least those across an upgrade.
+   */
+  private rebuildTraceState<TType extends SpanType>(cached: ExportedSpan<TType>): TraceState | undefined {
+    if (cached.traceState) return cached.traceState;
+    const fallback = this.computeTraceState();
+    if (!cached.nestedUnderParent) return fallback;
+    return { requestContextKeys: fallback?.requestContextKeys ?? [], nestedUnderParent: true };
   }
 
   // ============================================================================
