@@ -20,6 +20,7 @@ import { Agent } from '@mastra/core/agent';
 import { EventEmitterPubSub } from '@mastra/core/events';
 import { Mastra } from '@mastra/core/mastra';
 import { MockStore } from '@mastra/core/storage';
+import { expect, it } from 'vitest';
 
 // Test ID counter for unique agent IDs
 let testIdCounter = 0;
@@ -208,4 +209,22 @@ createDurableAgentTestSuite({
     memoryPersistence: true,
     backgroundTasks: true,
   },
+});
+
+// Regression guard: the skip map above omits the agent-creation key, so the
+// domain must still be registered. When the key was `constructor`, the omitted
+// key resolved to the inherited Object.prototype.constructor (truthy) and the
+// domain was silently skipped.
+it('registers the agent-creation domain when the leg does not skip it', ({ task }) => {
+  const suiteNames: string[] = [];
+  const collect = (tasks: typeof task.file.tasks) => {
+    for (const t of tasks) {
+      if (t.type === 'suite') {
+        suiteNames.push(t.name);
+        collect(t.tasks);
+      }
+    }
+  };
+  collect(task.file.tasks);
+  expect(suiteNames).toContain('agent creation');
 });
