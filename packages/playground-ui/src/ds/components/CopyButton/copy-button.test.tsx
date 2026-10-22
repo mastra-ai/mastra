@@ -9,6 +9,14 @@ afterEach(() => {
 });
 
 describe('CopyButton', () => {
+  describe('when no size is given', () => {
+    it('renders as a round icon button, not a padded pill', () => {
+      render(<CopyButton content="A complete reply" tooltip="Copy message" />);
+
+      expect(screen.getByRole('button', { name: 'Copy message' }).getAttribute('data-shape')).toBe('icon');
+    });
+  });
+
   describe('when clipboard access fails', () => {
     it('does not claim the message was copied', async () => {
       const writeText = vi.fn().mockRejectedValue(new DOMException('Blocked', 'NotAllowedError'));

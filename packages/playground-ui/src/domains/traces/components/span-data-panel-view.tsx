@@ -90,7 +90,7 @@ export function SpanDataPanelView({
         <DataPanel.HeaderActions>
           {onShowTrace && (
             <Button
-              size="sm"
+              size="icon-sm"
               variant="ghost"
               aria-label="Go to trace"
               tooltip="Go to trace"
