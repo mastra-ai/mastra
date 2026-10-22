@@ -11,30 +11,30 @@
 
 export const MODEL_TOKENS: Record<string, string> = {
   // OpenAI
-  __GATEWAY_OPENAI_MODEL__: 'openai/gpt-5.6-sol',
-  __GATEWAY_OPENAI_MODEL_MINI__: 'openai/gpt-5-mini',
-  __GATEWAY_OPENAI_MODEL_NANO__: 'openai/gpt-5-nano',
-  __GATEWAY_OPENAI_MODEL_BASE__: 'openai/gpt-5',
-  __AI_SDK_OPENAI_MODEL_BASE__: 'gpt-5',
+  __GATEWAY_OPENAI_MODEL__: 'openai/gpt-6.1-sol',
+  __GATEWAY_OPENAI_MODEL_MINI__: 'openai/gpt-5.4-mini',
+  __GATEWAY_OPENAI_MODEL_NANO__: 'openai/gpt-5.4-nano',
+  __GATEWAY_OPENAI_MODEL_BASE__: 'openai/gpt-5.6',
+  __AI_SDK_OPENAI_MODEL_BASE__: 'gpt-5.6',
   __GATEWAY_OPENAI_EMBEDDING_MODEL__: 'openai/text-embedding-3-small',
   __AI_SDK_OPENAI_EMBEDDING_MODEL__: 'text-embedding-3-small',
-  __AI_SDK_OPENAI_MODEL_REALTIME__: 'gpt-5.1-realtime',
+  __AI_SDK_OPENAI_MODEL_REALTIME__: 'gpt-realtime-2.1',
 
   // Anthropic
-  __GATEWAY_ANTHROPIC_MODEL_SONNET__: 'anthropic/claude-sonnet-4-6',
-  __GATEWAY_ANTHROPIC_MODEL_OPUS__: 'anthropic/claude-opus-4-7',
-  __GATEWAY_ANTHROPIC_MODEL_HAIKU__: 'anthropic/claude-haiku-4-5',
-  __AI_SDK_ANTHROPIC_MODEL_SONNET__: 'claude-sonnet-4-6',
+  __GATEWAY_ANTHROPIC_MODEL_SONNET__: 'anthropic/claude-sonnet-5-5',
+  __GATEWAY_ANTHROPIC_MODEL_OPUS__: 'anthropic/claude-opus-5-5',
+  __GATEWAY_ANTHROPIC_MODEL_HAIKU__: 'anthropic/claude-haiku-5-5',
+  __AI_SDK_ANTHROPIC_MODEL_SONNET__: 'claude-sonnet-5-5',
 
   // Google
-  __GATEWAY_GOOGLE_MODEL__: 'google/gemini-2.5-pro',
-  __GATEWAY_GOOGLE_MODEL_FLASH__: 'google/gemini-2.5-flash',
+  __GATEWAY_GOOGLE_MODEL__: 'google/gemini-3.1-pro-preview',
+  __GATEWAY_GOOGLE_MODEL_FLASH__: 'google/gemini-3.8-flash',
 
   // TypeSafe AI
   __AI_SDK_TYPESAFE_DECISION_MODEL__: 'jev-latest',
 
   // Alibaba
-  __GATEWAY_ALIBABA_MODEL__: 'alibaba/qwen-max',
+  __GATEWAY_ALIBABA_MODEL__: 'alibaba/qwen3.8-max',
 
   // Amazon Bedrock
   __GATEWAY_BEDROCK_MODEL_OPUS__: 'amazon-bedrock/us.anthropic.claude-opus-4-6-v1',

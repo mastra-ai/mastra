@@ -193,9 +193,9 @@ describe('sample scaffolds', () => {
   });
 
   test.each([
-    ['anthropic', 'anthropic/claude-sonnet-5'],
+    ['anthropic', 'anthropic/claude-sonnet-5-5'],
     ['google', 'google/gemini-3.8-flash'],
-    ['openai', 'openai/gpt-5-mini'],
+    ['openai', 'openai/gpt-5.4-mini'],
   ] as const)('generates a working default for %s in the agent and scorer (#28043)', async (provider, model) => {
     const agentPath = `${dirPath}/weather-agent.ts`;
     const scorerPath = `${dirPath}/weather-scorer.ts`;
