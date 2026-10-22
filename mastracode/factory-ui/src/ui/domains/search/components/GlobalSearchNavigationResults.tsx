@@ -104,7 +104,7 @@ export function GlobalSearchNavigationResults({
         icon={<Settings />}
         title={SETTINGS_SECTION_LABELS.memory}
         subtitle="Settings"
-        value={`Memory Settings memory observational ${settingsSectionPath(factoryId, 'memory')}`}
+        value={`Memory Settings memory personal factory shared observational ${settingsSectionPath(factoryId, 'memory')}`}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'memory'), true)}
       />
       <CommandPaletteItem

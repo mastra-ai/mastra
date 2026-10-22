@@ -57,4 +57,21 @@ describe('SettingsNavigation', () => {
     expect(screen.queryByRole('link', { name: 'Work Intake' })).not.toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Account' })).not.toBeInTheDocument();
   });
+
+  it.each([
+    { query: 'default model', destination: 'Models' },
+    { query: 'your models', destination: 'Models' },
+    { query: 'factory models', destination: 'Models' },
+    { query: 'personal memory', destination: 'Memory' },
+    { query: 'factory memory', destination: 'Memory' },
+    { query: 'your memory', destination: 'Memory' },
+    { query: 'shared memory', destination: 'Memory' },
+  ])('finds $destination by the former page name "$query"', async ({ query, destination }) => {
+    const user = userEvent.setup();
+    renderNavigation();
+
+    await user.type(screen.getByRole('searchbox', { name: 'Search settings' }), query);
+
+    expect(screen.getByRole('link', { name: destination })).toBeInTheDocument();
+  });
 });

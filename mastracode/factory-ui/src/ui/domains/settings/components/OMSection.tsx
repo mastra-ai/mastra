@@ -9,6 +9,7 @@ import {
   InputNumberInput,
 } from '@mastra/playground-ui/components/InputNumber';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
+import { InfoTooltip } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
@@ -171,13 +172,13 @@ export function OMSection({
       <div className="@container flex flex-col gap-3">
         <ol className="flex flex-col">
           <OMRow as="li" rail="node" label="Messages" />
-          <OMRow as="li" rail="edge" label="Observe after">
+          <OMRow as="li" rail="edge" label="Observe after" info="Message tokens processed before the observer runs.">
             <TokenThresholdInput
               value={config.observationThreshold}
               onCommit={observationThreshold => thresholdsMutation.mutate({ observationThreshold })}
             />
           </OMRow>
-          <OMRow as="li" rail="node" label="Observer">
+          <OMRow as="li" rail="node" label="Observer" info="Summarizes the conversation into observations.">
             <ModelCombobox
               models={models}
               value={config.observer.model}
@@ -189,13 +190,18 @@ export function OMSection({
               onValueChange={modelId => switchModel('observer', modelId)}
             />
           </OMRow>
-          <OMRow as="li" rail="edge" label="Reflect after">
+          <OMRow
+            as="li"
+            rail="edge"
+            label="Reflect after"
+            info="Observation tokens accumulated before the reflector runs."
+          >
             <TokenThresholdInput
               value={config.reflectionThreshold}
               onCommit={reflectionThreshold => thresholdsMutation.mutate({ reflectionThreshold })}
             />
           </OMRow>
-          <OMRow as="li" rail="node" label="Reflector">
+          <OMRow as="li" rail="node" label="Reflector" info="Distills observations into longer-term memory.">
             <ModelCombobox
               models={models}
               value={config.reflector.model}
@@ -208,7 +214,12 @@ export function OMSection({
             />
           </OMRow>
         </ol>
-        <OMRow rail="none" label="Attachments">
+        <OMRow
+          rail="none"
+          label="Attachments"
+          info="Whether attached files are included in observations."
+          controlNamesItself
+        >
           <SegmentedControl
             aria-label="Observe attachments"
             size="sm"
@@ -240,34 +251,56 @@ const RAIL_MARKS: Record<RailMark, ReactNode> = {
   none: null,
 };
 
-function OMRow({
-  as: Row = 'div',
-  rail,
-  label,
-  children,
-}: {
-  as?: 'li' | 'div';
-  rail: RailMark;
+type OMRowCellsProps = {
   label: string;
+  info?: string;
+  controlNamesItself?: boolean;
   children?: ReactNode;
-}) {
+};
+
+function OMRow({ as: Row = 'div', rail, ...cells }: { as?: 'li' | 'div'; rail: RailMark } & OMRowCellsProps) {
   return (
     <Row className="group/row grid min-h-10 grid-cols-[2rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1 @min-[30rem]:grid-cols-[2rem_6.5rem_minmax(0,20rem)]">
       <span aria-hidden="true" className="row-span-2 flex flex-col items-center self-stretch @min-[30rem]:row-span-1">
         {RAIL_MARKS[rail]}
       </span>
-      {children ? (
-        <Field className="contents">
-          <FieldLabel size="smaller" className={rail === 'node' ? undefined : 'text-muted-foreground'}>
-            {label}
-          </FieldLabel>
-          <div className="col-start-2 pb-2 @min-[30rem]:col-start-auto @min-[30rem]:pb-0">{children}</div>
-        </Field>
-      ) : (
-        <Txt as="span" variant="column">
-          {label}
-        </Txt>
-      )}
+      <OMRowCells muted={rail !== 'node'} {...cells} />
     </Row>
+  );
+}
+
+function OMRowCells({
+  label,
+  info,
+  muted,
+  controlNamesItself = false,
+  children,
+}: OMRowCellsProps & { muted: boolean }) {
+  const plainLabel = (
+    <span className="flex w-fit items-center gap-1">
+      <Txt as="span" variant="column" tone={muted ? 'muted' : undefined}>
+        {label}
+      </Txt>
+      {info ? <InfoTooltip aria-label={`About ${label}`}>{info}</InfoTooltip> : null}
+    </span>
+  );
+  if (!children) return plainLabel;
+
+  const control = <div className="col-start-2 pb-2 @min-[30rem]:col-start-auto @min-[30rem]:pb-0">{children}</div>;
+  if (controlNamesItself) {
+    return (
+      <>
+        {plainLabel}
+        {control}
+      </>
+    );
+  }
+  return (
+    <Field className="contents">
+      <FieldLabel size="smaller" info={info} className={muted ? 'text-muted-foreground' : undefined}>
+        {label}
+      </FieldLabel>
+      {control}
+    </Field>
   );
 }

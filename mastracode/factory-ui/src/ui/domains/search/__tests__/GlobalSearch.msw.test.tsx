@@ -1009,6 +1009,17 @@ describe('Global search', () => {
     releaseSessions();
   });
 
+  it('finds Memory settings by the former page name "personal memory"', async () => {
+    stubSearchApi();
+    const user = userEvent.setup();
+    renderSearchRoute();
+    const dialog = await openFromSidebar();
+
+    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), 'personal memory');
+
+    expect(await within(dialog).findByText('Memory')).toBeInTheDocument();
+  });
+
   it('selects Settings with origin state and closes without creating a session', async () => {
     const requests = stubSearchApi();
     const origin = `/factories/${ACTIVE_FACTORY_ID}/settings/preferences`;

@@ -72,14 +72,14 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         label: SETTINGS_SECTION_LABELS.models,
         icon: Bot,
         searchText:
-          'models routing personal factory defaults hybrid thinking level api keys providers credentials sign in oauth custom endpoints',
+          'models default model your models factory models routing personal factory defaults hybrid thinking level api keys providers credentials sign in oauth custom endpoints',
       },
       {
         id: 'memory',
         label: SETTINGS_SECTION_LABELS.memory,
         icon: Brain,
         searchText:
-          'memory personal factory observational recall observer reflector thresholds attachments summarize context',
+          'memory personal memory factory memory your memory shared memory observational recall observer reflector thresholds attachments summarize context',
       },
       {
         id: 'skills',

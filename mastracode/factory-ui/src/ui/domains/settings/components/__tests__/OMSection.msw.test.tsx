@@ -4,7 +4,7 @@ import { delay, http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { OMConfigInfo } from '../../../../../api/types';
 import type { AvailableModelOption } from '../../../../../hooks/useAvailableModels';
 import { OMSection } from '../OMSection';
@@ -342,5 +342,26 @@ describe('OMSection', () => {
 
     await waitFor(() => expect(requestBody).toEqual({ value: true }));
     await waitFor(() => expect(screen.getByRole('radio', { name: 'On' })).toHaveAttribute('aria-checked', 'true'));
+  });
+
+  it('keeps the attachment setting when the Attachments label is clicked', async () => {
+    let attachmentWrites = 0;
+    server.use(
+      http.get(OM_URL, () => HttpResponse.json({ config: { ...baseConfig, observeAttachments: false } })),
+      http.put(`${OM_URL}/observe-attachments`, () => {
+        attachmentWrites += 1;
+        return HttpResponse.json({ ok: true, config: { ...baseConfig, observeAttachments: 'auto' } });
+      }),
+    );
+
+    const user = userEvent.setup();
+    const { client } = renderWithProviders(<OMSection models={models} />);
+
+    await screen.findByDisplayValue('1,000');
+    await user.click(screen.getByText('Attachments'));
+    await waitForMutationsIdle(client);
+
+    expect(attachmentWrites).toBe(0);
+    expect(screen.getByRole('radio', { name: 'Off' })).toHaveAttribute('aria-checked', 'true');
   });
 });
