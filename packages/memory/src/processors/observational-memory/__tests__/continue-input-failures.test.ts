@@ -1,6 +1,6 @@
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { LLMock } from '@copilotkit/aimock';
-import { Agent } from '@mastra/core/agent';
+import { Agent, MessageList } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
@@ -144,6 +144,46 @@ describe('OM continue policy for input failures', () => {
     expect(failedBuild).toHaveBeenCalled();
     const requests = mock.getRequests().filter(entry => (entry.body as { model?: string }).model === 'actor');
     expect(JSON.stringify((requests[0]!.body as { messages: unknown }).messages)).toContain('HISTORY_MARKER');
+  });
+
+  it('re-adds unsealed loaded history after an input failure seals it', async () => {
+    const history: MastraDBMessage = {
+      id: 'history-with-seal',
+      role: 'assistant',
+      type: 'text',
+      content: { format: 2, parts: [{ type: 'text', text: 'Earlier order HISTORY_MARKER' }] },
+      createdAt: new Date(),
+    };
+    const originalAdd = MessageList.prototype.add;
+    const readded: Array<{ sealed?: boolean; sealedAt?: unknown }> = [];
+    vi.spyOn(MessageList.prototype, 'add').mockImplementation(function (messages, source, options) {
+      if (source === 'memory' && !Array.isArray(messages) && messages.id === history.id) {
+        readded.push({
+          sealed: (messages.content.metadata as { mastra?: { sealed?: boolean } } | undefined)?.mastra?.sealed,
+          sealedAt: (messages.content.parts?.[0] as { metadata?: { mastra?: { sealedAt?: unknown } } })?.metadata
+            ?.mastra?.sealedAt,
+        });
+      }
+      return originalAdd.call(this, messages, source, options);
+    });
+    vi.spyOn(ObservationalMemory.prototype, 'buildContextSystemMessages').mockImplementationOnce(async function () {
+      this.sealMessagesForBuffering([history]);
+      throw new Error('context build failed after seal');
+    });
+    const agent = setup(new InMemoryStore(), undefined, 'continue', false, memory => {
+      const getContext = memory.getContext.bind(memory);
+      vi.spyOn(memory, 'getContext').mockImplementation(async args => {
+        const context = await getContext(args);
+        return { ...context, messages: [...context.messages, history] };
+      });
+    });
+    const result = await agent.generate('Find order 4471', {
+      memory: { thread: 'sealed-history-on-input-failure', resource: 'r' },
+      maxSteps: 3,
+    });
+    expect(result.text).toBe('The order shipped.');
+    expect(readded).toHaveLength(2);
+    expect(readded[1]).toEqual({ sealed: undefined, sealedAt: undefined });
   });
 
   it('restores message seals when observation fails after mutating the live list', async () => {

@@ -399,7 +399,22 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           this.turn.agent = args.agent;
           this.turn.requestContext = requestContext;
           await this.turn.start(this.memory, runState);
-          loadedContextMessages = this.turn.context.messages.filter(message => message.role !== 'system');
+          loadedContextMessages = this.turn.context.messages
+            .filter(message => message.role !== 'system')
+            .map(message => ({
+              ...message,
+              content: {
+                ...message.content,
+                metadata: message.content.metadata && {
+                  ...message.content.metadata,
+                  mastra: { ...(message.content.metadata.mastra as object) },
+                },
+                parts: message.content.parts?.map(part => {
+                  const metadata = (part as { metadata?: { mastra?: object } }).metadata;
+                  return { ...part, ...(metadata && { metadata: { ...metadata, mastra: { ...metadata.mastra } } }) };
+                }),
+              },
+            }));
           // A run recovered by another worker can continue a response message that the dead
           // worker already observed. That worker rotated the id in memory, but the rotation was
           // lost with it. Seal and rotate again so the rest of the turn isn't merged into the observed message.
