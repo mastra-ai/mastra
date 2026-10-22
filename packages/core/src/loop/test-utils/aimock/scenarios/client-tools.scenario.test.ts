@@ -111,7 +111,7 @@ describeForAllEngines('AIMock scenario: client tools', engine => {
       engine,
       llm: getMock(),
       prompt: 'Show product sku-1 and explain it',
-      tools: { 'render-card': renderCard },
+      clientTools: { 'render-card': renderCard },
       stopWhen: stepCountIs(3),
       collectChunks: true,
       fixtures: llm => {

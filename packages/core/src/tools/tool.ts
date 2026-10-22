@@ -239,6 +239,9 @@ export class Tool<
     ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContext>['execute']
   >;
 
+  /** Whether this tool only displays its call and receives a server acknowledgement. */
+  renderOnly?: boolean;
+
   /** Parent Mastra instance for accessing shared resources */
   mastra?: Mastra;
 
@@ -403,6 +406,7 @@ export class Tool<
     this.suspendSchema = opts.suspendSchema ? toStandardSchema(opts.suspendSchema) : undefined;
     this.resumeSchema = opts.resumeSchema ? toStandardSchema(opts.resumeSchema) : undefined;
     this.requestContextSchema = opts.requestContextSchema;
+    this.renderOnly = opts.renderOnly;
     this.mastra = opts.mastra;
     this.requireApproval = opts.requireApproval || false;
     this.beforeApproval = opts.beforeApproval;
