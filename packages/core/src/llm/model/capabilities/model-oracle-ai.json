@@ -39,13 +39,19 @@
     "o4-mini"
   ],
   "reasoning": {
-    "gpt-5.5": [
+    "gpt-5": [
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
       }
     ],
-    "gpt-5.4": [
+    "auto": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "gpt-5.5": [
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
@@ -57,6 +63,12 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
+    "glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "xhigh"]
+      }
+    ],
     "deepseek-v4-pro": [
       {
         "type": "toggle"
@@ -64,6 +76,12 @@
       {
         "type": "effort",
         "values": ["high", "max"]
+      }
+    ],
+    "o4-mini": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "claude-fable-5": [
@@ -78,28 +96,10 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "o4-mini": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "xhigh"]
-      }
-    ],
     "claude-sonnet-5": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "gpt-5": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
       }
     ],
     "gpt-5.4-mini": [
@@ -108,10 +108,10 @@
         "values": ["minimal", "low", "medium", "high"]
       }
     ],
-    "auto": [
+    "gpt-5.4": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+        "values": ["minimal", "low", "medium", "high"]
       }
     ],
     "gpt-5.4-nano": [
