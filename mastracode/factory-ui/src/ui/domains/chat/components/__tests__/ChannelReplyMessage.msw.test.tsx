@@ -160,6 +160,8 @@ describe('reply_in_thread in the transcript', () => {
     const post = screen.getByRole('group', { name: 'Reply in Slack thread' });
     expect(within(post).getByText('Not sent to Slack')).toBeInTheDocument();
     expect(within(post).queryByText('Sent to Slack')).not.toBeInTheDocument();
+    // Nothing went out, so there's no posted message to copy or time.
+    expect(within(post).queryByRole('button', { name: 'Copy message' })).not.toBeInTheDocument();
   });
 });
 
