@@ -110,24 +110,33 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     this.lastPersistedStatusByRun.delete(runId);
   }
 
-  /** Tail of each run's queue of foreach snapshot writes, see `serializeForeachSnapshotWrite`. */
-  protected foreachSnapshotWriteTails = new Map<string, Promise<void>>();
+  /**
+   * Whether this engine checkpoints parallel arms and foreach items as they finish, so
+   * `restart()` after a crash does not run them again (#26214). Engines that cannot
+   * restart, or whose durable operations are replayed by position (Inngest), turn it off
+   * and keep one step-update write per step.
+   */
+  supportsRestartCheckpoints(): boolean {
+    return true;
+  }
+
+  /** Tail of each run's queue of step-update writes, see `serializeSnapshotWrite`. */
+  protected snapshotWriteTails = new Map<string, Promise<void>>();
 
   /**
-   * Runs a run's foreach snapshot writes one at a time, in call order. Item-start and item-end
-   * writes are full-snapshot upserts that carry the foreach progress, so if they overlapped an
-   * older one could land last and erase items that already finished (#26214).
+   * Runs a run's step-update writes one at a time, in call order. The slot is taken when this
+   * is called, so writes land in the order they were issued. Writes inside a parallel or foreach
+   * block are full-snapshot upserts; if they overlapped, an older one (a sibling's start write)
+   * could land last and erase an arm or item that already finished (#26214).
    */
-  async serializeForeachSnapshotWrite(runId: string, write: () => Promise<void>): Promise<void> {
-    const previous = this.foreachSnapshotWriteTails.get(runId) ?? Promise.resolve();
+  serializeSnapshotWrite(runId: string, write: () => Promise<void>): Promise<void> {
+    const previous = this.snapshotWriteTails.get(runId) ?? Promise.resolve();
     const current = previous.then(write);
     const tail = current.catch(() => {});
-    this.foreachSnapshotWriteTails.set(runId, tail);
-    try {
-      await current;
-    } finally {
-      if (this.foreachSnapshotWriteTails.get(runId) === tail) this.foreachSnapshotWriteTails.delete(runId);
-    }
+    this.snapshotWriteTails.set(runId, tail);
+    return current.finally(() => {
+      if (this.snapshotWriteTails.get(runId) === tail) this.snapshotWriteTails.delete(runId);
+    });
   }
 
   /** Returns the current step's zero-based retry attempt, or zero outside an attempt. */

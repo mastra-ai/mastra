@@ -241,8 +241,8 @@ export async function persistStepUpdate(
       tracingContext,
     };
 
-    const workflowsStore = await engine.mastra?.getStorage()?.getStore('workflows');
     const write = async () => {
+      const workflowsStore = await engine.mastra?.getStorage()?.getStore('workflows');
       await workflowsStore?.persistWorkflowSnapshot({
         workflowName: workflowId,
         runId,
@@ -250,11 +250,9 @@ export async function persistStepUpdate(
         snapshot: engine.options?.pruneSnapshot ? engine.options.pruneSnapshot({ snapshot, workflowStatus }) : snapshot,
       });
     };
-    if (executionContext.foreachIndex !== undefined || phase?.startsWith('foreach-item-end.')) {
-      await engine.serializeForeachSnapshotWrite(runId, write);
-    } else {
-      await write();
-    }
+    // Queue before any await so the write keeps its place among concurrent parallel arms and
+    // foreach items of this run.
+    await (engine.supportsRestartCheckpoints() ? engine.serializeSnapshotWrite(runId, write) : write());
     engine.setLastPersistedStatus(runId, workflowStatus);
   });
 }

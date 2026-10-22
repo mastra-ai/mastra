@@ -269,7 +269,7 @@ export async function executeParallel(
       // Apply context changes from parallel step execution
       engine.applyMutableContext(executionContext, stepExecResult.mutableContext);
       Object.assign(stepResults, stepExecResult.stepResults);
-      if (stepExecResult.result.status === 'success') {
+      if (stepExecResult.result.status === 'success' && engine.supportsRestartCheckpoints()) {
         // Checkpoint each finished arm so a crash before the others finish
         // does not run it again on restart (#26214).
         await engine.persistStepUpdate({
@@ -1020,7 +1020,9 @@ export async function executeForeach(
 
   // Items that finished before a crash, checkpointed on the running foreach result (#26214).
   const restartProgress =
-    restart && stepResults[stepId]?.status === 'running' ? getForeachProgress(stepResults[stepId]) : undefined;
+    restart && engine.supportsRestartCheckpoints() && stepResults[stepId]?.status === 'running'
+      ? getForeachProgress(stepResults[stepId])
+      : undefined;
 
   const stepInfo = {
     // Same as executeStep: strip prior completion/suspend fields on re-entry.
@@ -1307,7 +1309,7 @@ export async function executeForeach(
 
       const result = stepExecResult.result as ForeachStepResult;
 
-      if (result.status === 'success') {
+      if (result.status === 'success' && engine.supportsRestartCheckpoints()) {
         // Record the finished item and put the progress back on the shared foreach result
         // before any await, so a sibling's item-start write cannot drop it (#26214).
         const nestedRunId = result.metadata?.nestedRunId;

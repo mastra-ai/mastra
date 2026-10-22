@@ -222,6 +222,15 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
    * Failures here stay retriable, so a non-zero function-level `retries` covers
    * transient errors in these operations (spans, event publishing, conditions).
    */
+  /**
+   * Inngest memoizes durable operations by position and does not support `restart()`, so the
+   * per-arm and per-item checkpoints the default engine writes for restart would only add
+   * step.run calls to every parallel block and foreach.
+   */
+  supportsRestartCheckpoints(): boolean {
+    return false;
+  }
+
   async wrapDurableOperation<T>(operationId: string, operationFn: () => Promise<T>): Promise<T> {
     return this.runDurably(operationId, operationFn, Error);
   }

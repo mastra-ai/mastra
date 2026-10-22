@@ -312,6 +312,44 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
       expect(recorded.size).toBeGreaterThan(0);
     });
 
+    it('never lets a sibling arm start write overwrite a finished parallel arm', async () => {
+      const storage = new MockStore();
+      const fast = step('fast', async () => ({ fast: 1 }));
+      const slow = step('slow', async () => {
+        await sleep(100);
+        return { slow: 2 };
+      });
+      const workflow = createWorkflow({ id: 'parallel-checkpoints', inputSchema: anySchema, outputSchema: anySchema })
+        .parallel([fast.step, slow.step])
+        .commit();
+      new Mastra({ logger: false, storage, workflows: { wf: workflow } });
+      const store = (await storage.getStore('workflows'))!;
+
+      // Storage that resolves later writes first: both arms' start writes are issued before the
+      // fast arm's end write, so without ordering the slow arm's stale start write lands last.
+      const persist = store.persistWorkflowSnapshot.bind(store);
+      const applied: WorkflowRunState[] = [];
+      let calls = 0;
+      vi.spyOn(store, 'persistWorkflowSnapshot').mockImplementation(async (args: any) => {
+        const snapshot = JSON.parse(JSON.stringify(args.snapshot));
+        await sleep(Math.max(0, 40 - 10 * calls++));
+        applied.push(snapshot);
+        return persist({ ...args, snapshot });
+      });
+
+      const result = await (await workflow.createRun()).start({ inputData: {} });
+      expect(result.status).toBe('success');
+
+      let fastRecorded = false;
+      for (const snapshot of applied) {
+        if (snapshot.status !== 'running') continue;
+        const finished = snapshot.context.fast?.status === 'success';
+        if (fastRecorded) expect(finished, 'a later write dropped the finished arm').toBe(true);
+        fastRecorded ||= finished;
+      }
+      expect(fastRecorded).toBe(true);
+    });
+
     it('waits for every checkpoint write and clears the active path when one fails', async () => {
       const { workflow } = await setup(2);
       const errorChildSpan = vi.spyOn(DefaultExecutionEngine.prototype, 'errorChildSpan');
