@@ -1,8 +1,8 @@
-import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
-import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
-import { Input } from '@mastra/playground-ui/components/Input';
-import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
-import { Txt } from '@mastra/playground-ui/components/Txt';
+import { CodeEditor } from '@/ds/components/CodeEditor';
+import { Field, FieldLabel } from '@/ds/components/Field';
+import { Input } from '@/ds/components/Input';
+import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
+import { Txt } from '@/ds/components/Txt';
 
 export interface SkillSimpleFormProps {
   name: string;
@@ -62,7 +62,7 @@ export function SkillSimpleForm({
               editable
               placeholder="You are a helpful assistant that…"
               showCopyButton={false}
-              className="h-full w-full"
+              className="size-full"
             />
           </div>
         )}

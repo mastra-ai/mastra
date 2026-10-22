@@ -86,6 +86,12 @@ if (!globalThis.IntersectionObserver) {
   };
 }
 
+// jsdom ranges have no layout; CodeMirror's measure cycle calls these asynchronously after mount.
+if (!Range.prototype.getClientRects) {
+  Range.prototype.getClientRects = () => Object.assign([], { item: () => null });
+  Range.prototype.getBoundingClientRect = () => new DOMRect();
+}
+
 if (!Element.prototype.scrollTo) {
   Element.prototype.scrollTo = () => {};
 }
