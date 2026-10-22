@@ -777,7 +777,7 @@ Claude and ChatGPT don't consume these events yet: Claude connectors have no eve
 - An event is delivered once it is 5 seconds old, so events written while a poll runs aren't skipped.
 - With `maxAgeMs`, older events are skipped and the result is marked `truncated`.
 - Each event's `eventId` is its audit row id, and the payload has `action`, `occurredAt`, `actor`, a one-line `summary`, and `workItemId` and `sessionId` when the event is about a work item or session.
-- Work item and session activity is served: item changes, runs, approvals, signals, and agents' commits, pushes and pull requests. Sessions follow the same rule as everywhere else in the Factory: you see your own sessions and shared ones, never another member's private session. An event that names a session you can't see is left out entirely, even when it also names a work item.
+- Work item and session activity is served: item changes, runs, approvals, signals, and agents' commits, pushes and pull requests. Sessions follow the same rule as everywhere else in the Factory: you see your own sessions and shared ones, never another member's private session. Work item activity always shows up: when it happened in a session you can't see, the event says `privateSession: true` and the summary ends with "(in a private session)", but it doesn't say which session. Activity on such a session alone is left out.
 
 ### Development
 

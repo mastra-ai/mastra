@@ -692,7 +692,7 @@ describe('Factory activity over MCP events', () => {
     expect(targeted.body?.error).toMatchObject({ code: -32024 });
   });
 
-  it('session activity reaches the members who can see the session, and a private session only its owner', async () => {
+  it('session activity reaches the members who can see the session, and work item activity in a private session reaches everyone without naming it', async () => {
     const { url, project, item, audit, createSessions } = await setup();
     await createSessions([
       { sessionId: 'alice-private', userId: 'alice', visibility: 'private', title: 'Alice’s spike' },
@@ -723,7 +723,7 @@ describe('Factory activity over MCP events', () => {
       action: 'factory.agent.push',
       targets: [{ type: 'worktree', id: '/sandbox/app' }],
     });
-    // A run approval inside Bob's private session also names the work item; it stays Bob's.
+    // Work item activity inside Bob's private session: others see it, but not which session.
     await record({
       actorId: 'bob',
       actorType: 'human',
@@ -732,6 +732,12 @@ describe('Factory activity over MCP events', () => {
         { type: 'session', id: 'bob-private' },
         { type: 'work_item', id: item.id, name: item.title },
       ],
+    });
+    await record({
+      actorId: 'agent:bob-private',
+      actorType: 'agent',
+      action: 'factory.work_item.stage_moved',
+      targets: [{ type: 'work_item', id: item.id, name: item.title }],
     });
     tick(1);
     await renameItem(url, item.id, 'Fix the sign-in page');
@@ -744,6 +750,19 @@ describe('Factory activity over MCP events', () => {
     expect(await seen('token-alice', aliceStart.body!.result.cursor)).toEqual([
       { ...activity('factory.agent.signaled'), sessionId: 'shared', summary: 'agent signaled: Pairing on login' },
       { ...activity('factory.agent.push'), sessionId: 'alice-private', summary: 'agent push: Alice’s spike' },
+      {
+        ...activity('factory.run.approved'),
+        workItemId: item.id,
+        privateSession: true,
+        summary: 'run approved: Fix the login page (in a private session)',
+      },
+      {
+        ...activity('factory.work_item.stage_moved'),
+        actor: { type: 'agent', id: 'agent' },
+        workItemId: item.id,
+        privateSession: true,
+        summary: 'stage moved: Fix the login page (in a private session)',
+      },
       { ...activity('factory.work_item.updated'), workItemId: item.id, summary: 'updated: Fix the sign-in page' },
     ]);
     expect(await seen('token-bob', bobStart.body!.result.cursor)).toEqual([
@@ -754,6 +773,13 @@ describe('Factory activity over MCP events', () => {
         sessionId: 'bob-private',
         workItemId: item.id,
         summary: 'run approved: Fix the login page',
+      },
+      {
+        ...activity('factory.work_item.stage_moved'),
+        actor: { type: 'agent', id: 'agent:bob-private' },
+        sessionId: 'bob-private',
+        workItemId: item.id,
+        summary: 'stage moved: Fix the login page',
       },
       { ...activity('factory.work_item.updated'), workItemId: item.id, summary: 'updated: Fix the sign-in page' },
     ]);

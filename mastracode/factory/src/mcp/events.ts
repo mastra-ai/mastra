@@ -36,6 +36,8 @@ const activityPayload = z.object({
   }),
   workItemId: z.string().optional(),
   sessionId: z.string().optional(),
+  /** The work item event happened in a session the caller can't see; which one stays hidden. */
+  privateSession: z.literal(true).optional(),
   summary: z.string(),
 });
 
@@ -51,9 +53,9 @@ export interface FactoryActivityEventDeps {
   viewer: { orgId: string; userId: string };
 }
 
-type Subject = { workItem?: { id: string; name?: string }; session?: SourceControlSession };
+type Subject = { workItem?: { id: string; name?: string }; session?: SourceControlSession; privateSession?: true };
 
-function toActivity(event: AuditEventRow, { workItem, session }: Subject): FactoryActivity {
+function toActivity(event: AuditEventRow, { workItem, session, privateSession }: Subject): FactoryActivity {
   const profile = event.metadata[ACTOR_PROFILE_METADATA_KEY] as { name?: unknown } | undefined;
   const parsed = parseAuditAction(event.action);
   const verb = parsed
@@ -64,12 +66,14 @@ function toActivity(event: AuditEventRow, { workItem, session }: Subject): Facto
     occurredAt: event.occurredAt.toISOString(),
     actor: {
       type: event.actorType,
-      id: event.actorId,
+      // An agent's id is its thread, which is the hidden session's id.
+      id: privateSession && event.actorType === 'agent' ? 'agent' : event.actorId,
       ...(typeof profile?.name === 'string' ? { name: profile.name } : {}),
     },
     ...(workItem ? { workItemId: workItem.id } : {}),
     ...(session ? { sessionId: session.sessionId } : {}),
-    summary: `${verb}: ${workItem ? (workItem.name ?? workItem.id) : (session?.title ?? session?.branch ?? session?.sessionId)}`,
+    ...(privateSession ? { privateSession } : {}),
+    summary: `${verb}: ${workItem ? (workItem.name ?? workItem.id) : (session?.title ?? session?.branch ?? session?.sessionId)}${privateSession ? ' (in a private session)' : ''}`,
   };
 }
 
@@ -84,10 +88,11 @@ export const ACTIVITY_SETTLE_MS = 5_000;
  * `factory.activity`: the Factory's audit trail as polled MCP events (SEP-3415, experimental).
  *
  * Serves activity on work items and sessions. Sessions follow the same rule as the
- * session routes (`canViewSourceControlSession`): another member's private session,
- * or a session that can't be found, keeps the whole event out, even when it also
- * names a work item. An agent's activity counts as its session's when the agent's
- * thread is a session. Events naming neither (intake settings, rule bindings'
+ * session routes (`canViewSourceControlSession`). Work item activity is always served;
+ * when it happened in a session the caller can't see (another member's private
+ * session, or one that can't be found) it is marked `privateSession` and names no
+ * session. Activity on such a session alone is not served. An agent's activity
+ * counts as its session's when the agent's thread is a session. Events naming neither (intake settings, rule bindings'
  * own actions) are not served.
  *
  * Poll-only by design: the MCP server is built per request, so there is nothing
@@ -131,13 +136,14 @@ export function factoryActivityEvent(deps: FactoryActivityEventDeps) {
         const workItem = event.targets.find(target => target.type === 'work_item');
         const named = event.targets.filter(target => target.type === 'session').map(target => target.id);
         const sessions = await Promise.all(named.map(lookup));
-        if (!sessions.every(visible)) return undefined;
+        let hidden = !sessions.every(visible);
         let session = sessions[0];
         if (event.actorType === 'agent' && event.actorId.startsWith('agent:')) {
           const actorSession = await lookup(event.actorId.slice('agent:'.length));
-          if (actorSession && !visible(actorSession)) return undefined;
+          if (actorSession && !visible(actorSession)) hidden = true;
           session ??= actorSession ?? undefined;
         }
+        if (hidden) return workItem ? { workItem, privateSession: true } : undefined;
         if (!workItem && !session) return undefined;
         return { ...(workItem ? { workItem } : {}), ...(session ? { session } : {}) };
       };
