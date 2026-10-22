@@ -100,13 +100,17 @@ export async function findWorkspaces(
   });
 
   // `find-workspaces` globbed directories, so the root was only a member when a
-  // pattern resolved to the root itself (`.`, `./`). Manifest globs also match the
-  // root for `**`, which a directory glob never did.
+  // pattern resolved to the root itself (`.`, `./`, `{.,packages/*}`). Manifest
+  // globs also match the root for `**`, which a directory glob never did.
   const includesRoot = isRootWorkspace(root.globs);
 
+  const locations = manifests.map(manifest => toPosix(parentDirectory(manifest)));
+  // tinyglobby does not match the root manifest for brace alternatives such as
+  // `{.}` or `{.,packages/*}`, so add the root explicitly when it is declared.
+  if (includesRoot && !locations.includes(root.location)) locations.push(root.location);
+
   const workspaces: Workspace[] = [];
-  for (const manifest of manifests) {
-    const location = toPosix(parentDirectory(manifest));
+  for (const location of locations) {
     if (location === root.location && !includesRoot) continue;
     const pkg = readJsonFile(location, 'package.json');
     if (isObject(pkg) && typeof pkg.name === 'string') {
@@ -151,6 +155,36 @@ function isRootWorkspace(globs: string[]): boolean {
 }
 
 function isRootPattern(pattern: string): boolean {
+  return braceAlternatives(pattern).some(alternative => isRootPath(alternative));
+}
+
+/**
+ * Split the first brace group of a glob into its comma-separated alternatives, so
+ * `{.,packages/*}` yields `.` and `packages/*`. Nested groups stay intact; only the
+ * top level of the first group is split, which is enough to spot a root alternative.
+ */
+function braceAlternatives(pattern: string): string[] {
+  if (!pattern.startsWith('{')) return [pattern];
+
+  let depth = 0;
+  let close = -1;
+  for (let i = 0; i < pattern.length; i++) {
+    if (pattern[i] === '{') depth++;
+    else if (pattern[i] === '}' && --depth === 0) {
+      close = i;
+      break;
+    }
+  }
+  if (close === -1) return [pattern];
+
+  const rest = pattern.slice(close + 1);
+  return pattern
+    .slice(1, close)
+    .split(',')
+    .map(alternative => alternative + rest);
+}
+
+function isRootPath(pattern: string): boolean {
   return (
     pattern
       .split(/[\\/]/)
