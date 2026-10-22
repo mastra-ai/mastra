@@ -390,6 +390,11 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   /** MCP protocol context forwarded to tools for in-process durable runs. */
   mcp?: AgentExecutionOptions<OUTPUT>['mcp'];
   /**
+   * Per-call tool lifecycle hooks. Applied when tools are prepared for this execution.
+   * Function hooks are not serialized; a cross-process recovery cannot restore them.
+   */
+  hooks?: AgentExecutionOptions<OUTPUT>['hooks'];
+  /**
    * Per-invocation tool payload transform policy. The closure rides on the
    * in-process run registry; only the JSON-safe `targets` shadow is serialized
    * for cross-process engines.

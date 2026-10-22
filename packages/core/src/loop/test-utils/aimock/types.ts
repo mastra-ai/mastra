@@ -135,6 +135,8 @@ export interface RunLoopScenarioOptions {
     inputProcessors?: any;
     hooks?: ToolHooks;
   };
+  /** Per-call tool hooks forwarded to agent.stream(). */
+  hooks?: ToolHooks;
   /** Tools available to the loop. Tool ids must match the scripted tool-call names. */
   tools?: ToolsInput;
   /** Signal providers registered on the Agent constructor. */

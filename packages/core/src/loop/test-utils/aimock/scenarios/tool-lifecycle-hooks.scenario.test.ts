@@ -5,6 +5,7 @@ import { it, expect, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../../../agent';
 import type { ToolsInput } from '../../../../agent';
+import type { DurableAgentStreamOptions } from '../../../../agent/durable/durable-agent';
 import { Mastra } from '../../../../mastra';
 import { InMemoryStore } from '../../../../storage';
 import { createTool } from '../../../../tools';
@@ -216,6 +217,59 @@ describeForAllEngines('AIMock loop scenario: tool lifecycle hooks', engine => {
     );
     // The hook's substitute output is what the model sees as the tool result.
     expect(JSON.stringify(requests[1]!.body.messages)).toContain('blocked-by-hook');
+  });
+
+  it('uses call-time hooks instead of default and agent hooks on every engine', async () => {
+    const agentBefore = vi.fn();
+    const defaultBefore = vi.fn();
+    const defaultAfter = vi.fn();
+    const callBefore = vi.fn();
+    const callAfter = vi.fn();
+    const callOptions = {
+      hooks: { beforeToolCall: callBefore, afterToolCall: callAfter },
+    } satisfies DurableAgentStreamOptions;
+    const execute = vi.fn(async () => ({ value: 'call-only' }));
+    const llm = getMock();
+    const tool = createTool({
+      id: 'guarded_tool',
+      description: 'A guarded tool.',
+      inputSchema: z.object({ key: z.string() }),
+      execute,
+    });
+
+    const { requests } = await runLoopScenario({
+      engine,
+      llm,
+      prompt: 'Call the guarded tool.',
+      sharedAgent: buildHookedAgent(llm, {
+        tools: { guarded_tool: tool },
+        hooks: { beforeToolCall: agentBefore },
+        executionHooks: { beforeToolCall: defaultBefore, afterToolCall: defaultAfter },
+      }),
+      hooks: callOptions.hooks,
+      stopWhen: stepCountIs(5),
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false },
+          { toolCalls: [{ id: 'call_guarded', name: 'guarded_tool', arguments: { key: 'alpha' } }] },
+        );
+        llm.on({ endpoint: 'chat', toolCallId: 'call_guarded', hasToolResult: true }, { content: 'Done.' });
+      },
+    });
+
+    expect(requests).toHaveLength(2);
+    expect(callBefore).toHaveBeenCalledWith(
+      expect.objectContaining({ toolName: 'guarded_tool', input: { key: 'alpha' } }),
+    );
+    expect(callAfter).toHaveBeenCalledTimes(1);
+    expect(callAfter).toHaveBeenCalledWith(
+      expect.objectContaining({ toolName: 'guarded_tool', output: { value: 'call-only' } }),
+    );
+    expect(defaultBefore).not.toHaveBeenCalled();
+    expect(defaultAfter).not.toHaveBeenCalled();
+    expect(agentBefore).not.toHaveBeenCalled();
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(JSON.stringify(requests[1]!.body.messages)).toContain('call-only');
   });
 
   it('feeds the per-execution hook result back to the model through the assembled agent', async () => {
