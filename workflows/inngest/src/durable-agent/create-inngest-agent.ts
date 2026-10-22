@@ -46,6 +46,8 @@ import {
   emitErrorEvent,
   runDurableStreamUntilIdle,
   runResumeDurableStreamUntilIdle,
+  getRunStreamSlot,
+  getScopeStreamSlot,
   globalRunRegistry,
   getRunRegistryEntry,
   deleteRunRegistryEntry,
@@ -1973,6 +1975,12 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     // The wrapped Agent's thread/run abort only reaches in-process state; an
     // Inngest run executes on the step worker, which must be told to stop.
     abortThreadStream(abortOptions) {
+      const scopeKey = `${abortOptions.threadId ?? ''}|${abortOptions.resourceId ?? ''}`;
+      const wrapperClose = getScopeStreamSlot(activeStreamUntilIdle, scopeKey, abortOptions.expectedRunId);
+      if (wrapperClose) {
+        wrapperClose();
+        return true;
+      }
       // Resolve the run before the base call: aborting releases the thread
       // lease, after which the thread no longer has an active run to look up.
       const runId = agent.getActiveThreadRunId(abortOptions);
@@ -1984,6 +1992,11 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     },
 
     abortRunStream(runId) {
+      const wrapperClose = getRunStreamSlot(activeStreamUntilIdle, runId);
+      if (wrapperClose) {
+        wrapperClose();
+        return true;
+      }
       const aborted = agent.abortRunStream(runId);
       // Publish regardless of local knowledge: the run is normally executing
       // on an Inngest worker this process cannot see.

@@ -12,6 +12,7 @@
  */
 import { resolveAgentScopes } from '../../agent/scopes';
 import type { BackgroundTaskManager } from '../../background-tasks/manager';
+import { ErrorCategory, ErrorDomain, MastraError } from '../../error';
 import type { MastraMemory } from '../../memory/memory';
 import {
   MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY,
@@ -426,6 +427,7 @@ export async function runIdleLoop<
   let continuationAbort: AbortController | undefined;
   let aborting = false;
   let detached = false;
+  let observerDetached = false;
   // Set once the active inner run parks on a tool approval or a tool
   // suspend(). A parked run is waiting for resumeStreamUntilIdle(), so a reader
   // that stops reading (break / request disconnect) must only detach;
@@ -461,11 +463,20 @@ export async function runIdleLoop<
 
   const abortWrapper = (reason?: 'replaced') => {
     if ((closed && !detached) || aborting) return;
+    if (reason === 'replaced' && observerDetached && !parked) {
+      throw new MastraError({
+        id: 'DURABLE_AGENT_EXECUTION_CONFLICT',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'A detached durable idle loop is still executing. Abort it explicitly before starting another stream in this scope.',
+      });
+    }
     if (reason === 'replaced' && hooks?.detachOnCancel && parked) {
       forceClose({ keepInnerRuns: true });
       return;
     }
     aborting = true;
+    // External engines route abortRunStream back through this registry; release before forwarding.
     releaseStreamSlot(deps.activeStreams, scopeKey, wrapperRunId, abortWrapper);
     initialAbort.abort();
     continuationAbort?.abort();
@@ -482,7 +493,8 @@ export async function runIdleLoop<
     if (isProcessing) return;
     if (runningTaskIds.size > 0) return;
     if (pendingCompletions.length > 0) return;
-    forceClose();
+    // Detached observers may reattach after completion; retain the inner run's replay cache.
+    forceClose(observerDetached ? { keepInnerRuns: true } : undefined);
   };
 
   const clearIdleTimer = () => {
@@ -518,10 +530,12 @@ export async function runIdleLoop<
         if (value && typeof value === 'object' && PARKING_CHUNKS.has((value as any).type)) {
           parked = true;
         }
-        try {
-          outerController.enqueue(value);
-        } catch {
-          break;
+        if (!observerDetached) {
+          try {
+            outerController.enqueue(value);
+          } catch {
+            break;
+          }
         }
         if (value && typeof value === 'object' && (value as any).type === 'background-task-started') {
           const taskId = (value as any).payload?.taskId;
@@ -605,8 +619,10 @@ export async function runIdleLoop<
       outerController = controller;
     },
     cancel() {
-      if (hooks?.detachOnCancel) forceClose({ keepInnerRuns: true });
-      else detachOrAbort();
+      if (hooks?.detachOnCancel && !parked) {
+        // Keep draining segments and scheduling background continuations without an observer.
+        observerDetached = true;
+      } else detachOrAbort();
     },
   });
 
@@ -647,10 +663,12 @@ export async function runIdleLoop<
 
         updateIdleTimer();
 
-        try {
-          outerController.enqueue(chunk);
-        } catch {
-          break;
+        if (!observerDetached) {
+          try {
+            outerController.enqueue(chunk);
+          } catch {
+            break;
+          }
         }
 
         if (!taskId) continue;

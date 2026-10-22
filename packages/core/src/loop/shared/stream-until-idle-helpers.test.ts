@@ -88,7 +88,6 @@ describe('runIdleLoop detaches pending durable continuations (COR-1489)', () => 
       const bg = makeBgStream();
       const pending = Promise.withResolvers<void>();
       const release = Promise.withResolvers<void>();
-      const cancelled = Promise.withResolvers<void>();
       const signal = new AbortController();
       const activeStreams = new Map<string, () => void>();
       const cleanup = vi.fn();
@@ -98,7 +97,7 @@ describe('runIdleLoop detaches pending durable continuations (COR-1489)', () => 
         await release.promise;
         return {
           runId: 'late-run',
-          fullStream: new ReadableStream({ cancel: () => cancelled.resolve() }),
+          fullStream: streamOf(textChunks('final answer')),
         };
       });
       const ctx = await runIdleLoop(
@@ -124,17 +123,20 @@ describe('runIdleLoop detaches pending durable continuations (COR-1489)', () => 
       bg.push(completedChunk('task-1'));
       await pending.promise;
       await reader.cancel();
-      expect(activeStreams.size).toBe(0);
+      expect(activeStreams.size).toBe(2);
       expect(cleanup).not.toHaveBeenCalled();
       if (abortAfterDetach) signal.abort();
       release.resolve();
-      if (abortAfterDetach) await vi.waitFor(() => expect(abort).toHaveBeenCalledTimes(2));
-      else {
-        await cancelled.promise;
+      if (abortAfterDetach) {
+        await vi.waitFor(() => expect(abort).toHaveBeenCalledTimes(2));
+        expect(cleanup).not.toHaveBeenCalled();
+      } else {
+        await vi.waitFor(() => expect(activeStreams.size).toBe(0));
+        expect(cleanup).not.toHaveBeenCalled();
         expect(abort).not.toHaveBeenCalled();
       }
+      expect(activeStreams.size).toBe(0);
       expect(continuation).toHaveBeenCalledTimes(1);
-      expect(cleanup).not.toHaveBeenCalled();
     });
   }
 });

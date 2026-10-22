@@ -15,6 +15,127 @@ describeForAllEngines('AIMock loop scenario: durable untilIdle observer detach (
   const getMock = useLoopScenarioAimock();
 
   for (const resumed of [false, true, 'legacy'] as const) {
+    for (const action of ['read', 'cancel', 'cancel-signal', 'cancel-abort', 'cancel-thread-abort'] as const) {
+      if ((action === 'cancel-abort' || action === 'cancel-thread-abort') && !isDurableEngineVariant(engine)) continue;
+      it(`${resumed === 'legacy' ? 'legacy resumed' : resumed ? 'resumed' : 'initial'} background research ${action} persists the continuation only while execution is live`, async () => {
+        const llm = getMock();
+        const memory = new MockMemory();
+        const gate = Promise.withResolvers<void>();
+        const research = createTool({
+          id: 'research',
+          description: 'Research in the background',
+          inputSchema: z.object({}),
+          background: { enabled: true },
+          execute: async () => {
+            await gate.promise;
+            return { summary: 'Research complete.' };
+          },
+        });
+        const authorize = createTool({
+          id: 'authorize',
+          description: 'Get permission before starting',
+          inputSchema: z.object({}),
+          requireApproval: true,
+          execute: async () => ({ approved: true }),
+        });
+        const { agent, mastra } = await createSharedAgent(llm, {
+          engine,
+          memory,
+          tools: { research, authorize },
+          agentBackgroundTasks: { tools: { research: true } },
+          backgroundTasks: BG_CONFIG,
+        });
+        const thread = { thread: `background-detach-${engine}-${resumed}-${action}`, resource: 'detach-user' };
+        const offset = resumed ? 1 : 0;
+        if (resumed) {
+          llm.on(
+            { endpoint: 'chat', sequenceIndex: 0 },
+            {
+              toolCalls: [{ id: 'authorize-1', name: 'authorize', arguments: {} }],
+            },
+          );
+        }
+        llm.on(
+          { endpoint: 'chat', sequenceIndex: offset },
+          {
+            toolCalls: [{ id: 'research-1', name: 'research', arguments: {} }],
+          },
+        );
+        llm.on({ endpoint: 'chat', sequenceIndex: offset + 1 }, { content: 'Research dispatched.' });
+        llm.on({ endpoint: 'chat', sequenceIndex: offset + 2 }, { content: 'Final research answer.' });
+        const signal = new AbortController();
+        const options = { memory: thread, maxSteps: 8, abortSignal: signal.signal, maxIdleMs: 5_000 };
+        let output;
+        if (resumed) {
+          const parked = await agent.streamUntilIdle('Start', { memory: thread, maxSteps: 8 });
+          for await (const chunk of parked.fullStream) {
+            if (chunk.type === 'tool-call-approval') break;
+          }
+          const resumeOptions = { ...options, runId: parked.runId, toolCallId: 'authorize-1', untilIdle: true };
+          output =
+            resumed === 'legacy'
+              ? await agent.resumeStreamUntilIdle({ approved: true }, resumeOptions)
+              : await agent.resumeStream({ approved: true }, resumeOptions);
+        } else {
+          output = await agent.streamUntilIdle('Start', options);
+        }
+        const reader = output.fullStream.getReader();
+        let taskId: string | undefined;
+        try {
+          while (true) {
+            const { value, done } = await reader.read();
+            expect(done).toBe(false);
+            if (value.type === 'background-task-started') taskId = value.payload.taskId;
+            if (value.type === 'finish') break;
+          }
+          expect(taskId).toBeTypeOf('string');
+          expect(await mastra.backgroundTaskManager!.getTask(taskId!)).toMatchObject({ status: 'running' });
+          expect(llm.getRequests()).toHaveLength(offset + 2);
+          if (action !== 'read') await reader.cancel();
+          if (action === 'cancel-signal') signal.abort();
+          if (action === 'cancel-abort') expect(await agent.abortRunStream(output.runId)).toBe(true);
+          if (action === 'cancel-thread-abort') {
+            expect(
+              await agent.abortThreadStream({
+                threadId: thread.thread,
+                resourceId: thread.resource,
+                expectedRunId: output.runId,
+              }),
+            ).toBe(true);
+          }
+          gate.resolve();
+          if (action === 'read')
+            while (!(await reader.read()).done) {
+              /* drain continuations */
+            }
+          await vi.waitFor(async () => {
+            expect(await mastra.backgroundTaskManager!.getTask(taskId!)).toMatchObject({ status: 'completed' });
+          });
+          const completes = action === 'read' || (action === 'cancel' && isDurableEngineVariant(engine));
+          if (completes) {
+            await vi.waitFor(
+              async () => {
+                const { messages } = await memory.recall({ threadId: thread.thread, resourceId: thread.resource });
+                expect(JSON.stringify(messages)).toContain('Final research answer.');
+              },
+              { timeout: 3_000 },
+            );
+            expect(llm.getRequests()).toHaveLength(offset + 3);
+            expect(JSON.stringify(llm.getRequests()[offset + 2]!.body)).toContain('Research complete.');
+          } else {
+            // Let terminal-task delivery settle before checking that cancellation prevented a new turn.
+            await new Promise(resolve => setTimeout(resolve, 100));
+            expect(llm.getRequests()).toHaveLength(offset + 2);
+            const { messages } = await memory.recall({ threadId: thread.thread, resourceId: thread.resource });
+            expect(JSON.stringify(messages)).not.toContain('Final research answer.');
+          }
+        } finally {
+          signal.abort();
+          gate.resolve();
+          reader.releaseLock();
+        }
+      }, 30_000);
+    }
     for (const action of ['cancel', 'signal', 'cancel-signal', 'signal-cancel', 'race', 'cancel-abort'] as const) {
       it(`${resumed === 'legacy' ? 'legacy resumed' : resumed ? 'resumed' : 'initial'} reader ${action} preserves execution cancellation authority`, async () => {
         const llm = getMock();
@@ -124,6 +245,10 @@ describeForAllEngines('AIMock loop scenario: durable untilIdle observer detach (
               ).rejects.toMatchObject({
                 id: 'DURABLE_AGENT_EXECUTION_CONFLICT',
               });
+              await expect(
+                agent.stream('Competing idle loop', { runId: result.runId, memory: thread, untilIdle: true }),
+              ).rejects.toMatchObject({ id: 'DURABLE_AGENT_EXECUTION_CONFLICT' });
+              expect(toolSignal?.aborted).toBe(false);
             }
           }
           const observation = isDurableEngineVariant(engine) ? await agent.observe(result.runId) : undefined;
@@ -152,6 +277,7 @@ describeForAllEngines('AIMock loop scenario: durable untilIdle observer detach (
             });
           }
         } finally {
+          signal.abort();
           gate.resolve();
           reader.releaseLock();
         }

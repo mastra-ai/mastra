@@ -208,7 +208,11 @@ export async function startConnectInngestDevServer(): Promise<ChildProcess | nul
  */
 export async function setupSharedTestInfrastructure({
   observability,
-}: { observability?: NonNullable<ConstructorParameters<typeof Mastra>[0]>['observability'] } = {}): Promise<void> {
+  backgroundTasks,
+}: {
+  observability?: NonNullable<ConstructorParameters<typeof Mastra>[0]>['observability'];
+  backgroundTasks?: NonNullable<ConstructorParameters<typeof Mastra>[0]>['backgroundTasks'];
+} = {}): Promise<void> {
   // Start Inngest dev server first (needs to be running before we create the app server)
   // Skip if INNGEST_DEV_EXTERNAL=true (for running against Docker or existing server)
   if (process.env.INNGEST_DEV_EXTERNAL !== 'true') {
@@ -240,6 +244,7 @@ export async function setupSharedTestInfrastructure({
       [workflow.id]: workflow,
     },
     ...(observability ? { observability } : {}),
+    ...(backgroundTasks ? { backgroundTasks } : {}),
     server: {
       apiRoutes: [
         {
