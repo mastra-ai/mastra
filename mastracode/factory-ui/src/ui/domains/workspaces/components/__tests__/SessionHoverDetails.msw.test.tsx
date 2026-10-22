@@ -136,7 +136,7 @@ describe('Workspace session hover details', () => {
       expect(await within(card).findByText('Taken over from Grace Hopper')).toBeInTheDocument();
       expect(
         within(card).getByRole('img', {
-          name: 'Session timeline. Triage, Building. 1 agent run. Grace Hopper moved it to Building. Ada Lovelace took over',
+          name: 'Session timeline. Triage 1h, Building 3h. 1 agent run. Grace Hopper moved it to Building. Ada Lovelace took over',
         }),
       ).toBeInTheDocument();
     });

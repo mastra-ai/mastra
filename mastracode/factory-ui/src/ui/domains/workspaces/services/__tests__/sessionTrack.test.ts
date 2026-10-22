@@ -31,7 +31,7 @@ function layout(overrides: Partial<Parameters<typeof layoutSessionTrack>[0]>) {
 }
 
 describe('layoutSessionTrack', () => {
-  it('draws only the part of each stage the session lived through, ending an open entry where the next begins', () => {
+  it('draws and times only the part of each stage the session lived through, ending an open entry where the next begins', () => {
     const { stages } = layout({
       stageHistory: [
         { stage: 'triage', enteredAt: iso(-5), exitedAt: iso(2), by: 'user-ada' },
@@ -41,9 +41,9 @@ describe('layoutSessionTrack', () => {
     });
 
     expect(stages).toEqual([
-      { stage: 'triage', left: 0, width: 20 },
-      { stage: 'planning', left: 20, width: 40 },
-      { stage: 'execute', left: 60, width: 40 },
+      { stage: 'triage', left: 0, width: 20, from: sessionStart, to: sessionStart + 2 * HOUR },
+      { stage: 'planning', left: 20, width: 40, from: sessionStart + 2 * HOUR, to: sessionStart + 6 * HOUR },
+      { stage: 'execute', left: 60, width: 40, from: sessionStart + 6 * HOUR, to: sessionStart + 10 * HOUR },
     ]);
   });
 
@@ -73,7 +73,7 @@ describe('layoutSessionTrack', () => {
       ],
     });
 
-    expect(runs).toEqual([{ left: 0, width: 25 }]);
+    expect(runs).toEqual([{ left: 0, width: 25, from: sessionStart + 2 * HOUR, to: sessionStart + 4 * HOUR }]);
   });
 });
 

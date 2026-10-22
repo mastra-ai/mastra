@@ -15,10 +15,12 @@ export interface OwnerChange {
   toOwnerId: string;
 }
 
-/** Horizontal placement on the track, in percent of its width. */
+/** Horizontal placement on the track, in percent of its width, and the moments it covers once clipped to the track. */
 export interface TrackSpan {
   left: number;
   width: number;
+  from: number;
+  to: number;
 }
 
 export interface TrackStage extends TrackSpan {
@@ -81,7 +83,12 @@ export function layoutSessionTrack({
     const clippedFrom = Math.max(from, startedAt);
     const clippedTo = Math.min(to, now);
     if (clippedTo <= clippedFrom) return undefined;
-    return { left: percentAt(clippedFrom), width: percentAt(clippedTo) - percentAt(clippedFrom) };
+    return {
+      left: percentAt(clippedFrom),
+      width: percentAt(clippedTo) - percentAt(clippedFrom),
+      from: clippedFrom,
+      to: clippedTo,
+    };
   };
   const withinTrack = (time: number) => time >= startedAt && time <= now;
 
@@ -110,10 +117,22 @@ export function layoutSessionTrack({
   };
 }
 
+const START_FORMATS = { today: 'HH:mm', thisWeek: 'EEE', older: 'MMM d' };
+const MOMENT_FORMATS = { today: 'HH:mm', thisWeek: 'EEE HH:mm', older: 'MMM d, HH:mm' };
+
+function trackTimeLabel(time: number, now: number, formats: typeof START_FORMATS): string {
+  const days = differenceInCalendarDays(now, time);
+  if (days === 0) return format(time, formats.today);
+  if (days < 7) return format(time, formats.thisWeek);
+  return format(time, formats.older);
+}
+
 /** Clock time today, weekday this week, calendar date beyond. */
 export function trackStartLabel(startedAt: number, now: number): string {
-  const days = differenceInCalendarDays(now, startedAt);
-  if (days === 0) return format(startedAt, 'HH:mm');
-  if (days < 7) return format(startedAt, 'EEE');
-  return format(startedAt, 'MMM d');
+  return trackTimeLabel(startedAt, now, START_FORMATS);
+}
+
+/** Same buckets as the start, with the clock: a hovered span or pin names its exact moments. */
+export function trackMomentLabel(time: number, now: number): string {
+  return trackTimeLabel(time, now, MOMENT_FORMATS);
 }
