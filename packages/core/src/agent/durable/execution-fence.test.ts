@@ -472,6 +472,8 @@ describe('storage-backed ExecutionFence', () => {
 
     const writes = vi.fn(async () => {});
     expect(await original.settle(writes)).toBe('superseded');
+    expect(original.ownsRunTopics()).toBe(false);
+    expect(recovered.ownsRunTopics()).toBe(true);
     expect(writes).not.toHaveBeenCalled();
     expect(await workflowsStore.getRunOwnership({ runId: 'run-1' })).toMatchObject({
       generation: recovered.generation,
@@ -525,6 +527,47 @@ describe('storage-backed ExecutionFence', () => {
     expect(await fence.settle(writes)).toBe('orphaned');
     expect(writes).not.toHaveBeenCalled();
   });
+
+  it.each(['owned', 'orphaned'])(
+    'interrupted %s settlement rejects late tool writes before terminal cleanup',
+    async state => {
+      const { workflowsStore, memoryStore } = await stores();
+      const fence = await storageClaim(workflowsStore, 'run-1');
+      await fence.coverMemory(memoryStore);
+      if (state === 'orphaned') {
+        await workflowsStore.releaseRunOwnership({
+          runId: 'run-1',
+          generation: fence.generation!,
+          ownerId: fence.executionId,
+        });
+      }
+      const thread = { id: 't-1', resourceId: 'r-1', title: '', createdAt: new Date(), updatedAt: new Date() };
+      const staleFence = { runId: 'run-1', generation: fence.generation!, ownerId: fence.executionId };
+      const terminalWrite = vi.fn(async () => {
+        expect(fence.isLost()).toBe(true);
+        // The old tool is already fenced out while terminal cleanup is awaiting I/O.
+        await expect(memoryStore.saveThread({ thread, fence: staleFence })).rejects.toSatisfy(isRunFenceConflictError);
+        await memoryStore.saveThread({ thread });
+        expect(await workflowsStore.getRunOwnership({ runId: 'run-1' })).toMatchObject({ live: true });
+      });
+
+      expect(await fence.settle(terminalWrite, true)).toBe('owned');
+      await fence.whenSettled;
+      expect(terminalWrite).toHaveBeenCalledTimes(1);
+      expect(fence.isLost()).toBe(true);
+      expect(fence.ownsRunTopics()).toBe(true);
+      expect(ExecutionFence.getLocalActive('run-1')).toBeUndefined();
+      await expect(memoryStore.saveThread({ thread, fence: staleFence })).rejects.toSatisfy(isRunFenceConflictError);
+      expect(await workflowsStore.getRunOwnership({ runId: 'run-1' })).toMatchObject({ live: false });
+
+      const next = await storageClaim(workflowsStore, 'run-1');
+      await next.coverMemory(memoryStore);
+      await fence.settle(terminalWrite, true);
+      expect(terminalWrite).toHaveBeenCalledTimes(1);
+      await expect(next.verify()).resolves.toBeUndefined();
+      await next.settle(async () => {});
+    },
+  );
 
   it("settling keeps the owner records: the settled claim's late writes land until the run is claimed again", async () => {
     const { workflowsStore, memoryStore } = await stores();

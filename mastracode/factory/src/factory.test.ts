@@ -2091,15 +2091,28 @@ describe('MastraFactory.prepare', () => {
     return lastStudioProvider()?.getSessionHeaders?.({ id: 'test-token', userId: 'u_1' })?.['Set-Cookie'];
   }
 
-  it('derives the default Studio cookie domain from publicUrl for subdomain deploys', async () => {
-    // A `<sub>.mastra.cloud` deploy should mint cookies with
-    // `Domain=.mastra.cloud` so the browser sends them back to sibling
-    // subdomains — no `MASTRA_COOKIE_DOMAIN` env wiring required.
+  it('never scopes the default Studio cookie to the shared parent domain (SP-5)', async () => {
+    // A parent-domain cookie (`Domain=.mastra.cloud`) is sent by the browser to
+    // every tenant deployment under that domain, so the default must be host-only.
     await withCleanCookieEnv(async () => {
       await prepareFactory({ storage: fakeStorage(), publicUrl: 'https://studio-abc.mastra.cloud' });
       const setCookie = seededSetCookie();
       expect(setCookie).toBeDefined();
-      expect(setCookie).toContain('Domain=.mastra.cloud');
+      expect(setCookie).not.toContain('Domain=');
+    });
+  });
+
+  it('issues a host-only __Host- cookie on a platform-deployed factory', async () => {
+    // The platform injects MASTRA_COOKIE_DOMAIN (the factory's own host) and a
+    // mastra.ai shared API; neither may become a cookie Domain.
+    await withCleanCookieEnv(async () => {
+      process.env.MASTRA_COOKIE_DOMAIN = 'acme.factory.mastra.cloud';
+      process.env.MASTRA_SHARED_API_URL = 'https://platform.mastra.ai/v1';
+      await prepareFactory({ storage: fakeStorage(), publicUrl: 'https://acme.factory.mastra.cloud' });
+      const setCookie = seededSetCookie();
+      expect(setCookie).toMatch(/^__Host-wos-session=test-token;/);
+      expect(setCookie).toContain('Secure');
+      expect(setCookie).not.toContain('Domain=');
     });
   });
 
