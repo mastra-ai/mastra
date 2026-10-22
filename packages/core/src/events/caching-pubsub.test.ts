@@ -1430,6 +1430,47 @@ describe('CachingPubSub', () => {
       expect(inner.acked.map(event => event.index)).toEqual([0, 1]);
     });
 
+    it('keeps the initial history read behind a backfill the transport started while subscribing', async () => {
+      // A transport that replays retained frames without awaiting the callback
+      // can start a backfill before `subscribe()` resolves. The history read
+      // must queue behind it, not run alongside it.
+      class UnawaitedReplayPubSub extends RetainingPubSub {
+        override async subscribe(t: string, cb: EventCallback): Promise<void> {
+          const listeners = this.listeners.get(t) ?? new Set<EventCallback>();
+          this.listeners.set(t, listeners);
+          listeners.add(cb);
+          for (const event of this.retained.get(t) ?? []) {
+            void cb(event, async () => {
+              this.acked.push(event);
+            });
+          }
+        }
+      }
+
+      const inner = new UnawaitedReplayPubSub();
+      const shared = new InMemoryServerCache();
+      const frames = [await append(shared, 0), await append(shared, 1), await append(shared, 2)];
+      // Only the last frame is retained on the transport, so it opens a gap.
+      inner.retained.set(topic, [frames[2]!]);
+
+      const subscriber = new CachingPubSub(inner, shared);
+      const received: number[] = [];
+      let active = 0;
+      let maxActive = 0;
+      await subscriber.subscribeFromOffset(topic, 0, async event => {
+        active++;
+        maxActive = Math.max(maxActive, active);
+        await new Promise(resolve => setTimeout(resolve, 5));
+        received.push(event.index!);
+        active--;
+      });
+      await vi.waitFor(() => expect(received.length).toBeGreaterThanOrEqual(3));
+      await new Promise(resolve => setTimeout(resolve, 30));
+
+      expect(received).toEqual([0, 1, 2]);
+      expect(maxActive).toBe(1);
+    });
+
     it('resyncs when the log expired and a new run segment restarted numbering at 0', async () => {
       const inner = new RetainingPubSub();
       const shared = new InMemoryServerCache();

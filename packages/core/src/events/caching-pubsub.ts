@@ -387,12 +387,18 @@ export class CachingPubSub extends PubSub {
       // arriving during the read queue behind it.
       await this.inner.subscribe(topic, wrappedCb);
 
+      // A transport that replays retained frames without awaiting the callback
+      // can start a delivery chain (a backfill) before `subscribe()` resolves.
+      // Read history only after that chain settles, so the two never deliver
+      // at the same time.
+      const inFlight = pending;
       let releaseHistory!: () => void;
       const historyGate = new Promise<void>(resolve => {
         releaseHistory = resolve;
       });
       pending = historyGate;
       try {
+        await inFlight;
         const entries = (await this.cache.listFromTo(cacheKey, next)) as Event[];
         for (const entry of entries) {
           if (closed) return;
