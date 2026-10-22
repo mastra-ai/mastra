@@ -59,15 +59,21 @@ export function readProviderErrorDetails(error: unknown): ProviderErrorDetails {
 
 /**
  * The provider's own explanation from a response body: `error.message` (Anthropic,
- * OpenAI), a top-level `message`, or the raw text when the body isn't JSON.
+ * OpenAI), a top-level `message` or string `detail` (FastAPI backends such as the
+ * ChatGPT Codex endpoint), or the raw text when the body isn't JSON.
  */
 function providerExplanation(responseBody: string): string {
   try {
-    const parsed = JSON.parse(responseBody) as { error?: { message?: unknown } | string; message?: unknown };
+    const parsed = JSON.parse(responseBody) as {
+      error?: { message?: unknown } | string;
+      message?: unknown;
+      detail?: unknown;
+    };
     if (parsed && typeof parsed === 'object') {
       const nested = typeof parsed.error === 'object' ? parsed.error?.message : parsed.error;
       if (typeof nested === 'string' && nested.trim()) return nested.trim();
       if (typeof parsed.message === 'string' && parsed.message.trim()) return parsed.message.trim();
+      if (typeof parsed.detail === 'string' && parsed.detail.trim()) return parsed.detail.trim();
     }
   } catch {
     // Not JSON; show the raw text.
@@ -76,23 +82,29 @@ function providerExplanation(responseBody: string): string {
 }
 
 /**
- * Human-readable one-liner for a provider HTTP failure, or undefined when the
- * error carries no HTTP details. Example:
+ * Human-readable one-liner for a provider HTTP failure, at most `maxLength`
+ * characters, or undefined when the error carries no HTTP details. Example:
  * `Bad Request (HTTP 400): prompt is too long (request id req_123)`.
+ *
+ * The explanation is parsed from the full body (a truncated JSON body would not
+ * parse), and the request id is always kept when the text has to be shortened.
  */
-export function describeProviderError(message: string, details: ProviderErrorDetails): string | undefined {
+export function describeProviderError(message: string, error: unknown, maxLength: number): string | undefined {
+  const details = readProviderErrorDetails(error);
   if (details.statusCode === undefined && details.responseBody === undefined) return undefined;
 
   let text = message;
   if (details.statusCode !== undefined) text += ` (HTTP ${details.statusCode})`;
 
   if (details.responseBody !== undefined) {
-    const explanation = providerExplanation(details.responseBody);
+    const explanation = providerExplanation(readField(error as object, 'responseBody') as string);
     if (explanation && explanation !== message) text += `: ${explanation}`;
   } else if (details.statusCode !== undefined) {
     text += ': empty response body';
   }
 
-  if (details.requestId) text += ` (request id ${details.requestId})`;
-  return text;
+  const suffix = details.requestId ? ` (request id ${details.requestId})` : '';
+  const room = Math.max(0, maxLength - suffix.length);
+  if (text.length > room) text = `${text.slice(0, Math.max(0, room - 1))}…`;
+  return text + suffix;
 }

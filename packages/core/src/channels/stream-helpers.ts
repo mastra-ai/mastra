@@ -237,10 +237,12 @@ export async function postStreamError(args: {
   }
   // Provider HTTP failures often carry only the status text ("Bad Request") as
   // their message; the provider's real explanation is in the response body.
-  const providerDetails = readProviderErrorDetails(rawError);
-  message = describeProviderError(message, providerDetails) ?? message;
-  const display = message.length > 1000 ? message.slice(0, 1000) + '…' : message;
-  logger?.error?.(`[${platform}] Stream completed with error`, { error: display, ...providerDetails });
+  // Logs get the parsed explanation (inside `display`) but never the raw body,
+  // which can echo request content to anyone who can read server logs.
+  const { statusCode, requestId } = readProviderErrorDetails(rawError);
+  const display =
+    describeProviderError(message, rawError, 1000) ?? (message.length > 1000 ? message.slice(0, 1000) + '…' : message);
+  logger?.error?.(`[${platform}] Stream completed with error`, { error: display, statusCode, requestId });
   const postable = formatError
     ? formatError(rawError instanceof Error ? rawError : new Error(display))
     : `❌ Error: ${display}`;
