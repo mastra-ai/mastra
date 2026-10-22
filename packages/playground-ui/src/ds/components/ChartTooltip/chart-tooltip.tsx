@@ -1,7 +1,7 @@
 import type { ComponentPropsWithoutRef } from 'react';
 
-import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { overlaySurfaceStyle } from '../../primitives/raised-surface';
 
 export type ChartTooltipProps = ComponentPropsWithoutRef<'div'>;
 

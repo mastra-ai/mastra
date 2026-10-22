@@ -6,8 +6,8 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { server } from '../../../../test/msw-server';
 import { WorkflowEntityHeader } from '../workflow-entity-header';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 

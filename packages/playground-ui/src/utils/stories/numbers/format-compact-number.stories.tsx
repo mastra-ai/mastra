@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { HelperExamples } from '../../../../.storybook/fixtures/helpers/helper-examples';
 import type { HelperExample } from '../../../../.storybook/fixtures/helpers/helper-examples';
-import { formatCompactNumber } from '@/utils/cost';
+import { formatCompactNumber } from '../../cost';
 
 const examples: HelperExample[] = [
   ['formatCompactNumber(12_310)', formatCompactNumber(12_310)],

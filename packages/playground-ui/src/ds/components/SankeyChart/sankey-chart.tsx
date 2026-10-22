@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import type { ComponentProps, CSSProperties, KeyboardEvent } from 'react';
 import { ResponsiveContainer, Sankey as RechartsSankey } from 'recharts';
+import { cn } from '../../../lib/utils';
+import { CHART_LABEL_FONT_SIZE, CHART_TICK_FONT_SIZE, Colors } from '../../tokens';
 import {
   getSankeyChartCurveSelection,
   getSankeyChartNodeSelection,
@@ -19,8 +21,6 @@ import { SankeyPortalTooltip } from './sankey-portal-tooltip';
 import { useSankeyChartMeasurements } from './use-sankey-chart-measurements';
 import { useSankeyGeometryTransition } from './use-sankey-geometry-transition';
 import { useSankeyHoverTooltip } from './use-sankey-hover-tooltip';
-import { CHART_LABEL_FONT_SIZE, CHART_TICK_FONT_SIZE, Colors } from '@/ds/tokens';
-import { cn } from '@/lib/utils';
 
 const NODE_LABEL_FONT_SIZE = CHART_TICK_FONT_SIZE;
 const COLUMN_LABEL_FONT_SIZE = CHART_LABEL_FONT_SIZE;

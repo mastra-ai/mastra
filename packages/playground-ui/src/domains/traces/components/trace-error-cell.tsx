@@ -1,6 +1,6 @@
+import { DataList } from '../../../ds/components/DataList';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '../../../ds/components/HoverCard';
 import { TraceErrorDetails } from './trace-error-details';
-import { DataList } from '@/ds/components/DataList';
-import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/ds/components/HoverCard';
 
 export interface TraceErrorCellProps {
   traceId: string;

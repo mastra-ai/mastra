@@ -1,9 +1,9 @@
 import { SearchIcon } from 'lucide-react';
 import { forwardRef } from 'react';
 import type { ReactNode } from 'react';
+import { Button } from '../../Button';
+import type { ButtonProps } from '../../Button';
 import { SidebarButtonHint } from './sidebar-button-hint';
-import { Button } from '@/ds/components/Button';
-import type { ButtonProps } from '@/ds/components/Button';
 
 export type SidebarSearchTriggerProps = Omit<ButtonProps, 'variant' | 'size' | 'tooltip' | 'children'> & {
   /** Tooltip label, and the accessible name unless `aria-label` is set. Defaults to `Search`. */

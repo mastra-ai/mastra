@@ -1,7 +1,7 @@
 import { MoreVerticalIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { Button } from '@/ds/components/Button';
-import { DropdownMenu } from '@/ds/components/DropdownMenu';
+import { Button } from '../../Button';
+import { DropdownMenu } from '../../DropdownMenu';
 
 export function WorkflowStepActions({ children }: { children: ReactNode }) {
   return (

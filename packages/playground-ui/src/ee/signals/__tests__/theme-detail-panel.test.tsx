@@ -4,6 +4,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { server } from '../../../test/msw-server';
 import { ThemeDetailPanel } from '../theme-detail-panel';
 import {
   fadingThemeHistoryResponse,
@@ -16,7 +17,6 @@ import {
   truncatedThemeHistoryResponse,
   zeroCoverageThemeDetailResponse,
 } from './fixtures/theme-drilldown';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = window.location.origin;
 const detailPath = `${BASE_URL}/api/learning/entities/support-agent/themes/101`;

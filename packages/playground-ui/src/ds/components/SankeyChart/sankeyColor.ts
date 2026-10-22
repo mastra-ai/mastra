@@ -1,4 +1,4 @@
-import { hashLabel } from '@/lib/colors';
+import { hashLabel } from '../../../lib/colors';
 
 export const sankeySeriesColors: readonly string[] = [
   'var(--chart-blue)',

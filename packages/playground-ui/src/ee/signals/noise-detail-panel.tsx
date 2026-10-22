@@ -1,11 +1,5 @@
 import { useState } from 'react';
 
-import { EXAMPLES_PAGE_SIZE, ExamplesPager } from './examples-pager';
-import { useNoise, useNoiseExamples } from './hooks';
-import { shareSentence } from './signal-formatting';
-import type { ThemeSelection, ThemeSelectionStats } from './theme-drilldown-data';
-import { TraceInsightView } from './trace-insight-view';
-import type { TraceSignalName } from './types';
 import {
   Drawer,
   DrawerBody,
@@ -13,10 +7,16 @@ import {
   DrawerDescription,
   DrawerHeader,
   DrawerTitle,
-} from '@/ds/components/Drawer';
-import { Txt } from '@/ds/components/Txt';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
-import { cn } from '@/lib/utils';
+} from '../../ds/components/Drawer';
+import { Txt } from '../../ds/components/Txt';
+import { raisedSurfaceStyle } from '../../ds/primitives/raised-surface';
+import { cn } from '../../lib/utils';
+import { EXAMPLES_PAGE_SIZE, ExamplesPager } from './examples-pager';
+import { useNoise, useNoiseExamples } from './hooks';
+import { shareSentence } from './signal-formatting';
+import type { ThemeSelection, ThemeSelectionStats } from './theme-drilldown-data';
+import { TraceInsightView } from './trace-insight-view';
+import type { TraceSignalName } from './types';
 
 interface NoiseDetailPanelProps {
   entityId: string;

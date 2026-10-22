@@ -1,15 +1,15 @@
 import { useEffect, useState } from 'react';
 
-import { useChatRunning } from '../context/chat-context';
 import {
   Activity,
   ActivityContent,
   ActivityHeadline,
   ActivityTrailing,
   ActivityTrigger,
-} from '@/ds/components/ai/activity';
-import type { ActivityStatus } from '@/ds/components/ai/activity';
-import { cn } from '@/lib/utils';
+} from '../../../ds/components/ai/activity';
+import type { ActivityStatus } from '../../../ds/components/ai/activity';
+import { cn } from '../../../lib/utils';
+import { useChatRunning } from '../context/chat-context';
 
 export interface BadgeWrapperProps {
   children?: React.ReactNode;

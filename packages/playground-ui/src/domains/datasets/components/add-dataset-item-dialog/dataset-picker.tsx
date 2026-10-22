@@ -1,9 +1,16 @@
 import type { DatasetRecord } from '@mastra/client-js';
 import { Plus } from 'lucide-react';
-import { Field, FieldLabel } from '@/ds/components/Field';
-import { Select, SelectContent, SelectItem, SelectSeparator, SelectTrigger, SelectValue } from '@/ds/components/Select';
-import { Txt } from '@/ds/components/Txt';
-import { Icon } from '@/ds/icons';
+import { Field, FieldLabel } from '../../../../ds/components/Field';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectSeparator,
+  SelectTrigger,
+  SelectValue,
+} from '../../../../ds/components/Select';
+import { Txt } from '../../../../ds/components/Txt';
+import { Icon } from '../../../../ds/icons';
 
 const CREATE_DATASET_VALUE = '__create-dataset__';
 

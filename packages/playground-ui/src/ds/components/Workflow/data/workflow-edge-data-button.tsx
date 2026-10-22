@@ -1,12 +1,12 @@
 import { Database } from 'lucide-react';
 import { useState } from 'react';
 import type { MouseEventHandler } from 'react';
+import { cn } from '../../../../lib/utils';
+import { raisedSurfaceStyle, surfaceStateLayerStyle } from '../../../primitives/raised-surface';
+import { Button } from '../../Button';
+import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '../../Dialog';
+import { Txt } from '../../Txt';
 import { WorkflowCodeContent } from './workflow-code-dialog-content';
-import { Button } from '@/ds/components/Button';
-import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@/ds/components/Dialog';
-import { Txt } from '@/ds/components/Txt';
-import { raisedSurfaceStyle, surfaceStateLayerStyle } from '@/ds/primitives/raised-surface';
-import { cn } from '@/lib/utils';
 
 export interface WorkflowEdgeDataButtonProps {
   previousStepId?: string;

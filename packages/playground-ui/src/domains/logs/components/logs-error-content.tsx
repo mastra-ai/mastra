@@ -4,9 +4,9 @@ import {
   isObservabilityUnavailableError,
   isUnsupportedObservabilityOperationError,
 } from '@mastra/react/hooks/query';
-import { PermissionDenied } from '@/domains/auth/components/permission-denied';
-import { SessionExpired } from '@/domains/auth/components/session-expired';
-import { EmptyState } from '@/ds/components/EmptyState';
+import { EmptyState } from '../../../ds/components/EmptyState';
+import { PermissionDenied } from '../../auth/components/permission-denied';
+import { SessionExpired } from '../../auth/components/session-expired';
 
 export interface LogsErrorContentProps {
   /** The error from a useLogs query. */

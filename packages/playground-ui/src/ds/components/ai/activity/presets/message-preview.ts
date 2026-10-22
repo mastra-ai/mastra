@@ -1,4 +1,4 @@
-import { truncateString } from '@/lib/truncate-string';
+import { truncateString } from '../../../../../lib/truncate-string';
 
 export function messagePreview(message: string): string {
   return truncateString(message, 72);

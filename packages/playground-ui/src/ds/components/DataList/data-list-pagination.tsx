@@ -1,5 +1,5 @@
 import { ArrowLeftIcon, ArrowRightIcon } from 'lucide-react';
-import { Button } from '@/ds/components/Button';
+import { Button } from '../Button';
 
 export type DataListPaginationProps = {
   currentPage?: number;

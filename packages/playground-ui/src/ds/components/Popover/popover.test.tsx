@@ -2,10 +2,10 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { Button } from '../Button';
+import { StatusDot } from '../StatusIndicators/status-dot';
+import type { StatusPresentation } from '../StatusIndicators/status-dot-styles';
 import { Popover, PopoverContent, PopoverTrigger } from './popover';
-import { Button } from '@/ds/components/Button';
-import { StatusDot } from '@/ds/components/StatusIndicators/status-dot';
-import type { StatusPresentation } from '@/ds/components/StatusIndicators/status-dot-styles';
 
 afterEach(() => {
   cleanup();

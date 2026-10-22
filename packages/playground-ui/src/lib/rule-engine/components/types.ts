@@ -1,5 +1,5 @@
+import type { JsonSchema, JsonSchemaProperty } from '../../json-schema';
 import type { ConditionOperator, Rule, RuleGroup } from '../types';
-import type { JsonSchema, JsonSchemaProperty } from '@/lib/json-schema';
 
 export type { JsonSchema, JsonSchemaProperty };
 

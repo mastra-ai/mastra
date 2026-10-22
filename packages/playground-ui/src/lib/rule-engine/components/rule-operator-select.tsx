@@ -14,12 +14,12 @@ import {
 } from 'lucide-react';
 import * as React from 'react';
 
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../ds/components/Select/select';
+import { Icon } from '../../../ds/icons';
+import { cn } from '../../utils';
 import type { ConditionOperator } from '../types';
 import type { RuleOperatorSelectProps } from './types';
 import { OPERATOR_LABELS, OPERATORS } from './types';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select/select';
-import { Icon } from '@/ds/icons';
-import { cn } from '@/lib/utils';
 
 /**
  * Icons for each operator type

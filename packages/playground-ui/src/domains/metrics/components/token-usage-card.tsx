@@ -1,4 +1,8 @@
 import { useState } from 'react';
+import { MetricsCard } from '../../../ds/components/MetricsCard';
+import { MetricsLineChartLegend } from '../../../ds/components/MetricsLineChart';
+import type { MetricsLineChartSeries } from '../../../ds/components/MetricsLineChart';
+import { MetricsStackedBarChart } from '../../../ds/components/MetricsStackedBarChart';
 import type { TimeRange } from '../drilldown';
 import { useMetricsActivity } from '../hooks/use-metrics-activity';
 import { useMetricsFilters } from '../hooks/use-metrics-filters';
@@ -10,10 +14,6 @@ import { OpenInTracesButton } from './card-action-buttons';
 import { ChartArea } from './chart-area';
 import { ChartCard } from './chart-card';
 import { ChartCardError } from './chart-card-error';
-import { MetricsCard } from '@/ds/components/MetricsCard';
-import { MetricsLineChartLegend } from '@/ds/components/MetricsLineChart';
-import type { MetricsLineChartSeries } from '@/ds/components/MetricsLineChart';
-import { MetricsStackedBarChart } from '@/ds/components/MetricsStackedBarChart';
 
 type View = 'tokens' | 'cost';
 

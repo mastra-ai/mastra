@@ -3,16 +3,16 @@ import { cleanup, render, screen } from '@testing-library/react';
 import type * as React from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { Command, CommandInput } from '../components/Command';
+import { ComposerInput } from '../components/Composer';
+import { Input } from '../components/Input';
+import { InputGroup, InputGroupInput, InputGroupTextarea } from '../components/InputGroup';
+import { InputNumber, InputNumberGroup, InputNumberInput } from '../components/InputNumber';
+import { SavedViewNameInput } from '../components/SavedViews/saved-view-name-input';
+import { SearchInput } from '../components/SearchInput';
+import { Textarea } from '../components/Textarea';
+import { Tree } from '../components/Tree';
 import { textFieldAutofillProps } from './password-manager-autofill';
-import { Command, CommandInput } from '@/ds/components/Command';
-import { ComposerInput } from '@/ds/components/Composer';
-import { Input } from '@/ds/components/Input';
-import { InputGroup, InputGroupInput, InputGroupTextarea } from '@/ds/components/InputGroup';
-import { InputNumber, InputNumberGroup, InputNumberInput } from '@/ds/components/InputNumber';
-import { SavedViewNameInput } from '@/ds/components/SavedViews/saved-view-name-input';
-import { SearchInput } from '@/ds/components/SearchInput';
-import { Textarea } from '@/ds/components/Textarea';
-import { Tree } from '@/ds/components/Tree';
 
 afterEach(() => {
   cleanup();

@@ -2,12 +2,12 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { forwardRef } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { TooltipProvider } from '../../../../../ds/components/Tooltip';
+import type { LinkComponentProviderProps } from '../../../../../lib/framework';
+import { LinkComponentProvider } from '../../../../../lib/framework';
+import { ToolCallProvider } from '../../../context/tool-call-context';
 import { SandboxExecutionBadge } from '../sandbox-execution-badge';
 import type { SandboxExecutionBadgeProps } from '../sandbox-execution-badge';
-import { ToolCallProvider } from '@/domains/chat/context/tool-call-context';
-import { TooltipProvider } from '@/ds/components/Tooltip';
-import type { LinkComponentProviderProps } from '@/lib/framework';
-import { LinkComponentProvider } from '@/lib/framework';
 
 const Link = forwardRef<HTMLAnchorElement, React.AnchorHTMLAttributes<HTMLAnchorElement>>(function Link(props, ref) {
   return <a ref={ref} {...props} />;

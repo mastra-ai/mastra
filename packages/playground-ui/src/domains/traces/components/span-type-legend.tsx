@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
+import { Badge } from '../../../ds/components/Badge';
 import type { UISpan } from '../types';
 import { getSpanTypeUi, spanTypePrefixes } from './shared';
-import { Badge } from '@/ds/components/Badge';
 
 function useUsedSpanTypes(spans: UISpan[]) {
   return useMemo(() => {

@@ -1,8 +1,8 @@
-import { CopyButton } from '@/ds/components/CopyButton';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import type { TxtProps } from '@/ds/components/Txt';
-import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { CopyButton } from '../CopyButton';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip';
+import type { TxtProps } from '../Txt';
+import { Txt } from '../Txt';
 
 export interface TruncateProps extends Omit<TxtProps, 'children'> {
   children: string;

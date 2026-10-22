@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select';
 
 export type TimePickerProps = {
   defaultValue?: string;

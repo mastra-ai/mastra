@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from 'react';
-import { toast } from '@/lib/toast';
+import { toast } from '../lib/toast';
 
 type UseCopyToClipboardProps = {
   text: string;

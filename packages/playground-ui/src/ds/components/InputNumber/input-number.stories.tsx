@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import type { ControlSize } from '../../primitives/control-size';
 import { Field, FieldDescription, FieldError, FieldLabel } from '../Field';
 import { Input } from '../Input';
 import { InputGroupAddon, InputGroupText } from '../InputGroup';
@@ -9,7 +10,6 @@ import {
   InputNumberIncrement,
   InputNumberInput,
 } from './input-number';
-import type { ControlSize } from '@/ds/primitives/control-size';
 
 const meta: Meta<typeof InputNumber> = {
   title: 'Composite/InputNumber',

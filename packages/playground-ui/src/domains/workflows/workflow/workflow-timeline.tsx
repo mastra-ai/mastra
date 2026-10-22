@@ -1,17 +1,17 @@
 import { ChartNoAxesGantt, ChevronsDownUp, ChevronsUpDown } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
+import { Button } from '../../../ds/components/Button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../../../ds/components/Collapsible';
+import { DisclosureChevron } from '../../../ds/components/DisclosureChevron';
+import { Txt } from '../../../ds/components/Txt';
+import { raisedSurfaceStyle } from '../../../ds/primitives/raised-surface';
+import { useAutoscroll } from '../../../hooks/use-autoscroll';
+import { cn } from '../../../utils/cn';
 import { useCurrentRun } from '../context/use-current-run';
 import { useWorkflowSelectedStep } from '../context/use-workflow-selected-step';
 import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
 import { WorkflowTimelineRow } from './workflow-timeline-row';
 import { buildTimeline } from './workflow-timeline-utils';
-import { Button } from '@/ds/components/Button';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
-import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
-import { Txt } from '@/ds/components/Txt';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
-import { useAutoscroll } from '@/hooks/use-autoscroll';
-import { cn } from '@/utils/cn';
 
 export function WorkflowTimeline() {
   const { steps } = useCurrentRun();

@@ -2,9 +2,9 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { Button } from '../Button';
+import { Dialog, DialogContent, DialogTitle } from '../Dialog';
 import { AlertDialog } from './alert-dialog';
-import { Button } from '@/ds/components/Button';
-import { Dialog, DialogContent, DialogTitle } from '@/ds/components/Dialog';
 
 afterEach(() => {
   cleanup();

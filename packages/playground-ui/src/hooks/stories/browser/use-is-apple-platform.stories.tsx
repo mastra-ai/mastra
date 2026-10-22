@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { HookDemo } from '../../../../.storybook/fixtures/hooks/hook-demo';
-import { Kbd } from '@/ds/components/Kbd';
-import { Txt } from '@/ds/components/Txt';
-import { useIsApplePlatform } from '@/hooks/use-keyboard-shortcut-label';
+import { Kbd } from '../../../ds/components/Kbd';
+import { Txt } from '../../../ds/components/Txt';
+import { useIsApplePlatform } from '../../use-keyboard-shortcut-label';
 
 function IsApplePlatformDemo() {
   const isApplePlatform = useIsApplePlatform();

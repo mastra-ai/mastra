@@ -1,14 +1,14 @@
 import { useCallback, useMemo, useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 
+import { TranscriptDivider } from '../../../../ds/components/ai/transcript-divider';
+import { MessageScrollerItem } from '../../../../ds/components/MessageScroller';
+import { Tabs } from '../../../../ds/components/Tabs';
+import { useMeasuredAutoHeight } from '../../../../hooks/use-measured-auto-height';
+import { cn } from '../../../../lib/utils';
 import { useThreadTrace } from './thread-trace-context';
 import { ThreadTraceRowContext } from './thread-trace-row-context';
 import type { ThreadTraceRowContextValue } from './thread-trace-row-context';
-import { TranscriptDivider } from '@/ds/components/ai/transcript-divider';
-import { MessageScrollerItem } from '@/ds/components/MessageScroller';
-import { Tabs } from '@/ds/components/Tabs';
-import { useMeasuredAutoHeight } from '@/hooks/use-measured-auto-height';
-import { cn } from '@/lib/utils';
 
 export const THREAD_TRACE_MESSAGES_TAB = 'messages';
 

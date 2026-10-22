@@ -3,24 +3,24 @@ import type { SelectPopupProps, SelectPositionerProps } from '@base-ui/react/sel
 import { Check, ChevronDown } from 'lucide-react';
 import * as React from 'react';
 
-import { buttonVariants } from '../Button/Button';
-import type { TextButtonSize } from '../Button/Button';
-import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
-import { controlTriggerOpenState } from '@/ds/primitives/control-size';
-import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
-import { useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
-import { fieldTriggerErrorBorder, fieldTriggerStyle, fieldTriggerWidthStyle } from '@/ds/primitives/form-element';
+import { cn } from '../../../lib/utils';
+import { controlTriggerOpenState } from '../../primitives/control-size';
+import { FLOATING_POSITION_METHOD } from '../../primitives/floating';
+import { useFluidMenu, useFluidMenuItemRef } from '../../primitives/fluid-menu';
+import { fieldTriggerErrorBorder, fieldTriggerStyle, fieldTriggerWidthStyle } from '../../primitives/form-element';
 import {
   menuItemCheckClass,
   menuItemClass,
   menuPopupClass,
   menuPositionerClass,
   menuSeparatorClass,
-} from '@/ds/primitives/menu-item';
-import { menuScrollPopupClass, MenuScrollArea } from '@/ds/primitives/menu-scroll-area';
-import { usePortalContainer } from '@/ds/primitives/portal-container';
-import { transitions } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
+} from '../../primitives/menu-item';
+import { menuScrollPopupClass, MenuScrollArea } from '../../primitives/menu-scroll-area';
+import { usePortalContainer } from '../../primitives/portal-container';
+import { transitions } from '../../primitives/transitions';
+import { buttonVariants } from '../Button/Button';
+import type { TextButtonSize } from '../Button/Button';
+import { keepOwnAccessibleName } from '../Field/field-control-aria';
 
 /**
  * Select migrated from `@radix-ui/react-select` to Base UI (`@base-ui/react/select`).

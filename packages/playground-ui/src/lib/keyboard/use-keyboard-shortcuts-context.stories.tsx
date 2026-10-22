@@ -2,10 +2,10 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 
 import { HookDemo } from '../../../.storybook/fixtures/hooks/hook-demo';
+import { Button } from '../../ds/components/Button';
+import { Txt } from '../../ds/components/Txt';
 import { KeyboardShortcutsProvider, useKeyboardShortcutsContext } from './keyboard-shortcuts-context';
 import { useKeydown } from './use-keydown';
-import { Button } from '@/ds/components/Button';
-import { Txt } from '@/ds/components/Txt';
 
 function ShortcutStatus() {
   const context = useKeyboardShortcutsContext();

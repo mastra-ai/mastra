@@ -1,8 +1,8 @@
+import { cn } from '../../../lib/utils';
+import { transitions } from '../../primitives/transitions';
+import { Txt } from '../Txt';
 import { getStatusIcon } from './shared';
 import type { ProcessStep } from './shared';
-import { Txt } from '@/ds/components/Txt';
-import { transitions } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
 
 type ProcessStepListItemVariant = 'default' | 'plain';
 

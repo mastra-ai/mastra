@@ -1,7 +1,7 @@
+import { CodeEditor } from '../../../../ds/components/CodeEditor';
+import { Field, FieldError } from '../../../../ds/components/Field';
+import { FormSubmitRow } from '../../../../lib/form/components/form-submit-row';
 import type { WorkflowInputDataProps } from '../workflow-input-data';
-import { CodeEditor } from '@/ds/components/CodeEditor';
-import { Field, FieldError } from '@/ds/components/Field';
-import { FormSubmitRow } from '@/lib/form/components/form-submit-row';
 
 type WorkflowJsonInputProps = Omit<WorkflowInputDataProps, 'schema' | 'defaultValues' | 'onSubmit'> & {
   value: string;

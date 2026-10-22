@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
+import { PullRequestIcon } from '../../../PullRequestIcon';
 import { NotificationActivity } from './notification-activity';
 import { SignalActivity } from './signal-activity';
-import { PullRequestIcon } from '@/ds/components/PullRequestIcon';
 
 const snapshot = 'Board: work\nStage: building\nRevision: 4\nAwaiting review on the composer changes before landing.';
 

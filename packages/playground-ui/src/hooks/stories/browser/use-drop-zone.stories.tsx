@@ -2,9 +2,9 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { DragEvent } from 'react';
 import { useState } from 'react';
 import { HookDemo } from '../../../../.storybook/fixtures/hooks/hook-demo';
-import { Txt } from '@/ds/components/Txt';
-import { useDropZone } from '@/hooks/use-drop-zone';
-import { cn } from '@/lib/utils';
+import { Txt } from '../../../ds/components/Txt';
+import { cn } from '../../../lib/utils';
+import { useDropZone } from '../../use-drop-zone';
 
 const TASK_TYPE = 'application/x-story-task';
 

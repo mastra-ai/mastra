@@ -1,4 +1,4 @@
-import { Txt } from '@/ds/components/Txt';
+import { Txt } from '../Txt';
 export interface DataPanelNoDataProps {
   children?: React.ReactNode;
 }

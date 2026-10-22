@@ -1,8 +1,8 @@
 import { useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
 
+import { cn } from '../../../lib/utils';
 import { SettledContext, useArriving } from './use-watched';
-import { cn } from '@/lib/utils';
 
 /**
  * Marks what the reader was handed. Whatever mounts with a scope is already there and

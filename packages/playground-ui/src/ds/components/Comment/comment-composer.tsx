@@ -2,12 +2,12 @@ import { ArrowUp } from 'lucide-react';
 import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 import { forwardRef } from 'react';
 
+import { cn } from '../../../lib/utils';
+import type { ControlSize } from '../../primitives/control-size';
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '../InputGroup';
+import type { InputGroupButtonProps, InputGroupInputProps } from '../InputGroup';
 import { useCommentVariant } from './comment-context';
 import type { CommentVariant } from './comment-context';
-import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/ds/components/InputGroup';
-import type { InputGroupButtonProps, InputGroupInputProps } from '@/ds/components/InputGroup';
-import type { ControlSize } from '@/ds/primitives/control-size';
-import { cn } from '@/lib/utils';
 
 export type CommentComposerProps = ComponentPropsWithoutRef<'form'>;
 

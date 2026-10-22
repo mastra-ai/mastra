@@ -1,6 +1,6 @@
+import { CodeBlock } from '../../../ds/components/CodeBlock';
+import { MarkdownRenderer } from '../../../ds/components/MarkdownRenderer';
 import { splitFrontmatter } from './frontmatter';
-import { CodeBlock } from '@/ds/components/CodeBlock';
-import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 
 /** Renders a markdown file, showing any leading YAML frontmatter as a code block above the body. */
 export function WorkspaceMarkdownPreview({ content }: { content: string }) {

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
 
 const column = 'flex w-4 shrink-0 flex-col items-center self-stretch';
 const vertical = 'w-0 flex-1 border-l border-dashed border-surface-overlay-strong';

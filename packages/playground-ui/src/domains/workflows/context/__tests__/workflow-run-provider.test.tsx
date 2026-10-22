@@ -7,6 +7,7 @@ import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { useContext, useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { server } from '../../../../test/msw-server';
 import { convertWorkflowRunStateToStreamResult } from '../../utils';
 import { twoStepWorkflow } from '../../workflow/__tests__/fixtures/workflow-debug-step-controls';
 import { WorkflowTimeline } from '../../workflow/workflow-timeline';
@@ -24,7 +25,6 @@ import {
   suspendedLoop,
 } from './fixtures/completed-loop';
 import { completedChunks, replayedChunks, runningChunk } from './fixtures/workflow-stream';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 afterEach(cleanup);

@@ -1,8 +1,8 @@
 import type { ReactNode } from 'react';
+import { cn } from '../../../lib/utils';
+import { Button } from '../Button/Button';
+import { Txt } from '../Txt';
 import type { SavedViewsController } from './use-saved-views';
-import { Button } from '@/ds/components/Button/Button';
-import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/lib/utils';
 
 export type SavedViewEditorProps<TSettings> = {
   views: SavedViewsController<TSettings>;

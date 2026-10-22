@@ -1,4 +1,9 @@
 import { Braces, ListTodo, MessageSquareReply, ScrollText } from 'lucide-react';
+import { ActivityItem } from '../../../../ds/components/ai/activity';
+import { Code } from '../../../../ds/components/Code';
+import { MarkdownRenderer } from '../../../../ds/components/MarkdownRenderer';
+import { Txt } from '../../../../ds/components/Txt';
+import { formatDuration } from '../../../../utils/duration';
 import {
   compressionRatio,
   extractedValueEntries,
@@ -6,11 +11,6 @@ import {
   formatTokens,
 } from './observation-marker-format';
 import { ObservationRenderer } from './observation-renderer';
-import { ActivityItem } from '@/ds/components/ai/activity';
-import { Code } from '@/ds/components/Code';
-import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
-import { Txt } from '@/ds/components/Txt';
-import { formatDuration } from '@/utils/duration';
 
 export interface ObservationStatsProps {
   inputTokens?: number;

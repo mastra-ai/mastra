@@ -1,5 +1,5 @@
 import type { BuiltInTraceSignalName, SignalCatalogEntry, TraceSignalName } from '@mastra/client-js';
-import { formatDate, formatDateRange, formatShortDate } from '@/utils/date-format';
+import { formatDate, formatDateRange, formatShortDate } from '../../utils/date-format';
 
 /** Catalog used with older servers that do not return signal metadata. */
 export const BUILT_IN_SIGNAL_CATALOG: SignalCatalogEntry[] = [

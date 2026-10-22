@@ -1,9 +1,9 @@
 import type { ComponentPropsWithoutRef } from 'react';
+import { cn } from '../../../../lib/utils';
+import { VisuallyHidden } from '../../../primitives/visually-hidden';
+import type { LinkComponent } from '../../../types/link-component';
 import type { SidebarState } from '../root/sidebar-context';
 import { useMaybeSidebarState } from '../root/sidebar-context';
-import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
-import type { LinkComponent } from '@/ds/types/link-component';
-import { cn } from '@/lib/utils';
 
 export type SidebarNavHeaderProps = Omit<ComponentPropsWithoutRef<'header'>, 'children'> & {
   children?: React.ReactNode;

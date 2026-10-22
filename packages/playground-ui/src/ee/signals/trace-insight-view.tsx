@@ -1,14 +1,14 @@
 import { ChevronLeft } from 'lucide-react';
+import { Button } from '../../ds/components/Button';
+import { Txt } from '../../ds/components/Txt';
+import { TraceIcon } from '../../ds/icons/TraceIcon';
+import { raisedSurfaceStyle } from '../../ds/primitives/raised-surface';
+import { textStyle } from '../../ds/primitives/text';
+import { cn } from '../../lib/utils';
 import { useTraceInsight } from './hooks';
 import { signalLabel } from './signal-formatting';
 import type { TraceInsightResponse } from './types';
 import { useTraceIntelligence } from './use-trace-intelligence';
-import { Button } from '@/ds/components/Button';
-import { Txt } from '@/ds/components/Txt';
-import { TraceIcon } from '@/ds/icons/TraceIcon';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
-import { textStyle } from '@/ds/primitives/text';
-import { cn } from '@/lib/utils';
 
 interface TraceInsightViewProps {
   traceId: string;

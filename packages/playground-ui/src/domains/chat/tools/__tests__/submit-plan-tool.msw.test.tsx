@@ -4,11 +4,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { delay, http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { server } from '../../../../test/msw-server';
+import { ToolCallProvider } from '../../context/tool-call-context';
 import { SubmitPlanTool } from '../submit-plan-tool';
 import type { SubmitPlanToolProps } from '../submit-plan-tool';
 import { submittedPlanFile, submittedPlanPath } from './fixtures/submit-plan';
-import { ToolCallProvider } from '@/domains/chat/context/tool-call-context';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 const toolCallId = 'submit-plan-call';

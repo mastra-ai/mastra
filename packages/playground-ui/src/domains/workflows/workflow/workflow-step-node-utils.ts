@@ -1,11 +1,11 @@
 import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
 import type { ResolvedWorkflowStep } from '@mastra/react';
 import type { Node } from '@xyflow/react';
-import type { WorkflowCardCondition as Condition } from '@/ds/components/Workflow';
+import type { WorkflowCardCondition as Condition } from '../../../ds/components/Workflow';
 
 export const WORKFLOW_STEP_NODE_TYPE = 'workflow-step-node';
-export { WORKFLOW_BOUNDARY_NODE_TYPE } from '@/ds/components/Workflow';
-export type { WorkflowBoundaryNodeModel as WorkflowBoundaryNode } from '@/ds/components/Workflow';
+export { WORKFLOW_BOUNDARY_NODE_TYPE } from '../../../ds/components/Workflow';
+export type { WorkflowBoundaryNodeModel as WorkflowBoundaryNode } from '../../../ds/components/Workflow';
 
 export type WorkflowStepNodeData = {
   label: string;

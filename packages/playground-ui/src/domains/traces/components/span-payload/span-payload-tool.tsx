@@ -1,8 +1,8 @@
+import { ActivityHeadline } from '../../../../ds/components/ai/activity';
+import { presentTool } from '../../../../ds/components/ai/tool-call/tool-presentation';
+import { BadgeWrapper } from '../../../chat/components/badge-wrapper';
 import { SpanPayloadJson } from './span-payload-json';
 import { SpanPayloadField, SpanPayloadLabel } from './span-payload-primitives';
-import { BadgeWrapper } from '@/domains/chat/components/badge-wrapper';
-import { ActivityHeadline } from '@/ds/components/ai/activity';
-import { presentTool } from '@/ds/components/ai/tool-call/tool-presentation';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);

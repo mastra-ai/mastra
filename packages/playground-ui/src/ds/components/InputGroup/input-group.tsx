@@ -3,19 +3,19 @@ import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 
-import { Button } from '@/ds/components/Button';
-import type { ButtonProps } from '@/ds/components/Button/Button';
-import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
-import { ControlSizeContext, controlHeight } from '@/ds/primitives/control-size';
-import type { ControlSize } from '@/ds/primitives/control-size';
+import { cn } from '../../../lib/utils';
+import { ControlSizeContext, controlHeight } from '../../primitives/control-size';
+import type { ControlSize } from '../../primitives/control-size';
 import {
   deprecatedErrorAria,
   fieldErrorRimWithin,
   inputSurfaceAndFocusWithinStyle,
-} from '@/ds/primitives/form-element';
-import { textFieldAutofillProps } from '@/ds/primitives/password-manager-autofill';
-import { TextareaControl } from '@/ds/primitives/textarea-control';
-import { cn } from '@/lib/utils';
+} from '../../primitives/form-element';
+import { textFieldAutofillProps } from '../../primitives/password-manager-autofill';
+import { TextareaControl } from '../../primitives/textarea-control';
+import { Button } from '../Button';
+import type { ButtonProps } from '../Button/Button';
+import { keepOwnAccessibleName } from '../Field/field-control-aria';
 
 // Size flows down as `data-size` on the named group root (`group/input-group`), read by the
 // control through `group-data-[size=…]` variants — no prop drilling. The one context read is

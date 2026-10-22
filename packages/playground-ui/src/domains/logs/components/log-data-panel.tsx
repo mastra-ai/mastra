@@ -1,13 +1,13 @@
 import { ArrowRightIcon } from 'lucide-react';
 import { Fragment } from 'react';
+import { Button } from '../../../ds/components/Button';
+import { ButtonsGroup } from '../../../ds/components/ButtonsGroup';
+import { CopyButton } from '../../../ds/components/CopyButton';
+import { DataKeysAndValues } from '../../../ds/components/DataKeysAndValues';
+import { DataPanel } from '../../../ds/components/DataPanel';
+import { Txt } from '../../../ds/components/Txt';
+import { formatTimestampPrecise } from '../../../utils/date-format';
 import type { LogRecord } from '../types';
-import { Button } from '@/ds/components/Button';
-import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
-import { CopyButton } from '@/ds/components/CopyButton';
-import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
-import { DataPanel } from '@/ds/components/DataPanel';
-import { Txt } from '@/ds/components/Txt';
-import { formatTimestampPrecise } from '@/utils/date-format';
 
 export interface LogDataPanelProps {
   /** Always mount the panel and pass `undefined` to close it, so the drawer can animate out. */

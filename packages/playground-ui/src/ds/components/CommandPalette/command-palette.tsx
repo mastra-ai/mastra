@@ -1,14 +1,14 @@
 import type { ComponentPropsWithoutRef, HTMLAttributes, ReactNode } from 'react';
 
-import { CommandDialog, CommandInput, CommandItem, CommandList, CommandShortcut } from '@/ds/components/Command';
-import { Kbd } from '@/ds/components/Kbd';
-import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
-import { Txt } from '@/ds/components/Txt';
-import { inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
-import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
-import { controlStateColorTransition } from '@/ds/primitives/transitions';
-import { quietTextHover } from '@/ds/primitives/typography';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { inputSurfaceAndFocusWithinStyle } from '../../primitives/form-element';
+import { overlaySurfaceStyle } from '../../primitives/raised-surface';
+import { controlStateColorTransition } from '../../primitives/transitions';
+import { quietTextHover } from '../../primitives/typography';
+import { CommandDialog, CommandInput, CommandItem, CommandList, CommandShortcut } from '../Command';
+import { Kbd } from '../Kbd';
+import { ScrollArea, ScrollAreaViewport } from '../ScrollArea';
+import { Txt } from '../Txt';
 
 import './command-palette.css';
 

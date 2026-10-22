@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect } from 'storybook/test';
+import { TextRoles } from '../../tokens/fonts';
 import { Button } from '../Button';
 import { Input } from '../Input';
 import { Tree } from '../Tree';
 import { Txt } from './Txt';
-import { TextRoles } from '@/ds/tokens/fonts';
 
 const meta: Meta<typeof Txt> = {
   title: 'Elements/Txt',

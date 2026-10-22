@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { HelperExamples } from '../../../../.storybook/fixtures/helpers/helper-examples';
 import type { HelperExample } from '../../../../.storybook/fixtures/helpers/helper-examples';
-import { formatBytes } from '@/utils/number';
+import { formatBytes } from '../../number';
 
 const examples: HelperExample[] = [
   ['formatBytes(512)', formatBytes(512)],

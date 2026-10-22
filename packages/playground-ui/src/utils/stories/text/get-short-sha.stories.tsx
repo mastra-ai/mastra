@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { HelperExamples } from '../../../../.storybook/fixtures/helpers/helper-examples';
 import type { HelperExample } from '../../../../.storybook/fixtures/helpers/helper-examples';
-import { getShortSha } from '@/utils/id';
+import { getShortSha } from '../../id';
 
 const examples: HelperExample[] = [
   ["getShortSha('79f36ef97e4b1c2d3e4f5a6b7c8d9e0f1a2b3c4d')", getShortSha('79f36ef97e4b1c2d3e4f5a6b7c8d9e0f1a2b3c4d')],

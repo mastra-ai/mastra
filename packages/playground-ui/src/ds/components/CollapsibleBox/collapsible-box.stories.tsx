@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Maximize2, Minimize2 } from 'lucide-react';
+import { Button } from '../Button';
+import { Txt } from '../Txt';
 import { CollapsibleBox } from './collapsible-box';
 import { useCollapsibleBox } from './use-collapsible-box';
-import { Button } from '@/ds/components/Button';
-import { Txt } from '@/ds/components/Txt';
 
 function Demo({ paragraphs, collapsedHeight }: { paragraphs: number; collapsedHeight?: number }) {
   const box = useCollapsibleBox({ collapsedHeight });

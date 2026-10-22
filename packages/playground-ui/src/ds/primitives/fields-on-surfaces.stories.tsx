@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
-import { Button } from '@/ds/components/Button';
-import { Card } from '@/ds/components/Card';
-import { Combobox } from '@/ds/components/Combobox';
-import { DateTimePicker } from '@/ds/components/DateTimePicker';
+import { Button } from '../components/Button';
+import { Card } from '../components/Card';
+import { Combobox } from '../components/Combobox';
+import { DateTimePicker } from '../components/DateTimePicker';
 import {
   Dialog,
   DialogBody,
@@ -13,13 +13,13 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/ds/components/Dialog';
-import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
-import { Input } from '@/ds/components/Input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
-import { Textarea } from '@/ds/components/Textarea';
-import { Txt } from '@/ds/components/Txt';
-import { dialogSurfaceStyle } from '@/ds/primitives/raised-surface';
+} from '../components/Dialog';
+import { Field, FieldError, FieldLabel } from '../components/Field';
+import { Input } from '../components/Input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/Select';
+import { Textarea } from '../components/Textarea';
+import { Txt } from '../components/Txt';
+import { dialogSurfaceStyle } from './raised-surface';
 
 const regions = [
   { value: 'us-east-1', label: 'US East (N. Virginia)' },

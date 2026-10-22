@@ -6,6 +6,7 @@ import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { server } from '../../../../test/msw-server';
 import {
   authoredFeedbackResponse,
   feedbackRecord,
@@ -17,7 +18,6 @@ import {
 } from '../../hooks/__tests__/fixtures/trace-feedback';
 import { SpanFeedbackTab } from '../span-feedback-tab';
 import { TraceFeedbackTab } from '../trace-feedback-tab';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 const FEEDBACK_URL = `${BASE_URL}/api/observability/feedback`;

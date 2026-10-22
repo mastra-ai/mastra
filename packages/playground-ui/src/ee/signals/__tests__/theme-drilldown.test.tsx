@@ -6,6 +6,7 @@ import { useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { server } from '../../../test/msw-server';
 import { useThemeDetail, useThemeExamples, useThemeHistory, useThemePaths, useThemeSnapshots } from '../hooks';
 import { SankeySignals } from '../sankey-signals';
 import { buildDrilledThemeFlow, findSelectionStats, findThemeSelectionById } from '../theme-drilldown-data';
@@ -30,7 +31,6 @@ import {
   themeHistoryResponse,
   twoDrilldownThemeSnapshotsResponse,
 } from './fixtures/theme-drilldown';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = window.location.origin;
 const detailPath = `${BASE_URL}/api/learning/entities/support-agent/themes/101`;

@@ -1,6 +1,6 @@
 import Dagre from '@dagrejs/dagre';
+import { WORKFLOW_BOUNDARY_NODE_TYPE } from '../../../ds/components/Workflow';
 import type { WorkflowGraphNode, WorkflowGraphEdge } from './utils';
-import { WORKFLOW_BOUNDARY_NODE_TYPE } from '@/ds/components/Workflow';
 
 const getNodeSize = (node: WorkflowGraphNode): { width: number; height: number } => {
   if (node.type === WORKFLOW_BOUNDARY_NODE_TYPE) {

@@ -1,11 +1,11 @@
+import { cn } from '../../../lib/utils';
+import { AgentIcon } from '../../icons/AgentIcon';
+import { ToolsIcon } from '../../icons/ToolsIcon';
+import { WorkflowIcon } from '../../icons/WorkflowIcon';
 import { Badge } from '../Badge';
 import type { BadgeVariant } from '../Badge';
 import { DataListCell, DataListTextCell } from '../DataList/data-list-cells';
-import { Txt } from '@/ds/components/Txt';
-import { AgentIcon } from '@/ds/icons/AgentIcon';
-import { ToolsIcon } from '@/ds/icons/ToolsIcon';
-import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
-import { cn } from '@/lib/utils';
+import { Txt } from '../Txt';
 
 type LogLevel = 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 

@@ -1,14 +1,14 @@
 import { LockIcon, XIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useRef, useState } from 'react';
+import { MENU_SIDE_OFFSET } from '../../primitives/menu-item';
 import { Button } from '../Button';
 import { ButtonsGroup, ButtonsGroupText } from '../ButtonsGroup';
+import { Input } from '../Input';
+import { Popover, PopoverContent, PopoverTrigger } from '../Popover/popover';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../Tooltip';
 import { PickMultiPanel } from './pick-multi-panel';
 import type { PropertyFilterField, PropertyFilterToken } from './types';
-import { Input } from '@/ds/components/Input';
-import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover/popover';
-import { MENU_SIDE_OFFSET } from '@/ds/primitives/menu-item';
 
 export type PropertyFilterAppliedProps = {
   fields: PropertyFilterField[];

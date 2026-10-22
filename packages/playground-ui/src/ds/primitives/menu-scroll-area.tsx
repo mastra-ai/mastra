@@ -1,10 +1,10 @@
 import * as React from 'react';
 
-import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
-import type { ScrollAreaViewportProps } from '@/ds/components/ScrollArea';
-import { FluidMenuItems } from '@/ds/primitives/fluid-menu';
-import type { FluidMenu } from '@/ds/primitives/fluid-menu';
-import { cn } from '@/lib/utils';
+import { cn } from '../../lib/utils';
+import { ScrollArea, ScrollAreaViewport } from '../components/ScrollArea';
+import type { ScrollAreaViewportProps } from '../components/ScrollArea';
+import { FluidMenuItems } from './fluid-menu';
+import type { FluidMenu } from './fluid-menu';
 
 // For a popup that scrolls its items through `MenuScrollArea`: the popup only clips, and its
 // padding moves inside the scrolled content, so the scrollbar runs along the popup's edge with

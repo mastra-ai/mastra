@@ -1,8 +1,8 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 
+import { PageHeader as LegacyPageHeader } from '../../../components/PageHeader';
 import { PageHeader } from './page-header';
-import { PageHeader as LegacyPageHeader } from '@/ds/components/PageHeader';
 
 describe('PageHeader', () => {
   it('keeps the legacy entry point', () => {

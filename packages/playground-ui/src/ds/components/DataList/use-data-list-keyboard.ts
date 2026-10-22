@@ -1,7 +1,7 @@
 import { useRef } from 'react';
 import type { RefObject } from 'react';
-import { useTableKeydown } from '@/lib/keyboard';
-import type { UseTableKeydownArgs } from '@/lib/keyboard';
+import { useTableKeydown } from '../../../lib/keyboard';
+import type { UseTableKeydownArgs } from '../../../lib/keyboard';
 
 export type UseDataListKeyboardArgs<T extends HTMLElement = HTMLDivElement> = Omit<
   UseTableKeydownArgs,

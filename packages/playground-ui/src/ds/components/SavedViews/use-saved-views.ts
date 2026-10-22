@@ -1,8 +1,8 @@
 import { useState, useSyncExternalStore } from 'react';
+import type { FilterBarItem } from '../FilterBar/types';
 import { parseSavedViews, savedViewNameSchema, serializeSavedViews } from './saved-view-schema';
 import type { SavedView, SavedViewSettingsSchema } from './saved-view-schema';
 import { readSavedViewsRaw, savedViewsSubscriber, writeSavedViewsRaw } from './saved-views-storage';
-import type { FilterBarItem } from '@/ds/components/FilterBar/types';
 
 const NEW_SAVED_VIEW_NAME = 'Untitled view';
 

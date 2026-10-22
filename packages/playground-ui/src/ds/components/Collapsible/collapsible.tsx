@@ -1,7 +1,7 @@
 import { Collapsible as CollapsiblePrimitive } from '@base-ui/react/collapsible';
 import React from 'react';
-import { transitions, focusRing } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { transitions, focusRing } from '../../primitives/transitions';
 
 const Collapsible = CollapsiblePrimitive.Root;
 

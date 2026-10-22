@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { HookDemo } from '../../../../.storybook/fixtures/hooks/hook-demo';
-import { Button } from '@/ds/components/Button';
-import { Txt } from '@/ds/components/Txt';
-import { useElapsedTime } from '@/hooks/use-elapsed-time';
-import { formatElapsed } from '@/utils/duration';
+import { Button } from '../../../ds/components/Button';
+import { Txt } from '../../../ds/components/Txt';
+import { formatElapsed } from '../../../utils/duration';
+import { useElapsedTime } from '../../use-elapsed-time';
 
 function ElapsedTimeDemo() {
   const [isActive, setIsActive] = useState(false);

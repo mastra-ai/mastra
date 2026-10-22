@@ -5,10 +5,10 @@ import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { describe, expect, it } from 'vitest';
 
+import { server } from '../../../test/msw-server';
 import { useThemeFlow, useThemeSnapshots } from '../hooks';
 import { TraceIntelligenceProvider } from '../trace-intelligence-provider';
 import { themeFlowResponse, themeSnapshotsResponse } from './fixtures/theme-flow';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = window.location.origin;
 

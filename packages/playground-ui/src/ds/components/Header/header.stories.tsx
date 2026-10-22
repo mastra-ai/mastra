@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Settings, Bell, Plus, Search } from 'lucide-react';
+import { MainCard } from '../../new/layout/app-shell/main-card';
 import { Button } from '../Button';
 import { Txt } from '../Txt';
 import { Header, HeaderTitle, HeaderAction, HeaderGroup } from './Header';
-import { MainCard } from '@/ds/new/layout/app-shell/main-card';
 
 const meta: Meta<typeof Header> = {
   title: 'Layout/Header',

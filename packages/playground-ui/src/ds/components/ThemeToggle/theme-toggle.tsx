@@ -1,10 +1,10 @@
 import { Monitor, Moon, Sun } from 'lucide-react';
 
+import type { ControlSize } from '../../primitives/control-size';
 import { SegmentedControl, SegmentedControlItem } from '../SegmentedControl';
 import type { SegmentedControlProps } from '../SegmentedControl';
 import { useTheme } from '../ThemeProvider';
 import type { Theme } from '../ThemeProvider/theme-context';
-import type { ControlSize } from '@/ds/primitives/control-size';
 
 export interface ThemeToggleOption {
   value: Theme;

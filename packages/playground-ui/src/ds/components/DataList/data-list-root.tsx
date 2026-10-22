@@ -1,6 +1,12 @@
 import { ScrollArea as ScrollAreaPrimitive } from '@base-ui/react/scroll-area';
 import type { CSSProperties, ReactNode, RefObject } from 'react';
 import { useId, useMemo } from 'react';
+import { useLocalStorageState } from '../../../hooks/use-local-storage-state';
+import { cn } from '../../../lib/utils';
+import { FluidMenuItems, useFluidMenu } from '../../primitives/fluid-menu';
+import { raisedSurfaceStyle } from '../../primitives/raised-surface';
+import { ScrollArea, ScrollAreaViewport } from '../ScrollArea/scroll-area';
+import type { ScrollAreaMask, ScrollAreaProps } from '../ScrollArea/scroll-area';
 import {
   columnOrderSchema,
   getColumnOrderStorageKey,
@@ -14,12 +20,6 @@ import {
 } from './data-list-column-order';
 import { DataListReorderContext } from './data-list-reorder-context';
 import type { DataListReorderContextValue } from './data-list-reorder-context';
-import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea/scroll-area';
-import type { ScrollAreaMask, ScrollAreaProps } from '@/ds/components/ScrollArea/scroll-area';
-import { FluidMenuItems, useFluidMenu } from '@/ds/primitives/fluid-menu';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
-import { useLocalStorageState } from '@/hooks/use-local-storage-state';
-import { cn } from '@/lib/utils';
 
 /**
  * Horizontal sizing of the list grid.

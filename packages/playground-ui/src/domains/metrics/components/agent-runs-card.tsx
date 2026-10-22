@@ -1,4 +1,6 @@
 import { EntityType } from '@mastra/core/observability';
+import { MetricsCard } from '../../../ds/components/MetricsCard';
+import { MetricsStackedBarChart } from '../../../ds/components/MetricsStackedBarChart';
 import type { TimeRange } from '../drilldown';
 import { useMetricsActivity } from '../hooks/use-metrics-activity';
 import { useMetricsFilters } from '../hooks/use-metrics-filters';
@@ -9,8 +11,6 @@ import { bucketPlan, bucketWindow } from '../lib/metrics-buckets';
 import { ChartArea } from './chart-area';
 import { ChartCard } from './chart-card';
 import { ChartCardError } from './chart-card-error';
-import { MetricsCard } from '@/ds/components/MetricsCard';
-import { MetricsStackedBarChart } from '@/ds/components/MetricsStackedBarChart';
 
 const SERIES = [
   { dataKey: 'completed', label: 'Completed', color: CHART_COLORS.green },

@@ -1,11 +1,11 @@
 import { useSyncExternalStore } from 'react';
-import { Badge } from '@/ds/components/Badge';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { focusRing } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
-import { formatDate, toDate } from '@/utils/date-format';
-import type { DateInput } from '@/utils/date-format';
-import { formatRelativeTime } from '@/utils/relative-time';
+import { cn } from '../../../lib/utils';
+import { formatDate, toDate } from '../../../utils/date-format';
+import type { DateInput } from '../../../utils/date-format';
+import { formatRelativeTime } from '../../../utils/relative-time';
+import { focusRing } from '../../primitives/transitions';
+import { Badge } from '../Badge';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip';
 
 export interface RelativeTimestampProps {
   value: DateInput;

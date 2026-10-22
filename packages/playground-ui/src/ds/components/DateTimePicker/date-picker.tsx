@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { DayPicker } from 'react-day-picker';
-import { quietTextHover } from '@/ds/primitives/typography';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { quietTextHover } from '../../primitives/typography';
 
 export type CalendarProps = React.ComponentProps<typeof DayPicker>;
 

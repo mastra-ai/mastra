@@ -1,13 +1,13 @@
 import { useTraceSpans } from '@mastra/react/hooks/traces';
 import { ListTreeIcon } from 'lucide-react';
+import { Button } from '../../../ds/components/Button';
+import { Txt } from '../../../ds/components/Txt';
+import { cn } from '../../../utils/cn';
+import { ToolCallProvider } from '../../chat/context/tool-call-context';
+import { MessageRow } from '../../chat/messages/message-row';
 import { formatTraceThreadMessages } from './format-trace-thread-messages';
 import { TraceMessagesSkeleton } from './trace-messages-skeleton';
-import { ToolCallProvider } from '@/domains/chat/context/tool-call-context';
-import { MessageRow } from '@/domains/chat/messages/message-row';
-import { TracesErrorContent } from '@/domains/traces/components/traces-error-content';
-import { Button } from '@/ds/components/Button';
-import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/utils/cn';
+import { TracesErrorContent } from './traces-error-content';
 
 export interface TraceThreadItemViewProps {
   traceId: string;

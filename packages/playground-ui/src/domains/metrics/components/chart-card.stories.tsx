@@ -1,12 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
+import { MetricsLineChart, MetricsLineChartLegend } from '../../../ds/components/MetricsLineChart';
+import type { MetricsLineChartSeries } from '../../../ds/components/MetricsLineChart';
 import { bucketLabels } from '../lib/bucket-labels';
 import { EDGE_BUCKET_AXIS } from '../lib/chart-axis';
 import { CHART_COLORS } from '../lib/chart-colors';
 import { ChartArea } from './chart-area';
 import { ChartCard } from './chart-card';
-import { MetricsLineChart, MetricsLineChartLegend } from '@/ds/components/MetricsLineChart';
-import type { MetricsLineChartSeries } from '@/ds/components/MetricsLineChart';
 
 const DAY = 24 * 3_600_000;
 const start = new Date(2026, 9, 15).getTime();

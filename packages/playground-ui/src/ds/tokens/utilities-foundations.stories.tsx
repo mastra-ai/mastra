@@ -2,11 +2,11 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ArrowDown, ArrowUp } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
+import { cn } from '../../lib/utils';
 import { Txt } from '../components/Txt/Txt';
 import { ARRIVING_CLASS, ARRIVING_MS } from './animations';
 import { FoundationPage, FoundationSection, Specimen, SpecimenGroup } from './foundations-layout';
-import { cn } from '@/lib/utils';
-import '@/ds/components/Arrival/arrival.css';
+import '../components/Arrival/arrival.css';
 
 const meta: Meta = {
   title: 'Foundations/Utilities',

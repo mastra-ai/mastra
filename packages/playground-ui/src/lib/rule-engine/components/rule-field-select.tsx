@@ -1,12 +1,12 @@
 import { Braces, Hash, List, ToggleLeft, Type } from 'lucide-react';
 import * as React from 'react';
 
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../ds/components/Select/select';
+import { Txt } from '../../../ds/components/Txt';
+import { Icon } from '../../../ds/icons';
+import { cn } from '../../utils';
 import { getFieldOptionsFromSchema, getFieldOptionAtPath, getChildFieldOptions, parseFieldPath } from './schema-utils';
 import type { FieldOption, RuleFieldSelectProps } from './types';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select/select';
-import { Txt } from '@/ds/components/Txt';
-import { Icon } from '@/ds/icons';
-import { cn } from '@/lib/utils';
 
 /**
  * Get icon for a field type

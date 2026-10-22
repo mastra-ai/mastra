@@ -1,6 +1,7 @@
 import type { EntityType } from '@mastra/core/observability';
 import type { TraceQueryDiscoveryTimeRange } from '@mastra/react/hooks/traces';
 import { createContext, useContext } from 'react';
+import type { DataListSort } from '../../../../ds/components/DataList';
 import type { useTraceColumnPreferences } from '../../hooks/use-trace-column-preferences';
 import type { useTracesListSource } from '../../hooks/use-traces-list-source';
 import { hasTraceUsageColumn, isTraceUsageColumn } from '../../trace-list-columns';
@@ -8,7 +9,6 @@ import type { TraceColumnPreferences } from '../../trace-list-columns';
 import type { SpanTab, TraceDatePreset } from '../../types';
 import type { TraceSpanView } from '../trace-data-panel-view';
 import type { TracesFilters, TracesSelection, TracesSortDirection } from './traces-explorer-actions';
-import type { DataListSort } from '@/ds/components/DataList';
 
 export type TracesExplorerScope = { entityId: string; entityType?: EntityType };
 

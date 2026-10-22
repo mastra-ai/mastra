@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 
-import { frameFillStyle } from '@/ds/primitives/raised-surface';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../../lib/utils';
+import { frameFillStyle } from '../../../primitives/raised-surface';
 
 // The app frame surface inside `AppShell`. Spacing around it is owned by the shell, not the card.
 // Framed only from lg, where the sidebar sits beside it (the sidebar's drawer breakpoint); below lg it is

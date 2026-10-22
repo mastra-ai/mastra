@@ -6,10 +6,10 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { server } from '../../../../test/msw-server';
+import { buildListDatasetsResponse } from '../../../datasets/components/__tests__/fixtures/datasets';
 import { ScoreDataPanel } from '../score-data-panel';
 import { createScore } from './fixtures/score-as-item';
-import { buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 

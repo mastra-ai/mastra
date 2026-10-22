@@ -1,0 +1,2 @@
+@source '.';
+@source not './**/*.{test,stories}.{ts,tsx}';

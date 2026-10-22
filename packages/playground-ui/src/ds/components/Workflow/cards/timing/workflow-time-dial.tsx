@@ -1,5 +1,5 @@
 import type { ComponentProps, ReactNode } from 'react';
-import { cn } from '@/utils/cn';
+import { cn } from '../../../../../utils/cn';
 
 export type DurationUnit = 'ms' | 's' | 'min' | 'h';
 

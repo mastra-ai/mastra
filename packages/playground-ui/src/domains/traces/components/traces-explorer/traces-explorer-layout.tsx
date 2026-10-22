@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { PageLayout } from '../../../../ds/components/PageLayout';
 import { NoTracesInfo } from '../no-traces-info';
 import { TracesErrorContent } from '../traces-error-content';
 import { TracesPageSkeleton } from '../traces-page-skeleton';
@@ -12,7 +13,6 @@ import {
 } from './traces-explorer-context';
 import type { TracesListContextValue } from './traces-explorer-context';
 import { useTracesDiscovery } from './use-traces-discovery';
-import { PageLayout } from '@/ds/components/PageLayout';
 
 export type TracesExplorerErrorRenderArgs = Pick<TracesListContextValue, 'refetch'> & {
   error: NonNullable<TracesListContextValue['error']>;

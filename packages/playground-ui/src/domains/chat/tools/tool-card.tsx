@@ -1,18 +1,19 @@
 import { useMcpAppTools } from '@mastra/react/hooks/mcps';
 import { useCallback, useContext } from 'react';
+import type { MessageMetadata } from '..';
+import { McpAppToolResult } from '../../mcps/components/mcp-app-tool-result';
+import { PlaygroundWorkflowRunProvider } from '../../workflows/context/playground-workflow-run-provider';
+import { ChatAgentContext, useChatRunning, useChatSend } from '../context/chat-context';
+import { AskUserTool } from './ask-user-tool';
 import { AgentBadgeWrapper } from './badges/agent-badge-wrapper';
+import { CodeModeBadge } from './badges/code-mode-badge';
 import { FileTreeBadge } from './badges/file-tree-badge';
+import { ObservationMarkerBadge } from './badges/observation-marker-badge';
 import { SandboxExecutionBadge } from './badges/sandbox-execution-badge';
 import { ToolBadge } from './badges/tool-badge';
 import { useWorkflowStream, WorkflowBadge } from './badges/workflow-badge';
+import { ConnectPromptTool } from './connect-prompt-tool';
 import { SubmitPlanTool } from './submit-plan-tool';
-import { ToolResultMedia } from './tool-result-media';
-import type { MessageMetadata } from '@/domains/chat';
-import { ChatAgentContext, useChatRunning, useChatSend } from '@/domains/chat/context/chat-context';
-import { AskUserTool } from '@/domains/chat/tools/ask-user-tool';
-import { CodeModeBadge } from '@/domains/chat/tools/badges/code-mode-badge';
-import { ObservationMarkerBadge } from '@/domains/chat/tools/badges/observation-marker-badge';
-import { ConnectPromptTool } from '@/domains/chat/tools/connect-prompt-tool';
 import {
   badgeStatus,
   codeModeCall,
@@ -21,9 +22,8 @@ import {
   isWorkflowCall,
   toolCardKind,
   toolInteraction,
-} from '@/domains/chat/tools/tool-card-kind';
-import { McpAppToolResult } from '@/domains/mcps/components/mcp-app-tool-result';
-import { PlaygroundWorkflowRunProvider } from '@/domains/workflows/context/playground-workflow-run-provider';
+} from './tool-card-kind';
+import { ToolResultMedia } from './tool-result-media';
 
 /** A `data`-typed part the agent wrote via `writer.custom`, scoped to a call by `data.toolCallId`. */
 export interface DataMessagePart {

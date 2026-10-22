@@ -1,9 +1,9 @@
 import type { WorkflowRunStatus } from '@mastra/core/workflows';
 import { Check, CirclePause, CircleSlash, Clock, Pause, X } from 'lucide-react';
+import { Spinner } from '../../../ds/components/Spinner';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../../ds/components/Tooltip';
+import { Icon } from '../../../ds/icons/Icon';
 import { workflowStatusTone, workflowStatusToneText } from '../workflow-status-tone';
-import { Spinner } from '@/ds/components/Spinner';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { Icon } from '@/ds/icons/Icon';
 
 export interface WorkflowRunStatusIconProps {
   status: WorkflowRunStatus;

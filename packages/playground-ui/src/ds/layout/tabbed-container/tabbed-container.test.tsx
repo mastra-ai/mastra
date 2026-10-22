@@ -2,9 +2,9 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { DataList } from '../../components/DataList/data-list';
+import { TabbedContainer as LegacyTabbedContainer } from '../../components/DataList/TabbedContainer/tabbed-container';
 import { TabbedContainer } from './index';
-import { DataList } from '@/ds/components/DataList/data-list';
-import { TabbedContainer as LegacyTabbedContainer } from '@/ds/components/DataList/TabbedContainer/tabbed-container';
 
 beforeEach(() => {
   vi.stubGlobal(

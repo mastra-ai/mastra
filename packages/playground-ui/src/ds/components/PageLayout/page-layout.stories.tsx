@@ -3,6 +3,8 @@ import { ArrowLeftIcon, BoxesIcon, PlusIcon } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
 import { expect, within } from 'storybook/test';
 
+import { MainCard } from '../../new/layout/app-shell';
+import { PageHeader } from '../../new/layout/page-header';
 import { ActionRow } from '../ActionRow';
 import { Breadcrumb, Crumb } from '../Breadcrumb';
 import { Button } from '../Button';
@@ -10,8 +12,6 @@ import { EmptyState } from '../EmptyState';
 import { Input } from '../Input';
 import { Txt } from '../Txt';
 import { PageLayout } from './index';
-import { MainCard } from '@/ds/new/layout/app-shell';
-import { PageHeader } from '@/ds/new/layout/page-header';
 
 const meta: Meta<typeof PageLayout> = {
   title: 'Layout/PageLayout',

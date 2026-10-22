@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { CheckIcon } from 'lucide-react';
+import { cn } from '../../../lib/utils';
+import { focusRingOffset } from '../../primitives/transitions';
 import { DropdownMenu } from '../DropdownMenu/dropdown-menu';
 import { Avatar } from './Avatar';
-import { focusRingOffset } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
 
 const meta: Meta<typeof Avatar> = {
   title: 'Elements/Avatar',

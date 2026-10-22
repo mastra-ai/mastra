@@ -7,16 +7,16 @@ import { http, HttpResponse } from 'msw';
 import type { ChangeEvent } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { server } from '../../../../test/msw-server';
 import { SaveAsDatasetItemDialog } from '../save-as-dataset-item-dialog';
 import type { CreateDatasetDialogRenderProps } from '../save-as-dataset-item-dialog';
 import { buildDataset, buildListDatasetsResponse } from './fixtures/datasets';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 
 // Unlike the main suite, this one keeps the real Select: Base UI resets an unmatched value when its
 // items change, and that reset is what this suite guards against. CodeEditor stays stubbed.
-vi.mock('@/ds/components/CodeEditor', () => ({
+vi.mock('../../../../ds/components/CodeEditor', () => ({
   CodeEditor: ({ value, onChange }: { value?: string; onChange?: (value: string) => void }) => (
     <textarea
       value={value ?? ''}

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Txt } from '@/ds/components/Txt';
-import { formatDuration } from '@/utils/duration';
+import { formatDuration } from '../../../../utils/duration';
+import { Txt } from '../../Txt';
 
 interface WorkflowClockProps {
   startedAt: number;

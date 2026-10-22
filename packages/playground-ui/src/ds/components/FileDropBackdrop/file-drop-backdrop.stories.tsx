@@ -2,13 +2,13 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ArrowUp, Paperclip } from 'lucide-react';
 import { useRef, useState } from 'react';
 
+import { FileChipEntry } from '../../../domains/chat/attachments/attachment-preview-dialog';
+import { ComposerAttachment } from '../../../domains/chat/attachments/composer-attachment';
+import { ComposerAttachmentList } from '../../../domains/chat/attachments/composer-attachment-list';
 import { Button } from '../Button';
 import { Composer, ComposerActions, ComposerBox, ComposerInput } from '../Composer';
 import { Input } from '../Input';
 import { FileDropBackdrop } from './file-drop-backdrop';
-import { FileChipEntry } from '@/domains/chat/attachments/attachment-preview-dialog';
-import { ComposerAttachment } from '@/domains/chat/attachments/composer-attachment';
-import { ComposerAttachmentList } from '@/domains/chat/attachments/composer-attachment-list';
 
 const meta: Meta<typeof FileDropBackdrop> = {
   title: 'Elements/FileDropBackdrop',

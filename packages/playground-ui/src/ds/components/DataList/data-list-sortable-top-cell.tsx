@@ -1,9 +1,9 @@
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { cn } from '../../../lib/utils';
+import { Button } from '../Button';
 import { DataListTopCell } from './data-list-top-cell';
 import type { DataListTopCellProps } from './data-list-top-cell';
-import { Button } from '@/ds/components/Button';
-import { cn } from '@/lib/utils';
 
 export type DataListSort = 'asc' | 'desc';
 

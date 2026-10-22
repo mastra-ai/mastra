@@ -2,6 +2,8 @@ import type { EntityType } from '@mastra/core/observability';
 import { useMastraClient } from '@mastra/react';
 import { createTraceQueryValuesResolver, useEntityNames, useEnvironments } from '@mastra/react/hooks/traces';
 import { useMemo } from 'react';
+import { isFilterBarGroup } from '../../../../ds/components/FilterBar';
+import type { FilterBarExpression, FilterBarField, FilterBarItem } from '../../../../ds/components/FilterBar';
 import {
   createTraceFilterBarFields,
   filterBarExpressionToTraceFilters,
@@ -13,8 +15,6 @@ import { TRACE_TIME_RANGE_FIELD, TRACE_TIME_RANGE_FIELD_ID, TRACE_TIME_RANGE_ITE
 import { getSelectedEntityOption } from './traces-explorer-actions';
 import { useTracesConfig, useTracesFilters } from './traces-explorer-context';
 import { useTracesDiscovery } from './use-traces-discovery';
-import { isFilterBarGroup } from '@/ds/components/FilterBar';
-import type { FilterBarExpression, FilterBarField, FilterBarItem } from '@/ds/components/FilterBar';
 
 const NO_SUGGESTIONS: string[] = [];
 

@@ -2,9 +2,9 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { TooltipProvider } from '../../../../../ds/components/Tooltip';
+import { ToolCallProvider } from '../../../context/tool-call-context';
 import { ToolBadge } from '../tool-badge';
-import { ToolCallProvider } from '@/domains/chat/context/tool-call-context';
-import { TooltipProvider } from '@/ds/components/Tooltip';
 
 const renderWithProviders = (node: ReactNode) =>
   render(

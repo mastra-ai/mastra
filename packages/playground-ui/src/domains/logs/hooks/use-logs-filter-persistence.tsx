@@ -1,12 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import type { SetURLSearchParamsLike } from '../../../lib/sort/use-url-sort';
+import { toast } from '../../../lib/toast';
 import {
   clearSavedLogsFilters,
   hasAnyLogsFilterParams,
   loadLogsFiltersFromStorage,
   saveLogsFiltersToStorage,
 } from '../log-filters';
-import type { SetURLSearchParamsLike } from '@/lib/sort/use-url-sort';
-import { toast } from '@/lib/toast';
 
 const DEFAULT_SAVED_MESSAGE = 'Filters setting for Logs saved';
 const DEFAULT_CLEARED_MESSAGE = 'Filters setting for Logs cleared up';

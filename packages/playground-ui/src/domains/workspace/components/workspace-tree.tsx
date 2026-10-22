@@ -4,19 +4,19 @@ import { useQueryClient } from '@tanstack/react-query';
 import { CircleAlertIcon, FolderPlusIcon, LockIcon } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { AlertDialog } from '../../../ds/components/AlertDialog';
+import { Button } from '../../../ds/components/Button';
+import { Skeleton } from '../../../ds/components/Skeleton';
+import { Spinner } from '../../../ds/components/Spinner';
+import { Tree } from '../../../ds/components/Tree';
+import { Txt } from '../../../ds/components/Txt';
+import { FileIcon, FolderIcon, TrashIcon } from '../../../ds/icons';
 import { ROOT_PATH, joinPath, parentOf } from '../path';
 import { MountIcon } from './mount-icon';
 import type { WorkspaceMount } from './mount-icon';
 import { useWorkspaceContext } from './use-workspace-context';
 import type { WorkspaceEntryRef } from './use-workspace-context';
 import { WorkspaceError } from './workspace-error';
-import { AlertDialog } from '@/ds/components/AlertDialog';
-import { Button } from '@/ds/components/Button';
-import { Skeleton } from '@/ds/components/Skeleton';
-import { Spinner } from '@/ds/components/Spinner';
-import { Tree } from '@/ds/components/Tree';
-import { Txt } from '@/ds/components/Txt';
-import { FileIcon, FolderIcon, TrashIcon } from '@/ds/icons';
 
 const formatBytes = (bytes: number) => {
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];

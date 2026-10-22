@@ -1,6 +1,6 @@
 import type { ComponentPropsWithRef, ReactNode } from 'react';
 
-import { cn } from '@/lib/utils';
+import { cn } from '../../../../lib/utils';
 
 import './app-shell.css';
 

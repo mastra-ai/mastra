@@ -1,7 +1,7 @@
+import { WorkflowEdgeDataButton } from '../../../../ds/components/Workflow';
 import { useWorkflowStepDetail } from '../../context/workflow-step-detail-context';
 import type { WorkflowDataSelection } from '../../context/workflow-step-detail-context';
 import { useWorkflowData, workflowDataKey } from './use-workflow-data';
-import { WorkflowEdgeDataButton } from '@/ds/components/Workflow';
 
 export function WorkflowDataButton({ selection }: { selection: WorkflowDataSelection }) {
   const { stepDetail, showData } = useWorkflowStepDetail();

@@ -6,6 +6,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { server } from '../../../../test/msw-server';
 import { TraceAsItemDialog } from '../trace-as-item-dialog';
 import {
   datasetItem,
@@ -14,12 +15,11 @@ import {
   trajectoryWithToolCalls,
 } from './fixtures/add-trace-mocks';
 import { createTraceDetails } from './fixtures/trace-as-item';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 
 // CodeMirror doesn't run in jsdom: a textarea keeps the editor's value and accessible name.
-vi.mock('@/ds/components/CodeEditor', () => ({
+vi.mock('../../../../ds/components/CodeEditor', () => ({
   CodeEditor: ({
     value,
     onChange,

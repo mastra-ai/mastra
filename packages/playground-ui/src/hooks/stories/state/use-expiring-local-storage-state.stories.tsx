@@ -2,9 +2,9 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { z } from 'zod/v4';
 import { HookDemo } from '../../../../.storybook/fixtures/hooks/hook-demo';
-import { Button } from '@/ds/components/Button';
-import { Txt } from '@/ds/components/Txt';
-import { useExpiringLocalStorageState } from '@/hooks/use-local-storage-state';
+import { Button } from '../../../ds/components/Button';
+import { Txt } from '../../../ds/components/Txt';
+import { useExpiringLocalStorageState } from '../../use-local-storage-state';
 
 const draftSchema = z.string();
 const storageKey = 'storybook:hooks:expiring-storage:draft';

@@ -1,6 +1,6 @@
 @import './fonts.css';
 @import '../../playground-ui/src/index.css';
-@import '@mastra/playground-ui/sources.css';
+@import '../../playground-ui/src/sources.css';
 
 @layer base {
   :root {

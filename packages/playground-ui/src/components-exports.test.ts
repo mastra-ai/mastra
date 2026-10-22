@@ -31,8 +31,9 @@ const findMissingComponentEntries = (directory: string): string[] =>
     });
 
 describe('components/* subpath exports', () => {
-  it('exposes the wildcard export pointing into dist/components', () => {
+  it('exposes the wildcard export pointing into dist/components, and into the source for monorepo dev servers', () => {
     expect(pkg.exports['./components/*']).toEqual({
+      '@mastra/source': './src/ds/components/*',
       import: {
         types: './dist/components/*.d.ts',
         default: './dist/components/*.es.js',

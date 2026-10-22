@@ -1,5 +1,5 @@
 import type { EntityLearningProgressStatus, ThemeLearningEntity } from '@mastra/client-js';
-import { formatDate } from '@/utils/date-format';
+import { formatDate } from '../../../utils/date-format';
 
 export type TraceIntelligenceEntitySort = 'default' | 'entity-asc' | 'entity-desc';
 export type TraceIntelligenceEntityView = 'compact' | 'list';

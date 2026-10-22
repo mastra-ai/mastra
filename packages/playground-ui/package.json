@@ -19,6 +19,7 @@
     "./components.css": "./components.css",
     "./sources.css": "./sources.css",
     "./tokens": {
+      "@mastra/source": "./src/ds/tokens/index.ts",
       "import": {
         "types": "./dist/tokens.d.ts",
         "default": "./dist/tokens.es.js"
@@ -29,6 +30,7 @@
       }
     },
     "./utils/*": {
+      "@mastra/source": "./src/utils/*",
       "import": {
         "types": "./dist/utils/*.d.ts",
         "default": "./dist/utils/*.es.js"
@@ -39,6 +41,7 @@
       }
     },
     "./domains/*": {
+      "@mastra/source": "./src/domains/*",
       "import": {
         "types": "./dist/domains/*.d.ts",
         "default": "./dist/domains/*.es.js"
@@ -49,6 +52,7 @@
       }
     },
     "./ee/*": {
+      "@mastra/source": "./src/ee/*",
       "import": {
         "types": "./dist/ee/*.d.ts",
         "default": "./dist/ee/*.es.js"
@@ -59,6 +63,7 @@
       }
     },
     "./primitives/*": {
+      "@mastra/source": "./src/ds/primitives/*",
       "import": {
         "types": "./dist/primitives/*.d.ts",
         "default": "./dist/primitives/*.es.js"
@@ -69,6 +74,7 @@
       }
     },
     "./keyboard/*": {
+      "@mastra/source": "./src/lib/keyboard/*",
       "import": {
         "types": "./dist/keyboard/*.d.ts",
         "default": "./dist/keyboard/*.es.js"
@@ -79,6 +85,7 @@
       }
     },
     "./resize/*": {
+      "@mastra/source": "./src/lib/resize/*",
       "import": {
         "types": "./dist/resize/*.d.ts",
         "default": "./dist/resize/*.es.js"
@@ -89,6 +96,7 @@
       }
     },
     "./sort/*": {
+      "@mastra/source": "./src/lib/sort/*",
       "import": {
         "types": "./dist/sort/*.d.ts",
         "default": "./dist/sort/*.es.js"
@@ -99,6 +107,7 @@
       }
     },
     "./lib/*": {
+      "@mastra/source": "./src/lib/*",
       "import": {
         "types": "./dist/lib/*.d.ts",
         "default": "./dist/lib/*.es.js"
@@ -109,18 +118,21 @@
       }
     },
     "./hooks/*": {
+      "@mastra/source": "./src/hooks/*",
       "import": {
         "types": "./dist/hooks/*.d.ts",
         "default": "./dist/hooks/*.es.js"
       }
     },
     "./icons/*": {
+      "@mastra/source": "./src/ds/icons/*",
       "import": {
         "types": "./dist/icons/*.d.ts",
         "default": "./dist/icons/*.es.js"
       }
     },
     "./components/*": {
+      "@mastra/source": "./src/ds/components/*",
       "import": {
         "types": "./dist/components/*.d.ts",
         "default": "./dist/components/*.es.js"
@@ -128,18 +140,21 @@
     },
     "./package.json": "./package.json",
     "./new/settings": {
+      "@mastra/source": "./src/ds/new/settings/index.ts",
       "import": {
         "types": "./dist/new/settings.d.ts",
         "default": "./dist/new/settings.es.js"
       }
     },
     "./new/layout/app-shell": {
+      "@mastra/source": "./src/ds/new/layout/app-shell/index.ts",
       "import": {
         "types": "./dist/new/layout/app-shell.d.ts",
         "default": "./dist/new/layout/app-shell.es.js"
       }
     },
     "./layout/tabbed-container": {
+      "@mastra/source": "./src/ds/layout/tabbed-container/index.ts",
       "import": {
         "types": "./dist/layout/tabbed-container.d.ts",
         "default": "./dist/layout/tabbed-container.es.js"
@@ -148,7 +163,7 @@
   },
   "scripts": {
     "build": "vite build",
-    "dev": "node scripts/prune-dist.mjs && vite build --watch --mode development",
+    "dev": "tsc --watch --preserveWatchOutput --noEmit false --emitDeclarationOnly --noCheck",
     "test": "vitest",
     "test:mutate": "stryker run --mutate",
     "typecheck": "tsc",

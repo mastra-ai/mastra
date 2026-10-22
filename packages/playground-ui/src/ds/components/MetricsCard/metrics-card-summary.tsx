@@ -1,6 +1,6 @@
-import { SkeletonText } from '@/ds/components/Skeleton';
-import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { SkeletonText } from '../Skeleton';
+import { Txt } from '../Txt';
 
 /** Always the top bar's last item, so action buttons sit to its left and the value hugs the edge. */
 export function MetricsCardSummary({

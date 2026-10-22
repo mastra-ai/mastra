@@ -1,7 +1,7 @@
 import { ArrowLeftIcon, XIcon } from 'lucide-react';
-import { Button } from '@/ds/components/Button';
-import type { ButtonProps } from '@/ds/components/Button';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { Button } from '../Button';
+import type { ButtonProps } from '../Button';
 
 export interface DataPanelCloseButtonProps {
   onClick: () => void;

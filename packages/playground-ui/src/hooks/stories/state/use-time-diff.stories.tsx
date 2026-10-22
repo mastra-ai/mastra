@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { HookDemo } from '../../../../.storybook/fixtures/hooks/hook-demo';
-import { Button } from '@/ds/components/Button';
-import { Txt } from '@/ds/components/Txt';
-import { useTimeDiff } from '@/hooks/use-time-diff';
+import { Button } from '../../../ds/components/Button';
+import { Txt } from '../../../ds/components/Txt';
+import { useTimeDiff } from '../../use-time-diff';
 
 function TimeDiffDemo() {
   const [startedAt, setStartedAt] = useState(() => Date.now());

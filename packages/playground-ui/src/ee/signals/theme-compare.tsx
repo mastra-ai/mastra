@@ -1,5 +1,6 @@
 import { useState } from 'react';
 
+import { Txt } from '../../ds/components/Txt';
 import { useThemeFlows } from './hooks/use-theme-flows';
 import { snapshotSummaryLabel } from './sankey-signals-data';
 import { SignalDeltaColumn } from './signal-delta-column';
@@ -9,7 +10,6 @@ import type { TimelineMarkerKind } from './snapshot-timeline';
 import { timelineTickPositions } from './snapshot-timeline-data';
 import type { ThemeSelection } from './theme-drilldown-data';
 import type { ThemeSnapshot, TraceSignalName } from './types';
-import { Txt } from '@/ds/components/Txt';
 
 /**
  * Compare mode: two interchangeable points on the shared time axis show how

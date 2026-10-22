@@ -1,7 +1,7 @@
 import type { TaskItem } from '@mastra/core/signals';
 import { useId } from 'react';
+import { cn } from '../../../../lib/utils';
 import { TASK_ROW_HEIGHT, taskGraphMotion } from './task-graph-node';
-import { cn } from '@/lib/utils';
 
 type TaskStatus = TaskItem['status'];
 

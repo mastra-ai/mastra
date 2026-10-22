@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ArrowUpRight } from 'lucide-react';
+import { SettingsContainer } from '../../new/settings';
 import { Button } from '../Button';
 import { DisclosureChevron } from '../DisclosureChevron';
 import { Meter } from '../Meter';
@@ -7,7 +8,6 @@ import { ScrollArea } from '../ScrollArea';
 import { Table } from '../Table';
 import { Txt } from '../Txt';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from './collapsible';
-import { SettingsContainer } from '@/ds/new/settings';
 
 const meta: Meta<typeof Collapsible> = {
   title: 'Layout/Collapsible',

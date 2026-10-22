@@ -3,12 +3,12 @@ import { EditorView } from '@codemirror/view';
 import ReactCodeMirror from '@uiw/react-codemirror';
 import { AlignJustifyIcon, AlignLeftIcon } from 'lucide-react';
 import React, { useState, useMemo } from 'react';
-import { Button } from '@/ds/components/Button';
-import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
-import { codeFoldGutter, useCodemirrorTheme } from '@/ds/components/CodeEditor';
-import { CopyButton } from '@/ds/components/CopyButton';
-import { Section } from '@/ds/components/Section';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { raisedSurfaceStyle } from '../../primitives/raised-surface';
+import { Button } from '../Button';
+import { ButtonsGroup } from '../ButtonsGroup';
+import { codeFoldGutter, useCodemirrorTheme } from '../CodeEditor';
+import { CopyButton } from '../CopyButton';
+import { Section } from '../Section';
 
 export type SideDialogCodeSectionProps = {
   title: React.ReactNode;

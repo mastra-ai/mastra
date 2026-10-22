@@ -1,8 +1,8 @@
 import { Avatar as BaseAvatar } from '@base-ui/react/avatar';
 import { useContext } from 'react';
 
+import { cn } from '../../../lib/utils';
 import { AvatarSizeContext, avatarIconClasses, avatarTextClasses } from './avatar-size';
-import { cn } from '@/lib/utils';
 
 export type AvatarFallbackProps = Omit<BaseAvatar.Fallback.Props, 'className'> & {
   className?: string;

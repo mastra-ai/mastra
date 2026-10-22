@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { HookDemo } from '../../../../.storybook/fixtures/hooks/hook-demo';
-import { Txt } from '@/ds/components/Txt';
-import { useIsMobile } from '@/hooks/use-is-mobile';
+import { Txt } from '../../../ds/components/Txt';
+import { useIsMobile } from '../../use-is-mobile';
 
 function IsMobileDemo({ breakpoint }: { breakpoint: number }) {
   const isMobile = useIsMobile(breakpoint);

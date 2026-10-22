@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { HelperExamples } from '../../../../.storybook/fixtures/helpers/helper-examples';
 import type { HelperExample } from '../../../../.storybook/fixtures/helpers/helper-examples';
-import { resolveModel } from '@/utils/model';
+import { resolveModel } from '../../model';
 
 const calls = [
   'anthropic/claude-sonnet-4.5',

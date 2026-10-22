@@ -1,4 +1,12 @@
 import { ArrowDown, ArrowUp, Plus, Trash2 } from 'lucide-react';
+import { Button } from '../../../../ds/components/Button';
+import { CodeEditor } from '../../../../ds/components/CodeEditor';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../../../../ds/components/Collapsible';
+import { DisclosureChevron } from '../../../../ds/components/DisclosureChevron';
+import { Input } from '../../../../ds/components/Input';
+import { SegmentedControl, SegmentedControlItem } from '../../../../ds/components/SegmentedControl';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../../ds/components/Select';
+import { Txt } from '../../../../ds/components/Txt';
 import {
   ORDERING_LABELS,
   STEP_TYPE_OPTIONS,
@@ -9,14 +17,6 @@ import {
   recordedDetails,
 } from './trajectory-types';
 import type { TrajectoryOrdering, TrajectoryStepRow } from './trajectory-types';
-import { Button } from '@/ds/components/Button';
-import { CodeEditor } from '@/ds/components/CodeEditor';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
-import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
-import { Input } from '@/ds/components/Input';
-import { SegmentedControl, SegmentedControlItem } from '@/ds/components/SegmentedControl';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
-import { Txt } from '@/ds/components/Txt';
 
 const ORDERING_HINTS = {
   strict: 'Steps must run exactly in this order, with nothing in between.',

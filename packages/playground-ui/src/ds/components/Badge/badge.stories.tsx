@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Check, AlertCircle, FileText, Image as ImageIcon, Info as InfoIcon, TriangleAlert, Tag } from 'lucide-react';
+import { cn } from '../../../lib/utils';
 import { Badge } from './Badge';
 import type { BadgeProps } from './Badge';
-import { cn } from '@/lib/utils';
 
 const meta = {
   title: 'Elements/Badge',

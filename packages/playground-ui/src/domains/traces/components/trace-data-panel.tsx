@@ -1,10 +1,10 @@
 import { useScorers } from '@mastra/react/hooks/scores';
 import { useState } from 'react';
 import type { ComponentProps } from 'react';
-import { SpanScoring } from '@/domains/scores';
-import { TraceDataPanelView } from '@/domains/traces/components/trace-data-panel-view';
-import type { TraceSideView } from '@/domains/traces/components/trace-data-panel-view';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/ds/components/Dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '../../../ds/components/Dialog';
+import { SpanScoring } from '../../scores';
+import { TraceDataPanelView } from './trace-data-panel-view';
+import type { TraceSideView } from './trace-data-panel-view';
 
 type TraceDataPanelProps = Omit<
   ComponentProps<typeof TraceDataPanelView>,

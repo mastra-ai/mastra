@@ -1,6 +1,13 @@
 import type { FieldWrapperProps } from '@autoform/react';
 import React from 'react';
-import { Field, FieldDescription, FieldError, FieldLabel, Fieldset, FieldsetLegend } from '@/ds/components/Field';
+import {
+  Field,
+  FieldDescription,
+  FieldError,
+  FieldLabel,
+  Fieldset,
+  FieldsetLegend,
+} from '../../../ds/components/Field';
 
 const GROUP_TYPES = ['object', 'array'];
 

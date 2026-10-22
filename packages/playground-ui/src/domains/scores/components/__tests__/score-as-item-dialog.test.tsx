@@ -6,10 +6,10 @@ import { http, HttpResponse } from 'msw';
 import type { ChangeEvent, HTMLAttributes, PropsWithChildren, SelectHTMLAttributes } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { server } from '../../../../test/msw-server';
+import { buildListDatasetsResponse } from '../../../datasets/components/__tests__/fixtures/datasets';
 import { ScoreAsItemDialog } from '../score-as-item-dialog';
 import { createScore } from './fixtures/score-as-item';
-import { buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 
@@ -23,7 +23,7 @@ type CodeEditorProps = {
 // thin seam so this suite can focus on score-to-dataset payload preparation.
 // The dataset hooks are driven through the real @mastra/client-js + React
 // Query stack via MSW.
-vi.mock('@/ds/components/Select', () => ({
+vi.mock('../../../../ds/components/Select', () => ({
   Select: ({ children }: PropsWithChildren<SelectHTMLAttributes<HTMLSelectElement>>) => <div>{children}</div>,
   SelectTrigger: ({ children }: PropsWithChildren<HTMLAttributes<HTMLButtonElement>>) => (
     <button type="button">{children}</button>
@@ -33,11 +33,11 @@ vi.mock('@/ds/components/Select', () => ({
   SelectItem: ({ children }: PropsWithChildren<{ value: string }>) => <div>{children}</div>,
 }));
 
-vi.mock('@/utils/toast', () => ({
+vi.mock('../../../../utils/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 
-vi.mock('@/ds/components/CodeEditor', () => ({
+vi.mock('../../../../ds/components/CodeEditor', () => ({
   CodeEditor: ({ value, onChange }: CodeEditorProps) => (
     <textarea
       value={value ?? ''}

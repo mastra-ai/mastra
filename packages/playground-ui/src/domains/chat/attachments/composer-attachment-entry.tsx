@@ -1,8 +1,8 @@
 import { useContext } from 'react';
 import type { ReactNode } from 'react';
+import { Txt } from '../../../ds/components/Txt';
+import { cn } from '../../../utils/cn';
 import { ComposerAttachmentContext } from './composer-attachment-context';
-import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/utils/cn';
 
 /** Preview content shares the composer's filename without duplicating it in each adapter. */
 export function ComposerAttachmentEntry({

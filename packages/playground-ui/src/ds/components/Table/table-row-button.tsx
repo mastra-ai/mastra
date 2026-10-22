@@ -1,7 +1,7 @@
 import type { ComponentProps } from 'react';
+import { cn } from '../../../lib/utils';
 import { useTableVariant } from './table-context';
 import { tableRowTargetStyles } from './table-row-target';
-import { cn } from '@/lib/utils';
 
 export type TableRowButtonProps = Omit<ComponentProps<'button'>, 'type'>;
 

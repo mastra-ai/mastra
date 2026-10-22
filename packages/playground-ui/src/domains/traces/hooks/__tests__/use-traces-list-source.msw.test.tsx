@@ -6,6 +6,7 @@ import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { server } from '../../../../test/msw-server';
 import {
   TRACES_LIST_DELTA_HORIZON_MS,
   TRACES_LIST_DELTA_POLL_INTERVAL_MS,
@@ -14,7 +15,6 @@ import {
 } from '../use-traces-list-source';
 import { freshTrace, lastTraceQueryPage, traceQueryDeltaBatch } from './fixtures/trace-query';
 import { lastLegacyTracePage } from './fixtures/trace-query-legacy';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 const OBSERVABILITY_URL = `${BASE_URL}/api/observability`;

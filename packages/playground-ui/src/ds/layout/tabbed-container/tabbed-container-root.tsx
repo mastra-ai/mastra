@@ -2,22 +2,22 @@ import { ListFilterIcon } from 'lucide-react';
 import { Children, isValidElement, useContext } from 'react';
 import type { ReactElement, ReactNode } from 'react';
 import './tabbed-container.css';
-import { Combobox } from '@/ds/components/Combobox/combobox';
-import type { ComboboxProps } from '@/ds/components/Combobox/combobox';
-import { DataList } from '@/ds/components/DataList/data-list';
-import type { DataListFit } from '@/ds/components/DataList/data-list-root';
-import { ListSearch } from '@/ds/components/ListSearch/list-search';
-import type { ListSearchProps } from '@/ds/components/ListSearch/list-search';
-import { TabContent } from '@/ds/components/Tabs/tabs-content';
-import { TabsContext } from '@/ds/components/Tabs/tabs-context';
-import { TabList } from '@/ds/components/Tabs/tabs-list';
-import { Tabs } from '@/ds/components/Tabs/tabs-root';
-import type { TabsRootProps } from '@/ds/components/Tabs/tabs-root';
-import { Tab } from '@/ds/components/Tabs/tabs-tab';
-import type { TabProps } from '@/ds/components/Tabs/tabs-tab';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip/tooltip';
-import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { Combobox } from '../../components/Combobox/combobox';
+import type { ComboboxProps } from '../../components/Combobox/combobox';
+import { DataList } from '../../components/DataList/data-list';
+import type { DataListFit } from '../../components/DataList/data-list-root';
+import { ListSearch } from '../../components/ListSearch/list-search';
+import type { ListSearchProps } from '../../components/ListSearch/list-search';
+import { TabContent } from '../../components/Tabs/tabs-content';
+import { TabsContext } from '../../components/Tabs/tabs-context';
+import { TabList } from '../../components/Tabs/tabs-list';
+import { Tabs } from '../../components/Tabs/tabs-root';
+import type { TabsRootProps } from '../../components/Tabs/tabs-root';
+import { Tab } from '../../components/Tabs/tabs-tab';
+import type { TabProps } from '../../components/Tabs/tabs-tab';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../components/Tooltip/tooltip';
+import { Txt } from '../../components/Txt';
 
 export type TabbedContainerSearchProps = Pick<
   ListSearchProps,

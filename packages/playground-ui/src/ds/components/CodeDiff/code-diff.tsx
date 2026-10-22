@@ -2,8 +2,8 @@
 
 import { MultiFileDiff, PatchDiff } from '@pierre/diffs/react';
 import type { FileDiffOptions } from '@pierre/diffs/react';
-import { useTheme } from '@/ds/components/ThemeProvider';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { useTheme } from '../ThemeProvider';
 import './code-diff.css';
 
 export type CodeDiffProps = {

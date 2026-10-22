@@ -1,5 +1,5 @@
 import type { ResolvedWorkflowStep } from '@mastra/react';
-import type { WorkflowStepCardViewProps } from '@/ds/components/Workflow';
+import type { WorkflowStepCardViewProps } from '../../../ds/components/Workflow';
 
 export function getWorkflowCardKind(step: ResolvedWorkflowStep): WorkflowStepCardViewProps['nodeKind'] {
   switch (step.kind) {

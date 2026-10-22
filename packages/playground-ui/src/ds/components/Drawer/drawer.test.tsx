@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { Button } from '../Button';
 import {
   Drawer,
   DrawerBody,
@@ -16,7 +17,6 @@ import {
   DrawerTrigger,
   DrawerViewport,
 } from './drawer';
-import { Button } from '@/ds/components/Button';
 
 afterEach(() => {
   cleanup();

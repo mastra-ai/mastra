@@ -1,9 +1,9 @@
 import { CalendarClockIcon, HashIcon, TimerIcon } from 'lucide-react';
+import { DataPanel } from '../../../ds/components/DataPanel';
+import { truncateString } from '../../../lib/truncate-string';
+import { formatDate, formatTimestampPrecise } from '../../../utils/date-format';
+import { formatDurationPrecise } from '../../../utils/duration';
 import { getSpanDurationMs } from '../utils/span-utils';
-import { DataPanel } from '@/ds/components/DataPanel';
-import { truncateString } from '@/lib/truncate-string';
-import { formatDate, formatTimestampPrecise } from '@/utils/date-format';
-import { formatDurationPrecise } from '@/utils/duration';
 
 export interface SpanSummaryDescriptionProps {
   span: {

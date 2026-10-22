@@ -1,4 +1,4 @@
-import { cn } from '@/lib/utils';
+import { cn } from '../../../../lib/utils';
 
 export function sidebarNavStackPageClasses(active: boolean, page: 'root' | 'view', className?: string) {
   return cn(

@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { render, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { server } from '@/test/msw-server';
+import { server } from '../../../../test/msw-server';
 
 /**
  * Regression tests for AgentBadgeWrapper's message-source selection and fetch
@@ -26,7 +26,7 @@ vi.mock('../badges/agent-badge', () => ({
   AgentBadge: mockAgentBadge,
 }));
 
-vi.mock('@/domains/chat/components/loading-badge', () => ({
+vi.mock('../../components/loading-badge', () => ({
   LoadingBadge: () => null,
 }));
 

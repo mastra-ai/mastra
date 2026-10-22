@@ -1,7 +1,7 @@
 import { useState } from 'react';
 
-import { ThreadViewByTrace } from '@/domains/traces/components/thread-view-by-trace';
-import { DataPanel } from '@/ds/components/DataPanel';
+import { DataPanel } from '../../../ds/components/DataPanel';
+import { ThreadViewByTrace } from './thread-view-by-trace';
 
 export interface TraceThreadPanelProps {
   /** Keep the panel mounted and toggle `open` so the drawer animates in and out. */

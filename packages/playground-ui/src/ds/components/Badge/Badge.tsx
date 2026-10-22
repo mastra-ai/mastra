@@ -1,9 +1,9 @@
 import type { HTMLAttributes, ReactNode } from 'react';
 
+import { cn } from '../../../lib/utils';
 import { Icon } from '../../icons/Icon';
+import { transitions } from '../../primitives/transitions';
 import { productColors, productSubtleColors } from '../ProductAvatar/product-identity';
-import { transitions } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
 
 export type BadgeEmphasis = 'strong' | 'subtle';
 export type BadgeIndicator = 'dot' | 'pulse';

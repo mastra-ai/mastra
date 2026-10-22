@@ -1,11 +1,11 @@
 import { CheckIcon, SearchIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { cn } from '../../../lib/utils';
+import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '../../primitives/fluid-menu';
+import { menuEmptyClass, menuItemCheckClass, menuItemClass, menuSearchClasses } from '../../primitives/menu-item';
+import { passwordManagerOptOutProps } from '../../primitives/password-manager-autofill';
+import { Spinner } from '../Spinner/spinner';
 import type { PropertyFilterField, PropertyFilterToken } from './types';
-import { Spinner } from '@/ds/components/Spinner/spinner';
-import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
-import { menuEmptyClass, menuItemCheckClass, menuItemClass, menuSearchClasses } from '@/ds/primitives/menu-item';
-import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
-import { cn } from '@/lib/utils';
 
 // Same rendering as Combobox items: no visible control, a trailing check when selected.
 // Focus is on the item itself (roving via [data-pick-multi-item]): the fluid highlight follows it.

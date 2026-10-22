@@ -1,5 +1,8 @@
 import { EntityType } from '@mastra/core/observability';
 import { useState } from 'react';
+import { MetricsCard } from '../../../ds/components/MetricsCard';
+import type { MetricsLineChartSeries } from '../../../ds/components/MetricsLineChart';
+import { MetricsLineChart, MetricsLineChartLegend } from '../../../ds/components/MetricsLineChart';
 import type { TimeRange } from '../drilldown';
 import { useMetricsFilters } from '../hooks/use-metrics-filters';
 import type { LatencyEntity } from '../hooks/use-metrics-latency';
@@ -12,9 +15,6 @@ import { OpenInTracesButton } from './card-action-buttons';
 import { ChartArea } from './chart-area';
 import { ChartCard } from './chart-card';
 import { ChartCardError } from './chart-card-error';
-import { MetricsCard } from '@/ds/components/MetricsCard';
-import type { MetricsLineChartSeries } from '@/ds/components/MetricsLineChart';
-import { MetricsLineChart, MetricsLineChartLegend } from '@/ds/components/MetricsLineChart';
 
 const ROOT_ENTITY: Record<LatencyEntity, EntityType> = {
   agents: EntityType.AGENT,

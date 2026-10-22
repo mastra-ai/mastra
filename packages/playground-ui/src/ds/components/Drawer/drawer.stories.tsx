@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import * as React from 'react';
 
+import { raisedSurfaceStyle } from '../../primitives/raised-surface';
 import { Button } from '../Button';
 import { Field, FieldLabel } from '../Field';
 import { Input } from '../Input';
@@ -21,7 +22,6 @@ import {
   DrawerTrigger,
   DrawerViewport,
 } from './drawer';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
 const meta: Meta<typeof Drawer> = {
   title: 'Feedback/Drawer',

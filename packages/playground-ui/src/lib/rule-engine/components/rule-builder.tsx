@@ -1,17 +1,17 @@
 import { Plus, X, Component } from 'lucide-react';
 import * as React from 'react';
 
+import { Button } from '../../../ds/components/Button';
+import { Txt } from '../../../ds/components/Txt';
+
+import { Icon } from '../../../ds/icons';
+import { controlStateColorTransition } from '../../../ds/primitives/transitions';
+import { quietTextHover } from '../../../ds/primitives/typography';
+import { cn } from '../../utils';
 import type { Rule, RuleGroup, RuleGroupDepth1 } from '../types';
 import { isRule, createDefaultRule, createDefaultRuleGroup } from '../utils';
-
 import { RuleRow } from './rule-row';
 import type { RuleBuilderProps, RuleGroupViewProps } from './types';
-import { Button } from '@/ds/components/Button';
-import { Txt } from '@/ds/components/Txt';
-import { Icon } from '@/ds/icons';
-import { controlStateColorTransition } from '@/ds/primitives/transitions';
-import { quietTextHover } from '@/ds/primitives/typography';
-import { cn } from '@/lib/utils';
 
 const DEFAULT_MAX_DEPTH = 3;
 

@@ -1,10 +1,10 @@
 import { useState } from 'react';
-import { Button } from '@/ds/components/Button';
-import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
-import type { TxtProps } from '@/ds/components/Txt';
-import { Txt } from '@/ds/components/Txt';
-import { useIsClamped } from '@/hooks/use-is-clamped';
-import { cn } from '@/lib/utils';
+import { useIsClamped } from '../../../hooks/use-is-clamped';
+import { cn } from '../../../lib/utils';
+import { Button } from '../Button';
+import { DisclosureChevron } from '../DisclosureChevron';
+import type { TxtProps } from '../Txt';
+import { Txt } from '../Txt';
 
 // Tailwind needs static class names — map instead of interpolating.
 const clampClasses = {

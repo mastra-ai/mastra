@@ -1,11 +1,11 @@
 import { Brain, Eye, Unplug } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
+import { Activity, ActivityContent, ActivityHeadline, ActivityTrigger } from '../../../../ds/components/ai/activity';
+import type { ActivityStatus } from '../../../../ds/components/ai/activity';
+import { ToolCallOutput } from '../../../../ds/components/ai/tool-call';
 import { Extractions, ObservationSections, ObservationStats } from './observation-marker-details';
 import { compressionRatio, extractedValueEntries, formatTokens } from './observation-marker-format';
-import { Activity, ActivityContent, ActivityHeadline, ActivityTrigger } from '@/ds/components/ai/activity';
-import type { ActivityStatus } from '@/ds/components/ai/activity';
-import { ToolCallOutput } from '@/ds/components/ai/tool-call';
 
 export interface OmMarkerData {
   observedAt?: string;

@@ -1,6 +1,7 @@
 import type * as React from 'react';
 
-import { Button } from '@/ds/components/Button';
+import { cn } from '../../../lib/utils';
+import { Button } from '../Button';
 import {
   Dialog,
   DialogBody,
@@ -12,10 +13,9 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from '@/ds/components/Dialog';
-import type { DialogProps } from '@/ds/components/Dialog';
-import { dialogActionLayoutClasses, dialogActionSizeClasses } from '@/ds/components/Dialog/dialog-context';
-import { cn } from '@/lib/utils';
+} from '../Dialog';
+import type { DialogProps } from '../Dialog';
+import { dialogActionLayoutClasses, dialogActionSizeClasses } from '../Dialog/dialog-context';
 
 type AlertDialogProps = Omit<DialogProps, 'intent' | 'pending' | 'modal' | 'disablePointerDismissal'>;
 

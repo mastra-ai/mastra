@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
-import { Activity, ActivityContent, ActivityHeadline, ActivityTrigger } from '@/ds/components/ai/activity';
-import type { ActivityStatus } from '@/ds/components/ai/activity';
-import { ToolCallArguments, ToolCallOutput, presentTool } from '@/ds/components/ai/tool-call';
+import { Activity, ActivityContent, ActivityHeadline, ActivityTrigger } from '../../../src/ds/components/ai/activity';
+import type { ActivityStatus } from '../../../src/ds/components/ai/activity';
+import { ToolCallArguments, ToolCallOutput, presentTool } from '../../../src/ds/components/ai/tool-call';
 
 interface ReviewToolProps {
   toolName: string;

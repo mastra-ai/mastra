@@ -1,6 +1,6 @@
+import { CHART_LABEL_COLOR } from '../tokens';
 import { labelWidth } from './chart-axes';
 import { CHART_AXIS_FONT_SIZE } from './chart-layout';
-import { CHART_LABEL_COLOR } from '@/ds/tokens';
 
 export type ChartTimeTickProps = {
   x?: number;

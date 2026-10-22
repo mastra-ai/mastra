@@ -1,14 +1,14 @@
 import { HardDrive } from 'lucide-react';
+import type { MessageMetadata } from '../..';
+import type { ActivityStatus } from '../../../../ds/components/ai/activity';
+import { presentTool, ToolCallArguments, ToolCallOutput } from '../../../../ds/components/ai/tool-call';
+import { Txt } from '../../../../ds/components/Txt';
 import type { DataMessagePart } from '../tool-card';
+import { awaitsToolApproval } from './awaits-tool-approval';
+import type { ToolApprovalRequest } from './tool-approval-badge';
+import { ToolApprovalBadge } from './tool-approval-badge';
 import { parseToolArgs, workspaceMetadata } from './workspace-data-parts';
 import { WorkspaceLink } from './workspace-link';
-import type { MessageMetadata } from '@/domains/chat';
-import { awaitsToolApproval } from '@/domains/chat/tools/badges/awaits-tool-approval';
-import type { ToolApprovalRequest } from '@/domains/chat/tools/badges/tool-approval-badge';
-import { ToolApprovalBadge } from '@/domains/chat/tools/badges/tool-approval-badge';
-import type { ActivityStatus } from '@/ds/components/ai/activity';
-import { presentTool, ToolCallArguments, ToolCallOutput } from '@/ds/components/ai/tool-call';
-import { Txt } from '@/ds/components/Txt';
 
 export interface FileTreeBadgeProps extends Omit<ToolApprovalRequest, 'toolCalled'> {
   toolName: string;

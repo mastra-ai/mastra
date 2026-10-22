@@ -1,7 +1,7 @@
 import type { MastraClient } from '@mastra/client-js';
 import type { EntityType } from '@mastra/core/observability';
+import type { PropertyFilterField, PropertyFilterToken } from '../../ds/components/PropertyFilter/types';
 import type { LogLevel } from './types';
-import type { PropertyFilterField, PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
 
 type ListLogsArgs = NonNullable<Parameters<MastraClient['listLogsVNext']>[0]>;
 

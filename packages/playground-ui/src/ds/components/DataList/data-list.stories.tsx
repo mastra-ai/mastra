@@ -1,12 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Pencil, Trash2 } from 'lucide-react';
 import { useRef, useState } from 'react';
+import { useTableKeydown } from '../../../lib/keyboard';
+import { Button } from '../Button';
+import { Status } from '../StatusIndicators';
 import { DataList } from './data-list';
 import type { DataListSort } from './data-list';
 import { DataListSkeleton } from './data-list-skeleton';
-import { Button } from '@/ds/components/Button';
-import { Status } from '@/ds/components/StatusIndicators';
-import { useTableKeydown } from '@/lib/keyboard';
 
 const meta: Meta<typeof DataList> = {
   title: 'DataDisplay/DataList',

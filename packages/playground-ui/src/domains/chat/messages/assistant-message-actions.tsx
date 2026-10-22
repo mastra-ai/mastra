@@ -1,7 +1,7 @@
 import { AudioLinesIcon, StopCircleIcon } from 'lucide-react';
-import { ProviderLogo } from '@/domains/llm';
-import { Button } from '@/ds/components/Button';
-import { MessageCopyButton, MessageMetadata } from '@/ds/components/Message';
+import { Button } from '../../../ds/components/Button';
+import { MessageCopyButton, MessageMetadata } from '../../../ds/components/Message';
+import { ProviderLogo } from '../../llm';
 
 export function AssistantMessageActions({
   text,

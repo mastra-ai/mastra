@@ -1,12 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { HookDemo } from '../../../../.storybook/fixtures/hooks/hook-demo';
-import { Button } from '@/ds/components/Button';
-import { Field, FieldLabel } from '@/ds/components/Field';
-import { Input } from '@/ds/components/Input';
-import { Txt } from '@/ds/components/Txt';
-import { useScrollToFirstHighlight } from '@/hooks/use-scroll-to-first-highlight';
-import { useTextHighlight } from '@/hooks/use-text-highlight';
+import { Button } from '../../../ds/components/Button';
+import { Field, FieldLabel } from '../../../ds/components/Field';
+import { Input } from '../../../ds/components/Input';
+import { Txt } from '../../../ds/components/Txt';
+import { useScrollToFirstHighlight } from '../../use-scroll-to-first-highlight';
+import { useTextHighlight } from '../../use-text-highlight';
 
 function ScrollToFirstHighlightDemo() {
   const [search, setSearch] = useState('');

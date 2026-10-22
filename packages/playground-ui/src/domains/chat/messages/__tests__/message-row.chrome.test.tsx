@@ -8,11 +8,11 @@ import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { DatasetSaveProvider } from '../..';
+import { server } from '../../../../test/msw-server';
+import { buildListDatasetsResponse } from '../../../datasets/components/__tests__/fixtures/datasets';
+import { ToolCallProvider } from '../../context/tool-call-context';
 import { MessageRow } from '../message-row';
-import { DatasetSaveProvider } from '@/domains/chat';
-import { ToolCallProvider } from '@/domains/chat/context/tool-call-context';
-import { buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 

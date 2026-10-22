@@ -1,7 +1,7 @@
 import type { ComponentProps, ReactNode } from 'react';
-import { Txt } from '@/ds/components/Txt';
-import { messageSurfaceStyle } from '@/ds/primitives/message-surface';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { messageSurfaceStyle } from '../../primitives/message-surface';
+import { Txt } from '../Txt';
 
 export interface MessageProps extends ComponentProps<'div'> {
   from: 'user' | 'assistant';

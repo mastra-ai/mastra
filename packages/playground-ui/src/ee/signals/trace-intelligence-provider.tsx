@@ -2,9 +2,9 @@ import type { SignalCatalogEntry } from '@mastra/client-js';
 import { useMemo } from 'react';
 import type { ReactNode } from 'react';
 
+import type { LinkComponent } from '../../ds/types/link-component';
 import { defaultTraceIntelligenceContextValue, TraceIntelligenceContext } from './trace-intelligence-context';
 import type { TraceIntelligenceRequest, TraceSignalManagement } from './trace-intelligence-context';
-import type { LinkComponent } from '@/ds/types/link-component';
 
 export interface TraceIntelligenceProviderProps {
   cacheScope: string;

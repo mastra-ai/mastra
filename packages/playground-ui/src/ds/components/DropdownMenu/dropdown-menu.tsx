@@ -2,8 +2,9 @@ import { Menu as MenuPrimitive } from '@base-ui/react/menu';
 import type { MenuPopupProps, MenuPositionerProps } from '@base-ui/react/menu';
 import { CheckIcon, ChevronDown } from 'lucide-react';
 import * as React from 'react';
-import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
-import { useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
+import { cn } from '../../../lib/utils';
+import { FLOATING_POSITION_METHOD } from '../../primitives/floating';
+import { useFluidMenu, useFluidMenuItemRef } from '../../primitives/fluid-menu';
 import {
   MENU_SIDE_OFFSET,
   menuItemCheckClass,
@@ -18,12 +19,11 @@ import {
   menuPositionerClass,
   menuSeparatorClass,
   menuShortcutClass,
-} from '@/ds/primitives/menu-item';
-import { menuScrollPopupClass, MenuScrollArea } from '@/ds/primitives/menu-scroll-area';
-import { usePortalContainer } from '@/ds/primitives/portal-container';
-import { resolveTriggerRender } from '@/ds/primitives/trigger-button';
-import type { TriggerButtonProps } from '@/ds/primitives/trigger-button';
-import { cn } from '@/lib/utils';
+} from '../../primitives/menu-item';
+import { menuScrollPopupClass, MenuScrollArea } from '../../primitives/menu-scroll-area';
+import { usePortalContainer } from '../../primitives/portal-container';
+import { resolveTriggerRender } from '../../primitives/trigger-button';
+import type { TriggerButtonProps } from '../../primitives/trigger-button';
 
 const DropdownMenuRoot = MenuPrimitive.Root;
 

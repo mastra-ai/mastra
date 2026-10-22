@@ -1,8 +1,8 @@
 import { use } from 'react';
 
+import { DataList } from '../DataList/data-list';
 import { EnvironmentVariablesEditorReadOnlyListContext } from './environment-variables-editor-context';
 import type { EnvironmentVariablesEditorReadOnlyHeaderProps } from './environment-variables-editor.types';
-import { DataList } from '@/ds/components/DataList/data-list';
 
 export function EnvironmentVariablesEditorReadOnlyHeader({
   className,

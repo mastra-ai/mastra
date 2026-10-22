@@ -1,9 +1,8 @@
 import { cva } from 'class-variance-authority';
-import { buttonVariants, isIconButtonSize } from '../Button/Button';
-import type { ButtonSize } from '../Button/Button';
-import { controlTriggerOpenState } from '@/ds/primitives/control-size';
-import type { ControlTriggerVisualVariant } from '@/ds/primitives/control-size';
-import { fieldTriggerErrorBorder, fieldTriggerStyle, fieldTriggerWidthStyle } from '@/ds/primitives/form-element';
+import { cn } from '../../../lib/utils';
+import { controlTriggerOpenState } from '../../primitives/control-size';
+import type { ControlTriggerVisualVariant } from '../../primitives/control-size';
+import { fieldTriggerErrorBorder, fieldTriggerStyle, fieldTriggerWidthStyle } from '../../primitives/form-element';
 import {
   menuItemCheckClass,
   menuItemClass,
@@ -11,8 +10,9 @@ import {
   menuPositionerClass,
   menuSearchClasses,
   menuEmptyClass,
-} from '@/ds/primitives/menu-item';
-import { cn } from '@/lib/utils';
+} from '../../primitives/menu-item';
+import { buttonVariants, isIconButtonSize } from '../Button/Button';
+import type { ButtonSize } from '../Button/Button';
 
 /**
  * A combobox is a form field, so it reuses the Button's size/shape recipe,

@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 
+import { Button } from '../Button';
 import { SearchInput } from './search-input';
 import type { SearchInputProps } from './search-input';
-import { Button } from '@/ds/components/Button';
 
 const meta: Meta<typeof SearchInput> = {
   title: 'Forms/SearchInput',

@@ -1,10 +1,10 @@
 import { ChevronRightIcon } from 'lucide-react';
 import React from 'react';
-import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/ds/components/HoverCard';
-import { Txt } from '@/ds/components/Txt';
-import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
-import type { LinkComponent } from '@/ds/types/link-component';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { VisuallyHidden } from '../../primitives/visually-hidden';
+import type { LinkComponent } from '../../types/link-component';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '../HoverCard';
+import { Txt } from '../Txt';
 
 export type KeyValueListItemValue = {
   id: string;

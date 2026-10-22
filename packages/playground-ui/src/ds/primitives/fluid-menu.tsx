@@ -1,10 +1,10 @@
 /* eslint-disable react-refresh/only-export-components -- provider and its hooks intentionally share this module */
 import * as React from 'react';
 
-import { FluidHoverHighlight } from '@/components/fluid-hover-highlight';
-import { useFluidHover } from '@/hooks/use-fluid-hover';
-import type { UseFluidHoverOptions, UseFluidHoverReturn } from '@/hooks/use-fluid-hover';
-import { cn } from '@/lib/utils';
+import { FluidHoverHighlight } from '../../components/fluid-hover-highlight';
+import { useFluidHover } from '../../hooks/use-fluid-hover';
+import type { UseFluidHoverOptions, UseFluidHoverReturn } from '../../hooks/use-fluid-hover';
+import { cn } from '../../lib/utils';
 
 /**
  * Shared Fluid Hover wiring for every popup that lists items (DropdownMenu,

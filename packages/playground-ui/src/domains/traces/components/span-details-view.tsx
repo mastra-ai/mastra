@@ -1,5 +1,6 @@
 import { describeProcessorPipeline, describeSpanInput, describeSpanOutput } from '@mastra/core/observability';
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
+import { DataDetailsPanel } from '../../../ds/components/DataDetailsPanel';
 import type { SpanRecord } from '../types';
 import {
   SpanErrorRenderer,
@@ -11,7 +12,6 @@ import {
 import { asCoreSpan } from './span-payload/span-payload-registry';
 import { SpanSummaryDescription } from './span-summary-description';
 import { TraceIdButton } from './trace-id-button';
-import { DataDetailsPanel } from '@/ds/components/DataDetailsPanel';
 
 const KV = DataDetailsPanel.KeyValueList;
 

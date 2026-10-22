@@ -1,9 +1,9 @@
 import { Handle, Position } from '@xyflow/react';
 import type { NodeProps } from '@xyflow/react';
 
+import { cn } from '../../../../utils/cn';
+import { Txt } from '../../Txt';
 import type { WorkflowBoundaryNodeModel } from './types';
-import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/utils/cn';
 
 export const WorkflowBoundaryNode = ({ data }: NodeProps<WorkflowBoundaryNodeModel>) => {
   const isStart = data.boundaryRole === 'start';

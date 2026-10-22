@@ -1,6 +1,6 @@
 import type { ComponentProps } from 'react';
-import { CopyButton } from '@/ds/components/CopyButton';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../../lib/utils';
+import { CopyButton } from '../../CopyButton';
 
 export interface ToolCallMonoProps extends ComponentProps<'pre'> {
   copyText: string;

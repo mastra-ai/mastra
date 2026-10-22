@@ -1,12 +1,12 @@
 import type { ReactNode } from 'react';
+import { cn } from '../../../lib/utils';
+import { transitions } from '../../primitives/transitions';
 import { Code } from '../Code/code';
 import { CopyButton } from '../CopyButton/copy-button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select/select';
 import { TabList } from '../Tabs/tabs-list';
 import { Tabs } from '../Tabs/tabs-root';
 import { Tab } from '../Tabs/tabs-tab';
-import { transitions } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
 
 export type CodeBlockSelector = 'select' | 'tabs';
 

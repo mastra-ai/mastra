@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Spinner } from '@/ds/components/Spinner';
+import { Spinner } from '../Spinner';
 
 export interface DataDetailsPanelLoadingDataProps {
   children?: ReactNode;

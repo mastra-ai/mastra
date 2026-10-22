@@ -1,14 +1,14 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
 import { FileInputIcon, FileOutputIcon, GaugeIcon, ReceiptText, SaveIcon } from 'lucide-react';
 import { useState } from 'react';
+import { Button } from '../../../ds/components/Button';
+import { DataKeysAndValues } from '../../../ds/components/DataKeysAndValues';
+import { DataPanel } from '../../../ds/components/DataPanel';
+import { Txt } from '../../../ds/components/Txt';
+import { useLinkComponent } from '../../../lib/framework';
+import { cn } from '../../../utils/cn';
+import { formatTimestampPrecise } from '../../../utils/date-format';
 import { ScoreAsItemDialog } from './score-as-item-dialog';
-import { Button } from '@/ds/components/Button';
-import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
-import { DataPanel } from '@/ds/components/DataPanel';
-import { Txt } from '@/ds/components/Txt';
-import { useLinkComponent } from '@/lib/framework';
-import { cn } from '@/utils/cn';
-import { formatTimestampPrecise } from '@/utils/date-format';
 
 function isCodeBasedScorer(score?: ClientScoreRowData): boolean {
   if (!score) return false;

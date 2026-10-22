@@ -5,6 +5,8 @@ import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { buildSankeyChartGraph } from '../../../ds/components/SankeyChart';
+import { server } from '../../../test/msw-server';
 import { SignalsOverviewPage as SignalsEmptyState } from '../components/signals-overview-page';
 import { useThemeSnapshots } from '../hooks/use-theme-snapshots';
 import { SankeySignals } from '../sankey-signals';
@@ -36,8 +38,6 @@ import {
   themeSnapshotsResponse,
   unlinkedGoalStageThemeFlowResponse,
 } from './fixtures/theme-flow';
-import { buildSankeyChartGraph } from '@/ds/components/SankeyChart';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = window.location.origin;
 

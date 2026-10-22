@@ -8,18 +8,18 @@ import type { ReactNode } from 'react';
 import { useContext, useState } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { server } from '../../../../test/msw-server';
+import { WorkflowRunContext, WorkflowRunProvider } from '../../../workflows';
+import { ChatAgentContext, ChatRunningContext } from '../../context/chat-context';
+import { ToolCallProvider } from '../../context/tool-call-context';
 import { MessageRow } from '../../messages/message-row';
+import type { ToolPart } from '../../messages/renderers/tool-part';
+import { readToolPart } from '../../messages/renderers/tool-part';
 import { AgentBadge } from '../badges/agent-badge';
 import { ToolCard, ToolCardInner } from '../tool-card';
 import type { ToolCardProps } from '../tool-card';
+import { WORKSPACE_TOOLS } from '../workspace-tool-constants';
 import { failedParentMessages, partialChildMessages, resumedChildMessages } from './fixtures/failed-delegation';
-import { ChatAgentContext, ChatRunningContext } from '@/domains/chat/context/chat-context';
-import { ToolCallProvider } from '@/domains/chat/context/tool-call-context';
-import type { ToolPart } from '@/domains/chat/messages/renderers/tool-part';
-import { readToolPart } from '@/domains/chat/messages/renderers/tool-part';
-import { WORKSPACE_TOOLS } from '@/domains/chat/tools/workspace-tool-constants';
-import { WorkflowRunContext, WorkflowRunProvider } from '@/domains/workflows';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 

@@ -1,6 +1,6 @@
+import { AskUser } from '../../../../ds/components/ai/ask-user';
+import type { AskUserAnswer, AskUserResult, AskUserPayload } from '../../../../ds/components/ai/ask-user';
 import { useToolCall } from '../../context/tool-call-context';
-import { AskUser } from '@/ds/components/ai/ask-user';
-import type { AskUserAnswer, AskUserResult, AskUserPayload } from '@/ds/components/ai/ask-user';
 
 export interface AskUserBadgeProps {
   toolCallId: string;

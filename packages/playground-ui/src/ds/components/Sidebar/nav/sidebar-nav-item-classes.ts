@@ -1,9 +1,9 @@
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
-import { controlHeight } from '@/ds/primitives/control-size';
-import { surfaceStateLayerStyle } from '@/ds/primitives/raised-surface';
-import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../../lib/utils';
+import { controlHeight } from '../../../primitives/control-size';
+import { surfaceStateLayerStyle } from '../../../primitives/raised-surface';
+import { controlStateColorTransition, focusRing } from '../../../primitives/transitions';
 
 // A nav row is a control: same rhythm as a button or a field, from the same rungs, so a
 // sidebar row and a toolbar button in the same app are never 2px apart. A nav label is a

@@ -1,4 +1,6 @@
 import { EntityType } from '@mastra/core/observability';
+import { MetricsCard } from '../../../ds/components/MetricsCard';
+import { MetricsLineChart } from '../../../ds/components/MetricsLineChart';
 import type { TimeRange } from '../drilldown';
 import { useMetricsActivity } from '../hooks/use-metrics-activity';
 import { useMetricsFilters } from '../hooks/use-metrics-filters';
@@ -10,8 +12,6 @@ import { OpenErrorsInLogsButton } from './card-action-buttons';
 import { ChartArea } from './chart-area';
 import { ChartCard } from './chart-card';
 import { ChartCardError } from './chart-card-error';
-import { MetricsCard } from '@/ds/components/MetricsCard';
-import { MetricsLineChart } from '@/ds/components/MetricsLineChart';
 
 const SERIES = [{ dataKey: 'failureRate', label: 'Failed runs', color: CHART_COLORS.error }];
 

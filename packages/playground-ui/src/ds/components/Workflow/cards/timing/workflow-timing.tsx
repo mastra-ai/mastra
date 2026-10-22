@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react';
+import { formatDate, formatShortDate } from '../../../../../utils/date-format';
+import { formatDuration } from '../../../../../utils/duration';
+import { Txt } from '../../../Txt';
 import type { WorkflowStepCardViewProps } from '../../types';
 import { ClockDial, DurationDial } from './workflow-time-dial';
 import type { DurationUnit } from './workflow-time-dial';
-import { Txt } from '@/ds/components/Txt';
-import { formatDate, formatShortDate } from '@/utils/date-format';
-import { formatDuration } from '@/utils/duration';
 
 const captionClasses = 'text-meta tracking-wider whitespace-nowrap text-muted-foreground uppercase';
 

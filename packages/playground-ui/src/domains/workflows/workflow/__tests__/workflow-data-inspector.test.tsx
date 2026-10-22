@@ -6,6 +6,7 @@ import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
+import { server } from '../../../../test/msw-server';
 import { WorkflowRunProvider } from '../../context/workflow-run-provider';
 import { useWorkflowStepDetail } from '../../context/workflow-step-detail-context';
 import { WorkflowStepDetailProvider } from '../../context/workflow-step-detail-provider';
@@ -14,7 +15,6 @@ import { WorkflowDataInspector } from '../data/workflow-data-inspector';
 import { WorkflowSuspendedOverlay } from '../workflow-suspended-overlay';
 import { inspectionWorkflow, suspendedRunWithOutput } from './fixtures/workflow-data-inspector';
 import { suspendedRunState, successfulRunState } from './fixtures/workflow-run-states';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 afterEach(cleanup);

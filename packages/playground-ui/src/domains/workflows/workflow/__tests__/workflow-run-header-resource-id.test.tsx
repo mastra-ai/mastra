@@ -5,12 +5,12 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useContext } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
+import { server } from '../../../../test/msw-server';
 import { WorkflowRunContext } from '../../context/workflow-run-context';
 import { WorkflowRunProvider } from '../../context/workflow-run-provider';
 import { WorkflowTrigger } from '../workflow-trigger';
 import { twoStepWorkflow } from './fixtures/workflow-debug-step-controls';
 import { pausedRunAfterFirstStepState } from './fixtures/workflow-run-states';
-import { server } from '@/test/msw-server';
 
 const TRIGGER_PROPS = { requestContext: {}, onRequestContextChange: () => {}, canExecute: true };
 

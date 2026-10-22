@@ -1,6 +1,6 @@
 import { ArrowDownIcon, ArrowUpIcon } from 'lucide-react';
-import { Button } from '@/ds/components/Button';
-import type { ButtonProps } from '@/ds/components/Button';
+import { Button } from '../Button';
+import type { ButtonProps } from '../Button';
 
 export interface DataPanelNextPrevNavProps {
   onPrevious?: () => void;

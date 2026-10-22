@@ -3,6 +3,8 @@ import { useObservabilityCapabilities } from '@mastra/react/hooks/capabilities';
 import { createTraceQueryValuesResolver, useEntityNames, useEnvironments } from '@mastra/react/hooks/traces';
 import type { TraceQueryDiscoveryTimeRange } from '@mastra/react/hooks/traces';
 import { useMemo } from 'react';
+import { FilterBar, isFilterBarGroup } from '../../../ds/components/FilterBar';
+import type { FilterBarExpression } from '../../../ds/components/FilterBar';
 import {
   TraceTimeRangeChip,
   TRACE_TIME_RANGE_FIELD,
@@ -18,8 +20,6 @@ import {
 import type { TraceFilterGroup, TraceFilterToken } from '../../traces/trace-query-filters';
 import type { TraceDatePreset } from '../../traces/types';
 import { createSpanFilterBarFields } from '../span-filters';
-import { FilterBar, isFilterBarGroup } from '@/ds/components/FilterBar';
-import type { FilterBarExpression } from '@/ds/components/FilterBar';
 
 const TIME_RANGE_PRESETS: readonly TraceDatePreset[] = [
   'last-24h',

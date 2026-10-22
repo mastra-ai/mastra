@@ -1,5 +1,10 @@
 import { EntityType, SpanType } from '@mastra/core/observability';
 import type { TraceQueryScalarPredicate } from '@mastra/core/storage';
+import type {
+  FilterBarField,
+  FilterBarOption,
+  FilterBarSuggestionsResolver,
+} from '../../ds/components/FilterBar/types';
 import {
   isLegacyAnyValue,
   ROOT_ENTITY_TYPE_OPTIONS,
@@ -16,7 +21,6 @@ import {
 } from '../traces/trace-filters';
 import { isTraceFilterGroup, scalarPredicate } from '../traces/trace-query-filters';
 import type { TraceFilterGroup, TraceFilterOperatorId, TraceFilterToken } from '../traces/trace-query-filters';
-import type { FilterBarField, FilterBarOption, FilterBarSuggestionsResolver } from '@/ds/components/FilterBar/types';
 
 /** Span query fields every store accepts. `startedAt`/`endedAt` are left to the time-range chip. */
 export const SPAN_CORE_FILTER_FIELD_IDS = [

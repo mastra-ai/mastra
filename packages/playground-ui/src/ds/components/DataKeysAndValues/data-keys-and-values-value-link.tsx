@@ -1,7 +1,7 @@
 import { ExternalLinkIcon, Link2Icon } from 'lucide-react';
+import { cn } from '../../../lib/utils';
+import { controlStateColorTransition } from '../../primitives/transitions';
 import { dataKeysAndValuesValueStyles } from './shared';
-import { controlStateColorTransition } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
 
 export interface DataKeysAndValuesValueLinkProps {
   className?: string;

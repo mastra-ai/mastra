@@ -1,5 +1,5 @@
+import { toDate } from '../../../utils/date-format';
 import type { SpanRecord } from '../types';
-import { toDate } from '@/utils/date-format';
 
 type MessageLike = { role?: string; content?: unknown };
 

@@ -1,5 +1,5 @@
-import type { TextRole } from '@/ds/tokens';
-import { cn } from '@/lib/utils';
+import { cn } from '../../lib/utils';
+import type { TextRole } from '../tokens';
 
 const roles: Record<TextRole, string> = {
   hero: 'text-hero font-display',

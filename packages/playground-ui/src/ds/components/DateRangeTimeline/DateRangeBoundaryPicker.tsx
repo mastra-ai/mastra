@@ -1,12 +1,12 @@
 import { format } from 'date-fns';
 import { CalendarDaysIcon } from 'lucide-react';
 import { useState } from 'react';
+import { Button } from '../Button/Button';
+import { DatePicker } from '../DateTimePicker';
+import { Popover, PopoverTrigger, PopoverContent } from '../Popover/popover';
+import { Txt } from '../Txt/Txt';
 import { parseDate } from './lib/date-range-timeline';
 import type { DateBoundary } from './lib/date-range-timeline';
-import { Button } from '@/ds/components/Button/Button';
-import { DatePicker } from '@/ds/components/DateTimePicker';
-import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover/popover';
-import { Txt } from '@/ds/components/Txt/Txt';
 
 interface DateRangeBoundaryPickerProps {
   boundary: DateBoundary;

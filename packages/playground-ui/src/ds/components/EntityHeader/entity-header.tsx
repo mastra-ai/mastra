@@ -1,6 +1,6 @@
-import { Skeleton } from '@/ds/components/Skeleton';
-import { Txt } from '@/ds/components/Txt';
-import { Icon } from '@/ds/icons';
+import { Icon } from '../../icons';
+import { Skeleton } from '../Skeleton';
+import { Txt } from '../Txt';
 
 export type EntityHeaderProps = {
   icon: React.ReactNode;

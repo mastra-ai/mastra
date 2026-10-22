@@ -1,6 +1,6 @@
+import { Skeleton } from '../../../ds/components/Skeleton';
+import { cn } from '../../../lib/utils';
 import { SPAN_TREE_INDENT, SPAN_TREE_PAD_Y } from './span-tree-rail';
-import { Skeleton } from '@/ds/components/Skeleton';
-import { cn } from '@/lib/utils';
 
 /** `[depth, name width]` per row: a root span, then a couple of nested levels, like a typical agent run. */
 const ROWS: Array<[number, string]> = [

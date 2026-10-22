@@ -18,19 +18,19 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/ds/components/Dialog';
-import { Field, FieldLabel } from '@/ds/components/Field';
-import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
-import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
-import { SearchInput } from '@/ds/components/SearchInput';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
-import { Txt } from '@/ds/components/Txt';
-import { GithubIcon } from '@/ds/icons/GithubIcon';
-import { SkillIcon } from '@/ds/icons/SkillIcon';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
-import { controlStateColorTransition } from '@/ds/primitives/transitions';
-import { quietTextHover } from '@/ds/primitives/typography';
-import { cn } from '@/lib/utils';
+} from '../../../ds/components/Dialog';
+import { Field, FieldLabel } from '../../../ds/components/Field';
+import { MarkdownRenderer } from '../../../ds/components/MarkdownRenderer';
+import { ScrollArea, ScrollAreaViewport } from '../../../ds/components/ScrollArea';
+import { SearchInput } from '../../../ds/components/SearchInput';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../ds/components/Select';
+import { Txt } from '../../../ds/components/Txt';
+import { GithubIcon } from '../../../ds/icons/GithubIcon';
+import { SkillIcon } from '../../../ds/icons/SkillIcon';
+import { raisedSurfaceStyle } from '../../../ds/primitives/raised-surface';
+import { controlStateColorTransition } from '../../../ds/primitives/transitions';
+import { quietTextHover } from '../../../ds/primitives/typography';
+import { cn } from '../../../lib/utils';
 
 export interface WritableMount {
   path: string;

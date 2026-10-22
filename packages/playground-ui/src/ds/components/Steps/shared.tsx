@@ -1,5 +1,5 @@
 import { CheckIcon, XIcon } from 'lucide-react';
-import { Spinner } from '@/ds/components/Spinner';
+import { Spinner } from '../Spinner';
 
 export function getStatusIcon(status: string) {
   switch (status) {

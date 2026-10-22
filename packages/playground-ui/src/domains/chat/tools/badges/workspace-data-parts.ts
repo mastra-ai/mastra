@@ -1,5 +1,5 @@
+import { isRecord } from '../../messages/signal-data';
 import type { DataMessagePart } from '../tool-card';
-import { isRecord } from '@/domains/chat/messages/signal-data';
 
 interface WorkspaceResource {
   id?: string;

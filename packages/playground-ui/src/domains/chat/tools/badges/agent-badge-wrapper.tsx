@@ -1,12 +1,12 @@
 import { toAISdkV5Messages } from '@mastra/ai-sdk/ui';
 import { useAgentMessages } from '@mastra/react/hooks/agents';
+import type { MessageMetadata } from '../..';
+import type { ActivityStatus } from '../../../../ds/components/ai/activity';
+import { LoadingBadge } from '../../components/loading-badge';
 import type { AgentMessage } from './agent-badge';
 import { AgentBadge } from './agent-badge';
 import { resolveToChildMessages } from './resolve-child-messages';
-import type { MessageMetadata } from '@/domains/chat';
-import { LoadingBadge } from '@/domains/chat/components/loading-badge';
-import type { ToolApprovalRequest } from '@/domains/chat/tools/badges/tool-approval-badge';
-import type { ActivityStatus } from '@/ds/components/ai/activity';
+import type { ToolApprovalRequest } from './tool-approval-badge';
 
 interface SubAgentToolResult {
   toolName: string;

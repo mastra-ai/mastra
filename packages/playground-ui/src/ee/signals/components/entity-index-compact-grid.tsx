@@ -1,13 +1,13 @@
 import type { ThemeLearningEntity } from '@mastra/client-js';
 import { useId } from 'react';
 
+import { Card, CardContent, CardDescription, CardLink, CardTitle } from '../../../ds/components/Card';
+import { ScrollArea } from '../../../ds/components/ScrollArea';
+import { Txt } from '../../../ds/components/Txt';
+import { textStyle } from '../../../ds/primitives/text';
+import type { LinkComponent } from '../../../ds/types/link-component';
 import { entityIndexMetadata } from './entity-index-model';
 import { EntityIndexStatus } from './entity-index-status';
-import { Card, CardContent, CardDescription, CardLink, CardTitle } from '@/ds/components/Card';
-import { ScrollArea } from '@/ds/components/ScrollArea';
-import { Txt } from '@/ds/components/Txt';
-import { textStyle } from '@/ds/primitives/text';
-import type { LinkComponent } from '@/ds/types/link-component';
 
 export interface EntityIndexCompactGridProps {
   entities: readonly ThemeLearningEntity[];

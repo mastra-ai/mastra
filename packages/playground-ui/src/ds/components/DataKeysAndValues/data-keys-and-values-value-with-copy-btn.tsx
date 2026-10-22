@@ -1,8 +1,8 @@
 import { CheckIcon, CopyIcon } from 'lucide-react';
+import { useCopyToClipboard } from '../../../hooks/use-copy-to-clipboard';
+import { cn } from '../../../lib/utils';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip';
 import { dataKeysAndValuesValueStyles } from './shared';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
-import { cn } from '@/lib/utils';
 
 export interface DataKeysAndValuesValueWithCopyBtnProps {
   className?: string;

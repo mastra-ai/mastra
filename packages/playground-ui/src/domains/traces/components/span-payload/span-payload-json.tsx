@@ -1,6 +1,6 @@
-import { CodeEditor } from '@/ds/components/CodeEditor';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
-import { cn } from '@/lib/utils';
+import { CodeEditor } from '../../../../ds/components/CodeEditor';
+import { raisedSurfaceStyle } from '../../../../ds/primitives/raised-surface';
+import { cn } from '../../../../lib/utils';
 
 export interface SpanPayloadJsonProps {
   value: unknown;

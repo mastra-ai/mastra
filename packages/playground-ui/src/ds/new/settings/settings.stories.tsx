@@ -1,4 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Badge } from '../../components/Badge';
+import { Button } from '../../components/Button';
+import { Input } from '../../components/Input';
+import { Switch } from '../../components/Switch';
+import { ThemeProvider } from '../../components/ThemeProvider';
+import { ThemeToggle } from '../../components/ThemeToggle';
 import {
   SettingsContainer,
   SettingsDescription,
@@ -9,12 +15,6 @@ import {
   SettingsRow,
   SettingsTitle,
 } from './index';
-import { Badge } from '@/ds/components/Badge';
-import { Button } from '@/ds/components/Button';
-import { Input } from '@/ds/components/Input';
-import { Switch } from '@/ds/components/Switch';
-import { ThemeProvider } from '@/ds/components/ThemeProvider';
-import { ThemeToggle } from '@/ds/components/ThemeToggle';
 
 const meta = {
   title: 'New/Settings',

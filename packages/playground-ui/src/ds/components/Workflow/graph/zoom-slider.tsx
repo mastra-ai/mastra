@@ -2,10 +2,10 @@ import type { PanelProps } from '@xyflow/react';
 import { Panel, useViewport, useReactFlow, useStore } from '@xyflow/react';
 import { Maximize, Minus, Plus } from 'lucide-react';
 import { forwardRef } from 'react';
+import { cn } from '../../../../utils/cn';
+import { Button } from '../../Button';
+import { Slider } from '../../Slider';
 import { workflowCameraDuration } from './workflow-camera-duration';
-import { Button } from '@/ds/components/Button';
-import { Slider } from '@/ds/components/Slider';
-import { cn } from '@/utils/cn';
 
 export const ZoomSlider = forwardRef<
   HTMLDivElement,

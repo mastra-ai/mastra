@@ -1,5 +1,5 @@
 import type { ComponentProps, ElementType } from 'react';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
 
 export type SectionHeadingProps = ComponentProps<'h2'> & {
   headingLevel?: 'h2' | 'h3' | 'h4';

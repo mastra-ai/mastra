@@ -1,10 +1,10 @@
 import { useId } from 'react';
 import type { ComponentProps, SVGProps } from 'react';
+import { cn } from '../../../lib/utils';
 import type { BillingArt, BillingArtPaths, BillingArtStroke } from './art/billing-art';
 import { creditsArt } from './art/credits-art';
 import { enterpriseArt, freeArt, starterArt, teamsArt } from './art/plan-art';
 import { largeArt, mediumArt, serverlessArt, smallArt } from './art/project-size-art';
-import { cn } from '@/lib/utils';
 
 export type BillingIllustrationName =
   | 'serverless'

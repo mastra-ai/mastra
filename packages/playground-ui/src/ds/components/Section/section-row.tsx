@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import { SettingsRowLayout } from '@/ds/new/settings/settings-row';
-import type { SettingsRowProps } from '@/ds/new/settings/settings-row';
+import { SettingsRowLayout } from '../../new/settings/settings-row';
+import type { SettingsRowProps } from '../../new/settings/settings-row';
 
 export type SectionRowProps = Omit<SettingsRowProps, 'tone' | 'viewOnly'>;
 export type SectionViewOnlyRowProps = SectionRowProps & { children: ReactNode };

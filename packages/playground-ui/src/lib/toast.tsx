@@ -3,7 +3,7 @@ import React from 'react';
 import type { ExternalToast, ToasterProps } from 'sonner';
 import { toast as sonnerToast, Toaster as SonnerToaster } from 'sonner';
 
-import { cn } from '@/lib/utils';
+import { cn } from './utils';
 
 import './toast.css';
 

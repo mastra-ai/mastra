@@ -1,7 +1,7 @@
+import { DataListSkeleton } from '../../../ds/components/DataList';
+import { Skeleton } from '../../../ds/components/Skeleton';
 import { buildTraceListColumns, DEFAULT_TRACE_COLUMN_PREFERENCES } from '../trace-list-columns';
 import type { TraceColumnPreferences } from '../trace-list-columns';
-import { DataListSkeleton } from '@/ds/components/DataList';
-import { Skeleton } from '@/ds/components/Skeleton';
 
 export type TracesPageSkeletonProps = {
   columnPreferences?: TraceColumnPreferences;

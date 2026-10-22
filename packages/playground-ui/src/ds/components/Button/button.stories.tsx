@@ -1,12 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ArrowUpRight, Plus, Settings, Trash } from 'lucide-react';
 import { Fragment } from 'react';
+import { raisedSurfaceStyle } from '../../primitives/raised-surface';
 import { Input } from '../Input';
 import { TooltipProvider } from '../Tooltip';
 import { Txt } from '../Txt';
 import type { ButtonVariant } from './Button';
 import { Button } from './Button';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
 const ALL_VARIANTS: ButtonVariant[] = [
   'default',

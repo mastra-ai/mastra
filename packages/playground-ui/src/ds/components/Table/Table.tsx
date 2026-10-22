@@ -1,5 +1,8 @@
 import type { ComponentProps, ComponentPropsWithoutRef, CSSProperties, ReactNode } from 'react';
 import { forwardRef, useEffect, useImperativeHandle, useRef } from 'react';
+import { cn } from '../../../lib/utils';
+import { raisedSurfaceStyle } from '../../primitives/raised-surface';
+import { focusRingInset } from '../../primitives/transitions';
 import { Cell } from './Cells';
 import { resolveTableAlign, tableAlignClasses, toNativeAlign } from './table-align';
 import type { TableAlign } from './table-align';
@@ -9,9 +12,6 @@ import { TablePagination } from './table-pagination';
 import { TableRowButton } from './table-row-button';
 import { TableRowLink } from './table-row-link';
 import { TableSortButton } from './table-sort-button';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
-import { focusRingInset } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
 
 export interface TableProps extends ComponentProps<'table'> {
   className?: string;

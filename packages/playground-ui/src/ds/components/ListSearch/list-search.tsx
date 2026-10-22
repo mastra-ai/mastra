@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { useDebouncedCallback } from 'use-debounce';
-import { SearchInput } from '@/ds/components/SearchInput';
-import type { SearchInputProps } from '@/ds/components/SearchInput';
-import { useKeydown } from '@/lib/keyboard';
+import { useKeydown } from '../../../lib/keyboard';
+import { SearchInput } from '../SearchInput';
+import type { SearchInputProps } from '../SearchInput';
 
 export type ListSearchProps = {
   onSearch: (search: string) => void;

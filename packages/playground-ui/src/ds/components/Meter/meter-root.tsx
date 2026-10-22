@@ -1,13 +1,13 @@
 import { useId } from 'react';
 import type { CSSProperties, ComponentProps, ReactNode } from 'react';
+import { formatCost, formatFullNumber } from '../../../lib/cost';
+import { cn } from '../../../lib/utils';
+import { focusRing, transitions } from '../../primitives/transitions';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip/tooltip';
+import { Txt } from '../Txt/Txt';
 import { MeterPartContext, sourceColorClassName } from './meter-context';
 import { MeterKeyRow } from './meter-key-row';
 import { MeterSegment } from './meter-segment';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip/tooltip';
-import { Txt } from '@/ds/components/Txt/Txt';
-import { focusRing, transitions } from '@/ds/primitives/transitions';
-import { formatCost, formatFullNumber } from '@/lib/cost';
-import { cn } from '@/lib/utils';
 
 export type MeterProps = Omit<ComponentProps<'span'>, 'children'> & {
   value: number;

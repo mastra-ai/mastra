@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react';
+import { Code } from '../../../../ds/components/Code';
+import { CodeBlock } from '../../../../ds/components/CodeBlock';
+import { CodeEditor } from '../../../../ds/components/CodeEditor';
+import { ToolCoinIcon } from '../../../../ds/icons/ToolCoinIcon';
+import { formatTypeScript } from '../../../../utils/formatting';
 import { SectionLabel } from '../../components/section-label';
 import type { MessageMetadata } from '../../messages/message-metadata';
 import type { CodeModeResult } from '../code-mode';
 import type { ToolApprovalRequest } from './tool-approval-badge';
 import { ToolApprovalBadge } from './tool-approval-badge';
-import { Code } from '@/ds/components/Code';
-import { CodeBlock } from '@/ds/components/CodeBlock';
-import { CodeEditor } from '@/ds/components/CodeEditor';
-import { ToolCoinIcon } from '@/ds/icons/ToolCoinIcon';
-import { formatTypeScript } from '@/utils/formatting';
 
 export interface CodeModeBadgeProps extends Omit<ToolApprovalRequest, 'toolCalled'> {
   toolName: string;

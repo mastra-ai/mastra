@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
-import { useShimmerDelay } from '@/ds/primitives/shimmer';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { useShimmerDelay } from '../../primitives/shimmer';
 
 function Skeleton({ className, style, ...props }: React.HTMLAttributes<HTMLDivElement>) {
   const delay = useShimmerDelay();

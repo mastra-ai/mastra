@@ -4,9 +4,9 @@ import { Tooltip as TooltipPrimitive } from '@base-ui/react/tooltip';
 import type { TooltipPopupProps, TooltipPositionerProps } from '@base-ui/react/tooltip';
 import * as React from 'react';
 
-import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
-import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { FLOATING_POSITION_METHOD } from '../../primitives/floating';
+import { overlaySurfaceStyle } from '../../primitives/raised-surface';
 
 type TooltipProviderProps = Omit<TooltipPrimitive.Provider.Props, 'delay' | 'timeout'> & {
   delay?: number;

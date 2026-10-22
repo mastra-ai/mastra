@@ -5,6 +5,7 @@ import type {
   SpanInputMessage,
 } from '@mastra/core/observability';
 import { Fragment } from 'react';
+import { DataKeysAndValues } from '../../../../ds/components/DataKeysAndValues';
 import { SpanPayloadJson } from './span-payload-json';
 import { SpanPayloadMessages } from './span-payload-messages';
 import {
@@ -14,7 +15,6 @@ import {
   SpanPayloadToolCalls,
 } from './span-payload-primitives';
 import { hasItems } from './span-payload-registry';
-import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 
 type Scalar = string | number | boolean;
 

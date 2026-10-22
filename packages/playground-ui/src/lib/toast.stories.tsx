@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import type { ReactNode } from 'react';
+import { Button } from '../ds/components/Button';
 import { toast, Toaster } from './toast';
-import { Button } from '@/ds/components/Button';
 
 const meta: Meta = {
   title: 'Feedback/Toast',

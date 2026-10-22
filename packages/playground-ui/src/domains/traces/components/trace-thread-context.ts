@@ -1,6 +1,6 @@
 import { SpanType } from '@mastra/core/observability';
 import type { ComponentProps } from 'react';
-import type { TraceDataPanelView } from '@/domains/traces/components/trace-data-panel-view';
+import type { TraceDataPanelView } from './trace-data-panel-view';
 
 type TraceSpan = NonNullable<ComponentProps<typeof TraceDataPanelView>['spans']>[number];
 

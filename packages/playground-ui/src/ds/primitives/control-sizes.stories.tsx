@@ -1,23 +1,23 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { Button } from '@/ds/components/Button';
-import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
-import { Combobox } from '@/ds/components/Combobox';
-import { Input } from '@/ds/components/Input';
+import { Button } from '../components/Button';
+import { ButtonsGroup } from '../components/ButtonsGroup';
+import { Combobox } from '../components/Combobox';
+import { Input } from '../components/Input';
 import {
   InputNumber,
   InputNumberDecrement,
   InputNumberGroup,
   InputNumberIncrement,
   InputNumberInput,
-} from '@/ds/components/InputNumber';
-import { SegmentedControl, SegmentedControlItem } from '@/ds/components/SegmentedControl';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
-import { Tab, TabList, Tabs } from '@/ds/components/Tabs';
-import type { TabListProps, TabListSize } from '@/ds/components/Tabs';
-import { Txt } from '@/ds/components/Txt';
-import type { ControlSize } from '@/ds/primitives/control-size';
+} from '../components/InputNumber';
+import { SegmentedControl, SegmentedControlItem } from '../components/SegmentedControl';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../components/Select';
+import { Tab, TabList, Tabs } from '../components/Tabs';
+import type { TabListProps, TabListSize } from '../components/Tabs';
+import { Txt } from '../components/Txt';
+import type { ControlSize } from './control-size';
 
 /**
  * Every control that takes the shared control rung (`h-control-*`), one row per size. A row's

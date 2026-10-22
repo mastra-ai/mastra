@@ -1,5 +1,5 @@
+import { DataList } from '../DataList/data-list';
 import type { EnvironmentVariablesEditorReadOnlyEmptyProps } from './environment-variables-editor.types';
-import { DataList } from '@/ds/components/DataList/data-list';
 
 export function EnvironmentVariablesEditorReadOnlyEmpty({
   message = 'No environment variables found',

@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, waitFor } from 'storybook/test';
+import { Badge } from '../Badge';
 import { ScrollArea, ScrollAreaViewport } from './scroll-area';
-import { Badge } from '@/ds/components/Badge';
 
 const meta: Meta<typeof ScrollArea> = {
   title: 'Layout/ScrollArea',

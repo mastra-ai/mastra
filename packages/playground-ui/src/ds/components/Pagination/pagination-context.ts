@@ -1,6 +1,6 @@
 import { createContext, use, useCallback, useRef } from 'react';
 import type { Dispatch, SetStateAction } from 'react';
-import type { UseFluidHoverReturn } from '@/hooks/use-fluid-hover';
+import type { UseFluidHoverReturn } from '../../../hooks/use-fluid-hover';
 
 export type PaginationContextValue = {
   registerItem: UseFluidHoverReturn['registerItem'];

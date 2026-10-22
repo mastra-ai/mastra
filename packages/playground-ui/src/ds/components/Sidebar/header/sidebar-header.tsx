@@ -1,7 +1,7 @@
 import type { ComponentPropsWithoutRef, ReactNode } from 'react';
+import { cn } from '../../../../lib/utils';
 import { useMaybeSidebarState } from '../root/sidebar-context';
 import { SidebarTrigger } from '../root/sidebar-trigger';
-import { cn } from '@/lib/utils';
 
 import './sidebar-header.css';
 

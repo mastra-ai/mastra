@@ -4,6 +4,8 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterEach, assert, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { server } from '../../../../test/msw-server';
+import { TEST_BASE_URL, renderWithProviders } from '../../../../test/render';
 import { TracesListView } from '../traces-list-view';
 import type { TracesListViewTrace } from '../traces-list-view';
 import {
@@ -13,8 +15,6 @@ import {
   failedSpanDetail,
   fullErrorMessage,
 } from './fixtures/trace-error-cell';
-import { server } from '@/test/msw-server';
-import { TEST_BASE_URL, renderWithProviders } from '@/test/render';
 
 // jsdom implements neither ResizeObserver nor element layout; without both the
 // virtualizer sees a zero-height scroll container and renders no rows. The stub

@@ -1,7 +1,7 @@
 import { format } from 'date-fns';
+import { Txt } from '../Txt/Txt';
 import { parseDate } from './lib/date-range-timeline';
 import type { TimelineTick } from './lib/date-range-timeline';
-import { Txt } from '@/ds/components/Txt/Txt';
 
 interface DateRangeTicksProps {
   ticks: TimelineTick[];

@@ -2,15 +2,15 @@ import type { BrowserSessionProbe } from '@mastra/react/hooks/agents';
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 
-import { useActivatedSkills } from '@/domains/agents/context/activated-skills-context';
+import { useActivatedSkills } from '../../agents/context/activated-skills-context';
 import {
   isBrowserTool,
   isBrowserToolError,
   useBrowserToolCallsSafe,
-} from '@/domains/agents/context/browser-tool-calls-context';
-import type { ToolPartFields } from '@/domains/chat/messages/renderers/tool-part';
-import { isRecord } from '@/domains/chat/messages/signal-data';
-import { isSettledState } from '@/domains/chat/tools/tool-card-kind';
+} from '../../agents/context/browser-tool-calls-context';
+import type { ToolPartFields } from '../messages/renderers/tool-part';
+import { isRecord } from '../messages/signal-data';
+import { isSettledState } from './tool-card-kind';
 
 export interface ToolCallEffectsProps extends ToolPartFields {
   readOnly?: boolean;

@@ -1,9 +1,9 @@
 import { LockKeyholeIcon } from 'lucide-react';
 import { useId } from 'react';
 import type { ReactNode } from 'react';
-import { Field, FieldDescription, FieldError, FieldLabel, Fieldset, FieldsetLegend } from '@/ds/components/Field';
-import type { FieldProps, FieldsetProps } from '@/ds/components/Field';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { Field, FieldDescription, FieldError, FieldLabel, Fieldset, FieldsetLegend } from '../../components/Field';
+import type { FieldProps, FieldsetProps } from '../../components/Field';
 
 export type SettingsRowProps = Omit<FieldProps, 'children' | 'invalid' | 'orientation'> & {
   label: ReactNode;

@@ -1,10 +1,10 @@
 import type { ComponentProps } from 'react';
 
+import { Tab, TabContent, TabList } from '../../../../ds/components/Tabs';
+import type { TabContentProps, TabListProps, TabProps } from '../../../../ds/components/Tabs';
+import { cn } from '../../../../lib/utils';
 import { THREAD_TRACE_MESSAGES_TAB } from './thread-trace-row';
 import { useThreadTraceRow } from './thread-trace-row-context';
-import { Tab, TabContent, TabList } from '@/ds/components/Tabs';
-import type { TabContentProps, TabListProps, TabProps } from '@/ds/components/Tabs';
-import { cn } from '@/lib/utils';
 
 export interface ThreadTraceMessagesProps extends ComponentProps<'div'> {
   /** Class name of the sticky, measured wrapper around the children. */

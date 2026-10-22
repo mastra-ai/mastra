@@ -1,8 +1,8 @@
-import { formatCompactTokens } from '@/ds/components/TokenBudget/format-tokens';
-import { toneClass } from '@/ds/components/TokenBudget/tones';
-import type { TokenBudgetTone } from '@/ds/components/TokenBudget/tones';
-import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/lib/utils';
+import { formatCompactTokens } from '../../../ds/components/TokenBudget/format-tokens';
+import { toneClass } from '../../../ds/components/TokenBudget/tones';
+import type { TokenBudgetTone } from '../../../ds/components/TokenBudget/tones';
+import { Txt } from '../../../ds/components/Txt';
+import { cn } from '../../../lib/utils';
 
 interface ThreadContextProgressProps {
   messageTokens?: number;

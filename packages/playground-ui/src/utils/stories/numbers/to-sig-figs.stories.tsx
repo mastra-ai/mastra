@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { HelperExamples } from '../../../../.storybook/fixtures/helpers/helper-examples';
 import type { HelperExample } from '../../../../.storybook/fixtures/helpers/helper-examples';
-import { toSigFigs } from '@/utils/number';
+import { toSigFigs } from '../../number';
 
 const examples: HelperExample[] = [
   ['toSigFigs(3.14159, 3)', toSigFigs(3.14159, 3)],

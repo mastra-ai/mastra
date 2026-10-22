@@ -1,5 +1,8 @@
 import { ChevronsRightIcon } from 'lucide-react';
 import * as React from 'react';
+import { cn } from '../../../lib/utils';
+import { PortalContainerProvider } from '../../primitives/portal-container';
+import { transitions } from '../../primitives/transitions';
 import {
   Drawer,
   DrawerBackdrop,
@@ -10,10 +13,7 @@ import {
   DrawerPortal,
   DrawerTitle,
   DrawerViewport,
-} from '@/ds/components/Drawer';
-import { PortalContainerProvider } from '@/ds/primitives/portal-container';
-import { transitions } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
+} from '../Drawer';
 
 export type SideDialogRootProps = {
   variant?: 'default' | 'confirmation';

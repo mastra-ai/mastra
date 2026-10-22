@@ -1,10 +1,10 @@
 import { useMemo } from 'react';
 
+import { cn } from '../../../lib/utils';
+import { DataList } from '../DataList/data-list';
 import { EnvironmentVariablesEditorReadOnlyListContext } from './environment-variables-editor-context';
 import { EnvironmentVariablesEditorReadOnlyHeader } from './environment-variables-editor-read-only-header';
 import type { EnvironmentVariablesEditorReadOnlyListProps } from './environment-variables-editor.types';
-import { DataList } from '@/ds/components/DataList/data-list';
-import { cn } from '@/lib/utils';
 
 const READ_ONLY_COLUMNS = 'minmax(12rem,1.4fr) minmax(8rem,0.9fr) minmax(8rem,auto)';
 const READ_ONLY_COLUMNS_WITH_ICON = `auto ${READ_ONLY_COLUMNS}`;

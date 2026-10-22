@@ -1,9 +1,9 @@
 import { Children } from 'react';
 import type { ComponentProps } from 'react';
 
+import { cn } from '../../../lib/utils';
 import { AvatarSizeContext } from './avatar-size';
 import type { AvatarSize } from './avatar-size';
-import { cn } from '@/lib/utils';
 
 export type AvatarGroupProps = ComponentProps<'div'> & {
   size?: AvatarSize;

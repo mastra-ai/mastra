@@ -1,6 +1,6 @@
-import { Badge } from '@/ds/components/Badge';
-import type { BadgeVariant } from '@/ds/components/Badge';
-import { Shimmer } from '@/ds/components/Shimmer';
+import { Badge } from '../../../ds/components/Badge';
+import type { BadgeVariant } from '../../../ds/components/Badge';
+import { Shimmer } from '../../../ds/components/Shimmer';
 
 export type TraceStatusValueStatus = 'success' | 'error' | 'running';
 

@@ -1,7 +1,7 @@
 import type { ReasoningPart } from '@mastra/react/ui';
 
+import { ReasoningActivity } from '../../../../ds/components/ai/activity';
 import { getReasoningContent } from '../reasoning-content';
-import { ReasoningActivity } from '@/ds/components/ai/activity';
 
 export interface ReasoningPartRendererProps {
   part: ReasoningPart;

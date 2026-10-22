@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { HelperExamples } from '../../../../.storybook/fixtures/helpers/helper-examples';
 import type { HelperExample } from '../../../../.storybook/fixtures/helpers/helper-examples';
-import { lodashTitleCase } from '@/utils/string';
+import { lodashTitleCase } from '../../string';
 
 const examples: HelperExample[] = [
   ["lodashTitleCase('weatherAgent')", lodashTitleCase('weatherAgent')],

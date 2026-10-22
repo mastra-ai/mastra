@@ -1,4 +1,8 @@
-import type { ConnectPromptPayload, UserConnectSessionResponse, UserConnectionStatusResponse } from '@/domains/connect';
+import type {
+  ConnectPromptPayload,
+  UserConnectSessionResponse,
+  UserConnectionStatusResponse,
+} from '../../../../connect';
 
 /**
  * Structured output of the built-in `request_connection` tool, as produced by

@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useCallback, useState } from 'react';
+import { cn } from '../../lib/utils';
 import { Txt } from '../components/Txt/Txt';
 import type { TextRole } from './fonts';
 import { FoundationPage, FoundationSection, Specimen } from './foundations-layout';
-import { cn } from '@/lib/utils';
 
 const meta: Meta = {
   title: 'Foundations/Typography',

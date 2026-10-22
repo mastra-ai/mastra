@@ -3,23 +3,15 @@ import { RefreshCwIcon, SaveIcon, SearchIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 
+import { useEnvironmentVariablesEditor } from '../../../hooks/use-environment-variables-editor';
+import { collectEnvironmentVariables, rowsFromEnvironmentVariables } from '../../../lib/env-file';
+import type { EnvironmentVariableEntry } from '../../../lib/env-file';
+import { Button } from '../Button';
+import { Drawer, DrawerBody, DrawerContent, DrawerFooter, DrawerHeader, DrawerTitle, DrawerTrigger } from '../Drawer';
+import { InputGroup, InputGroupAddon, InputGroupInput } from '../InputGroup';
+import { Notice } from '../Notice';
+import { TooltipProvider } from '../Tooltip';
 import { EnvironmentVariablesEditor } from './environment-variables-editor';
-import { Button } from '@/ds/components/Button';
-import {
-  Drawer,
-  DrawerBody,
-  DrawerContent,
-  DrawerFooter,
-  DrawerHeader,
-  DrawerTitle,
-  DrawerTrigger,
-} from '@/ds/components/Drawer';
-import { InputGroup, InputGroupAddon, InputGroupInput } from '@/ds/components/InputGroup';
-import { Notice } from '@/ds/components/Notice';
-import { TooltipProvider } from '@/ds/components/Tooltip';
-import { useEnvironmentVariablesEditor } from '@/hooks/use-environment-variables-editor';
-import { collectEnvironmentVariables, rowsFromEnvironmentVariables } from '@/lib/env-file';
-import type { EnvironmentVariableEntry } from '@/lib/env-file';
 
 const meta: Meta<typeof EnvironmentVariablesEditor> = {
   title: 'Composite/EnvironmentVariablesEditor',

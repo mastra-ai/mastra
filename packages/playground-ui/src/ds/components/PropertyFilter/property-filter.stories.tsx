@@ -1,11 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
+import { raisedSurfaceStyle } from '../../primitives/raised-surface';
 import { PickMultiPanel } from './pick-multi-panel';
 import { PropertyFilterActions } from './property-filter-actions';
 import { PropertyFilterApplied } from './property-filter-applied';
 import { PropertyFilterCreator } from './property-filter-creator';
 import type { PropertyFilterField, PropertyFilterToken } from './types';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
 const FIELDS: PropertyFilterField[] = [
   {

@@ -1,9 +1,9 @@
 import type { FilePart } from '@mastra/react/ui';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, waitFor, within } from 'storybook/test';
+import { Message } from '../../../ds/components/Message';
 import { MessageAttachment } from '../attachments/message-attachment';
 import { MessageAttachments } from '../attachments/message-attachments';
-import { Message } from '@/ds/components/Message';
 
 const meta = {
   title: 'AI/Sent Attachments',

@@ -2,6 +2,11 @@ import { is404NotFoundError } from '@mastra/react/hooks/query';
 import { useWorkspaceDirectory } from '@mastra/react/hooks/workspace';
 import type { ReactNode } from 'react';
 import { Panel } from 'react-resizable-panels';
+import { EmptyState } from '../../../ds/components/EmptyState';
+import { ScrollArea } from '../../../ds/components/ScrollArea';
+import { CollapsiblePanel } from '../../../lib/resize/collapsible-panel';
+import { PanelGroup } from '../../../lib/resize/panel-group';
+import { PanelSeparator } from '../../../lib/resize/separator';
 import { ROOT_PATH } from '../path';
 import { useWorkspaceContext } from './use-workspace-context';
 import { WorkspaceActiveFileContent as ActiveFileBody } from './workspace-active-file';
@@ -12,11 +17,6 @@ import type { WorkspaceProviderProps } from './workspace-context';
 import { WorkspaceCreateDirectory } from './workspace-create-directory';
 import { WorkspaceSearchResults } from './workspace-search';
 import { WorkspaceTree as TreeBody } from './workspace-tree';
-import { EmptyState } from '@/ds/components/EmptyState';
-import { ScrollArea } from '@/ds/components/ScrollArea';
-import { CollapsiblePanel } from '@/lib/resize/collapsible-panel';
-import { PanelGroup } from '@/lib/resize/panel-group';
-import { PanelSeparator } from '@/lib/resize/separator';
 
 export type WorkspaceRootProps = WorkspaceProviderProps;
 

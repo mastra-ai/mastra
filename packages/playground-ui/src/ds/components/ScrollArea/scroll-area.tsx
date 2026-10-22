@@ -2,11 +2,11 @@ import { ScrollArea as ScrollAreaPrimitive } from '@base-ui/react/scroll-area';
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
 import * as React from 'react';
 
-import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
-import { quietTextHover } from '@/ds/primitives/typography';
-import { useAutoscroll } from '@/hooks/use-autoscroll';
-import { mergeRefs } from '@/lib/merge-refs';
-import { cn } from '@/lib/utils';
+import { useAutoscroll } from '../../../hooks/use-autoscroll';
+import { mergeRefs } from '../../../lib/merge-refs';
+import { cn } from '../../../lib/utils';
+import { controlStateColorTransition, focusRing } from '../../primitives/transitions';
+import { quietTextHover } from '../../primitives/typography';
 
 type Orientation = 'vertical' | 'horizontal' | 'both';
 type ScrollButtonDirection = 'left' | 'right';

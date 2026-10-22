@@ -3,11 +3,11 @@ import { screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
+import { TestLinkProvider } from '../../../../test/link-provider';
+import { server } from '../../../../test/msw-server';
+import { renderWithProviders, TEST_BASE_URL } from '../../../../test/render';
 import { TraceMessagesPanel } from '../trace-messages-panel';
 import { TRACE_ID, panelTraceSpans } from './fixtures/trace-span-panel';
-import { TestLinkProvider } from '@/test/link-provider';
-import { server } from '@/test/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 describe('TraceMessagesPanel', () => {
   it('when rendered, then the reconstructed turn shows inside the messages panel', async () => {

@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { HelperExamples } from '../../../../.storybook/fixtures/helpers/helper-examples';
 import type { HelperExample } from '../../../../.storybook/fixtures/helpers/helper-examples';
-import { formatPercent } from '@/utils/number';
+import { formatPercent } from '../../number';
 
 const examples: HelperExample[] = [
   ['formatPercent(0.42)', formatPercent(0.42)],

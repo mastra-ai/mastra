@@ -1,5 +1,5 @@
+import { cn } from '../../../lib/utils';
 import type { DateRangeGridMarker } from './lib/date-range-timeline-grid';
-import { cn } from '@/lib/utils';
 
 interface DateRangeTrackGridProps {
   markers: DateRangeGridMarker[];

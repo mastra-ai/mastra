@@ -1,12 +1,12 @@
 import type { TimeTravelParams } from '@mastra/client-js';
 
 import { useContext, useMemo, useState } from 'react';
+import { Dialog, DialogContent, DialogTitle, DialogHeader, DialogBody } from '../../../ds/components/Dialog';
+import { WorkflowCodeContent, WorkflowStepActions, WorkflowStepAction } from '../../../ds/components/Workflow';
 import type { TripwireData } from '../context/use-current-run';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
 import { WorkflowTimeTravelForm } from './workflow-time-travel-form';
-import { Dialog, DialogContent, DialogTitle, DialogHeader, DialogBody } from '@/ds/components/Dialog';
-import { WorkflowCodeContent, WorkflowStepActions, WorkflowStepAction } from '@/ds/components/Workflow';
 
 export interface WorkflowStepActionBarProps {
   resumeData?: any;

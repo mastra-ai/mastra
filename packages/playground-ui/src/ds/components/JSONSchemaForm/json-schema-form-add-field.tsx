@@ -1,9 +1,9 @@
 import { Plus } from 'lucide-react';
 import * as React from 'react';
+import { Button } from '../Button';
+import type { ButtonProps } from '../Button';
 import { useJSONSchemaForm } from './json-schema-form-context';
 import { useJSONSchemaFormNestedContext } from './json-schema-form-nested-context';
-import { Button } from '@/ds/components/Button';
-import type { ButtonProps } from '@/ds/components/Button';
 
 export type JSONSchemaFormAddFieldProps = Omit<ButtonProps, 'onClick'>;
 

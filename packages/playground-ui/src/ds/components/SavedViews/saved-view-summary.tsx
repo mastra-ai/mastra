@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
-import { FilterBarFieldLabel, formatValue } from '@/ds/components/FilterBar/filter-bar-chip';
-import type { FilterBarField, FilterBarItem, FilterBarOperator } from '@/ds/components/FilterBar/types';
-import { Txt } from '@/ds/components/Txt';
+import { FilterBarFieldLabel, formatValue } from '../FilterBar/filter-bar-chip';
+import type { FilterBarField, FilterBarItem, FilterBarOperator } from '../FilterBar/types';
+import { Txt } from '../Txt';
 
 type SavedViewSummaryProps = {
   filters: readonly FilterBarItem[];

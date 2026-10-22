@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import { Skeleton } from '@/ds/components/Skeleton';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { Skeleton } from '../Skeleton';
 
 export function MetricsKpiCardValueRow({
   children,

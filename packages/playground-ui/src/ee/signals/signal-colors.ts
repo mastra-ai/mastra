@@ -1,4 +1,4 @@
-import { hashLabel } from '@/lib/colors';
+import { hashLabel } from '../../lib/colors';
 
 type SignalHue = 'green' | 'orange' | 'blue' | 'purple' | 'pink' | 'amber';
 

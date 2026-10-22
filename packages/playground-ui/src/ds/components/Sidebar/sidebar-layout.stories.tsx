@@ -19,19 +19,7 @@ import {
   Wrench,
 } from 'lucide-react';
 import { useState, forwardRef } from 'react';
-import { getIsLinkActive, Sidebar, SidebarProvider, useSidebar } from '.';
-import type { SidebarProviderProps, SidebarSection } from '.';
-import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/ds/components/Dialog';
-import { LogoWithoutText } from '@/ds/components/Logo';
-import { TooltipProvider } from '@/ds/components/Tooltip';
+import { cn } from '../../../lib/utils';
 import {
   AgentIcon,
   DatasetsIcon,
@@ -47,10 +35,22 @@ import {
   TraceIcon,
   WorkflowIcon,
   WorkspacesIcon,
-} from '@/ds/icons';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
-import type { LinkComponentProps } from '@/ds/types/link-component';
-import { cn } from '@/lib/utils';
+} from '../../icons';
+import { raisedSurfaceStyle } from '../../primitives/raised-surface';
+import type { LinkComponentProps } from '../../types/link-component';
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '../Dialog';
+import { LogoWithoutText } from '../Logo';
+import { TooltipProvider } from '../Tooltip';
+import { getIsLinkActive, Sidebar, SidebarProvider, useSidebar } from '.';
+import type { SidebarProviderProps, SidebarSection } from '.';
 
 const StoryLink = forwardRef<HTMLAnchorElement, LinkComponentProps>(({ href, children, ...props }, ref) => (
   <a ref={ref} href={href} {...props}>

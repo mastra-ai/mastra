@@ -1,5 +1,5 @@
-import { ChartTooltip } from '@/ds/components/ChartTooltip';
-import { Txt } from '@/ds/components/Txt';
+import { ChartTooltip } from '../ChartTooltip';
+import { Txt } from '../Txt';
 
 export function MetricsLineChartTooltip({
   active,

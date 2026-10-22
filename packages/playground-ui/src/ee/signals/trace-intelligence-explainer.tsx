@@ -1,8 +1,8 @@
 import type { SignalCatalogEntry } from '@mastra/client-js';
+import { InfoTooltip } from '../../ds/components/Tooltip';
+import { Txt } from '../../ds/components/Txt';
 import { getSignalColor } from './signal-colors';
 import { orderedSignals, signalDescription, signalLabel } from './signal-formatting';
-import { InfoTooltip } from '@/ds/components/Tooltip';
-import { Txt } from '@/ds/components/Txt';
 
 /** Info tooltip for first-time viewers: signals → themes → snapshots. */
 export function TraceIntelligenceExplainer({ signalCatalog }: { signalCatalog: readonly SignalCatalogEntry[] }) {

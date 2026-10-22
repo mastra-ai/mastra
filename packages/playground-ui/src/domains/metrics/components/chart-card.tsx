@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
-import { MetricsCard } from '@/ds/components/MetricsCard';
-import type { MetricsCardTitleMenuProps } from '@/ds/components/MetricsCard';
-import { cn } from '@/lib/utils';
+import { MetricsCard } from '../../../ds/components/MetricsCard';
+import type { MetricsCardTitleMenuProps } from '../../../ds/components/MetricsCard';
+import { cn } from '../../../lib/utils';
 
 export type ChartCardProps = {
   /**

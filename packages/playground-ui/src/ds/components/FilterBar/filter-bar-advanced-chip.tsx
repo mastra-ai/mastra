@@ -1,16 +1,16 @@
 import { BracesIcon, XIcon } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
+import { cn } from '../../../lib/utils';
+import { Button } from '../Button/Button';
+import { Popover, PopoverContent, PopoverTrigger } from '../Popover';
+import { Txt } from '../Txt';
 import { chipClass, editableSegmentClass } from './filter-bar-chip';
 import { FILTER_BAR_SCOPE_ATTR, useFilterBarContext } from './filter-bar-context';
 import { FilterBarGroupEditor } from './filter-bar-group-editor';
 import { countLeaves } from './filter-bar-tree';
 import type { FilterBarGroup } from './types';
 import { useSettleOnLeave } from './use-settle-on-leave';
-import { Button } from '@/ds/components/Button/Button';
-import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
-import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/lib/utils';
 
 export type FilterBarAdvancedChipProps = {
   group: FilterBarGroup;

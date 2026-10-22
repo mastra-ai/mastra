@@ -1,10 +1,10 @@
 import { ExternalLink } from 'lucide-react';
 import type { ReactNode } from 'react';
 
-import { Button } from '@/ds/components/Button';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { controlStateColorTransition } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { controlStateColorTransition } from '../../primitives/transitions';
+import { Button } from '../Button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip';
 
 export type DisabledFeatureButtonProps = {
   icon: ReactNode;

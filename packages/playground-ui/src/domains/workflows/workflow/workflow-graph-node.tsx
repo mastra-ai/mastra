@@ -1,5 +1,7 @@
 import type { NodeProps } from '@xyflow/react';
 
+import { WorkflowNodeFrame, WorkflowConditionCard, WorkflowStepCardView } from '../../../ds/components/Workflow';
+import type { WorkflowCardDisplayStatus } from '../../../ds/components/Workflow';
 import { useCurrentRun } from '../context/use-current-run';
 import type { Step } from '../context/use-current-run';
 import { useWorkflowSelectedStep } from '../context/use-workflow-selected-step';
@@ -10,8 +12,6 @@ import { WorkflowBodyGraph } from './workflow-body-graph';
 import { getWorkflowCardKind } from './workflow-node-kind';
 import { WorkflowStepActionBar } from './workflow-step-action-bar';
 import type { WorkflowStepNode, WorkflowStepNodeData } from './workflow-step-node-utils';
-import { WorkflowNodeFrame, WorkflowConditionCard, WorkflowStepCardView } from '@/ds/components/Workflow';
-import type { WorkflowCardDisplayStatus } from '@/ds/components/Workflow';
 
 export interface WorkflowGraphNodeProps {
   parentWorkflowName?: string;

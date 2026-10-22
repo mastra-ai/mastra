@@ -1,5 +1,5 @@
 import { z } from 'zod/v4';
-import type { FilterBarItem } from '@/ds/components/FilterBar/types';
+import type { FilterBarItem } from '../FilterBar/types';
 
 export const MAX_SAVED_VIEW_NAME_CHARS = 80;
 

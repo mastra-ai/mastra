@@ -1,9 +1,9 @@
+import { Card } from '../../../ds/components/Card';
+import { Skeleton } from '../../../ds/components/Skeleton';
+import { controlSizeClasses } from '../../../ds/primitives/control-size';
+import { cn } from '../../../lib/utils';
 import { TraceMessagesSkeleton } from './trace-messages-skeleton';
 import { TraceSpanTreeSkeleton } from './trace-span-tree-skeleton';
-import { Card } from '@/ds/components/Card';
-import { Skeleton } from '@/ds/components/Skeleton';
-import { controlSizeClasses } from '@/ds/primitives/control-size';
-import { cn } from '@/lib/utils';
 
 const ROWS = [0, 1, 2];
 

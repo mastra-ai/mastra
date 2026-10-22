@@ -1,12 +1,12 @@
 import type { ReactNode } from 'react';
 
+import { cn } from '../../../lib/utils';
+import { focusRing } from '../../primitives/transitions';
+import { Popover, PopoverContent, PopoverTrigger } from '../Popover';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip';
+import { Txt } from '../Txt';
 import { ThinkingLevelRamp } from './thinking-level-ramp';
 import type { ThinkingLevelOption } from './use-thinking-level-stop';
-import { Popover, PopoverContent, PopoverTrigger } from '@/ds/components/Popover';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { Txt } from '@/ds/components/Txt';
-import { focusRing } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
 
 export interface ThinkingLevelBarsProps<T extends string> {
   options: readonly ThinkingLevelOption<T>[];

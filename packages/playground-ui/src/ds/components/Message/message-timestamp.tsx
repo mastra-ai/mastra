@@ -1,5 +1,5 @@
+import { formatDate, toDate } from '../../../utils/date-format';
 import { MessageMetadata } from './message';
-import { formatDate, toDate } from '@/utils/date-format';
 
 export function MessageTimestamp({ value }: { value: Date | string }) {
   const time = toDate(value);

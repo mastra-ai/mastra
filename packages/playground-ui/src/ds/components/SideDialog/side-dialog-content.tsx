@@ -1,5 +1,5 @@
-import { DrawerInteractive } from '@/ds/components/Drawer';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { DrawerInteractive } from '../Drawer';
 
 export type SideDialogContentProps = {
   children?: React.ReactNode;

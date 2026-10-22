@@ -1,8 +1,8 @@
 import { Collapsible } from '@base-ui/react/collapsible';
 import { ArrowLeft, Check } from 'lucide-react';
 import { useEffect, useRef } from 'react';
+import { cn } from '../../../../lib/utils';
 import { ScrollArea, ScrollAreaViewport } from '../../ScrollArea';
-import { cn } from '@/lib/utils';
 
 export interface ComposerSuggestionItem {
   id: string;

@@ -3,13 +3,13 @@ import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import { ChevronDown, X } from 'lucide-react';
 import { Fragment, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { cn } from '../../../lib/utils';
+import { controlHeight } from '../../primitives/control-size';
+import { transitions } from '../../primitives/transitions';
 import { DropdownMenu } from '../DropdownMenu/dropdown-menu';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../Tooltip/tooltip';
 import { TabListContext, TabsContext } from './tabs-context';
 import type { TabMeasurement } from './tabs-context';
-import { controlHeight } from '@/ds/primitives/control-size';
-import { transitions } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
 
 const tabListVariants = cva('relative flex items-center text-body', {
   variants: {

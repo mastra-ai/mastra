@@ -1,12 +1,12 @@
 import { X } from 'lucide-react';
 import { createContext, useContext, useId, useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
-import { useArriving } from '@/ds/components/Arrival';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
-import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
-import { Shimmer } from '@/ds/components/Shimmer';
-import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../../lib/utils';
+import { useArriving } from '../../Arrival';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../../Collapsible';
+import { DisclosureChevron } from '../../DisclosureChevron';
+import { Shimmer } from '../../Shimmer';
+import { Txt } from '../../Txt';
 
 type ActivityStatus = 'idle' | 'running' | 'error';
 

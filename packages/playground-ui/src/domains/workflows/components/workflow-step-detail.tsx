@@ -1,12 +1,12 @@
 import { ReactFlowProvider } from '@xyflow/react';
 import { List, X } from 'lucide-react';
 
+import { Txt } from '../../../ds/components/Txt';
+import { BADGE_COLORS, WorkflowCodeContent } from '../../../ds/components/Workflow';
+import { WorkflowIcon } from '../../../ds/icons/WorkflowIcon';
 import { useWorkflowStepDetail } from '../context/workflow-step-detail-context';
 import { WorkflowDataInspector } from '../workflow/data/workflow-data-inspector';
 import { WorkflowNestedGraph } from '../workflow/workflow-nested-graph';
-import { Txt } from '@/ds/components/Txt';
-import { BADGE_COLORS, WorkflowCodeContent } from '@/ds/components/Workflow';
-import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
 
 export function WorkflowStepDetailContent({ requestContext }: { requestContext: Record<string, any> }) {
   const { stepDetail, closeStepDetail } = useWorkflowStepDetail();

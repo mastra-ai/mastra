@@ -1,14 +1,14 @@
 import { Minimize2 } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
+import { Button } from '../../../../ds/components/Button';
+import { ButtonsGroup } from '../../../../ds/components/ButtonsGroup';
+import { Card, CardContent } from '../../../../ds/components/Card';
+import { CollapsibleBox, useCollapsibleBox } from '../../../../ds/components/CollapsibleBox';
+import { CopyButton } from '../../../../ds/components/CopyButton';
+import { DataPanelSectionHeading } from '../../../../ds/components/DataPanel/data-panel-section-heading';
+import { cn } from '../../../../lib/utils';
 import { SpanPayloadJson } from './span-payload-json';
-import { Button } from '@/ds/components/Button';
-import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
-import { Card, CardContent } from '@/ds/components/Card';
-import { CollapsibleBox, useCollapsibleBox } from '@/ds/components/CollapsibleBox';
-import { CopyButton } from '@/ds/components/CopyButton';
-import { DataPanelSectionHeading } from '@/ds/components/DataPanel/data-panel-section-heading';
-import { cn } from '@/lib/utils';
 
 export type SpanPayloadView = 'rich' | 'raw';
 

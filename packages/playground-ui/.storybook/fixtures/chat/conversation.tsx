@@ -1,22 +1,22 @@
 import { MessageSquare, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
+import { MessageAttachments } from '../../../src/domains/chat/attachments/message-attachments';
+import { UserTextPartRenderer } from '../../../src/domains/chat/messages/renderers/user-text-part-renderer';
+import type { TaskListItem } from '../../../src/ds/components/ai/task-list';
+import { TaskList } from '../../../src/ds/components/ai/task-list';
+import { Avatar } from '../../../src/ds/components/Avatar';
+import { Button } from '../../../src/ds/components/Button';
+import { ChatShell } from '../../../src/ds/components/ChatShell';
+import { EmptyState } from '../../../src/ds/components/EmptyState';
+import { Message } from '../../../src/ds/components/Message';
+import { MessageScrollerItem } from '../../../src/ds/components/MessageScroller';
+import { ThreadRail } from '../../../src/ds/components/ThreadRail';
+import { TooltipProvider } from '../../../src/ds/components/Tooltip';
+import { Txt } from '../../../src/ds/components/Txt';
 import { ConversationComposer } from './composer';
 import type { Scenario } from './data';
 import { ConversationResponse } from './response';
 import { useStoryConversation } from './use-conversation';
-import { MessageAttachments } from '@/domains/chat/attachments/message-attachments';
-import { UserTextPartRenderer } from '@/domains/chat/messages/renderers/user-text-part-renderer';
-import type { TaskListItem } from '@/ds/components/ai/task-list';
-import { TaskList } from '@/ds/components/ai/task-list';
-import { Avatar } from '@/ds/components/Avatar';
-import { Button } from '@/ds/components/Button';
-import { ChatShell } from '@/ds/components/ChatShell';
-import { EmptyState } from '@/ds/components/EmptyState';
-import { Message } from '@/ds/components/Message';
-import { MessageScrollerItem } from '@/ds/components/MessageScroller';
-import { ThreadRail } from '@/ds/components/ThreadRail';
-import { TooltipProvider } from '@/ds/components/Tooltip';
-import { Txt } from '@/ds/components/Txt';
 
 function Conversation({ scenario, onReset }: { scenario: Scenario; onReset: () => void }) {
   const { turns, phase, busy, sendMessage, transitionTurn } = useStoryConversation(scenario);

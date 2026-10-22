@@ -4,14 +4,14 @@ import type { CSSProperties, ReactNode } from 'react';
 
 import { Button } from '../../../ds/components/Button';
 import { Card } from '../../../ds/components/Card';
+import { Txt } from '../../../ds/components/Txt';
+import { TraceIcon } from '../../../ds/icons/TraceIcon';
+import { raisedSurfaceStyle } from '../../../ds/primitives/raised-surface';
+import { textStyle } from '../../../ds/primitives/text';
 import type { LinkComponent } from '../../../ds/types/link-component';
+import { cn } from '../../../lib/utils';
 import { getSignalColor } from '../signal-colors';
 import { BUILT_IN_SIGNAL_CATALOG, orderedSignals, signalDescription, signalLabel } from '../signal-formatting';
-import { Txt } from '@/ds/components/Txt';
-import { TraceIcon } from '@/ds/icons/TraceIcon';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
-import { textStyle } from '@/ds/primitives/text';
-import { cn } from '@/lib/utils';
 
 const traceRows = [
   ['chat.completion', '1.2s'],

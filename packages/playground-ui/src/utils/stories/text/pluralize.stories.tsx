@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { HelperExamples } from '../../../../.storybook/fixtures/helpers/helper-examples';
 import type { HelperExample } from '../../../../.storybook/fixtures/helpers/helper-examples';
-import { pluralize } from '@/utils/string';
+import { pluralize } from '../../string';
 
 const examples: HelperExample[] = [
   ["pluralize(1, 'deploy')", pluralize(1, 'deploy')],

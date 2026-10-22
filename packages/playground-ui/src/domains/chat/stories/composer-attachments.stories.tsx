@@ -10,12 +10,12 @@ import {
   verifyMixedAttachments,
   verifyPreviewAndRemoval,
 } from '../../../../.storybook/tests/composer-attachments';
+import { Button } from '../../../ds/components/Button';
+import { Composer, ComposerActions, ComposerBox, ComposerInput } from '../../../ds/components/Composer';
 import { ImageEntry, TxtEntry, PdfEntry, FileChipEntry } from '../attachments/attachment-preview-dialog';
 import { ComposerAttachment } from '../attachments/composer-attachment';
 import { ComposerAttachmentList } from '../attachments/composer-attachment-list';
 import type { AttachmentPreviewProps } from '../attachments/use-attachment-preview';
-import { Button } from '@/ds/components/Button';
-import { Composer, ComposerActions, ComposerBox, ComposerInput } from '@/ds/components/Composer';
 
 const meta = {
   title: 'AI/Composer Attachments',

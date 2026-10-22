@@ -1,3 +1,4 @@
+import { hueAccentColor, hueForName } from '../../lib/colors';
 import type {
   Topic,
   TopicSubtopic,
@@ -7,7 +8,6 @@ import type {
   TopicTraceSummary,
   TopicWithCounts,
 } from './types';
-import { hueAccentColor, hueForName } from '@/lib/colors';
 
 export function getTopicColor(id: string): string {
   return hueAccentColor(hueForName(id));

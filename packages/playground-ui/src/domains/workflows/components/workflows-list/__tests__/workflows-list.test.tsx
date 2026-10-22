@@ -5,12 +5,12 @@ import type { AnchorHTMLAttributes } from 'react';
 import { forwardRef } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 
+import type { LinkComponentProviderProps } from '../../../../../lib/framework';
+import { LinkComponentProvider } from '../../../../../lib/framework';
+import { server } from '../../../../../test/msw-server';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../test/render';
 import { WorkflowsList } from '../workflows-list';
 import { originWorkflowsFixture, runCountsFixture, workflowsFixture } from './fixtures/workflows';
-import type { LinkComponentProviderProps } from '@/lib/framework';
-import { LinkComponentProvider } from '@/lib/framework';
-import { server } from '@/test/msw-server';
-import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '@/test/render';
 
 const StubLink = forwardRef<HTMLAnchorElement, AnchorHTMLAttributes<HTMLAnchorElement> & { to?: string }>(
   ({ children, to, href, ...props }, ref) => (

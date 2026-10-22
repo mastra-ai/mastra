@@ -1,6 +1,6 @@
 import type { ComponentPropsWithoutRef } from 'react';
-import { Badge } from '@/ds/components/Badge';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../../lib/utils';
+import { Badge } from '../../Badge';
 
 export type SidebarBadgeProps = ComponentPropsWithoutRef<'span'>;
 

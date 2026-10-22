@@ -1,6 +1,6 @@
 import type { ComponentProps } from 'react';
-import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { Txt } from '../Txt';
 
 export type SectionDescriptionProps = ComponentProps<'p'>;
 

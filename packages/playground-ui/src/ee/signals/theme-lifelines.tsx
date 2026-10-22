@@ -1,3 +1,4 @@
+import { Txt } from '../../ds/components/Txt';
 import { useThemeFlows } from './hooks/use-theme-flows';
 import { snapshotSummaryLabel } from './sankey-signals-data';
 import { SignalLifelines } from './signal-lifelines';
@@ -8,7 +9,6 @@ import type { TimelineMarkerKind } from './snapshot-timeline';
 import { timelineTickPositions } from './snapshot-timeline-data';
 import type { ThemeSelection } from './theme-drilldown-data';
 import type { ThemeSnapshot, TraceSignalName } from './types';
-import { Txt } from '@/ds/components/Txt';
 
 /**
  * Lifelines mode: every theme holds a fixed row while landmarks run left to

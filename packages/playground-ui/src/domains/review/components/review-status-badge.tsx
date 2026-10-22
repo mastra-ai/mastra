@@ -1,5 +1,5 @@
 import type { ComponentProps, ReactNode } from 'react';
-import { Badge } from '@/ds/components/Badge';
+import { Badge } from '../../../ds/components/Badge';
 
 type ReviewStatus = 'needs-review' | 'complete' | 'reviewed';
 

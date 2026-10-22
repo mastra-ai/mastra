@@ -1,5 +1,8 @@
 import { useState } from 'react';
 
+import { DisclosureChevron } from '../../ds/components/DisclosureChevron';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../ds/components/Tooltip';
+import { Txt } from '../../ds/components/Txt';
 import { LifelineRow } from './lifeline-row';
 import { getSignalColor } from './signal-colors';
 import { signalDescription, signalLabel } from './signal-formatting';
@@ -7,9 +10,6 @@ import type { ThemeSelection } from './theme-drilldown-data';
 import { buildThemeLifelines } from './theme-lifelines-data';
 import type { ThemeFlowResponse, ThemeSnapshot, TraceSignalName } from './types';
 import { useTraceIntelligence } from './use-trace-intelligence';
-import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { Txt } from '@/ds/components/Txt';
 
 export function SignalLifelines({
   signalName,

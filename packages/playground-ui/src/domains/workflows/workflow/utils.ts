@@ -1,6 +1,7 @@
 import type { Workflow, SerializedStepFlowEntry } from '@mastra/core/workflows';
 import type { Node } from '@xyflow/react';
 import { MarkerType } from '@xyflow/react';
+import type { WorkflowDataEdgeModel } from '../../../ds/components/Workflow';
 import { getWorkflowMapContext } from './workflow-graph-groups';
 import { getLayoutedElements } from './workflow-graph-layout';
 import {
@@ -10,7 +11,6 @@ import {
   WORKFLOW_STEP_NODE_TYPE,
 } from './workflow-step-node-utils';
 import type { WorkflowBoundaryNode, WorkflowStepNode } from './workflow-step-node-utils';
-import type { WorkflowDataEdgeModel } from '@/ds/components/Workflow';
 
 const getWorkflowBoundaryNodeId = (role: 'start' | 'end') => `boundary-${role}`;
 const WORKFLOW_START_NODE_ID = getWorkflowBoundaryNodeId('start');

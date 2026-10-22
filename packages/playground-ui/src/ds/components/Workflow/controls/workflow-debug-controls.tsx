@@ -1,8 +1,8 @@
 import { Loader2, Pause, PlayIcon, StepForwardIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { Badge } from '@/ds/components/Badge';
-import { Button } from '@/ds/components/Button';
-import { Txt } from '@/ds/components/Txt';
+import { Badge } from '../../Badge';
+import { Button } from '../../Button';
+import { Txt } from '../../Txt';
 
 export interface WorkflowDebugControlsProps {
   isStreaming?: boolean;

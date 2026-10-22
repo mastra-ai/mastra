@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { raisedSurfaceStyle } from '../../primitives/raised-surface';
 import { Field, FieldError, FieldLabel } from '../Field';
 import { Textarea } from './textarea';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
 const meta: Meta<typeof Textarea> = {
   title: 'Elements/Textarea',

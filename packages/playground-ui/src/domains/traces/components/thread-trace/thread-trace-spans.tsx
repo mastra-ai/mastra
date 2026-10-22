@@ -3,15 +3,15 @@ import { Minimize2 } from 'lucide-react';
 import { useMemo } from 'react';
 import type { ComponentProps } from 'react';
 
+import { Button } from '../../../../ds/components/Button';
+import { CollapsibleBox } from '../../../../ds/components/CollapsibleBox';
+import type { CollapsibleBoxState } from '../../../../ds/components/CollapsibleBox';
+import { cn } from '../../../../lib/utils';
 import { useExpandedSpanIds } from '../../hooks/use-expanded-span-ids';
 import { formatHierarchicalSpans } from '../format-hierarchical-spans';
 import { TraceSpanTree } from '../trace-span-tree';
 import { useThreadTrace } from './thread-trace-context';
 import { useThreadTraceRow } from './thread-trace-row-context';
-import { Button } from '@/ds/components/Button';
-import { CollapsibleBox } from '@/ds/components/CollapsibleBox';
-import type { CollapsibleBoxState } from '@/ds/components/CollapsibleBox';
-import { cn } from '@/lib/utils';
 
 /**
  * The span tree is clamped to the messages column while the row is collapsed. The budget is the

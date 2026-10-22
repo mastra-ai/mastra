@@ -1,8 +1,8 @@
+import { cn } from '../../../lib/utils';
+import { Icon } from '../../icons';
+import { raisedSurfaceStyle } from '../../primitives/raised-surface';
+import { textStyle } from '../../primitives/text';
 import { Txt } from '../Txt';
-import { Icon } from '@/ds/icons';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
-import { textStyle } from '@/ds/primitives/text';
-import { cn } from '@/lib/utils';
 
 export interface EntityProps {
   children: React.ReactNode;

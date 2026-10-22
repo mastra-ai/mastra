@@ -2,14 +2,14 @@ import type { EntityType } from '@mastra/core/observability';
 import type { MetricsDimensionalFilter } from '@mastra/react/hooks/metrics';
 import { CloudIcon, CpuIcon } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
-import { traceFilterFieldColor, traceFilterFieldIcon } from '../traces/trace-filters';
 import type {
   FilterBarField,
   FilterBarItem,
   FilterBarOperator,
   FilterBarOption,
-} from '@/ds/components/FilterBar/types';
-import type { PropertyFilterField, PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
+} from '../../ds/components/FilterBar/types';
+import type { PropertyFilterField, PropertyFilterToken } from '../../ds/components/PropertyFilter/types';
+import { traceFilterFieldColor, traceFilterFieldIcon } from '../traces/trace-filters';
 
 type EntityTypeValue = `${EntityType}`;
 

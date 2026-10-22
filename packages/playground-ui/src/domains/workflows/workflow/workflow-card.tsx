@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
-import { Icon } from '@/ds/icons/Icon';
+import { DisclosureChevron } from '../../../ds/components/DisclosureChevron';
+import { Icon } from '../../../ds/icons/Icon';
 
 export interface WorkflowCardProps {
   header: React.ReactNode;

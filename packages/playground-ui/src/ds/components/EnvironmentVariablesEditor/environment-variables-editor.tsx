@@ -1,3 +1,6 @@
+import type { EnvironmentVariableEntry } from '../../../lib/env-file';
+import { DUPLICATE_ENVIRONMENT_VARIABLE_MESSAGE } from '../../../lib/env-file';
+import { cn } from '../../../lib/utils';
 import { EnvironmentVariablesEditorActions } from './environment-variables-editor-actions';
 import { EnvironmentVariablesEditorAddButton } from './environment-variables-editor-add-button';
 import { EnvironmentVariablesEditorDuplicateKeysError } from './environment-variables-editor-duplicate-keys-error';
@@ -14,9 +17,6 @@ import { EnvironmentVariablesEditorUpload } from './environment-variables-editor
 import { EnvironmentVariablesEditorUploadButton } from './environment-variables-editor-upload-button';
 import { EnvironmentVariablesEditorUploadError } from './environment-variables-editor-upload-error';
 import type { EnvironmentVariablesEditorProps } from './environment-variables-editor.types';
-import type { EnvironmentVariableEntry } from '@/lib/env-file';
-import { DUPLICATE_ENVIRONMENT_VARIABLE_MESSAGE } from '@/lib/env-file';
-import { cn } from '@/lib/utils';
 
 const renderEnvironmentVariablesEditor = <TRow extends EnvironmentVariableEntry = EnvironmentVariableEntry>({
   className,

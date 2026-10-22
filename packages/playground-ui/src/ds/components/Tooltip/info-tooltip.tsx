@@ -1,11 +1,11 @@
 import { Info } from 'lucide-react';
 import * as React from 'react';
 
+import { cn } from '../../../lib/utils';
+import { Icon } from '../../icons/Icon';
+import { controlStateColorTransition, focusRing } from '../../primitives/transitions';
 import { Tooltip, TooltipContent, TooltipTrigger } from './tooltip';
 import type { TooltipContentProps } from './tooltip';
-import { Icon } from '@/ds/icons/Icon';
-import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
 
 type InfoTooltipProps = {
   /** The explanation shown in the tooltip, and read to screen readers as the icon's description. */

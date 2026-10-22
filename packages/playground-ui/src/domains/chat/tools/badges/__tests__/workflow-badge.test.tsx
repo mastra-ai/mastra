@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import '@/test/inert-resize-observer';
+import '../../../../../test/inert-resize-observer';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
@@ -8,10 +8,10 @@ import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { server } from '../../../../../test/msw-server';
+import { ToolCallProvider } from '../../../context/tool-call-context';
 import { WorkflowBadge } from '../workflow-badge';
 import { badgeWorkflow, badgeWorkflowRuns, RUN_ID, WORKFLOW_ID } from './fixtures/workflow-badge';
-import { ToolCallProvider } from '@/domains/chat/context/tool-call-context';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 

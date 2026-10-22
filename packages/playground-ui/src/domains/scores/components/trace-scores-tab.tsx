@@ -1,16 +1,16 @@
 import type { ClientScoreRowData, ListScoresResponse } from '@mastra/client-js';
 import { useTraceSpanScores } from '@mastra/react/hooks/scores';
 import { useState } from 'react';
-import { DataList } from '@/ds/components/DataList';
-import { EmptyState } from '@/ds/components/EmptyState';
-import { MetricsKpiCard } from '@/ds/components/MetricsKpiCard';
-import { Spinner } from '@/ds/components/Spinner';
-import { getShortId } from '@/ds/components/Text';
-import { Txt } from '@/ds/components/Txt';
-import { controlStateColorTransition } from '@/ds/primitives/transitions';
-import { quietTextHover } from '@/ds/primitives/typography';
-import { cn } from '@/utils/cn';
-import { formatDate } from '@/utils/date-format';
+import { DataList } from '../../../ds/components/DataList';
+import { EmptyState } from '../../../ds/components/EmptyState';
+import { MetricsKpiCard } from '../../../ds/components/MetricsKpiCard';
+import { Spinner } from '../../../ds/components/Spinner';
+import { getShortId } from '../../../ds/components/Text';
+import { Txt } from '../../../ds/components/Txt';
+import { controlStateColorTransition } from '../../../ds/primitives/transitions';
+import { quietTextHover } from '../../../ds/primitives/typography';
+import { cn } from '../../../utils/cn';
+import { formatDate } from '../../../utils/date-format';
 
 const REASON_PREVIEW_LENGTH = 100;
 

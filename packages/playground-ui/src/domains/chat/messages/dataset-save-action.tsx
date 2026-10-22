@@ -1,11 +1,8 @@
 import { useMastraClient } from '@mastra/react';
 import { DatabaseIcon } from 'lucide-react';
 import { useState, useCallback, useEffect, useMemo } from 'react';
-import { useDatasetSaveContext } from '../context/dataset-save-context-value';
-import type { DatasetSaveContextValue } from '../context/dataset-save-context-value';
-import { useDatasetMutations, useDatasets } from '@/domains/datasets';
-import { Button } from '@/ds/components/Button';
-import { CodeEditor } from '@/ds/components/CodeEditor';
+import { Button } from '../../../ds/components/Button';
+import { CodeEditor } from '../../../ds/components/CodeEditor';
 import {
   Dialog,
   DialogAction,
@@ -16,15 +13,18 @@ import {
   DialogDescription,
   DialogBody,
   DialogFooter,
-} from '@/ds/components/Dialog';
-import { Field, FieldLabel } from '@/ds/components/Field';
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/ds/components/Select';
-import { Spinner } from '@/ds/components/Spinner';
-import { Txt } from '@/ds/components/Txt';
-import { controlStateColorTransition } from '@/ds/primitives/transitions';
-import { quietTextHover } from '@/ds/primitives/typography';
-import { cn } from '@/utils/cn';
-import { toast } from '@/utils/toast';
+} from '../../../ds/components/Dialog';
+import { Field, FieldLabel } from '../../../ds/components/Field';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../../../ds/components/Select';
+import { Spinner } from '../../../ds/components/Spinner';
+import { Txt } from '../../../ds/components/Txt';
+import { controlStateColorTransition } from '../../../ds/primitives/transitions';
+import { quietTextHover } from '../../../ds/primitives/typography';
+import { cn } from '../../../utils/cn';
+import { toast } from '../../../utils/toast';
+import { useDatasetMutations, useDatasets } from '../../datasets';
+import { useDatasetSaveContext } from '../context/dataset-save-context-value';
+import type { DatasetSaveContextValue } from '../context/dataset-save-context-value';
 
 function DatasetSaveDialog({
   open,

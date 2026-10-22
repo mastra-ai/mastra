@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { CheckIcon, MailIcon, SearchIcon, SendIcon, XIcon } from 'lucide-react';
+import { raisedSurfaceStyle } from '../../primitives/raised-surface';
 import { Field, FieldError, FieldLabel } from '../Field';
 import { Kbd } from '../Kbd';
 import { Txt } from '../Txt/Txt';
@@ -11,7 +12,6 @@ import {
   InputGroupText,
   InputGroupTextarea,
 } from './input-group';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
 const meta: Meta<typeof InputGroup> = {
   title: 'Composite/InputGroup',

@@ -1,11 +1,11 @@
+import { Card, CardContent } from '../../ds/components/Card';
+import { Sankey, SankeyChart } from '../../ds/components/SankeyChart';
+import type { SankeyChartColumn, SankeyChartNodeSelection, SankeyChartRecord } from '../../ds/components/SankeyChart';
+import { Txt } from '../../ds/components/Txt';
 import { getSignalRecordNodeId, getSignalRecordNodeLabel, getSignalRecordNodeValue } from './sankey-signals-data';
 import { getSignalColor } from './signal-colors';
 import { SortableSignalHeaders } from './sortable-signal-headers';
 import type { ThemeFlowResponse, TraceSignalName } from './types';
-import { Card, CardContent } from '@/ds/components/Card';
-import { Sankey, SankeyChart } from '@/ds/components/SankeyChart';
-import type { SankeyChartColumn, SankeyChartNodeSelection, SankeyChartRecord } from '@/ds/components/SankeyChart';
-import { Txt } from '@/ds/components/Txt';
 
 export function FlowCard({
   columns,

@@ -1,6 +1,6 @@
 import { EllipsisVerticalIcon, SaveIcon, Trash2Icon, XIcon } from 'lucide-react';
-import { Button } from '@/ds/components/Button/Button';
-import { DropdownMenu } from '@/ds/components/DropdownMenu/dropdown-menu';
+import { Button } from '../Button/Button';
+import { DropdownMenu } from '../DropdownMenu/dropdown-menu';
 
 export type PropertyFilterActionsProps = {
   disabled?: boolean;

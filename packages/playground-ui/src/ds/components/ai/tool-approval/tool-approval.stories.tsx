@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { expect, fn, userEvent, within } from 'storybook/test';
+import { ToolCallProvider } from '../../../../domains/chat/context/tool-call-context';
+import { ToolBadge } from '../../../../domains/chat/tools/badges/tool-badge';
 import { ToolApproval } from './tool-approval';
 import type { ToolApprovalProps } from './tool-approval';
-import { ToolCallProvider } from '@/domains/chat/context/tool-call-context';
-import { ToolBadge } from '@/domains/chat/tools/badges/tool-badge';
 
 const toolArguments = { path: 'src/agent.ts', content: 'export const agent = createAgent({ name: "Assistant" });' };
 

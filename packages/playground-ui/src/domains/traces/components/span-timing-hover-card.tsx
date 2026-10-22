@@ -1,10 +1,10 @@
+import { DataKeysAndValues } from '../../../ds/components/DataKeysAndValues';
+import { HoverCardContent } from '../../../ds/components/HoverCard';
+import { Txt } from '../../../ds/components/Txt';
+import { cn } from '../../../lib/utils';
+import { formatTimestampPrecise } from '../../../utils/date-format';
+import { formatDurationPrecise } from '../../../utils/duration';
 import type { UISpan } from '../types';
-import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
-import { HoverCardContent } from '@/ds/components/HoverCard';
-import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/lib/utils';
-import { formatTimestampPrecise } from '@/utils/date-format';
-import { formatDurationPrecise } from '@/utils/duration';
 
 type SpanTimingHoverCardProps = {
   span: UISpan;

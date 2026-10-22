@@ -1,9 +1,9 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import type { ComponentProps, KeyboardEvent, MouseEvent, PointerEvent } from 'react';
+import { cn } from '../../../lib/utils';
+import { Button } from '../Button';
+import type { TextButtonSize } from '../Button';
 import { dialogActionLayoutClasses, dialogActionSizeClasses, useDialogContext } from './dialog-context';
-import { Button } from '@/ds/components/Button';
-import type { TextButtonSize } from '@/ds/components/Button';
-import { cn } from '@/lib/utils';
 
 type DialogActionButtonProps = Omit<ComponentProps<typeof Button>, 'onClick' | 'variant' | 'as' | 'type' | 'size'> & {
   size?: TextButtonSize;

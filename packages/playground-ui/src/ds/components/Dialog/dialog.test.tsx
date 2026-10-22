@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import type { FormEvent } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { Button } from '../Button';
 import {
   Dialog,
   DialogBody,
@@ -16,7 +17,6 @@ import {
   DialogAction,
   DialogCancel,
 } from './dialog';
-import { Button } from '@/ds/components/Button';
 
 afterEach(() => {
   cleanup();

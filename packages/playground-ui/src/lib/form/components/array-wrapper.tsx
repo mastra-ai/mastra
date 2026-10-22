@@ -1,9 +1,9 @@
 import type { ArrayWrapperProps } from '@autoform/react';
 import { Brackets, Plus } from 'lucide-react';
 import { Children, useContext, useRef } from 'react';
+import { Button } from '../../../ds/components/Button';
+import { Txt } from '../../../ds/components/Txt';
 import { ArrayAddButtonContext, FormReadOnlyContext } from '../field-context';
-import { Button } from '@/ds/components/Button';
-import { Txt } from '@/ds/components/Txt';
 
 export function ArrayWrapper({ label, children, onAddItem }: ArrayWrapperProps) {
   const readOnly = useContext(FormReadOnlyContext);

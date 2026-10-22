@@ -1,6 +1,6 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
-import { sortBy } from '@/lib/sort/sort-by';
-import type { ListSort } from '@/lib/sort/sort-by';
+import { sortBy } from '../../../../lib/sort/sort-by';
+import type { ListSort } from '../../../../lib/sort/sort-by';
 
 export type WorkflowsSortKey = 'name' | 'running' | 'suspended' | 'steps';
 export type WorkflowsSort = ListSort<WorkflowsSortKey>;

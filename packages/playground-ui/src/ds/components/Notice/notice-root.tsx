@@ -2,9 +2,9 @@ import { FileTextIcon, InfoIcon, LightbulbIcon, OctagonAlertIcon, TriangleAlertI
 import { Children } from 'react';
 import type { ReactNode } from 'react';
 import './notice.css';
-import { GrainFill } from '@/ds/components/GrainFill/grain-fill';
-import { textStyle } from '@/ds/primitives/text';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { textStyle } from '../../primitives/text';
+import { GrainFill } from '../GrainFill/grain-fill';
 
 export type NoticeVariant = 'warning' | 'destructive' | 'success' | 'info' | 'note';
 

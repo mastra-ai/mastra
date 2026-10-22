@@ -1,9 +1,9 @@
 import { MenuIcon } from 'lucide-react';
 import type { ComponentPropsWithoutRef } from 'react';
+import { cn } from '../../../../lib/utils';
+import { focusRing } from '../../../primitives/transitions';
+import { quietTextHover } from '../../../primitives/typography';
 import { useSidebar } from './sidebar-context';
-import { focusRing } from '@/ds/primitives/transitions';
-import { quietTextHover } from '@/ds/primitives/typography';
-import { cn } from '@/lib/utils';
 
 export type SidebarMobileTriggerProps = ComponentPropsWithoutRef<'button'> & {
   icon?: React.ReactNode;

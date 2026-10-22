@@ -1,13 +1,13 @@
 import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 
-import type { ButtonProps } from '@/ds/components/Button';
-import type { DataListNoMatchProps } from '@/ds/components/DataList/data-list-no-match';
-import type { DataListRootProps } from '@/ds/components/DataList/data-list-root';
-import type { DataListRowStaticProps } from '@/ds/components/DataList/data-list-row-static';
-import type { DataListTopProps } from '@/ds/components/DataList/data-list-top';
-import type { NoticeRootProps } from '@/ds/components/Notice';
-import type { EnvironmentVariablesEditorController } from '@/hooks/use-environment-variables-editor';
-import type { EnvironmentVariableEntry } from '@/lib/env-file';
+import type { EnvironmentVariablesEditorController } from '../../../hooks/use-environment-variables-editor';
+import type { EnvironmentVariableEntry } from '../../../lib/env-file';
+import type { ButtonProps } from '../Button';
+import type { DataListNoMatchProps } from '../DataList/data-list-no-match';
+import type { DataListRootProps } from '../DataList/data-list-root';
+import type { DataListRowStaticProps } from '../DataList/data-list-row-static';
+import type { DataListTopProps } from '../DataList/data-list-top';
+import type { NoticeRootProps } from '../Notice';
 
 export type EnvironmentVariablesEditorRowErrors = Record<number, { key?: ReactNode; value?: ReactNode }>;
 

@@ -1,10 +1,10 @@
+import { cn } from '../../../lib/utils';
 import { DataListCell } from './data-list-cells';
 import { DataListRoot } from './data-list-root';
 import type { DataListFit, DataListVariant } from './data-list-root';
 import { DataListTop } from './data-list-top';
 import { DataListTopCell } from './data-list-top-cell';
 import { dataListRowOuterStyles, splitColumns } from './shared';
-import { cn } from '@/lib/utils';
 
 const widths = ['75%', '50%', '65%', '90%', '60%', '80%'] as const;
 const headerWidths = ['3rem', '5rem', '4rem', '3.5rem', '4.5rem', '3rem'] as const;

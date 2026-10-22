@@ -1,11 +1,11 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
 import { ReactFlowProvider } from '@xyflow/react';
 import { useContext, useMemo } from 'react';
+import { WorkflowGraphPlaceholder } from '../../../ds/components/Workflow';
+import { lodashTitleCase } from '../../../utils/string';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { WorkflowGraphBoundary } from './workflow-graph-boundary';
 import { WorkflowGraphInner } from './workflow-graph-inner';
-import { WorkflowGraphPlaceholder } from '@/ds/components/Workflow';
-import { lodashTitleCase } from '@/utils/string';
 
 export interface WorkflowGraphProps {
   workflowId: string;

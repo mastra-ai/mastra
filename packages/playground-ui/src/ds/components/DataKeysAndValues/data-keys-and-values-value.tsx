@@ -1,5 +1,5 @@
+import { cn } from '../../../lib/utils';
 import { dataKeysAndValuesValueStyles } from './shared';
-import { cn } from '@/lib/utils';
 
 export interface DataKeysAndValuesValueProps {
   className?: string;

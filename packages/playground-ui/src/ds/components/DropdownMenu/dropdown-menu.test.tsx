@@ -4,8 +4,8 @@ import userEvent from '@testing-library/user-event';
 import type { UserEvent } from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { Button } from '../Button';
 import { DropdownMenu } from './dropdown-menu';
-import { Button } from '@/ds/components/Button';
 
 afterEach(() => {
   cleanup();

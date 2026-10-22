@@ -1,15 +1,15 @@
 import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
 
 import { useMemo, useState } from 'react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../ds/components/Select';
+import { Txt } from '../../../ds/components/Txt';
+import { WorkflowGraphCanvas, WORKFLOW_BOUNDARY_NODE_TYPE } from '../../../ds/components/Workflow';
 import { useCurrentRun } from '../context/use-current-run';
 import { useWorkflowGraphNodes } from './use-workflow-graph-nodes';
 import { useWorkflowGraphRuntime } from './use-workflow-graph-runtime';
 import { WorkflowGraphBoundary } from './workflow-graph-boundary';
 import { getWorkflowGraphGroups } from './workflow-graph-groups';
 import { getWorkflowIterationScopes } from './workflow-iteration-scopes';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
-import { Txt } from '@/ds/components/Txt';
-import { WorkflowGraphCanvas, WORKFLOW_BOUNDARY_NODE_TYPE } from '@/ds/components/Workflow';
 
 export interface WorkflowNestedGraphProps {
   stepGraph: SerializedStepFlowEntry[];

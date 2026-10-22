@@ -1,4 +1,4 @@
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
 
 export type SideDialogHeaderProps = {
   children?: React.ReactNode;

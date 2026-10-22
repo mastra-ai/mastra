@@ -1,4 +1,4 @@
-import type { ComposerCommand } from '@/ds/components/Composer';
+import type { ComposerCommand } from '../../../src/ds/components/Composer';
 
 export const reviewCommands: ComposerCommand[] = [
   {

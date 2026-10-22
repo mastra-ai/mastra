@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
-import { Collapsible, CollapsibleContent } from '@/ds/components/Collapsible';
-import { Switch } from '@/ds/components/Switch';
-import { SettingsRow } from '@/ds/new/settings';
+import { Collapsible, CollapsibleContent } from '../../../../ds/components/Collapsible';
+import { Switch } from '../../../../ds/components/Switch';
+import { SettingsRow } from '../../../../ds/new/settings';
 
 export interface CollapsibleSettingsRowProps {
   label: string;

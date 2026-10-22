@@ -1,8 +1,8 @@
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../ds/components/Tooltip';
+import { Txt } from '../../ds/components/Txt';
 import { getSignalAreaClass, getSignalColor } from './signal-colors';
 import { formatSnapshotDate, traceLabel } from './signal-formatting';
 import type { ThemeHistoryPoint } from './theme-trend';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { Txt } from '@/ds/components/Txt';
 
 const TREND_CHART_HEIGHT = 32;
 

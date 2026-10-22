@@ -1,9 +1,9 @@
 import { PanelLeftIcon } from 'lucide-react';
+import { cn } from '../../../../lib/utils';
+import { Button } from '../../Button';
+import type { ButtonProps } from '../../Button';
 import { SidebarButtonHint } from '../header/sidebar-button-hint';
 import { useSidebar } from './sidebar-context';
-import { Button } from '@/ds/components/Button';
-import type { ButtonProps } from '@/ds/components/Button';
-import { cn } from '@/lib/utils';
 
 export type SidebarTriggerProps = Omit<ButtonProps, 'variant' | 'size' | 'tooltip' | 'children'>;
 

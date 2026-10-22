@@ -5,6 +5,7 @@ import { delay, http, HttpResponse } from 'msw';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { server } from '../../../test/msw-server';
 import { useThemeSnapshots } from '../hooks/use-theme-snapshots';
 import { SankeySignals } from '../sankey-signals';
 import { timelineTickPositions } from '../snapshot-timeline-data';
@@ -15,7 +16,6 @@ import {
   landmarkThemeSnapshotsResponse,
   multiThemeSnapshotsResponse,
 } from './fixtures/theme-flow';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = window.location.origin;
 

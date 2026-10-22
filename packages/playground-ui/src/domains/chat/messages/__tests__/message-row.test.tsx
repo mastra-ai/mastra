@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import '@/test/inert-resize-observer';
+import '../../../../test/inert-resize-observer';
 import { MessageList } from '@mastra/core/agent/message-list';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { MastraTextPart, ToolInvocationPart } from '@mastra/react';
@@ -11,13 +11,13 @@ import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { ArrivalScope } from '../../../../ds/components/Arrival';
+import { ARRIVING_CLASS } from '../../../../ds/tokens';
+import { server } from '../../../../test/msw-server';
+import { ChatRunningContext } from '../../context/chat-context';
+import { ToolCallProvider } from '../../context/tool-call-context';
+import { buildGlobalOmPartsByCycleId, convertOmPartsInMastraMessage } from '../../om/om-parts-converter';
 import { MessageRow } from '../message-row';
-import { ChatRunningContext } from '@/domains/chat/context/chat-context';
-import { ToolCallProvider } from '@/domains/chat/context/tool-call-context';
-import { buildGlobalOmPartsByCycleId, convertOmPartsInMastraMessage } from '@/domains/chat/om/om-parts-converter';
-import { ArrivalScope } from '@/ds/components/Arrival';
-import { ARRIVING_CLASS } from '@/ds/tokens';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 

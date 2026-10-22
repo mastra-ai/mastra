@@ -1,5 +1,7 @@
 import { http, HttpResponse, delay } from 'msw';
 import type { ReactNode } from 'react';
+import { server } from '../../../../test/msw-server';
+import { renderWithProviders, TEST_BASE_URL } from '../../../../test/render';
 import { MetricsProvider } from '../../hooks/use-metrics';
 import {
   agentLatencyFixture,
@@ -18,8 +20,6 @@ import {
   threadSpendBreakdownFixture,
   tokenSeriesFixture,
 } from './fixtures/metrics';
-import { server } from '@/test/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 const API = `${TEST_BASE_URL}/api/observability/metrics`;
 const SCORES_API = `${TEST_BASE_URL}/api/observability/scores`;

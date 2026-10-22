@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { HelperExamples } from '../../../../.storybook/fixtures/helpers/helper-examples';
 import type { HelperExample } from '../../../../.storybook/fixtures/helpers/helper-examples';
-import { formatElapsed } from '@/utils/duration';
+import { formatElapsed } from '../../duration';
 
 const examples: HelperExample[] = [
   ['formatElapsed(3_200)', formatElapsed(3_200)],

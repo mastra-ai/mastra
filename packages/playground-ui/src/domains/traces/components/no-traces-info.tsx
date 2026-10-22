@@ -1,6 +1,6 @@
+import { EmptyState } from '../../../ds/components/EmptyState';
+import { formatDate } from '../../../utils/date-format';
 import type { TraceDatePreset } from '../types';
-import { EmptyState } from '@/ds/components/EmptyState';
-import { formatDate } from '@/utils/date-format';
 
 const PRESET_LABELS: Record<Exclude<TraceDatePreset, 'all' | 'custom'>, string> = {
   'last-24h': 'the last 24 hours',

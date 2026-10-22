@@ -1,15 +1,15 @@
 import { safeStringify } from '@mastra/core/utils/safe-stringify';
 import { ArrowDownToLine, ArrowUpFromLine, ChevronRight, CirclePause, X } from 'lucide-react';
 import { useContext, useEffect, useRef } from 'react';
+import { Badge } from '../../../../ds/components/Badge';
+import { Button } from '../../../../ds/components/Button';
+import { CodeEditor } from '../../../../ds/components/CodeEditor';
+import { Txt } from '../../../../ds/components/Txt';
 import { panelSurfaceStyle } from '../../components/workflow-layout';
 import { WorkflowRunContext } from '../../context/workflow-run-context';
 import { useWorkflowStepDetail } from '../../context/workflow-step-detail-context';
 import type { WorkflowDataSelection } from '../../context/workflow-step-detail-context';
 import { useWorkflowData, workflowDataKey } from './use-workflow-data';
-import { Badge } from '@/ds/components/Badge';
-import { Button } from '@/ds/components/Button';
-import { CodeEditor } from '@/ds/components/CodeEditor';
-import { Txt } from '@/ds/components/Txt';
 
 const DIRECTION_ICONS = { input: ArrowDownToLine, output: ArrowUpFromLine };
 const DIRECTION_LABELS = { input: 'Input', output: 'Output' };

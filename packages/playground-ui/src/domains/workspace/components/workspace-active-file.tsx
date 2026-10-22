@@ -6,14 +6,14 @@ import {
   useWorkspaceFileContent,
 } from '@mastra/react/hooks/workspace';
 import type { ReactNode } from 'react';
+import { CodeBlock } from '../../../ds/components/CodeBlock';
+import { languageForPath } from '../../../ds/components/CodeEditor/highlight';
+import { EmptyState } from '../../../ds/components/EmptyState';
+import { Skeleton } from '../../../ds/components/Skeleton';
+import { Txt } from '../../../ds/components/Txt';
 import { useWorkspaceContext } from './use-workspace-context';
 import { WorkspaceError } from './workspace-error';
 import { WorkspaceMarkdownPreview } from './workspace-markdown-preview';
-import { CodeBlock } from '@/ds/components/CodeBlock';
-import { languageForPath } from '@/ds/components/CodeEditor/highlight';
-import { EmptyState } from '@/ds/components/EmptyState';
-import { Skeleton } from '@/ds/components/Skeleton';
-import { Txt } from '@/ds/components/Txt';
 
 export interface WorkspaceFilePreview {
   path: string;

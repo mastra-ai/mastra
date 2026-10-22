@@ -1,9 +1,9 @@
 import { Avatar as BaseAvatar } from '@base-ui/react/avatar';
 import { useContext } from 'react';
 
+import { cn } from '../../../lib/utils';
 import { AvatarSizeContext, avatarSizeClasses } from './avatar-size';
 import type { AvatarSize } from './avatar-size';
-import { cn } from '@/lib/utils';
 
 export type AvatarRootProps = Omit<BaseAvatar.Root.Props, 'className'> & {
   size?: AvatarSize;

@@ -1,8 +1,8 @@
 import { CopyIcon, CheckIcon } from 'lucide-react';
 
+import { useCopyToClipboard } from '../../../hooks/use-copy-to-clipboard';
 import type { ButtonProps, IconButtonSize } from '../Button';
 import { Button } from '../Button';
-import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 
 export type CopyButtonProps = {
   content: string;

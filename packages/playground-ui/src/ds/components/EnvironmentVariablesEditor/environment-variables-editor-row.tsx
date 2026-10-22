@@ -1,12 +1,12 @@
 import { EyeIcon, EyeOffIcon, TrashIcon } from 'lucide-react';
 
+import { DUPLICATE_ENVIRONMENT_VARIABLE_MESSAGE } from '../../../lib/env-file';
+import { cn } from '../../../lib/utils';
+import { Button } from '../Button';
+import { Field, FieldError, FieldLabel } from '../Field';
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '../InputGroup';
 import { useEnvironmentVariablesEditorContext } from './environment-variables-editor-context';
 import type { EnvironmentVariablesEditorRowProps } from './environment-variables-editor.types';
-import { Button } from '@/ds/components/Button';
-import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
-import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/ds/components/InputGroup';
-import { DUPLICATE_ENVIRONMENT_VARIABLE_MESSAGE } from '@/lib/env-file';
-import { cn } from '@/lib/utils';
 
 export function EnvironmentVariablesEditorRow({
   row,

@@ -8,15 +8,15 @@ import { forwardRef, useEffect } from 'react';
 import { stringify } from 'superjson';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import type { LinkComponentProviderProps } from '../../../../lib/framework';
+import { LinkComponentProvider } from '../../../../lib/framework';
+import { server } from '../../../../test/msw-server';
 import { useWorkflowSelectedStep } from '../../context/use-workflow-selected-step';
 import { WorkflowRunContext } from '../../context/workflow-run-context';
 import type { WorkflowRunContextType } from '../../context/workflow-run-context';
 import { WorkflowSelectedStepProvider } from '../../context/workflow-selected-step-context';
 import { twoStepWorkflow } from '../../workflow/__tests__/fixtures/workflow-debug-step-controls';
 import { WorkflowInformation } from '../workflow-information';
-import type { LinkComponentProviderProps } from '@/lib/framework';
-import { LinkComponentProvider } from '@/lib/framework';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 const WORKFLOW_ID = 'demo-workflow';

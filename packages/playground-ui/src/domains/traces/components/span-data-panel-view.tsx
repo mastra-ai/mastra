@@ -1,6 +1,12 @@
 import { describeProcessorPipeline, describeSpanInput, describeSpanOutput } from '@mastra/core/observability';
 import { BracesIcon, ExternalLinkIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { Button } from '../../../ds/components/Button';
+import { DataKeysAndValues } from '../../../ds/components/DataKeysAndValues';
+import { DataPanel } from '../../../ds/components/DataPanel';
+import { Notice } from '../../../ds/components/Notice';
+import { Tab, TabContent, TabList, Tabs } from '../../../ds/components/Tabs';
+import { cn } from '../../../lib/utils';
 import type { SpanRecord } from '../types';
 import { getTokenLimitMessage, isTokenLimitExceeded } from '../utils/span-utils';
 import {
@@ -15,12 +21,6 @@ import { SpanSummaryDescription } from './span-summary-description';
 import { SpanTokenUsage } from './span-token-usage';
 import type { TokenUsage } from './span-token-usage';
 import { TraceIdButton } from './trace-id-button';
-import { Button } from '@/ds/components/Button';
-import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
-import { DataPanel } from '@/ds/components/DataPanel';
-import { Notice } from '@/ds/components/Notice';
-import { Tab, TabContent, TabList, Tabs } from '@/ds/components/Tabs';
-import { cn } from '@/lib/utils';
 
 // Mirrors `DataPanel.Content` padding without requiring the Drawer root (this view also renders standalone).
 const BODY_CLASS = 'min-h-0 flex-1 overflow-y-auto px-2 py-3';

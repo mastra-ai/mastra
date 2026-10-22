@@ -1,12 +1,12 @@
 import { Check, ShieldCheck, X } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { Badge } from '../../Badge';
+import type { BadgeVariant } from '../../Badge';
+import { Button } from '../../Button';
+import { Txt } from '../../Txt';
 import { Activity, ActivityContent, ActivityHeader, ActivityIcon, ActivityTrigger } from '../activity';
 import { presentTool, ToolCallArguments } from '../tool-call';
-import { Badge } from '@/ds/components/Badge';
-import type { BadgeVariant } from '@/ds/components/Badge';
-import { Button } from '@/ds/components/Button';
-import { Txt } from '@/ds/components/Txt';
 
 type ToolApprovalDecision = 'approved' | 'declined';
 

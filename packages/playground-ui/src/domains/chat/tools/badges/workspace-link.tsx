@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import { Txt } from '@/ds/components/Txt';
-import { useLinkComponent } from '@/lib/framework';
+import { Txt } from '../../../../ds/components/Txt';
+import { useLinkComponent } from '../../../../lib/framework';
 
 export interface WorkspaceLinkProps {
   href: string;

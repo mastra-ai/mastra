@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { HookDemo } from '../../../../.storybook/fixtures/hooks/hook-demo';
-import { Button } from '@/ds/components/Button';
-import { Txt } from '@/ds/components/Txt';
-import { createLocalStorageStore, useLocalStorageStore } from '@/hooks/use-local-storage-store';
+import { Button } from '../../../ds/components/Button';
+import { Txt } from '../../../ds/components/Txt';
+import { createLocalStorageStore, useLocalStorageStore } from '../../use-local-storage-store';
 
 const counterStore = createLocalStorageStore<number>({
   key: 'storybook:hooks:local-storage-store:count',

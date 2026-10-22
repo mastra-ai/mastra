@@ -5,10 +5,10 @@ import { Field, FieldLabel } from '../../../ds/components/Field';
 import { Skeleton } from '../../../ds/components/Skeleton';
 import { Txt } from '../../../ds/components/Txt';
 import { cn } from '../../../lib/utils';
+import { formatDate } from '../../../utils/date-format';
 import { observationPriorityByEmoji, observationPriorityTone } from '../lib/observation-priority';
 import type { ObservationPriority } from '../lib/observation-priority';
 import type { OMHistoryRecord } from '../types';
-import { formatDate } from '@/utils/date-format';
 
 const CodeDiff = lazy(() => import('../../../ds/components/CodeDiff').then(({ CodeDiff }) => ({ default: CodeDiff })));
 

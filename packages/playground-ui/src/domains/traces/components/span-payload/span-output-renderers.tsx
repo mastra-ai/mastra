@@ -6,6 +6,11 @@ import type {
   ModelStepResult,
   SpanOutputDescription,
 } from '@mastra/core/observability';
+import { ReasoningActivity } from '../../../../ds/components/ai/activity';
+import { DataKeysAndValues } from '../../../../ds/components/DataKeysAndValues';
+import { InlineCode } from '../../../../ds/components/InlineCode/inline-code';
+import { Notice } from '../../../../ds/components/Notice';
+import { Txt } from '../../../../ds/components/Txt';
 import type { SpanRecord } from '../../types';
 import { SpanPayloadAttachment } from './span-payload-attachment';
 import { SpanPayloadJson } from './span-payload-json';
@@ -18,11 +23,6 @@ import {
 import { SpanPayloadProcessor } from './span-payload-processor';
 import { asCoreSpan, hasItems, pickRenderer } from './span-payload-registry';
 import type { PayloadRegistry } from './span-payload-registry';
-import { ReasoningActivity } from '@/ds/components/ai/activity';
-import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
-import { InlineCode } from '@/ds/components/InlineCode/inline-code';
-import { Notice } from '@/ds/components/Notice';
-import { Txt } from '@/ds/components/Txt';
 
 function SpanTextRenderer({ value }: { value: string }) {
   return <SpanPayloadMarkdown>{value}</SpanPayloadMarkdown>;

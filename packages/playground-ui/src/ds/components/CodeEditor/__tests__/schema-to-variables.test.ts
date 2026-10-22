@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import type { JsonSchema } from '../../../../lib/json-schema';
 import { flattenSchemaToVariables } from '../schema-to-variables';
-import type { JsonSchema } from '@/lib/json-schema';
 
 describe('flattenSchemaToVariables', () => {
   it('should return empty array for undefined schema', () => {

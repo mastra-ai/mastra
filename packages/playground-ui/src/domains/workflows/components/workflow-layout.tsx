@@ -1,11 +1,11 @@
 import { createContext, useContext, useLayoutEffect, useRef, useState } from 'react';
 import type { CSSProperties, KeyboardEvent, PointerEvent } from 'react';
 import { z } from 'zod/v4';
-import { WorkflowCanvasInsetContext } from '@/ds/components/Workflow';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
-import { ResizeHandleIndicator } from '@/ds/primitives/resize-handle-indicator';
-import { useIsMobile } from '@/hooks/use-is-mobile';
-import { useLocalStorageState } from '@/hooks/use-local-storage-state';
+import { WorkflowCanvasInsetContext } from '../../../ds/components/Workflow';
+import { raisedSurfaceStyle } from '../../../ds/primitives/raised-surface';
+import { ResizeHandleIndicator } from '../../../ds/primitives/resize-handle-indicator';
+import { useIsMobile } from '../../../hooks/use-is-mobile';
+import { useLocalStorageState } from '../../../hooks/use-local-storage-state';
 import './workflow-layout.css';
 
 export interface WorkflowLayoutProps {

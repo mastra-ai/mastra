@@ -1,11 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Button } from '../../components/Button';
+import { Combobox } from '../../components/Combobox';
+import { Input } from '../../components/Input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../components/Select';
+import { Switch } from '../../components/Switch';
+import { ThemeProvider } from '../../components/ThemeProvider';
 import { SettingsContainer, SettingsRow } from './index';
-import { Button } from '@/ds/components/Button';
-import { Combobox } from '@/ds/components/Combobox';
-import { Input } from '@/ds/components/Input';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
-import { Switch } from '@/ds/components/Switch';
-import { ThemeProvider } from '@/ds/components/ThemeProvider';
 
 const models = [
   { label: 'openai/gpt-6-luna', value: 'openai/gpt-6-luna', description: 'openai' },

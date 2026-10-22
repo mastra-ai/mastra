@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { HelperExamples } from '../../../../.storybook/fixtures/helpers/helper-examples';
 import type { HelperExample } from '../../../../.storybook/fixtures/helpers/helper-examples';
-import { formatDurationPrecise } from '@/utils/duration';
+import { formatDurationPrecise } from '../../duration';
 
 const examples: HelperExample[] = [
   ['formatDurationPrecise(123.4)', formatDurationPrecise(123.4)],

@@ -1,6 +1,6 @@
+import type { AskUserPayload, AskUserResult } from '../../../ds/components/ai/ask-user';
 import type { MessageMetadata } from '../messages/message-metadata';
 import { AskUserBadge } from './badges/ask-user-badge';
-import type { AskUserPayload, AskUserResult } from '@/ds/components/ai/ask-user';
 
 export interface AskUserToolProps {
   toolName: string;

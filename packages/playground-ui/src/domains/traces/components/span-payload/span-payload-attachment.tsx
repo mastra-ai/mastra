@@ -1,5 +1,5 @@
+import { InMessageAttachment } from '../../../chat/messages/renderers/in-message-attachment';
 import { SpanPayloadJson } from './span-payload-json';
-import { InMessageAttachment } from '@/domains/chat/messages/renderers/in-message-attachment';
 
 export function SpanPayloadAttachment({ value }: { value: unknown }) {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return <SpanPayloadJson value={value} />;

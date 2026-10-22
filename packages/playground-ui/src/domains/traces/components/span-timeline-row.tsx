@@ -1,14 +1,14 @@
 import { ChevronDownIcon, ChevronRightIcon } from 'lucide-react';
 import { useEffect, useRef } from 'react';
+import { HoverCard, HoverCardTrigger } from '../../../ds/components/HoverCard';
+import { Txt } from '../../../ds/components/Txt/Txt';
+import { focusRing, focusRingInset } from '../../../ds/primitives/transitions';
+import { cn } from '../../../lib/utils';
+import { formatDurationPrecise } from '../../../utils/duration';
 import { getSpanTimingLayout } from '../utils/span-timing';
 import type { SpanRowContext } from './span-rows';
 import { SpanTimingHoverCard } from './span-timing-hover-card';
 import { TimelineStructureSign } from './timeline-structure-sign';
-import { HoverCard, HoverCardTrigger } from '@/ds/components/HoverCard';
-import { Txt } from '@/ds/components/Txt/Txt';
-import { focusRing, focusRingInset } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
-import { formatDurationPrecise } from '@/utils/duration';
 
 export type SpanTimelineRowProps = {
   ctx: SpanRowContext;

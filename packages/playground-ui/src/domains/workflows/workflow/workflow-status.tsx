@@ -1,13 +1,13 @@
 import { CirclePause, HourglassIcon, Loader2, ShieldAlert } from 'lucide-react';
+import { CodeEditor } from '../../../ds/components/CodeEditor';
+import { Txt } from '../../../ds/components/Txt';
+import { CheckIcon } from '../../../ds/icons/CheckIcon';
+import { CrossIcon } from '../../../ds/icons/CrossIcon';
+import { Icon } from '../../../ds/icons/Icon';
+import { cn } from '../../../utils/cn';
+import { TripwireNotice } from '../../chat/messages/tripwire-notice';
 import { workflowStatusTone, workflowStatusToneText } from '../workflow-status-tone';
 import { WorkflowCard } from './workflow-card';
-import { TripwireNotice } from '@/domains/chat/messages/tripwire-notice';
-import { CodeEditor } from '@/ds/components/CodeEditor';
-import { Txt } from '@/ds/components/Txt';
-import { CheckIcon } from '@/ds/icons/CheckIcon';
-import { CrossIcon } from '@/ds/icons/CrossIcon';
-import { Icon } from '@/ds/icons/Icon';
-import { cn } from '@/utils/cn';
 
 export interface TripwireInfo {
   reason?: string;

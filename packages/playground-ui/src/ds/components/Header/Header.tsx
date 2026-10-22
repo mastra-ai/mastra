@@ -1,7 +1,7 @@
 import React from 'react';
 
+import { cn } from '../../../lib/utils';
 import { Txt } from '../Txt';
-import { cn } from '@/lib/utils';
 
 export interface HeaderProps {
   children?: React.ReactNode;

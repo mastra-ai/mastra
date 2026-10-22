@@ -13,6 +13,7 @@ describe('package exports', () => {
 
   it('publishes the lib entrypoint', () => {
     expect(packageJson.exports['./lib/*']).toEqual({
+      '@mastra/source': './src/lib/*',
       import: {
         types: './dist/lib/*.d.ts',
         default: './dist/lib/*.es.js',
@@ -26,6 +27,7 @@ describe('package exports', () => {
 
   it('publishes the tabbed container layout entrypoint', () => {
     expect(packageJson.exports['./layout/tabbed-container']).toEqual({
+      '@mastra/source': './src/ds/layout/tabbed-container/index.ts',
       import: {
         types: './dist/layout/tabbed-container.d.ts',
         default: './dist/layout/tabbed-container.es.js',

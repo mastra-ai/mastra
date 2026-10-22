@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
+import { ProcessorIcon } from '../../../ds/icons/ProcessorIcon';
 import type { UISpanStyle } from '../types';
-import { ProcessorIcon } from '@/ds/icons/ProcessorIcon';
 
 type SpanTypeBadgeProps = {
   /** Raw span type (`processor_run`, `model_generation`, ...). */

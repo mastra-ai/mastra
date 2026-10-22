@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { forwardRef } from 'react';
+import type { LinkComponentProps } from '../../types/link-component';
+import { TooltipProvider } from '../Tooltip';
 import { DataKeysAndValues } from './data-keys-and-values';
 import type { DataKeysAndValuesProps } from './data-keys-and-values-root';
-import { TooltipProvider } from '@/ds/components/Tooltip';
-import type { LinkComponentProps } from '@/ds/types/link-component';
 
 const meta: Meta<typeof DataKeysAndValues> = {
   title: 'Elements/DataKeysAndValues',

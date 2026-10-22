@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
-import { useWatched } from '@/ds/components/Arrival';
-import { ARRIVING_MS } from '@/ds/tokens';
+import { ARRIVING_MS } from '../../tokens';
+import { useWatched } from '../Arrival';
 
 interface Landing {
   words: number;

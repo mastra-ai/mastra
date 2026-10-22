@@ -1,8 +1,8 @@
 import { useState } from 'react';
-import { Button } from '@/ds/components/Button';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
-import { truncateString } from '@/lib/truncate-string';
+import { useCopyToClipboard } from '../../../hooks/use-copy-to-clipboard';
+import { truncateString } from '../../../lib/truncate-string';
+import { Button } from '../Button';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip';
 
 export interface DataPanelCopyIdProps {
   id: string;

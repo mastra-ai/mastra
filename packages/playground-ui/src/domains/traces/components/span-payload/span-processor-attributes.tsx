@@ -1,14 +1,14 @@
 import { describeProcessorPipeline } from '@mastra/core/observability';
 import type { ProcessorPipelineDescription } from '@mastra/core/observability';
+import { DataKeysAndValues } from '../../../../ds/components/DataKeysAndValues';
+import { Notice } from '../../../../ds/components/Notice';
+import { Txt } from '../../../../ds/components/Txt/Txt';
+import { formatDuration } from '../../../../utils/duration';
 import type { SpanRecord } from '../../types';
 import { SpanPayloadJson } from './span-payload-json';
 import { SpanPayloadMessages } from './span-payload-messages';
 import { SpanPayloadCollapsible, SpanPayloadField } from './span-payload-primitives';
 import { asCoreSpan } from './span-payload-registry';
-import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
-import { Notice } from '@/ds/components/Notice';
-import { Txt } from '@/ds/components/Txt/Txt';
-import { formatDuration } from '@/utils/duration';
 
 /** Mutation kinds as actions a reader recognises. */
 const MUTATION_LABELS: Record<string, string> = {

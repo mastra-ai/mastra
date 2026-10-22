@@ -3,6 +3,15 @@ import { Columns2, List } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 
+import { PermissionDenied } from '../../../domains/auth/components/permission-denied';
+import { SessionExpired } from '../../../domains/auth/components/session-expired';
+import { Button } from '../../../ds/components/Button';
+import { ButtonsGroup } from '../../../ds/components/ButtonsGroup';
+import { DataListSkeleton } from '../../../ds/components/DataList';
+import { EmptyState } from '../../../ds/components/EmptyState';
+import { ListSearch } from '../../../ds/components/ListSearch';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../ds/components/Select';
+import { is401UnauthorizedError, is403ForbiddenError } from '../../../utils/errors';
 import { useThemeEntities } from '../hooks';
 import { TraceSignalSettingsButton, TraceSignalSettingsPanel } from '../settings/trace-signal-settings';
 import { TraceIntelligenceExplainer } from '../trace-intelligence-explainer';
@@ -11,15 +20,6 @@ import { EntityIndexCompactGrid } from './entity-index-compact-grid';
 import { EntityIndexList } from './entity-index-list';
 import { filterAndSortEntities } from './entity-index-model';
 import type { TraceIntelligenceEntitySort, TraceIntelligenceEntityView } from './entity-index-model';
-import { PermissionDenied } from '@/domains/auth/components/permission-denied';
-import { SessionExpired } from '@/domains/auth/components/session-expired';
-import { Button } from '@/ds/components/Button';
-import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
-import { DataListSkeleton } from '@/ds/components/DataList';
-import { EmptyState } from '@/ds/components/EmptyState';
-import { ListSearch } from '@/ds/components/ListSearch';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
-import { is401UnauthorizedError, is403ForbiddenError } from '@/utils/errors';
 
 export type { TraceIntelligenceEntitySort, TraceIntelligenceEntityView } from './entity-index-model';
 

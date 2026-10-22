@@ -29,6 +29,6 @@ export { useEnvironments } from '@mastra/react/hooks/traces';
 export { useServiceNames } from '@mastra/react/hooks/traces';
 export { useTraceSpanNavigation } from './use-trace-span-navigation';
 export { useTraceListNavigation } from './use-trace-list-navigation';
-export type { SetURLSearchParamsLike } from '@/lib/sort/use-url-sort';
+export type { SetURLSearchParamsLike } from '../../../lib/sort/use-url-sort';
 export { useExpandedSpanIds } from './use-expanded-span-ids';
 export { useVisibleTraceRows } from './use-visible-trace-rows';

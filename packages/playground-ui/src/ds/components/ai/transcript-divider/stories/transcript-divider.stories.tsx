@@ -1,6 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { Button } from '../../../Button';
 import { TranscriptDivider } from '../transcript-divider';
-import { Button } from '@/ds/components/Button';
 
 const meta = {
   title: 'AI/Transcript divider',

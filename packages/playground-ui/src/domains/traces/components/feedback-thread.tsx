@@ -1,11 +1,9 @@
 import type { FeedbackItem, ListFeedbackResponse } from '@mastra/client-js';
 import { ArrowUp, Trash2, ChevronRight, ChevronLeft, ClipboardCheck, EllipsisIcon } from 'lucide-react';
 import { useState } from 'react';
-import { ReviewStatusBadge } from '@/domains/review/components/review-status-badge';
-import { feedbackAuthorLabel } from '@/domains/traces/utils/feedback-author';
-import { AlertDialog } from '@/ds/components/AlertDialog';
-import { Avatar } from '@/ds/components/Avatar';
-import { Button } from '@/ds/components/Button';
+import { AlertDialog } from '../../../ds/components/AlertDialog';
+import { Avatar } from '../../../ds/components/Avatar';
+import { Button } from '../../../ds/components/Button';
 import {
   Comment,
   CommentItem,
@@ -17,13 +15,15 @@ import {
   CommentItemHeader,
   CommentItemTimestamp,
   CommentList,
-} from '@/ds/components/Comment';
-import type { CommentVariant } from '@/ds/components/Comment';
-import { DropdownMenu } from '@/ds/components/DropdownMenu';
-import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/ds/components/InputGroup';
-import { Txt } from '@/ds/components/Txt';
-import { Icon } from '@/ds/icons/Icon';
-import { formatDate } from '@/utils/date-format';
+} from '../../../ds/components/Comment';
+import type { CommentVariant } from '../../../ds/components/Comment';
+import { DropdownMenu } from '../../../ds/components/DropdownMenu';
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '../../../ds/components/InputGroup';
+import { Txt } from '../../../ds/components/Txt';
+import { Icon } from '../../../ds/icons/Icon';
+import { formatDate } from '../../../utils/date-format';
+import { ReviewStatusBadge } from '../../review/components/review-status-badge';
+import { feedbackAuthorLabel } from '../utils/feedback-author';
 
 type FeedbackThreadProps = {
   feedbackData?: ListFeedbackResponse | null;

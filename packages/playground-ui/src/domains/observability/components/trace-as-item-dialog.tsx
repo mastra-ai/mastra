@@ -6,9 +6,9 @@ import { safeStringify } from '@mastra/core/utils/safe-stringify';
 import { useMastraClient } from '@mastra/react';
 import { useSpanDetail } from '@mastra/react/hooks/traces';
 import { useQuery } from '@tanstack/react-query';
-import { AddDatasetItemDialog } from '@/domains/datasets';
-import type { AddDatasetItemDialogProps, TrajectoryExpectation } from '@/domains/datasets';
-import type { SpanRecord } from '@/domains/traces/types';
+import { AddDatasetItemDialog } from '../../datasets';
+import type { AddDatasetItemDialogProps, TrajectoryExpectation } from '../../datasets';
+import type { SpanRecord } from '../../traces/types';
 
 type ExpectedStep = NonNullable<TrajectoryExpectation['steps']>[number];
 

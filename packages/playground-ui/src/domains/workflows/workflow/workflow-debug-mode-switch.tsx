@@ -1,7 +1,7 @@
 import { useContext } from 'react';
+import { Field, FieldContent, FieldDescription, FieldLabel } from '../../../ds/components/Field';
+import { Switch } from '../../../ds/components/Switch';
 import { WorkflowRunContext } from '../context/workflow-run-context';
-import { Field, FieldContent, FieldDescription, FieldLabel } from '@/ds/components/Field';
-import { Switch } from '@/ds/components/Switch';
 
 export function WorkflowDebugModeSwitch() {
   const { debugMode, setDebugMode } = useContext(WorkflowRunContext);

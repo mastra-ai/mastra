@@ -1,7 +1,7 @@
-import { buttonVariants } from '@/ds/components/Button/Button';
-import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
-import { controlStateColorTransition } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
+import { cn } from '../../lib/utils';
+import { buttonVariants } from '../components/Button/Button';
+import { overlaySurfaceStyle } from './raised-surface';
+import { controlStateColorTransition } from './transitions';
 
 // Shared recipe for items rendered inside floating menus (DropdownMenu, ContextMenu,
 // Select, Combobox, PropertyFilter). An item shares ghost/md Button interaction

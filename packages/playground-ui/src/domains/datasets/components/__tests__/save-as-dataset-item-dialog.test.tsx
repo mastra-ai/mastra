@@ -7,13 +7,13 @@ import { http, HttpResponse } from 'msw';
 import type { ChangeEvent, PropsWithChildren, ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { LinkComponentProvider } from '../../../../lib/framework';
+import { Toaster, toast } from '../../../../lib/toast';
+import { StubLink, stubLinkPaths } from '../../../../test/link-provider';
+import { server } from '../../../../test/msw-server';
 import { SaveAsDatasetItemDialog } from '../save-as-dataset-item-dialog';
 import type { CreateDatasetDialogRenderProps } from '../save-as-dataset-item-dialog';
 import { buildDataset, buildDatasetItem, buildListDatasetsResponse } from './fixtures/datasets';
-import { LinkComponentProvider } from '@/lib/framework';
-import { Toaster, toast } from '@/lib/toast';
-import { StubLink, stubLinkPaths } from '@/test/link-provider';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 
@@ -27,7 +27,7 @@ type CodeEditorProps = {
 // thin seam so this suite can focus on the dialog's async-seeding logic. The
 // data hooks below are driven through the real @mastra/client-js + React Query
 // stack via MSW. Select is a native <select> so tests can pick a dataset.
-vi.mock('@/ds/components/Select', () => ({
+vi.mock('../../../../ds/components/Select', () => ({
   Select: ({
     children,
     value,
@@ -44,7 +44,7 @@ vi.mock('@/ds/components/Select', () => ({
   SelectItem: ({ children, value }: PropsWithChildren<{ value: string }>) => <option value={value}>{children}</option>,
 }));
 
-vi.mock('@/ds/components/CodeEditor', () => ({
+vi.mock('../../../../ds/components/CodeEditor', () => ({
   CodeEditor: ({ value, onChange }: CodeEditorProps) => (
     <textarea
       value={value ?? ''}

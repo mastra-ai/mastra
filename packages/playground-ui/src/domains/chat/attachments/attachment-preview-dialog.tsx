@@ -1,11 +1,11 @@
 import { File as FileIcon, FileAudio, FileText, FileVideo } from 'lucide-react';
 import type { RefObject } from 'react';
+import { Button } from '../../../ds/components/Button';
+import { Dialog, DialogTitle, DialogContent, DialogHeader, DialogBody } from '../../../ds/components/Dialog';
+import { cn } from '../../../utils/cn';
 import { ComposerAttachmentEntry } from './composer-attachment-entry';
 import { useAttachmentPreview } from './use-attachment-preview';
 import type { AttachmentPreviewProps } from './use-attachment-preview';
-import { Button } from '@/ds/components/Button';
-import { Dialog, DialogTitle, DialogContent, DialogHeader, DialogBody } from '@/ds/components/Dialog';
-import { cn } from '@/utils/cn';
 
 interface PdfEntryProps extends AttachmentPreviewProps {
   data: string;

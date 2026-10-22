@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { HelperExamples } from '../../../../.storybook/fixtures/helpers/helper-examples';
 import type { HelperExample } from '../../../../.storybook/fixtures/helpers/helper-examples';
-import { formatFullNumber } from '@/utils/cost';
+import { formatFullNumber } from '../../cost';
 
 const examples: HelperExample[] = [
   ['formatFullNumber(12_310)', formatFullNumber(12_310)],

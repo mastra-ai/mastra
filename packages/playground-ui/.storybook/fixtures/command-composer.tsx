@@ -1,7 +1,6 @@
 import { useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
-import { reviewCommands } from './chat/commands';
-import { Button } from '@/ds/components/Button';
+import { Button } from '../../src/ds/components/Button';
 import {
   Composer,
   ComposerActions,
@@ -9,9 +8,10 @@ import {
   ComposerInput,
   ComposerSuggestions,
   useComposerCommands,
-} from '@/ds/components/Composer';
-import type { ComposerCommand } from '@/ds/components/Composer';
-import { Txt } from '@/ds/components/Txt';
+} from '../../src/ds/components/Composer';
+import type { ComposerCommand } from '../../src/ds/components/Composer';
+import { Txt } from '../../src/ds/components/Txt';
+import { reviewCommands } from './chat/commands';
 
 interface CommandComposerProps {
   initialValue?: string;

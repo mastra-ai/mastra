@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { LinkComponentProps } from '../../../types/link-component';
 import { Sidebar } from '../sidebar';
 import type { SidebarSection } from './sidebar-sections';
-import type { LinkComponentProps } from '@/ds/types/link-component';
 
 const storageKey = 'sidebar-visibility-test';
 const sections: SidebarSection[] = [

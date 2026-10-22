@@ -1,3 +1,6 @@
+import type { ActivityStatus } from '../../../ds/components/ai/activity';
+import { isTaskTool } from '../../../ds/components/ai/tool-call';
+import { isConnectPromptPayload } from '../../connect/types';
 import type { MessageMetadata, SuspendedToolMetadata, ToolApprovalMetadata } from '../messages/message-metadata';
 import type { ToolPartFields } from '../messages/renderers/tool-part';
 import { isRecord } from '../messages/signal-data';
@@ -5,9 +8,6 @@ import { getCodeModeCall } from './code-mode';
 import { CONNECT_PROMPT_TOOL_NAME } from './connect-prompt-tool-id';
 import { SUBMIT_PLAN_TOOL_ID } from './submit-plan-tool-id';
 import { WORKSPACE_TOOLS } from './workspace-tool-constants';
-import { isConnectPromptPayload } from '@/domains/connect/types';
-import type { ActivityStatus } from '@/ds/components/ai/activity';
-import { isTaskTool } from '@/ds/components/ai/tool-call';
 
 /** Which card draws a call. Decided once, shared by the dispatcher and the fold. */
 export type ToolCardKind =

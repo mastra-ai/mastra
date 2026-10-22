@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
+import { cn } from '../../lib/utils';
 import { Txt } from '../components/Txt/Txt';
-import { cn } from '@/lib/utils';
 
 interface FoundationPageProps {
   eyebrow: string;

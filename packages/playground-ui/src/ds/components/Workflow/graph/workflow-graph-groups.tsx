@@ -1,7 +1,7 @@
 import { useViewport } from '@xyflow/react';
 import type { Node } from '@xyflow/react';
 import { GitFork } from 'lucide-react';
-import { Badge } from '@/ds/components/Badge';
+import { Badge } from '../../Badge';
 
 export interface WorkflowGraphGroup {
   id: string;

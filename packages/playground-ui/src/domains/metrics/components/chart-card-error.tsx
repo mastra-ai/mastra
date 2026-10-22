@@ -1,4 +1,4 @@
-import { MetricsCard } from '@/ds/components/MetricsCard';
+import { MetricsCard } from '../../../ds/components/MetricsCard';
 
 /** Fills a chart card's body when its data failed to load. */
 export function ChartCardError() {

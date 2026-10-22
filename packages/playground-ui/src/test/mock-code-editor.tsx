@@ -1,7 +1,7 @@
 /**
  * Stand-in for `@uiw/react-codemirror`: a textarea named "Code editor" that tests drive with `fireEvent.change`.
  *
- * Usage: `vi.mock('@uiw/react-codemirror', () => import('@/test/mock-code-editor'));`
+ * Usage: `vi.mock('@uiw/react-codemirror', () => import('<relative path to src>/test/mock-code-editor'));`
  */
 export default function MockCodeEditor({
   value,

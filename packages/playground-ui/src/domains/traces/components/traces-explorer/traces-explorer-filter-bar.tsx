@@ -1,12 +1,12 @@
 import type { ReactNode } from 'react';
+import { FilterBar } from '../../../../ds/components/FilterBar';
+import type { FilterBarItem } from '../../../../ds/components/FilterBar';
 import { TRACE_FILTER_BAR_OPERATORS } from '../../trace-filters';
 import type { TraceDatePreset } from '../../types';
 import { TRACE_TIME_RANGE_FIELD_ID, TraceTimeRangeChip } from '../trace-time-range-chip';
 import type { TraceTimeRangeChipProps } from '../trace-time-range-chip';
 import { useTracesConfig, useTracesFilters, useTracesList } from './traces-explorer-context';
 import { useTracesFilterBar, useTracesFilterBarFields } from './use-traces-filter-bar';
-import { FilterBar } from '@/ds/components/FilterBar';
-import type { FilterBarItem } from '@/ds/components/FilterBar';
 
 const TIME_RANGE_PRESETS: readonly TraceDatePreset[] = [
   'last-24h',

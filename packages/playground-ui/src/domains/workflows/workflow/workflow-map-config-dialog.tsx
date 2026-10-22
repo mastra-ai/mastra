@@ -1,8 +1,8 @@
 import { Eye } from 'lucide-react';
 import { useState } from 'react';
-import { Button } from '@/ds/components/Button';
-import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@/ds/components/Dialog';
-import { WorkflowCodeContent } from '@/ds/components/Workflow';
+import { Button } from '../../../ds/components/Button';
+import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '../../../ds/components/Dialog';
+import { WorkflowCodeContent } from '../../../ds/components/Workflow';
 
 export interface WorkflowMapConfigDialogProps {
   stepName: string;

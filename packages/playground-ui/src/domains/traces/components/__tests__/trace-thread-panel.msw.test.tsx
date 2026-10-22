@@ -1,9 +1,12 @@
 // @vitest-environment jsdom
-import '@/test/inert-resize-observer';
+import '../../../../test/inert-resize-observer';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { TestLinkProvider } from '../../../../test/link-provider';
+import { server } from '../../../../test/msw-server';
+import { renderWithProviders, TEST_BASE_URL } from '../../../../test/render';
 import { TraceThreadPanel } from '../trace-thread-panel';
 import type { TraceThreadPanelProps } from '../trace-thread-panel';
 import {
@@ -14,9 +17,6 @@ import {
   traceASpans,
   traceBSpans,
 } from './fixtures/thread-traces';
-import { TestLinkProvider } from '@/test/link-provider';
-import { server } from '@/test/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 // jsdom does not implement scrollIntoView, which the thread view uses to reveal the anchored trace.
 const scrollIntoView = vi.fn();

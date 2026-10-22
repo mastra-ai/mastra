@@ -2,18 +2,18 @@ import { Button as BaseButton } from '@base-ui/react/button';
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import React from 'react';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { Icon } from '@/ds/icons/Icon';
-import { iconSizeClasses } from '@/ds/icons/icon-size-classes';
-import type { IconSize } from '@/ds/icons/icon-size-classes';
-import { controlHeight, controlSizeClasses } from '@/ds/primitives/control-size';
+import { cn } from '../../../lib/utils';
+import { Icon } from '../../icons/Icon';
+import { iconSizeClasses } from '../../icons/icon-size-classes';
+import type { IconSize } from '../../icons/icon-size-classes';
+import { controlHeight, controlSizeClasses } from '../../primitives/control-size';
 import {
   controlFocusBorderVisible,
   raisedControlSurfaceStyle,
   sharedFormElementDisabledStyle,
-} from '@/ds/primitives/form-element';
-import { controlStateColorTransition, focusRing, focusRingOffset } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
+} from '../../primitives/form-element';
+import { controlStateColorTransition, focusRing, focusRingOffset } from '../../primitives/transitions';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip';
 
 // Text-mode buttons are pills. Each size sets `--button-px`, the label's side padding. The
 // icon side gets 2px less, because a glyph draws inside its box: the icon then reads as far

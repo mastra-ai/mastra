@@ -1,10 +1,10 @@
 import { Plus } from 'lucide-react';
 import React, { useRef } from 'react';
+import { useKeydown } from '../../../lib/keyboard';
+import { mergeRefs } from '../../../lib/merge-refs';
+import { Kbd } from '../Kbd';
 import { Button } from './Button';
 import type { ButtonProps } from './Button';
-import { Kbd } from '@/ds/components/Kbd';
-import { useKeydown } from '@/lib/keyboard';
-import { mergeRefs } from '@/lib/merge-refs';
 
 export const CREATE_BUTTON_SHORTCUT = 'c';
 

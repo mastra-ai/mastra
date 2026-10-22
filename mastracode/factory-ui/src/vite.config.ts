@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import ts from 'typescript';
-import { defineConfig, loadEnv, searchForWorkspaceRoot } from 'vite';
+import { defaultClientConditions, defineConfig, loadEnv, searchForWorkspaceRoot } from 'vite';
 import type { Plugin } from 'vite';
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -260,7 +260,7 @@ const routesManifestPlugin = (): Plugin => {
  * SPA separately (static host / CDN, cross-origin via
  * MASTRACODE_ALLOWED_ORIGINS) remains possible.
  */
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ command, mode }) => {
   // Absolute: Vite resolves a relative `envDir` against `root` (`src/ui`), so
   // `MASTRACODE_ENV_DIR=../web` would silently point at a directory that does
   // not exist and no `VITE_*` var would reach `import.meta.env`.
@@ -289,6 +289,7 @@ export default defineConfig(({ mode }) => {
       // resolve their own react copy from the monorepo store — force a single
       // copy from here.
       dedupe: ['react', 'react-dom', '@tanstack/react-query'],
+      ...(command === 'serve' && { conditions: ['@mastra/source', ...defaultClientConditions] }),
     },
     build: {
       outDir: process.env.MASTRACODE_OUT_DIR ?? resolve(here, '../dist'),

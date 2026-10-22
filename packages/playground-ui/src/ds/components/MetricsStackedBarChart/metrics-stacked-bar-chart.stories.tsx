@@ -1,12 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 
+import { formatFullNumber } from '../../../utils/cost';
 import { MetricsCard } from '../MetricsCard';
 import { count, coldStartSeries, ms, requestsByHour, statusSeries } from '../MetricsCard/metrics-story-data';
 import type { MetricsLineChartSeries } from '../MetricsLineChart';
 import { Txt } from '../Txt';
 import { MetricsStackedBarChart } from './metrics-stacked-bar-chart';
-import { formatFullNumber } from '@/utils/cost';
 
 const usd = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', notation: 'compact' });
 

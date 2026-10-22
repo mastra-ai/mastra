@@ -3,9 +3,9 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
 import type { ScoreRowData } from '@mastra/core/evals';
 import { safeStringify } from '@mastra/core/utils/safe-stringify';
-import { SaveAsDatasetItemDialog } from '@/domains/datasets';
-import type { DataPanelProps } from '@/ds/components/DataPanel';
-import { getShortId } from '@/ds/components/Text';
+import type { DataPanelProps } from '../../../ds/components/DataPanel';
+import { getShortId } from '../../../ds/components/Text';
+import { SaveAsDatasetItemDialog } from '../../datasets';
 
 type ScoreForDatasetItem = ScoreRowData | ClientScoreRowData;
 

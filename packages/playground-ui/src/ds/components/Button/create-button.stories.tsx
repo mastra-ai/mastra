@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { fn } from 'storybook/test';
+import { raisedSurfaceStyle } from '../../primitives/raised-surface';
 import { TooltipProvider } from '../Tooltip';
 import { CreateButton } from './CreateButton';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
 const meta: Meta<typeof CreateButton> = {
   title: 'Elements/CreateButton',

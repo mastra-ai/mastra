@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Fragment } from 'react';
+import { cn } from '../../../lib/utils';
 import { Badge } from '../Badge/Badge';
 import { Button } from '../Button/Button';
 import { Card } from '../Card/Card';
@@ -7,7 +8,6 @@ import { Table } from '../Table/Table';
 import { Txt } from '../Txt/Txt';
 import { BillingIllustration, billingIllustrationHoverGroup } from './billing-illustration';
 import type { BillingIllustrationName } from './billing-illustration';
-import { cn } from '@/lib/utils';
 
 const meta = {
   title: 'Elements/BillingIllustration',

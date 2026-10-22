@@ -4,9 +4,9 @@ import type { VariantProps } from 'class-variance-authority';
 import { XIcon } from 'lucide-react';
 import * as React from 'react';
 
-import { Button } from '@/ds/components/Button';
-import { dialogSurfaceStyle } from '@/ds/primitives/raised-surface';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { dialogSurfaceStyle } from '../../primitives/raised-surface';
+import { Button } from '../Button';
 
 // Swipe/stack transforms live in drawer.css — unreadable as Tailwind arbitrary values.
 import './drawer.css';

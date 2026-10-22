@@ -1,7 +1,7 @@
 import { ChevronDownIcon } from 'lucide-react';
+import { Button } from '../../../ds/components/Button';
+import { DropdownMenu } from '../../../ds/components/DropdownMenu';
 import type { TraceListMode } from '../trace-filters';
-import { Button } from '@/ds/components/Button';
-import { DropdownMenu } from '@/ds/components/DropdownMenu';
 
 const TRACES_LIST_MODE_LABELS: Record<TraceListMode, string> = {
   traces: 'Top-level traces only',

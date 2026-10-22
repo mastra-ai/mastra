@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Code } from '@/ds/components/Code';
-import { formatTypeScript } from '@/utils/formatting';
+import { formatTypeScript } from '../../../../../utils/formatting';
+import { Code } from '../../../Code';
 
 const MAX_FORMATTED_SOURCE_CHARS = 10_000;
 

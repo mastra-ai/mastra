@@ -2,16 +2,16 @@ import type { TraceSignalDefinition } from '@mastra/client-js';
 import { Settings, ArchiveRestore, Archive, Pencil, LayoutGrid } from 'lucide-react';
 import { useState } from 'react';
 
+import { Badge } from '../../../ds/components/Badge';
+import { Button } from '../../../ds/components/Button';
+import { DataDetailsPanel } from '../../../ds/components/DataDetailsPanel';
+import { Notice } from '../../../ds/components/Notice';
+import { Skeleton } from '../../../ds/components/Skeleton';
+import { Switch } from '../../../ds/components/Switch';
+import { Txt } from '../../../ds/components/Txt';
 import { useTraceIntelligence } from '../use-trace-intelligence';
 import { SignalDefinitionFormDialog } from './signal-definition-form-dialog';
 import { useSignalManagementList, useSignalManagementMutations } from './use-signal-management';
-import { Badge } from '@/ds/components/Badge';
-import { Button } from '@/ds/components/Button';
-import { DataDetailsPanel } from '@/ds/components/DataDetailsPanel';
-import { Notice } from '@/ds/components/Notice';
-import { Skeleton } from '@/ds/components/Skeleton';
-import { Switch } from '@/ds/components/Switch';
-import { Txt } from '@/ds/components/Txt';
 
 export function TraceSignalSettingsButton({ open, onClick }: { open: boolean; onClick: () => void }) {
   const { signalManagement } = useTraceIntelligence();

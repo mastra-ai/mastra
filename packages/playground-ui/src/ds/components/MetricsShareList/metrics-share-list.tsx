@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
+import { cn } from '../../../lib/utils';
+import { Txt } from '../Txt';
 import { MetricsShareListHeader } from './metrics-share-list-header';
 import { ShareListRow } from './metrics-share-list-row';
 import {
@@ -17,8 +19,6 @@ import {
 import { ShowMore } from './metrics-share-list-show-more';
 import { ShareListSkeleton } from './metrics-share-list-skeleton';
 import type { MetricsShareListProps } from './metrics-share-list-types';
-import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/lib/utils';
 
 /**
  * Each row's share of a total: one 100% strip on top, the ranked rows below with their share

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
 
 /**
  * One row under the top bar for a card's controls: small tabs, a legend, list column headers.

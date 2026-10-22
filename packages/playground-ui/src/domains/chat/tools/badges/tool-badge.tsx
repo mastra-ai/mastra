@@ -1,11 +1,5 @@
-import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
-import type { MessageMetadata } from '@/domains/chat';
-import { NetworkChoiceMetadataDialogTrigger } from '@/domains/chat/components/network-choice-metadata-dialog';
-import { SectionLabel } from '@/domains/chat/components/section-label';
-import { awaitsToolApproval } from '@/domains/chat/tools/badges/awaits-tool-approval';
-import type { ToolApprovalRequest } from '@/domains/chat/tools/badges/tool-approval-badge';
-import { ToolApprovalBadge } from '@/domains/chat/tools/badges/tool-approval-badge';
-import type { ActivityStatus } from '@/ds/components/ai/activity';
+import type { MessageMetadata } from '../..';
+import type { ActivityStatus } from '../../../../ds/components/ai/activity';
 import {
   hasToolArguments,
   presentTool,
@@ -13,8 +7,14 @@ import {
   stripSerializedAnsi,
   ToolCallArguments,
   ToolCallOutput,
-} from '@/ds/components/ai/tool-call';
-import { CodeEditor } from '@/ds/components/CodeEditor';
+} from '../../../../ds/components/ai/tool-call';
+import { CodeEditor } from '../../../../ds/components/CodeEditor';
+import { NetworkChoiceMetadataDialogTrigger } from '../../components/network-choice-metadata-dialog';
+import { SectionLabel } from '../../components/section-label';
+import { awaitsToolApproval } from './awaits-tool-approval';
+import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
+import type { ToolApprovalRequest } from './tool-approval-badge';
+import { ToolApprovalBadge } from './tool-approval-badge';
 
 function formatArgs(args: Record<string, unknown> | string): { pretty: string; parsed?: Record<string, unknown> } {
   try {

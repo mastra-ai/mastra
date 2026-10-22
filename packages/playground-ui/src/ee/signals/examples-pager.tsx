@@ -1,6 +1,6 @@
 import { ChevronRight, ChevronLeft } from 'lucide-react';
-import { Button } from '@/ds/components/Button';
-import { Txt } from '@/ds/components/Txt';
+import { Button } from '../../ds/components/Button';
+import { Txt } from '../../ds/components/Txt';
 
 export const EXAMPLES_PAGE_SIZE = 5;
 

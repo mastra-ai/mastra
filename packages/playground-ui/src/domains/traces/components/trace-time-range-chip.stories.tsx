@@ -1,11 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 
+import type { DateRangePreset } from '../../../ds/components/DateTimeRangePicker';
+import { FilterBar } from '../../../ds/components/FilterBar';
+import { DEFAULT_FILTER_OPERATORS } from '../../../ds/components/FilterBar/default-operators';
+import type { FilterBarItem } from '../../../ds/components/FilterBar/types';
 import { TraceTimeRangeChip, TRACE_TIME_RANGE_FIELD } from './trace-time-range-chip';
-import type { DateRangePreset } from '@/ds/components/DateTimeRangePicker';
-import { FilterBar } from '@/ds/components/FilterBar';
-import { DEFAULT_FILTER_OPERATORS } from '@/ds/components/FilterBar/default-operators';
-import type { FilterBarItem } from '@/ds/components/FilterBar/types';
 
 const meta: Meta<typeof TraceTimeRangeChip> = {
   title: 'Domains/Traces/TraceTimeRangeChip',

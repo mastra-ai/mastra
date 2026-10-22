@@ -1,10 +1,10 @@
 import type { TripwireMetadata } from '@mastra/react';
 import { ChevronDown, ChevronRight, RefreshCw, ShieldAlert, Tag } from 'lucide-react';
 import { useState } from 'react';
-import { Badge } from '@/ds/components/Badge';
-import { CodeEditor } from '@/ds/components/CodeEditor';
-import { Notice } from '@/ds/components/Notice';
-import { Txt } from '@/ds/components/Txt';
+import { Badge } from '../../../ds/components/Badge';
+import { CodeEditor } from '../../../ds/components/CodeEditor';
+import { Notice } from '../../../ds/components/Notice';
+import { Txt } from '../../../ds/components/Txt';
 
 export interface TripwireNoticeProps {
   reason: string;

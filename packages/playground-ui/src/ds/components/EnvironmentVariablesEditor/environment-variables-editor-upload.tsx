@@ -1,7 +1,7 @@
+import { cn } from '../../../lib/utils';
 import { useEnvironmentVariablesEditorContext } from './environment-variables-editor-context';
 import { EnvironmentVariablesEditorUploadButton } from './environment-variables-editor-upload-button';
 import type { EnvironmentVariablesEditorUploadProps } from './environment-variables-editor.types';
-import { cn } from '@/lib/utils';
 
 export function EnvironmentVariablesEditorUpload({
   className,

@@ -14,9 +14,9 @@ import {
   Users,
 } from 'lucide-react';
 import { useState } from 'react';
+import { cn } from '../../../lib/utils';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '../Dialog';
 import { ContextMenu } from './context-menu';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogBody } from '@/ds/components/Dialog';
-import { cn } from '@/lib/utils';
 
 const meta: Meta<typeof ContextMenu> = {
   title: 'Elements/ContextMenu',

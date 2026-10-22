@@ -3,8 +3,8 @@ import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 
-import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
-import { controlSizeClasses } from '@/ds/primitives/control-size';
+import { cn } from '../../../lib/utils';
+import { controlSizeClasses } from '../../primitives/control-size';
 import {
   deprecatedErrorAria,
   fieldErrorRim,
@@ -12,11 +12,11 @@ import {
   resolveFieldVariant,
   sharedFormElementDisabledStyle,
   unstyledFormElementStyle,
-} from '@/ds/primitives/form-element';
-import type { DeprecatedFilledVariant } from '@/ds/primitives/form-element';
-import { textFieldAutofillProps } from '@/ds/primitives/password-manager-autofill';
-import { controlStateColorTransition } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
+} from '../../primitives/form-element';
+import type { DeprecatedFilledVariant } from '../../primitives/form-element';
+import { textFieldAutofillProps } from '../../primitives/password-manager-autofill';
+import { controlStateColorTransition } from '../../primitives/transitions';
+import { keepOwnAccessibleName } from '../Field/field-control-aria';
 
 const inputVariants = cva(
   cn(

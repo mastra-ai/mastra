@@ -2,6 +2,7 @@ import { describeProcessorPipeline, describeSpanInput, describeSpanOutput } from
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { FileInputIcon, FileOutputIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { cn } from '../../../../lib/utils';
 import { SpanDataPanelView } from '../span-data-panel-view';
 import { SpanDetailsView } from '../span-details-view';
 import { ALL_SPAN_FIXTURES } from './__tests__/fixtures/span-payloads';
@@ -12,7 +13,6 @@ import { SpanOutputRenderer } from './span-output-renderers';
 import { asCoreSpan } from './span-payload-registry';
 import { SpanPayloadSection } from './span-payload-section';
 import { SpanProcessorAttributes } from './span-processor-attributes';
-import { cn } from '@/lib/utils';
 
 type FixtureName = keyof typeof ALL_SPAN_FIXTURES;
 const FIXTURE_NAMES = Object.keys(ALL_SPAN_FIXTURES) as FixtureName[];

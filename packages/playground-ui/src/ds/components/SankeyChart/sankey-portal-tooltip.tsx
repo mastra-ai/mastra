@@ -1,8 +1,8 @@
 import { createPortal } from 'react-dom';
 
+import { ChartTooltip } from '../ChartTooltip';
 import { SANKEY_TOOLTIP_MAX_WIDTH_PX } from './use-sankey-hover-tooltip';
 import type { SankeyTooltipPosition } from './use-sankey-hover-tooltip';
-import { ChartTooltip } from '@/ds/components/ChartTooltip';
 
 export function SankeyPortalTooltip({
   id,

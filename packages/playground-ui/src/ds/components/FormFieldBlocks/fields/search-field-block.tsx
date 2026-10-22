@@ -1,13 +1,13 @@
 import { SearchIcon, XIcon } from 'lucide-react';
 import { useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
+import { cn } from '../../../../lib/utils';
 import { Button } from '../../Button';
 import { Input } from '../../Input';
 import type { InputProps } from '../../Input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../Tooltip';
 import { FieldBlock } from '../block/field-block';
 import { fieldErrorId } from '../block/field-error-id';
-import { cn } from '@/lib/utils';
 
 export type SearchFieldBlockProps = {
   name: string;

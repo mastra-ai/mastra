@@ -1,8 +1,8 @@
 import { Drawer as DrawerPrimitive } from '@base-ui/react/drawer';
 import type { ReactNode, Ref } from 'react';
 
+import { cn } from '../../../lib/utils';
 import { useDataPanelVariant } from './data-panel-context';
-import { cn } from '@/lib/utils';
 
 export interface DataPanelContentProps {
   children: ReactNode;

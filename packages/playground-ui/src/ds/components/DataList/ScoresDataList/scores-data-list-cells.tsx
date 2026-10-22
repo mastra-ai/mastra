@@ -1,6 +1,6 @@
+import { formatDate } from '../../../../utils/date-format';
+import { Txt } from '../../Txt';
 import { DataListCell } from '../data-list-cells';
-import { Txt } from '@/ds/components/Txt';
-import { formatDate } from '@/utils/date-format';
 
 // ---------------------------------------------------------------------------
 // Helpers

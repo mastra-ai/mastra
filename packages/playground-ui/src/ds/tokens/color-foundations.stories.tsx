@@ -5,10 +5,10 @@ import dataVizCss from '../../../theme/data-viz.css?raw';
 import statusCss from '../../../theme/status.css?raw';
 import surfacesCss from '../../../theme/surfaces.css?raw';
 import themeCss from '../../../theme.css?raw';
+import { cn } from '../../lib/utils';
 import { Popover, PopoverContent, PopoverTrigger } from '../components/Popover';
 import { Txt } from '../components/Txt/Txt';
 import { FoundationPage, FoundationSection } from './foundations-layout';
-import { cn } from '@/lib/utils';
 
 const meta = {
   title: 'Foundations/Color',

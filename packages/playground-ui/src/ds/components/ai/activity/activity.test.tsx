@@ -2,6 +2,8 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { Search } from 'lucide-react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ARRIVING_CLASS } from '../../../tokens';
+import { ArrivalScope } from '../../Arrival';
 import {
   Activity,
   ActivityContent,
@@ -17,8 +19,6 @@ import {
   ActivityTrailing,
   ActivityTrigger,
 } from './activity';
-import { ArrivalScope } from '@/ds/components/Arrival';
-import { ARRIVING_CLASS } from '@/ds/tokens';
 
 const Example = ({
   open,

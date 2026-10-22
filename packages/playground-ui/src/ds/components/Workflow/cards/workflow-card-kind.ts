@@ -11,8 +11,8 @@ import {
   Wrench,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import type { BadgeVariant } from '../../Badge';
 import type { WorkflowStepCardViewProps } from '../types';
-import type { BadgeVariant } from '@/ds/components/Badge';
 
 export type WorkflowTypeBadgeProps = Pick<
   WorkflowStepCardViewProps,

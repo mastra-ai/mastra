@@ -1,10 +1,10 @@
 import { forwardRef } from 'react';
 import type { ComponentPropsWithoutRef, KeyboardEvent, MouseEvent } from 'react';
+import { cn } from '../../../lib/utils';
+import { useFluidMenuItemRef } from '../../primitives/fluid-menu';
+import { focusRingInset } from '../../primitives/transitions';
 import { DataListRowWrapperContext } from './data-list-row-wrapper-context';
 import { dataListRowOuterStyles, dataListRowStateStyles } from './shared';
-import { useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
-import { focusRingInset } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
 
 export type DataListRowWrapperProps = ComponentPropsWithoutRef<'div'> & {
   /**

@@ -2,12 +2,12 @@ import { Popover as PopoverPrimitive } from '@base-ui/react/popover';
 import type { PopoverPopupProps, PopoverPositionerProps } from '@base-ui/react/popover';
 import * as React from 'react';
 
-import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
-import { usePortalContainer } from '@/ds/primitives/portal-container';
-import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
-import { resolveTriggerRender } from '@/ds/primitives/trigger-button';
-import type { TriggerButtonProps } from '@/ds/primitives/trigger-button';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { FLOATING_POSITION_METHOD } from '../../primitives/floating';
+import { usePortalContainer } from '../../primitives/portal-container';
+import { overlaySurfaceStyle } from '../../primitives/raised-surface';
+import { resolveTriggerRender } from '../../primitives/trigger-button';
+import type { TriggerButtonProps } from '../../primitives/trigger-button';
 
 const Popover = PopoverPrimitive.Root;
 

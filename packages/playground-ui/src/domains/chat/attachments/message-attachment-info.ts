@@ -1,5 +1,5 @@
 import { File, FileAudio, FileImage, FileSpreadsheet, FileText, FileVideo } from 'lucide-react';
-import { isRemoteUrl } from '@/lib/file';
+import { isRemoteUrl } from '../../../lib/file';
 
 export function attachmentName(name: string | undefined, src: string | undefined, fallback: string) {
   const value = name || src;

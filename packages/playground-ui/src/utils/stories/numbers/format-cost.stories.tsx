@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { HelperExamples } from '../../../../.storybook/fixtures/helpers/helper-examples';
 import type { HelperExample } from '../../../../.storybook/fixtures/helpers/helper-examples';
-import { formatCost } from '@/utils/cost';
+import { formatCost } from '../../cost';
 
 const examples: HelperExample[] = [
   ['formatCost(4.37)', formatCost(4.37)],

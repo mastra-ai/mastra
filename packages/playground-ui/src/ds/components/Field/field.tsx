@@ -3,10 +3,10 @@ import { Fieldset as FieldsetPrimitive } from '@base-ui/react/fieldset';
 import { CircleAlertIcon } from 'lucide-react';
 import * as React from 'react';
 
+import { cn } from '../../../lib/utils';
+import { Icon } from '../../icons/Icon';
+import { InfoTooltip } from '../Tooltip';
 import { FieldAriaContext, useFieldAriaIds } from './field-control-aria';
-import { InfoTooltip } from '@/ds/components/Tooltip';
-import { Icon } from '@/ds/icons/Icon';
-import { cn } from '@/lib/utils';
 
 type FieldProps = Omit<FieldPrimitive.Root.Props, 'className'> & {
   className?: string;

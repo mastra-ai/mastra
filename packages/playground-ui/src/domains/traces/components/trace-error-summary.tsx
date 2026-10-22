@@ -1,5 +1,5 @@
-import { CopyButton } from '@/ds/components/CopyButton';
-import { Txt } from '@/ds/components/Txt';
+import { CopyButton } from '../../../ds/components/CopyButton';
+import { Txt } from '../../../ds/components/Txt';
 
 export interface TraceErrorSummaryProps {
   name: string;

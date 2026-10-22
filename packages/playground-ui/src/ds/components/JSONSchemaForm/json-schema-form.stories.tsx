@@ -1,11 +1,11 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { PlusIcon } from 'lucide-react';
 import { useState } from 'react';
+import type { JsonSchema } from '../../../lib/json-schema';
 import { TooltipProvider } from '../Tooltip';
 import type { SchemaField } from './types';
 import { createField } from './types';
 import { JSONSchemaForm } from './index';
-import type { JsonSchema } from '@/lib/json-schema';
 
 const meta: Meta<typeof JSONSchemaForm.Root> = {
   title: 'Forms/JSONSchemaForm',

@@ -1,9 +1,9 @@
 import { useRef } from 'react';
+import { ContextMenu } from '../../ContextMenu';
 import type { SidebarLink } from '../nav/sidebar-nav-link';
 import { SidebarSectionLink } from './sidebar-section-link';
 import type { OptionalSidebarLink, SidebarLinkPlacement } from './sidebar-visibility';
 import { isSidebarLinkPlacement, sidebarLinkPlacementLabels, sidebarLinkPlacements } from './sidebar-visibility';
-import { ContextMenu } from '@/ds/components/ContextMenu';
 
 export type SidebarOptionalLinkProps = {
   link: OptionalSidebarLink;

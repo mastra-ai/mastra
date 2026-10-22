@@ -1,8 +1,8 @@
+import { cn } from '../../../../lib/utils';
+import { frameSurfaceStyle } from '../../../primitives/raised-surface';
 import { useMaybeSidebarState } from './sidebar-context';
 import type { SidebarPanelProps } from './sidebar-panel';
 import { SidebarPanel } from './sidebar-panel';
-import { frameSurfaceStyle } from '@/ds/primitives/raised-surface';
-import { cn } from '@/lib/utils';
 
 export type SidebarRootProps = SidebarPanelProps & {
   'aria-label'?: string;

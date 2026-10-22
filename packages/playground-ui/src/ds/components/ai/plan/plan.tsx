@@ -2,15 +2,15 @@ import { CheckIcon, ClipboardList, CopyIcon, Maximize2, Minimize2 } from 'lucide
 import { createContext, useContext } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
 
-import { Badge } from '@/ds/components/Badge';
-import { Button } from '@/ds/components/Button';
-import { CollapsibleBox, DEFAULT_COLLAPSED_HEIGHT, useCollapsibleBox } from '@/ds/components/CollapsibleBox';
-import type { CollapsibleBoxState } from '@/ds/components/CollapsibleBox';
-import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
-import { Txt } from '@/ds/components/Txt';
-import { Icon } from '@/ds/icons/Icon';
-import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
-import { cn } from '@/lib/utils';
+import { useCopyToClipboard } from '../../../../hooks/use-copy-to-clipboard';
+import { cn } from '../../../../lib/utils';
+import { Icon } from '../../../icons/Icon';
+import { Badge } from '../../Badge';
+import { Button } from '../../Button';
+import { CollapsibleBox, DEFAULT_COLLAPSED_HEIGHT, useCollapsibleBox } from '../../CollapsibleBox';
+import type { CollapsibleBoxState } from '../../CollapsibleBox';
+import { MarkdownRenderer } from '../../MarkdownRenderer';
+import { Txt } from '../../Txt';
 
 const PlanContext = createContext<CollapsibleBoxState | null>(null);
 

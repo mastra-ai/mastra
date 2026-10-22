@@ -1,11 +1,11 @@
 import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
 import { useMemo } from 'react';
+import { WorkflowGraphCanvas } from '../../../ds/components/Workflow';
 import { useWorkflowSelectedStep } from '../context/use-workflow-selected-step';
 import { useWorkflowGraphNodes } from './use-workflow-graph-nodes';
 import { useWorkflowGraphRuntime } from './use-workflow-graph-runtime';
 import { findFocusNode } from './utils';
 import { getWorkflowGraphGroups } from './workflow-graph-groups';
-import { WorkflowGraphCanvas } from '@/ds/components/Workflow';
 
 export interface WorkflowGraphInnerProps {
   stepGraph: SerializedStepFlowEntry[];

@@ -1,7 +1,7 @@
 import { Panel } from 'react-resizable-panels';
-import { CollapsiblePanel } from '@/lib/resize/collapsible-panel';
-import { PanelGroup } from '@/lib/resize/panel-group';
-import { PanelSeparator } from '@/lib/resize/separator';
+import { CollapsiblePanel } from '../../../lib/resize/collapsible-panel';
+import { PanelGroup } from '../../../lib/resize/panel-group';
+import { PanelSeparator } from '../../../lib/resize/separator';
 
 export interface TopicsLayoutProps {
   sidebar?: React.ReactNode;

@@ -1,11 +1,11 @@
 import { CheckIcon, ChevronDownIcon, CopyIcon, DownloadIcon } from 'lucide-react';
 import type { ComponentProps } from 'react';
 import type { ExtraProps } from 'react-markdown';
+import { useCopyToClipboard } from '../../../hooks/use-copy-to-clipboard';
+import { Button } from '../Button';
+import { ButtonsGroup } from '../ButtonsGroup';
+import { DropdownMenu } from '../DropdownMenu';
 import { downloadTableCsv } from './table-csv';
-import { Button } from '@/ds/components/Button';
-import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
-import { DropdownMenu } from '@/ds/components/DropdownMenu';
-import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
 
 export function MarkdownTable({ node, children }: ComponentProps<'table'> & ExtraProps) {
   const markdown = node?.properties.tableMarkdown;

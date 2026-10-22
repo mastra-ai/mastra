@@ -1,9 +1,9 @@
 import * as React from 'react';
+import { cn } from '../../../lib/utils';
+import { transitions } from '../../primitives/transitions';
+import { CollapsibleTrigger } from '../Collapsible';
+import { DisclosureChevron } from '../DisclosureChevron';
 import { useTreeContext, useTreeDepth, useTreeFolderContext } from './tree-context';
-import { CollapsibleTrigger } from '@/ds/components/Collapsible';
-import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
-import { transitions } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
 
 export interface TreeFolderTriggerProps {
   className?: string;

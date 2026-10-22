@@ -1,5 +1,5 @@
+import { Notice } from '../../../ds/components/Notice';
 import { getWorkflowRunErrors } from './workflow-run-errors';
-import { Notice } from '@/ds/components/Notice';
 
 export function WorkflowRunError({
   result,

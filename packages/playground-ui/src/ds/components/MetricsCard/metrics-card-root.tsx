@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import { Card } from '@/ds/components/Card';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { Card } from '../Card';
 
 export function MetricsCardRoot({ children, className }: { children: ReactNode; className?: string }) {
   return (

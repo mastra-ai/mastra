@@ -1,8 +1,8 @@
 import type { FilePart } from '@mastra/react/ui';
 
+import { isBrowserFetchableUrl, isNonFetchableRemoteUrl } from '../../../../lib/file';
 import { isTextMimeType } from '../../attachments/attachment-kind';
 import { MessageAttachment } from '../../attachments/message-attachment';
-import { isBrowserFetchableUrl, isNonFetchableRemoteUrl } from '@/lib/file';
 
 const textPreview = (data: string) => {
   if (!data.startsWith('data:')) return data;

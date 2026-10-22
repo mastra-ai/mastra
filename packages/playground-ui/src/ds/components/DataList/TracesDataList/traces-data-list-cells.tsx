@@ -1,18 +1,18 @@
 import { CornerDownRightIcon, DatabaseIcon, ListTreeIcon, RouteIcon, SplitIcon } from 'lucide-react';
 import type { ComponentType, SVGProps } from 'react';
+import { cn } from '../../../../lib/utils';
+import { AgentIcon } from '../../../icons/AgentIcon';
+import { McpServerIcon } from '../../../icons/McpServerIcon';
+import { MemoryIcon } from '../../../icons/MemoryIcon';
+import { ProcessorIcon } from '../../../icons/ProcessorIcon';
+import { ScorersIcon } from '../../../icons/ScorersIcon';
+import { ToolsIcon } from '../../../icons/ToolsIcon';
+import { WorkflowIcon } from '../../../icons/WorkflowIcon';
+import { Badge } from '../../Badge';
+import type { BadgeVariant } from '../../Badge';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../Tooltip';
+import { Txt } from '../../Txt';
 import { DataListCell, DataListTextCell } from '../data-list-cells';
-import { Badge } from '@/ds/components/Badge';
-import type { BadgeVariant } from '@/ds/components/Badge';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { Txt } from '@/ds/components/Txt';
-import { AgentIcon } from '@/ds/icons/AgentIcon';
-import { McpServerIcon } from '@/ds/icons/McpServerIcon';
-import { MemoryIcon } from '@/ds/icons/MemoryIcon';
-import { ProcessorIcon } from '@/ds/icons/ProcessorIcon';
-import { ScorersIcon } from '@/ds/icons/ScorersIcon';
-import { ToolsIcon } from '@/ds/icons/ToolsIcon';
-import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
-import { cn } from '@/lib/utils';
 
 // ---------------------------------------------------------------------------
 // NameCell

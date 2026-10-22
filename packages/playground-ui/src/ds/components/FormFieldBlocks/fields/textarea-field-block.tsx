@@ -1,3 +1,4 @@
+import { VisuallyHidden } from '../../../primitives/visually-hidden';
 import { Textarea } from '../../Textarea';
 import type { TextareaProps } from '../../Textarea';
 import { FieldBlock } from '../block/field-block';
@@ -6,7 +7,6 @@ import type { FieldBlockHelpTextProps } from '../block/field-block-help-text';
 import type { FieldBlockLabelProps } from '../block/field-block-label';
 import type { FieldBlockLayoutProps } from '../block/field-block-layout';
 import { fieldErrorId } from '../block/field-error-id';
-import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
 
 export type TextareaFieldBlockProps = Pick<FieldBlockLayoutProps, 'layout' | 'labelColumnWidth'> &
   Omit<TextareaProps, 'name' | 'size'> & {

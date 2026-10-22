@@ -1,6 +1,7 @@
 import { FoldVertical, X } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { presentTool } from './tool-presentation';
+import { ScrollArea } from '../../ScrollArea';
+import { Txt } from '../../Txt';
 import {
   Activity,
   ActivityContent,
@@ -14,10 +15,9 @@ import {
   ActivitySummary,
   ActivityTrailing,
   ActivityTrigger,
-} from '@/ds/components/ai/activity';
-import type { ActivityStatus } from '@/ds/components/ai/activity';
-import { ScrollArea } from '@/ds/components/ScrollArea';
-import { Txt } from '@/ds/components/Txt';
+} from '../activity';
+import type { ActivityStatus } from '../activity';
+import { presentTool } from './tool-presentation';
 
 export interface ToolCallGroupStep {
   toolName: string;

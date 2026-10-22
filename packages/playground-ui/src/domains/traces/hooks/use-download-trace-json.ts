@@ -1,7 +1,7 @@
 import { useFetchTraceSpans } from '@mastra/react/hooks/traces';
 import { useState } from 'react';
-import { downloadJson } from '@/lib/file';
-import { toast } from '@/lib/toast';
+import { downloadJson } from '../../../lib/file';
+import { toast } from '../../../lib/toast';
 
 export function useDownloadTraceJson() {
   const fetchTraceSpans = useFetchTraceSpans();

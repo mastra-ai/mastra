@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-import { ArrivalScope, useWatched } from '@/ds/components/Arrival';
+import { ArrivalScope, useWatched } from '../Arrival';
 
 import './comment-arrival.css';
 

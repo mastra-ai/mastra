@@ -1,15 +1,15 @@
 import { Area, CartesianGrid, ComposedChart, Line, Tooltip } from 'recharts';
+import { cn } from '../../../lib/utils';
+import { CHART_CURSOR_PROPS, CHART_GRID_PROPS, useChartSize } from '../../primitives/chart-axes';
+import type { ChartXLabels } from '../../primitives/chart-axes';
+import { Y_AXIS_WIDTH, compactNumber, dataMax, isWholeData, timeXAxis, valueYAxis } from '../../primitives/chart-frame';
+import type { ChartHeight } from '../../primitives/chart-frame';
+import { CHART_MARGIN } from '../../primitives/chart-layout';
+import { ChartPlot } from '../../primitives/chart-plot';
+import { useChartDefsId } from '../../primitives/use-chart-defs-id';
+import { ChartSkeleton } from '../ChartSkeleton';
 import { MetricsLineChartLegend } from './metrics-line-chart-legend';
 import { MetricsLineChartTooltip } from './metrics-line-chart-tooltip';
-import { ChartSkeleton } from '@/ds/components/ChartSkeleton';
-import { CHART_CURSOR_PROPS, CHART_GRID_PROPS, useChartSize } from '@/ds/primitives/chart-axes';
-import type { ChartXLabels } from '@/ds/primitives/chart-axes';
-import { Y_AXIS_WIDTH, compactNumber, dataMax, isWholeData, timeXAxis, valueYAxis } from '@/ds/primitives/chart-frame';
-import type { ChartHeight } from '@/ds/primitives/chart-frame';
-import { CHART_MARGIN } from '@/ds/primitives/chart-layout';
-import { ChartPlot } from '@/ds/primitives/chart-plot';
-import { useChartDefsId } from '@/ds/primitives/use-chart-defs-id';
-import { cn } from '@/lib/utils';
 
 export type MetricsLineChartSeries = {
   dataKey: string;

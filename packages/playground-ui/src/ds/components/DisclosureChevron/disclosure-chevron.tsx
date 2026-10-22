@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronRight, ChevronUp } from 'lucide-react';
 import type { ComponentProps } from 'react';
-import { transitions } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { transitions } from '../../primitives/transitions';
 
 export type DisclosureChevronDirection = 'down' | 'up' | 'right';
 

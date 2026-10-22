@@ -1,13 +1,13 @@
 import { BrainIcon } from 'lucide-react';
+import { AgentIcon } from '../../../ds/icons/AgentIcon';
+import { McpServerIcon } from '../../../ds/icons/McpServerIcon';
+import { MemoryIcon } from '../../../ds/icons/MemoryIcon';
+import { ScorersIcon } from '../../../ds/icons/ScorersIcon';
+import { SkillIcon } from '../../../ds/icons/SkillIcon';
+import { ToolsIcon } from '../../../ds/icons/ToolsIcon';
+import { WorkflowIcon } from '../../../ds/icons/WorkflowIcon';
+import { WorkspacesIcon } from '../../../ds/icons/WorkspacesIcon';
 import type { UISpanStyle } from '../types';
-import { AgentIcon } from '@/ds/icons/AgentIcon';
-import { McpServerIcon } from '@/ds/icons/McpServerIcon';
-import { MemoryIcon } from '@/ds/icons/MemoryIcon';
-import { ScorersIcon } from '@/ds/icons/ScorersIcon';
-import { SkillIcon } from '@/ds/icons/SkillIcon';
-import { ToolsIcon } from '@/ds/icons/ToolsIcon';
-import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
-import { WorkspacesIcon } from '@/ds/icons/WorkspacesIcon';
 
 export const spanTypePrefixes = [
   'agent',

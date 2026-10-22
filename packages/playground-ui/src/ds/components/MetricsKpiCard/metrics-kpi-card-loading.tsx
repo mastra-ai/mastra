@@ -1,5 +1,5 @@
-import { Spinner } from '@/ds/components/Spinner/spinner';
-import { Txt } from '@/ds/components/Txt';
+import { Spinner } from '../Spinner/spinner';
+import { Txt } from '../Txt';
 
 export function MetricsKpiCardLoading({ className }: { className?: string }) {
   return (

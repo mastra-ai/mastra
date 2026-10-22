@@ -1,8 +1,8 @@
 import type { QueryTracesInput } from '@mastra/client-js';
 import type { TraceQueryPredicate, TraceQueryScalarPredicate } from '@mastra/core/storage';
+import type { PropertyFilterToken } from '../../ds/components/PropertyFilter/types';
 import { isLegacyAnyValue } from './trace-filters';
 import type { buildTraceListFilters, TraceStatusFilter } from './trace-filters';
-import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
 
 export const TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS = new Set([
   'runId',

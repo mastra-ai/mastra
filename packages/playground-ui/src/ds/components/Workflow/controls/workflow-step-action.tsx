@@ -8,7 +8,7 @@ import {
   ShieldAlertIcon,
   StepForwardIcon,
 } from 'lucide-react';
-import { DropdownMenu } from '@/ds/components/DropdownMenu';
+import { DropdownMenu } from '../../DropdownMenu';
 
 const actions = {
   nested: { icon: PanelRightIcon, label: 'View nested graph', activeLabel: 'Hide nested graph' },

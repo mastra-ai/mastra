@@ -1,7 +1,7 @@
 import type { ComponentProps } from 'react';
-import { ComposerAttachments } from '@/ds/components/Composer';
-import { ScrollArea } from '@/ds/components/ScrollArea';
-import { cn } from '@/utils/cn';
+import { ComposerAttachments } from '../../../ds/components/Composer';
+import { ScrollArea } from '../../../ds/components/ScrollArea';
+import { cn } from '../../../utils/cn';
 
 export function ComposerAttachmentList({ className, ...props }: ComponentProps<typeof ComposerAttachments>) {
   return (

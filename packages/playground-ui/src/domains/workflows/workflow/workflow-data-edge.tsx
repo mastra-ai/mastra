@@ -1,9 +1,9 @@
 import type { EdgeProps } from '@xyflow/react';
 import { memo } from 'react';
+import type { WorkflowDataEdgeModel } from '../../../ds/components/Workflow';
+import { WorkflowDataEdgeView } from '../../../ds/components/Workflow';
 import type { WorkflowDataSelection } from '../context/workflow-step-detail-context';
 import { WorkflowDataButton } from './data/workflow-data-button';
-import type { WorkflowDataEdgeModel } from '@/ds/components/Workflow';
-import { WorkflowDataEdgeView } from '@/ds/components/Workflow';
 
 export interface WorkflowDataEdgeProps extends EdgeProps<WorkflowDataEdgeModel> {
   parentWorkflowName?: string;

@@ -1,6 +1,14 @@
 import { Combobox as BaseCombobox } from '@base-ui/react/combobox';
 import { X } from 'lucide-react';
 import * as React from 'react';
+import { cn } from '../../../lib/utils';
+import { deprecatedErrorAria } from '../../primitives/form-element';
+import type { PortalContainer } from '../../primitives/portal-container';
+import { Button, isIconButtonSize } from '../Button/Button';
+import type { ButtonSize } from '../Button/Button';
+import { keepOwnAccessibleName, useFieldAriaIds } from '../Field/field-control-aria';
+import { FieldBlock } from '../FormFieldBlocks/block/field-block';
+import { fieldErrorId } from '../FormFieldBlocks/block/field-error-id';
 import {
   ComboboxChip,
   ComboboxChips,
@@ -17,14 +25,6 @@ import {
 } from './combobox-parts';
 import { comboboxStyles } from './combobox-styles';
 import type { ComboboxVariant } from './combobox-styles';
-import { Button, isIconButtonSize } from '@/ds/components/Button/Button';
-import type { ButtonSize } from '@/ds/components/Button/Button';
-import { keepOwnAccessibleName, useFieldAriaIds } from '@/ds/components/Field/field-control-aria';
-import { FieldBlock } from '@/ds/components/FormFieldBlocks/block/field-block';
-import { fieldErrorId } from '@/ds/components/FormFieldBlocks/block/field-error-id';
-import { deprecatedErrorAria } from '@/ds/primitives/form-element';
-import type { PortalContainer } from '@/ds/primitives/portal-container';
-import { cn } from '@/lib/utils';
 
 export type { ComboboxVariant } from './combobox-styles';
 

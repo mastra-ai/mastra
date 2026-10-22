@@ -1,5 +1,7 @@
 import { Fragment } from 'react';
 import type { ReactNode } from 'react';
+import { cn } from '../../../lib/utils';
+import { VisuallyHidden } from '../../primitives/visually-hidden';
 import { FilterBarAdvancedChip } from './filter-bar-advanced-chip';
 import { FilterBarChip } from './filter-bar-chip';
 import { FilterBarClear } from './filter-bar-clear';
@@ -7,8 +9,6 @@ import { FILTER_BAR_SCOPE_ATTR, FilterBarProvider, useFilterBarContext } from '.
 import { FilterBarInput } from './filter-bar-input';
 import { isFilterBarGroup } from './types';
 import type { FilterBarExpression, FilterBarField, FilterBarItem, FilterBarOperator } from './types';
-import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
-import { cn } from '@/lib/utils';
 
 type FilterBarValueProps =
   | {

@@ -1,6 +1,6 @@
 import type { AutoFormFieldProps } from '@autoform/react';
 import React from 'react';
-import { Input } from '@/ds/components/Input';
+import { Input } from '../../../ds/components/Input';
 
 const INVALID = Symbol('invalid');
 

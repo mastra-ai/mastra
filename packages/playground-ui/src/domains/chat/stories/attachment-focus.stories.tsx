@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect, userEvent, within } from 'storybook/test';
+import { ChatShell } from '../../../ds/components/ChatShell';
+import { Message } from '../../../ds/components/Message';
+import { MessageScrollerItem } from '../../../ds/components/MessageScroller';
+import { raisedSurfaceStyle } from '../../../ds/primitives/raised-surface';
 import { UserFilePartRenderer } from '../messages/renderers/user-file-part-renderer';
-import { ChatShell } from '@/ds/components/ChatShell';
-import { Message } from '@/ds/components/Message';
-import { MessageScrollerItem } from '@/ds/components/MessageScroller';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
 const imageSvg =
   '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="160"><rect width="320" height="160" fill="#d8ede3"/><circle cx="160" cy="80" r="48" fill="#326b50"/><path d="m136 80 16 16 32-32" fill="none" stroke="#d8ede3" stroke-width="8"/></svg>';

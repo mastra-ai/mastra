@@ -2,10 +2,10 @@ import { Check, X } from 'lucide-react';
 import { useState } from 'react';
 import type { KeyboardEvent } from 'react';
 
-import { Button } from '@/ds/components/Button';
-import { Field, FieldError } from '@/ds/components/Field';
-import { TextareaControl } from '@/ds/primitives/textarea-control';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { TextareaControl } from '../../primitives/textarea-control';
+import { Button } from '../Button';
+import { Field, FieldError } from '../Field';
 
 export interface CommentEditorProps {
   initialBody: string;

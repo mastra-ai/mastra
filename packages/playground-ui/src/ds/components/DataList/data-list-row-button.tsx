@@ -1,10 +1,10 @@
 import { forwardRef } from 'react';
 import type { ComponentPropsWithoutRef } from 'react';
+import { cn } from '../../../lib/utils';
+import { useFluidMenuItemRef } from '../../primitives/fluid-menu';
 import { useDataListRowWrapperContext } from './data-list-row-wrapper-context';
 import { dataListRowInteractiveStyles, dataListRowStyles } from './shared';
 import type { DataListRowSharedProps } from './shared';
-import { useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
-import { cn } from '@/lib/utils';
 
 export type DataListRowButtonProps = ComponentPropsWithoutRef<'button'> & DataListRowSharedProps;
 

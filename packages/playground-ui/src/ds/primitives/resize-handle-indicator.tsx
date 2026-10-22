@@ -1,6 +1,6 @@
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
-import { cn } from '@/lib/utils';
+import { cn } from '../../lib/utils';
 
 // line: gradient hairline, fits a visible container edge.
 // pill: small floating pill, for handles with no container around.

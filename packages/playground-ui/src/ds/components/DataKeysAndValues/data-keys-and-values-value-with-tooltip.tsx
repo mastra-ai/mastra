@@ -1,6 +1,6 @@
+import { cn } from '../../../lib/utils';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip';
 import { dataKeysAndValuesValueStyles } from './shared';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { cn } from '@/lib/utils';
 
 export interface DataKeysAndValuesValueWithTooltipProps {
   className?: string;

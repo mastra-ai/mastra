@@ -1,7 +1,7 @@
+import { cn } from '../../../lib/utils';
 import { useEnvironmentVariablesEditorContext } from './environment-variables-editor-context';
 import { EnvironmentVariablesEditorRow } from './environment-variables-editor-row';
 import type { EnvironmentVariablesEditorRowsProps } from './environment-variables-editor.types';
-import { cn } from '@/lib/utils';
 
 export function EnvironmentVariablesEditorRows({
   className,

@@ -4,8 +4,8 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { useEnvironmentVariablesEditor } from '../../../hooks/use-environment-variables-editor';
 import { EnvironmentVariablesEditor } from './environment-variables-editor';
-import { useEnvironmentVariablesEditor } from '@/hooks/use-environment-variables-editor';
 
 afterEach(() => {
   cleanup();

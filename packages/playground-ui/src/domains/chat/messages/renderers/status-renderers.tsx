@@ -5,8 +5,8 @@ import type {
   WarningRendererProps,
 } from '@mastra/react/ui';
 
+import { Notice } from '../../../../ds/components/Notice';
 import { TripwireNotice } from '../tripwire-notice';
-import { Notice } from '@/ds/components/Notice';
 
 export const ErrorStatusRenderer = ({ text }: ErrorRendererProps) => (
   <Notice variant="destructive" title="Error">

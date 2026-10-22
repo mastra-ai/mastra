@@ -1,5 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useEffect, useRef, useState } from 'react';
+import { Button } from '../Button';
+import type { TextButtonSize } from '../Button';
+import { Notice } from '../Notice';
 import {
   Dialog,
   DialogAction,
@@ -12,9 +15,6 @@ import {
   DialogTitle,
   DialogTrigger,
 } from './dialog';
-import { Button } from '@/ds/components/Button';
-import type { TextButtonSize } from '@/ds/components/Button';
-import { Notice } from '@/ds/components/Notice';
 
 function ConfirmationExample({
   holdSeconds = 1.5,

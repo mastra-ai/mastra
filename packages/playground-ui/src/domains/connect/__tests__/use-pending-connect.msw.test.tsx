@@ -6,10 +6,10 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { server } from '../../../test/msw-server';
 import { connectPromptSession, connectPromptStatusActive } from '../../chat/tools/__tests__/fixtures/connect-prompt';
 import type { UsePendingConnectOptions } from '../use-user-connect';
 import { usePendingConnect } from '../use-user-connect';
-import { server } from '@/test/msw-server';
 
 // The Nango frontend SDK opens real windows and websockets, so it is the one
 // boundary mocked beyond MSW — exactly how the platform dashboard tests it.

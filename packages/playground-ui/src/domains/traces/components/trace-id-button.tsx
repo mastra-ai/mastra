@@ -1,5 +1,5 @@
-import { DataPanel } from '@/ds/components/DataPanel';
-import type { DataPanelCopyIdProps } from '@/ds/components/DataPanel';
+import { DataPanel } from '../../../ds/components/DataPanel';
+import type { DataPanelCopyIdProps } from '../../../ds/components/DataPanel';
 
 export function TraceIdButton({
   id,

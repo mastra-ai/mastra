@@ -1,11 +1,11 @@
 import { useCallback, useContext } from 'react';
+import { Skeleton } from '../../../ds/components/Skeleton';
+import { Txt } from '../../../ds/components/Txt';
 import type { WorkflowRunContextType } from '../context/workflow-run-context';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { isWorkflowRunFinished } from '../utils';
 import type { WorkflowTriggerProps } from '../workflow/workflow-trigger';
 import { WorkflowTrigger } from '../workflow/workflow-trigger';
-import { Skeleton } from '@/ds/components/Skeleton';
-import { Txt } from '@/ds/components/Txt';
 
 export interface WorkflowRunDetailProps extends Omit<
   WorkflowTriggerProps,

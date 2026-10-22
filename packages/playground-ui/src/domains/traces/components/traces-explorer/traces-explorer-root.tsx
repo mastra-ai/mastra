@@ -1,6 +1,14 @@
 import { EntityType } from '@mastra/core/observability';
 import { useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import {
+  useFeedbackAvailable,
+  useSpanQueryAvailable,
+  useTraceQueryAvailable,
+  useTraceQueryDeltaPollingAvailable,
+  useTraceQueryDiscoveryAvailable,
+  useTraceQueryRootDurationAvailable,
+} from '../../../capabilities';
 import { resolveTraceQueryTimeRange } from '../../trace-query-filters';
 import {
   applyDate,
@@ -38,14 +46,6 @@ import type {
   TracesSelectionContextValue,
 } from './traces-explorer-context';
 import { TracesListProvider } from './traces-explorer-list-provider';
-import {
-  useFeedbackAvailable,
-  useSpanQueryAvailable,
-  useTraceQueryAvailable,
-  useTraceQueryDeltaPollingAvailable,
-  useTraceQueryDiscoveryAvailable,
-  useTraceQueryRootDurationAvailable,
-} from '@/domains/capabilities';
 
 export type TracesExplorerRootProps = {
   selection: TracesSelection;

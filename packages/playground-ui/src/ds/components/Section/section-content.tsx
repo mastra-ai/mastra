@@ -1,5 +1,5 @@
 import type { ComponentProps } from 'react';
-import { SettingsContainerLayout } from '@/ds/new/settings/settings-container';
+import { SettingsContainerLayout } from '../../new/settings/settings-container';
 
 export type SectionContentProps = ComponentProps<'div'>;
 

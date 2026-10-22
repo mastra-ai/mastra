@@ -3,10 +3,10 @@ import { makeSSOLoginRequest } from '@mastra/react/hooks/auth';
 import { LogInIcon, TimerOffIcon } from 'lucide-react';
 import { useState } from 'react';
 
-import { Button } from '@/ds/components/Button';
-import { EmptyState } from '@/ds/components/EmptyState';
-import type { EmptyStateProps } from '@/ds/components/EmptyState';
-import { toast } from '@/lib/toast';
+import { Button } from '../../../ds/components/Button';
+import { EmptyState } from '../../../ds/components/EmptyState';
+import type { EmptyStateProps } from '../../../ds/components/EmptyState';
+import { toast } from '../../../lib/toast';
 
 export type SessionExpiredProps = {
   variant?: EmptyStateProps['variant'];

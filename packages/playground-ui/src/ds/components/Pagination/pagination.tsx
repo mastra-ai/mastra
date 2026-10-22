@@ -2,15 +2,15 @@ import { useRender } from '@base-ui/react/use-render';
 import { ChevronLeft, ChevronRight, Ellipsis } from 'lucide-react';
 import { cloneElement, isValidElement, useMemo, useRef, useState } from 'react';
 import type { ComponentProps, MouseEvent, ReactElement } from 'react';
+import { FluidHoverHighlight } from '../../../components/fluid-hover-highlight';
+import { useFluidHover } from '../../../hooks/use-fluid-hover';
+import { cn } from '../../../lib/utils';
+import { Icon } from '../../icons/Icon';
+import { controlSizeClasses } from '../../primitives/control-size';
+import { raisedControlSurfaceStyle } from '../../primitives/form-element';
+import { controlStateColorTransition, focusRing } from '../../primitives/transitions';
 import { PaginationContext, usePaginationItemRef } from './pagination-context';
 import type { PaginationContextValue } from './pagination-context';
-import { FluidHoverHighlight } from '@/components/fluid-hover-highlight';
-import { Icon } from '@/ds/icons/Icon';
-import { controlSizeClasses } from '@/ds/primitives/control-size';
-import { raisedControlSurfaceStyle } from '@/ds/primitives/form-element';
-import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
-import { useFluidHover } from '@/hooks/use-fluid-hover';
-import { cn } from '@/lib/utils';
 
 export type PaginationProps = ComponentProps<'nav'>;
 

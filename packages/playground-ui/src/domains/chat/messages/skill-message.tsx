@@ -1,9 +1,9 @@
 import { BookOpen } from 'lucide-react';
 
+import { ActivityItem, SignalActivity } from '../../../ds/components/ai/activity';
+import { MarkdownRenderer } from '../../../ds/components/MarkdownRenderer';
+import { ScrollArea } from '../../../ds/components/ScrollArea';
 import type { SkillActivation } from './skill-activation';
-import { ActivityItem, SignalActivity } from '@/ds/components/ai/activity';
-import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
-import { ScrollArea } from '@/ds/components/ScrollArea';
 
 export function SkillMessage({ activation }: { activation: SkillActivation }) {
   const { name, arguments: args, instructions, feed } = activation;

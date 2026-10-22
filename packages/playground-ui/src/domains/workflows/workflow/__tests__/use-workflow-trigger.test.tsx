@@ -8,6 +8,7 @@ import type { ReactNode } from 'react';
 import { useContext } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { server } from '../../../../test/msw-server';
 import { WorkflowRunContext } from '../../context/workflow-run-context';
 import { WorkflowRunProvider } from '../../context/workflow-run-provider';
 import { useNextPerStep, useSuspendedSteps, useWaitingStepKey } from '../use-workflow-trigger';
@@ -21,7 +22,6 @@ import {
   successfulRunState,
   suspendedRunState,
 } from './fixtures/workflow-run-states';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 

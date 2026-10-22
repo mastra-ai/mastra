@@ -1,12 +1,12 @@
 import { Children, cloneElement, isValidElement } from 'react';
 import type { ComponentPropsWithoutRef, ElementType, ReactNode } from 'react';
+import { cn } from '../../../lib/utils';
+import { formatDate, formatTimestampPrecise } from '../../../utils/date-format';
+import type { DatePreset } from '../../../utils/date-format';
+import { getShortId } from '../../../utils/id';
+import { Checkbox } from '../Checkbox';
 import { dataListRowActionRevealStyles, dataListStickyStartStyles } from './shared';
 import type { DataListSticky } from './shared';
-import { Checkbox } from '@/ds/components/Checkbox';
-import { cn } from '@/lib/utils';
-import { formatDate, formatTimestampPrecise } from '@/utils/date-format';
-import type { DatePreset } from '@/utils/date-format';
-import { getShortId } from '@/utils/id';
 
 export type DataListCellProps = {
   children?: ReactNode;

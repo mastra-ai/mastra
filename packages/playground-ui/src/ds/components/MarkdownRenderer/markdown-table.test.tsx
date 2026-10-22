@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { Toaster, toast } from '../../../lib/toast';
 import { MarkdownRenderer } from './markdown-renderer';
-import { Toaster, toast } from '@/lib/toast';
 
 const table = '| Name | Value |\n| :--- | ---: |\n| **東京** | a\\|b `code` |';
 

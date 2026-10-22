@@ -1,6 +1,6 @@
 import { ExternalLinkIcon } from 'lucide-react';
-import { Button } from '@/ds/components/Button';
-import { EmptyState } from '@/ds/components/EmptyState';
+import { Button } from '../../../../ds/components/Button';
+import { EmptyState } from '../../../../ds/components/EmptyState';
 
 export const NoWorkflowsInfo = () => (
   <EmptyState

@@ -1,6 +1,15 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { ListFilterIcon } from 'lucide-react';
 import { useRef } from 'react';
+import { DataList, DataListSkeletonRows, TracesDataList, useDataListKeyboard } from '../../../ds/components/DataList';
+import type { DataListSort } from '../../../ds/components/DataList';
+import { splitColumns } from '../../../ds/components/DataList/shared';
+import { DropdownMenu } from '../../../ds/components/DropdownMenu';
+import { Txt } from '../../../ds/components/Txt/Txt';
+import { focusRing } from '../../../ds/primitives/transitions';
+import { formatCompactNumber, formatCost } from '../../../lib/cost';
+import { cn } from '../../../lib/utils';
+import { formatDuration } from '../../../utils/duration';
 import {
   DEFAULT_TRACE_COLUMN_PREFERENCES,
   TRACE_CUSTOM_COLUMN_LABELS,
@@ -12,15 +21,6 @@ import {
 import type { TraceColumnPreferences, TraceCustomColumn, TraceUsageSummary } from '../trace-list-columns';
 import { getInputPreview, getSpanDurationMs } from '../utils/span-utils';
 import { TraceErrorCell } from './trace-error-cell';
-import { DataList, DataListSkeletonRows, TracesDataList, useDataListKeyboard } from '@/ds/components/DataList';
-import type { DataListSort } from '@/ds/components/DataList';
-import { splitColumns } from '@/ds/components/DataList/shared';
-import { DropdownMenu } from '@/ds/components/DropdownMenu';
-import { Txt } from '@/ds/components/Txt/Txt';
-import { focusRing } from '@/ds/primitives/transitions';
-import { formatCompactNumber, formatCost } from '@/lib/cost';
-import { cn } from '@/lib/utils';
-import { formatDuration } from '@/utils/duration';
 
 export type TracesListViewTrace = {
   traceId: string;

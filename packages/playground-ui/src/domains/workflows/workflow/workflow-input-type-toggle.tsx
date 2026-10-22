@@ -1,9 +1,9 @@
 import { Braces, FormInput } from 'lucide-react';
-import { Txt } from '@/ds/components/Txt';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
-import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
-import { quietTextHover } from '@/ds/primitives/typography';
-import { cn } from '@/utils/cn';
+import { Txt } from '../../../ds/components/Txt';
+import { raisedSurfaceStyle } from '../../../ds/primitives/raised-surface';
+import { controlStateColorTransition, focusRing } from '../../../ds/primitives/transitions';
+import { quietTextHover } from '../../../ds/primitives/typography';
+import { cn } from '../../../utils/cn';
 
 export type WorkflowInputType = 'simple' | 'form' | 'json';
 

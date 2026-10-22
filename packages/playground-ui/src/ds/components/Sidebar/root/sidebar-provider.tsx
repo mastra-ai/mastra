@@ -1,8 +1,8 @@
 import React from 'react';
 import type { CSSProperties } from 'react';
+import type { LinkComponent } from '../../../types/link-component';
 import { SidebarContext, MobileDrawerContext } from './sidebar-context';
 import type { MobileDrawerContextValue, SidebarState } from './sidebar-context';
-import type { LinkComponent } from '@/ds/types/link-component';
 
 const SIDEBAR_STATE_KEY = 'sidebar:state';
 const SIDEBAR_WIDTH_KEY = 'sidebar:width';

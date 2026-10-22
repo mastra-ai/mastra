@@ -1,9 +1,9 @@
 import { useWorkflows } from '@mastra/react/hooks/workflows';
 import { useEffect } from 'react';
-import { Combobox } from '@/ds/components/Combobox';
-import type { ComboboxProps } from '@/ds/components/Combobox';
-import { useLinkComponent } from '@/lib/framework';
-import { toast } from '@/utils/toast';
+import { Combobox } from '../../../ds/components/Combobox';
+import type { ComboboxProps } from '../../../ds/components/Combobox';
+import { useLinkComponent } from '../../../lib/framework';
+import { toast } from '../../../utils/toast';
 
 export interface WorkflowComboboxProps {
   requestContext?: Record<string, any>;

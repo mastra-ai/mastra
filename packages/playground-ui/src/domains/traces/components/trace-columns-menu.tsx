@@ -1,10 +1,8 @@
 import { Columns3Icon, PlusIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
-import { TRACE_CUSTOM_COLUMN_FIELDS, TRACE_CUSTOM_COLUMN_LABELS, TRACE_USAGE_COLUMNS } from '../trace-list-columns';
-import type { TraceColumnPreferences, TraceCustomColumn, TraceOptionalColumn } from '../trace-list-columns';
-import { Button } from '@/ds/components/Button';
-import { Combobox } from '@/ds/components/Combobox';
+import { Button } from '../../../ds/components/Button';
+import { Combobox } from '../../../ds/components/Combobox';
 import {
   Dialog,
   DialogAction,
@@ -15,11 +13,13 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/ds/components/Dialog';
-import { DropdownMenu } from '@/ds/components/DropdownMenu';
-import { Field, FieldError, FieldLabel } from '@/ds/components/Field';
-import { Form } from '@/ds/components/Form';
-import { Txt } from '@/ds/components/Txt';
+} from '../../../ds/components/Dialog';
+import { DropdownMenu } from '../../../ds/components/DropdownMenu';
+import { Field, FieldError, FieldLabel } from '../../../ds/components/Field';
+import { Form } from '../../../ds/components/Form';
+import { Txt } from '../../../ds/components/Txt';
+import { TRACE_CUSTOM_COLUMN_FIELDS, TRACE_CUSTOM_COLUMN_LABELS, TRACE_USAGE_COLUMNS } from '../trace-list-columns';
+import type { TraceColumnPreferences, TraceCustomColumn, TraceOptionalColumn } from '../trace-list-columns';
 
 const EMPTY_KEYS: readonly string[] = [];
 

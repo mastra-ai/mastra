@@ -1,16 +1,16 @@
 import { useSpanDetail, useThreadHasOtherTraces } from '@mastra/react/hooks/traces';
 import { MessagesSquareIcon } from 'lucide-react';
 import type { ComponentProps, ReactNode } from 'react';
-import { SpanDataPanelView } from '@/domains/traces/components/span-data-panel-view';
-import { TraceDataPanel } from '@/domains/traces/components/trace-data-panel';
-import type { TraceDataPanelView } from '@/domains/traces/components/trace-data-panel-view';
-import { TraceMessagesPanel } from '@/domains/traces/components/trace-messages-panel';
-import { getTraceThreadId } from '@/domains/traces/components/trace-thread-context';
-import { TraceThreadPanel } from '@/domains/traces/components/trace-thread-panel';
-import { useTraceSpanNavigation } from '@/domains/traces/hooks/use-trace-span-navigation';
-import { Button } from '@/ds/components/Button';
-import { useLinkComponent } from '@/lib/framework';
-import type { LinkComponentPaths } from '@/lib/framework';
+import { Button } from '../../../ds/components/Button';
+import { useLinkComponent } from '../../../lib/framework';
+import type { LinkComponentPaths } from '../../../lib/framework';
+import { useTraceSpanNavigation } from '../hooks/use-trace-span-navigation';
+import { SpanDataPanelView } from './span-data-panel-view';
+import { TraceDataPanel } from './trace-data-panel';
+import type { TraceDataPanelView } from './trace-data-panel-view';
+import { TraceMessagesPanel } from './trace-messages-panel';
+import { getTraceThreadId } from './trace-thread-context';
+import { TraceThreadPanel } from './trace-thread-panel';
 
 type TraceDataPanelViewProps = ComponentProps<typeof TraceDataPanelView>;
 

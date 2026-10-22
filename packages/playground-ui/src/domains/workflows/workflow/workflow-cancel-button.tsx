@@ -1,5 +1,5 @@
 import { Loader2, Square } from 'lucide-react';
-import { Button } from '@/ds/components/Button';
+import { Button } from '../../../ds/components/Button';
 
 export interface WorkflowCancelButtonProps {
   status?: string;

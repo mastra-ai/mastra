@@ -1,10 +1,10 @@
 import { useContext, useState } from 'react';
 
+import { cn } from '../../../lib/utils';
+import { controlStateColorTransition } from '../../primitives/transitions';
 import { Txt } from '../Txt/Txt';
 import { AvatarSizeContext, avatarSizeClasses } from './avatar-size';
 import type { AvatarSize } from './avatar-size';
-import { controlStateColorTransition } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
 
 export type AvatarProps = {
   src?: string;

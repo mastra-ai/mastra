@@ -1,6 +1,6 @@
 import type { ComponentPropsWithoutRef } from 'react';
-import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { Txt } from '../Txt';
 
 export type DataListNoMatchProps = ComponentPropsWithoutRef<'div'> & {
   message?: string;

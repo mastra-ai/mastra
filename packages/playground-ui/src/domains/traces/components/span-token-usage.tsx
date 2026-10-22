@@ -1,9 +1,9 @@
 import type { InputTokenDetails, OutputTokenDetails, UsageStats } from '@mastra/core/observability';
 import { Fragment } from 'react';
+import { DataKeysAndValues } from '../../../ds/components/DataKeysAndValues';
+import { Txt } from '../../../ds/components/Txt';
+import { cn } from '../../../lib/utils';
 import { getTokenUsageView } from './span-token-usage.utils';
-import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
-import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/lib/utils';
 
 export type TokenUsage = UsageStats;
 

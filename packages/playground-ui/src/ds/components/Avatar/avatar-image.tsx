@@ -1,6 +1,6 @@
 import { Avatar as BaseAvatar } from '@base-ui/react/avatar';
 
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
 
 export type AvatarImageProps = Omit<BaseAvatar.Image.Props, 'className' | 'alt'> & {
   alt: string;

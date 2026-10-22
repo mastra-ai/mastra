@@ -1,9 +1,9 @@
 import { File, Folder } from 'lucide-react';
 import * as React from 'react';
+import { cn } from '../../../lib/utils';
+import { passwordManagerOptOutProps } from '../../primitives/password-manager-autofill';
+import { transitions } from '../../primitives/transitions';
 import { useTreeDepth } from './tree-context';
-import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
-import { transitions } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
 
 export interface TreeInputProps {
   type: 'file' | 'folder';

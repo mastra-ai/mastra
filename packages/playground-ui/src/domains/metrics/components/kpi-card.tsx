@@ -1,6 +1,6 @@
 import type { LucideIcon } from 'lucide-react';
-import { MetricsKpiCard } from '@/ds/components/MetricsKpiCard';
-import { cn } from '@/lib/utils';
+import { MetricsKpiCard } from '../../../ds/components/MetricsKpiCard';
+import { cn } from '../../../lib/utils';
 
 export type KpiCardProps = {
   label: string;

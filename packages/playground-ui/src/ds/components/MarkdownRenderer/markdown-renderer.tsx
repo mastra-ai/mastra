@@ -5,13 +5,13 @@ import type { Components, ExtraProps, Options } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remend from 'remend';
 
+import { cn } from '../../../lib/utils';
+import { CodeBlock } from '../CodeBlock';
 import { rehypeArriving } from './arriving';
 import { splitBlocks } from './blocks';
 import { MarkdownTable } from './markdown-table';
 import { remarkTableMarkdown } from './table-markdown';
 import { useSettledWords } from './use-settled';
-import { CodeBlock } from '@/ds/components/CodeBlock';
-import { cn } from '@/lib/utils';
 
 import './markdown-renderer.css';
 

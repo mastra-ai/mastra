@@ -1,4 +1,4 @@
-import { dialogSurfaceStyle } from '@/ds/primitives/raised-surface';
+import { dialogSurfaceStyle } from '../../primitives/raised-surface';
 
 export type DialogSize = 'sm' | 'md' | 'lg' | 'xl' | 'full';
 

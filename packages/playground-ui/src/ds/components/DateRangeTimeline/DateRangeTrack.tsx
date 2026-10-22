@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import type { PointerEvent, RefObject } from 'react';
+import { cn } from '../../../lib/utils';
 import { DateRangeHandle } from './DateRangeHandle';
 import { DateRangeSelection } from './DateRangeSelection';
 import { DateRangeTrackGrid } from './DateRangeTrackGrid';
@@ -9,7 +10,6 @@ import { useDateRangeWheelZoom } from './hooks/useDateRangeWheelZoom';
 import type { TimelineIndexRange, TimelineState } from './lib/date-range-timeline';
 import { createDateRangeGridMarkers } from './lib/date-range-timeline-grid';
 import { createDateRangeTrackModel } from './lib/date-range-timeline-view-model';
-import { cn } from '@/lib/utils';
 
 interface DateRangeTrackProps {
   wheelTargetRef: RefObject<HTMLDivElement | null>;

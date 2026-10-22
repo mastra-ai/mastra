@@ -2,31 +2,31 @@ import type { GetWorkflowResponse } from '@mastra/client-js';
 import { useWorkflow } from '@mastra/react/hooks/workflows';
 import { Eye } from 'lucide-react';
 import { useContext, useEffect } from 'react';
-import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
-import type { MessageMetadata } from '@/domains/chat';
+import type { MessageMetadata } from '../..';
+import { ToolCallMono } from '../../../../ds/components/ai/tool-call';
 
-import { LoadingBadge } from '@/domains/chat/components/loading-badge';
-import { NetworkChoiceMetadataDialogTrigger } from '@/domains/chat/components/network-choice-metadata-dialog';
-import { SectionLabel } from '@/domains/chat/components/section-label';
-import { awaitsToolApproval } from '@/domains/chat/tools/badges/awaits-tool-approval';
-import type { ToolApprovalRequest } from '@/domains/chat/tools/badges/tool-approval-badge';
-import { ToolApprovalBadge } from '@/domains/chat/tools/badges/tool-approval-badge';
-import { useEntityRequestContext } from '@/domains/request-context/hooks/use-entity-request-context';
+import { Button } from '../../../../ds/components/Button';
+import { CodeEditor } from '../../../../ds/components/CodeEditor';
+import { WorkflowIcon } from '../../../../ds/icons/WorkflowIcon';
+import { useLinkComponent } from '../../../../lib/framework';
+import { useEntityRequestContext } from '../../../request-context/hooks/use-entity-request-context';
 import {
   WorkflowGraph,
   WorkflowRunContext,
   WorkflowSelectedStepProvider,
   WorkflowStepDetailProvider,
   useWorkflowStepDetail,
-} from '@/domains/workflows';
-import { WorkflowStepDetailContent } from '@/domains/workflows/components/workflow-step-detail';
-import { PlaygroundWorkflowRunProvider } from '@/domains/workflows/context/playground-workflow-run-provider';
-import type { WorkflowRunStreamResult } from '@/domains/workflows/context/workflow-run-context';
-import { ToolCallMono } from '@/ds/components/ai/tool-call';
-import { Button } from '@/ds/components/Button';
-import { CodeEditor } from '@/ds/components/CodeEditor';
-import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
-import { useLinkComponent } from '@/lib/framework';
+} from '../../../workflows';
+import { WorkflowStepDetailContent } from '../../../workflows/components/workflow-step-detail';
+import { PlaygroundWorkflowRunProvider } from '../../../workflows/context/playground-workflow-run-provider';
+import type { WorkflowRunStreamResult } from '../../../workflows/context/workflow-run-context';
+import { LoadingBadge } from '../../components/loading-badge';
+import { NetworkChoiceMetadataDialogTrigger } from '../../components/network-choice-metadata-dialog';
+import { SectionLabel } from '../../components/section-label';
+import { awaitsToolApproval } from './awaits-tool-approval';
+import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
+import type { ToolApprovalRequest } from './tool-approval-badge';
+import { ToolApprovalBadge } from './tool-approval-badge';
 
 export interface WorkflowBadgeProps extends Omit<ToolApprovalRequest, 'toolCalled'> {
   workflowId: string;

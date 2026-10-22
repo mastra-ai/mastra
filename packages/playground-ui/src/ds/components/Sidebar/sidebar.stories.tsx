@@ -18,8 +18,12 @@ import {
   Wrench,
 } from 'lucide-react';
 import { useRef, useState } from 'react';
-import { Sidebar, useSidebar } from '.';
-import { Avatar } from '@/ds/components/Avatar';
+import { KeyboardShortcutsProvider } from '../../../lib/keyboard/keyboard-shortcuts-context';
+import { useKeydown } from '../../../lib/keyboard/use-keydown';
+import { cn } from '../../../lib/utils';
+import { LogsIcon, MetricsIcon, TraceIcon } from '../../icons';
+import { focusRing } from '../../primitives/transitions';
+import { Avatar } from '../Avatar';
 import {
   Dialog,
   DialogBody,
@@ -28,16 +32,12 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-} from '@/ds/components/Dialog';
-import { DropdownMenu } from '@/ds/components/DropdownMenu';
-import { Input } from '@/ds/components/Input';
-import { LogoWithoutText } from '@/ds/components/Logo';
-import { TooltipProvider } from '@/ds/components/Tooltip';
-import { LogsIcon, MetricsIcon, TraceIcon } from '@/ds/icons';
-import { focusRing } from '@/ds/primitives/transitions';
-import { KeyboardShortcutsProvider } from '@/lib/keyboard/keyboard-shortcuts-context';
-import { useKeydown } from '@/lib/keyboard/use-keydown';
-import { cn } from '@/lib/utils';
+} from '../Dialog';
+import { DropdownMenu } from '../DropdownMenu';
+import { Input } from '../Input';
+import { LogoWithoutText } from '../Logo';
+import { TooltipProvider } from '../Tooltip';
+import { Sidebar, useSidebar } from '.';
 
 const meta: Meta<typeof Sidebar> = {
   title: 'Layout/Sidebar',

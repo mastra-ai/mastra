@@ -1,12 +1,12 @@
 import { CheckIcon } from 'lucide-react';
 import { forwardRef } from 'react';
 import type { ReactNode } from 'react';
+import { cn } from '../../../lib/utils';
+import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '../../primitives/fluid-menu';
+import { ComboboxPrimitive, comboboxStyles } from '../Combobox';
+import { Spinner } from '../Spinner/spinner';
 import { useFilterBarContext } from './filter-bar-context';
 import type { FilterBarOption } from './types';
-import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
-import { Spinner } from '@/ds/components/Spinner/spinner';
-import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
-import { cn } from '@/lib/utils';
 
 export type FilterBarOptionListProps<T> = {
   getKey: (option: T) => string;

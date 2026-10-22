@@ -1,9 +1,9 @@
 import { SpanType } from '@mastra/core/observability';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { TooltipProvider } from '../../../ds/components/Tooltip';
 import type { LightSpanRecord } from '../types';
 import { TraceDataPanelView } from './trace-data-panel-view';
-import { TooltipProvider } from '@/ds/components/Tooltip';
 
 const traceStart = new Date('2026-06-01T10:00:00.000Z').getTime();
 const at = (ms: number) => new Date(traceStart + ms).toISOString();

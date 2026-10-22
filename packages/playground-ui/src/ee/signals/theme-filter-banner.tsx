@@ -1,11 +1,11 @@
 import type { SignalCatalogEntry } from '@mastra/client-js';
 import { X, Eye } from 'lucide-react';
+import { Button } from '../../ds/components/Button';
+import { Txt } from '../../ds/components/Txt';
 import { getSignalColor } from './signal-colors';
 import { signalLabel } from './signal-formatting';
 import type { ThemeSelection } from './theme-drilldown-data';
 import { useTraceIntelligence } from './use-trace-intelligence';
-import { Button } from '@/ds/components/Button';
-import { Txt } from '@/ds/components/Txt';
 
 function selectionLabel(catalog: readonly SignalCatalogEntry[], selection: ThemeSelection) {
   return `${signalLabel(catalog, selection.signalName)} · ${selection.kind === 'theme' ? selection.label : 'Noise'}`;

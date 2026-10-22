@@ -2,13 +2,13 @@ import { NumberField as NumberFieldPrimitive } from '@base-ui/react/number-field
 import { MinusIcon, PlusIcon } from 'lucide-react';
 import * as React from 'react';
 
-import { buttonVariants } from '@/ds/components/Button/Button';
-import { inputGroupClassName, inputGroupControlClassName } from '@/ds/components/InputGroup/input-group';
-import { Icon } from '@/ds/icons/Icon';
-import { ControlSizeContext, controlHeight } from '@/ds/primitives/control-size';
-import type { ControlSize } from '@/ds/primitives/control-size';
-import { textFieldAutofillProps } from '@/ds/primitives/password-manager-autofill';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { Icon } from '../../icons/Icon';
+import { ControlSizeContext, controlHeight } from '../../primitives/control-size';
+import type { ControlSize } from '../../primitives/control-size';
+import { textFieldAutofillProps } from '../../primitives/password-manager-autofill';
+import { buttonVariants } from '../Button/Button';
+import { inputGroupClassName, inputGroupControlClassName } from '../InputGroup/input-group';
 
 type InputNumberProps = Omit<NumberFieldPrimitive.Root.Props, 'className'> & {
   className?: string;

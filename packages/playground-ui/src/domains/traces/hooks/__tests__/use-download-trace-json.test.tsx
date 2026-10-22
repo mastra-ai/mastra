@@ -32,7 +32,7 @@ type ToastPromiseArgs = {
 // Keep the toast side effect out of the test, but still consume the promise so its
 // rejection is handled and `isPending` can settle — and record what the user is told.
 const toastCalls = vi.hoisted(() => [] as ToastPromiseArgs[]);
-vi.mock('@/lib/toast', () => ({
+vi.mock('../../../../lib/toast', () => ({
   toast: {
     promise: (args: ToastPromiseArgs) => {
       toastCalls.push(args);

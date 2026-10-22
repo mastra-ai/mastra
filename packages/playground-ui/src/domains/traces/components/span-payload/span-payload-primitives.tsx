@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../../../../ds/components/Collapsible';
+import { DisclosureChevron } from '../../../../ds/components/DisclosureChevron';
+import { MarkdownRenderer } from '../../../../ds/components/MarkdownRenderer';
+import { Txt } from '../../../../ds/components/Txt';
 import { SpanPayloadTool } from './span-payload-tool';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
-import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
-import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
-import { Txt } from '@/ds/components/Txt';
 
 /** Small-caps label above a field of a rich payload. */
 export function SpanPayloadLabel({ children }: { children: ReactNode }) {

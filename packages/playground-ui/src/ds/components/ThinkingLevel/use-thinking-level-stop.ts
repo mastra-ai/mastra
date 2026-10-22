@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import type { ChangeEvent } from 'react';
 
-import { focusRing } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { focusRing } from '../../primitives/transitions';
 
 export interface ThinkingLevelOption<T extends string = string> {
   value: T;

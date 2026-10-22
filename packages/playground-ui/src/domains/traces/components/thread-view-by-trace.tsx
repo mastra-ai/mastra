@@ -3,21 +3,21 @@ import { traceSpansQueryOptions, useTraceSpans } from '@mastra/react/hooks/trace
 import { useQueries } from '@tanstack/react-query';
 import { ExternalLinkIcon, MessageSquareReplyIcon, MessageSquareTextIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { TraceScoresTab } from '@/domains/scores';
-import { ThreadTrace, useThreadTraceRow } from '@/domains/traces/components/thread-trace';
-import type { ThreadTraceSelectedSpan } from '@/domains/traces/components/thread-trace';
+import { Button } from '../../../ds/components/Button';
+import { Txt } from '../../../ds/components/Txt';
+import { Icon } from '../../../ds/icons/Icon';
 
-import { ThreadViewSkeleton } from '@/domains/traces/components/thread-view-skeleton';
-import { TraceFeedbackTab } from '@/domains/traces/components/trace-feedback-tab';
-import { TraceThreadItemView } from '@/domains/traces/components/trace-thread-item-view';
-import { TracesErrorContent } from '@/domains/traces/components/traces-error-content';
-import { useTracesListSource } from '@/domains/traces/hooks/use-traces-list-source';
-import type { UseTracesListSourceArgs } from '@/domains/traces/hooks/use-traces-list-source';
-import { Button } from '@/ds/components/Button';
-import { Txt } from '@/ds/components/Txt';
-import { Icon } from '@/ds/icons/Icon';
-import { ScorersIcon } from '@/ds/icons/ScorersIcon';
-import { useLinkComponent } from '@/lib/framework';
+import { ScorersIcon } from '../../../ds/icons/ScorersIcon';
+import { useLinkComponent } from '../../../lib/framework';
+import { TraceScoresTab } from '../../scores';
+import { useTracesListSource } from '../hooks/use-traces-list-source';
+import type { UseTracesListSourceArgs } from '../hooks/use-traces-list-source';
+import { ThreadTrace, useThreadTraceRow } from './thread-trace';
+import type { ThreadTraceSelectedSpan } from './thread-trace';
+import { ThreadViewSkeleton } from './thread-view-skeleton';
+import { TraceFeedbackTab } from './trace-feedback-tab';
+import { TraceThreadItemView } from './trace-thread-item-view';
+import { TracesErrorContent } from './traces-error-content';
 
 // `queryTraces` requires a time range; start at the epoch so it covers the whole thread, like the legacy endpoint.
 const THREAD_WINDOW_FROM = new Date(0).toISOString();

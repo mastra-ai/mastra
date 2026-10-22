@@ -4,8 +4,8 @@ import { EditorView } from '@codemirror/view';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { Toaster } from '../../../../lib/toast';
 import { CodeEditor } from '../code-editor';
-import { Toaster } from '@/lib/toast';
 
 const codeMirrorProps = vi.hoisted(() => [] as Array<{ extensions: unknown[] }>);
 

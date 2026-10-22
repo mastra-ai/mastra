@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
+import { SignalActivity } from '../../../ds/components/ai/activity';
 import { parseSystemReminder } from './system-reminder-utils';
-import { SignalActivity } from '@/ds/components/ai/activity';
 
 export interface SystemReminderBadgeProps {
   text: string;

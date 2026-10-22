@@ -1,9 +1,9 @@
 import { Loader2 } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { Button } from '@/ds/components/Button';
-import type { ButtonProps } from '@/ds/components/Button';
-import { Icon } from '@/ds/icons/Icon';
-import { cn } from '@/utils/cn';
+import { Button } from '../../../ds/components/Button';
+import type { ButtonProps } from '../../../ds/components/Button';
+import { Icon } from '../../../ds/icons/Icon';
+import { cn } from '../../../utils/cn';
 
 export type FormSubmitRowProps = {
   isSubmitLoading?: boolean;

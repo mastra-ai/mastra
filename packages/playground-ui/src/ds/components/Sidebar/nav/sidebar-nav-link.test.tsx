@@ -4,12 +4,12 @@ import { Tooltip as TooltipPrimitive } from '@base-ui/react/tooltip';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import type { LinkComponentProps } from '../../../types/link-component';
+import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '../../Tooltip';
 import { useMobileDrawer } from '../root/sidebar-context';
 import { SidebarProvider } from '../root/sidebar-provider';
 import { SidebarNavHeader } from './sidebar-nav-header';
 import { SidebarNavLink } from './sidebar-nav-link';
-import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from '@/ds/components/Tooltip';
-import type { LinkComponentProps } from '@/ds/types/link-component';
 
 const DrawerToggle = () => {
   const { openMobile, setOpenMobile } = useMobileDrawer();

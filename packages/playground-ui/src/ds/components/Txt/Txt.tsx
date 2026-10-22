@@ -1,9 +1,9 @@
 import { useRender } from '@base-ui/react/use-render';
 import type { ComponentPropsWithoutRef, HTMLAttributes, Ref } from 'react';
 
-import { textStyle } from '@/ds/primitives/text';
-import type { TextStyleProps } from '@/ds/primitives/text';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { textStyle } from '../../primitives/text';
+import type { TextStyleProps } from '../../primitives/text';
 
 type TextElement = 'h1' | 'h2' | 'h3' | 'h4' | 'h5' | 'h6' | 'p' | 'span' | 'label' | 'strong' | 'b' | 'time';
 

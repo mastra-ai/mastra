@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
-import { Tab, TabList, Tabs } from '@/ds/components/Tabs';
-import type { TabProps } from '@/ds/components/Tabs';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { Tab, TabList, Tabs } from '../Tabs';
+import type { TabProps } from '../Tabs';
 
 export type MetricsCardTabsProps<T extends string> = {
   value: T;

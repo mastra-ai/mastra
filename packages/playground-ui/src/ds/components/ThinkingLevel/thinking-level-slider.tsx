@@ -1,7 +1,7 @@
+import { cn } from '../../../lib/utils';
+import { Txt } from '../Txt';
 import { useThinkingLevelStop, invisibleRangeInputClassName } from './use-thinking-level-stop';
 import type { ThinkingLevelOption } from './use-thinking-level-stop';
-import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/lib/utils';
 
 export interface ThinkingLevelSliderProps<T extends string> {
   options: readonly ThinkingLevelOption<T>[];

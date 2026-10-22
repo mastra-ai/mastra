@@ -1,18 +1,18 @@
 import { useState } from 'react';
 import type { CSSProperties } from 'react';
+import { cn } from '../../../../../utils/cn';
+import { raisedSurfaceStyle, surfaceStateLayerStyle } from '../../../../primitives/raised-surface';
+import { ActivityWick } from '../../../Activity';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../../../Collapsible';
+import { DisclosureChevron } from '../../../DisclosureChevron';
+import { Shimmer } from '../../../Shimmer';
+import { Txt } from '../../../Txt';
 import type { WorkflowCardDisplayStatus, WorkflowStepCardViewProps } from '../../types';
 import { WorkflowTiming } from '../timing/workflow-timing';
 import { getNodeIndicators } from '../workflow-card-badge-utils';
 import { getWorkflowCardBadge } from '../workflow-card-kind';
 import { WorkflowClock } from '../workflow-clock';
 import { WorkflowTypeBadge } from '../workflow-type-badge';
-import { ActivityWick } from '@/ds/components/Activity';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
-import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
-import { Shimmer } from '@/ds/components/Shimmer';
-import { Txt } from '@/ds/components/Txt';
-import { raisedSurfaceStyle, surfaceStateLayerStyle } from '@/ds/primitives/raised-surface';
-import { cn } from '@/utils/cn';
 
 type ReportedStatus = NonNullable<WorkflowCardDisplayStatus>;
 

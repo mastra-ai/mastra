@@ -1,11 +1,11 @@
 import { format, isValid, parse, startOfDay } from 'date-fns';
 import { Check } from 'lucide-react';
 import { useId, useState } from 'react';
-import { Button } from '@/ds/components/Button/Button';
-import { DatePicker, TimePicker } from '@/ds/components/DateTimePicker';
-import { Field, FieldError } from '@/ds/components/Field';
-import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { Button } from '../Button/Button';
+import { DatePicker, TimePicker } from '../DateTimePicker';
+import { Field, FieldError } from '../Field';
+import { Txt } from '../Txt';
 
 function formatDays(ms: number): string {
   const days = Math.round(ms / (24 * 60 * 60 * 1000));

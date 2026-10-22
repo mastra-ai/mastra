@@ -1,10 +1,10 @@
 import { XAxis, YAxis } from 'recharts';
+import { CHART_LABEL_COLOR } from '../tokens';
 import { chartYTickCount, niceYTicks, pickTimeTicks } from './chart-axes';
 import type { ChartSize, ChartXLabels } from './chart-axes';
 import { CHART_AXIS_FONT_SIZE, X_AXIS_HEIGHT } from './chart-layout';
 import { ChartTimeTick } from './chart-time-tick';
 import type { ChartTimeTickProps } from './chart-time-tick';
-import { CHART_LABEL_COLOR } from '@/ds/tokens';
 
 /** A chart's height: pixels, or `fill` to grow with its parent (a flex column, e.g. a card). */
 export type ChartHeight = number | 'fill';

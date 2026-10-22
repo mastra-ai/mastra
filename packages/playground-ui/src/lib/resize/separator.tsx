@@ -1,7 +1,7 @@
 import { Separator } from 'react-resizable-panels';
 import type { SeparatorProps } from 'react-resizable-panels';
-import { ResizeHandleIndicator } from '@/ds/primitives/resize-handle-indicator';
-import { cn } from '@/lib/utils';
+import { ResizeHandleIndicator } from '../../ds/primitives/resize-handle-indicator';
+import { cn } from '../utils';
 
 export type PanelSeparatorProps = Omit<SeparatorProps, 'children'> & {
   variant?: 'line' | 'pill';

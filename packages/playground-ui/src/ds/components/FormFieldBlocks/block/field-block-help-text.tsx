@@ -1,4 +1,4 @@
-import { Txt } from '@/ds/components/Txt';
+import { Txt } from '../../Txt';
 export type FieldBlockHelpTextProps = {
   children?: React.ReactNode;
 };

@@ -9,6 +9,8 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { Toaster, toast } from '../../../../lib/toast';
+import { server } from '../../../../test/msw-server';
 import { AddDatasetItemDialog } from '../add-dataset-item-dialog';
 import type { AddDatasetItemDialogProps, CreateDatasetDialogRenderProps } from '../add-dataset-item-dialog';
 import {
@@ -23,13 +25,11 @@ import {
   weatherAgentDataset,
 } from './fixtures/add-dataset-item';
 import { buildListDatasetsResponse } from './fixtures/datasets';
-import { Toaster, toast } from '@/lib/toast';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 
 // CodeMirror doesn't run in jsdom: a textarea keeps the editor's value, change and accessible name.
-vi.mock('@/ds/components/CodeEditor', () => ({
+vi.mock('../../../../ds/components/CodeEditor', () => ({
   CodeEditor: ({
     value,
     onChange,

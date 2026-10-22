@@ -1,8 +1,8 @@
 import { X } from 'lucide-react';
 
-import { Button } from '@/ds/components/Button';
-import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { Button } from '../Button';
+import { Txt } from '../Txt';
 
 export interface CommentQuoteProps {
   authorName?: string;

@@ -2,6 +2,7 @@ import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
 
+import { cn } from '../../../lib/utils';
 import {
   deprecatedErrorAria,
   fieldErrorRim,
@@ -9,11 +10,10 @@ import {
   resolveFieldVariant,
   sharedFormElementDisabledStyle,
   unstyledFormElementStyle,
-} from '@/ds/primitives/form-element';
-import type { DeprecatedFilledVariant } from '@/ds/primitives/form-element';
-import { TextareaControl } from '@/ds/primitives/textarea-control';
-import { controlStateColorTransition } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
+} from '../../primitives/form-element';
+import type { DeprecatedFilledVariant } from '../../primitives/form-element';
+import { TextareaControl } from '../../primitives/textarea-control';
+import { controlStateColorTransition } from '../../primitives/transitions';
 
 const textareaVariants = cva(
   cn(

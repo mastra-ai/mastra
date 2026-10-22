@@ -5,12 +5,12 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { http, HttpResponse } from 'msw';
 import { useContext } from 'react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { server } from '../../../../test/msw-server';
 import { completedChunks } from '../../context/__tests__/fixtures/workflow-stream';
 import { WorkflowRunContext } from '../../context/workflow-run-context';
 import { WorkflowRunProvider } from '../../context/workflow-run-provider';
 import { WorkflowTrigger } from '../workflow-trigger';
 import { twoStepWorkflow } from './fixtures/workflow-debug-step-controls';
-import { server } from '@/test/msw-server';
 
 const TRIGGER_PROPS = {
   requestContext: {},

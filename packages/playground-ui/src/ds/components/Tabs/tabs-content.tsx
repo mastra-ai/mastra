@@ -1,8 +1,8 @@
 import { Tabs as BaseTabs } from '@base-ui/react/tabs';
 import { useContext, useEffect, useState } from 'react';
+import { cn } from '../../../lib/utils';
+import { focusRing } from '../../primitives/transitions';
 import { TabsContext } from './tabs-context';
-import { focusRing } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
 
 export type TabContentProps = {
   children: React.ReactNode;

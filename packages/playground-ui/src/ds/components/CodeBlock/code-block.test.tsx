@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { TooltipProvider } from '../Tooltip';
 import { CodeBlock } from './code-block';
 
-vi.mock('@/lib/toast', () => ({
+vi.mock('../../../lib/toast', () => ({
   toast: { success: vi.fn(), error: vi.fn() },
 }));
 

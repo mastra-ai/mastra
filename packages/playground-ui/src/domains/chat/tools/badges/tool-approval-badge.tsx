@@ -1,8 +1,8 @@
+import { ToolApprovalActions, ToolApprovalStatus } from '../../../../ds/components/ai/tool-approval';
 import { BadgeWrapper } from '../../components/badge-wrapper';
 import type { BadgeWrapperProps } from '../../components/badge-wrapper';
 import { useOptionalToolCall } from '../../context/tool-call-context';
 import { awaitsToolApproval } from './awaits-tool-approval';
-import { ToolApprovalActions, ToolApprovalStatus } from '@/ds/components/ai/tool-approval';
 
 export interface ToolApprovalRequest {
   toolCallId: string;

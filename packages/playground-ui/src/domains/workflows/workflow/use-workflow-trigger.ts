@@ -3,6 +3,7 @@ import { useCallback, useContext, useMemo } from 'react';
 import { parse } from 'superjson';
 import { z } from 'zod';
 
+import { jsonSchemaToZodRuntime } from '../../../lib/form/json-schema-to-zod-runtime';
 import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import {
@@ -17,7 +18,6 @@ import {
 } from './utils';
 import { WORKFLOW_STEP_NODE_TYPE } from './workflow-step-node-utils';
 import type { ResumeStepParams } from './workflow-suspended-steps';
-import { jsonSchemaToZodRuntime } from '@/lib/form/json-schema-to-zod-runtime';
 
 export interface SuspendedStep {
   stepId: string;

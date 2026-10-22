@@ -1,3 +1,6 @@
+import { MetricsCard } from '../../../ds/components/MetricsCard';
+import type { MetricsLineChartSeries } from '../../../ds/components/MetricsLineChart';
+import { MetricsLineChart } from '../../../ds/components/MetricsLineChart';
 import { useMetricsScores } from '../hooks/use-metrics-scores';
 import type { ScorerAverage } from '../hooks/use-metrics-scores';
 import { BUCKET_AXIS } from '../lib/chart-axis';
@@ -5,9 +8,6 @@ import { CHART_COLORS } from '../lib/chart-colors';
 import { ChartArea } from './chart-area';
 import { ChartCard } from './chart-card';
 import { ChartCardError } from './chart-card-error';
-import { MetricsCard } from '@/ds/components/MetricsCard';
-import type { MetricsLineChartSeries } from '@/ds/components/MetricsLineChart';
-import { MetricsLineChart } from '@/ds/components/MetricsLineChart';
 
 /** Scores aren't problems, so no warm hues; past five scorers the colors repeat. */
 const SCORER_COLORS = [

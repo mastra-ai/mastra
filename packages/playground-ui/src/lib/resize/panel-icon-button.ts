@@ -1,6 +1,6 @@
-import { controlStateColorTransition } from '@/ds/primitives/transitions';
-import { quietTextHover } from '@/ds/primitives/typography';
-import { cn } from '@/lib/utils';
+import { controlStateColorTransition } from '../../ds/primitives/transitions';
+import { quietTextHover } from '../../ds/primitives/typography';
+import { cn } from '../utils';
 
 // Ghost icon button shared by the collapsed-panel hint (desktop) and the
 // panel drawer trigger (mobile), so both edges read as the same affordance.

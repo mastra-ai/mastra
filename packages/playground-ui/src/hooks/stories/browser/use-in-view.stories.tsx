@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useRef } from 'react';
 import { HookDemo } from '../../../../.storybook/fixtures/hooks/hook-demo';
-import { Txt } from '@/ds/components/Txt';
-import { useInView } from '@/hooks/use-in-view';
+import { Txt } from '../../../ds/components/Txt';
+import { useInView } from '../../use-in-view';
 
 function InViewDemo() {
   const root = useRef<HTMLDivElement>(null);

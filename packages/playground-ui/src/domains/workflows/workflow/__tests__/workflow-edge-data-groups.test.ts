@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
+import type { WorkflowDataEdgeModel } from '../../../../ds/components/Workflow';
 import { groupWorkflowEdgeData } from '../data/workflow-edge-data-groups';
-import type { WorkflowDataEdgeModel } from '@/ds/components/Workflow';
 
 const parallelEdges: WorkflowDataEdgeModel[] = [
   { id: 'prepare-left', source: 'prepare', target: 'left', data: { previousStepId: 'prepare' } },

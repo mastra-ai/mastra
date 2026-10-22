@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
-import { SkeletonText } from '@/ds/components/Skeleton';
-import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { SkeletonText } from '../Skeleton';
+import { Txt } from '../Txt';
 
 /**
  * Bottom row under a hairline: one line of context on the left (e.g. "1.3K server errors")

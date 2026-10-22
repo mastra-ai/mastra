@@ -1,11 +1,11 @@
 import { CheckIcon } from 'lucide-react';
-import type { ConnectPromptPayload } from '@/domains/connect';
-import { isConnectPromptPayload, ProviderLogo, usePendingConnect } from '@/domains/connect';
-import { Button } from '@/ds/components/Button';
-import { DataList } from '@/ds/components/DataList';
-import { Notice } from '@/ds/components/Notice';
-import { Txt } from '@/ds/components/Txt';
-import { Icon } from '@/ds/icons/Icon';
+import { Button } from '../../../ds/components/Button';
+import { DataList } from '../../../ds/components/DataList';
+import { Notice } from '../../../ds/components/Notice';
+import { Txt } from '../../../ds/components/Txt';
+import { Icon } from '../../../ds/icons/Icon';
+import type { ConnectPromptPayload } from '../../connect';
+import { isConnectPromptPayload, ProviderLogo, usePendingConnect } from '../../connect';
 
 export { CONNECT_PROMPT_TOOL_NAME } from './connect-prompt-tool-id';
 

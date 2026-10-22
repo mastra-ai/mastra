@@ -1,9 +1,9 @@
 import { Switch as SwitchPrimitive } from '@base-ui/react/switch';
 import * as React from 'react';
 
-import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
-import { focusRingOffset } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { focusRingOffset } from '../../primitives/transitions';
+import { keepOwnAccessibleName } from '../Field/field-control-aria';
 import './switch.css';
 
 type SwitchProps = Omit<SwitchPrimitive.Root.Props, 'className'> & {

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { createContext, useContext, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import type { UseFormReturn } from 'react-hook-form';
 import { z } from 'zod';
+import type { ButtonProps } from '../../ds/components/Button';
 import { AutoForm } from './auto-form';
 import { FormSubmitRow } from './components/form-submit-row';
 import type { FormSubmitRowProps } from './components/form-submit-row';
@@ -9,7 +10,6 @@ import { ROOT_FIELD_KEY } from './field-context';
 import { isEmptyZodObject } from './is-empty-zod-object';
 import { CustomZodProvider } from './zod-provider';
 import { getShape } from './zod-provider/compat';
-import type { ButtonProps } from '@/ds/components/Button';
 
 interface DynamicFormProps {
   schema: any;

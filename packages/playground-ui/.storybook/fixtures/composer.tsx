@@ -1,7 +1,7 @@
 import { ArrowUp, Hammer, Map, Mic, Paperclip, Square, Zap } from 'lucide-react';
 import { useRef, useState } from 'react';
-import { Button } from '@/ds/components/Button';
-import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
+import { Button } from '../../src/ds/components/Button';
+import { ButtonsGroup } from '../../src/ds/components/ButtonsGroup';
 import {
   Composer,
   ComposerActions,
@@ -9,9 +9,9 @@ import {
   ComposerInput,
   ComposerToneLabel,
   ComposerRing,
-} from '@/ds/components/Composer';
-import type { ComposerInputProps, ComposerTone } from '@/ds/components/Composer';
-import { Select, SelectContent, SelectItem, SelectTrigger } from '@/ds/components/Select';
+} from '../../src/ds/components/Composer';
+import type { ComposerInputProps, ComposerTone } from '../../src/ds/components/Composer';
+import { Select, SelectContent, SelectItem, SelectTrigger } from '../../src/ds/components/Select';
 
 const modes = [
   { id: 'build', label: 'Build', Icon: Hammer, tone: 'green' },

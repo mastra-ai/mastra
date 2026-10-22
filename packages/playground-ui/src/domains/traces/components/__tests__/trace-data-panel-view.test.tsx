@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import '@/test/inert-resize-observer';
+import '../../../../test/inert-resize-observer';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render as renderUI, screen, waitFor, within } from '@testing-library/react';
@@ -8,11 +8,11 @@ import { setupServer } from 'msw/node';
 import type { ReactNode } from 'react';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { installHighlightApi } from '../../../../test/highlight-api';
+import type { HighlightApiHarness } from '../../../../test/highlight-api';
 import { TraceDataPanelView } from '../trace-data-panel-view';
 import type { TraceDataPanelViewProps } from '../trace-data-panel-view';
 import { deepTraceFixture, nestedSpanFixture, rootSpanFixture } from './fixtures/trace-data-panel-view';
-import { installHighlightApi } from '@/test/highlight-api';
-import type { HighlightApiHarness } from '@/test/highlight-api';
 
 let queryClient: QueryClient;
 beforeEach(() => {

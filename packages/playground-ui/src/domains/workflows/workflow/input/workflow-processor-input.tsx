@@ -1,11 +1,11 @@
 import { useState } from 'react';
+import { Field, FieldDescription, FieldError, FieldLabel } from '../../../../ds/components/Field';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../../../ds/components/Select';
+import { Textarea } from '../../../../ds/components/Textarea';
+import { FormSubmitRow } from '../../../../lib/form/components/form-submit-row';
 import type { WorkflowInputDataProps } from '../workflow-input-data';
 import { getProcessorMessage, updateProcessorMessage, withPhaseRole } from './processor-input';
 import type { ProcessorDraft } from './processor-input';
-import { Field, FieldDescription, FieldError, FieldLabel } from '@/ds/components/Field';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
-import { Textarea } from '@/ds/components/Textarea';
-import { FormSubmitRow } from '@/lib/form/components/form-submit-row';
 
 const PROCESSOR_PHASES = [
   { value: 'input', label: 'Input - Process input messages before LLM' },

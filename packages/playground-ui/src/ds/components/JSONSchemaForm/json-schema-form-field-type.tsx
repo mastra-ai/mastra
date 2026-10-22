@@ -1,12 +1,12 @@
 import { Type, Hash, ToggleLeft, AlignLeft, Braces, List } from 'lucide-react';
 import * as React from 'react';
+import { cn } from '../../../lib/utils';
+import { Icon } from '../../icons';
 import { Field, FieldLabel } from '../Field';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../Select';
 import type { SelectTriggerProps } from '../Select/select';
 import { useJSONSchemaFormField } from './json-schema-form-field-context';
 import type { FieldType } from './types';
-import { Icon } from '@/ds/icons';
-import { cn } from '@/lib/utils';
 
 const TYPE_OPTIONS = [
   {

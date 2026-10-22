@@ -1,12 +1,12 @@
 import { useWorkflow } from '@mastra/react/hooks/workflows';
 import { CopyIcon, Cpu, Database } from 'lucide-react';
-import { Badge } from '@/ds/components/Badge';
-import { EntityHeader } from '@/ds/components/EntityHeader';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
-import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
-import { focusRing } from '@/ds/primitives/transitions';
-import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
-import { cn } from '@/utils/cn';
+import { Badge } from '../../../ds/components/Badge';
+import { EntityHeader } from '../../../ds/components/EntityHeader';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../../ds/components/Tooltip';
+import { WorkflowIcon } from '../../../ds/icons/WorkflowIcon';
+import { focusRing } from '../../../ds/primitives/transitions';
+import { useCopyToClipboard } from '../../../hooks/use-copy-to-clipboard';
+import { cn } from '../../../utils/cn';
 
 export interface WorkflowEntityHeaderProps {
   requestContext?: Record<string, any>;

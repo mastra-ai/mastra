@@ -6,6 +6,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { http, HttpResponse } from 'msw';
 import { useContext } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { server } from '../../../../test/msw-server';
 import { WorkflowRunContext } from '../../context/workflow-run-context';
 import { WorkflowRunProvider } from '../../context/workflow-run-provider';
 import { WorkflowDebugStepControls } from '../workflow-debug-step-controls';
@@ -16,7 +17,6 @@ import {
   parallelWorkflow,
   twoStepWorkflow,
 } from './fixtures/workflow-debug-step-controls';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 afterEach(cleanup);

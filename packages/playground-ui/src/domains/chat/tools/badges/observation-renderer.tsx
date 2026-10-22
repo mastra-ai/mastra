@@ -1,10 +1,10 @@
 'use client';
 
 import { useMemo } from 'react';
-import { observationPriorityByEmoji, observationPriorityTone } from '@/domains/memory/lib/observation-priority';
-import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
-import { Txt } from '@/ds/components/Txt/Txt';
-import { cn } from '@/utils/cn';
+import { MarkdownRenderer } from '../../../../ds/components/MarkdownRenderer';
+import { Txt } from '../../../../ds/components/Txt/Txt';
+import { cn } from '../../../../utils/cn';
+import { observationPriorityByEmoji, observationPriorityTone } from '../../../memory/lib/observation-priority';
 
 type Priority = '🔴' | '🟡' | '🟢';
 

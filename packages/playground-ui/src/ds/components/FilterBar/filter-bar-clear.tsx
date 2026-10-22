@@ -1,6 +1,6 @@
 import { XIcon } from 'lucide-react';
+import { Button } from '../Button/Button';
 import { useFilterBarContext } from './filter-bar-context';
-import { Button } from '@/ds/components/Button/Button';
 
 /** Removes every removable filter. Rendered by FilterBar at its trailing edge; hidden while nothing can be removed. */
 export function FilterBarClear({ label }: { label: string }) {

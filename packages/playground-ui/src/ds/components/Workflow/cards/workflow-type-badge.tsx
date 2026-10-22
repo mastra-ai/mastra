@@ -1,6 +1,6 @@
+import { Badge } from '../../Badge';
 import { getWorkflowCardBadge } from './workflow-card-kind';
 import type { WorkflowTypeBadgeProps } from './workflow-card-kind';
-import { Badge } from '@/ds/components/Badge';
 
 export function WorkflowTypeBadge(props: WorkflowTypeBadgeProps) {
   const { label, Icon, tone } = getWorkflowCardBadge(props);

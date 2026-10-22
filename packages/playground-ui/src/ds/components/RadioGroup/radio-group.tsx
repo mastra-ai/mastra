@@ -2,9 +2,9 @@ import { Radio as RadioPrimitive } from '@base-ui/react/radio';
 import { RadioGroup as RadioGroupPrimitive } from '@base-ui/react/radio-group';
 import * as React from 'react';
 
-import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
-import { selectionControlStyle } from '@/ds/primitives/selection-control';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { selectionControlStyle } from '../../primitives/selection-control';
+import { keepOwnAccessibleName } from '../Field/field-control-aria';
 
 type RadioGroupProps = Omit<RadioGroupPrimitive.Props, 'className'> & {
   className?: string;

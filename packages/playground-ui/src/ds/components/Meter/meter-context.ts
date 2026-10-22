@@ -1,5 +1,5 @@
 import { createContext } from 'react';
-import { formatFullNumber } from '@/lib/cost';
+import { formatFullNumber } from '../../../lib/cost';
 
 export type MeterPart = 'bar' | 'key';
 

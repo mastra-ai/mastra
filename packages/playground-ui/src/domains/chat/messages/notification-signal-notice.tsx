@@ -1,8 +1,8 @@
+import { NotificationActivity } from '../../../ds/components/ai/activity';
+import { Badge } from '../../../ds/components/Badge';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../../ds/components/Tooltip/tooltip';
 import { formatSignalValue, getMcpEventSignalInfo, getNotificationMetadata, signalContentsToText } from './signal-data';
 import type { McpEventSignalInfo, SignalData } from './signal-data';
-import { NotificationActivity } from '@/ds/components/ai/activity';
-import { Badge } from '@/ds/components/Badge';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip/tooltip';
 
 export type NotificationSignalNoticeProps = {
   signal: SignalData;

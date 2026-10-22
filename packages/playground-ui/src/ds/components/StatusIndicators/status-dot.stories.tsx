@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { TooltipProvider } from '../Tooltip';
 import { Status } from './status';
 import { StatusDot } from './status-dot';
 import { deployStates } from './status-dot-styles';
 import type { DeployState, StatusPresentation } from './status-dot-styles';
-import { TooltipProvider } from '@/ds/components/Tooltip';
 
 const DESCRIPTIONS: Record<DeployState, string> = {
   ready: 'The server is live and responding to requests.',

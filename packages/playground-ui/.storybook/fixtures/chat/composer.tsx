@@ -1,10 +1,8 @@
 import { ArrowUp, Paperclip, Square, X } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
-import { reviewCommands } from './commands';
-import type { ChatFile, Phase } from './data';
-import { UserFilePartRenderer } from '@/domains/chat/messages/renderers/user-file-part-renderer';
-import { Button } from '@/ds/components/Button';
+import { UserFilePartRenderer } from '../../../src/domains/chat/messages/renderers/user-file-part-renderer';
+import { Button } from '../../../src/ds/components/Button';
 import {
   Composer,
   ComposerActions,
@@ -14,9 +12,11 @@ import {
   ComposerRing,
   ComposerSuggestions,
   useComposerCommands,
-} from '@/ds/components/Composer';
-import { Notice } from '@/ds/components/Notice';
-import { Txt } from '@/ds/components/Txt';
+} from '../../../src/ds/components/Composer';
+import { Notice } from '../../../src/ds/components/Notice';
+import { Txt } from '../../../src/ds/components/Txt';
+import { reviewCommands } from './commands';
+import type { ChatFile, Phase } from './data';
 
 const composerStatus: Record<Phase, string> = {
   complete: 'Ready',

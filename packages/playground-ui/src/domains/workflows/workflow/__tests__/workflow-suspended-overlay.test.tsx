@@ -6,6 +6,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-li
 import { http, HttpResponse } from 'msw';
 import { useContext } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
+import { server } from '../../../../test/msw-server';
 import { WorkflowRunContext } from '../../context/workflow-run-context';
 import { WorkflowRunProvider } from '../../context/workflow-run-provider';
 import { WorkflowSuspendedOverlay } from '../workflow-suspended-overlay';
@@ -18,7 +19,6 @@ import {
   suspendedChunk,
   suspendedIterationArray,
 } from './fixtures/workflow-suspension';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 afterEach(cleanup);

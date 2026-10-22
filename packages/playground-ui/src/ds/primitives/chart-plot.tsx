@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { ResponsiveContainer } from 'recharts';
+import { cn } from '../../lib/utils';
 import type { ChartHeight } from './chart-frame';
-import { cn } from '@/lib/utils';
 
 /**
  * Sizes the plot. `fill` takes the parent's free height, out of flow: a ResponsiveContainer at

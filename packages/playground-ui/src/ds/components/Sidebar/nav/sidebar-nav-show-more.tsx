@@ -1,9 +1,9 @@
 import type { ComponentPropsWithoutRef } from 'react';
+import { cn } from '../../../../lib/utils';
+import { textStyle } from '../../../primitives/text';
+import { controlStateColorTransition, focusRing } from '../../../primitives/transitions';
 import type { SidebarState } from '../root/sidebar-context';
 import { useMaybeSidebarState } from '../root/sidebar-context';
-import { textStyle } from '@/ds/primitives/text';
-import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
 
 export type SidebarNavShowMoreProps = Omit<ComponentPropsWithoutRef<'button'>, 'children' | 'onClick'> & {
   foldedCount: number;

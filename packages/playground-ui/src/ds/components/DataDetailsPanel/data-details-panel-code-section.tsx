@@ -1,11 +1,11 @@
 import { AlignJustifyIcon, AlignLeftIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
-import { Button } from '@/ds/components/Button';
-import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
-import { CodeEditor } from '@/ds/components/CodeEditor';
-import { CopyButton } from '@/ds/components/CopyButton';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { raisedSurfaceStyle } from '../../primitives/raised-surface';
+import { Button } from '../Button';
+import { ButtonsGroup } from '../ButtonsGroup';
+import { CodeEditor } from '../CodeEditor';
+import { CopyButton } from '../CopyButton';
 
 export interface DataDetailsPanelCodeSectionProps {
   title: React.ReactNode;

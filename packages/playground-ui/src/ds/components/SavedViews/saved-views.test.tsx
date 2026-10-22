@@ -4,11 +4,11 @@ import { useState } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 
+import type { FilterBarField, FilterBarItem, FilterBarOperator } from '../FilterBar/types';
 import { SavedViewEditor } from './saved-view-editor';
 import { parseSavedViews } from './saved-view-schema';
 import { SavedViewTabs } from './saved-view-tabs';
 import { useSavedViews } from './use-saved-views';
-import type { FilterBarField, FilterBarItem, FilterBarOperator } from '@/ds/components/FilterBar/types';
 
 const STORAGE_KEY = 'saved-views-test';
 const settingsSchema = z.object({ layout: z.enum(['list', 'board']) });

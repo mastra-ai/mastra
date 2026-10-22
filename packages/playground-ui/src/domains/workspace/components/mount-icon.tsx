@@ -1,6 +1,6 @@
 import type { WorkspaceFsListResponse } from '@mastra/client-js';
 import { Cloud, Database, Folder, HardDrive } from 'lucide-react';
-import { AmazonIcon, AzureIcon, GoogleIcon } from '@/ds/icons';
+import { AmazonIcon, AzureIcon, GoogleIcon } from '../../../ds/icons';
 
 export type WorkspaceMount = NonNullable<WorkspaceFsListResponse['entries'][number]['mount']>;
 

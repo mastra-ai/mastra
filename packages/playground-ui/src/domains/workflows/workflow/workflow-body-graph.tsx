@@ -1,8 +1,8 @@
 import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
 import { ReactFlowProvider } from '@xyflow/react';
 import { Repeat2 } from 'lucide-react';
+import { Txt } from '../../../ds/components/Txt';
 import { WorkflowNestedGraph } from './workflow-nested-graph';
-import { Txt } from '@/ds/components/Txt';
 
 export function WorkflowBodyGraph({
   stepGraph,

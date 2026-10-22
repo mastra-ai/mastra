@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import '@/test/inert-resize-observer';
+import '../../../../test/inert-resize-observer';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render as renderUI, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';

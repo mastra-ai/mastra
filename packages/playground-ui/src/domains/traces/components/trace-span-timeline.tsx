@@ -1,13 +1,13 @@
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
+import { Txt } from '../../../ds/components/Txt';
+import { cn } from '../../../lib/utils';
+import { formatDurationPrecise } from '../../../utils/duration';
 import type { UISpan } from '../types';
 import { getOverallLatency } from '../utils/span-timing';
 import { SpanRows } from './span-rows';
 import { SpanTimelineRow } from './span-timeline-row';
 import { SpanTypeLegend } from './span-type-legend';
 import { TraceSpanTreeLoading } from './trace-span-tree';
-import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/lib/utils';
-import { formatDurationPrecise } from '@/utils/duration';
 
 export type TraceSpanTimelineProps = {
   hierarchicalSpans: UISpan[];

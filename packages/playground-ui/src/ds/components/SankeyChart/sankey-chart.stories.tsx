@@ -3,13 +3,13 @@ import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd';
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { GripVertical } from 'lucide-react';
 import { useState } from 'react';
+import { cn } from '../../../lib/utils';
+import { focusRing } from '../../primitives/transitions';
+import { Checkbox } from '../Checkbox';
+import { Field, FieldLabel } from '../Field';
 import { SankeyChart } from './sankey-chart';
 import type { SankeyChartCurveSelection } from './sankey-chart-utils';
 import { Sankey, useSankey } from './sankey-context';
-import { Checkbox } from '@/ds/components/Checkbox';
-import { Field, FieldLabel } from '@/ds/components/Field';
-import { focusRing } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
 
 const data = [
   { channel: 'Search', region: 'Europe', outcome: 'Won' },

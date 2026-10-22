@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Bell, Brain, FileText, Layers, Sparkles, Terminal } from 'lucide-react';
 import { useState } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
+import { Badge } from '../../Badge';
 import {
   Activity,
   ActivityContent,
@@ -14,7 +15,6 @@ import {
   ActivitySpacer,
   ActivityTrigger,
 } from './activity';
-import { Badge } from '@/ds/components/Badge';
 
 const Code = ({ children }: { children: string }) => (
   <pre className="m-0 max-h-60 overflow-auto rounded-md bg-sidebar px-3 py-2 font-mono text-caption whitespace-pre-wrap text-muted-foreground">

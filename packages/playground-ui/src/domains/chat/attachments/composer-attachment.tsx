@@ -1,11 +1,11 @@
 import { Ellipsis, Eye, Pencil, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import type { ReactNode } from 'react';
+import { Button } from '../../../ds/components/Button/Button';
+import { ContextMenu } from '../../../ds/components/ContextMenu/context-menu';
+import { raisedSurfaceStyle, surfaceStateLayerStyle } from '../../../ds/primitives/raised-surface';
+import { cn } from '../../../utils/cn';
 import { ComposerAttachmentContext } from './composer-attachment-context';
-import { Button } from '@/ds/components/Button/Button';
-import { ContextMenu } from '@/ds/components/ContextMenu/context-menu';
-import { raisedSurfaceStyle, surfaceStateLayerStyle } from '@/ds/primitives/raised-surface';
-import { cn } from '@/utils/cn';
 
 // Dark attachments need a fill above the muted composer. Light attachments keep
 // the white card material and use the shared rim and shadow for elevation.

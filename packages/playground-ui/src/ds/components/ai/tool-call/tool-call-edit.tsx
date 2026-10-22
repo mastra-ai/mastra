@@ -1,9 +1,9 @@
+import { truncateString } from '../../../../lib/truncate-string';
+import { cn } from '../../../../lib/utils';
+import { useHighlight } from '../../Code';
+import { CodeBlock } from '../../CodeBlock';
+import { languageForPath } from '../../CodeEditor/highlight';
 import type { ToolEdit } from './tool-presentation';
-import { useHighlight } from '@/ds/components/Code';
-import { CodeBlock } from '@/ds/components/CodeBlock';
-import { languageForPath } from '@/ds/components/CodeEditor/highlight';
-import { truncateString } from '@/lib/truncate-string';
-import { cn } from '@/lib/utils';
 
 const DIFF_MAX_LINES = 200;
 const WRITTEN_FILE_MAX_CHARS = 2000;

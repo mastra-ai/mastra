@@ -1,9 +1,9 @@
 import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { ComponentProps } from 'react';
-import { Icon } from '@/ds/icons/Icon';
-import { controlStateColorTransition, focusRingOffset } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { Icon } from '../../icons/Icon';
+import { controlStateColorTransition, focusRingOffset } from '../../primitives/transitions';
 
 export type TableSortDirection = 'ascending' | 'descending' | 'none';
 

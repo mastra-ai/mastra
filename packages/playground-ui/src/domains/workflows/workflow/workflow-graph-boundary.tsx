@@ -1,13 +1,13 @@
 import { safeStringify } from '@mastra/core/utils/safe-stringify';
 import type { SerializedStepFlowEntry } from '@mastra/core/workflows';
 import type { ReactNode } from 'react';
-import { Button } from '@/ds/components/Button';
-import { Code } from '@/ds/components/Code';
-import { CopyButton } from '@/ds/components/CopyButton';
-import { ErrorBoundary } from '@/ds/components/ErrorBoundary';
-import { Txt } from '@/ds/components/Txt';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
-import { cn } from '@/utils/cn';
+import { Button } from '../../../ds/components/Button';
+import { Code } from '../../../ds/components/Code';
+import { CopyButton } from '../../../ds/components/CopyButton';
+import { ErrorBoundary } from '../../../ds/components/ErrorBoundary';
+import { Txt } from '../../../ds/components/Txt';
+import { raisedSurfaceStyle } from '../../../ds/primitives/raised-surface';
+import { cn } from '../../../utils/cn';
 
 export function WorkflowGraphBoundary({
   stepGraph,

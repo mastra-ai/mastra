@@ -2,31 +2,24 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ArrowUpRight, Bot, Columns3, Ellipsis } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
+import { formatFullNumber } from '../../../lib/cost';
+import { cn } from '../../../lib/utils';
+import { ActionRow } from '../ActionRow';
 import { Badge } from '../Badge';
+import { Button } from '../Button/Button';
+import { Combobox } from '../Combobox/combobox';
+import { Drawer, DrawerBody, DrawerContent, DrawerDescription, DrawerHeader, DrawerTitle } from '../Drawer/drawer';
+import { DropdownMenu } from '../DropdownMenu/dropdown-menu';
+import { Input } from '../Input/input';
+import { ListSearch } from '../ListSearch/list-search';
+import { PropertyFilterApplied } from '../PropertyFilter/property-filter-applied';
+import { PropertyFilterCreator } from '../PropertyFilter/property-filter-creator';
+import type { PropertyFilterField, PropertyFilterToken } from '../PropertyFilter/types';
+import { SkeletonText } from '../Skeleton/skeleton-text';
+import { Switch } from '../Switch/switch';
+import { Txt } from '../Txt/Txt';
 import { Cell, TxtCell, DateTimeCell, EntryCell } from './Cells';
 import { Table, Thead, Th, Tbody, Row } from './Table';
-import { ActionRow } from '@/ds/components/ActionRow';
-import { Button } from '@/ds/components/Button/Button';
-import { Combobox } from '@/ds/components/Combobox/combobox';
-import {
-  Drawer,
-  DrawerBody,
-  DrawerContent,
-  DrawerDescription,
-  DrawerHeader,
-  DrawerTitle,
-} from '@/ds/components/Drawer/drawer';
-import { DropdownMenu } from '@/ds/components/DropdownMenu/dropdown-menu';
-import { Input } from '@/ds/components/Input/input';
-import { ListSearch } from '@/ds/components/ListSearch/list-search';
-import { PropertyFilterApplied } from '@/ds/components/PropertyFilter/property-filter-applied';
-import { PropertyFilterCreator } from '@/ds/components/PropertyFilter/property-filter-creator';
-import type { PropertyFilterField, PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
-import { SkeletonText } from '@/ds/components/Skeleton/skeleton-text';
-import { Switch } from '@/ds/components/Switch/switch';
-import { Txt } from '@/ds/components/Txt/Txt';
-import { formatFullNumber } from '@/lib/cost';
-import { cn } from '@/lib/utils';
 
 const meta: Meta<typeof Table> = {
   title: 'DataDisplay/Table',

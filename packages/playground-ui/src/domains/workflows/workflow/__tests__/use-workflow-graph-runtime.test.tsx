@@ -7,6 +7,7 @@ import { http, HttpResponse } from 'msw';
 import { useContext } from 'react';
 import type { PropsWithChildren } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
+import { server } from '../../../../test/msw-server';
 import { WorkflowRunContext } from '../../context/workflow-run-context';
 import { WorkflowRunProvider } from '../../context/workflow-run-provider';
 import { useWorkflowGraphRuntime } from '../use-workflow-graph-runtime';
@@ -14,7 +15,6 @@ import type { WorkflowGraphEdge } from '../utils';
 import { constructNodesAndEdges } from '../utils';
 import { branchWorkflow, twoStepWorkflow } from './fixtures/workflow-debug-step-controls';
 import { completedIterationRun, graphRun } from './fixtures/workflow-graph-runtime';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 afterEach(cleanup);

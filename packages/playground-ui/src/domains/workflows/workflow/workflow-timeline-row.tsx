@@ -11,14 +11,14 @@ import {
   SkipForward,
   Timer,
 } from 'lucide-react';
+import { Button } from '../../../ds/components/Button';
+import { Txt } from '../../../ds/components/Txt';
+import { focusRing } from '../../../ds/primitives/transitions';
+import { cn } from '../../../utils/cn';
+import { formatDuration } from '../../../utils/duration';
 import type { Step } from '../context/use-current-run';
 import { workflowStatusTone, workflowStatusToneBar, workflowStatusToneText } from '../workflow-status-tone';
 import type { TimelineRow } from './workflow-timeline-utils';
-import { Button } from '@/ds/components/Button';
-import { Txt } from '@/ds/components/Txt';
-import { focusRing } from '@/ds/primitives/transitions';
-import { cn } from '@/utils/cn';
-import { formatDuration } from '@/utils/duration';
 
 const statusPresentation = {
   success: { label: 'Completed', icon: Check },

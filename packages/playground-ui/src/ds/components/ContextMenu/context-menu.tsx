@@ -2,9 +2,9 @@ import { ContextMenu as ContextMenuPrimitive } from '@base-ui/react/context-menu
 import type { ContextMenuPopupProps, ContextMenuPositionerProps } from '@base-ui/react/context-menu';
 import { CheckIcon, ChevronDown } from 'lucide-react';
 import * as React from 'react';
-import { allowNativeMenuAfterRightPressOutside } from './native-context-menu';
-import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
-import { useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
+import { cn } from '../../../lib/utils';
+import { FLOATING_POSITION_METHOD } from '../../primitives/floating';
+import { useFluidMenu, useFluidMenuItemRef } from '../../primitives/fluid-menu';
 import {
   menuItemCheckClass,
   menuItemClass,
@@ -17,10 +17,10 @@ import {
   menuPositionerClass,
   menuSeparatorClass,
   menuShortcutClass,
-} from '@/ds/primitives/menu-item';
-import { menuScrollPopupClass, MenuScrollArea } from '@/ds/primitives/menu-scroll-area';
-import { usePortalContainer } from '@/ds/primitives/portal-container';
-import { cn } from '@/lib/utils';
+} from '../../primitives/menu-item';
+import { menuScrollPopupClass, MenuScrollArea } from '../../primitives/menu-scroll-area';
+import { usePortalContainer } from '../../primitives/portal-container';
+import { allowNativeMenuAfterRightPressOutside } from './native-context-menu';
 
 const ContextMenuRoot = ContextMenuPrimitive.Root;
 const ContextMenuGroup = ContextMenuPrimitive.Group;

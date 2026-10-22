@@ -1,9 +1,13 @@
 import type { ComponentProps } from 'react';
 import { Panel } from 'react-resizable-panels';
 
+import {
+  MessageScroller,
+  MessageScrollerContent,
+  MessageScrollerViewport,
+} from '../../../../ds/components/MessageScroller';
+import { cn } from '../../../../lib/utils';
 import { useThreadTrace } from './thread-trace-context';
-import { MessageScroller, MessageScrollerContent, MessageScrollerViewport } from '@/ds/components/MessageScroller';
-import { cn } from '@/lib/utils';
 
 export interface ThreadTraceListProps extends ComponentProps<'div'> {
   /** Class name of the inner wrapper that establishes the positioning context for the rail. */

@@ -1,8 +1,8 @@
 import type { ThemeLearningEntity } from '@mastra/client-js';
 
+import { Badge } from '../../../ds/components/Badge';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../../ds/components/Tooltip';
 import { entityStatusLabel, analyzingDescription } from './entity-index-model';
-import { Badge } from '@/ds/components/Badge';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 
 export function EntityIndexStatus({ entity }: { entity: ThemeLearningEntity }) {
   const label = entityStatusLabel(entity.status);

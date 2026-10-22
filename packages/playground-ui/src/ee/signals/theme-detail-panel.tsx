@@ -1,5 +1,17 @@
 import { useState } from 'react';
 
+import {
+  Drawer,
+  DrawerBody,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+} from '../../ds/components/Drawer';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../ds/components/Tooltip';
+import { Txt } from '../../ds/components/Txt';
+import { raisedSurfaceStyle } from '../../ds/primitives/raised-surface';
+import { cn } from '../../lib/utils';
 import { EXAMPLES_PAGE_SIZE, ExamplesPager } from './examples-pager';
 import { useThemeDetail, useThemeExamples, useThemeHistory } from './hooks';
 import { getSignalColor } from './signal-colors';
@@ -9,18 +21,6 @@ import { chronologicalHistoryPoints, themeTrendDirection } from './theme-trend';
 import { ThemeTrendChart } from './theme-trend-chart';
 import { TraceInsightView } from './trace-insight-view';
 import { useTraceIntelligence } from './use-trace-intelligence';
-import {
-  Drawer,
-  DrawerBody,
-  DrawerContent,
-  DrawerDescription,
-  DrawerHeader,
-  DrawerTitle,
-} from '@/ds/components/Drawer';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { Txt } from '@/ds/components/Txt';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
-import { cn } from '@/lib/utils';
 
 interface ThemeDetailPanelProps {
   entityId: string;

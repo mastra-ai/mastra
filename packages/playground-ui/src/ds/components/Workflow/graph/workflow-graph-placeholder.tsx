@@ -1,5 +1,5 @@
 import { AlertCircleIcon } from 'lucide-react';
-import { Skeleton } from '@/ds/components/Skeleton';
+import { Skeleton } from '../../Skeleton';
 
 export type WorkflowGraphPlaceholderProps = { isLoading: true } | { isLoading?: false; workflowName: string };
 

@@ -1,6 +1,4 @@
 import type { ReactNode } from 'react';
-import { PanelEdgeIcon } from './panel-edge-icon';
-import { panelIconButtonClass } from './panel-icon-button';
 import {
   Drawer,
   DrawerBackdrop,
@@ -9,9 +7,11 @@ import {
   DrawerTitle,
   DrawerTrigger,
   DrawerViewport,
-} from '@/ds/components/Drawer';
-import { Icon } from '@/ds/icons';
-import { cn } from '@/lib/utils';
+} from '../../ds/components/Drawer';
+import { Icon } from '../../ds/icons';
+import { cn } from '../utils';
+import { PanelEdgeIcon } from './panel-edge-icon';
+import { panelIconButtonClass } from './panel-icon-button';
 
 export interface PanelDrawerProps {
   direction: 'left' | 'right';

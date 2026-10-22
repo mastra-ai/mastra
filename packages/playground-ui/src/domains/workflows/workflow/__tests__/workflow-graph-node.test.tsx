@@ -7,6 +7,7 @@ import type { NodeProps } from '@xyflow/react';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
 import { afterEach, describe, expect, it } from 'vitest';
+import { server } from '../../../../test/msw-server';
 import { WorkflowRunProvider } from '../../context/workflow-run-provider';
 import { WorkflowSelectedStepProvider } from '../../context/workflow-selected-step-context';
 import { WorkflowStepDetailProvider } from '../../context/workflow-step-detail-provider';
@@ -15,7 +16,6 @@ import { resolveWorkflowGraphStep, WORKFLOW_STEP_NODE_TYPE } from '../workflow-s
 import type { WorkflowStepNode, WorkflowStepNodeData } from '../workflow-step-node-utils';
 import { twoStepWorkflow } from './fixtures/workflow-debug-step-controls';
 import { pausedRunAfterFirstStepState } from './fixtures/workflow-run-states';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 afterEach(cleanup);

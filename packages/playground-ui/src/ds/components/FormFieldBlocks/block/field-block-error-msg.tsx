@@ -1,7 +1,7 @@
 import { CircleAlertIcon } from 'lucide-react';
-import { Txt } from '@/ds/components/Txt';
-import { Icon } from '@/ds/icons/Icon';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../../lib/utils';
+import { Icon } from '../../../icons/Icon';
+import { Txt } from '../../Txt';
 
 export type FieldBlockErrorMsgProps = {
   children?: React.ReactNode;

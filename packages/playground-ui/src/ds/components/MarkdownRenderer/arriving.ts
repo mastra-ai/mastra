@@ -1,8 +1,8 @@
 import type { ExtraProps } from 'react-markdown';
 
-import { ARRIVING_CLASS } from '@/ds/tokens';
+import { ARRIVING_CLASS } from '../../tokens';
 
-import '@/ds/components/Arrival/arrival.css';
+import '../Arrival/arrival.css';
 
 type MarkdownElement = NonNullable<ExtraProps['node']>;
 type MarkdownChild = MarkdownElement['children'][number];

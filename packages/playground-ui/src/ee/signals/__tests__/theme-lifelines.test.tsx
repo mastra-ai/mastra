@@ -5,6 +5,7 @@ import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { server } from '../../../test/msw-server';
 import { useThemeSnapshots } from '../hooks/use-theme-snapshots';
 import { SankeySignals } from '../sankey-signals';
 import { buildThemeLifelines, lifelineConnectors, lifelineSegments } from '../theme-lifelines-data';
@@ -13,7 +14,6 @@ import {
   fourStageThemeFlowResponse,
   landmarkThemeSnapshotsResponse,
 } from './fixtures/theme-flow';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = window.location.origin;
 

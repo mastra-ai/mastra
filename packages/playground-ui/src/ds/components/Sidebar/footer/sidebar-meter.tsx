@@ -1,11 +1,11 @@
 import type { ComponentPropsWithoutRef, ReactNode } from 'react';
 import { forwardRef } from 'react';
+import { cn } from '../../../../lib/utils';
+import { surfaceStateLayerStyle } from '../../../primitives/raised-surface';
+import type { LinkComponent } from '../../../types/link-component';
+import { Txt } from '../../Txt';
 import { useMaybeSidebarState } from '../root/sidebar-context';
 import type { SidebarState } from '../root/sidebar-context';
-import { Txt } from '@/ds/components/Txt';
-import { surfaceStateLayerStyle } from '@/ds/primitives/raised-surface';
-import type { LinkComponent } from '@/ds/types/link-component';
-import { cn } from '@/lib/utils';
 
 export type SidebarMeterTone = 'neutral' | 'warning' | 'danger';
 

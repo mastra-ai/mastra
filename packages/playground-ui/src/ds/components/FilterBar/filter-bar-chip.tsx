@@ -4,6 +4,18 @@ import { LockIcon, PencilIcon, SearchIcon, XIcon } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import type { AnimationEvent, CSSProperties, ComponentProps, KeyboardEvent, MouseEvent, ReactNode } from 'react';
+import { useIsApplePlatform } from '../../../hooks/use-keyboard-shortcut-label';
+import { cn } from '../../../lib/utils';
+import { controlHeight } from '../../primitives/control-size';
+import type { ControlSize } from '../../primitives/control-size';
+import { FLOATING_POSITION_METHOD } from '../../primitives/floating';
+import { inputSurfaceAndFocusWithinStyle } from '../../primitives/form-element';
+import { MENU_SIDE_OFFSET } from '../../primitives/menu-item';
+import { passwordManagerOptOutProps } from '../../primitives/password-manager-autofill';
+import { usePortalContainer } from '../../primitives/portal-container';
+import { Button } from '../Button/Button';
+import { ComboboxPrimitive, comboboxStyles } from '../Combobox';
+import { Kbd } from '../Kbd/kbd';
 import { emptyValueFor, useFilterBarContext } from './filter-bar-context';
 import { FilterBarOptionLabel, FilterBarOptionList } from './filter-bar-option-list';
 import { matchesQueryFilter } from './match-query';
@@ -20,19 +32,7 @@ import type {
 } from './types';
 import { useValueStep } from './use-value-step';
 import { getFieldSuggestions } from './use-value-suggestions';
-import { Button } from '@/ds/components/Button/Button';
-import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
-import { Kbd } from '@/ds/components/Kbd/kbd';
-import { controlHeight } from '@/ds/primitives/control-size';
-import type { ControlSize } from '@/ds/primitives/control-size';
-import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
-import { inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
 import './filter-bar-chip.css';
-import { MENU_SIDE_OFFSET } from '@/ds/primitives/menu-item';
-import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
-import { usePortalContainer } from '@/ds/primitives/portal-container';
-import { useIsApplePlatform } from '@/hooks/use-keyboard-shortcut-label';
-import { cn } from '@/lib/utils';
 
 // `filter-bar-segment` carries the left-to-right entrance (see filter-bar-chip.css).
 // No `first:`/`last:` rounding here: a segment is not reliably the first or last child.

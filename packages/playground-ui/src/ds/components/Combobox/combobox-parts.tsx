@@ -4,19 +4,19 @@
 import { Combobox as BaseCombobox } from '@base-ui/react/combobox';
 import { Check, ChevronDown, ChevronsUpDown, Search, X } from 'lucide-react';
 import * as React from 'react';
+import { cn } from '../../../lib/utils';
+import { FLOATING_POSITION_METHOD } from '../../primitives/floating';
+import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '../../primitives/fluid-menu';
+import { menuLabelClass, menuSeparatorClass } from '../../primitives/menu-item';
+import { passwordManagerOptOutProps } from '../../primitives/password-manager-autofill';
+import { usePopupAnchor } from '../../primitives/popup-anchor';
+import { usePortalContainer } from '../../primitives/portal-container';
+import type { PortalContainer } from '../../primitives/portal-container';
+import { isIconButtonSize } from '../Button/Button';
+import type { ButtonSize, TextButtonSize } from '../Button/Button';
+import { ScrollArea, ScrollAreaViewport } from '../ScrollArea';
 import { comboboxItemClass, comboboxStyles, comboboxTriggerClass } from './combobox-styles';
 import type { ComboboxVariant } from './combobox-styles';
-import { isIconButtonSize } from '@/ds/components/Button/Button';
-import type { ButtonSize, TextButtonSize } from '@/ds/components/Button/Button';
-import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
-import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
-import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
-import { menuLabelClass, menuSeparatorClass } from '@/ds/primitives/menu-item';
-import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
-import { usePopupAnchor } from '@/ds/primitives/popup-anchor';
-import { usePortalContainer } from '@/ds/primitives/portal-container';
-import type { PortalContainer } from '@/ds/primitives/portal-container';
-import { cn } from '@/lib/utils';
 
 /**
  * Root. Same props as Base UI's `Combobox.Root` (`items`, `value`, `onValueChange`, `multiple`,

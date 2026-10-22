@@ -5,7 +5,7 @@ import tailwindcss from '@tailwindcss/vite';
 import react from '@vitejs/plugin-react';
 import ts from 'typescript';
 import type { Plugin, PluginOption, UserConfig } from 'vite';
-import { defineConfig } from 'vite';
+import { defaultClientConditions, defineConfig } from 'vite';
 
 const studioStandalonePlugin = (targetPort: string, targetHost: string): PluginOption => ({
   name: 'studio-standalone-plugin',
@@ -253,6 +253,10 @@ export default defineConfig(({ mode }) => {
 
     return {
       ...commonConfig,
+      resolve: {
+        ...commonConfig.resolve,
+        conditions: ['@mastra/source', ...defaultClientConditions],
+      },
       server: {
         ...commonConfig.server,
         proxy: {

@@ -1,10 +1,10 @@
 import { describeSpanError } from '@mastra/core/observability';
+import { DataKeysAndValues } from '../../../../ds/components/DataKeysAndValues';
+import { Notice } from '../../../../ds/components/Notice';
 import type { SpanRecord } from '../../types';
 import { SpanPayloadJson } from './span-payload-json';
 import { SpanPayloadCollapsible } from './span-payload-primitives';
 import { asCoreSpan } from './span-payload-registry';
-import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
-import { Notice } from '@/ds/components/Notice';
 
 export interface SpanErrorRendererProps {
   span: SpanRecord;

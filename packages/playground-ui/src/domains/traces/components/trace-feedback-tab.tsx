@@ -2,8 +2,8 @@ import { useUpdateFeedbackReviewStatus } from '@mastra/react/hooks/feedback';
 import { useCreateFeedback, useDeleteFeedback, useTraceFeedback } from '@mastra/react/hooks/traces';
 import { useState } from 'react';
 
+import type { CommentVariant } from '../../../ds/components/Comment';
 import { FeedbackThread } from './feedback-thread';
-import type { CommentVariant } from '@/ds/components/Comment';
 
 type TraceFeedbackTabProps = {
   traceId: string;

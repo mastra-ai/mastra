@@ -15,13 +15,13 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/ds/components/Dialog';
-import { Field, FieldDescription, FieldError, FieldLabel } from '@/ds/components/Field';
-import { Form } from '@/ds/components/Form';
-import { Input } from '@/ds/components/Input';
-import { Notice } from '@/ds/components/Notice';
-import { Textarea } from '@/ds/components/Textarea';
-import { Txt } from '@/ds/components/Txt';
+} from '../../../ds/components/Dialog';
+import { Field, FieldDescription, FieldError, FieldLabel } from '../../../ds/components/Field';
+import { Form } from '../../../ds/components/Form';
+import { Input } from '../../../ds/components/Input';
+import { Notice } from '../../../ds/components/Notice';
+import { Textarea } from '../../../ds/components/Textarea';
+import { Txt } from '../../../ds/components/Txt';
 
 const reservedNames = new Set([
   'goal',

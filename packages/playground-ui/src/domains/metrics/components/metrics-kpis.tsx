@@ -6,11 +6,11 @@ import {
 } from '@mastra/react/hooks/metrics';
 import { keepPreviousData } from '@tanstack/react-query';
 import { BotIcon, CoinsIcon, HashIcon, MessagesSquareIcon } from 'lucide-react';
+import { MetricsCardGroup } from '../../../ds/components/MetricsCardGroup';
 import { useMetrics } from '../hooks/use-metrics';
 import { useMetricsFilters } from '../hooks/use-metrics-filters';
 import { formatCount, formatUsd } from '../lib/chart-format';
 import { KpiCard } from './kpi-card';
-import { MetricsCardGroup } from '@/ds/components/MetricsCardGroup';
 
 const KEEP = { placeholderData: keepPreviousData };
 

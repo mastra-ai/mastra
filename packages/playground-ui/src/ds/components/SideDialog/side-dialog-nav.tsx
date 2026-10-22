@@ -1,6 +1,6 @@
 import { ArrowDownIcon, ArrowUpIcon } from 'lucide-react';
-import { Button } from '@/ds/components/Button';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { Button } from '../Button';
 
 export type SideDialogNavProps = {
   onNext?: (() => void) | null;

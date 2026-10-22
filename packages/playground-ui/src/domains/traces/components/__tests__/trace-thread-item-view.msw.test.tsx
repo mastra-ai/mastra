@@ -1,10 +1,14 @@
 // @vitest-environment jsdom
-import '@/test/inert-resize-observer';
+import '../../../../test/inert-resize-observer';
 import { SpanType } from '@mastra/core/observability';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 
+import { server } from '../../../../test/msw-server';
+import { renderWithProviders, TEST_BASE_URL } from '../../../../test/render';
+import { ActivatedSkillsProvider, useActivatedSkills } from '../../../agents/context/activated-skills-context';
+import { BrowserToolCallsProvider, useBrowserToolCalls } from '../../../agents/context/browser-tool-calls-context';
 import { TraceThreadItemView } from '../trace-thread-item-view';
 import {
   agentTraceWithTools,
@@ -15,10 +19,6 @@ import {
   traceWorkflow,
   traceWorkflowRuns,
 } from './fixtures/trace-thread-item';
-import { ActivatedSkillsProvider, useActivatedSkills } from '@/domains/agents/context/activated-skills-context';
-import { BrowserToolCallsProvider, useBrowserToolCalls } from '@/domains/agents/context/browser-tool-calls-context';
-import { server } from '@/test/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 const installToolTraceHandlers = () => {
   server.use(

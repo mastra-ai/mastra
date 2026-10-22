@@ -1,5 +1,5 @@
+import { cn } from '../../../lib/utils';
 import type { MetricsShareListHeaderProps } from './metrics-share-list-types';
-import { cn } from '@/lib/utils';
 
 /** Column headers, right-aligned to the list's number columns. */
 export function MetricsShareListHeader({

@@ -1,8 +1,8 @@
 import { useContext } from 'react';
 import type { ReactNode } from 'react';
+import { WorkflowDebugControls } from '../../../ds/components/Workflow';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { useNextPerStep } from './use-workflow-trigger';
-import { WorkflowDebugControls } from '@/ds/components/Workflow';
 
 export interface WorkflowDebugStepControlsProps {
   isStreaming?: boolean;

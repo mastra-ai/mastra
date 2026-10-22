@@ -1,8 +1,8 @@
 import { ArrowDownRightIcon, ArrowUpRightIcon } from 'lucide-react';
-import { Badge } from '@/ds/components/Badge';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { Badge } from '../Badge';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip';
+import { Txt } from '../Txt';
 
 const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
 

@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
+import { raisedSurfaceStyle } from '../../primitives/raised-surface';
 import { ThemeToggle } from '../ThemeToggle';
 import { ThemeProvider, useTheme } from './theme-provider';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
 const meta: Meta<typeof ThemeProvider> = {
   title: 'Providers/ThemeProvider',

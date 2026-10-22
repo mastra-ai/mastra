@@ -2,18 +2,18 @@ import { Dialog as DialogPrimitive } from '@base-ui/react/dialog';
 import { X } from 'lucide-react';
 import * as React from 'react';
 
+import { useIsMobile } from '../../../hooks/use-is-mobile';
+import { cn } from '../../../lib/utils';
+import { Button } from '../Button';
+import type { TextButtonSize } from '../Button';
+import { Drawer, DrawerContent } from '../Drawer';
+import type { DrawerProps } from '../Drawer';
+import { ScrollArea, ScrollAreaViewport } from '../ScrollArea';
 import { DialogAction } from './dialog-action';
 import { DialogContext, dialogActionLayoutClasses, dialogActionSizeClasses, useDialogContext } from './dialog-context';
 import type { DialogIntent } from './dialog-context';
 import { DIALOG_DRAWER_BREAKPOINT_PX, dialogContentSizeClasses, dialogPopupClassName } from './dialog-shell';
 import type { DialogSize } from './dialog-shell';
-import { Button } from '@/ds/components/Button';
-import type { TextButtonSize } from '@/ds/components/Button';
-import { Drawer, DrawerContent } from '@/ds/components/Drawer';
-import type { DrawerProps } from '@/ds/components/Drawer';
-import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
-import { useIsMobile } from '@/hooks/use-is-mobile';
-import { cn } from '@/lib/utils';
 
 import './dialog.css';
 

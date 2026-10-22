@@ -1,15 +1,15 @@
 import { FileText } from 'lucide-react';
 import * as React from 'react';
 
-import type { ThreadRailTurn } from './thread-rail-turns';
+import { useMeasuredAutoHeight } from '../../../hooks/use-measured-auto-height';
 
-import { useOptionalMessageScroller, useOptionalMessageScrollerVisibility } from '@/ds/components/MessageScroller';
-import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
-import { Txt } from '@/ds/components/Txt';
-import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
-import { focusRing } from '@/ds/primitives/transitions';
-import { useMeasuredAutoHeight } from '@/hooks/use-measured-auto-height';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { overlaySurfaceStyle } from '../../primitives/raised-surface';
+import { focusRing } from '../../primitives/transitions';
+import { useOptionalMessageScroller, useOptionalMessageScrollerVisibility } from '../MessageScroller';
+import { ScrollArea, ScrollAreaViewport } from '../ScrollArea';
+import { Txt } from '../Txt';
+import type { ThreadRailTurn } from './thread-rail-turns';
 
 type ThreadRailPreviewPhase = 'hidden' | 'entering' | 'visible' | 'exiting';
 

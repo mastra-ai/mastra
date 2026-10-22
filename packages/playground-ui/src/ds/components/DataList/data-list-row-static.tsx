@@ -1,9 +1,9 @@
 import { forwardRef } from 'react';
 import type { ComponentPropsWithoutRef } from 'react';
+import { cn } from '../../../lib/utils';
 import { useDataListRowWrapperContext } from './data-list-row-wrapper-context';
 import { dataListRowStaticStyles } from './shared';
 import type { DataListRowSharedProps } from './shared';
-import { cn } from '@/lib/utils';
 
 export type DataListRowStaticProps = ComponentPropsWithoutRef<'div'> & DataListRowSharedProps;
 

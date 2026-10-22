@@ -5,17 +5,17 @@ import {
   CircleDollarSignIcon,
   TimerIcon,
 } from 'lucide-react';
+import { DataPanel } from '../../../ds/components/DataPanel';
+import { Txt } from '../../../ds/components/Txt/Txt';
+import { AgentIcon, WorkflowIcon } from '../../../ds/icons';
+import type { LinkComponent } from '../../../ds/types/link-component';
+import { formatCompactNumber, formatCost } from '../../../lib/cost';
+import { formatDate, formatTimestampPrecise } from '../../../utils/date-format';
+import { formatDuration, formatDurationPrecise } from '../../../utils/duration';
 import type { TraceUsageSummary } from '../trace-list-columns';
 import { getSpanDurationMs } from '../utils/span-utils';
 import { TraceStatusValue } from './trace-status-value';
 import type { TraceStatusValueStatus } from './trace-status-value';
-import { DataPanel } from '@/ds/components/DataPanel';
-import { Txt } from '@/ds/components/Txt/Txt';
-import { AgentIcon, WorkflowIcon } from '@/ds/icons';
-import type { LinkComponent } from '@/ds/types/link-component';
-import { formatCompactNumber, formatCost } from '@/lib/cost';
-import { formatDate, formatTimestampPrecise } from '@/utils/date-format';
-import { formatDuration, formatDurationPrecise } from '@/utils/duration';
 
 function formatEntityType(entityType: string): string {
   return entityType

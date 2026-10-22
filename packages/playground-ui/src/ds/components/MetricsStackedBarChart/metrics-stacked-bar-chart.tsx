@@ -1,13 +1,11 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Bar, CartesianGrid, ComposedChart, LabelList, Line, Rectangle, ReferenceLine, Tooltip } from 'recharts';
 import type { LabelProps } from 'recharts';
-import { ChartSkeleton } from '@/ds/components/ChartSkeleton';
-import type { MetricsLineChartSeries } from '@/ds/components/MetricsLineChart';
-import { MetricsLineChartLegend, MetricsLineChartTooltip } from '@/ds/components/MetricsLineChart';
-import { CHART_GRID_PROPS, useChartSize } from '@/ds/primitives/chart-axes';
-import type { ChartXLabels } from '@/ds/primitives/chart-axes';
-import { singleBarBox, stackedSegmentBox } from '@/ds/primitives/chart-column-layout';
-import type { SegmentBox } from '@/ds/primitives/chart-column-layout';
+import { cn } from '../../../lib/utils';
+import { CHART_GRID_PROPS, useChartSize } from '../../primitives/chart-axes';
+import type { ChartXLabels } from '../../primitives/chart-axes';
+import { singleBarBox, stackedSegmentBox } from '../../primitives/chart-column-layout';
+import type { SegmentBox } from '../../primitives/chart-column-layout';
 import {
   CHART_TICK,
   Y_AXIS_WIDTH,
@@ -16,12 +14,14 @@ import {
   isWholeData,
   timeXAxis,
   valueYAxis,
-} from '@/ds/primitives/chart-frame';
-import type { ChartHeight } from '@/ds/primitives/chart-frame';
-import { CHART_AXIS_FONT_SIZE, CHART_MARGIN } from '@/ds/primitives/chart-layout';
-import { ChartPlot } from '@/ds/primitives/chart-plot';
-import { useChartDefsId } from '@/ds/primitives/use-chart-defs-id';
-import { cn } from '@/lib/utils';
+} from '../../primitives/chart-frame';
+import type { ChartHeight } from '../../primitives/chart-frame';
+import { CHART_AXIS_FONT_SIZE, CHART_MARGIN } from '../../primitives/chart-layout';
+import { ChartPlot } from '../../primitives/chart-plot';
+import { useChartDefsId } from '../../primitives/use-chart-defs-id';
+import { ChartSkeleton } from '../ChartSkeleton';
+import type { MetricsLineChartSeries } from '../MetricsLineChart';
+import { MetricsLineChartLegend, MetricsLineChartTooltip } from '../MetricsLineChart';
 
 /** Corner radius of every segment; thin segments scale it down so they stay crisp rectangles. */
 const RADIUS = 2;

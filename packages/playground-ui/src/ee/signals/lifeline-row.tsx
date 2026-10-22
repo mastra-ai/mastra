@@ -1,3 +1,7 @@
+import { Txt } from '../../ds/components/Txt';
+import { controlStateColorTransition } from '../../ds/primitives/transitions';
+import { quietTextHoverInGroup } from '../../ds/primitives/typography';
+import { cn } from '../../lib/utils';
 import { LifelinePoint } from './lifeline-point';
 import { getSignalAreaClass, getSignalColor, getSignalConnectorClass } from './signal-colors';
 import { formatSnapshotCutoff } from './signal-formatting';
@@ -5,10 +9,6 @@ import type { ThemeSelection } from './theme-drilldown-data';
 import { lifelineConnectors, lifelineSegments } from './theme-lifelines-data';
 import type { ThemeLifeline, ThemeLifelinePoint } from './theme-lifelines-data';
 import type { ThemeSnapshot, TraceSignalName } from './types';
-import { Txt } from '@/ds/components/Txt';
-import { controlStateColorTransition } from '@/ds/primitives/transitions';
-import { quietTextHoverInGroup } from '@/ds/primitives/typography';
-import { cn } from '@/lib/utils';
 
 const TRACK_HEIGHT = 28;
 const MAX_BAR_HEIGHT = 22;

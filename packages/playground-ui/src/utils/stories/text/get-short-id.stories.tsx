@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { HelperExamples } from '../../../../.storybook/fixtures/helpers/helper-examples';
 import type { HelperExample } from '../../../../.storybook/fixtures/helpers/helper-examples';
-import { getShortId } from '@/utils/id';
+import { getShortId } from '../../id';
 
 const examples: HelperExample[] = [
   ["getShortId('3f2a9c1e-7b4d-4e8a-9c2f-1d6b8e0a4f7c')", getShortId('3f2a9c1e-7b4d-4e8a-9c2f-1d6b8e0a4f7c')],

@@ -1,12 +1,12 @@
 import { Background, BackgroundVariant, ReactFlow, useNodesInitialized, useReactFlow, useStore } from '@xyflow/react';
 import type { Edge, Node, ReactFlowProps } from '@xyflow/react';
 import { useContext, useEffect, useId, useRef } from 'react';
+import { cn } from '../../../../utils/cn';
 import { WorkflowCanvasInsetContext, workflowFitOptions } from '../workflow-canvas-inset';
 import { workflowCameraDuration } from './workflow-camera-duration';
 import { WorkflowGraphGroups } from './workflow-graph-groups';
 import type { WorkflowGraphGroup } from './workflow-graph-groups';
 import { ZoomSlider } from './zoom-slider';
-import { cn } from '@/utils/cn';
 import '@xyflow/react/dist/style.css';
 
 export type { WorkflowGraphGroup } from './workflow-graph-groups';

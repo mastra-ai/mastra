@@ -2,8 +2,8 @@ import type { AutoFormFieldProps } from '@autoform/react';
 import { v4 as uuid } from '@lukeed/uuid';
 import { Plus, TrashIcon } from 'lucide-react';
 import * as React from 'react';
-import { Button } from '@/ds/components/Button';
-import { Input } from '@/ds/components/Input';
+import { Button } from '../../../ds/components/Button';
+import { Input } from '../../../ds/components/Input';
 
 interface KeyValuePair {
   id: string;

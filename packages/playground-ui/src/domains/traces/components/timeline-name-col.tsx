@@ -1,12 +1,12 @@
 import { ChevronDownIcon, ChevronRightIcon } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useEffect, useRef } from 'react';
+import { Txt } from '../../../ds/components/Txt';
+import { focusRing, focusRingInset } from '../../../ds/primitives/transitions';
+import { cn } from '../../../lib/utils';
 import type { UISpan, UISpanStyle } from '../types';
 import { SPAN_TREE_INDENT, SPAN_TREE_LINE, SPAN_TREE_META_GAP, SPAN_TREE_PAD_Y, SpanTreeRail } from './span-tree-rail';
 import { SpanTypeBadge } from './span-type-badge';
-import { Txt } from '@/ds/components/Txt';
-import { focusRing, focusRingInset } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
 
 type TimelineNameColProps = {
   span: UISpan;

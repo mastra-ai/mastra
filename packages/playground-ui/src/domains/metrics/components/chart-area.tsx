@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { MetricsCard } from '@/ds/components/MetricsCard';
+import { MetricsCard } from '../../../ds/components/MetricsCard';
 
 export type ChartAreaProps = {
   /** No data in the range: the empty chart stays (axis and height) under a message. */

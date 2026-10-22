@@ -1,12 +1,12 @@
 import type { Dispatch, ReactNode, SetStateAction } from 'react';
+import { cn } from '../../../lib/utils';
+import { formatDuration } from '../../../utils/duration';
 import type { UISpan } from '../types';
 import type { SpanRowContext } from './span-rows';
 import { SpanRows } from './span-rows';
 import { SpanTreeRow } from './span-tree-row';
 import { SpanTypeLegend } from './span-type-legend';
 import { TraceSpanTreeSkeleton } from './trace-span-tree-skeleton';
-import { cn } from '@/lib/utils';
-import { formatDuration } from '@/utils/duration';
 
 export type TraceSpanTreeProps = {
   hierarchicalSpans: UISpan[];

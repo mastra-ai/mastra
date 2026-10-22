@@ -1,10 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Fragment } from 'react';
+import { raisedSurfaceStyle } from '../../primitives/raised-surface';
 import { Button } from '../Button/Button';
 import { Field, FieldError, FieldLabel } from '../Field';
 import { Txt } from '../Txt/Txt';
 import { Input } from './input';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
 const meta: Meta<typeof Input> = {
   title: 'Elements/Input',

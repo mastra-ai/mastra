@@ -5,10 +5,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { server } from '../../../../test/msw-server';
 import { tracePreviewsPage, tracesWithoutPreviewsPage } from '../../hooks/__tests__/fixtures/trace-query';
 import { useTracesListSource } from '../../hooks/use-traces-list-source';
 import { TracesListView } from '../traces-list-view';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 const query = () => ({ timeRange: { from: '2026-09-01T00:00:00Z', to: '2026-09-02T00:00:00Z' } });

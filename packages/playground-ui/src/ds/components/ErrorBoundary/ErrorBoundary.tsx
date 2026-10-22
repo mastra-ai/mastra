@@ -1,8 +1,8 @@
 import { AlertTriangle, Bug, RefreshCw, RotateCcw } from 'lucide-react';
 import * as React from 'react';
+import { cn } from '../../../lib/utils';
+import { quietTextHover } from '../../primitives/typography';
 import { Button } from '../Button';
-import { quietTextHover } from '@/ds/primitives/typography';
-import { cn } from '@/lib/utils';
 
 export type ErrorBoundaryVariant = 'section' | 'inline';
 

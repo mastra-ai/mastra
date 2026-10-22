@@ -1,10 +1,10 @@
 import { useMemo } from 'react';
 
+import type { EnvironmentVariableEntry } from '../../../lib/env-file';
 import { EnvironmentVariablesEditorContext } from './environment-variables-editor-context';
 import type { EnvironmentVariablesEditorContextValue } from './environment-variables-editor-context';
 import { EnvironmentVariablesEditorPasteHint } from './environment-variables-editor-paste-hint';
 import type { EnvironmentVariablesEditorRootProps } from './environment-variables-editor.types';
-import type { EnvironmentVariableEntry } from '@/lib/env-file';
 
 export function EnvironmentVariablesEditorRoot<TRow extends EnvironmentVariableEntry = EnvironmentVariableEntry>({
   editor,

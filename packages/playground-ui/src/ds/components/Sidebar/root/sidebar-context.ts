@@ -1,5 +1,5 @@
 import React from 'react';
-import type { LinkComponent } from '@/ds/types/link-component';
+import type { LinkComponent } from '../../../types/link-component';
 
 export type SidebarState = 'default' | 'collapsed';
 

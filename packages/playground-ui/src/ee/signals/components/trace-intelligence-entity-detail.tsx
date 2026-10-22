@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 
+import { EmptyState } from '../../../ds/components/EmptyState';
 import { useEntityLearningProgress, useThemeEntities, useThemeSnapshots } from '../hooks';
 import { SankeySignals } from '../sankey-signals';
 import { orderedSignals } from '../signal-formatting';
@@ -9,7 +10,6 @@ import { SignalsLoadingSkeleton } from '../signals-loading-skeleton';
 import { TraceIntelligenceProvider } from '../trace-intelligence-provider';
 import { useTraceIntelligence } from '../use-trace-intelligence';
 import { SignalsEmptyState } from './signals-empty-state';
-import { EmptyState } from '@/ds/components/EmptyState';
 
 export interface TraceIntelligenceEntityDetailProps {
   entityId: string;

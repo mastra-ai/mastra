@@ -1,7 +1,7 @@
 import { useId } from 'react';
-import { CHART_MARGIN, X_AXIS_HEIGHT } from '@/ds/primitives/chart-layout';
-import { useShimmerDelay } from '@/ds/primitives/shimmer';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { CHART_MARGIN, X_AXIS_HEIGHT } from '../../primitives/chart-layout';
+import { useShimmerDelay } from '../../primitives/shimmer';
 
 export type ChartSkeletonProps = {
   /** Ghost shape: columns for bar charts, a curve for line charts. */

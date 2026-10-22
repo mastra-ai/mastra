@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { expect } from 'storybook/test';
 
+import { raisedSurfaceStyle } from '../../primitives/raised-surface';
 import { Notice } from '../Notice';
 import { ChatShell } from './index';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
 const meta: Meta<typeof ChatShell> = {
   title: 'Layout/ChatShell',

@@ -1,7 +1,7 @@
 import { CircleSlashIcon, CircleXIcon } from 'lucide-react';
 import * as React from 'react';
-import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { Txt } from '../Txt';
 
 type EmptyStateTone = 'default' | 'error';
 

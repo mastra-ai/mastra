@@ -1,9 +1,9 @@
 import { useVirtualizer } from '@tanstack/react-virtual';
 import { useEffect, useRef } from 'react';
+import { useDataListKeyboard } from '../../../ds/components/DataList';
+import type { DataListSort } from '../../../ds/components/DataList';
+import { LogsDataList, LogsDataListSkeleton } from '../../../ds/components/LogsDataList';
 import type { LogRecord } from '../types';
-import { useDataListKeyboard } from '@/ds/components/DataList';
-import type { DataListSort } from '@/ds/components/DataList';
-import { LogsDataList, LogsDataListSkeleton } from '@/ds/components/LogsDataList';
 
 // Fixed widths on non-flex columns prevent track shifts as the virtualizer swaps rows in/out.
 const COLUMNS = '6rem 9rem 5rem 10rem minmax(8rem,1fr) minmax(8rem,1fr)';

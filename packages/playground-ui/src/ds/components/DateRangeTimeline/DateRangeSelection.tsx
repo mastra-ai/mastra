@@ -1,7 +1,7 @@
 import type { KeyboardEventHandler, PointerEventHandler } from 'react';
-import { Txt } from '@/ds/components/Txt/Txt';
-import { focusRing } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { focusRing } from '../../primitives/transitions';
+import { Txt } from '../Txt/Txt';
 
 interface DateRangeSelectionProps {
   left: number;

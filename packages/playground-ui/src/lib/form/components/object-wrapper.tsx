@@ -1,11 +1,11 @@
 import type { ObjectWrapperProps } from '@autoform/react';
 import { Braces } from 'lucide-react';
 import { useContext } from 'react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../../../ds/components/Collapsible';
+import { DisclosureChevron } from '../../../ds/components/DisclosureChevron';
+import { Txt } from '../../../ds/components/Txt';
 import { FieldPathContext, ROOT_FIELD_KEY } from '../field-context';
 import { useSectionDisclosure } from '../use-section-disclosure';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
-import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
-import { Txt } from '@/ds/components/Txt';
 
 export function ObjectWrapper({ label, children }: ObjectWrapperProps) {
   if (label === ROOT_FIELD_KEY || label === '') return <div className="flex flex-col gap-2">{children}</div>;

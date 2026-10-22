@@ -2,9 +2,9 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
+import { ARRIVING_CLASS } from '../../tokens';
 import { ArrivalScope, Arriving } from './arrival';
 import { useArriving } from './use-watched';
-import { ARRIVING_CLASS } from '@/ds/tokens';
 
 function Mark({ name }: { name: string }) {
   const arriving = useArriving();

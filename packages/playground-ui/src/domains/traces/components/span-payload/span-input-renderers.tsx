@@ -1,5 +1,6 @@
 import { describeSpanInput } from '@mastra/core/observability';
 import type { AgentRunResumeInput, SpanInputDescription } from '@mastra/core/observability';
+import { DataKeysAndValues } from '../../../../ds/components/DataKeysAndValues';
 import type { SpanRecord } from '../../types';
 import { SpanPayloadJson } from './span-payload-json';
 import { SpanPayloadMessages } from './span-payload-messages';
@@ -7,7 +8,6 @@ import { SpanPayloadField, SpanPayloadMarkdown } from './span-payload-primitives
 import { SpanPayloadProcessor } from './span-payload-processor';
 import { asCoreSpan, pickRenderer } from './span-payload-registry';
 import type { PayloadRegistry } from './span-payload-registry';
-import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 
 function SpanTextRenderer({ value }: { value: string }) {
   return <SpanPayloadMarkdown>{value}</SpanPayloadMarkdown>;

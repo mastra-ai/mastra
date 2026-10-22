@@ -1,12 +1,12 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import type { ComponentProps } from 'react';
 
+import { MessageScrollerProvider } from '../../../../ds/components/MessageScroller';
+import { PanelGroup } from '../../../../lib/resize/panel-group';
+import { cn } from '../../../../lib/utils';
 import { useVisibleTraceRows } from '../../hooks/use-visible-trace-rows';
 import { ThreadTraceContext } from './thread-trace-context';
 import type { ThreadTraceContextValue, ThreadTraceHighlight, ThreadTraceSelectedSpan } from './thread-trace-context';
-import { MessageScrollerProvider } from '@/ds/components/MessageScroller';
-import { PanelGroup } from '@/lib/resize/panel-group';
-import { cn } from '@/lib/utils';
 
 export interface ThreadTraceRootProps extends ComponentProps<'div'> {
   /** Trace ids in reading order (oldest first); must match the order of the rendered rows. */

@@ -1,9 +1,9 @@
 import { autocompletion } from '@codemirror/autocomplete';
 import type { Completion, CompletionContext, CompletionResult } from '@codemirror/autocomplete';
 import type { Extension } from '@codemirror/state';
+import type { JsonSchema } from '../../../lib/json-schema';
 import { flattenSchemaToVariables } from './schema-to-variables';
 import type { VariableCompletion } from './schema-to-variables';
-import type { JsonSchema } from '@/lib/json-schema';
 
 /**
  * Creates a CodeMirror autocomplete extension for {{variable}} placeholders.

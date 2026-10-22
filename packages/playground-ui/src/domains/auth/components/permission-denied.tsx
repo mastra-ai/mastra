@@ -1,6 +1,6 @@
 import { LockIcon } from 'lucide-react';
-import { EmptyState } from '@/ds/components/EmptyState';
-import type { EmptyStateProps } from '@/ds/components/EmptyState';
+import { EmptyState } from '../../../ds/components/EmptyState';
+import type { EmptyStateProps } from '../../../ds/components/EmptyState';
 
 export type PermissionDeniedProps = {
   resource: string;

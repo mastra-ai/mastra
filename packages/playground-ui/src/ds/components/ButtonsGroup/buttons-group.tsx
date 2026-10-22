@@ -1,9 +1,9 @@
 import './buttons-group.css';
 import * as React from 'react';
 
-import { ControlSizeContext } from '@/ds/primitives/control-size';
-import type { ControlSize } from '@/ds/primitives/control-size';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { ControlSizeContext } from '../../primitives/control-size';
+import type { ControlSize } from '../../primitives/control-size';
 
 type Orientation = 'horizontal' | 'vertical';
 

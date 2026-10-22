@@ -1,12 +1,12 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useRef, useState } from 'react';
 import { HookDemo } from '../../../../.storybook/fixtures/hooks/hook-demo';
-import { FluidHoverHighlight } from '@/components/fluid-hover-highlight';
-import { Checkbox } from '@/ds/components/Checkbox';
-import { Field, FieldLabel } from '@/ds/components/Field';
-import { Txt } from '@/ds/components/Txt';
-import { useFluidHover, useRegisterFluidHoverItem } from '@/hooks/use-fluid-hover';
-import type { UseFluidHoverReturn } from '@/hooks/use-fluid-hover';
+import { FluidHoverHighlight } from '../../../components/fluid-hover-highlight';
+import { Checkbox } from '../../../ds/components/Checkbox';
+import { Field, FieldLabel } from '../../../ds/components/Field';
+import { Txt } from '../../../ds/components/Txt';
+import { useFluidHover, useRegisterFluidHoverItem } from '../../use-fluid-hover';
+import type { UseFluidHoverReturn } from '../../use-fluid-hover';
 
 const steps = ['Fetch weather', 'Summarize forecast', 'Send notification'];
 

@@ -1,5 +1,5 @@
+import type { DateRangePreset } from '../../ds/components/DateTimeRangePicker';
 import type { DatePreset } from './hooks/use-metrics';
-import type { DateRangePreset } from '@/ds/components/DateTimeRangePicker';
 
 /** The date presets the metrics dashboard offers, in `DateTimeRangePicker` terms. */
 export const METRICS_PICKER_PRESETS: readonly DateRangePreset[] = [

@@ -12,12 +12,12 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { userEvent, within } from 'storybook/test';
+import { hueAccentColor } from '../../../lib/colors';
+import { Avatar } from '../Avatar/Avatar';
+import { Txt } from '../Txt';
 import { DEFAULT_FILTER_OPERATORS } from './default-operators';
 import { FilterBar } from './filter-bar';
 import type { FilterBarExpression, FilterBarField, FilterBarItem } from './types';
-import { Avatar } from '@/ds/components/Avatar/Avatar';
-import { Txt } from '@/ds/components/Txt';
-import { hueAccentColor } from '@/lib/colors';
 
 const FIELDS: FilterBarField[] = [
   {

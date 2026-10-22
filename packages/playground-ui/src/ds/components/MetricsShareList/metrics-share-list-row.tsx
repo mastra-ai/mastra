@@ -1,9 +1,9 @@
 import type { CSSProperties, ElementType, ReactNode } from 'react';
+import { cn } from '../../../lib/utils';
+import { Txt } from '../Txt';
 import { NUM, ROW } from './metrics-share-list-classes';
 import type { ShownRow } from './metrics-share-list-rows';
 import type { MetricsShareListColumn } from './metrics-share-list-types';
-import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/lib/utils';
 
 export type ShareListRowProps = {
   row: ShownRow;

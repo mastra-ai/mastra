@@ -1,11 +1,11 @@
 import { Tabs as BaseTabs } from '@base-ui/react/tabs';
 import { useContext, useEffect, useRef } from 'react';
+import { cn } from '../../../lib/utils';
+import { controlStateColorTransition, focusRing } from '../../primitives/transitions';
+import { quietTextHover } from '../../primitives/typography';
 import { buttonVariants } from '../Button/Button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip/tooltip';
 import { TabListContext } from './tabs-context';
-import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
-import { quietTextHover } from '@/ds/primitives/typography';
-import { cn } from '@/lib/utils';
 
 export type TabProps = {
   children: React.ReactNode;

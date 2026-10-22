@@ -1,9 +1,9 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
-import { Badge } from '@/ds/components/Badge';
-import { CopyButton } from '@/ds/components/CopyButton';
-import { Txt } from '@/ds/components/Txt';
-import { Icon } from '@/ds/icons/Icon';
-import { WorkflowIcon } from '@/ds/icons/WorkflowIcon';
+import { Badge } from '../../../ds/components/Badge';
+import { CopyButton } from '../../../ds/components/CopyButton';
+import { Txt } from '../../../ds/components/Txt';
+import { Icon } from '../../../ds/icons/Icon';
+import { WorkflowIcon } from '../../../ds/icons/WorkflowIcon';
 
 export function InitialWorkflowHeader({ workflow, workflowId }: { workflow: GetWorkflowResponse; workflowId: string }) {
   const stepsCount = Object.keys(workflow.steps ?? {}).length;

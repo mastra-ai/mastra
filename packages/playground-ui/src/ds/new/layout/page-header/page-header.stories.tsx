@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ArrowLeftIcon, BotIcon } from 'lucide-react';
 
+import { Badge } from '../../../components/Badge';
+import { Button } from '../../../components/Button';
 import { PageHeader } from './page-header';
-import { Badge } from '@/ds/components/Badge';
-import { Button } from '@/ds/components/Button';
 
 function StoryFrame({ children }: { children: React.ReactNode }) {
   return <div className="w-[min(42rem,calc(100vw-7rem))] py-10">{children}</div>;

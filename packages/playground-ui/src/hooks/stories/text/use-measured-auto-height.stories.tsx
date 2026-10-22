@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { HookDemo } from '../../../../.storybook/fixtures/hooks/hook-demo';
-import { Button } from '@/ds/components/Button';
-import { Txt } from '@/ds/components/Txt';
-import { useMeasuredAutoHeight } from '@/hooks/use-measured-auto-height';
+import { Button } from '../../../ds/components/Button';
+import { Txt } from '../../../ds/components/Txt';
+import { useMeasuredAutoHeight } from '../../use-measured-auto-height';
 
 function MeasuredAutoHeightDemo() {
   const [expanded, setExpanded] = useState(false);

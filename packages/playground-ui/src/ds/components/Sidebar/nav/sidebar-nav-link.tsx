@@ -1,14 +1,14 @@
 import { ChevronRightIcon } from 'lucide-react';
 import React from 'react';
 import type { ComponentProps } from 'react';
+import { cn } from '../../../../lib/utils';
+import type { LinkComponent } from '../../../types/link-component';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../Tooltip';
 import type { SidebarState } from '../root/sidebar-context';
 import { useMaybeSidebarState } from '../root/sidebar-context';
 import { navItemClasses, navItemLayoutClasses, navRowSurfaceClasses } from './sidebar-nav-item-classes';
 import type { SidebarNavItemSize } from './sidebar-nav-item-classes';
 import { SidebarNavLabel } from './sidebar-nav-label';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import type { LinkComponent } from '@/ds/types/link-component';
-import { cn } from '@/lib/utils';
 
 export type SidebarLink = {
   name: string;

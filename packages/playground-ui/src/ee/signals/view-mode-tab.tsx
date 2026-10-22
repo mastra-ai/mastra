@@ -1,6 +1,6 @@
-import { Tab } from '@/ds/components/Tabs';
-import { Txt } from '@/ds/components/Txt';
-import { Icon } from '@/ds/icons/Icon';
+import { Tab } from '../../ds/components/Tabs';
+import { Txt } from '../../ds/components/Txt';
+import { Icon } from '../../ds/icons/Icon';
 
 export type SignalsViewMode = 'flow' | 'compare' | 'lifelines';
 

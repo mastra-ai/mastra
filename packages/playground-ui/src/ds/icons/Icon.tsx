@@ -1,7 +1,7 @@
 import type { HTMLAttributes, ReactNode } from 'react';
+import { cn } from '../../lib/utils';
 import { iconSizeClasses } from './icon-size-classes';
 import type { IconSize } from './icon-size-classes';
-import { cn } from '@/lib/utils';
 
 export type { IconSize } from './icon-size-classes';
 

@@ -1,3 +1,4 @@
+import { DataCodeSection } from '../DataCodeSection';
 import { DataPanelCloseButton } from './data-panel-close-button';
 import { DataPanelContent } from './data-panel-content';
 import { DataPanelCopyId } from './data-panel-copy-id';
@@ -11,7 +12,6 @@ import { DataPanelNextPrevNav } from './data-panel-next-prev-nav';
 import { DataPanelNoData } from './data-panel-no-data';
 import { DataPanelRoot } from './data-panel-root';
 import { DataPanelSectionHeading } from './data-panel-section-heading';
-import { DataCodeSection } from '@/ds/components/DataCodeSection';
 
 export const DataPanel = Object.assign(DataPanelRoot, {
   Header: DataPanelHeader,

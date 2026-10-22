@@ -2,9 +2,9 @@
 import { cleanup, render, act } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { FakeHighlight, installHighlightApi } from '../test/highlight-api';
+import type { HighlightApiHarness } from '../test/highlight-api';
 import { useTextHighlight } from './use-text-highlight';
-import { FakeHighlight, installHighlightApi } from '@/test/highlight-api';
-import type { HighlightApiHarness } from '@/test/highlight-api';
 
 const originalFrameApi = {
   requestAnimationFrame: globalThis.requestAnimationFrame,

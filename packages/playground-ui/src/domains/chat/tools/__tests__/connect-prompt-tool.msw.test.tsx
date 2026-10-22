@@ -4,9 +4,9 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { server } from '../../../../test/msw-server';
 import { ConnectPromptTool } from '../connect-prompt-tool';
 import { connectPromptPayload, connectPromptSession, connectPromptStatusActive } from './fixtures/connect-prompt';
-import { server } from '@/test/msw-server';
 
 // The Nango frontend SDK opens real windows and websockets, so it is the one
 // boundary mocked beyond MSW.

@@ -6,6 +6,7 @@ import { ReactFlowProvider } from '@xyflow/react';
 import { useContext, useLayoutEffect } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { WorkflowGraphCanvas } from '../../../../ds/components/Workflow';
 import { useWorkflowSelectedStep } from '../../context/use-workflow-selected-step';
 import { WorkflowRunContext } from '../../context/workflow-run-context';
 import type { WorkflowRunContextType } from '../../context/workflow-run-context';
@@ -14,7 +15,6 @@ import { WorkflowStepDetailProvider } from '../../context/workflow-step-detail-p
 import { WorkflowGraph } from '../workflow-graph';
 import { twoStepWorkflow as baseWorkflow } from './fixtures/workflow-debug-step-controls';
 import { graphRun } from './fixtures/workflow-graph-runtime';
-import { WorkflowGraphCanvas } from '@/ds/components/Workflow';
 
 const reactFlowViewport = vi.hoisted(() => ({
   getNodes: vi.fn<() => XyFlowReact.Node[]>(() => []),

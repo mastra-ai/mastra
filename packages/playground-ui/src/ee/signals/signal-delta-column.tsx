@@ -1,3 +1,5 @@
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../ds/components/Tooltip';
+import { Txt } from '../../ds/components/Txt';
 import { getSignalColor } from './signal-colors';
 import { signalDescription, signalLabel } from './signal-formatting';
 import { computeThemeShareDeltas, themeShareSeries } from './theme-compare-data';
@@ -5,8 +7,6 @@ import { ThemeCompareSparkline } from './theme-compare-sparkline';
 import type { ThemeSelection } from './theme-drilldown-data';
 import type { ThemeFlowResponse, TraceSignalName } from './types';
 import { useTraceIntelligence } from './use-trace-intelligence';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { Txt } from '@/ds/components/Txt';
 
 function percent(share: number) {
   return `${Math.round(share * 100)}%`;

@@ -2,8 +2,8 @@ import { javascript } from '@codemirror/lang-javascript';
 import { jsonLanguage } from '@codemirror/lang-json';
 import { EditorView } from '@codemirror/view';
 import CodeMirror from '@uiw/react-codemirror';
-import { codeFoldGutter, useCodemirrorTheme } from '@/ds/components/CodeEditor';
-import { CopyButton } from '@/ds/components/CopyButton';
+import { codeFoldGutter, useCodemirrorTheme } from '../../CodeEditor';
+import { CopyButton } from '../../CopyButton';
 
 export const WorkflowCodeContent = ({
   data,

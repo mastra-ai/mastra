@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { HelperExamples } from '../../../../.storybook/fixtures/helpers/helper-examples';
 import type { HelperExample } from '../../../../.storybook/fixtures/helpers/helper-examples';
-import { formatRelativeTime } from '@/utils/relative-time';
+import { formatRelativeTime } from '../../relative-time';
 
 const now = Date.UTC(2026, 8, 24, 12);
 const opts = { now, locale: 'en-US', timeZone: 'UTC' };

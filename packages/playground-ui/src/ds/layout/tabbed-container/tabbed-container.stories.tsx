@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
+import { cn } from '../../../lib/utils';
+import { DataList } from '../../components/DataList/data-list';
+import type { DataListSort } from '../../components/DataList/data-list';
 import { TabbedContainer } from './index';
-import { DataList } from '@/ds/components/DataList/data-list';
-import type { DataListSort } from '@/ds/components/DataList/data-list';
-import { cn } from '@/lib/utils';
 
 const meta: Meta<typeof TabbedContainer> = {
   title: 'Layout/TabbedContainer',

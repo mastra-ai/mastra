@@ -1,8 +1,8 @@
 import { Brain } from 'lucide-react';
+import { MarkdownRenderer } from '../../../MarkdownRenderer';
 import { ActivityItem } from '../activity';
 import { hasVisibleReasoning } from './reasoning-visibility';
 import type { ReasoningContent } from './reasoning-visibility';
-import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
 
 export interface ReasoningActivityProps extends ReasoningContent {
   defaultOpen?: boolean;

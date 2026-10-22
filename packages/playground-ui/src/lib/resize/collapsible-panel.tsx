@@ -2,12 +2,12 @@ import type { CSSProperties, Ref } from 'react';
 import { useImperativeHandle, useRef, useState } from 'react';
 import type { PanelProps } from 'react-resizable-panels';
 import { Panel, usePanelRef } from 'react-resizable-panels';
+import { Kbd } from '../../ds/components/Kbd';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../ds/components/Tooltip';
+import { Icon } from '../../ds/icons';
+import { cn } from '../utils';
 import { PanelEdgeIcon } from './panel-edge-icon';
 import { panelIconButtonClass } from './panel-icon-button';
-import { Kbd } from '@/ds/components/Kbd';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { Icon } from '@/ds/icons';
-import { cn } from '@/lib/utils';
 
 /** Programmatic control over a CollapsiblePanel (distinct from the library's panel handle). */
 export interface CollapsiblePanelHandle {

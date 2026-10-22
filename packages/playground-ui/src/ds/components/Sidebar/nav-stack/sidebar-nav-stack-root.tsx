@@ -1,7 +1,7 @@
 import React from 'react';
 import type { ComponentPropsWithoutRef } from 'react';
+import { cn } from '../../../../lib/utils';
 import { SidebarNavStackContext } from './sidebar-nav-stack-context';
-import { cn } from '@/lib/utils';
 
 export type SidebarNavStackProps = ComponentPropsWithoutRef<'div'> & {
   value: string;

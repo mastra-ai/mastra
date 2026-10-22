@@ -1,10 +1,10 @@
 import type { SpanInputMessage } from '@mastra/core/observability';
+import { ReasoningActivity } from '../../../../ds/components/ai/activity';
+import { Message } from '../../../../ds/components/Message';
 import { SpanPayloadAttachment } from './span-payload-attachment';
 import { SpanPayloadJson } from './span-payload-json';
 import { SpanPayloadMarkdown, SpanPayloadLabel } from './span-payload-primitives';
 import { SpanPayloadTool } from './span-payload-tool';
-import { ReasoningActivity } from '@/ds/components/ai/activity';
-import { Message } from '@/ds/components/Message';
 
 const isRecord = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);

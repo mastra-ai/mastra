@@ -1,4 +1,4 @@
-import { Skeleton } from '@/ds/components/Skeleton';
+import { Skeleton } from '../../ds/components/Skeleton';
 
 function DistributionSkeleton() {
   return (

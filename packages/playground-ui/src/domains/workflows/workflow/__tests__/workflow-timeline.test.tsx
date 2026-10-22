@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it } from 'vitest';
+import { server } from '../../../../test/msw-server';
 import { WorkflowStepDetailContent } from '../../components/workflow-step-detail';
 import { completedLoop } from '../../context/__tests__/fixtures/completed-loop';
 import { WorkflowRunProvider } from '../../context/workflow-run-provider';
@@ -11,7 +12,6 @@ import { WorkflowSelectedStepProvider } from '../../context/workflow-selected-st
 import { WorkflowStepDetailProvider } from '../../context/workflow-step-detail-provider';
 import { WorkflowTimeline } from '../workflow-timeline';
 import { twoStepWorkflow } from './fixtures/workflow-debug-step-controls';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 afterEach(cleanup);

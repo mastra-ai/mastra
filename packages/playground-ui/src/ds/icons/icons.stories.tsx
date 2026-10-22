@@ -1,5 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Bell, Check, ChevronDown, Copy, Folder, Play, Plus, Search, Settings, Trash2, X } from 'lucide-react';
+import { Button } from '../components/Button';
+import { Sizes } from '../tokens/sizes';
 import { Icon } from './Icon';
 import type { IconSize } from './Icon';
 import {
@@ -57,8 +59,6 @@ import {
   XaiIcon,
   ZaiIcon,
 } from './index';
-import { Button } from '@/ds/components/Button';
-import { Sizes } from '@/ds/tokens/sizes';
 
 const meta: Meta<typeof Icon> = {
   title: 'Icons/All Icons',

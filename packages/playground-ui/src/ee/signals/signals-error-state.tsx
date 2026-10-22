@@ -1,6 +1,6 @@
 import { TriangleAlert, X, RotateCcw } from 'lucide-react';
-import { Button } from '@/ds/components/Button';
-import { Txt } from '@/ds/components/Txt';
+import { Button } from '../../ds/components/Button';
+import { Txt } from '../../ds/components/Txt';
 
 export function SignalsErrorState({
   message,

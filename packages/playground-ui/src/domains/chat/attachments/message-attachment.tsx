@@ -1,9 +1,9 @@
 import { useRef, useState } from 'react';
+import { AttachmentCard } from '../../../ds/components/AttachmentCard';
+import { isBrowserFetchableUrl } from '../../../lib/file';
 import { PdfPreviewDialog, TxtPreviewDialog } from './attachment-preview-dialog';
 import { attachmentInfo, attachmentName, textAttachment } from './message-attachment-info';
 import { MessageImageAttachment } from './message-image-attachment';
-import { AttachmentCard } from '@/ds/components/AttachmentCard';
-import { isBrowserFetchableUrl } from '@/lib/file';
 
 export interface MessageAttachmentProps {
   type: 'image' | 'document' | 'file';

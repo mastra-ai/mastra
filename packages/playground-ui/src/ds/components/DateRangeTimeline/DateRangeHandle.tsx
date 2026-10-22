@@ -1,8 +1,8 @@
 import { format } from 'date-fns';
 import type { KeyboardEventHandler, PointerEventHandler } from 'react';
+import { cn } from '../../../lib/utils';
 import { parseDate } from './lib/date-range-timeline';
 import type { DateBoundary } from './lib/date-range-timeline';
-import { cn } from '@/lib/utils';
 
 interface DateRangeHandleProps {
   boundary: DateBoundary;

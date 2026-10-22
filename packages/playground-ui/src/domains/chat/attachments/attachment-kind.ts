@@ -1,4 +1,4 @@
-import { isRemoteUrl } from '@/lib/file';
+import { isRemoteUrl } from '../../../lib/file';
 
 export type ComposerAttachmentKind = 'image' | 'pdf' | 'video' | 'text' | 'file';
 

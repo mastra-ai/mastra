@@ -3,6 +3,8 @@ import { useTraceSpanScores } from '@mastra/react/hooks/scores';
 import { useSpanFeedback, useTraceFeedback, useTraceOrBranchSpans, useTraceUsage } from '@mastra/react/hooks/traces';
 import { useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
+import { TraceAsItemDialog } from '../../../observability/components/trace-as-item-dialog';
+import { ScoreDataPanel, TraceScoresList } from '../../../scores';
 import { useTraceListNavigation } from '../../hooks/use-trace-list-navigation';
 import type { SpanTab } from '../../types';
 import { SpanFeedbackTab } from '../span-feedback-tab';
@@ -10,8 +12,6 @@ import { TraceFeedbackTab } from '../trace-feedback-tab';
 import { TraceSpanPanel } from '../trace-span-panel';
 import type { TraceSpanPanelProps } from '../trace-span-panel';
 import { useTraceUsageColumns, useTracesConfig, useTracesList, useTracesSelection } from './traces-explorer-context';
-import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
-import { ScoreDataPanel, TraceScoresList } from '@/domains/scores';
 
 export type TracesExplorerPanelProps = {
   /** Opens a score of one of the full thread's traces (the host owns routing). */

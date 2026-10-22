@@ -1,12 +1,12 @@
 import { useContext } from 'react';
 import type { HTMLAttributes } from 'react';
+import { cn } from '../../../lib/utils';
 import { AvatarSizeContext, avatarSizeClasses } from '../Avatar/avatar-size';
 import type { AvatarSize } from '../Avatar/avatar-size';
 import { productAvatarDefaultClasses, productAvatarIconClasses } from './product-avatar-size';
 import { productColors, productNames } from './product-identity';
 import type { Product } from './product-identity';
 import { ProductIcon } from './ProductIcon';
-import { cn } from '@/lib/utils';
 
 export type ProductAvatarProps = Omit<HTMLAttributes<HTMLSpanElement>, 'children'> & {
   product: Product;

@@ -1,17 +1,17 @@
 import { useEffect, useRef } from 'react';
+import type { MessageMetadata } from '../..';
+import type { ActivityStatus } from '../../../../ds/components/ai/activity';
+import { presentTool, ToolCallCommand, ToolCallMono } from '../../../../ds/components/ai/tool-call';
+import { Txt } from '../../../../ds/components/Txt';
+import { useElapsedTime } from '../../../../hooks/use-elapsed-time';
+import { cn } from '../../../../utils/cn';
+import { formatDuration, formatElapsed } from '../../../../utils/duration';
 import type { DataMessagePart } from '../tool-card';
+import { awaitsToolApproval } from './awaits-tool-approval';
+import type { ToolApprovalRequest } from './tool-approval-badge';
+import { ToolApprovalBadge } from './tool-approval-badge';
 import { parseToolArgs, toolDataParts, workspaceMetadata } from './workspace-data-parts';
 import { WorkspaceLink } from './workspace-link';
-import type { MessageMetadata } from '@/domains/chat';
-import { awaitsToolApproval } from '@/domains/chat/tools/badges/awaits-tool-approval';
-import type { ToolApprovalRequest } from '@/domains/chat/tools/badges/tool-approval-badge';
-import { ToolApprovalBadge } from '@/domains/chat/tools/badges/tool-approval-badge';
-import type { ActivityStatus } from '@/ds/components/ai/activity';
-import { presentTool, ToolCallCommand, ToolCallMono } from '@/ds/components/ai/tool-call';
-import { Txt } from '@/ds/components/Txt';
-import { useElapsedTime } from '@/hooks/use-elapsed-time';
-import { cn } from '@/utils/cn';
-import { formatDuration, formatElapsed } from '@/utils/duration';
 
 const SANDBOX_STATUS_DOT: Record<string, string> = {
   running: 'bg-success-indicator',

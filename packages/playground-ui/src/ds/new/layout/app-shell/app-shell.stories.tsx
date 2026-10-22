@@ -2,16 +2,16 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Bot, Search, Settings, Workflow } from 'lucide-react';
 import type { ReactNode } from 'react';
 
+import { cn } from '../../../../lib/utils';
+import { Breadcrumb, Crumb } from '../../../components/Breadcrumb';
+import { LogoWithoutText } from '../../../components/Logo';
+import { PageLayout } from '../../../components/PageLayout';
+import { Sidebar, SidebarProvider } from '../../../components/Sidebar';
+import { TooltipProvider } from '../../../components/Tooltip';
+import { raisedSurfaceStyle } from '../../../primitives/raised-surface';
 import { PageHeader } from '../page-header';
 import { AppShell } from './app-shell';
 import { MainCard } from './main-card';
-import { Breadcrumb, Crumb } from '@/ds/components/Breadcrumb';
-import { LogoWithoutText } from '@/ds/components/Logo';
-import { PageLayout } from '@/ds/components/PageLayout';
-import { Sidebar, SidebarProvider } from '@/ds/components/Sidebar';
-import { TooltipProvider } from '@/ds/components/Tooltip';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
-import { cn } from '@/lib/utils';
 
 function DemoSidebar() {
   return (

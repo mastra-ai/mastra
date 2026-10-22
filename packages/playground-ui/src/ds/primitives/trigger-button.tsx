@@ -1,8 +1,8 @@
 import * as React from 'react';
+import { cn } from '../../lib/utils';
+import { Button } from '../components/Button';
+import type { ButtonProps } from '../components/Button';
 import { controlTriggerOpenStateFor } from './control-size';
-import { Button } from '@/ds/components/Button';
-import type { ButtonProps } from '@/ds/components/Button';
-import { cn } from '@/lib/utils';
 
 /**
  * Props shared by every click-to-open trigger (DropdownMenu, Popover, …) that is

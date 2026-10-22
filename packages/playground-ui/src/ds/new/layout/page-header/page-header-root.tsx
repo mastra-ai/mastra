@@ -1,13 +1,13 @@
 import { Children, isValidElement } from 'react';
 import type { ComponentPropsWithoutRef, ElementType, ReactNode } from 'react';
 
+import { cn } from '../../../../lib/utils';
 import { PageHeaderAction } from './page-header-action';
 import { PageHeaderEyebrow } from './page-header-eyebrow';
 import { PageHeaderIcon } from './page-header-icon';
 import { PageHeaderMeta } from './page-header-meta';
 import type { PageHeaderMetaProps } from './page-header-meta';
 import { PageHeaderTitle } from './page-header-title';
-import { cn } from '@/lib/utils';
 
 export type PageHeaderRootProps = ComponentPropsWithoutRef<'header'> & {
   spacing?: 'default' | 'breathing';

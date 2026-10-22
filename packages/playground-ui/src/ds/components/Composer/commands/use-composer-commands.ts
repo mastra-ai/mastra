@@ -1,9 +1,9 @@
 import type { ChangeEvent, ComponentPropsWithoutRef, RefObject } from 'react';
 import { useId, useState } from 'react';
+import { useKeydown } from '../../../../lib/keyboard/use-keydown';
 import type { ComposerCommand, ComposerCommandOption } from './command-matches';
 import { matchCommandOptions, matchCommands } from './command-matches';
 import type { ComposerSuggestionItem, ComposerSuggestionsProps } from './composer-suggestions';
-import { useKeydown } from '@/lib/keyboard/use-keydown';
 
 function createSuggestionItems(
   listId: string,

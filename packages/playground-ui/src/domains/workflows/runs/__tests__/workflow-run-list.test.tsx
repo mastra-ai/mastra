@@ -8,6 +8,9 @@ import type { AnchorHTMLAttributes } from 'react';
 import { forwardRef } from 'react';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import type { LinkComponentProviderProps } from '../../../../lib/framework';
+import { LinkComponentProvider } from '../../../../lib/framework';
+import { server } from '../../../../test/msw-server';
 import { WorkflowRecentRuns } from '../workflow-run-list';
 import {
   emptyWorkflowRuns,
@@ -16,9 +19,6 @@ import {
   runsWithInput,
   runsWithResource,
 } from './fixtures/workflow-runs';
-import type { LinkComponentProviderProps } from '@/lib/framework';
-import { LinkComponentProvider } from '@/lib/framework';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 const WORKFLOW_ID = 'demo-workflow';

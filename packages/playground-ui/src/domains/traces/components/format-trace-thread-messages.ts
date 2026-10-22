@@ -1,9 +1,9 @@
 import type { MastraClient } from '@mastra/client-js';
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent/message-list';
 import { SpanType } from '@mastra/core/observability';
-import { isHiddenTool } from '@/domains/chat/tools/tool-card-kind';
-import { formatHierarchicalSpans } from '@/domains/traces/components/format-hierarchical-spans';
-import type { UISpan } from '@/domains/traces/types';
+import { isHiddenTool } from '../../chat/tools/tool-card-kind';
+import type { UISpan } from '../types';
+import { formatHierarchicalSpans } from './format-hierarchical-spans';
 
 type SpanRecord = Awaited<ReturnType<MastraClient['getTrace']>>['spans'][number];
 

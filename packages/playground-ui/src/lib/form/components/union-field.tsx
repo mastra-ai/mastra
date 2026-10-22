@@ -1,7 +1,7 @@
 import type { ParsedField } from '@autoform/core';
 import type { AutoFormFieldProps } from '@autoform/react';
+import { Txt } from '../../../ds/components/Txt';
 import { CustomAutoFormField } from './custom-auto-form-field';
-import { Txt } from '@/ds/components/Txt';
 
 export const UnionField: React.FC<AutoFormFieldProps> = ({ field, inputProps }) => {
   const path = inputProps.name?.split('.') ?? [];

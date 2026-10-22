@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 
 import { HookDemo } from '../../../.storybook/fixtures/hooks/hook-demo';
+import { Txt } from '../../ds/components/Txt';
 import { KeyboardScope, useKeyboardScopeDepth } from './keyboard-shortcuts-context';
-import { Txt } from '@/ds/components/Txt';
 
 function ScopeDepth({ label }: { label: string }) {
   const depth = useKeyboardScopeDepth();

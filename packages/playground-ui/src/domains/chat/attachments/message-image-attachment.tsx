@@ -1,7 +1,7 @@
 import { FileImage } from 'lucide-react';
 import { useRef, useState } from 'react';
+import { AttachmentCard } from '../../../ds/components/AttachmentCard';
 import { ImagePreviewDialog } from './attachment-preview-dialog';
-import { AttachmentCard } from '@/ds/components/AttachmentCard';
 
 export function MessageImageAttachment({ src, name, typeLabel }: { src: string; name: string; typeLabel: string }) {
   const [open, setOpen] = useState(false);

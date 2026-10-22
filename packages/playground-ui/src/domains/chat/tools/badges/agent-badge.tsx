@@ -1,18 +1,18 @@
 import React from 'react';
 import Markdown from 'react-markdown';
+import type { MessageMetadata } from '../..';
+import type { ActivityStatus } from '../../../../ds/components/ai/activity';
+import { ToolCallMono } from '../../../../ds/components/ai/tool-call';
+import { Button } from '../../../../ds/components/Button';
+import { CodeEditor } from '../../../../ds/components/CodeEditor';
+import { AgentIcon } from '../../../../ds/icons/AgentIcon';
+import { NetworkChoiceMetadataDialogTrigger } from '../../components/network-choice-metadata-dialog';
+import { SectionLabel } from '../../components/section-label';
 import { ToolCard } from '../tool-card';
+import { awaitsToolApproval } from './awaits-tool-approval';
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
-import type { MessageMetadata } from '@/domains/chat';
-import { NetworkChoiceMetadataDialogTrigger } from '@/domains/chat/components/network-choice-metadata-dialog';
-import { SectionLabel } from '@/domains/chat/components/section-label';
-import { awaitsToolApproval } from '@/domains/chat/tools/badges/awaits-tool-approval';
-import type { ToolApprovalRequest } from '@/domains/chat/tools/badges/tool-approval-badge';
-import { ToolApprovalBadge } from '@/domains/chat/tools/badges/tool-approval-badge';
-import type { ActivityStatus } from '@/ds/components/ai/activity';
-import { ToolCallMono } from '@/ds/components/ai/tool-call';
-import { Button } from '@/ds/components/Button';
-import { CodeEditor } from '@/ds/components/CodeEditor';
-import { AgentIcon } from '@/ds/icons/AgentIcon';
+import type { ToolApprovalRequest } from './tool-approval-badge';
+import { ToolApprovalBadge } from './tool-approval-badge';
 
 type TextMessage = {
   type: 'text';

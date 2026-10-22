@@ -1,5 +1,5 @@
 import { XIcon } from 'lucide-react';
-import { Button } from '@/ds/components/Button';
+import { Button } from '../Button';
 
 export interface DataDetailsPanelCloseButtonProps {
   onClick: () => void;

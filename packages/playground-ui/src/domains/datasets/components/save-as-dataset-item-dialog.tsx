@@ -5,16 +5,16 @@ import { useDatasetMutations, useDatasets } from '@mastra/react/hooks/datasets';
 import { Check, X } from 'lucide-react';
 import { useState, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
-import { Button } from '@/ds/components/Button';
-import { CodeEditor } from '@/ds/components/CodeEditor';
-import { DataPanel } from '@/ds/components/DataPanel';
-import type { DataPanelProps } from '@/ds/components/DataPanel';
-import { Field, FieldLabel } from '@/ds/components/Field';
-import { Form } from '@/ds/components/Form';
-import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/ds/components/Select';
-import { Txt } from '@/ds/components/Txt';
-import { useLinkComponent } from '@/lib/framework';
-import { toast } from '@/utils/toast';
+import { Button } from '../../../ds/components/Button';
+import { CodeEditor } from '../../../ds/components/CodeEditor';
+import { DataPanel } from '../../../ds/components/DataPanel';
+import type { DataPanelProps } from '../../../ds/components/DataPanel';
+import { Field, FieldLabel } from '../../../ds/components/Field';
+import { Form } from '../../../ds/components/Form';
+import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '../../../ds/components/Select';
+import { Txt } from '../../../ds/components/Txt';
+import { useLinkComponent } from '../../../lib/framework';
+import { toast } from '../../../utils/toast';
 
 const CREATE_DATASET_VALUE = '__create-dataset__';
 

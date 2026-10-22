@@ -5,19 +5,19 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mockNetworkChoiceMetadataDialogTrigger = vi.fn(() => null);
 
-vi.mock('@/domains/chat/components/network-choice-metadata-dialog', () => ({
+vi.mock('../../components/network-choice-metadata-dialog', () => ({
   NetworkChoiceMetadataDialogTrigger: mockNetworkChoiceMetadataDialogTrigger,
 }));
 
-vi.mock('@/ds/components/CodeEditor', () => ({
+vi.mock('../../../../ds/components/CodeEditor', () => ({
   CodeEditor: () => null,
 }));
 
-vi.mock('@/ds/icons/AgentIcon', () => ({
+vi.mock('../../../../ds/icons/AgentIcon', () => ({
   AgentIcon: () => null,
 }));
 
-vi.mock('@/domains/chat/components/badge-wrapper', () => ({
+vi.mock('../../components/badge-wrapper', () => ({
   BadgeWrapper: ({ extraInfo }: { extraInfo: ReactNode }) => {
     return extraInfo;
   },

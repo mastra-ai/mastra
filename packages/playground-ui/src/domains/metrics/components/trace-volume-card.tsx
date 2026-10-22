@@ -2,6 +2,9 @@ import { EntityType } from '@mastra/core/observability';
 import { useTraceVolumeMetrics } from '@mastra/react/hooks/metrics';
 import { keepPreviousData } from '@tanstack/react-query';
 import { useState } from 'react';
+import { MetricsCard } from '../../../ds/components/MetricsCard';
+import type { MetricsShareListRow } from '../../../ds/components/MetricsShareList';
+import { MetricsShareList } from '../../../ds/components/MetricsShareList';
 import { useMetricsFilters } from '../hooks/use-metrics-filters';
 import { CHART_COLORS } from '../lib/chart-colors';
 import { formatCount, formatPercent } from '../lib/chart-format';
@@ -9,9 +12,6 @@ import { OpenErrorsInLogsButton, OpenInTracesButton } from './card-action-button
 import { ChartArea } from './chart-area';
 import { ChartCard } from './chart-card';
 import { ChartCardError } from './chart-card-error';
-import { MetricsCard } from '@/ds/components/MetricsCard';
-import type { MetricsShareListRow } from '@/ds/components/MetricsShareList';
-import { MetricsShareList } from '@/ds/components/MetricsShareList';
 
 type Entity = 'agents' | 'workflows' | 'tools';
 

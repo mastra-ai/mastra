@@ -2,8 +2,8 @@
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
 
+import { TooltipProvider } from '../Tooltip';
 import { DisabledFeatureButton } from './disabled-feature-button';
-import { TooltipProvider } from '@/ds/components/Tooltip';
 
 afterEach(() => {
   cleanup();

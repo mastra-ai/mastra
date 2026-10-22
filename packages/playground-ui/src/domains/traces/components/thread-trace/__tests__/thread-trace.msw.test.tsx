@@ -6,9 +6,9 @@ import { http, HttpResponse } from 'msw';
 import type { ReactNode } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { server } from '../../../../../test/msw-server';
 import { ThreadTrace, useThreadTrace, useThreadTraceRow } from '../index';
 import { spanADetail, traceASpans, traceBSpans } from './fixtures/thread-trace';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 const TRACE_IDS = ['trace-a', 'trace-b'];

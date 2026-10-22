@@ -1,10 +1,10 @@
 import type { ReactNode } from 'react';
 
+import { cn } from '../../../lib/utils';
+import { Txt } from '../Txt';
 import { formatCompactTokens } from './format-tokens';
 import { toneClass } from './tones';
 import type { TokenBudgetTone } from './tones';
-import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/lib/utils';
 
 import './token-budget.css';
 

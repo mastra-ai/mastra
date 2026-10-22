@@ -1,7 +1,7 @@
 import { createContext, use } from 'react';
 
+import type { EnvironmentVariablesEditorController } from '../../../hooks/use-environment-variables-editor';
 import type { EnvironmentVariablesEditorRowErrors } from './environment-variables-editor.types';
-import type { EnvironmentVariablesEditorController } from '@/hooks/use-environment-variables-editor';
 
 type EnvironmentVariablesEditorRenderController = Pick<
   EnvironmentVariablesEditorController,

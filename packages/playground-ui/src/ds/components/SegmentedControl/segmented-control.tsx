@@ -2,13 +2,13 @@ import { Radio as RadioPrimitive } from '@base-ui/react/radio';
 import { RadioGroup as RadioGroupPrimitive } from '@base-ui/react/radio-group';
 import * as React from 'react';
 
-import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
-import type { ControlSize } from '@/ds/primitives/control-size';
-import { controlHeight } from '@/ds/primitives/control-size';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
-import { controlStateColorTransition } from '@/ds/primitives/transitions';
-import { mergeRefs } from '@/lib/merge-refs';
-import { cn } from '@/lib/utils';
+import { mergeRefs } from '../../../lib/merge-refs';
+import { cn } from '../../../lib/utils';
+import type { ControlSize } from '../../primitives/control-size';
+import { controlHeight } from '../../primitives/control-size';
+import { raisedSurfaceStyle } from '../../primitives/raised-surface';
+import { controlStateColorTransition } from '../../primitives/transitions';
+import { keepOwnAccessibleName } from '../Field/field-control-aria';
 
 type SegmentedControlContextValue = {
   iconOnly: boolean;

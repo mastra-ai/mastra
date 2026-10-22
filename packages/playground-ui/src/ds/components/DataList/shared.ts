@@ -1,4 +1,4 @@
-import { focusRingInset } from '@/ds/primitives/transitions';
+import { focusRingInset } from '../../primitives/transitions';
 
 /**
  * Row-level styling for the element that participates in the row sibling

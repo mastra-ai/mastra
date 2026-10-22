@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 // ComboboxChips observes the field's size to round it once chips wrap.
-import '@/test/inert-resize-observer';
+import '../../../test/inert-resize-observer';
 import { cleanup, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { useState } from 'react';

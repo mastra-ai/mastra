@@ -1,12 +1,12 @@
 import type { ComponentPropsWithoutRef, DragEvent, ElementType, KeyboardEvent, ReactNode } from 'react';
 import { forwardRef, useState } from 'react';
+import { cn } from '../../../lib/utils';
+import { focusRingInset } from '../../primitives/transitions';
+import { Checkbox } from '../Checkbox';
+import { Tooltip, TooltipTrigger, TooltipContent } from '../Tooltip';
 import { useDataListReorder } from './data-list-reorder-context';
 import { dataListStickyStartStyles } from './shared';
 import type { DataListSticky } from './shared';
-import { Checkbox } from '@/ds/components/Checkbox';
-import { Tooltip, TooltipTrigger, TooltipContent } from '@/ds/components/Tooltip';
-import { focusRingInset } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
 
 export type DataListTopCellProps = {
   children: ReactNode;

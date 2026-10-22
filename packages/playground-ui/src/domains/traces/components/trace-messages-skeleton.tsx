@@ -1,5 +1,5 @@
-import { Skeleton } from '@/ds/components/Skeleton';
-import { cn } from '@/utils/cn';
+import { Skeleton } from '../../../ds/components/Skeleton';
+import { cn } from '../../../utils/cn';
 
 export interface TraceMessagesSkeletonProps {
   className?: string;

@@ -1,5 +1,5 @@
-import { transitions } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { transitions } from '../../primitives/transitions';
 
 export type KbdProps = {
   children: React.ReactNode;

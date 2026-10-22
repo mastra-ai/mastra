@@ -2,9 +2,9 @@ import { PreviewCard as PreviewCardPrimitive } from '@base-ui/react/preview-card
 import type { PreviewCardPopupProps, PreviewCardPositionerProps } from '@base-ui/react/preview-card';
 import * as React from 'react';
 
-import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
-import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { FLOATING_POSITION_METHOD } from '../../primitives/floating';
+import { overlaySurfaceStyle } from '../../primitives/raised-surface';
 
 const HoverCard = PreviewCardPrimitive.Root;
 

@@ -1,9 +1,9 @@
 import { Maximize2 } from 'lucide-react';
 import { useLayoutEffect, useRef } from 'react';
 import type { ComponentProps } from 'react';
+import { cn } from '../../../lib/utils';
+import { Button } from '../Button';
 import type { CollapsibleBoxState } from './use-collapsible-box';
-import { Button } from '@/ds/components/Button';
-import { cn } from '@/lib/utils';
 
 export interface CollapsibleBoxProps extends ComponentProps<'div'> {
   state: CollapsibleBoxState;

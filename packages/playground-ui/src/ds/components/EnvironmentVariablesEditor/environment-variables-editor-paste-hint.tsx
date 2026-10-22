@@ -1,7 +1,7 @@
+import { cn } from '../../../lib/utils';
+import { Txt } from '../Txt';
 import { useEnvironmentVariablesEditorContext } from './environment-variables-editor-context';
 import type { EnvironmentVariablesEditorPasteHintProps } from './environment-variables-editor.types';
-import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/lib/utils';
 
 export const DEFAULT_ENVIRONMENT_VARIABLE_PASTE_HINT = 'Tip: paste a .env file into any field to import it';
 

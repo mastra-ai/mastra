@@ -1,9 +1,9 @@
 import { useId, useState } from 'react';
 import type { FocusEvent, MouseEvent } from 'react';
 import { createPortal } from 'react-dom';
-import { ChartTooltip } from '@/ds/components/ChartTooltip';
-import { focusRing } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
+import { ChartTooltip } from '../../ds/components/ChartTooltip';
+import { focusRing } from '../../ds/primitives/transitions';
+import { cn } from '../../lib/utils';
 
 /** A theme-presence point with an instant portal tooltip. */
 export function LifelinePoint({

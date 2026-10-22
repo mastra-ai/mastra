@@ -1,6 +1,6 @@
+import { cn } from '../../../lib/utils';
+import { Txt } from '../Txt';
 import type { MetricsLineChartSeries } from './metrics-line-chart';
-import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/lib/utils';
 
 export function MetricsLineChartLegend({
   data,

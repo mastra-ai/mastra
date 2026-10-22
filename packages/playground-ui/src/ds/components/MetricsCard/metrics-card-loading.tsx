@@ -1,5 +1,5 @@
-import { Spinner } from '@/ds/components/Spinner/spinner';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { Spinner } from '../Spinner/spinner';
 
 export function MetricsCardLoading({ className }: { className?: string }) {
   return (

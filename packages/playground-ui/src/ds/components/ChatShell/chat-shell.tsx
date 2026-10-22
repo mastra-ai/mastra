@@ -1,5 +1,6 @@
 import type { ComponentProps, ComponentPropsWithoutRef } from 'react';
 
+import { cn } from '../../../lib/utils';
 import {
   MessageScroller,
   MessageScrollerButton,
@@ -7,14 +8,13 @@ import {
   MessageScrollerProvider,
   MessageScrollerViewport,
 } from '../MessageScroller';
+
 import type {
   MessageScrollerButtonProps,
   MessageScrollerContentProps,
   MessageScrollerProviderProps,
   MessageScrollerViewportProps,
 } from '../MessageScroller';
-
-import { cn } from '@/lib/utils';
 
 export type ChatShellProps = ComponentPropsWithoutRef<'div'> & {
   scroller?: Omit<MessageScrollerProviderProps, 'children'>;

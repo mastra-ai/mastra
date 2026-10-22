@@ -1,9 +1,9 @@
 import type { TaskItem } from '@mastra/core/signals';
 
+import { SignalActivity } from '../../../ds/components/ai/activity';
 import { NotificationSignalNotice } from './notification-signal-notice';
 import { formatSignalValue, isRecord, isSignalData, signalContentsToText } from './signal-data';
 import type { SignalData } from './signal-data';
-import { SignalActivity } from '@/ds/components/ai/activity';
 
 export type SignalBadgeProps = {
   signal: unknown;

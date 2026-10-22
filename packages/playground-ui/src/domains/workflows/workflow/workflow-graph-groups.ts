@@ -1,7 +1,7 @@
+import type { WorkflowGraphGroup } from '../../../ds/components/Workflow';
 import type { WorkflowGraphEdge, WorkflowGraphNode } from './utils';
 import { WORKFLOW_STEP_NODE_TYPE } from './workflow-step-node-utils';
 import type { WorkflowStepNode } from './workflow-step-node-utils';
-import type { WorkflowGraphGroup } from '@/ds/components/Workflow';
 
 export function getWorkflowGraphGroups(nodes: WorkflowGraphNode[]): WorkflowGraphGroup[] {
   const groups = new Map<string, WorkflowGraphGroup>();

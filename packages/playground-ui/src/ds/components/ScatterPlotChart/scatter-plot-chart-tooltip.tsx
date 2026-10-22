@@ -1,6 +1,6 @@
+import { ChartTooltip } from '../ChartTooltip';
+import { Txt } from '../Txt';
 import type { ScatterPlotChartFormatter } from './scatter-plot-chart';
-import { ChartTooltip } from '@/ds/components/ChartTooltip';
-import { Txt } from '@/ds/components/Txt';
 
 type ScatterTooltipPayload = Array<{
   color?: string;

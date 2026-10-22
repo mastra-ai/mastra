@@ -1,8 +1,8 @@
 import { useGetBackgroundTaskById, useBackgroundTaskStream } from '@mastra/react/hooks/agents';
 import { Loader2Icon, Share2 } from 'lucide-react';
 import { useState } from 'react';
-import { Button } from '@/ds/components/Button';
-import { CodeEditor } from '@/ds/components/CodeEditor';
+import { Button } from '../../../../ds/components/Button';
+import { CodeEditor } from '../../../../ds/components/CodeEditor';
 import {
   Dialog,
   DialogContent,
@@ -10,10 +10,10 @@ import {
   DialogHeader,
   DialogTitle,
   DialogBody,
-} from '@/ds/components/Dialog';
-import { Txt } from '@/ds/components/Txt';
-import { useTimeDiff } from '@/hooks/use-time-diff';
-import { toSigFigs } from '@/utils/number';
+} from '../../../../ds/components/Dialog';
+import { Txt } from '../../../../ds/components/Txt';
+import { useTimeDiff } from '../../../../hooks/use-time-diff';
+import { toSigFigs } from '../../../../utils/number';
 
 interface BackgroundTaskMetadataProps {
   backgroundTaskTaskId: string;

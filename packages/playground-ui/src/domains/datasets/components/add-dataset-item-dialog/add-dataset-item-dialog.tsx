@@ -2,6 +2,26 @@ import type { AddDatasetItemParams } from '@mastra/client-js';
 import { useDataset, useDatasetMutations, useDatasets } from '@mastra/react/hooks/datasets';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
+import { Badge } from '../../../../ds/components/Badge';
+import { Button } from '../../../../ds/components/Button';
+import { CodeEditor } from '../../../../ds/components/CodeEditor';
+import {
+  Dialog,
+  DialogAction,
+  DialogBody,
+  DialogCancel,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '../../../../ds/components/Dialog';
+import { Field, FieldDescription, FieldError, FieldLabel } from '../../../../ds/components/Field';
+import { Txt } from '../../../../ds/components/Txt';
+import { SettingsContainer } from '../../../../ds/new/settings';
+import { useLinkComponent } from '../../../../lib/framework';
+import { cn } from '../../../../lib/utils';
+import { toast } from '../../../../utils/toast';
 import type { CreateDatasetDialogRenderProps } from '../save-as-dataset-item-dialog';
 import { buildAddItemPayload } from './build-add-item-payload';
 import type { AddItemDraft, AddItemError, AddItemField } from './build-add-item-payload';
@@ -14,26 +34,6 @@ import { TrajectoryEditor } from './trajectory-editor';
 import { toTrajectoryStepRow } from './trajectory-types';
 import type { TrajectoryExpectation } from './trajectory-types';
 import { useTargetAgentTools } from './use-target-agent-tools';
-import { Badge } from '@/ds/components/Badge';
-import { Button } from '@/ds/components/Button';
-import { CodeEditor } from '@/ds/components/CodeEditor';
-import {
-  Dialog,
-  DialogAction,
-  DialogBody,
-  DialogCancel,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/ds/components/Dialog';
-import { Field, FieldDescription, FieldError, FieldLabel } from '@/ds/components/Field';
-import { Txt } from '@/ds/components/Txt';
-import { SettingsContainer } from '@/ds/new/settings';
-import { useLinkComponent } from '@/lib/framework';
-import { cn } from '@/lib/utils';
-import { toast } from '@/utils/toast';
 
 export interface AddDatasetItemDialogProps {
   /** The dataset to add the item to. Without it, the dialog asks which dataset. */

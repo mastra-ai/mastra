@@ -1,12 +1,12 @@
 import { safeStringify } from '@mastra/core/utils/safe-stringify';
 import { ArrowDownToLine, ArrowUpFromLine, Braces, Database } from 'lucide-react';
 import { useState } from 'react';
+import { CodeEditor } from '../../../ds/components/CodeEditor';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../../../ds/components/Collapsible';
+import { DisclosureChevron } from '../../../ds/components/DisclosureChevron';
+import { Tabs, TabList, Tab, TabContent } from '../../../ds/components/Tabs';
+import { Txt } from '../../../ds/components/Txt';
 import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
-import { CodeEditor } from '@/ds/components/CodeEditor';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
-import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
-import { Tabs, TabList, Tab, TabContent } from '@/ds/components/Tabs';
-import { Txt } from '@/ds/components/Txt';
 
 type RunDataTab = 'input' | 'output' | 'execution';
 

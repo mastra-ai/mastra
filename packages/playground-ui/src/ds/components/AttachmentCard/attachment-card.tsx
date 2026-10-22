@@ -1,8 +1,8 @@
 import type { ReactNode, Ref } from 'react';
+import { cn } from '../../../lib/utils';
+import { messageSurfaceStyle } from '../../primitives/message-surface';
 import { Txt } from '../Txt';
 import { AttachmentPreview } from './attachment-preview';
-import { messageSurfaceStyle } from '@/ds/primitives/message-surface';
-import { cn } from '@/lib/utils';
 
 export interface AttachmentCardProps {
   name: string;

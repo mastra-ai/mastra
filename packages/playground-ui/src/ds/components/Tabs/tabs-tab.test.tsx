@@ -2,13 +2,13 @@
 import { cleanup, act, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { cn } from '../../../lib/utils';
+import { controlHeight } from '../../primitives/control-size';
 import { buttonVariants } from '../Button/Button';
 import { TabContent } from './tabs-content';
 import { TabList } from './tabs-list';
 import { Tabs } from './tabs-root';
 import { Tab } from './tabs-tab';
-import { controlHeight } from '@/ds/primitives/control-size';
-import { cn } from '@/lib/utils';
 
 beforeEach(() => {
   vi.stubGlobal('PointerEvent', window.MouseEvent);

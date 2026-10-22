@@ -2,9 +2,9 @@ import { Loader2, Play } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { ZodSchema } from 'zod';
 
+import { Button } from '../../../ds/components/Button';
+import { Icon } from '../../../ds/icons/Icon';
 import { WorkflowInputData } from './workflow-input-data';
-import { Button } from '@/ds/components/Button';
-import { Icon } from '@/ds/icons/Icon';
 
 export interface WorkflowTriggerFormProps {
   zodSchema: ZodSchema | null;

@@ -1,9 +1,9 @@
 import type { ThemeLearningEntity } from '@mastra/client-js';
 
+import { DataList } from '../../../ds/components/DataList';
+import type { LinkComponent } from '../../../ds/types/link-component';
 import { entityIndexMetadata } from './entity-index-model';
 import { EntityIndexStatus } from './entity-index-status';
-import { DataList } from '@/ds/components/DataList';
-import type { LinkComponent } from '@/ds/types/link-component';
 
 const columns = 'minmax(12rem,1.5fr) minmax(7rem,0.6fr) minmax(8rem,0.7fr) minmax(8rem,0.7fr) minmax(12rem,1fr)';
 

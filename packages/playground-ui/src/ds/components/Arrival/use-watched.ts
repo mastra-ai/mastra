@@ -1,6 +1,6 @@
 import { createContext, useContext, useState } from 'react';
 
-import { ARRIVING_CLASS } from '@/ds/tokens';
+import { ARRIVING_CLASS } from '../../tokens';
 
 import './arrival.css';
 

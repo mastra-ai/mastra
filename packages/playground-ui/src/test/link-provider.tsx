@@ -2,9 +2,9 @@ import type { AnchorHTMLAttributes, ReactNode } from 'react';
 import { forwardRef } from 'react';
 // Imported through the package's public exports on purpose: CI's Changed Test
 // Gate typechecks this file against the base branch (see `paths` below), and
-// `@/exports` keeps exposing the provider wherever its implementation lives.
-import { LinkComponentProvider } from '@/lib/framework';
-import type { LinkComponentProviderProps } from '@/lib/framework';
+// `lib/framework` keeps exposing the provider wherever its implementation lives.
+import { LinkComponentProvider } from '../lib/framework';
+import type { LinkComponentProviderProps } from '../lib/framework';
 
 /**
  * Anchor stub for tests that render components which route through the framework

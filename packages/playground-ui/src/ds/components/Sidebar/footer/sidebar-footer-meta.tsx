@@ -1,7 +1,7 @@
 import { forwardRef } from 'react';
 import type { ComponentPropsWithoutRef, ReactNode } from 'react';
+import { cn } from '../../../../lib/utils';
 import { useSidebar } from '../root/sidebar-context';
-import { cn } from '@/lib/utils';
 
 export type SidebarFooterMetaProps = ComponentPropsWithoutRef<'div'> & {
   action?: ReactNode;

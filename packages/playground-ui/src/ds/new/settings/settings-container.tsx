@@ -1,6 +1,6 @@
 import type { ComponentProps } from 'react';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { raisedSurfaceStyle } from '../../primitives/raised-surface';
 
 export function SettingsContainerLayout({
   layout,

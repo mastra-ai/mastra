@@ -1,5 +1,5 @@
-import { controlSizeClasses } from '@/ds/primitives/control-size';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { controlSizeClasses } from '../../primitives/control-size';
 
 export interface DataPanelHeadingProps {
   className?: string;

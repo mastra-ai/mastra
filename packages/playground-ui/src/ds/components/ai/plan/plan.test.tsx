@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { toast } from '../../../../lib/toast';
 import { Button } from '../../Button';
 import { TooltipProvider } from '../../Tooltip';
 import {
@@ -23,11 +24,10 @@ import {
   PlanStatus,
   PlanTitle,
 } from './plan';
-import { toast } from '@/lib/toast';
 
 const renderPlan = (element: ReactNode) => render(<TooltipProvider>{element}</TooltipProvider>);
 
-/** Spied rather than module-mocked: `@/lib/toast` is one of our own services. */
+/** Spied rather than module-mocked: `lib/toast` is one of our own services. */
 let toastSuccess: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   toastSuccess = vi.spyOn(toast, 'success').mockImplementation(() => '');

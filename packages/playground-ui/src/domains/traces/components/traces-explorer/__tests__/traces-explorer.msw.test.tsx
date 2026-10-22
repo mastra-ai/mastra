@@ -5,6 +5,11 @@ import { delay, http, HttpResponse } from 'msw';
 import { Profiler, useState } from 'react';
 import type { ReactNode } from 'react';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { FilterBar } from '../../../../../ds/components/FilterBar';
+import type { FilterBarExpression, FilterBarField } from '../../../../../ds/components/FilterBar';
+import { TestLinkProvider } from '../../../../../test/link-provider';
+import { server } from '../../../../../test/msw-server';
+import { renderWithProviders, TEST_BASE_URL } from '../../../../../test/render';
 import {
   TRACES_LIST_DELTA_POLL_INTERVAL_MS,
   TRACES_LIST_REFETCH_INTERVAL_MS,
@@ -42,11 +47,6 @@ import {
   weatherTraceUsage,
   workflowTracesPage,
 } from './fixtures/traces-explorer';
-import { FilterBar } from '@/ds/components/FilterBar';
-import type { FilterBarExpression, FilterBarField } from '@/ds/components/FilterBar';
-import { TestLinkProvider } from '@/test/link-provider';
-import { server } from '@/test/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 const TRACE_COLUMN_STORAGE_KEY = `mastra:traces:columns:${TEST_BASE_URL}:/api`;
 const SCOPE_TOKENS: TracesFilters['tokens'] = [

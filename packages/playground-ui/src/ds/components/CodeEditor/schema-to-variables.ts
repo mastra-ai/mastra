@@ -1,4 +1,4 @@
-import type { JsonSchema, JsonSchemaProperty } from '@/lib/json-schema';
+import type { JsonSchema, JsonSchemaProperty } from '../../../lib/json-schema';
 
 /**
  * Represents a variable completion option derived from a schema

@@ -2,13 +2,13 @@ import { CheckIcon, Code2Icon, CopyIcon, EyeIcon, EyeOffIcon } from 'lucide-reac
 import { use, useState } from 'react';
 import type { ReactNode } from 'react';
 
+import { useCopyToClipboard } from '../../../hooks/use-copy-to-clipboard';
+import { cn } from '../../../lib/utils';
+import { Button } from '../Button';
+import { DataList } from '../DataList/data-list';
+import { Txt } from '../Txt';
 import { EnvironmentVariablesEditorReadOnlyListContext } from './environment-variables-editor-context';
 import type { EnvironmentVariablesEditorReadOnlyItemProps } from './environment-variables-editor.types';
-import { Button } from '@/ds/components/Button';
-import { DataList } from '@/ds/components/DataList/data-list';
-import { Txt } from '@/ds/components/Txt';
-import { useCopyToClipboard } from '@/hooks/use-copy-to-clipboard';
-import { cn } from '@/lib/utils';
 
 export function EnvironmentVariablesEditorReadOnlyItem({
   className,

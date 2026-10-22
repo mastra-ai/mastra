@@ -1,18 +1,18 @@
 // @vitest-environment jsdom
-import '@/test/inert-resize-observer';
+import '../../../../test/inert-resize-observer';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { useState } from 'react';
 import type { ComponentProps } from 'react';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
+import { TestLinkProvider } from '../../../../test/link-provider';
+import { server } from '../../../../test/msw-server';
+import { renderWithProviders, TEST_BASE_URL } from '../../../../test/render';
 import { TraceSpanPanel } from '../trace-span-panel';
 import type { TraceSpanPanelProps } from '../trace-span-panel';
 import { queryPageFromList } from './fixtures/thread-traces';
 import { TRACE_ID, panelTraceSpans, spanDetailById } from './fixtures/trace-span-panel';
-import { TestLinkProvider } from '@/test/link-provider';
-import { server } from '@/test/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 // jsdom reports zero-sized elements; give them a real size so the virtualized
 // timeline materializes its rows.

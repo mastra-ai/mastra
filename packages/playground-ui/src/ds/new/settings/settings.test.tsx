@@ -2,6 +2,9 @@
 
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it } from 'vitest';
+import { Form } from '../../components/Form';
+import { Input } from '../../components/Input';
+import { Switch } from '../../components/Switch';
 import {
   SettingsContainer,
   SettingsDescription,
@@ -11,9 +14,6 @@ import {
   SettingsRow,
   SettingsTitle,
 } from './index';
-import { Form } from '@/ds/components/Form';
-import { Input } from '@/ds/components/Input';
-import { Switch } from '@/ds/components/Switch';
 
 afterEach(cleanup);
 

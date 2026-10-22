@@ -1,12 +1,9 @@
 import type { TextPart } from '@mastra/react/ui';
-import { editArgs, plan, reviewTools } from './data';
-import type { Phase, Turn } from './data';
-import { ReviewTool } from './tool';
-import { MessageText } from '@/domains/chat/messages/renderers/message-text';
-import { ReasoningPartRenderer } from '@/domains/chat/messages/renderers/reasoning-part-renderer';
-import { SignalBadge } from '@/domains/chat/messages/signal-badge';
-import { AskUser } from '@/ds/components/ai/ask-user';
-import { useRevealedParts } from '@/ds/components/ai/message-reveal';
+import { MessageText } from '../../../src/domains/chat/messages/renderers/message-text';
+import { ReasoningPartRenderer } from '../../../src/domains/chat/messages/renderers/reasoning-part-renderer';
+import { SignalBadge } from '../../../src/domains/chat/messages/signal-badge';
+import { AskUser } from '../../../src/ds/components/ai/ask-user';
+import { useRevealedParts } from '../../../src/ds/components/ai/message-reveal';
 import {
   Plan,
   PlanBody,
@@ -18,11 +15,14 @@ import {
   PlanLabel,
   PlanMain,
   PlanTitle,
-} from '@/ds/components/ai/plan';
-import { ToolApprovalActions, ToolApprovalStatus } from '@/ds/components/ai/tool-approval';
-import { ToolCallGroup } from '@/ds/components/ai/tool-call';
-import { Button } from '@/ds/components/Button';
-import { CopyButton } from '@/ds/components/CopyButton';
+} from '../../../src/ds/components/ai/plan';
+import { ToolApprovalActions, ToolApprovalStatus } from '../../../src/ds/components/ai/tool-approval';
+import { ToolCallGroup } from '../../../src/ds/components/ai/tool-call';
+import { Button } from '../../../src/ds/components/Button';
+import { CopyButton } from '../../../src/ds/components/CopyButton';
+import { editArgs, plan, reviewTools } from './data';
+import type { Phase, Turn } from './data';
+import { ReviewTool } from './tool';
 
 interface ConversationResponseProps {
   turn: Turn;

@@ -3,21 +3,21 @@ import type { ReactNode } from 'react';
 import { useRef, useState } from 'react';
 import type { ZodSchema } from 'zod';
 
+import type { Button } from '../../../ds/components/Button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../../../ds/components/Collapsible';
+import { DisclosureChevron } from '../../../ds/components/DisclosureChevron';
+import { Txt } from '../../../ds/components/Txt';
+import { Icon } from '../../../ds/icons/Icon';
+import { DynamicForm } from '../../../lib/form';
+import { getFormShapeError, parseJsonDraft, validateJsonDraft } from '../../../lib/form/json-draft';
+import type { JsonDraftValue } from '../../../lib/form/json-draft';
+import { cn } from '../../../utils/cn';
 import { createProcessorInput, parseProcessorDraft } from './input/processor-input';
 import type { ProcessorDraft } from './input/processor-input';
 import { WorkflowJsonInput } from './input/workflow-json-input';
 import { WorkflowProcessorInput } from './input/workflow-processor-input';
 import { WorkflowInputTypeToggle } from './workflow-input-type-toggle';
 import type { WorkflowInputType } from './workflow-input-type-toggle';
-import type { Button } from '@/ds/components/Button';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
-import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
-import { Txt } from '@/ds/components/Txt';
-import { Icon } from '@/ds/icons/Icon';
-import { DynamicForm } from '@/lib/form';
-import { getFormShapeError, parseJsonDraft, validateJsonDraft } from '@/lib/form/json-draft';
-import type { JsonDraftValue } from '@/lib/form/json-draft';
-import { cn } from '@/utils/cn';
 
 export interface WorkflowInputDataProps {
   schema: ZodSchema;

@@ -1,7 +1,7 @@
 import { forwardRef } from 'react';
 import type { ComponentPropsWithoutRef } from 'react';
-import { GROUP_ATTR } from '@/hooks/use-fluid-hover';
-import { cn } from '@/lib/utils';
+import { GROUP_ATTR } from '../../../hooks/use-fluid-hover';
+import { cn } from '../../../lib/utils';
 
 export type DataListGroupProps = ComponentPropsWithoutRef<'section'>;
 

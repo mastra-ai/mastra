@@ -1,9 +1,9 @@
 import type { ComponentProps } from 'react';
 
+import { Card } from '../../../../ds/components/Card';
+import { DataPanel } from '../../../../ds/components/DataPanel';
+import { cn } from '../../../../lib/utils';
 import { useThreadTraceRow } from './thread-trace-row-context';
-import { Card } from '@/ds/components/Card';
-import { DataPanel } from '@/ds/components/DataPanel';
-import { cn } from '@/lib/utils';
 
 export type ThreadTraceDetailsProps = ComponentProps<'div'>;
 

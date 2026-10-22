@@ -1,8 +1,8 @@
 import { useContext } from 'react';
 import type { ComponentProps } from 'react';
 
+import { cn } from '../../../lib/utils';
 import { AvatarSizeContext, avatarIconClasses, avatarSizeClasses, avatarTextClasses } from './avatar-size';
-import { cn } from '@/lib/utils';
 
 export type AvatarGroupCountProps = ComponentProps<'div'>;
 

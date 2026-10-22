@@ -2,13 +2,13 @@ import type { ArrayElementWrapperProps } from '@autoform/react';
 import { Check, Trash2 } from 'lucide-react';
 import { useContext, useRef } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
+import { Button } from '../../../ds/components/Button';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '../../../ds/components/Collapsible';
+import { DisclosureChevron } from '../../../ds/components/DisclosureChevron';
+import { Txt } from '../../../ds/components/Txt';
 import { ArrayAddButtonContext, FieldPathContext, FormReadOnlyContext } from '../field-context';
 import { useSectionDisclosure } from '../use-section-disclosure';
 import { isPlainObject } from '../utils';
-import { Button } from '@/ds/components/Button';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
-import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
-import { Txt } from '@/ds/components/Txt';
 
 const HUMAN_SUMMARY_KEYS = ['title', 'name', 'label'];
 

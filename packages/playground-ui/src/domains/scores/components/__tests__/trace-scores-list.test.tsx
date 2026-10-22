@@ -7,8 +7,8 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { server } from '../../../../test/msw-server';
 import { TraceScoresList } from '../trace-scores-list';
-import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
 const SCORES_URL = `${BASE_URL}/api/observability/traces/trace-1/root/scores`;

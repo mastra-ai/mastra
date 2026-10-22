@@ -1,5 +1,5 @@
 import type { FilePart } from '@mastra/react/ui';
-import type { ToolCallGroupStep } from '@/ds/components/ai/tool-call';
+import type { ToolCallGroupStep } from '../../../src/ds/components/ai/tool-call';
 
 export type ChatFile = FilePart & { filename: string };
 export type Phase = 'complete' | 'streaming' | 'stopped' | 'question' | 'approval' | 'declined' | 'error';

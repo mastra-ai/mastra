@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { expect, userEvent, within } from 'storybook/test';
+import { Button } from '../Button';
 import { ActivityBelt, ActivityWick } from './activity';
 import type { ActivityStatus } from './activity';
-import { Button } from '@/ds/components/Button';
 
 const meta = {
   title: 'Feedback/Activity',

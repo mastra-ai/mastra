@@ -3,13 +3,13 @@ import { cva } from 'class-variance-authority';
 import type { ComponentPropsWithoutRef, HTMLAttributes } from 'react';
 import { forwardRef } from 'react';
 
+import { cn } from '../../../lib/utils';
+import { raisedSurfaceStyle } from '../../primitives/raised-surface';
+import { textStyle } from '../../primitives/text';
+import { Txt } from '../Txt';
+import type { TxtProps } from '../Txt';
 import { CommentContext, useCommentVariant } from './comment-context';
 import type { CommentVariant } from './comment-context';
-import { Txt } from '@/ds/components/Txt';
-import type { TxtProps } from '@/ds/components/Txt';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
-import { textStyle } from '@/ds/primitives/text';
-import { cn } from '@/lib/utils';
 
 const commentVariants = cva('flex flex-col', {
   variants: {

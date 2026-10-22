@@ -1,6 +1,6 @@
 import { Form as FormPrimitive } from '@base-ui/react/form';
 
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
 
 type FormProps = Omit<FormPrimitive.Props, 'className'> & {
   className?: string;

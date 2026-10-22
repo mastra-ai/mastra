@@ -2,15 +2,15 @@ import type { TaskItem } from '@mastra/core/signals';
 import { ChevronDown } from 'lucide-react';
 import { useId, useState } from 'react';
 import type { ComponentProps } from 'react';
+import { cn } from '../../../../lib/utils';
+import { raisedSurfaceStyle } from '../../../primitives/raised-surface';
+import { focusRing, transitions } from '../../../primitives/transitions';
+import { ScrollArea, ScrollAreaViewport } from '../../ScrollArea';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../../Tooltip';
+import { Txt } from '../../Txt';
 import { TaskGraphLines } from './task-graph';
 import { TASK_ROW_HEIGHT, taskGraphLaneShift, taskGraphMotion, taskGraphNodeClass } from './task-graph-node';
 import { taskWindowHeight, useFocusedRowScroll } from './use-focused-row-scroll';
-import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/ds/components/Tooltip';
-import { Txt } from '@/ds/components/Txt';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
-import { focusRing, transitions } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
 
 export type TaskListItem = TaskItem;
 

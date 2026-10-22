@@ -1,18 +1,18 @@
 /* eslint-disable react-refresh/only-export-components */
 import type { KeyboardEvent } from 'react';
-import { traceFilterFieldColor, traceFilterFieldIcon } from '../trace-filters';
-import type { DateTimeRangePickerProps } from '@/ds/components/DateTimeRangePicker';
-import { DateTimeRangePicker } from '@/ds/components/DateTimeRangePicker';
+import type { DateTimeRangePickerProps } from '../../../ds/components/DateTimeRangePicker';
+import { DateTimeRangePicker } from '../../../ds/components/DateTimeRangePicker';
 import {
   FilterBarChip,
   FilterBarFieldLabel,
   editableSegmentClass,
   fieldSegmentAccentStyle,
   segmentClass,
-} from '@/ds/components/FilterBar/filter-bar-chip';
-import { useFilterBarContext } from '@/ds/components/FilterBar/filter-bar-context';
-import type { FilterBarField, FilterBarItem } from '@/ds/components/FilterBar/types';
-import { cn } from '@/lib/utils';
+} from '../../../ds/components/FilterBar/filter-bar-chip';
+import { useFilterBarContext } from '../../../ds/components/FilterBar/filter-bar-context';
+import type { FilterBarField, FilterBarItem } from '../../../ds/components/FilterBar/types';
+import { cn } from '../../../lib/utils';
+import { traceFilterFieldColor, traceFilterFieldIcon } from '../trace-filters';
 
 export const TRACE_TIME_RANGE_FIELD_ID = 'timeRange';
 

@@ -2,10 +2,10 @@
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { TooltipProvider } from '../../Tooltip';
 import { SidebarSearchTrigger } from '../header/sidebar-search-trigger';
 import { SidebarProvider } from './sidebar-provider';
 import { SidebarTrigger } from './sidebar-trigger';
-import { TooltipProvider } from '@/ds/components/Tooltip';
 
 const mockMatchMedia = (matches: boolean) => {
   Object.defineProperty(window, 'matchMedia', {

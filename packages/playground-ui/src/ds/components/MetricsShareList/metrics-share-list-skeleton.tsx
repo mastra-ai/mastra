@@ -1,9 +1,9 @@
 import type { ReactNode } from 'react';
+import { cn } from '../../../lib/utils';
+import { Skeleton } from '../Skeleton';
+import { Txt } from '../Txt';
 import { NUM, ROW } from './metrics-share-list-classes';
 import type { MetricsShareListColumn } from './metrics-share-list-types';
-import { Skeleton } from '@/ds/components/Skeleton';
-import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/lib/utils';
 
 const LABEL_WIDTHS = ['w-32', 'w-24', 'w-36', 'w-20', 'w-28'];
 

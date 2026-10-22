@@ -1,10 +1,10 @@
 import { Drawer as DrawerPrimitive } from '@base-ui/react/drawer';
 import * as React from 'react';
 
+import { cn } from '../../../lib/utils';
+import { PortalContainerProvider } from '../../primitives/portal-container';
+import { frameFillStyle, frameSurfaceStyle } from '../../primitives/raised-surface';
 import { DataPanelVariantContext } from './data-panel-context';
-import { PortalContainerProvider } from '@/ds/primitives/portal-container';
-import { frameFillStyle, frameSurfaceStyle } from '@/ds/primitives/raised-surface';
-import { cn } from '@/lib/utils';
 
 // `drawer-popup` / `drawer-backdrop` carry the slide + fade transitions.
 import '../Drawer/drawer.css';

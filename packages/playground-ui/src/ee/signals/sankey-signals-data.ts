@@ -1,6 +1,6 @@
+import type { SankeyChartColumn, SankeyChartRecord } from '../../ds/components/SankeyChart';
 import { formatSnapshotCutoff, formatSnapshotWindow, themeLabel, traceLabel } from './signal-formatting';
 import type { ThemeFlowResponse, ThemeNode, ThemeSnapshot, TraceSignalName } from './types';
-import type { SankeyChartColumn, SankeyChartRecord } from '@/ds/components/SankeyChart';
 
 const MINIMUM_LAYOUT_WEIGHT = 0.01;
 

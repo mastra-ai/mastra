@@ -1,15 +1,15 @@
 import { useWorkspaceSearch } from '@mastra/react/hooks/workspace';
 import { XIcon } from 'lucide-react';
 import { useState, useTransition } from 'react';
+import { Button } from '../../../ds/components/Button';
+import { EmptyState } from '../../../ds/components/EmptyState';
+import { Input } from '../../../ds/components/Input';
+import { Skeleton } from '../../../ds/components/Skeleton';
+import { Txt } from '../../../ds/components/Txt';
+import { FileIcon, Icon, SearchIcon, SkillIcon } from '../../../ds/icons';
+import { cn } from '../../../lib/utils';
 import { useWorkspaceContext } from './use-workspace-context';
 import { WorkspaceError } from './workspace-error';
-import { Button } from '@/ds/components/Button';
-import { EmptyState } from '@/ds/components/EmptyState';
-import { Input } from '@/ds/components/Input';
-import { Skeleton } from '@/ds/components/Skeleton';
-import { Txt } from '@/ds/components/Txt';
-import { FileIcon, Icon, SearchIcon, SkillIcon } from '@/ds/icons';
-import { cn } from '@/lib/utils';
 
 /** Icon button that swaps the tree for the search panel, like VS Code's search view. */
 export function WorkspaceSearchToggle() {

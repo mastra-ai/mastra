@@ -1,4 +1,5 @@
 import type { ComponentProps, ReactNode } from 'react';
+import { Badge } from '../../Badge';
 import { useAskUserContext } from './ask-user-context';
 import {
   AskUserCustomAnswer,
@@ -11,7 +12,6 @@ import type { AskUserContainer } from './ask-user-layout';
 import { AskUserBody, AskUserOutput, AskUserPending, AskUserQuestion } from './ask-user-layout';
 import { AskUserRoot } from './ask-user-root';
 import type { AskUserAnswer, AskUserOption, AskUserPayload, AskUserResult } from './ask-user-types';
-import { Badge } from '@/ds/components/Badge';
 
 export interface AskUserProps extends Omit<ComponentProps<typeof AskUserContainer>, 'children' | 'onSubmit'> {
   payload: AskUserPayload;

@@ -1,7 +1,7 @@
 import { ChevronDownIcon } from 'lucide-react';
-import { DropdownMenu } from '@/ds/components/DropdownMenu';
-import type { DropdownMenuRadioOption } from '@/ds/components/DropdownMenu';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { DropdownMenu } from '../DropdownMenu';
+import type { DropdownMenuRadioOption } from '../DropdownMenu';
 
 export type MetricsCardTitleMenuProps<V extends string> = {
   /** The card title for the picked view (e.g. "Spend by model"). */

@@ -1,13 +1,13 @@
 import { MenuIcon } from 'lucide-react';
 import { useCallback, useEffect, useRef } from 'react';
 import type { KeyboardEvent as ReactKeyboardEvent, PointerEvent as ReactPointerEvent } from 'react';
+import { cn } from '../../../../lib/utils';
+import { overlaySurfaceStyle, surfaceGroupStateLayerStyle } from '../../../primitives/raised-surface';
+import { ResizeHandleIndicator } from '../../../primitives/resize-handle-indicator';
+import { quietTextHoverInGroup } from '../../../primitives/typography';
+import { VisuallyHidden } from '../../../primitives/visually-hidden';
+import { Drawer, DrawerClose, DrawerContent, DrawerDescription, DrawerTitle } from '../../Drawer';
 import { useSidebar } from './sidebar-context';
-import { Drawer, DrawerClose, DrawerContent, DrawerDescription, DrawerTitle } from '@/ds/components/Drawer';
-import { overlaySurfaceStyle, surfaceGroupStateLayerStyle } from '@/ds/primitives/raised-surface';
-import { ResizeHandleIndicator } from '@/ds/primitives/resize-handle-indicator';
-import { quietTextHoverInGroup } from '@/ds/primitives/typography';
-import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
-import { cn } from '@/lib/utils';
 
 export type SidebarPanelProps = {
   children: React.ReactNode;

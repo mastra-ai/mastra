@@ -1,6 +1,9 @@
 import { FolderIcon, FolderPlusIcon, PlusIcon, Trash2Icon } from 'lucide-react';
 import { Fragment, useEffect, useRef } from 'react';
 import type { ReactNode } from 'react';
+import { cn } from '../../../lib/utils';
+import { Button } from '../Button/Button';
+import { Txt } from '../Txt';
 import { FilterBarChip } from './filter-bar-chip';
 import { useFilterBarContext } from './filter-bar-context';
 import { FilterBarInput } from './filter-bar-input';
@@ -8,9 +11,6 @@ import { countLeaves } from './filter-bar-tree';
 import type { FilterBarGroup, FilterBarLogic } from './types';
 import { isFilterBarGroup } from './types';
 import { useSettleOnLeave } from './use-settle-on-leave';
-import { Button } from '@/ds/components/Button/Button';
-import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/lib/utils';
 
 const connectorClass =
   'flex h-control-sm w-14 shrink-0 items-center justify-center rounded-md text-column tracking-wide text-muted-foreground uppercase';

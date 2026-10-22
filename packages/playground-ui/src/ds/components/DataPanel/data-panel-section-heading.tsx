@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
 
 export interface DataPanelSectionHeadingProps {
   /** Optional leading icon. Rendered before `children` and sized via `[&>svg]:size-3.5`. */

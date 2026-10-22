@@ -1,5 +1,5 @@
+import { Notice } from '../Notice';
 import type { EnvironmentVariablesEditorMessagesProps } from './environment-variables-editor.types';
-import { Notice } from '@/ds/components/Notice';
 
 export function EnvironmentVariablesEditorMessages({
   error,

@@ -1,9 +1,9 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { TooltipProvider } from '../../../../../ds/components/Tooltip';
+import { ToolCallProvider } from '../../../context/tool-call-context';
 import { FileTreeBadge } from '../file-tree-badge';
-import { ToolCallProvider } from '@/domains/chat/context/tool-call-context';
-import { TooltipProvider } from '@/ds/components/Tooltip';
 
 afterEach(() => cleanup());
 

@@ -1,9 +1,9 @@
 import { Tabs as BaseTabs } from '@base-ui/react/tabs';
 import { useState } from 'react';
 import type { ComponentProps, ReactNode } from 'react';
+import { cn } from '../../../lib/utils';
 import { TabsContext } from './tabs-context';
 import './tabs.css';
-import { cn } from '@/lib/utils';
 
 export type TabsRootProps<T extends string> = Omit<
   ComponentProps<'div'>,

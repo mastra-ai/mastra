@@ -1,4 +1,4 @@
-import type { WorkflowDataEdgeModel } from '@/ds/components/Workflow';
+import type { WorkflowDataEdgeModel } from '../../../../ds/components/Workflow';
 
 const edgeDataKey = ({ data }: WorkflowDataEdgeModel) => {
   if (data?.boundaryPayload !== undefined) return `boundary:${data.boundaryPayload}`;

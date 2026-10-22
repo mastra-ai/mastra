@@ -2,10 +2,10 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { z } from 'zod/v4';
 import { HookDemo } from '../../../../.storybook/fixtures/hooks/hook-demo';
-import { Button } from '@/ds/components/Button';
-import { Field, FieldLabel } from '@/ds/components/Field';
-import { Input } from '@/ds/components/Input';
-import { useLocalStorageState } from '@/hooks/use-local-storage-state';
+import { Button } from '../../../ds/components/Button';
+import { Field, FieldLabel } from '../../../ds/components/Field';
+import { Input } from '../../../ds/components/Input';
+import { useLocalStorageState } from '../../use-local-storage-state';
 
 const draftSchema = z.string();
 const storageKey = 'storybook:hooks:local-storage:draft';

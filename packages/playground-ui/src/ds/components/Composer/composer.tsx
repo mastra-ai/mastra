@@ -1,10 +1,10 @@
 import type { ComponentPropsWithoutRef } from 'react';
 import { forwardRef } from 'react';
 
+import { cn } from '../../../lib/utils';
+import { textFieldAutofillProps } from '../../primitives/password-manager-autofill';
 import { ScrollArea } from '../ScrollArea';
 import { useComposerPointer } from './use-composer-pointer';
-import { textFieldAutofillProps } from '@/ds/primitives/password-manager-autofill';
-import { cn } from '@/lib/utils';
 
 import './composer.css';
 import './composer-ring.css';

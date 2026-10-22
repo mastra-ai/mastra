@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { HelperExamples } from '../../../../.storybook/fixtures/helpers/helper-examples';
 import type { HelperExample } from '../../../../.storybook/fixtures/helpers/helper-examples';
-import { truncateString } from '@/utils/truncate-string';
+import { truncateString } from '../../truncate-string';
 
 const examples: HelperExample[] = [
   ["truncateString('Summarize the latest deploy logs', 16)", truncateString('Summarize the latest deploy logs', 16)],

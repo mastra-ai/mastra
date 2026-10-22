@@ -2,15 +2,15 @@ import { Command as CommandPrimitive } from 'cmdk';
 import { Search } from 'lucide-react';
 import * as React from 'react';
 
-import { Dialog, DialogContent, DialogDescription, DialogTitle } from '@/ds/components/Dialog';
-import type { DialogSize } from '@/ds/components/Dialog';
-import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
-import type { ScrollAreaMask } from '@/ds/components/ScrollArea';
-import { Txt } from '@/ds/components/Txt';
-import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
-import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
-import { heightTransition, transitions } from '@/ds/primitives/transitions';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '../../primitives/fluid-menu';
+import { passwordManagerOptOutProps } from '../../primitives/password-manager-autofill';
+import { heightTransition, transitions } from '../../primitives/transitions';
+import { Dialog, DialogContent, DialogDescription, DialogTitle } from '../Dialog';
+import type { DialogSize } from '../Dialog';
+import { ScrollArea, ScrollAreaViewport } from '../ScrollArea';
+import type { ScrollAreaMask } from '../ScrollArea';
+import { Txt } from '../Txt';
 
 const Command = React.forwardRef<
   React.ElementRef<typeof CommandPrimitive>,

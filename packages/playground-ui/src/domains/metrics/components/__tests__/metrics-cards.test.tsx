@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { renderWithProviders } from '../../../../test/render';
 import { MetricsProvider } from '../../hooks/use-metrics';
 import { AgentRunsCard } from '../agent-runs-card';
 import { FailureRateCard } from '../failure-rate-card';
@@ -11,7 +12,6 @@ import { TokenUsageCard } from '../token-usage-card';
 import { TraceVolumeCard } from '../trace-volume-card';
 import { UsageCard } from '../usage-card';
 import { emptyMetrics, failingMetrics, seedMetrics } from './metrics-msw';
-import { renderWithProviders } from '@/test/render';
 
 const onEntityClick = vi.fn();
 const onThreadClick = vi.fn();

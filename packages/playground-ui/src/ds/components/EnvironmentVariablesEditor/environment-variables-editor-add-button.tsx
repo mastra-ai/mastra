@@ -1,9 +1,9 @@
 import { PlusIcon } from 'lucide-react';
 
+import { cn } from '../../../lib/utils';
+import { Button } from '../Button';
 import { useEnvironmentVariablesEditorContext } from './environment-variables-editor-context';
 import type { EnvironmentVariablesEditorAddButtonProps } from './environment-variables-editor.types';
-import { Button } from '@/ds/components/Button';
-import { cn } from '@/lib/utils';
 
 export function EnvironmentVariablesEditorAddButton({
   className,

@@ -1,14 +1,14 @@
 import { CheckCircleIcon } from 'lucide-react';
 import { useState } from 'react';
+import { Badge } from '../../../../ds/components/Badge';
+import { DisclosureChevron } from '../../../../ds/components/DisclosureChevron';
+import { MarkdownRenderer } from '../../../../ds/components/MarkdownRenderer';
+import type { MarkdownExternalLinkTarget } from '../../../../ds/components/MarkdownRenderer';
+import { Notice } from '../../../../ds/components/Notice';
+import { Icon } from '../../../../ds/icons/Icon';
 import type { MessageMetadata } from '../message-metadata';
 import { TripwireNotice } from '../tripwire-notice';
 import { errorMessage, messageTextKind } from './message-text-kind';
-import { Badge } from '@/ds/components/Badge';
-import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
-import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
-import type { MarkdownExternalLinkTarget } from '@/ds/components/MarkdownRenderer';
-import { Notice } from '@/ds/components/Notice';
-import { Icon } from '@/ds/icons/Icon';
 
 export interface MessageTextProps {
   text: string;

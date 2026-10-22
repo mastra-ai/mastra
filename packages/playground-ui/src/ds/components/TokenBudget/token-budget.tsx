@@ -1,9 +1,9 @@
 import { useId } from 'react';
 
+import { cn } from '../../../lib/utils';
 import { formatCompactTokens } from './format-tokens';
 import { toneClass } from './tones';
 import type { TokenBudgetTone } from './tones';
-import { cn } from '@/lib/utils';
 
 import './token-budget.css';
 

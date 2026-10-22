@@ -3,6 +3,12 @@ import { Loader2 } from 'lucide-react';
 import { useState, useEffect, useContext, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { z } from 'zod/v4';
+import { ScrollArea } from '../../../ds/components/ScrollArea';
+import { Skeleton } from '../../../ds/components/Skeleton';
+import { Txt } from '../../../ds/components/Txt';
+import { Icon } from '../../../ds/icons/Icon';
+import { useLocalStorageState } from '../../../hooks/use-local-storage-state';
+import { toast } from '../../../utils/toast';
 import type { WorkflowRunContextType } from '../context/workflow-run-context';
 import { WorkflowRunContext } from '../context/workflow-run-context';
 import { getRunResourceId, isWorkflowRunFinished } from '../utils';
@@ -16,12 +22,6 @@ import { RunWorkflowHeader } from './workflow-run-header';
 import { WorkflowTriggerForm } from './workflow-trigger-form';
 import type { WorkflowTriggerFormProps } from './workflow-trigger-form';
 import { InitialWorkflowHeader } from './workflow-trigger-header';
-import { ScrollArea } from '@/ds/components/ScrollArea';
-import { Skeleton } from '@/ds/components/Skeleton';
-import { Txt } from '@/ds/components/Txt';
-import { Icon } from '@/ds/icons/Icon';
-import { useLocalStorageState } from '@/hooks/use-local-storage-state';
-import { toast } from '@/utils/toast';
 
 export type WorkflowTriggerProps = Pick<
   WorkflowRunContextType,

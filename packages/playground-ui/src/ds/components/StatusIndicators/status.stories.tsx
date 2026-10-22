@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { DataList } from '../DataList';
+import { Txt } from '../Txt';
 import { Status } from './status';
-import { DataList } from '@/ds/components/DataList';
-import { Txt } from '@/ds/components/Txt';
 
 const RUNNING = {
   label: 'Ready',

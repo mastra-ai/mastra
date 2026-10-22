@@ -1,5 +1,5 @@
 import type { CSSProperties } from 'react';
-import type { Colors } from '@/ds/tokens/colors';
+import type { Colors } from '../../tokens/colors';
 import './grain-fill.css';
 
 const statusTones = ['warning', 'destructive', 'info', 'success'] as const;

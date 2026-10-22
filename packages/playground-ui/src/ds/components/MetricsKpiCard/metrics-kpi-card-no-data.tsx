@@ -1,4 +1,4 @@
-import { Txt } from '@/ds/components/Txt';
+import { Txt } from '../Txt';
 
 export function MetricsKpiCardNoData({ message = 'No data yet', className }: { message?: string; className?: string }) {
   return (

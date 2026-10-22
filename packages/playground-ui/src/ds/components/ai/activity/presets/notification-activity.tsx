@@ -1,10 +1,10 @@
 import { Bell, ExternalLink } from 'lucide-react';
 import type { ReactNode } from 'react';
+import { Badge } from '../../../Badge';
+import type { BadgeVariant } from '../../../Badge';
+import { Txt } from '../../../Txt';
 import { ActivityItem } from '../activity';
 import { messagePreview, messagePreviewShowsAll } from './message-preview';
-import { Badge } from '@/ds/components/Badge';
-import type { BadgeVariant } from '@/ds/components/Badge';
-import { Txt } from '@/ds/components/Txt';
 
 export interface NotificationActivityProps {
   label: string;

@@ -1,13 +1,13 @@
 import React from 'react';
 
+import { cn } from '../../../lib/utils';
 import { Icon } from '../../icons/Icon';
 import { SlashIcon } from '../../icons/SlashIcon';
-import { Skeleton } from '@/ds/components/Skeleton';
-import { controlSizeClasses } from '@/ds/primitives/control-size';
-import { PopupAnchorProvider } from '@/ds/primitives/popup-anchor';
-import { controlStateColorTransition } from '@/ds/primitives/transitions';
-import { quietTextHover, quietTextHoverInGroup } from '@/ds/primitives/typography';
-import { cn } from '@/lib/utils';
+import { controlSizeClasses } from '../../primitives/control-size';
+import { PopupAnchorProvider } from '../../primitives/popup-anchor';
+import { controlStateColorTransition } from '../../primitives/transitions';
+import { quietTextHover, quietTextHoverInGroup } from '../../primitives/typography';
+import { Skeleton } from '../Skeleton';
 
 export interface BreadcrumbProps {
   children?: React.ReactNode;

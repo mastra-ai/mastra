@@ -1,5 +1,5 @@
+import { passwordManagerOptOutProps } from '../../primitives/password-manager-autofill';
 import { MAX_SAVED_VIEW_NAME_CHARS } from './saved-view-schema';
-import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 
 // Uncontrolled so blur is the one exit: Enter blurs, Escape restores the name first, blur commits.
 export function SavedViewNameInput({ name, onCommit }: { name: string; onCommit: (name: string) => void }) {

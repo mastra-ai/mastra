@@ -1,5 +1,5 @@
-import { TraceThreadItemView } from '@/domains/traces/components/trace-thread-item-view';
-import { cn } from '@/utils/cn';
+import { cn } from '../../../utils/cn';
+import { TraceThreadItemView } from './trace-thread-item-view';
 
 export interface TraceMessagesPanelProps {
   traceId: string;

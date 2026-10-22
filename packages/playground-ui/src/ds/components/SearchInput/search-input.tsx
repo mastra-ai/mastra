@@ -1,10 +1,10 @@
 import { SearchIcon, XIcon } from 'lucide-react';
 import { useRef } from 'react';
 import type { Ref } from 'react';
-import { Field, FieldLabel } from '@/ds/components/Field';
-import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '@/ds/components/InputGroup';
-import type { InputGroupInputProps, InputGroupProps } from '@/ds/components/InputGroup';
-import { mergeRefs } from '@/lib/merge-refs';
+import { mergeRefs } from '../../../lib/merge-refs';
+import { Field, FieldLabel } from '../Field';
+import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from '../InputGroup';
+import type { InputGroupInputProps, InputGroupProps } from '../InputGroup';
 
 export type SearchInputProps = Omit<InputGroupInputProps, 'value' | 'onChange' | 'type' | 'ref' | 'error'> & {
   label: string;

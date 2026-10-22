@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import '@/test/inert-resize-observer';
+import '../../../../test/inert-resize-observer';
 import type { ListScoresResponse } from '@mastra/client-js';
 import { focusManager } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
@@ -7,6 +7,11 @@ import { http, HttpResponse } from 'msw';
 import type { ComponentProps } from 'react';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { TestLinkProvider } from '../../../../test/link-provider';
+import { server } from '../../../../test/msw-server';
+import { renderWithProviders, TEST_BASE_URL } from '../../../../test/render';
+import { ActivatedSkillsProvider } from '../../../agents/context/activated-skills-context';
+import { BrowserToolCallsProvider } from '../../../agents/context/browser-tool-calls-context';
 import { feedbackRecord, listFeedbackResponse } from '../../hooks/__tests__/fixtures/trace-feedback';
 import { ThreadViewByTrace } from '../thread-view-by-trace';
 import {
@@ -20,11 +25,6 @@ import {
   emptyMcpServers,
   emptyTraceSpanScores,
 } from './fixtures/thread-traces';
-import { ActivatedSkillsProvider } from '@/domains/agents/context/activated-skills-context';
-import { BrowserToolCallsProvider } from '@/domains/agents/context/browser-tool-calls-context';
-import { TestLinkProvider } from '@/test/link-provider';
-import { server } from '@/test/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 // jsdom does not implement scrollIntoView, which the timeline uses to reveal the selected span.
 const scrollIntoView = vi.fn();

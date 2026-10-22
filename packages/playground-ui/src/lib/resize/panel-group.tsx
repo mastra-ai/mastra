@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { GroupProps, Layout } from 'react-resizable-panels';
 import { Group } from 'react-resizable-panels';
-import { cn } from '@/lib/utils';
+import { cn } from '../utils';
 import './panel-group.css';
 
 export type PanelGroupProps = GroupProps;

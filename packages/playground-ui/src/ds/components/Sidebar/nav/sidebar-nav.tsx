@@ -1,7 +1,7 @@
 import type { ComponentPropsWithoutRef } from 'react';
+import { cn } from '../../../../lib/utils';
+import { ScrollArea, ScrollAreaViewport } from '../../ScrollArea';
 import { useMaybeSidebarState } from '../root/sidebar-context';
-import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
-import { cn } from '@/lib/utils';
 
 export type SidebarNavProps = ComponentPropsWithoutRef<'nav'>;
 

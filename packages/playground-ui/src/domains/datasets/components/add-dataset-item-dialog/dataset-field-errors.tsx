@@ -1,4 +1,4 @@
-import { FieldError } from '@/ds/components/Field';
+import { FieldError } from '../../../../ds/components/Field';
 
 export interface DatasetFieldErrorsProps {
   field: string;

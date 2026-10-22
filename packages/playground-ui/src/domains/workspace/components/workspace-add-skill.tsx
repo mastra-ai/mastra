@@ -1,9 +1,9 @@
 import { Wand2 } from 'lucide-react';
 import { useState } from 'react';
+import { Button } from '../../../ds/components/Button';
 import { useWorkspaceContext } from './use-workspace-context';
 import { WorkspaceAddSkillDialog } from './workspace-add-skill-dialog';
 import type { AddSkillDialogProps } from './workspace-add-skill-dialog';
-import { Button } from '@/ds/components/Button';
 
 export type WorkspaceSkillInstallParams = Parameters<AddSkillDialogProps['onInstall']>[0];
 

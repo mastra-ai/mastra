@@ -1,16 +1,16 @@
 import { X } from 'lucide-react';
 import * as React from 'react';
 
-import type { ConditionOperator } from '../types';
+import { Button } from '../../../ds/components/Button';
 
+import { cn } from '../../utils';
+import type { ConditionOperator } from '../types';
 import { RuleFieldSelect } from './rule-field-select';
 import { RuleOperatorSelect } from './rule-operator-select';
 import { RuleValueInput } from './rule-value-input';
+
 import { getFieldOptionAtPath } from './schema-utils';
 import type { RuleRowProps } from './types';
-
-import { Button } from '@/ds/components/Button';
-import { cn } from '@/lib/utils';
 
 const PRIMITIVE_TYPES = new Set(['string', 'number', 'boolean', 'integer']);
 

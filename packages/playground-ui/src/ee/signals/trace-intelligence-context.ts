@@ -8,8 +8,8 @@ import type {
 } from '@mastra/client-js';
 import { createContext } from 'react';
 
+import type { LinkComponent } from '../../ds/types/link-component';
 import { BUILT_IN_SIGNAL_CATALOG } from './signal-formatting';
-import type { LinkComponent } from '@/ds/types/link-component';
 
 export type TraceIntelligenceRequest = <Response>(path: string) => Promise<Response>;
 

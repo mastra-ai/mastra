@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { AskUserPayload, AskUserResult } from '../../../../../ds/components/ai/ask-user';
+import { TooltipProvider } from '../../../../../ds/components/Tooltip';
 import { ToolCallProvider } from '../../../context/tool-call-context';
 import { AskUserBadge } from '../ask-user-badge';
-import type { AskUserPayload, AskUserResult } from '@/ds/components/ai/ask-user';
-import { TooltipProvider } from '@/ds/components/Tooltip';
 
 type ProviderOverrides = {
   approveToolcall?: (toolCallId: string, resumeData?: unknown) => void;

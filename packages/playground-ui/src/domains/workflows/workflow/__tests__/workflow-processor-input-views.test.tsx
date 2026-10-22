@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { WorkflowInputData } from '../workflow-input-data';
 
-vi.mock('@uiw/react-codemirror', () => import('@/test/mock-code-editor'));
+vi.mock('@uiw/react-codemirror', () => import('../../../../test/mock-code-editor'));
 
 afterEach(cleanup);
 

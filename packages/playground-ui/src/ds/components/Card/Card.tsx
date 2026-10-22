@@ -1,11 +1,11 @@
 import { cva } from 'class-variance-authority';
 import type { VariantProps } from 'class-variance-authority';
 import * as React from 'react';
-import { surfaceRimFocus } from '@/ds/primitives/form-element';
-import { raisedSurfaceStyle, surfaceStateLayerStyle } from '@/ds/primitives/raised-surface';
-import { focusRingInset } from '@/ds/primitives/transitions';
-import type { LinkComponent } from '@/ds/types/link-component';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { surfaceRimFocus } from '../../primitives/form-element';
+import { raisedSurfaceStyle, surfaceStateLayerStyle } from '../../primitives/raised-surface';
+import { focusRingInset } from '../../primitives/transitions';
+import type { LinkComponent } from '../../types/link-component';
 
 const cardVariants = cva(
   cn(raisedSurfaceStyle, 'rounded-xl transition-all duration-normal ease-out-custom motion-reduce:transition-none'),

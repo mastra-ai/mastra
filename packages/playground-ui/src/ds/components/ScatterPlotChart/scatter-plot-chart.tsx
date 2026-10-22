@@ -1,12 +1,12 @@
 import { CartesianGrid, ResponsiveContainer, Scatter, ScatterChart, Tooltip, XAxis, YAxis, ZAxis } from 'recharts';
+import { cn } from '../../../lib/utils';
+import { CHART_LABEL_COLOR, CHART_TICK_FONT_SIZE, Colors } from '../../tokens';
 import { ScatterPlotChartTooltip } from './scatter-plot-chart-tooltip';
 import {
   formatScatterPlotAxisTick,
   getScatterPlotClickedPoint,
   getScatterPlotPointColor,
 } from './scatter-plot-chart-utils';
-import { CHART_LABEL_COLOR, CHART_TICK_FONT_SIZE, Colors } from '@/ds/tokens';
-import { cn } from '@/lib/utils';
 
 const DEFAULT_POINT_SIZE = 48;
 const CHART_MARGIN = { top: 16, right: 16, bottom: 16, left: 16 };

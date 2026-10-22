@@ -1,5 +1,5 @@
+import { cn } from '../../../lib/utils';
 import { Skeleton } from './skeleton';
-import { cn } from '@/lib/utils';
 
 export type SkeletonTextProps = {
   /** Type style of the text it stands in for (e.g. `text-body-sm`), which sets the line's height. */

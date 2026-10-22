@@ -1,9 +1,9 @@
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { Icon } from '@/ds/icons/Icon';
-import { controlSizeClasses } from '@/ds/primitives/control-size';
-import { controlStateColorTransition, transitions } from '@/ds/primitives/transitions';
-import { quietTextHover } from '@/ds/primitives/typography';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { Icon } from '../../icons/Icon';
+import { controlSizeClasses } from '../../primitives/control-size';
+import { controlStateColorTransition, transitions } from '../../primitives/transitions';
+import { quietTextHover } from '../../primitives/typography';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../Tooltip';
 
 export interface DataPanelMetadataProps {
   children: React.ReactNode;

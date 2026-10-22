@@ -1,12 +1,12 @@
 import React from 'react';
 
+import { cn } from '../../../lib/utils';
+import { formatDate } from '../../../utils/date-format';
 import { Icon } from '../../icons/Icon';
 import { Txt } from '../Txt';
 import { resolveTableAlign, tableAlignClasses, toNativeAlign } from './table-align';
 import type { TableAlign } from './table-align';
 import { useTableVariant } from './table-context';
-import { cn } from '@/lib/utils';
-import { formatDate } from '@/utils/date-format';
 
 export type TableCellTone = 'ink' | 'muted';
 

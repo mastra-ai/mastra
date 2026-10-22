@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import type { JsonSchema, JsonSchemaProperty } from '../../json-schema';
 import { generateDefaultValues } from '../generate-default-values';
-import type { JsonSchema, JsonSchemaProperty } from '@/lib/json-schema';
 
 describe('generateDefaultValues', () => {
   describe('basic type defaults', () => {

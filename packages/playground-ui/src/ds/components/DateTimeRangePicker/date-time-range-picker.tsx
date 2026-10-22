@@ -1,12 +1,12 @@
 import { CalendarIcon } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactElement } from 'react';
+import { cn } from '../../../lib/utils';
+import { Button } from '../Button/Button';
+import type { ButtonProps } from '../Button/Button';
+import { DropdownMenu } from '../DropdownMenu/dropdown-menu';
+import { Popover, PopoverTrigger, PopoverContent } from '../Popover/popover';
 import { CustomRangeEditor } from './custom-range-editor';
-import { Button } from '@/ds/components/Button/Button';
-import type { ButtonProps } from '@/ds/components/Button/Button';
-import { DropdownMenu } from '@/ds/components/DropdownMenu/dropdown-menu';
-import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover/popover';
-import { cn } from '@/lib/utils';
 
 export type DateRangePreset = 'all' | 'last-24h' | 'last-3d' | 'last-7d' | 'last-14d' | 'last-30d' | 'custom';
 

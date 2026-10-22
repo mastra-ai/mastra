@@ -16,6 +16,7 @@ import {
 import { Button } from '../../../ds/components/Button';
 import { Txt } from '../../../ds/components/Txt';
 import { overlaySurfaceStyle } from '../../../ds/primitives/raised-surface';
+import { formatDate } from '../../../utils/date-format';
 import type { ExtractedOmMarker } from '../lib/extract-markers';
 import { tToTimestampMs } from '../lib/replay-selection';
 import type { TDomain } from '../lib/timeline';
@@ -32,7 +33,6 @@ import {
   toMessageData,
   toSelectedT,
 } from './flame-graph-data';
-import { formatDate } from '@/utils/date-format';
 
 export interface ZoomRange {
   left: number;

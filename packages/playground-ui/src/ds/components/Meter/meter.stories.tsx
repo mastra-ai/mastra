@@ -2,10 +2,10 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useId } from 'react';
 import { expect } from 'storybook/test';
 
+import { formatFullNumber } from '../../../utils/cost';
+import { Card, CardContent } from '../Card';
+import { Txt } from '../Txt';
 import { Meter } from './meter';
-import { Card, CardContent } from '@/ds/components/Card';
-import { Txt } from '@/ds/components/Txt';
-import { formatFullNumber } from '@/utils/cost';
 
 const meta = {
   title: 'DataDisplay/Meter',

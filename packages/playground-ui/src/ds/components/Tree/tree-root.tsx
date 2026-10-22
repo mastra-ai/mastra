@@ -1,7 +1,7 @@
 import * as React from 'react';
+import { useIsomorphicLayoutEffect } from '../../../hooks/use-isomorphic-layout-effect';
+import { cn } from '../../../lib/utils';
 import { TreeProvider, TreeDepthProvider } from './tree-context';
-import { useIsomorphicLayoutEffect } from '@/hooks/use-isomorphic-layout-effect';
-import { cn } from '@/lib/utils';
 
 const TREE_FOCUSABLE_ITEM_SELECTOR = '[data-tree-item-kind="folder"], [data-tree-item-kind="file"]';
 const TREE_FOLDER_TRIGGER_SELECTOR = '[data-tree-folder-trigger="true"]';

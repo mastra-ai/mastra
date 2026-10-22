@@ -1,9 +1,9 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useRef, useState } from 'react';
 
+import { Kbd } from '../../ds/components/Kbd';
 import { KeyboardScope, KeyboardShortcutsProvider } from './keyboard-shortcuts-context';
 import { useKeydown, useTableKeydown } from './use-keydown';
-import { Kbd } from '@/ds/components/Kbd';
 
 const meta: Meta = {
   title: 'Hooks/useKeydown',

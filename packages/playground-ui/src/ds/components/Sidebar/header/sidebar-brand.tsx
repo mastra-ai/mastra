@@ -1,8 +1,8 @@
 import type { ComponentPropsWithoutRef, ReactNode } from 'react';
+import { cn } from '../../../../lib/utils';
+import { VisuallyHidden } from '../../../primitives/visually-hidden';
+import { Txt } from '../../Txt';
 import { useSidebar } from '../root/sidebar-context';
-import { Txt } from '@/ds/components/Txt';
-import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
-import { cn } from '@/lib/utils';
 
 export type SidebarBrandProps = Omit<ComponentPropsWithoutRef<'div'>, 'title'> & {
   logo?: ReactNode;

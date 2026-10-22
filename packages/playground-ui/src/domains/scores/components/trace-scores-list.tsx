@@ -2,12 +2,12 @@ import type { ClientScoreRowData } from '@mastra/client-js';
 import { useTraceSpanScores } from '@mastra/react/hooks/scores';
 import { InfoIcon } from 'lucide-react';
 import { Fragment, useState } from 'react';
-import { DataList } from '@/ds/components/DataList';
-import { HoverCard, HoverCardContent, HoverCardTrigger } from '@/ds/components/HoverCard';
-import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
-import { Spinner } from '@/ds/components/Spinner';
-import { Txt } from '@/ds/components/Txt';
-import { ScorersIcon } from '@/ds/icons/ScorersIcon';
+import { DataList } from '../../../ds/components/DataList';
+import { HoverCard, HoverCardContent, HoverCardTrigger } from '../../../ds/components/HoverCard';
+import { MarkdownRenderer } from '../../../ds/components/MarkdownRenderer';
+import { Spinner } from '../../../ds/components/Spinner';
+import { Txt } from '../../../ds/components/Txt';
+import { ScorersIcon } from '../../../ds/icons/ScorersIcon';
 
 export type TraceScoresListProps = {
   traceId: string;

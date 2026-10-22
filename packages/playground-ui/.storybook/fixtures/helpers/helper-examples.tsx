@@ -1,6 +1,6 @@
-import { InlineCode } from '@/ds/components/InlineCode';
-import { Cell, Row, Table, Tbody, Th, Thead } from '@/ds/components/Table';
-import { Txt } from '@/ds/components/Txt';
+import { InlineCode } from '../../../src/ds/components/InlineCode';
+import { Cell, Row, Table, Tbody, Th, Thead } from '../../../src/ds/components/Table';
+import { Txt } from '../../../src/ds/components/Txt';
 
 export type HelperExample = readonly [call: string, result: string | number | boolean | undefined];
 

@@ -1,11 +1,11 @@
 import { ChevronDown } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import { Button } from '../../../ds/components/Button';
+import { DataList } from '../../../ds/components/DataList/data-list';
+import { useDataListKeyboard } from '../../../ds/components/DataList/use-data-list-keyboard';
+import { SearchInput } from '../../../ds/components/SearchInput';
 import type { TopicTraceSummary } from '../types';
 import { getVisibleTraceSummaries } from '../utils';
-import { Button } from '@/ds/components/Button';
-import { DataList } from '@/ds/components/DataList/data-list';
-import { useDataListKeyboard } from '@/ds/components/DataList/use-data-list-keyboard';
-import { SearchInput } from '@/ds/components/SearchInput';
 
 export interface TopicTraceSummaryListProps {
   traces: TopicTraceSummary[];

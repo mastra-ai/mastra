@@ -1,5 +1,5 @@
-import { SkeletonText } from '@/ds/components/Skeleton';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { SkeletonText } from '../Skeleton';
 
 /**
  * A compact card's total, right of the title in the same type (14px, medium). Always the top

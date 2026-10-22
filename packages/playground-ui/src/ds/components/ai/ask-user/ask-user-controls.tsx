@@ -1,12 +1,12 @@
 import type { ChangeEvent, ComponentProps, KeyboardEvent, MouseEvent, ReactNode } from 'react';
+import { cn } from '../../../../lib/utils';
+import { Checkbox } from '../../Checkbox';
+import { FieldItem, FieldLabel, Fieldset } from '../../Field';
+import { Input } from '../../Input';
+import { RadioGroup, RadioGroupItem } from '../../RadioGroup';
+import { Txt } from '../../Txt';
 import { useAskUserContext, useOptionalAskUserContext } from './ask-user-context';
 import { AskUserOptionRow, AskUserSubmitButton } from './ask-user-layout';
-import { Checkbox } from '@/ds/components/Checkbox';
-import { FieldItem, FieldLabel, Fieldset } from '@/ds/components/Field';
-import { Input } from '@/ds/components/Input';
-import { RadioGroup, RadioGroupItem } from '@/ds/components/RadioGroup';
-import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/lib/utils';
 
 // Keep the UI-only custom choice separate from suggested answer values.
 const customAnswerValue = 'custom';

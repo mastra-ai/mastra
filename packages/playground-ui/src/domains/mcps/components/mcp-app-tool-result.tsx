@@ -2,8 +2,8 @@ import { useMastraClient } from '@mastra/react';
 import type { McpAppToolInfo } from '@mastra/react/hooks/mcps';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback } from 'react';
+import { Txt } from '../../../ds/components/Txt';
 import { McpAppViewer } from './mcp-app-viewer';
-import { Txt } from '@/ds/components/Txt';
 
 interface McpAppToolResultProps {
   appInfo: McpAppToolInfo;

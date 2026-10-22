@@ -4,15 +4,15 @@ import { Decoration, EditorView } from '@codemirror/view';
 import type { ReactCodeMirrorRef } from '@uiw/react-codemirror';
 import { AlignJustifyIcon, AlignLeftIcon, ExpandIcon, SearchIcon } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Button } from '@/ds/components/Button';
-import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
-import { CodeEditor } from '@/ds/components/CodeEditor';
-import { CopyButton } from '@/ds/components/CopyButton';
-import { DataPanelSectionHeading } from '@/ds/components/DataPanel/data-panel-section-heading';
-import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '@/ds/components/Dialog';
-import { SearchInput } from '@/ds/components/SearchInput';
-import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { raisedSurfaceStyle } from '../../primitives/raised-surface';
+import { Button } from '../Button';
+import { ButtonsGroup } from '../ButtonsGroup';
+import { CodeEditor } from '../CodeEditor';
+import { CopyButton } from '../CopyButton';
+import { DataPanelSectionHeading } from '../DataPanel/data-panel-section-heading';
+import { Dialog, DialogBody, DialogContent, DialogHeader, DialogTitle } from '../Dialog';
+import { SearchInput } from '../SearchInput';
 
 export interface DataCodeSectionDiff {
   /** The other document to compare against. */

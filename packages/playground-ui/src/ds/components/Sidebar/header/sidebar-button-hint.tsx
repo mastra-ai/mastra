@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Kbd } from '@/ds/components/Kbd';
+import { Kbd } from '../../Kbd';
 
 export type SidebarButtonHintProps = {
   label: ReactNode;

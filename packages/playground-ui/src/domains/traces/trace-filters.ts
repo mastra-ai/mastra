@@ -34,6 +34,16 @@ import {
   WaypointsIcon,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { isFilterBarGroup } from '../../ds/components/FilterBar/types';
+import type {
+  FilterBarExpression,
+  FilterBarField,
+  FilterBarGroup,
+  FilterBarItem,
+  FilterBarOperator,
+  FilterBarSuggestionsResolver,
+} from '../../ds/components/FilterBar/types';
+import type { PropertyFilterToken } from '../../ds/components/PropertyFilter/types';
 import {
   isTraceFilterGroup,
   isTraceFilterOperatorId,
@@ -48,16 +58,6 @@ import type {
   TraceQueryRelatedScope,
 } from './trace-query-filters';
 import type { TraceDatePreset } from './types';
-import { isFilterBarGroup } from '@/ds/components/FilterBar/types';
-import type {
-  FilterBarExpression,
-  FilterBarField,
-  FilterBarGroup,
-  FilterBarItem,
-  FilterBarOperator,
-  FilterBarSuggestionsResolver,
-} from '@/ds/components/FilterBar/types';
-import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
 
 export type {
   TraceFilterGroup,

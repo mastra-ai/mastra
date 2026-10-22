@@ -1,8 +1,8 @@
 import type { ComponentPropsWithoutRef } from 'react';
+import { cn } from '../../../../lib/utils';
+import { VisuallyHidden } from '../../../primitives/visually-hidden';
 import type { SidebarState } from '../root/sidebar-context';
 import { useMaybeSidebarState } from '../root/sidebar-context';
-import { VisuallyHidden } from '@/ds/primitives/visually-hidden';
-import { cn } from '@/lib/utils';
 
 export type SidebarNavLabelProps = ComponentPropsWithoutRef<'span'> & {
   /** Override sidebar state. Defaults to context, then `'default'`. */

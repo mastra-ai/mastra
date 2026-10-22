@@ -1,6 +1,6 @@
 import type { ReasoningPart } from '@mastra/react/ui';
-import { hasVisibleReasoning } from '@/ds/components/ai/activity';
-import type { ReasoningContent } from '@/ds/components/ai/activity';
+import { hasVisibleReasoning } from '../../../ds/components/ai/activity';
+import type { ReasoningContent } from '../../../ds/components/ai/activity';
 
 export function getReasoningContent(part: ReasoningPart): ReasoningContent | undefined {
   const content = {

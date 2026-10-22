@@ -1,16 +1,16 @@
 import type { WorkflowRunStatus } from '@mastra/core/workflows';
 import { Pause, Timer } from 'lucide-react';
+import { Badge } from '../../../ds/components/Badge';
+import { CopyButton } from '../../../ds/components/CopyButton';
+import { RelativeTimestamp } from '../../../ds/components/RelativeTimestamp';
+import { Txt } from '../../../ds/components/Txt';
+import { useTimeDiff } from '../../../hooks/use-time-diff';
+import { formatDuration } from '../../../utils/duration';
 import { WorkflowRunStatusIcon } from '../components/workflow-run-status-icon';
 import type { WorkflowRunStreamResult } from '../context/workflow-run-context';
 import type { WorkflowRunTiming } from '../context/workflow-step-timing';
 import { resolveRunTiming } from '../context/workflow-step-timing';
 import { workflowStatusTone } from '../workflow-status-tone';
-import { Badge } from '@/ds/components/Badge';
-import { CopyButton } from '@/ds/components/CopyButton';
-import { RelativeTimestamp } from '@/ds/components/RelativeTimestamp';
-import { Txt } from '@/ds/components/Txt';
-import { useTimeDiff } from '@/hooks/use-time-diff';
-import { formatDuration } from '@/utils/duration';
 
 function formatRunStatus(status?: WorkflowRunStatus) {
   if (!status) return 'Run';

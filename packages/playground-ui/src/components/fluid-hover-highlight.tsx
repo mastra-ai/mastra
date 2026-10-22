@@ -1,8 +1,8 @@
 'use client';
 
 import type { CSSProperties } from 'react';
-import type { UseFluidHoverReturn } from '@/hooks/use-fluid-hover';
-import { cn } from '@/lib/utils';
+import type { UseFluidHoverReturn } from '../hooks/use-fluid-hover';
+import { cn } from '../lib/utils';
 
 export type FluidHoverHighlightProps = {
   hover: Pick<UseFluidHoverReturn, 'activeIndex' | 'itemRects' | 'isMeasured'>;

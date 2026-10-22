@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
-import { Txt } from '@/ds/components/Txt';
-import { cn } from '@/lib/utils';
+import { cn } from '../../../lib/utils';
+import { Txt } from '../../components/Txt';
 
 export interface SettingsLayoutProps {
   title?: ReactNode;

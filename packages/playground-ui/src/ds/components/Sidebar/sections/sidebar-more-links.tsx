@@ -1,6 +1,7 @@
 import { MoreHorizontalIcon, Settings2Icon } from 'lucide-react';
 import { Fragment, useRef } from 'react';
 import type { ReactNode } from 'react';
+import { DropdownMenu } from '../../DropdownMenu';
 import { SidebarNavLabel } from '../nav/sidebar-nav-label';
 import type { SidebarLink } from '../nav/sidebar-nav-link';
 import { SidebarNavLink } from '../nav/sidebar-nav-link';
@@ -8,7 +9,6 @@ import { useMaybeSidebarState } from '../root/sidebar-context';
 import { SidebarOptionalLink } from './sidebar-optional-link';
 import type { OptionalSidebarLink, SidebarLinkPlacement } from './sidebar-visibility';
 import { getDefaultPlacement, getSidebarLinkKey } from './sidebar-visibility';
-import { DropdownMenu } from '@/ds/components/DropdownMenu';
 
 export type SidebarMoreLinksProps = {
   links: OptionalSidebarLink[];

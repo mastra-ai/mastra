@@ -1,4 +1,4 @@
-import type { JsonSchema, JsonSchemaProperty } from '@/lib/json-schema';
+import type { JsonSchema, JsonSchemaProperty } from '../json-schema';
 
 const MAX_DEPTH = 10;
 

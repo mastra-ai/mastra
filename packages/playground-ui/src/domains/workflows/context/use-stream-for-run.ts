@@ -1,6 +1,6 @@
 import { useStreamWorkflow } from '@mastra/react/hooks/workflows';
 import { useCallback, useState } from 'react';
-import { toast } from '@/utils/toast';
+import { toast } from '../../../utils/toast';
 
 export type StreamMode = 'execute' | 'observe';
 type StreamRun = { runId: string; mode: StreamMode };

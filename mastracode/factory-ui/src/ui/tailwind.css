@@ -1,6 +1,6 @@
 @import 'tailwindcss';
 @import '@mastra/playground-ui/components.css';
-@import '@mastra/playground-ui/sources.css';
+@import '../../../../packages/playground-ui/src/sources.css';
 
 /* Mona Sans and Commit Mono, same as Studio. Mona Sans comes from
  * @fontsource-variable/mona-sans, imported in main.tsx. Commit Mono is bundled

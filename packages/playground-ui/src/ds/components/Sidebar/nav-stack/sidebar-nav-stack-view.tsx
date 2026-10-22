@@ -1,11 +1,11 @@
 import { ArrowLeftIcon } from 'lucide-react';
 import React from 'react';
 import type { ComponentPropsWithoutRef } from 'react';
+import { cn } from '../../../../lib/utils';
 import { navItemClasses } from '../nav/sidebar-nav-item-classes';
 import { useSidebar } from '../root/sidebar-context';
 import { useSidebarNavStack } from './sidebar-nav-stack-context';
 import { sidebarNavStackPageClasses } from './sidebar-nav-stack-page-classes';
-import { cn } from '@/lib/utils';
 
 export type SidebarNavStackViewProps = ComponentPropsWithoutRef<'div'> & {
   value: string;

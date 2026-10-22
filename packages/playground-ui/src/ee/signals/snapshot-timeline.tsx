@@ -1,10 +1,10 @@
 import { Pause, Play } from 'lucide-react';
 
+import { Button } from '../../ds/components/Button';
+import { Txt } from '../../ds/components/Txt';
 import { formatSnapshotCutoff, formatSnapshotWindow, traceLabel } from './signal-formatting';
 import { snapshotTickLabel, timelineDayLabels, timelineTickPositions } from './snapshot-timeline-data';
 import type { ThemeSnapshot } from './types';
-import { Button } from '@/ds/components/Button';
-import { Txt } from '@/ds/components/Txt';
 
 export type TimelineMarkerKind = 'selected' | 'compare-point';
 

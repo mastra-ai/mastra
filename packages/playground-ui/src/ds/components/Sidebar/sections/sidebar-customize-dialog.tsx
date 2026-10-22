@@ -1,5 +1,8 @@
 import { useId } from 'react';
 import type { RefObject } from 'react';
+import { Dialog, DialogBody, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../../Dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../../Select';
+import { Txt } from '../../Txt';
 import type { SidebarSection } from './sidebar-sections';
 import {
   getSidebarLinkKey,
@@ -8,16 +11,6 @@ import {
   sidebarLinkPlacements,
 } from './sidebar-visibility';
 import type { OptionalSidebarLink, SidebarLinkPlacement } from './sidebar-visibility';
-import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/ds/components/Dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/ds/components/Select';
-import { Txt } from '@/ds/components/Txt';
 
 export type SidebarCustomizeDialogProps = {
   open: boolean;

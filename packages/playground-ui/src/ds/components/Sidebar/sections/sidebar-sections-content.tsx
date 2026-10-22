@@ -1,4 +1,5 @@
 import { useId, useRef, useState } from 'react';
+import { useLocalStorageState } from '../../../../hooks/use-local-storage-state';
 import { SidebarNavHeader } from '../nav/sidebar-nav-header';
 import { SidebarNavList } from '../nav/sidebar-nav-list';
 import { SidebarNavSection } from '../nav/sidebar-nav-section';
@@ -14,7 +15,6 @@ import {
   placementsSchema,
 } from './sidebar-visibility';
 import type { OptionalSidebarLink, SidebarLinkPlacement } from './sidebar-visibility';
-import { useLocalStorageState } from '@/hooks/use-local-storage-state';
 
 export function SidebarSectionsContent({
   sections,

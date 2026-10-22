@@ -2,6 +2,9 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeftRight, ChartNoAxesGantt, Waypoints } from 'lucide-react';
 import { useMemo, useState } from 'react';
 
+import type { SankeyChartNodeSelection } from '../../ds/components/SankeyChart';
+import { TabList, Tabs } from '../../ds/components/Tabs';
+import { Txt } from '../../ds/components/Txt';
 import { PendingSignalProgress } from './components/signals-empty-state';
 import { SignalsOverviewPage as SignalsEmptyState } from './components/signals-overview-page';
 import { fetchThemeFlow, fetchThemePaths, fetchThemeSnapshots, serializeThemeFilters } from './entity-learning-api';
@@ -41,9 +44,6 @@ import type { TraceSignalName } from './types';
 import { useTraceIntelligence } from './use-trace-intelligence';
 import { ViewModeTab } from './view-mode-tab';
 import type { SignalsViewMode } from './view-mode-tab';
-import type { SankeyChartNodeSelection } from '@/ds/components/SankeyChart';
-import { TabList, Tabs } from '@/ds/components/Tabs';
-import { Txt } from '@/ds/components/Txt';
 
 export interface SankeySignalsProps {
   entityId: string;

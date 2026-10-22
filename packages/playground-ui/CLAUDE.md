@@ -26,7 +26,7 @@ On every change to this package, you MUST ALWAYS follow these instructions:
 ### Local Commands (run from `packages/playground-ui`)
 
 - `pnpm build`: TypeCheck and build the package with Vite
-- `pnpm dev`: Build in watch mode
+- `pnpm dev`: Regenerate type declarations in watch mode, so apps see API changes while their dev servers read the source
 - `pnpm test`: Run tests with Vitest
 - `pnpm preview`: Preview the production build
 - `pnpm storybook`: Start Storybook dev server on port 6006

@@ -4,40 +4,34 @@ import { MessageFactory } from '@mastra/react/ui';
 import type { MessageRenderers } from '@mastra/react/ui';
 import { memo, useMemo } from 'react';
 import type { ReactNode } from 'react';
+import { AssistantMessageActions, DatasetSaveAction } from '..';
+import { useRevealedParts } from '../../../ds/components/ai/message-reveal';
+import { ToolCallGroup } from '../../../ds/components/ai/tool-call';
+import { Arriving } from '../../../ds/components/Arrival';
+import { Message, MessageActions, MessageCopyButton } from '../../../ds/components/Message';
+import { Notice } from '../../../ds/components/Notice';
+import { Txt } from '../../../ds/components/Txt';
 import { MessageAttachments } from '../attachments/message-attachments';
 import { splitMessageAttachments } from '../attachments/split-message-attachments';
-import { AssistantMessageActions, DatasetSaveAction } from '@/domains/chat';
-import { ChatRunningContext, useChatRunning } from '@/domains/chat/context/chat-context';
-import { AssistantTextPartRenderer } from '@/domains/chat/messages/renderers/assistant-text-part-renderer';
-import { DataPartRenderer } from '@/domains/chat/messages/renderers/data-part-renderer';
-import { messageTextKind } from '@/domains/chat/messages/renderers/message-text-kind';
-import { ReasoningPartRenderer } from '@/domains/chat/messages/renderers/reasoning-part-renderer';
-import { messageStatusRenderers } from '@/domains/chat/messages/renderers/status-renderers';
-import { readToolPart } from '@/domains/chat/messages/renderers/tool-part';
-import type { ToolPart } from '@/domains/chat/messages/renderers/tool-part';
-import { UserFilePartRenderer } from '@/domains/chat/messages/renderers/user-file-part-renderer';
-import { UserTextPartRenderer } from '@/domains/chat/messages/renderers/user-text-part-renderer';
-import {
-  getSignalType,
-  isRecord,
-  isSignalData,
-  isUserSignalType,
-  toReactiveSignalData,
-} from '@/domains/chat/messages/signal-data';
-import { parseSkillActivation } from '@/domains/chat/messages/skill-activation';
-import { SkillMessage } from '@/domains/chat/messages/skill-message';
-import { ToolCallEffects } from '@/domains/chat/tools/tool-call-effects';
-import { ToolCard } from '@/domains/chat/tools/tool-card';
-import type { DataMessagePart } from '@/domains/chat/tools/tool-card';
-import { badgeStatus, isSettledState } from '@/domains/chat/tools/tool-card-kind';
-import type { ToolCardContext } from '@/domains/chat/tools/tool-card-kind';
-import { collectToolGroups } from '@/domains/chat/tools/tool-groups';
-import { useRevealedParts } from '@/ds/components/ai/message-reveal';
-import { ToolCallGroup } from '@/ds/components/ai/tool-call';
-import { Arriving } from '@/ds/components/Arrival';
-import { Message, MessageActions, MessageCopyButton } from '@/ds/components/Message';
-import { Notice } from '@/ds/components/Notice';
-import { Txt } from '@/ds/components/Txt';
+import { ChatRunningContext, useChatRunning } from '../context/chat-context';
+import { ToolCallEffects } from '../tools/tool-call-effects';
+import { ToolCard } from '../tools/tool-card';
+import type { DataMessagePart } from '../tools/tool-card';
+import { badgeStatus, isSettledState } from '../tools/tool-card-kind';
+import type { ToolCardContext } from '../tools/tool-card-kind';
+import { collectToolGroups } from '../tools/tool-groups';
+import { AssistantTextPartRenderer } from './renderers/assistant-text-part-renderer';
+import { DataPartRenderer } from './renderers/data-part-renderer';
+import { messageTextKind } from './renderers/message-text-kind';
+import { ReasoningPartRenderer } from './renderers/reasoning-part-renderer';
+import { messageStatusRenderers } from './renderers/status-renderers';
+import { readToolPart } from './renderers/tool-part';
+import type { ToolPart } from './renderers/tool-part';
+import { UserFilePartRenderer } from './renderers/user-file-part-renderer';
+import { UserTextPartRenderer } from './renderers/user-text-part-renderer';
+import { getSignalType, isRecord, isSignalData, isUserSignalType, toReactiveSignalData } from './signal-data';
+import { parseSkillActivation } from './skill-activation';
+import { SkillMessage } from './skill-message';
 
 export interface MessageRowProps extends Omit<React.HTMLAttributes<HTMLDivElement>, 'children'> {
   message: MastraDBMessage;
