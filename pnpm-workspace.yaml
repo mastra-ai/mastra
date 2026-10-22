@@ -295,6 +295,12 @@ minimumReleaseAgeExclude:
   - '@modelcontextprotocol/client@2.3.0'
   # Renovate security update: launch-editor@2.14.2
   - launch-editor@2.14.2
+  # Renovate security update: @vitest/mocker@4.1.12
+  - "@vitest/mocker@4.1.12"
+  # Renovate security update: @storybook/addon-mcp@10.6.2
+  - "@storybook/addon-mcp@10.6.2"
+  # Renovate security update: storybook@10.6.2
+  - storybook@10.6.2
 trustPolicyExclude:
   # Vanta 2026-10-02: 7.4.6 fixes GHSA-g84c-rxfj-3j2c; earlier 7.4.x had trusted publisher
   # but 7.4.6 lacks that evidence (pnpm trustPolicy no-downgrade).
@@ -400,7 +406,7 @@ overrides:
   '@fastify/proxy-addr@<=5.1.0': 5.1.1
   # Round 2 2026-09-18: clear remaining Dependabot + raise Aikido-visible floors
   image-size@<=2.0.2: 2.0.4
-  '@vitest/mocker@>=2.1.0 <4.1.11': 4.1.11
+  '@vitest/mocker@>=2.1.0 <4.1.11': 4.1.12
   vitest@>=2.1.0 <4.1.11: 4.1.11
   jose@>=4.14.0 <6.2.12: 6.2.12
   '@noble/hashes@>=1.0.0 <1.8.0': 1.8.0
