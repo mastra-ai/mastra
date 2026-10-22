@@ -742,19 +742,28 @@ async function findInternalThread(mastra: Mastra | undefined, thread: HandlerThr
     },
     perPage: 1,
   })) ?? { threads: [] };
-  return threads[0];
+  return threads[0] ?? null;
 }
+
+type InternalThread = Awaited<ReturnType<typeof findInternalThread>>;
 
 async function prepareExistingSessionOwnerContext(
   thread: HandlerThread,
   deps: SlackChannelDeps,
   ctx: ChannelHandlerContext,
-  options: { expectedOrgId?: string; senderUserId?: string; requireInternalThread: boolean },
+  options: {
+    expectedOrgId?: string;
+    senderUserId?: string;
+    requireInternalThread: boolean;
+    /** Already looked up by the caller; `null` means it doesn't exist. */
+    internalThread?: InternalThread;
+  },
 ): Promise<'ready' | 'organization-mismatch' | 'access-denied'> {
   const sourceControls = configuredSourceControls(deps);
   if (sourceControls.length === 0 && !options.requireInternalThread) return 'ready';
 
-  const internalThread = await findInternalThread(ctx.mastra, thread);
+  const internalThread =
+    options.internalThread !== undefined ? options.internalThread : await findInternalThread(ctx.mastra, thread);
   if (!internalThread) {
     if (options.requireInternalThread) {
       throw new Error(`Could not resolve the internal Slack thread for ${thread.id}.`);
@@ -820,7 +829,7 @@ async function gateDispatch(
   message: HandlerMessage,
   deps: SlackChannelDeps,
   ctx: ChannelHandlerContext,
-  options: { requireInternalThread: boolean } = { requireInternalThread: false },
+  options: { requireInternalThread: boolean; internalThread?: InternalThread } = { requireInternalThread: false },
 ): Promise<{
   routed?: { link: ChannelAccountLink; factoryProjectId: string };
 } | null> {
@@ -840,6 +849,7 @@ async function gateDispatch(
       expectedOrgId: sender.link.orgId,
       senderUserId: sender.link.userId,
       requireInternalThread: options.requireInternalThread,
+      internalThread: options.internalThread,
     });
     if (ownerContext === 'access-denied') {
       await thread.post('This private Factory session belongs to another user.');
@@ -1052,23 +1062,25 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
       // thread without the bot replying. Word boundary so messages that
       // merely start with "aside..." (e.g. "asides can wait") still route.
       if (/^aside\b/i.test(message.text)) return ingestAside(thread, message, deps);
+      // Looked up once here for the mute check and the access gate below.
+      const internalThread = await findInternalThread(ctx.mastra, thread);
       // A muted thread ignores everything that doesn't tag the bot, and the
       // skipped messages never reach the session.
-      if (!message.isMention && (await isThreadMuted(thread, ctx))) return;
+      if (!message.isMention && internalThread?.metadata?.[MUTED_KEY] === 'true') return;
       // A subscribed follow-up from an unlinked sender must not run either
       // (e.g. the link was removed mid-conversation), and it must still
       // resolve a factory (e.g. the default was cleared or its factory
       // deleted mid-conversation). Mute and unmute pass the same gate, so only
       // someone allowed to prompt this session can change what it listens to.
       try {
-        const gate = await gateDispatch(thread, message, deps, ctx, { requireInternalThread: true });
+        const gate = await gateDispatch(thread, message, deps, ctx, { requireInternalThread: true, internalThread });
         if (!gate) return;
       } catch (error) {
         await reportPreDispatchError(thread, message, ctx, error);
         return;
       }
       const command = message.isMention ? muteCommand(message) : undefined;
-      if (command) return setThreadMuted(thread, message, ctx, command === 'mute');
+      if (command && internalThread) return setThreadMuted(thread, internalThread, message, ctx, command === 'mute');
       acknowledgeReceipt(thread, deps);
       await defaultHandler(thread, message);
     },
@@ -1103,11 +1115,6 @@ function muteCommand(message: HandlerMessage): 'mute' | 'unmute' | undefined {
   return rest === 'mute' || rest === 'unmute' ? rest : undefined;
 }
 
-async function isThreadMuted(thread: HandlerThread, ctx: ChannelHandlerContext): Promise<boolean> {
-  const internal = await findInternalThread(ctx.mastra, thread);
-  return internal?.metadata?.[MUTED_KEY] === 'true';
-}
-
 /**
  * Stored on the Mastra thread next to `channel_subscribed`, so a mute holds
  * across deploys and replicas. Callers run the sender's link and session
@@ -1115,13 +1122,13 @@ async function isThreadMuted(thread: HandlerThread, ctx: ChannelHandlerContext):
  */
 async function setThreadMuted(
   thread: HandlerThread,
+  internal: NonNullable<InternalThread>,
   message: HandlerMessage,
   ctx: ChannelHandlerContext,
   muted: boolean,
 ): Promise<void> {
-  const internal = await findInternalThread(ctx.mastra, thread);
   const store = await ctx.mastra?.getStorage()?.getStore('memory');
-  if (!internal || !store) return;
+  if (!store) return;
   await store.patchThread({ id: internal.id, metadata: { ...internal.metadata, [MUTED_KEY]: String(muted) } });
   try {
     await thread.adapter.addReaction(thread.id, message.id, muted ? 'mute' : 'loud_sound');
