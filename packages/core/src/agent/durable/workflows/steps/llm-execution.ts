@@ -2702,7 +2702,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               },
               state: typedInput.state,
               // Pass span data so tool calls can be children of model_step
-              modelSpanData: hasToolCalls && !processOutputStepTripwire ? modelSpan?.exportSpan?.() : undefined,
+              modelSpanData: hasToolCalls && !processOutputStepTripwire ? modelSpan?.snapshot?.() : undefined,
               stepSpanData,
               stepFinishPayload,
               // Carry step-finish through the iteration so the loop predicate can

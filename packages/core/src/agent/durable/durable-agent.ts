@@ -1630,8 +1630,8 @@ export class DurableAgent<
       // originals ended above.
       resumeAgentSpan: recoverAgentSpan,
       resumeModelSpan: recoverModelSpan,
-      resumeAgentSpanData: recoverAgentSpan?.exportSpan(),
-      resumeModelSpanData: recoverModelSpan?.exportSpan(),
+      resumeAgentSpanData: recoverAgentSpan?.snapshot(),
+      resumeModelSpanData: recoverModelSpan?.snapshot(),
       // abortController/abortSignal are installed by
       // #installAbortWithTotalTimeout below, with the run-level budget
       // composed in.
@@ -3798,8 +3798,8 @@ export class DurableAgent<
           if (!reg) continue;
           reg.resumeAgentSpan = resumeAgentSpan;
           reg.resumeModelSpan = resumeModelSpan;
-          reg.resumeAgentSpanData = resumeAgentSpan?.exportSpan();
-          reg.resumeModelSpanData = resumeModelSpan?.exportSpan();
+          reg.resumeAgentSpanData = resumeAgentSpan?.snapshot();
+          reg.resumeModelSpanData = resumeModelSpan?.snapshot();
           // Fresh spans capture their own first-chunk clock, never a prior segment's.
           reg.resumeCompletionStartTime = undefined;
         }

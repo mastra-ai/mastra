@@ -1488,6 +1488,9 @@ export interface Span<TType extends SpanType> extends BaseSpan<TType> {
   /** Returns a lightweight span ready for export */
   exportSpan(includeInternalSpans?: boolean): ExportedSpan<TType> | undefined;
 
+  /** Returns the span saved for a later `rebuildSpan()`, with its trace state */
+  snapshot(): SpanSnapshot<TType> | undefined;
+
   /** Returns the traceId on span, unless NoOpSpan, then undefined */
   get externalTraceId(): string | undefined;
 
@@ -1624,11 +1627,15 @@ export interface SpanData<TType extends SpanType> extends BaseSpan<TType> {
 export interface ExportedSpan<TType extends SpanType> extends SpanData<TType> {
   /** Set when the span is internal, so `rebuildSpan()` can restore its internal status */
   isInternal?: boolean;
-  /**
-   * The trace-level rules this span ran under (`requestContextKeys`, `hideInput`,
-   * `hideOutput`, `nestedUnderParent`), so `rebuildSpan()` can restore them and
-   * spans created under the rebuilt span keep honouring them.
-   */
+}
+
+/**
+ * A span saved between durable steps, for `rebuildSpan()`. Extends the exported
+ * form with runtime state that exporters do not need, so spans created under
+ * the rebuilt span keep honouring the trace's `requestContextKeys`,
+ * `hideInput` and `hideOutput`.
+ */
+export interface SpanSnapshot<TType extends SpanType> extends ExportedSpan<TType> {
   traceState?: TraceState;
 }
 
@@ -1709,7 +1716,7 @@ export interface IModelSpanTracker {
    * Export the current step span for later rebuilding (durable execution).
    * Returns undefined if no step span is active.
    */
-  exportCurrentStep(): ExportedSpan<SpanType.MODEL_STEP> | undefined;
+  exportCurrentStep(): SpanSnapshot<SpanType.MODEL_STEP> | undefined;
 
   /**
    * Get the pending step finish payload (captured when defer mode is enabled).

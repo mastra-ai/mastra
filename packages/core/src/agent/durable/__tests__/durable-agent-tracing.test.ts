@@ -84,6 +84,7 @@ describe('DurableAgent observability tracing', () => {
       }),
       update: vi.fn(),
       exportSpan: vi.fn(() => ({ id: span.id, type })),
+      snapshot: vi.fn(() => ({ id: span.id, type })),
       getParentSpanId: vi.fn(() => parentSpan?.id),
       findParent: vi.fn(function (this: any, spanType: string) {
         let current: any = this.parent;

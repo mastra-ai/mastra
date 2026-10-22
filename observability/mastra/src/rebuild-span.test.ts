@@ -1,6 +1,6 @@
 import { RequestContext } from '@mastra/core/di';
 import { InternalSpans, SamplingStrategyType, SpanType, TracingEventType } from '@mastra/core/observability';
-import type { ExportedSpan, TracingEvent } from '@mastra/core/observability';
+import type { SpanSnapshot, TracingEvent } from '@mastra/core/observability';
 import { describe, expect, it } from 'vitest';
 import { DefaultObservabilityInstance } from './instances';
 
@@ -87,8 +87,8 @@ describe('rebuildSpan internal status', () => {
  * rest of the run. (#28111)
  */
 describe('rebuildSpan trace state', () => {
-  const roundTrip = <T extends SpanType>(span: { exportSpan(): ExportedSpan<T> }) =>
-    JSON.parse(JSON.stringify(span.exportSpan())) as ExportedSpan<T>;
+  const roundTrip = <T extends SpanType>(span: { snapshot(): SpanSnapshot<T> }) =>
+    JSON.parse(JSON.stringify(span.snapshot())) as SpanSnapshot<T>;
 
   it('keeps extracting requestContextKeys for spans created under a rebuilt span', () => {
     const tracing = new DefaultObservabilityInstance({
@@ -122,6 +122,8 @@ describe('rebuildSpan trace state', () => {
     });
 
     expect(rebuiltStep.traceState).toEqual(step.traceState);
+    // Exporters never see the trace state
+    expect(step.exportSpan()).not.toHaveProperty('traceState');
     expect(child.metadata).toEqual({ tenant: 'acme', job: 'review' });
     expect(grandchild.metadata).toEqual({ tenant: 'acme', job: 'review' });
   });
@@ -184,7 +186,7 @@ describe('rebuildSpan trace state', () => {
     expect(child.metadata).toEqual({ tenant: 'acme' });
   });
 
-  it('falls back to the configured keys for a span exported before traceState was serialized', () => {
+  it('falls back to the configured keys for a span saved with exportSpan() instead of snapshot()', () => {
     const tracing = new DefaultObservabilityInstance({
       serviceName: 's',
       name: 'i',
@@ -193,8 +195,8 @@ describe('rebuildSpan trace state', () => {
       exporters: [],
     });
     const agent = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent' });
-    const { traceState: _dropped, ...legacy } = roundTrip(agent);
-    const child = tracing.rebuildSpan(legacy as ExportedSpan<SpanType.AGENT_RUN>).createChildSpan({
+    const legacy = JSON.parse(JSON.stringify(agent.exportSpan()));
+    const child = tracing.rebuildSpan(legacy).createChildSpan({
       type: SpanType.GENERIC,
       name: 'child',
       requestContext: new RequestContext([['tenant', 'acme']]),

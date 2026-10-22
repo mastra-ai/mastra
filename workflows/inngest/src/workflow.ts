@@ -555,7 +555,7 @@ export class InngestWorkflow<
             requestContext,
           });
 
-          return span?.exportSpan();
+          return span?.snapshot();
         });
 
         const engine = new InngestExecutionEngine(this.#mastra, step, attempt, this.options, parentStream);

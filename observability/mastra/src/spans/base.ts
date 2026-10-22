@@ -11,6 +11,7 @@ import type {
   CreateSpanOptions,
   ObservabilityInstance,
   ExportedSpan,
+  SpanSnapshot,
   TraceState,
   IModelSpanTracker,
   ModelSpanTrackerOptions,
@@ -571,7 +572,6 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       isEvent: this.isEvent,
       isRootSpan: this.isRootSpan,
       ...(this.isInternal ? { isInternal: true } : {}),
-      ...(this.traceState ? { traceState: this.traceState } : {}),
       parentSpanId: this.getParentSpanId(includeInternalSpans),
       externalParentSpanId: this.getExportedExternalParentSpanId(includeInternalSpans),
       ...(nestedUnderParent ? { nestedUnderParent: true } : {}),
@@ -579,6 +579,11 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       // Tags are only included for root spans, and a nested run does not own the trace
       ...(this.isRootSpan && !nestedUnderParent && this.tags?.length ? { tags: this.tags } : {}),
     };
+  }
+
+  /** Returns the span saved for a later `rebuildSpan()`, with its trace state */
+  public snapshot(): SpanSnapshot<TType> {
+    return { ...this.exportSpan(), ...(this.traceState ? { traceState: this.traceState } : {}) };
   }
 
   get externalTraceId(): string | undefined {
