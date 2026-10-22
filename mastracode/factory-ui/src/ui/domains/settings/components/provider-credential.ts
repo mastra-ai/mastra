@@ -5,6 +5,11 @@ export type CredentialScope = 'user' | 'org';
 
 export const CREDENTIAL_LABEL: Record<ProviderCredential, string> = { oauth: 'Signed in', api_key: 'Key saved' };
 
+export const SHARED_SOURCE: Partial<Record<ProviderInfo['source'], { label: string; description: string }>> = {
+  env: { label: 'From env', description: 'Read from the server environment' },
+  deployment: { label: 'From deployment', description: 'Provided by the deployment' },
+};
+
 /** The credential saved at exactly this scope. Deployment env keys belong to neither scope. */
 export function credentialAt(provider: ProviderInfo, scope: CredentialScope): ProviderCredential | undefined {
   if (scope === 'org') {

@@ -10,22 +10,18 @@ import { useFactoryAuth } from '../../../../../../hooks/useFactoryAuth';
 import { SkeletonRows } from '../../../../../ui/SkeletonRows';
 import { AddApiKeyDialog } from '../../AddApiKeyDialog';
 import { ProviderOAuthDialog } from '../../ProviderOAuthDialog';
-import { CREDENTIAL_LABEL, credentialAt } from '../../provider-credential';
+import { CREDENTIAL_LABEL, SHARED_SOURCE, credentialAt } from '../../provider-credential';
 import type { CredentialScope, ProviderCredential } from '../../provider-credential';
 import { AddProviderDrawer } from './AddProviderDrawer';
 import { ConnectedProviderRow } from './ConnectedProviderRow';
 import type { ProviderConnection } from './ConnectedProviderRow';
 
 const ORG_SCOPE_MEMBER_REASON = 'Only organization admins can manage org-wide credentials.';
+const ORG_SCOPE_AUDIENCE = 'Shared with every Factory in your organization.';
 
 const CREDENTIAL_STATUS: Record<ProviderCredential, StatusPresentation> = {
   oauth: { label: CREDENTIAL_LABEL.oauth, tone: 'success', description: 'Signed in with a provider account' },
   api_key: { label: CREDENTIAL_LABEL.api_key, tone: 'success', description: 'An API key is saved' },
-};
-
-const SHARED_SOURCE_STATUS: Partial<Record<ProviderInfo['source'], StatusPresentation>> = {
-  env: { label: 'From env', tone: 'neutral', description: 'Read from the server environment' },
-  deployment: { label: 'From deployment', tone: 'neutral', description: 'Provided by the deployment' },
 };
 
 interface ActiveOAuthSession {
@@ -38,25 +34,21 @@ function storedCredentialScope(requested: CredentialScope, authEnabled: boolean)
   return requested === 'org' && hasSeparateOrgStore ? 'org' : 'user';
 }
 
-function providerConnection(
-  provider: ProviderInfo,
-  scope: CredentialScope,
-  showSharedSources: boolean,
-): ProviderConnection | undefined {
+function sharedSourceStatus(source: ProviderInfo['source']): StatusPresentation | undefined {
+  const shared = SHARED_SOURCE[source];
+  return shared && { label: shared.label, tone: 'neutral', description: shared.description };
+}
+
+function providerConnection(provider: ProviderInfo, scope: CredentialScope): ProviderConnection | undefined {
   const credential = credentialAt(provider, scope);
   if (credential) return { provider, status: CREDENTIAL_STATUS[credential], credential };
-  if (!showSharedSources) return undefined;
-  const sharedStatus = SHARED_SOURCE_STATUS[provider.source];
+  const sharedStatus = sharedSourceStatus(provider.source);
   return sharedStatus && { provider, status: sharedStatus, credential: undefined };
 }
 
-function connectedProviders(
-  providers: ProviderInfo[],
-  scope: CredentialScope,
-  showSharedSources: boolean,
-): ProviderConnection[] {
+function connectedProviders(providers: ProviderInfo[], scope: CredentialScope): ProviderConnection[] {
   return providers
-    .flatMap(provider => providerConnection(provider, scope, showSharedSources) ?? [])
+    .flatMap(provider => providerConnection(provider, scope) ?? [])
     .toSorted((left, right) => left.provider.provider.localeCompare(right.provider.provider));
 }
 
@@ -75,7 +67,7 @@ export function ProviderList({ credentialScope }: { credentialScope: CredentialS
   const readOnly = scope === 'org' && orgKeyAdminQuery.data === false;
   const actionsDisabled = authQuery.isPending || readOnly;
   const providers = providersQuery.data ?? [];
-  const connections = connectedProviders(providers, scope, credentialScope === 'org');
+  const connections = connectedProviders(providers, scope);
 
   const openOAuth = (provider: string, session: OAuthStartResponse) => {
     setAddOpen(false);
@@ -125,6 +117,11 @@ export function ProviderList({ credentialScope }: { credentialScope: CredentialS
       {readOnly && (
         <Txt as="p" variant="caption" tone="muted">
           {ORG_SCOPE_MEMBER_REASON}
+        </Txt>
+      )}
+      {requestScope === 'org' && !readOnly && (
+        <Txt as="p" variant="caption" tone="muted">
+          {ORG_SCOPE_AUDIENCE}
         </Txt>
       )}
       {providersQuery.error && (

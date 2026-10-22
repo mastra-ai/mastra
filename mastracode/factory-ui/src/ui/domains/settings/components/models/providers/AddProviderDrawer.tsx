@@ -17,7 +17,7 @@ import { useState } from 'react';
 import type { OAuthStartResponse, ProviderInfo } from '../../../../../../api/types';
 import { useStartProviderOAuth } from '../../../../../../hooks/use-providers';
 import { ProviderBrandIcon } from '../../../../workspaces/components/ProviderBrandIcon';
-import { CREDENTIAL_LABEL, credentialAt } from '../../provider-credential';
+import { CREDENTIAL_LABEL, SHARED_SOURCE, credentialAt } from '../../provider-credential';
 import type { CredentialScope } from '../../provider-credential';
 
 const AUDIENCE: Record<CredentialScope, string> = {
@@ -35,6 +35,21 @@ function matchesSearch(provider: ProviderInfo, query: string): boolean {
 function soleOAuthMode(provider: ProviderInfo): string | undefined {
   const modes = provider.oauth?.modes ?? [];
   return modes.length === 1 ? modes[0] : undefined;
+}
+
+function takesApiKey(provider: ProviderInfo): boolean {
+  return provider.source !== 'deployment';
+}
+
+function connectionLabel(provider: ProviderInfo, scope: CredentialScope): string | undefined {
+  const credential = credentialAt(provider, scope);
+  if (credential) return CREDENTIAL_LABEL[credential];
+  return SHARED_SOURCE[provider.source]?.label;
+}
+
+function emptyMessage(search: string): string {
+  const trimmed = search.trim();
+  return trimmed ? `No providers match “${trimmed}”.` : 'No providers offer sign-in.';
 }
 
 export function AddProviderDrawer({
@@ -61,7 +76,7 @@ export function AddProviderDrawer({
   const sorted = providers.toSorted((left, right) => left.provider.localeCompare(right.provider));
   const signInProviders = sorted.filter(provider => provider.oauth?.supported === true);
   const shown = query ? sorted.filter(provider => matchesSearch(provider, query)) : signInProviders;
-  const keyOnlyCount = providers.length - signInProviders.length;
+  const keyOnlyCount = providers.filter(provider => provider.oauth?.supported !== true && takesApiKey(provider)).length;
   const startingProvider = startOAuthMutation.isPending ? startOAuthMutation.variables.provider : undefined;
 
   const signIn = (provider: ProviderInfo) => {
@@ -109,7 +124,7 @@ export function AddProviderDrawer({
           </Txt>
           {shown.length === 0 ? (
             <Txt as="p" variant="caption" className="py-4 text-center">
-              No providers match “{search.trim()}”.
+              {emptyMessage(search)}
             </Txt>
           ) : (
             <ul className="border-border divide-border min-h-0 divide-y overflow-y-auto rounded-lg border">
@@ -155,7 +170,8 @@ function AddProviderRow({
   onAddKey: () => void;
 }) {
   const displayName = providerDisplayName(provider.provider);
-  const connected = credentialAt(provider, credentialScope);
+  const label = connectionLabel(provider, credentialScope);
+  const starting = startingProvider !== undefined;
   return (
     <li className="flex min-h-12 items-center gap-3 py-2 pr-2 pl-3">
       <ProviderBrandIcon provider={provider.provider} fallback={<Box className="text-muted-foreground size-4" />} />
@@ -163,14 +179,14 @@ function AddProviderRow({
         <Txt as="span" variant="caption" className="truncate">
           {displayName}
         </Txt>
-        {connected && (
+        {label && (
           <Txt as="span" variant="meta" tone="muted">
-            {CREDENTIAL_LABEL[connected]}
+            {label}
           </Txt>
         )}
       </span>
-      {provider.source !== 'deployment' && (
-        <Button size="sm" aria-label={`Add API key for ${displayName}`} onClick={onAddKey}>
+      {takesApiKey(provider) && (
+        <Button size="sm" aria-label={`Add API key for ${displayName}`} disabled={starting} onClick={onAddKey}>
           API key
         </Button>
       )}
@@ -179,7 +195,7 @@ function AddProviderRow({
           size="sm"
           variant="primary"
           aria-label={`Sign in to ${displayName}`}
-          disabled={startingProvider !== undefined}
+          disabled={starting}
           onClick={onSignIn}
         >
           {startingProvider === provider.provider ? 'Starting…' : 'Sign in'}

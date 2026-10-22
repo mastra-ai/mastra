@@ -18,6 +18,23 @@ export interface ProviderConnection {
   credential: ProviderCredential | undefined;
 }
 
+const SIGNING_OUT_STATUS: StatusPresentation = {
+  label: 'Signing out…',
+  tone: 'progress',
+  description: 'Ending the provider sign-in',
+};
+const REMOVING_STATUS: StatusPresentation = {
+  label: 'Removing…',
+  tone: 'progress',
+  description: 'Deleting the saved API key',
+};
+
+function displayedStatus(saved: StatusPresentation, signingOut: boolean, removing: boolean): StatusPresentation {
+  if (signingOut) return SIGNING_OUT_STATUS;
+  if (removing) return REMOVING_STATUS;
+  return saved;
+}
+
 export function ConnectedProviderRow({
   connection,
   requestScope,
@@ -55,13 +72,13 @@ export function ConnectedProviderRow({
         {displayName}
       </Txt>
       <Txt as="span" variant="meta" tone="muted" className="shrink-0">
-        <Status presentation={status} />
+        <Status presentation={displayedStatus(status, signOutMutation.isPending, removeKeyMutation.isPending)} />
       </Txt>
       {credential ? (
         <CredentialMenu
           displayName={displayName}
           credential={credential}
-          disabled={disabled}
+          disabled={disabled || signOutMutation.isPending || removeKeyMutation.isPending}
           onSignOut={signOut}
           onUpdateKey={onUpdateKey}
           onRemoveKey={removeKey}

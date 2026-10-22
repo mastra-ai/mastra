@@ -123,13 +123,18 @@ describe('ProviderList', () => {
     );
   });
 
-  it('removes a stored key from the row menu', async () => {
+  it('shows a removing key as pending with its menu locked, then drops the row', async () => {
     const providers: ProviderInfo[] = [{ provider: 'openai', source: 'stored' }];
+    let releaseDelete = () => {};
+    const deleteHeld = new Promise<void>(resolve => {
+      releaseDelete = resolve;
+    });
     let removed = false;
     server.use(
       http.get(PROVIDERS_URL, () => HttpResponse.json({ providers })),
-      http.delete(keyUrl('openai'), () => {
+      http.delete(keyUrl('openai'), async () => {
         removed = true;
+        await deleteHeld;
         providers.length = 0;
         return HttpResponse.json({ ok: true });
       }),
@@ -141,6 +146,10 @@ describe('ProviderList', () => {
     await pickRowAction(user, 'openai', 'Remove key');
 
     await waitFor(() => expect(removed).toBe(true));
+    expect(within(rowFor('openai')).getByText('Removing…')).toBeInTheDocument();
+    expect(within(rowFor('openai')).getByRole('button', { name: 'OpenAI actions' })).toBeDisabled();
+
+    releaseDelete();
     await waitFor(() => expect(screen.queryByText('OpenAI')).not.toBeInTheDocument());
   });
 

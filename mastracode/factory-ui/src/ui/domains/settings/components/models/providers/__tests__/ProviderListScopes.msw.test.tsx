@@ -19,6 +19,8 @@ import {
   stubProviders,
 } from './provider-list-test-utils';
 
+const ORG_SHARED_CAPTION = 'Shared with every Factory in your organization.';
+
 function enableAuth() {
   window.__MASTRACODE_CONFIG__ = { authEnabled: true };
   server.use(
@@ -53,18 +55,20 @@ describe('ProviderList credential scopes', () => {
   describe('with auth enabled', () => {
     beforeEach(enableAuth);
 
-    it('lists shared deployment credentials only in the Factory list, without actions', async () => {
-      stubProviders([
-        { provider: 'amazon-bedrock', source: 'deployment' },
-        { provider: 'openai', source: 'none' },
-      ]);
-      const lists = renderBothLists();
+    it.each(['personal', 'factory'] as const)(
+      'lists a deployment provider in the %s list as read-only, since every scope can run its models',
+      async list => {
+        stubProviders([
+          { provider: 'amazon-bedrock', source: 'deployment' },
+          { provider: 'openai', source: 'none' },
+        ]);
+        const lists = renderBothLists();
 
-      const row = await waitFor(() => rowFor('amazon-bedrock', lists.factory()));
-      expect(within(row).getByText('From deployment')).toBeInTheDocument();
-      expect(within(row).queryByRole('button', { name: 'Amazon Bedrock actions' })).not.toBeInTheDocument();
-      expect(within(lists.personal()).queryByText('Amazon Bedrock')).not.toBeInTheDocument();
-    });
+        const row = await waitFor(() => rowFor('amazon-bedrock', lists[list]()));
+        expect(within(row).getByText('From deployment')).toBeInTheDocument();
+        expect(within(row).queryByRole('button', { name: 'Amazon Bedrock actions' })).not.toBeInTheDocument();
+      },
+    );
 
     it('saves an org key from the Factory list and keeps it out of the personal list', async () => {
       const providers: ProviderInfo[] = [{ provider: 'openai', source: 'none' }];
@@ -125,6 +129,60 @@ describe('ProviderList credential scopes', () => {
       await waitFor(() => expect(startBody).toEqual({ mode: 'paste-code', scope: 'user' }));
     });
 
+    it('starts an org sign-in at org scope from the Factory list', async () => {
+      let startBody: unknown;
+      server.use(
+        http.get(PROVIDERS_URL, () =>
+          HttpResponse.json({
+            providers: [{ provider: 'anthropic', source: 'none', oauth: { supported: true, modes: ['paste-code'] } }],
+          }),
+        ),
+        http.post(oauthUrl('anthropic', 'start'), async ({ request }) => {
+          startBody = await request.json();
+          return HttpResponse.json(pasteCodeSession('session-org'));
+        }),
+      );
+      const user = userEvent.setup();
+      const lists = renderBothLists();
+
+      expect(await within(lists.factory()).findByText(ORG_SHARED_CAPTION)).toBeInTheDocument();
+      const dialog = await openAddProvider(user, lists.factory());
+      await user.click(within(dialog).getByRole('button', { name: 'Sign in to Anthropic' }));
+
+      await waitFor(() => expect(startBody).toEqual({ mode: 'paste-code', scope: 'org' }));
+    });
+
+    it('signs out of an org sign-in at org scope from the Factory list', async () => {
+      let signOutScope: string | null = null;
+      server.use(
+        http.get(PROVIDERS_URL, () =>
+          HttpResponse.json({
+            providers: [
+              {
+                provider: 'anthropic',
+                source: 'oauth-org',
+                orgKey: true,
+                orgCredential: 'oauth',
+                oauth: { supported: true, modes: ['paste-code'] },
+              },
+            ],
+          }),
+        ),
+        http.delete(`${PROVIDERS_URL}/anthropic/oauth`, ({ request }) => {
+          signOutScope = new URL(request.url).searchParams.get('scope');
+          return HttpResponse.json({ ok: true });
+        }),
+      );
+      const user = userEvent.setup();
+      const { client } = renderWithProviders(<ProviderList credentialScope="org" />);
+
+      await screen.findByText('Anthropic');
+      await pickRowAction(user, 'anthropic', 'Sign out');
+
+      await waitForMutationsIdle(client);
+      expect(signOutScope).toBe('org');
+    });
+
     it('shows members the Factory list read-only with the reason', async () => {
       stubProviders(
         [
@@ -143,6 +201,7 @@ describe('ProviderList credential scopes', () => {
       expect(
         await within(lists.factory()).findByText('Only organization admins can manage org-wide credentials.'),
       ).toBeInTheDocument();
+      expect(within(lists.factory()).queryByText(ORG_SHARED_CAPTION)).not.toBeInTheDocument();
       expect(within(lists.factory()).getByRole('button', { name: 'Add provider' })).toBeDisabled();
       expect(
         within(rowFor('anthropic', lists.factory())).getByRole('button', { name: 'Anthropic actions' }),
