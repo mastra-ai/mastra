@@ -205,7 +205,11 @@ export async function importedGraphTargets(
   } catch (error) {
     if (!(error instanceof KnowledgeUnsupportedError)) throw error;
     // Older/unsupported adapters still render ordinary text links without importer provenance.
-    return { targets: new Map(), report: { complete: false, suppressed: { unsupported: allLinks() } } };
+    const withheld = allLinks();
+    return withheld > 0
+      ? { targets: new Map(), report: { complete: false, suppressed: { unsupported: withheld } } }
+      : // With no valid importer links there is nothing to disclose as withheld; stay complete.
+        { targets: new Map(), report: { complete: true, suppressed: {} } };
   }
   return { targets: result, report };
 }

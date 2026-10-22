@@ -613,6 +613,29 @@ describe('KnowledgeRoutes', () => {
       }
     });
 
+    it('does not report withheld importer links when no record has a valid link', async () => {
+      const { h, scopeIds, claimant, origin, target } = await fixture();
+      const backing = await h.knowledge.createRecord({
+        node: origin,
+        text: '[[Target]]',
+        scopeIds,
+        resolutionScopeIds: scopeIds,
+        source: claimant.source,
+        claimant,
+        metadata: { links: [{ address: 42 }, null, 'nope'] },
+      });
+      h.knowledge.listImportClaims = async () => {
+        throw new KnowledgeUnsupportedError();
+      };
+      const response = await graph(h);
+      expect(response.status).toBe(200);
+      // Nothing valid was withheld, so a zero-count cause with complete:false would be untruthful.
+      expect(response.body.importedLinks).toEqual({ complete: true, suppressed: {} });
+      // Ordinary text links still render; malformed metadata links contribute nothing.
+      expect(response.body.edges).toEqual([expect.objectContaining({ target: target.id })]);
+      expect(response.body.records.find(value => value.id === backing.id)?.nodeIds).toEqual([origin.id, target.id]);
+    });
+
     it('does not choose between same-named targets in distinct visible placements', async () => {
       const { h, scopeIds, claimant, origin } = await fixture();
       const org = (await scopePathIds(h.knowledge, h.orgScope)).at(-1)!;
