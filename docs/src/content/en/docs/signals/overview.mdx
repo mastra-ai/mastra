@@ -9,9 +9,11 @@ packages:
 
 **Added in:** `@mastra/core@1.39.0`
 
-Signals are typed asynchronous input to a thread. A thread is the durable, addressable conversation an agent works on. [Memory](/docs/memory/message-history#threads-and-resources) owns that concept and its storage. You subscribe to the thread's stream to receive output, then send input whenever you have it. Mastra decides whether the input joins an active run or starts a run on an idle thread, so you don't manage active or idle state.
+Signals are typed asynchronous input to a thread. A thread is the durable, addressable conversation an agent works on. Threads are a [Memory](/docs/memory/message-history#threads-and-resources) concept, and Memory also stores their history. You subscribe to the thread's stream to receive output, then send input whenever you have it. Mastra decides whether that input joins an active run or starts a run on an idle thread, so you don't manage active or idle state.
 
-For a thread-based agent, signals are the default input path. Send a message when a user replies, a signal when a background job adds context, and a notification when an external event should reach the agent later. [`agent.stream()`](/reference/streaming/agents/stream) is the exception: use it for a one-off request that doesn't need an addressable thread.
+For a thread-based agent, signals are the default input path: input goes to the thread instead of starting a new stream for each request. Send a message when a user replies, a signal when a background job adds context, and a notification when an external event should reach the agent later.
+
+When a request never becomes an ongoing conversation, there's no thread for input to arrive on. That's where [`agent.stream()`](/reference/streaming/agents/stream) fits: a single request that returns its answer and doesn't need to be addressed again.
 
 :::tip[📹 Watch]
 
