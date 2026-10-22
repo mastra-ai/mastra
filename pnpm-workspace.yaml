@@ -40,14 +40,14 @@ catalog:
   '@microsoft/api-extractor': ^7.57.7
   '@stryker-mutator/core': 10.0.0
   '@stryker-mutator/vitest-runner': 10.0.0
-  '@vitest/coverage-v8': 4.1.11
-  '@vitest/ui': 4.1.11
+  '@vitest/coverage-v8': 4.1.12
+  '@vitest/ui': 4.1.12
   date-fns: 4.4.0
   lucide-react: ^1.37.0
   react: ^19.2.5
   react-dom: ^19.2.5
   typescript: ^7.0.2
-  vitest: 4.1.11
+  vitest: 4.1.12
   zod: ^4.6.7
   tsx: ^4.23.1
   oxfmt: 0.59.0
@@ -119,17 +119,17 @@ packageExtensions:
       # client; if this resolves to a different vitest than the workspace,
       # a second SnapshotClient is created and every toMatchSnapshot() in
       # tests that import from that entrypoint fails. Keep these in sync.
-      vitest: 4.1.11
+      vitest: 4.1.12
   '@ai-sdk/provider-utils@3.0.28':
     dependencies:
       msw: ^2.12.11
       # See the note on the 3.0.25 entry — must track the catalog `vitest`.
-      vitest: 4.1.11
+      vitest: 4.1.12
   '@ai-sdk/provider-utils@3.0.38':
     dependencies:
       msw: ^2.12.11
       # See the note on the 3.0.25 entry — must track the catalog `vitest`.
-      vitest: 4.1.11
+      vitest: 4.1.12
   '@uiw/codemirror-theme-dracula@*':
     dependencies:
       '@babel/runtime': ^7.29.2
@@ -400,8 +400,8 @@ overrides:
   '@fastify/proxy-addr@<=5.1.0': 5.1.1
   # Round 2 2026-09-18: clear remaining Dependabot + raise Aikido-visible floors
   image-size@<=2.0.2: 2.0.4
-  '@vitest/mocker@>=2.1.0 <4.1.11': 4.1.11
-  vitest@>=2.1.0 <4.1.11: 4.1.11
+  '@vitest/mocker@>=2.1.0 <4.1.12': 4.1.12
+  vitest@>=2.1.0 <4.1.12: 4.1.12
   jose@>=4.14.0 <6.2.12: 6.2.12
   '@noble/hashes@>=1.0.0 <1.8.0': 1.8.0
   '@noble/hashes@>=2.0.0 <2.4.0': 2.4.0
