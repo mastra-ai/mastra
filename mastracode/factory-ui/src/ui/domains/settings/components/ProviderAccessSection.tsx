@@ -20,14 +20,15 @@ import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { AddApiKeyDialog } from './AddApiKeyDialog';
 import { ProviderOAuthDialog } from './ProviderOAuthDialog';
-import { providerDisplayName } from './provider-display-name';
+import { providerDisplayName } from '@mastra/factory/provider-display-name';
+import { credentialAt } from './provider-credential';
+import type { ProviderCredential as Credential } from './provider-credential';
 
 import { ScopeSwap, useScopeControl } from './SettingsScope';
 import type { SettingsScope } from './SettingsScope';
 import { SettingsSubsection } from './SettingsSubsection';
 
 type CredentialScope = 'user' | 'org';
-type Credential = NonNullable<ProviderInfo['userCredential']>;
 
 const CREDENTIAL_LABEL: Record<Credential, string> = { oauth: 'Signed in', api_key: 'Key saved' };
 const ORG_SCOPE_MEMBER_REASON = 'Only organization admins can manage org-wide credentials.';
@@ -41,34 +42,8 @@ function mutationErrorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback;
 }
 
-function credentialAt(provider: ProviderInfo, scope: CredentialScope): Credential | undefined {
-  if (scope === 'org') {
-    if (provider.orgCredential) return provider.orgCredential;
-    if (provider.source === 'oauth-org') return 'oauth';
-    if (provider.source === 'stored-org') return 'api_key';
-    return undefined;
-  }
-  if (provider.userCredential) return provider.userCredential;
-  if (provider.source === 'oauth' || provider.source === 'oauth-user') return 'oauth';
-  if (provider.source === 'stored' || provider.source === 'stored-user') return 'api_key';
-  return undefined;
-}
-
-interface RowScope {
-  scope: CredentialScope;
-  authEnabled: boolean;
-  showOrgCoverage: boolean;
-}
-
-function orgCoverage(
-  provider: ProviderInfo,
-  { scope, authEnabled, showOrgCoverage }: RowScope,
-): Credential | undefined {
-  return authEnabled && scope === 'user' && showOrgCoverage ? credentialAt(provider, 'org') : undefined;
-}
-
-function StatusBadge({ provider, rowScope }: { provider: ProviderInfo; rowScope: RowScope }) {
-  const own = credentialAt(provider, rowScope.scope);
+function StatusBadge({ provider, scope }: { provider: ProviderInfo; scope: CredentialScope }) {
+  const own = credentialAt(provider, scope);
   if (own) {
     return (
       <Badge size="sm" variant="success">
@@ -76,10 +51,10 @@ function StatusBadge({ provider, rowScope }: { provider: ProviderInfo; rowScope:
       </Badge>
     );
   }
-  if (orgCoverage(provider, rowScope)) {
+  if (provider.source === 'deployment') {
     return (
       <Badge size="sm" variant="blue">
-        Covered by org
+        From deployment
       </Badge>
     );
   }
@@ -100,11 +75,9 @@ function StatusBadge({ provider, rowScope }: { provider: ProviderInfo; rowScope:
 export function ProviderAccessSection({
   description,
   fixedScope,
-  showOrgCoverage = fixedScope === undefined,
 }: {
   description?: string;
   fixedScope?: CredentialScope;
-  showOrgCoverage?: boolean;
 }) {
   const providersQuery = useProvidersQuery();
   const authQuery = useFactoryAuth();
@@ -134,7 +107,6 @@ export function ProviderAccessSection({
   const orgScopeUnresolved = fixedScope === 'org' && authQuery.isPending;
   const readOnly = authEnabled && scope === 'org' && !canWriteOrgKey;
   const actionsDisabled = orgScopeUnresolved || readOnly;
-  const rowScope: RowScope = { scope, authEnabled, showOrgCoverage };
   const scopeArg = authEnabled ? { scope } : {};
 
   const oauthProviders = providers
@@ -232,7 +204,7 @@ export function ProviderAccessSection({
                     <SkeletonRows label="Loading providers" rows={3} rowClassName="h-9 w-full" />
                   </div>
                 ) : oauthProviders.length === 0 ? (
-                  <Txt as="p" variant="caption" className="text-muted-foreground px-4 py-3">
+                  <Txt tone="muted" as="p" variant="caption" className="px-4 py-3">
                     No providers support sign in.
                   </Txt>
                 ) : (
@@ -240,11 +212,10 @@ export function ProviderAccessSection({
                     const displayName = providerDisplayName(provider.provider);
                     const own = credentialAt(provider, scope);
                     const signedIn = own === 'oauth';
-                    const covered = own !== undefined || orgCoverage(provider, rowScope) !== undefined;
                     return (
                       <SettingsRow key={provider.provider} label={displayName}>
                         <span className="flex items-center gap-2">
-                          <StatusBadge provider={provider} rowScope={rowScope} />
+                          <StatusBadge provider={provider} scope={scope} />
                           {signedIn ? (
                             <Button
                               size="sm"
@@ -260,7 +231,7 @@ export function ProviderAccessSection({
                             </Button>
                           ) : (
                             <Button
-                              variant={covered ? 'default' : 'primary'}
+                              variant={own ? 'default' : 'primary'}
                               size="sm"
                               aria-label={`Sign in to ${displayName}`}
                               disabled={actionsDisabled || startOAuthMutation.isPending}
@@ -293,7 +264,7 @@ export function ProviderAccessSection({
                     <SkeletonRows label="Loading providers" rows={3} rowClassName="h-9 w-full" />
                   </div>
                 ) : results.length === 0 ? (
-                  <Txt as="p" variant="caption" className="text-muted-foreground px-4 py-3">
+                  <Txt tone="muted" as="p" variant="caption" className="px-4 py-3">
                     {query ? `No providers match “${search.trim()}”.` : 'No API key providers are available.'}
                   </Txt>
                 ) : (
@@ -303,15 +274,17 @@ export function ProviderAccessSection({
                     return (
                       <SettingsRow key={provider.provider} label={displayName}>
                         <span className="flex items-center gap-2">
-                          <StatusBadge provider={provider} rowScope={rowScope} />
-                          <Button
-                            size="sm"
-                            aria-label={`${storedKey ? 'Update key' : 'Add API key'} for ${displayName}`}
-                            disabled={actionsDisabled || isRemoving(provider)}
-                            onClick={() => setKeyDialogProvider(provider)}
-                          >
-                            {storedKey ? 'Update key' : 'Add API key'}
-                          </Button>
+                          <StatusBadge provider={provider} scope={scope} />
+                          {provider.source !== 'deployment' && (
+                            <Button
+                              size="sm"
+                              aria-label={`${storedKey ? 'Update key' : 'Add API key'} for ${displayName}`}
+                              disabled={actionsDisabled || isRemoving(provider)}
+                              onClick={() => setKeyDialogProvider(provider)}
+                            >
+                              {storedKey ? 'Update key' : 'Add API key'}
+                            </Button>
+                          )}
                           {storedKey && (
                             <Button
                               size="sm"

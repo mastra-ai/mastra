@@ -8,12 +8,15 @@
  * on the unmaintained npm `fastembed` package.
  */
 
-import { AddedToken, Tokenizer } from '@anush008/tokenizers';
 import fs from 'node:fs';
 import type { PathLike } from 'node:fs';
 import path from 'node:path';
+import { Readable } from 'node:stream';
+import { pipeline } from 'node:stream/promises';
+import type { ReadableStream } from 'node:stream/web';
+import { AddedToken, Tokenizer } from '@anush008/tokenizers';
+import { downloadFile } from '@huggingface/hub';
 import * as ort from 'onnxruntime-node';
-import { downloadFileToCacheDir } from '@huggingface/hub';
 
 export enum ExecutionProvider {
   CPU = 'cpu',
@@ -83,12 +86,22 @@ function normalize(v: number[]): number[] {
   return v.map(val => val / Math.max(norm, epsilon));
 }
 
-function getEmbeddings(data: number[], dimensions: [number, number, number]): number[][] {
-  const [x, _y, z] = dimensions;
-  return new Array(x).fill(undefined).map((_, index) => {
-    const startIndex = index * _y * z;
-    const endIndex = startIndex + z;
-    return data.slice(startIndex, endIndex);
+function getEmbeddings(data: number[], dimensions: [number, number, number], masks?: bigint[][]): number[][] {
+  const [batchSize, sequenceLength, hiddenSize] = dimensions;
+  return Array.from({ length: batchSize }, (_, batchIndex) => {
+    const start = batchIndex * sequenceLength * hiddenSize;
+    if (!masks) return data.slice(start, start + hiddenSize);
+
+    const embedding = new Array<number>(hiddenSize).fill(0);
+    let tokenCount = 0;
+    for (let tokenIndex = 0; tokenIndex < sequenceLength; tokenIndex++) {
+      if (masks[batchIndex]![tokenIndex] === 0n) continue;
+      tokenCount++;
+      for (let dimension = 0; dimension < hiddenSize; dimension++) {
+        embedding[dimension] = embedding[dimension]! + data[start + tokenIndex * hiddenSize + dimension]!;
+      }
+    }
+    return embedding.map(value => value / Math.max(tokenCount, 1));
   });
 }
 
@@ -204,6 +217,12 @@ function loadTokenizerFromDir(modelDir: PathLike, maxLength: number): Tokenizer 
   return tokenizer;
 }
 
+function assertValidBatchSize(batchSize: number): void {
+  if (!Number.isSafeInteger(batchSize) || batchSize <= 0) {
+    throw new RangeError(`batchSize must be a positive safe integer, received ${String(batchSize)}`);
+  }
+}
+
 export class FlagEmbedding extends Embedding {
   private constructor(
     private tokenizer: Tokenizer,
@@ -254,6 +273,27 @@ export class FlagEmbedding extends Embedding {
     return new FlagEmbedding(tokenizer, session, model);
   }
 
+  /**
+   * Counts texts longer than the model's token window. `embed()` silently truncates these to `maxLength`.
+   */
+  async countTruncated(textStrings: string[], batchSize: number = 256): Promise<{ count: number; maxLength: number }> {
+    assertValidBatchSize(batchSize);
+    let count = 0;
+    let maxLength = 0;
+    for (let i = 0; i < textStrings.length; i += batchSize) {
+      const batch = textStrings.slice(i, i + batchSize);
+      const encodings = await Promise.all(batch.map(textString => this.tokenizer.encode(textString)));
+      for (const encoding of encodings) {
+        if (encoding.getOverflowing().length > 0) {
+          count++;
+          // Padding is set to the window size, so a truncated encoding's length is the window.
+          maxLength = encoding.getLength();
+        }
+      }
+    }
+    return { count, maxLength };
+  }
+
   static async retrieveModel(
     model: EmbeddingModel,
     cacheDir: PathLike,
@@ -273,19 +313,18 @@ export class FlagEmbedding extends Embedding {
 
     const { repo, files } = HF_MODEL_SOURCES[model];
     const tmpDir = fs.mkdtempSync(`${modelDir}.tmp-`);
-    // Keep the Hugging Face hub cache inside the configured cacheDir (not ~/.cache) and
-    // move blobs out of it so each model file is stored only once.
-    const hubCacheDir = path.join(tmpDir, '.hf-hub');
-
     try {
       if (showDownloadProgress) {
-        console.info(`Downloading ${model} from Hugging Face (${repo})...`);
+        console.error(`Downloading ${model} from Hugging Face (${repo})...`);
       }
       for (const file of [...COMMON_MODEL_FILES, ...files]) {
-        const downloaded = await downloadFileToCacheDir({ repo, path: file, cacheDir: hubCacheDir });
-        fs.renameSync(fs.realpathSync(downloaded), path.join(tmpDir, file));
+        const downloaded = await downloadFile({ repo, path: file });
+        if (!downloaded) throw new Error(`Model file not found in ${repo}: ${file}`);
+        await pipeline(
+          Readable.fromWeb(downloaded.stream() as ReadableStream),
+          fs.createWriteStream(path.join(tmpDir, file)),
+        );
       }
-      fs.rmSync(hubCacheDir, { recursive: true, force: true });
       try {
         fs.renameSync(tmpDir, modelDir);
       } catch (error) {
@@ -305,6 +344,7 @@ export class FlagEmbedding extends Embedding {
   }
 
   async *embed(textStrings: string[], batchSize: number = 256) {
+    assertValidBatchSize(batchSize);
     for (let i = 0; i < textStrings.length; i += batchSize) {
       const batchTexts = textStrings.slice(i, i + batchSize);
 
@@ -355,6 +395,7 @@ export class FlagEmbedding extends Embedding {
       const embeddings = getEmbeddings(
         lastHiddenState.data as unknown[] as number[],
         lastHiddenState.dims as [number, number, number],
+        this.model === EmbeddingModel.AllMiniLML6V2 || this.model === EmbeddingModel.MLE5Large ? maskArray : undefined,
       );
 
       yield embeddings.map(normalize);
@@ -458,8 +499,6 @@ export class SparseTextEmbedding extends SparseEmbedding {
       return modelDir;
     }
 
-    fs.mkdirSync(modelDir, { mode: 0o755 });
-
     const filesToDownload = [
       'onnx/model.onnx',
       'tokenizer.json',
@@ -468,28 +507,35 @@ export class SparseTextEmbedding extends SparseEmbedding {
       'special_tokens_map.json',
     ];
 
-    for (const fileName of filesToDownload) {
-      const outputPath = path.join(modelDir, fileName);
-      const outputDir = path.dirname(outputPath);
+    const tmpDir = fs.mkdtempSync(`${modelDir}.tmp-`);
+    try {
+      for (const fileName of filesToDownload) {
+        const outputPath = path.join(tmpDir, fileName);
+        fs.mkdirSync(path.dirname(outputPath), { recursive: true, mode: 0o755 });
 
-      if (!fs.existsSync(outputDir)) {
-        fs.mkdirSync(outputDir, { recursive: true, mode: 0o755 });
+        const downloaded = await downloadFile({ repo: model, path: fileName });
+        if (!downloaded) throw new Error(`Model file not found in ${model}: ${fileName}`);
+        await pipeline(Readable.fromWeb(downloaded.stream() as ReadableStream), fs.createWriteStream(outputPath));
       }
 
-      const downloaded = await downloadFileToCacheDir({
-        repo: model,
-        path: fileName,
-      });
-
-      if (downloaded && typeof downloaded === 'string') {
-        fs.copyFileSync(downloaded, outputPath);
+      try {
+        fs.renameSync(tmpDir, modelDir);
+      } catch (error) {
+        const code = (error as NodeJS.ErrnoException).code;
+        if ((code === 'EEXIST' || code === 'ENOTEMPTY') && fs.existsSync(modelDir)) {
+          return modelDir;
+        }
+        throw error;
       }
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
     }
 
     return modelDir;
   }
 
   async *embed(textStrings: string[], batchSize: number = 256) {
+    assertValidBatchSize(batchSize);
     for (let i = 0; i < textStrings.length; i += batchSize) {
       const batchTexts = textStrings.slice(i, i + batchSize);
 

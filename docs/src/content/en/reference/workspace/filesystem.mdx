@@ -18,8 +18,8 @@ The `WorkspaceFilesystem` interface defines how workspaces interact with file st
 Read file contents.
 
 ```typescript
-const content = await filesystem.readFile('/docs/guide.md')
-const buffer = await filesystem.readFile('/image.png', { encoding: 'binary' })
+const content = await filesystem.readFile('docs/guide.md', { encoding: 'utf-8' })
+const buffer = await filesystem.readFile('image.png') // Buffer
 ```
 
 **Parameters:**
@@ -42,10 +42,9 @@ const buffer = await filesystem.readFile('/image.png', { encoding: 'binary' })
         parameters: [
           {
             name: 'encoding',
-            type: "'utf-8' | 'binary'",
-            description: 'Text or binary encoding',
+            type: 'BufferEncoding',
+            description: 'Text encoding. When omitted, the file is returned as a Buffer.',
             isOptional: true,
-            defaultValue: "'utf-8'",
           },
         ],
       },
@@ -61,8 +60,8 @@ const buffer = await filesystem.readFile('/image.png', { encoding: 'binary' })
 Write file contents.
 
 ```typescript
-await filesystem.writeFile('/docs/new.md', '# New Document')
-await filesystem.writeFile('/nested/path/file.md', content, { recursive: true })
+await filesystem.writeFile('docs/new.md', '# New Document')
+await filesystem.writeFile('nested/path/file.md', content, { recursive: true })
 ```
 
 **Parameters:**
@@ -76,7 +75,7 @@ await filesystem.writeFile('/nested/path/file.md', content, { recursive: true })
   },
   {
     name: 'content',
-    type: 'string | Buffer',
+    type: 'string | Buffer | Uint8Array',
     description: 'File content',
   },
   {
@@ -121,8 +120,8 @@ await filesystem.writeFile('/nested/path/file.md', content, { recursive: true })
 Delete a file.
 
 ```typescript
-await filesystem.deleteFile('/docs/old.md')
-await filesystem.deleteFile('/docs/maybe.md', { force: true }) // Don't throw if missing
+await filesystem.deleteFile('docs/old.md')
+await filesystem.deleteFile('docs/maybe.md', { force: true }) // Don't throw if missing
 ```
 
 **Parameters:**
@@ -162,7 +161,7 @@ await filesystem.deleteFile('/docs/maybe.md', { force: true }) // Don't throw if
 Append content to a file, creating it if it doesn't already exist. Parent directories are created automatically.
 
 ```typescript
-await filesystem.appendFile('/logs/app.log', 'New log entry\n')
+await filesystem.appendFile('logs/app.log', 'New log entry\n')
 ```
 
 **Parameters:**
@@ -176,7 +175,7 @@ await filesystem.appendFile('/logs/app.log', 'New log entry\n')
   },
   {
     name: 'content',
-    type: 'string | Buffer',
+    type: 'string | Buffer | Uint8Array',
     description: 'Content to append',
   },
 ]}
@@ -187,7 +186,7 @@ await filesystem.appendFile('/logs/app.log', 'New log entry\n')
 Copy a file to a new location.
 
 ```typescript
-await filesystem.copyFile('/docs/template.md', '/docs/new-doc.md')
+await filesystem.copyFile('docs/template.md', 'docs/new-doc.md')
 ```
 
 **Parameters:**
@@ -232,7 +231,7 @@ await filesystem.copyFile('/docs/template.md', '/docs/new-doc.md')
 Move or rename a file.
 
 ```typescript
-await filesystem.moveFile('/docs/draft.md', '/docs/final.md')
+await filesystem.moveFile('docs/draft.md', 'docs/final.md')
 ```
 
 **Parameters:**
@@ -277,7 +276,7 @@ await filesystem.moveFile('/docs/draft.md', '/docs/final.md')
 List directory contents.
 
 ```typescript
-const entries = await filesystem.readdir('/docs')
+const entries = await filesystem.readdir('docs')
 // [{ name: 'guide.md', type: 'file' }, { name: 'api', type: 'directory' }]
 ```
 
@@ -298,8 +297,8 @@ interface FileEntry {
 Create a directory.
 
 ```typescript
-await filesystem.mkdir('/docs/api')
-await filesystem.mkdir('/deeply/nested/path', { recursive: true })
+await filesystem.mkdir('docs/api')
+await filesystem.mkdir('deeply/nested/path', { recursive: true })
 ```
 
 **Parameters:**
@@ -339,8 +338,8 @@ await filesystem.mkdir('/deeply/nested/path', { recursive: true })
 Remove a directory.
 
 ```typescript
-await filesystem.rmdir('/docs/old')
-await filesystem.rmdir('/docs/nested', { recursive: true })
+await filesystem.rmdir('docs/old')
+await filesystem.rmdir('docs/nested', { recursive: true })
 ```
 
 **Parameters:**
@@ -387,7 +386,7 @@ await filesystem.rmdir('/docs/nested', { recursive: true })
 Check if a path exists.
 
 ```typescript
-const exists = await filesystem.exists('/docs/guide.md')
+const exists = await filesystem.exists('docs/guide.md')
 ```
 
 **Returns:** `Promise<boolean>`
@@ -397,8 +396,8 @@ const exists = await filesystem.exists('/docs/guide.md')
 Get file or directory metadata.
 
 ```typescript
-const stat = await filesystem.stat('/docs/guide.md')
-// { name: 'guide.md', path: '/docs/guide.md', type: 'file', size: 1234, createdAt: Date, modifiedAt: Date }
+const stat = await filesystem.stat('docs/guide.md')
+// { name: 'guide.md', path: 'docs/guide.md', type: 'file', size: 1234, createdAt: Date, modifiedAt: Date }
 ```
 
 **Returns:** `Promise<FileStat>`
@@ -439,7 +438,7 @@ Get filesystem metadata.
 
 ```typescript
 const info = await filesystem.getInfo?.()
-// { id, name, provider, basePath, readOnly, status, storage? }
+// { id, name, provider, status, error, readOnly, icon, metadata }
 ```
 
 **Returns:** `Promise<FilesystemInfo>`
@@ -449,14 +448,11 @@ interface FilesystemInfo {
   id: string
   name: string
   provider: string
-  basePath?: string
-  readOnly?: boolean
   status?: string
-  storage?: {
-    totalBytes?: number
-    usedBytes?: number
-    availableBytes?: number
-  }
+  error?: string // Error message when status is 'error'
+  readOnly?: boolean
+  icon?: string // Icon identifier for UI display
+  metadata?: Record<string, unknown> // Provider-specific, e.g. LocalFilesystem includes basePath
 }
 ```
 
@@ -512,6 +508,20 @@ const entries = await filesystem.walk?.('.', { maxDepth: 3 })
     name: 'options.includeHidden',
     type: 'boolean',
     description: 'Include entries whose names start with ".". Defaults to false.',
+    isOptional: true,
+  },
+  {
+    name: 'options.includeGitignoreFiles',
+    type: 'boolean',
+    description:
+      "Return `.gitignore` files even when hidden entries are excluded. `list_files` sets this so it can apply each directory's `.gitignore`. Providers may ignore it.",
+    isOptional: true,
+  },
+  {
+    name: 'options.skipDirectoryNames',
+    type: 'string[]',
+    description:
+      'Directory names not to descend into or return, such as `node_modules`. `list_files` filters the results as well, so providers may ignore it.',
     isOptional: true,
   },
 ]}

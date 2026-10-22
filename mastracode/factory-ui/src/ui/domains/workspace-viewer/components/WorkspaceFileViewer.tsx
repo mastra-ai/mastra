@@ -49,7 +49,7 @@ export function WorkspaceFileViewer({
         >
           <ArrowLeft />
         </Button>
-        <Txt variant="column" className="text-foreground min-w-0 flex-1 truncate">
+        <Txt tone="ink" variant="column" className="min-w-0 flex-1 truncate">
           {file?.name ?? filePath}
         </Txt>
         <div className="flex shrink-0 items-center gap-1">
@@ -69,11 +69,21 @@ export function WorkspaceFileViewer({
       </div>
 
       {file ? (
-        <div className="border-border text-muted-foreground flex shrink-0 items-center gap-3 border-b px-3 py-2 text-xs">
-          <span className="min-w-0 truncate">{file.path}</span>
-          <span className="ml-auto shrink-0">{formatBytes(file.size)}</span>
-          <span className="shrink-0">{new Date(file.updatedAt).toLocaleString()}</span>
-          {file.truncated ? <span className="shrink-0">Truncated</span> : null}
+        <div className="border-border flex shrink-0 items-center gap-3 border-b px-3 py-2">
+          <Txt tone="muted" as="span" variant="caption" className="min-w-0 truncate">
+            {file.path}
+          </Txt>
+          <Txt tone="muted" as="span" variant="caption" className="ml-auto shrink-0">
+            {formatBytes(file.size)}
+          </Txt>
+          <Txt tone="muted" as="span" variant="caption" className="shrink-0">
+            {new Date(file.updatedAt).toLocaleString()}
+          </Txt>
+          {file.truncated ? (
+            <Txt tone="muted" as="span" variant="caption" className="shrink-0">
+              Truncated
+            </Txt>
+          ) : null}
         </div>
       ) : null}
 
@@ -93,14 +103,14 @@ export function WorkspaceFileViewer({
         <ScrollArea className="min-h-0 flex-1" orientation="both">
           <div className="p-3">
             {file?.contentType === 'unsupported' ? (
-              <Txt className="text-muted-foreground">This file type cannot be previewed as text.</Txt>
+              <Txt tone="muted">This file type cannot be previewed as text.</Txt>
             ) : null}
             {file?.contentType === 'text' && isMarkdown ? <MarkdownRenderer>{content}</MarkdownRenderer> : null}
             {file?.contentType === 'text' && !isMarkdown ? (
               <Code
                 code={content}
                 lang={file.language}
-                className="border-border bg-background text-foreground text-caption m-0 rounded-md border p-3 leading-relaxed"
+                className="border-border bg-background text-caption text-foreground m-0 rounded-md border p-3 font-mono"
               />
             ) : null}
           </div>

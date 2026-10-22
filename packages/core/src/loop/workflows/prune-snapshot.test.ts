@@ -528,6 +528,113 @@ describe('pruneAgentLoopSnapshot stepResult.request strip', () => {
 
     expect(countRequestEchoes(original)).toBe(1);
   });
+
+  describe('LLM output wrapped under llmOutput by the durable mapping steps (issue #26462)', () => {
+    function llmOutput() {
+      return {
+        text: 'calling tools',
+        toolCalls: [{ toolCallId: 'call-1', toolName: 'big', args: {} }],
+        stepResult: stepResult(),
+        metadata: { id: 'resp-1', modelId: 'mock-model', request: requestEcho() },
+      };
+    }
+
+    function mappingSnapshot() {
+      return snapshotWith({
+        'collect-tool-results': { status: 'success', output: { llmOutput: llmOutput(), toolResults: [] } },
+        'durable-llm-mapping': { status: 'running', payload: { llmOutput: llmOutput(), toolResults: [] } },
+      });
+    }
+
+    it('strips the request from llmOutput.stepResult and llmOutput.metadata on output and payload', () => {
+      const context = contextOf(pruneAgentLoopSnapshot({ snapshot: mappingSnapshot() }));
+
+      for (const nested of [
+        context['collect-tool-results'].output.llmOutput,
+        context['durable-llm-mapping'].payload.llmOutput,
+      ]) {
+        expect(nested.stepResult).not.toHaveProperty('request');
+        expect(nested.metadata).not.toHaveProperty('request');
+      }
+    });
+
+    it('keeps everything else the mapping step reads from llmOutput', () => {
+      const context = contextOf(pruneAgentLoopSnapshot({ snapshot: mappingSnapshot() }));
+      const { request: _stepRequest, ...stepResultWithoutRequest } = stepResult();
+
+      expect(context['collect-tool-results'].output).toEqual({
+        llmOutput: {
+          text: 'calling tools',
+          toolCalls: [{ toolCallId: 'call-1', toolName: 'big', args: {} }],
+          stepResult: stepResultWithoutRequest,
+          metadata: { id: 'resp-1', modelId: 'mock-model' },
+        },
+        toolResults: [],
+      });
+    });
+
+    it('is copy-on-write and does not mutate the caller snapshot', () => {
+      const original = mappingSnapshot();
+      pruneAgentLoopSnapshot({ snapshot: original });
+
+      const collected = contextOf(original)['collect-tool-results'].output.llmOutput;
+      expect(collected.stepResult.request).toEqual(requestEcho());
+      expect(collected.metadata.request).toEqual(requestEcho());
+    });
+  });
+});
+
+describe('pruneAgentLoopSnapshot foreach step-level stream state', () => {
+  function suspendedForeach(stepLevelStreamState: unknown, entryStreamState: unknown) {
+    const entryPayload = { __streamState: entryStreamState, approval: { toolCallId: 'tool-1' } };
+    return snapshotWith({
+      toolCallStep: {
+        status: 'suspended',
+        suspendPayload: {
+          ...entryPayload,
+          __streamState: stepLevelStreamState,
+          __workflow_meta: {
+            foreachIndex: 1,
+            foreachOutput: [
+              { status: 'success', output: { ok: true }, suspendPayload: {} },
+              { status: 'suspended', suspendPayload: entryPayload },
+            ],
+          },
+        },
+      },
+    });
+  }
+
+  it("drops the foreach step's mirror of its suspended entry's stream state", () => {
+    const streamState = { messageList: 'live' };
+    const original = suspendedForeach(streamState, streamState);
+
+    const step = (pruneAgentLoopSnapshot({ snapshot: original }).context as Record<string, any>).toolCallStep;
+
+    expect(step.suspendPayload).not.toHaveProperty('__streamState');
+    expect(step.suspendPayload.approval).toEqual({ toolCallId: 'tool-1' });
+    expect(step.suspendPayload.__workflow_meta.foreachOutput[1].suspendPayload.__streamState).toBe(streamState);
+    expect((original.context as Record<string, any>).toolCallStep.suspendPayload.__streamState).toBe(streamState);
+  });
+
+  it("keeps a step-level stream state that is not the suspended entry's own object", () => {
+    const step = (
+      pruneAgentLoopSnapshot({
+        snapshot: suspendedForeach({ messageList: 'live' }, { messageList: 'live' }),
+      }).context as Record<string, any>
+    ).toolCallStep;
+
+    expect(step.suspendPayload.__streamState).toEqual({ messageList: 'live' });
+  });
+
+  it('keeps the parent row copy, whose propagated foreach entries carry no stream state', () => {
+    const streamState = { messageList: 'live' };
+    const step = (
+      pruneAgentLoopSnapshot({ snapshot: suspendedForeach(streamState, undefined) }).context as Record<string, any>
+    ).toolCallStep;
+
+    expect(step.suspendPayload.__streamState).toBe(streamState);
+  });
 });
 
 /**

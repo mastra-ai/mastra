@@ -508,6 +508,152 @@ describe('Extractor', () => {
     expect(stream.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBe('inline');
   });
 
+  it('retries schema working-memory extraction when the working-memory value is an empty object', async () => {
+    const memory = {
+      getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, schema: {} } })),
+      getWorkingMemoryTemplate: vi.fn(async () => ({ format: 'json', content: '{"type":"object"}' })),
+      getWorkingMemory: vi.fn(async () => '{"preferences":{}}'),
+    } as any;
+    const [resolved] = await resolveExtractors([new WorkingMemoryExtractor()], {
+      source: 'observer',
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      memory,
+    });
+    const stream = vi
+      .fn()
+      .mockResolvedValueOnce({ object: Promise.resolve({ 'working-memory': {} }) })
+      .mockResolvedValueOnce({
+        object: Promise.resolve({ 'working-memory': { preferences: { responseStyle: 'concise' } } }),
+      });
+
+    const result = await extractStructuredValues({
+      agent: { stream } as unknown as Agent<any, any, any, any>,
+      source: 'observer',
+      extractors: [resolved!],
+    });
+
+    expect(result.values).toEqual({ 'working-memory': { preferences: { responseStyle: 'concise' } } });
+    expect(result.failures).toEqual([]);
+    expect(stream).toHaveBeenCalledTimes(2);
+    expect(stream.mock.calls[1][1].structuredOutput.jsonPromptInjection).toBe('inline');
+  });
+
+  it('keeps sibling values and fails only the empty working-memory value when the retry fails', async () => {
+    const memory = {
+      getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, schema: {} } })),
+      getWorkingMemoryTemplate: vi.fn(async () => ({ format: 'json', content: '{"type":"object"}' })),
+      getWorkingMemory: vi.fn(async () => null),
+    } as any;
+    const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
+    const resolved = await resolveExtractors([new WorkingMemoryExtractor(), priority], {
+      source: 'observer',
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      memory,
+    });
+    const stream = vi
+      .fn()
+      .mockResolvedValueOnce({ object: Promise.resolve({ 'working-memory': {}, priority: 'high' }) })
+      .mockRejectedValueOnce(new Error('fallback failed'));
+
+    const result = await extractStructuredValues({
+      agent: { stream } as unknown as Agent<any, any, any, any>,
+      source: 'observer',
+      extractors: resolved,
+    });
+
+    expect(result.values).toEqual({ priority: 'high' });
+    expect(result.failures).toEqual([{ slug: 'working-memory', error: 'fallback failed' }]);
+    expect(stream).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps first-response sibling values that a successful retry omits', async () => {
+    const memory = {
+      getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, schema: {} } })),
+      getWorkingMemoryTemplate: vi.fn(async () => ({ format: 'json', content: '{"type":"object"}' })),
+      getWorkingMemory: vi.fn(async () => null),
+    } as any;
+    const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
+    const resolved = await resolveExtractors([new WorkingMemoryExtractor(), priority], {
+      source: 'observer',
+      threadId: 'thread-1',
+      resourceId: 'resource-1',
+      memory,
+    });
+    const stream = vi
+      .fn()
+      .mockResolvedValueOnce({ object: Promise.resolve({ 'working-memory': {}, priority: 'high' }) })
+      .mockResolvedValueOnce({ object: Promise.resolve({ 'working-memory': { name: 'Neo' } }) });
+
+    const result = await extractStructuredValues({
+      agent: { stream } as unknown as Agent<any, any, any, any>,
+      source: 'observer',
+      extractors: resolved,
+    });
+
+    expect(result.values).toEqual({ 'working-memory': { name: 'Neo' }, priority: 'high' });
+    expect(result.failures).toEqual([]);
+    expect(stream).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not retry when an extractor that has not opted in returns an empty object', async () => {
+    const details = new Extractor({
+      name: 'Details',
+      instructions: 'Extract details.',
+      schema: z.record(z.string(), z.unknown()),
+    });
+    const stream = vi.fn().mockResolvedValueOnce({ object: Promise.resolve({ details: {} }) });
+
+    const result = await extractStructuredValues({
+      agent: { stream } as unknown as Agent<any, any, any, any>,
+      source: 'observer',
+      extractors: [details],
+    });
+
+    expect(result.values).toEqual({ details: {} });
+    expect(stream).toHaveBeenCalledTimes(1);
+  });
+
+  describe('WorkingMemoryExtractor onExtracted with a configured schema', () => {
+    const schema = z.object({ name: z.string().optional() });
+    const createMemory = () =>
+      ({
+        getMergedThreadConfig: vi.fn(() => ({ workingMemory: { enabled: true, schema } })),
+        updateWorkingMemory: vi.fn(async () => undefined),
+      }) as any;
+    const runHook = (memory: any, current: unknown) =>
+      new WorkingMemoryExtractor().onExtracted!({
+        current,
+        memory,
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+      } as any);
+
+    it('does not overwrite stored working memory with an empty object', async () => {
+      const memory = createMemory();
+
+      await expect(runHook(memory, {})).resolves.toBeUndefined();
+      expect(memory.updateWorkingMemory).not.toHaveBeenCalled();
+    });
+
+    it('does not overwrite stored working memory when validation leaves an empty object', async () => {
+      const memory = createMemory();
+
+      await expect(runHook(memory, { name: null })).resolves.toBeUndefined();
+      expect(memory.updateWorkingMemory).not.toHaveBeenCalled();
+    });
+
+    it('stores a non-empty document', async () => {
+      const memory = createMemory();
+
+      await expect(runHook(memory, { name: 'Neo' })).resolves.toEqual({ name: 'Neo' });
+      expect(memory.updateWorkingMemory).toHaveBeenCalledWith(
+        expect.objectContaining({ threadId: 'thread-1', resourceId: 'resource-1', workingMemory: '{"name":"Neo"}' }),
+      );
+    });
+  });
+
   it('falls back to system json prompt injection when inline support is not advertised', async () => {
     const priority = new Extractor({ name: 'Priority', instructions: 'Extract priority.', schema: z.string() });
     const stream = vi

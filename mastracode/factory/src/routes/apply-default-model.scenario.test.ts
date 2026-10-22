@@ -23,10 +23,7 @@ async function buildController(storage: InMemoryStore, id: string) {
     id,
     storage,
     stateSchema: undefined,
-    modes: [
-      { id: 'build', name: 'Build', default: true, defaultModelId: 'openai/gpt-5.5', agent: testAgent() },
-      { id: 'plan', name: 'Plan', defaultModelId: 'openai/gpt-5.2-codex', agent: testAgent() },
-    ],
+    modes: [{ id: 'build', name: 'Build', default: true, defaultModelId: 'openai/gpt-5.5', agent: testAgent() }],
   });
   await controller.init();
   return controller;
@@ -92,7 +89,7 @@ describe('scenario: apply-default-model reaches a live run', () => {
     const controller = await buildController(storage, 'code');
     const session = await controller.createSession({ resourceId: 'resource-1', ownerId: 'user-1' });
     const thread = await session.thread.create();
-    await session.model.switch({ modelId: 'openai/gpt-5.2-codex' });
+    await session.model.switch('openai/gpt-5.2-codex');
 
     await bindRun({
       seed,
@@ -116,23 +113,21 @@ describe('scenario: apply-default-model reaches a live run', () => {
     expect(await response.json()).toMatchObject({ applied: [thread.id], skipped: [] });
     expect(session.model.get()).toBe('openai/gpt-5.2-codex');
 
-    await session.model.syncFromPersisted({ modeId: session.mode.get() });
+    await session.model.syncFromPersisted();
     expect(session.model.get()).toBe('anthropic/claude-opus-4-6');
   });
 
-  it("uses the bound thread's mode without changing a sibling thread", async () => {
+  it('updates the bound thread without changing a sibling thread', async () => {
     const storage = new InMemoryStore({ id: 'apply-default-model-sibling' });
     const { seed, project } = await seedProject('anthropic/claude-opus-4-6');
     const controller = await buildController(storage, 'code');
     const session = await controller.createSession({ resourceId: 'resource-1', ownerId: 'user-1' });
 
-    await session.mode.switch({ modeId: 'plan' });
     const boundThread = await session.thread.create();
-    await session.model.switch({ modelId: 'openai/gpt-5.2-codex' });
+    await session.model.switch('openai/gpt-5.2-codex');
 
     const siblingThread = await session.thread.create();
-    await session.mode.switch({ modeId: 'build' });
-    await session.model.switch({ modelId: 'openai/gpt-5.5' });
+    await session.model.switch('openai/gpt-5.5');
 
     await bindRun({
       seed,
@@ -155,11 +150,11 @@ describe('scenario: apply-default-model reaches a live run', () => {
     expect(await response.json()).toMatchObject({ applied: [boundThread.id], skipped: [] });
 
     expect(session.thread.getId()).toBe(siblingThread.id);
-    await session.model.syncFromPersisted({ modeId: 'build' });
+    await session.model.syncFromPersisted();
     expect(session.model.get()).toBe('openai/gpt-5.5');
 
     await session.thread.switch({ threadId: boundThread.id });
-    await session.model.syncFromPersisted({ modeId: 'plan' });
+    await session.model.syncFromPersisted();
     expect(session.model.get()).toBe('anthropic/claude-opus-4-6');
   });
 });

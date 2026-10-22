@@ -4,7 +4,7 @@ import { z } from 'zod/v4';
 import { RequestContext } from '../../request-context';
 import { createTool } from '../tool';
 import type { ToolAction } from '../types';
-import { validateToolInput } from '../validation';
+import { resolveToolOutputValidationSchema, validateToolInput } from '../validation';
 import { CoreToolBuilder } from './builder';
 
 const haikuModelConfig = {
@@ -54,6 +54,45 @@ describe('CoreToolBuilder - Schema Compatibility in Validation', () => {
     expect(executeResult).not.toHaveProperty('error');
     expect(executeResult).toEqual({ success: true, text: 'Short text' });
     expect(execute).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not invoke class-based Standard Schemas as lazy factories (#27265)', async () => {
+    const jsonSchema = {
+      type: 'object',
+      properties: { query: { type: 'string' } },
+      required: ['query'],
+      additionalProperties: false,
+    };
+    // Mimics Effect `Schema.Class(...).pipe(Schema.toStandardSchemaV1, Schema.toStandardJSONSchemaV1)`:
+    // an ES class constructor carrying Standard Schema metadata.
+    class Input {
+      static '~standard' = {
+        version: 1 as const,
+        vendor: 'effect',
+        validate: (value: unknown) =>
+          typeof (value as any)?.query === 'string'
+            ? { value }
+            : { issues: [{ message: 'query must be a string', path: ['query'] }] },
+        jsonSchema: { input: () => jsonSchema, output: () => jsonSchema },
+      };
+    }
+    expect(isStandardSchemaWithJSON(Input)).toBe(true);
+    expect(resolveToolOutputValidationSchema({ outputSchema: Input })).toBe(Input);
+
+    const tool: ToolAction<any, any> = {
+      id: 'class_probe',
+      description: 'Return the supplied query',
+      inputSchema: Input as any,
+      outputSchema: Input as any,
+      execute: async ({ query }) => ({ query }),
+    };
+
+    for (const model of [haikuModelConfig, { provider: 'openai', modelId: 'gpt-4.1', specificationVersion: 'v2' }]) {
+      const coreTool = buildCoreTool(tool, 'class_probe', model);
+      const options = { abortSignal: new AbortController().signal, toolCallId: 'call-class', messages: [] };
+      expect(await coreTool.execute?.({ query: 'test' }, options)).toEqual({ query: 'test' });
+      expect(await coreTool.execute?.({ query: 1 }, options)).toHaveProperty('error', true);
+    }
   });
 
   it('processToCompatSchema accepts short strings on Haiku after stripping min/max', () => {

@@ -208,7 +208,7 @@ function EditLayoutWrapper() {
     if (isViewingVersion && versionData) return versionData;
     if (agent) return agent;
     if (codeAgent) return mapAgentResponseToDataSource(codeAgent);
-    return {} as AgentDataSource;
+    return {};
   }, [isViewingVersion, versionData, agent, codeAgent]);
 
   const {

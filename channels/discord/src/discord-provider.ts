@@ -16,6 +16,7 @@ import { createDiscordAdapter } from '@chat-adapter/discord';
 import type { DiscordAdapter } from '@chat-adapter/discord';
 import {
   buildInviteUrl,
+  discordRequest,
   guildHealthCheck,
   listBotGuildIds,
   registerGlobalCommands,
@@ -24,6 +25,7 @@ import {
 } from './discord-client';
 import type { DiscordApplication } from './discord-client';
 import { DEFAULT_COMMANDS, hashCommands, normalizeCommands } from './commands';
+import { runGatewayLoop } from './gateway-loop';
 import { DiscordInstallStore, PLATFORM, toInstallationInfo } from './install-store';
 import { SNAPSHOT_TTL_MS, hasReconcilableSnapshot, planReconcile } from './reconcile';
 import { DEFAULT_INVITE_PERMISSIONS, DEFAULT_INVITE_SCOPES, DISCORD_API_BASE_URL } from './types';
@@ -33,8 +35,10 @@ import type { DiscordAppConfig, DiscordConnectOptions, DiscordInstallation, Disc
  * Resolve the per-adapter config the provider applies to the Discord entry in
  * `AgentChannels.adapters`. Discord has native embeds + action-row buttons, so
  * `toolDisplay` defaults to `'cards'` (unlike Telegram's `'text'`); `streaming`
- * post-and-edits the interaction followup; `gateway` (default `true`) makes core
- * own the DM/mention Gateway reconnection loop.
+ * post-and-edits the interaction followup; `gateway` (default `true`) makes the
+ * **provider** run the DM/mention Gateway reconnection loop. (The adapter entry
+ * handed to `AgentChannels` always carries `gateway: false` — core's loop must
+ * never start; see `#createAgentChannels`.)
  */
 export function resolveDiscordAdapterConfig(
   config: Pick<DiscordProviderConfig, 'streaming' | 'typingStatus' | 'toolDisplay' | 'gateway'>,
@@ -66,11 +70,15 @@ export function resolveDiscordAdapterConfig(
  * member) or lazily off the first inbound interaction's authoritative `guild_id`
  * (see {@link activateGuild}).
  *
- * **Gateway is core's job.** The mounted interactions route only ever receives
- * HTTP Interactions (PING, slash commands, buttons). DMs / @mentions / reactions
- * arrive over the Gateway WebSocket, whose reconnection loop core owns: setting
- * `gateway: true` (default) on the adapter entry is enough — the wrapper never
- * calls `startGatewayListener` or runs a reconnect loop.
+ * **Gateway is the provider's job.** The mounted interactions route only ever
+ * receives HTTP Interactions (PING, slash commands, buttons). DMs / @mentions /
+ * reactions arrive over the Gateway WebSocket, whose reconnection loop the
+ * provider owns ({@link #startGatewayLoop} → `./gateway-loop`): one abortable
+ * loop per installation, exponential backoff on failed connects, parked on a
+ * revoked token. Core's `AgentChannels` loop is explicitly disabled
+ * (`gateway: false` on the adapter entry) — it reconnects with no backoff and
+ * cannot be stopped, which is how a failing IDENTIFY once tripped Discord's
+ * 1000-connect abuse limit and got the bot token force-reset.
  *
  * Implemented (issues `mastra-discord-13x.2` + `.3`): the app-config +
  * guild-keyed install store, `connect()`/`disconnect()`, OAuth2 invite-URL
@@ -85,6 +93,15 @@ export class DiscordProvider implements ChannelProvider {
   #store?: DiscordInstallStore;
   /** Live adapters, keyed by installation id (one per agent; all share the app's bot token). */
   #adapters = new Map<string, DiscordAdapter>();
+  /**
+   * Live Gateway reconnect loops, keyed by installation id. Aborting a
+   * controller ends the loop and destroys its discord.js client. Exactly one
+   * loop may exist per installation — {@link #startGatewayLoop} aborts any
+   * predecessor, so credential rotations and adapter rebuilds can't leak loops
+   * that keep IDENTIFYing with stale tokens (Discord force-resets the bot
+   * token past ~1000 connects in a short window).
+   */
+  #gatewayLoops = new Map<string, AbortController>();
   /** Cached sync view of whether the app is configured (for {@link getInfo}). */
   #configured = false;
   #initPromise: Promise<void> | null = null;
@@ -149,6 +166,8 @@ export class DiscordProvider implements ChannelProvider {
       this.#storeIsFallback = false;
     }
     if (isNewInstance) {
+      // Loops reference adapters and agents from the superseded instance.
+      this.#stopAllGatewayLoops();
       this.#adapters.clear();
       // The store-derived half of #configured belongs to the old instance; only
       // credentials supplied via config/env survive a re-attach. Without this,
@@ -257,7 +276,9 @@ export class DiscordProvider implements ChannelProvider {
       await store.deleteAppConfig();
       this.#config = { ...this.#config, app: undefined };
       this.#configured = false;
-      // Live adapters still hold the app credentials that were just revoked.
+      // Live adapters still hold the app credentials that were just revoked,
+      // and running Gateway loops would keep IDENTIFYing with them.
+      this.#stopAllGatewayLoops();
       this.#adapters.clear();
       this.#initPromise = null;
       return;
@@ -300,6 +321,10 @@ export class DiscordProvider implements ChannelProvider {
     }
 
     const wasInitialized = this.#initPromise !== null;
+    // Stop loops BEFORE re-initializing: they are bound to adapters that hold
+    // the superseded credentials, and a leaked loop would keep IDENTIFYing
+    // with the old token until Discord's connect tripwire resets it.
+    this.#stopAllGatewayLoops();
     this.#adapters.clear();
     this.#initPromise = null;
     if (wasInitialized) await this.initialize();
@@ -513,13 +538,8 @@ export class DiscordProvider implements ChannelProvider {
   }
 
   /**
-   * Disconnect an agent from Discord: remove its installation row and drop the
-   * adapter entry.
-   *
-   * **Limitation:** the Gateway loop is owned by core (it calls
-   * `startGatewayListener` itself; there is no `stopGatewayListener`), so
-   * disconnect cannot kill an in-flight gateway window — it lapses at the next
-   * duration boundary. Contrast Telegram's clean `stopPolling()`.
+   * Disconnect an agent from Discord: abort its Gateway loop, remove its
+   * installation row, and drop the adapter entry.
    */
   async disconnect(agentId: string): Promise<void> {
     const store = await this.#getStore();
@@ -532,6 +552,7 @@ export class DiscordProvider implements ChannelProvider {
     // #registerCommands) would otherwise land AFTER the delete and resurrect
     // the disconnected row.
     await this.#enqueueWebhookTask(existing.webhookId, async () => {
+      this.#stopGatewayLoop(existing.id);
       this.#adapters.delete(existing.id);
       await store.deleteByAgent(agentId);
     });
@@ -718,6 +739,9 @@ export class DiscordProvider implements ChannelProvider {
     if (!channels || channels.adapters[PLATFORM] !== adapter) {
       channels = this.#createAgentChannels(agent, adapter);
       await channels.initialize(this.#mastra);
+      // The adapter was rebuilt (first hit after boot or a credential change),
+      // so any running loop is bound to the stale adapter — replace it.
+      this.#startGatewayLoop(installation, adapter, app);
     }
 
     try {
@@ -815,14 +839,75 @@ export class DiscordProvider implements ChannelProvider {
     if (agent && this.#mastra) {
       const channels = this.#createAgentChannels(agent, adapter);
       await channels.initialize(this.#mastra);
+      this.#startGatewayLoop(installation, adapter, app);
+    }
+  }
+
+  /**
+   * Start (or restart) the Gateway reconnect loop for an installation. Any
+   * previous loop for the same installation is aborted first, so adapter
+   * rebuilds and credential rotations replace the loop instead of stacking
+   * another one. No-op when the provider is configured `gateway: false`.
+   *
+   * The loop itself lives in {@link runGatewayLoop}; see that module for why
+   * the provider owns this instead of core's `AgentChannels` loop.
+   */
+  #startGatewayLoop(installation: DiscordInstallation, adapter: DiscordAdapter, app: DiscordAppConfig): void {
+    if (!resolveDiscordAdapterConfig(this.#config).gateway) return;
+    this.#stopGatewayLoop(installation.id);
+    const controller = new AbortController();
+    this.#gatewayLoops.set(installation.id, controller);
+    const apiBaseUrl = this.#apiBaseUrl();
+    void runGatewayLoop(
+      {
+        startSession: (options, durationMs, signal) => adapter.startGatewayListener(options, durationMs, signal),
+        checkToken: async () => {
+          try {
+            const response = await discordRequest(app.botToken, 'GET', '/applications/@me', apiBaseUrl);
+            return response.status === 401 ? 'invalid' : response.ok ? 'valid' : 'unreachable';
+          } catch {
+            return 'unreachable';
+          }
+        },
+        log: (level, message) => {
+          const line = `[Discord] [gateway:${installation.agentId}] ${message}`;
+          if (level === 'error') console.error(line);
+          else if (level === 'warn') console.warn(line);
+          else console.info(line);
+        },
+      },
+      controller.signal,
+    ).finally(() => {
+      // A parked loop (revoked token) removes itself; a replaced loop's entry
+      // already points at its successor's controller and must stay.
+      if (this.#gatewayLoops.get(installation.id) === controller) {
+        this.#gatewayLoops.delete(installation.id);
+      }
+    });
+  }
+
+  /** Abort an installation's Gateway loop (ends the session, destroys the client). */
+  #stopGatewayLoop(installationId: string): void {
+    const controller = this.#gatewayLoops.get(installationId);
+    if (!controller) return;
+    this.#gatewayLoops.delete(installationId);
+    controller.abort();
+  }
+
+  /** Abort every Gateway loop — credential revocation or Mastra re-attach. */
+  #stopAllGatewayLoops(): void {
+    for (const installationId of [...this.#gatewayLoops.keys()]) {
+      this.#stopGatewayLoop(installationId);
     }
   }
 
   /**
    * Create AgentChannels for an agent with the Discord adapter, preserving any
    * adapters/config the agent author already configured (mirrors `@mastra/slack`
-   * / `@mastra/telegram`). `gateway: true` (default) makes core start the Gateway
-   * reconnection loop for DMs/mentions.
+   * / `@mastra/telegram`). The entry always carries `gateway: false`: core's
+   * built-in gateway loop reconnects with no backoff and no abort handle, so
+   * the provider owns the Gateway lifecycle instead ({@link #startGatewayLoop},
+   * gated on the provider-level `gateway` config).
    */
   #createAgentChannels(agent: Agent, adapter: DiscordAdapter): AgentChannels {
     const existing = agent.getChannels();
@@ -831,6 +916,8 @@ export class DiscordProvider implements ChannelProvider {
     const entry = {
       adapter,
       ...resolveDiscordAdapterConfig(cfg),
+      // Never let core's AgentChannels start its own loop — see docstring.
+      gateway: false,
       ...(cfg.cors !== undefined ? { cors: cfg.cors } : {}),
       ...(cfg.formatError !== undefined ? { formatError: cfg.formatError } : {}),
     } as ChannelAdapterConfig;

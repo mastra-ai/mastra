@@ -2,6 +2,7 @@ import type { GetAgentResponse } from '@mastra/client-js';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { CardTitle } from '@mastra/playground-ui/components/Card';
 import { HoverCard, HoverCardContent, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { useId } from 'react';
 
@@ -55,8 +56,10 @@ export function AgentSubagentDetails({ agentName, agents }: AgentSubagentDetails
             tabIndex={0}
           >
             {agentEntries.map(([agentKey, agent]) => (
-              <li key={agentKey} className="overflow-wrap-anywhere text-column text-foreground">
-                {agent.name || agent.id || agentKey}
+              <li key={agentKey} className="overflow-wrap-anywhere text-foreground">
+                <Txt as="span" variant="column" className="block">
+                  {agent.name || agent.id || agentKey}
+                </Txt>
               </li>
             ))}
           </ul>

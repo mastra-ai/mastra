@@ -49,6 +49,10 @@ const families: { token: string; use: string; className: string; sample: string 
 ];
 
 const samples: Record<TextRole, string> = {
+  hero: 'Build with an agent factory',
+  lead: 'Agents pick up scoped work, collaborate, and ship changes you can review.',
+  eyebrow: 'Recent activity',
+  'display-lg': '$1,284.17',
   display: 'Build agents that ship',
   title: 'Agent overview',
   heading: 'Recent activity',

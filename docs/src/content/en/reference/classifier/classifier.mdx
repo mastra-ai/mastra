@@ -8,15 +8,15 @@ packages:
 
 # Classifier
 
-`Classifier` asks an evaluation model one or more fixed-domain questions about shared state. Use it when your application needs a typed choice, numeric score, or boolean probability without parsing generated text.
+`Classifier` asks a decision model one or more fixed-domain questions about shared state. Use it when your application needs a typed choice, numeric score, or boolean probability without parsing generated text.
 
 A classifier only returns evaluation results. Your application decides how to use them, for example by selecting a route or comparing a probability with a safety threshold.
 
-`Classifier` requires an evaluation model (`EvaluationModelV4`, optionally wrapped in `MastraEvaluationModel`). It doesn't accept a `'provider/model'` string, a bare model ID, or a language model.
+`Classifier` requires a decision model (`DecisionModelV4`, or the deprecated `EvaluationModelV4`, optionally wrapped in `MastraDecisionModel`). It doesn't accept a `'provider/model'` string, a bare model ID, or a language model.
 
 ## Basic usage
 
-This example uses the [TypeSafe AI provider](https://ai-sdk.dev/providers/ai-sdk-providers/typesafe-ai). Make sure to set the `TYPESAFE_AI_API_KEY` environment variable. To use another provider, see [Evaluation models](#evaluation-models).
+This example uses the [TypeSafe AI provider](https://ai-sdk.dev/providers/ai-sdk-providers/typesafe-ai). Make sure to set the `TYPESAFE_AI_API_KEY` environment variable. To use another provider, see [Decision models](#decision-models).
 
 Install the provider package:
 
@@ -32,7 +32,7 @@ import { typeSafeAi } from '@ai-sdk/typesafe-ai'
 
 const classifier = new Classifier({
   id: 'request-classifier',
-  model: typeSafeAi.evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
+  model: typeSafeAi.decisionModel('__AI_SDK_TYPESAFE_DECISION_MODEL__'),
   questions: {
     route: {
       type: 'choice',
@@ -49,22 +49,24 @@ const classifier = new Classifier({
   },
 })
 
-const result = await classifier.evaluate({
+const result = await classifier.decide({
   state: {
     subject: 'Duplicate charge',
     message: 'I was charged twice for the same subscription.',
   },
 })
 
-result.answers.route.choice // 'billing' | 'support'
-result.answers.urgent.probability // P(true), from 0 to 1
+result.answers.route.choice // 'billing' | 'support' | undefined
+result.answers.urgent.probability // P(true), from 0 to 1, or undefined
 ```
 
-The evaluation model receives every question with the same `state`. When a question omits `instructions`, its question name is used instead.
+A field is `undefined` only when the decision model refused the question. See [refused questions](#refused-questions).
 
-## Evaluation models
+The decision model receives every question with the same `state`. When a question omits `instructions`, its question name is used instead.
 
-The examples on this page follow the [TypeSafe AI provider setup](https://ai-sdk.dev/providers/ai-sdk-providers/typesafe-ai#setup) in the AI SDK documentation. Other AI SDK providers, including OpenAI, Anthropic, and Google, also expose an `evaluationModel()` factory. See [provider models](https://ai-sdk.dev/docs/ai-sdk-core/evaluation#provider-models) for the full list, supported model IDs, and how each provider answers questions.
+## Decision models
+
+The examples on this page follow the [TypeSafe AI provider setup](https://ai-sdk.dev/providers/ai-sdk-providers/typesafe-ai#setup) in the AI SDK documentation. Other AI SDK providers, including OpenAI, Anthropic, and Google, also expose a `decisionModel()` factory (previously `evaluationModel()`, still available as a deprecated alias). Mastra calls `doDecide()` and falls back to `doEvaluate()` for older providers. See [provider models](https://ai-sdk.dev/docs/ai-sdk-core/decisions#provider-models) for the full list, supported model IDs, and how each provider answers questions.
 
 Each provider exports a ready-made instance, which is what the examples on this page use. See [AI SDK providers](https://ai-sdk.dev/providers/ai-sdk-providers) for the others.
 
@@ -73,8 +75,8 @@ Pass a key explicitly by calling the factory instead:
 ```typescript
 import { createTypeSafeAi } from '@ai-sdk/typesafe-ai'
 
-const model = createTypeSafeAi({ apiKey: process.env.TYPESAFE_AI_API_KEY }).evaluationModel(
-  '__AI_SDK_TYPESAFE_EVALUATION_MODEL__',
+const model = createTypeSafeAi({ apiKey: process.env.TYPESAFE_AI_API_KEY }).decisionModel(
+  '__AI_SDK_TYPESAFE_DECISION_MODEL__',
 )
 ```
 
@@ -94,22 +96,22 @@ new Classifier(options)
   },
   {
     name: 'model',
-    type: 'EvaluationModelV4 | MastraEvaluationModel',
+    type: 'DecisionModelV4 | EvaluationModelV4 | MastraDecisionModel',
     description:
-      'An AI SDK evaluation model or a Mastra evaluation model wrapper. The model declares which question types it supports.',
+      'An AI SDK decision model or a Mastra decision model wrapper. The model declares which question types it supports.',
     isOptional: false,
   },
   {
     name: 'questions',
     type: 'ClassifierQuestions',
     description:
-      'A non-empty record of named questions. Omit this field to supply the questions to each evaluate() call instead.',
+      'A non-empty record of named questions. Omit this field to supply the questions to each decide() call instead.',
     isOptional: true,
   },
 ]}
 />
 
-Constructor questions and per-call questions are mutually exclusive. If the constructor includes `questions`, `evaluate()` rejects a `questions` option at compile time. If the constructor omits them, every `evaluate()` call must provide them. A processor, workflow step, or scorer classifies through a configured classifier, which requires constructor questions.
+Constructor questions and per-call questions are mutually exclusive. If the constructor includes `questions`, `decide()` rejects a `questions` option at compile time. If the constructor omits them, every `decide()` call must provide them. A processor, workflow step, or scorer classifies through a configured classifier, which requires constructor questions.
 
 ## Question types
 
@@ -201,6 +203,28 @@ const answer = {
 }
 ```
 
+### Refused questions
+
+A decision model can refuse any question, for example when a safety policy prevents it from answering. A refused question returns a `RefusalAnswer` instead of a choice, score, or boolean answer. The other questions in the same call keep their answers.
+
+```typescript
+const answer = {
+  type: 'refusal',
+}
+```
+
+A refusal has no `choice`, `score`, or `probability`. Equality checks such as `answers.route.choice === 'billing'` evaluate to `false`. Check `type` before you read a numeric field, and decide how your application handles the refusal:
+
+```typescript
+const urgent = result.answers.urgent
+
+if (urgent.type === 'refusal') {
+  // Route to a human, block the input, or apply a default.
+} else if (urgent.probability > 0.8) {
+  // Escalate.
+}
+```
+
 ## Designing questions
 
 These rules keep a question answerable from the state:
@@ -208,14 +232,16 @@ These rules keep a question answerable from the state:
 - Ask for one judgment. A question that moves when either of two fields changes can't be routed on.
 - Keep criteria exclusive. `strong: 'A good fit'` and `partial: 'Maybe a fit'` leak probability between them.
 - Give a score enough levels to represent intermediate values.
-- Add an escape level when the list isn't closed. Three teams and no `other` forces every input into a team.
+- Add an escape level when the list isn't closed. Without an `other` level, the classifier must assign every input to one of the listed teams.
 - Put fields in `state`, not in `instructions`. One changed field then moves one answer.
 
 To check a question, change one field of the state and confirm one answer moves.
 
-## `evaluate(options)`
+## `decide(options)`
 
-Evaluates all questions against the supplied state.
+Answers all questions against the supplied state.
+
+`evaluate(options)` is a deprecated alias for `decide(options)` and will be removed in a future release.
 
 <PropertiesTable
   content={[
@@ -240,7 +266,7 @@ Evaluates all questions against the supplied state.
   {
     name: 'providerOptions',
     type: 'SharedV4ProviderOptions',
-    description: 'Provider-specific options forwarded unchanged to the evaluation model.',
+    description: 'Provider-specific options forwarded unchanged to the decision model.',
     isOptional: true,
   },
   {
@@ -263,10 +289,10 @@ import { typeSafeAi } from '@ai-sdk/typesafe-ai'
 
 const classifier = new Classifier({
   id: 'dynamic-classifier',
-  model: typeSafeAi.evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
+  model: typeSafeAi.decisionModel('__AI_SDK_TYPESAFE_DECISION_MODEL__'),
 })
 
-const result = await classifier.evaluate({
+const result = await classifier.decide({
   state: { response: 'Your refund has been processed.' },
   questions: {
     tone: {
@@ -279,12 +305,12 @@ const result = await classifier.evaluate({
   },
 })
 
-result.answers.tone.choice // 'empathetic' | 'neutral'
+result.answers.tone.choice // 'empathetic' | 'neutral' | undefined
 ```
 
 ## Return value
 
-`evaluate()` returns `Promise<ClassifierResult<QUESTIONS>>`.
+`decide()` returns `Promise<ClassifierResult<QUESTIONS>>`.
 
 <PropertiesTable
   content={[
@@ -304,7 +330,7 @@ result.answers.tone.choice // 'empathetic' | 'neutral'
   {
     name: 'warnings',
     type: 'SharedV4Warning[]',
-    description: 'Warnings returned by the evaluation model.',
+    description: 'Warnings returned by the decision model.',
     isOptional: false,
   },
   {
@@ -316,7 +342,7 @@ result.answers.tone.choice // 'empathetic' | 'neutral'
   {
     name: 'providerMetadata',
     type: 'SharedV4ProviderMetadata',
-    description: 'Provider-specific metadata returned by the evaluation model.',
+    description: 'Provider-specific metadata returned by the decision model.',
     isOptional: true,
   },
   {
@@ -355,33 +381,29 @@ Input validation includes:
 - `state`, instructions, and criteria must be JSON-compatible.
 - The question record and choice criteria must not be empty.
 - Score criteria must contain at least two defined levels.
-- Every question type must be supported by the evaluation model.
+- Every question type must be supported by the decision model.
 - `maxRetries` must be a non-negative integer.
 
-Provider responses must contain exactly one matching answer for each question. The classifier also rejects invalid choices, out-of-range scores or probabilities, incomplete probability distributions, non-finite token counts, malformed warnings, and invalid response timestamps.
+Provider responses must contain exactly one answer for each question. Each answer must match the question type or be a refusal. The classifier also rejects invalid choices, out-of-range scores or probabilities, incomplete probability distributions, non-finite token counts, malformed warnings, and invalid response timestamps.
 
-Only retryable AI SDK `APICallError` failures are retried. Other errors reject immediately. When all retries fail, `evaluate()` rethrows the last provider error. Aborting the supplied signal rejects with the signal's abort reason, including when cancellation occurs during retry backoff.
+Only retryable AI SDK `APICallError` failures are retried. Other errors reject immediately. When all retries fail, `decide()` rethrows the last provider error. Aborting the supplied signal rejects with the signal's abort reason, including when cancellation occurs during retry backoff.
 
 ## Observability
 
-When an active Mastra span exists, `evaluate()` creates a `CLASSIFIER_EVALUATION` child span. It records the classifier and model identifiers, provider, question count and types, attempts, duration, and token usage.
+When an active Mastra span exists, `decide()` creates a `CLASSIFIER_EVALUATION` child span. The span input holds the evaluated `state` and the questions. The span output holds the answers, including probabilities. Span attributes record the classifier and model identifiers, provider, question count and types, attempts, duration, and token usage. The token usage also produces [token and cost metrics](/reference/observability/metrics/automatic-metrics#token-usage-metrics).
 
-The span doesn't include the evaluated state, question instructions, criteria, answers, probabilities, provider response body, or generated text.
+To keep the state and answers out of exported traces, set `hideInput` and `hideOutput` in the `tracingOptions` of the agent or workflow run that calls the classifier. See [hiding sensitive input/output](/docs/observability/tracing/overview#hiding-sensitive-inputoutput).
 
 ## Customize provider responses
 
-`Classifier` automatically wraps a raw AI SDK evaluation model in `MastraEvaluationModel`. Pass your own wrapper when provider output needs normalization before validation.
+`Classifier` automatically wraps a raw AI SDK decision model in `MastraDecisionModel`. Pass your own wrapper when provider output needs normalization before validation.
 
 ```typescript
-import {
-  Classifier,
-  MastraEvaluationModel,
-  type EvaluationModelResult,
-} from '@mastra/core/classifier'
+import { Classifier, MastraDecisionModel, type DecisionModelResult } from '@mastra/core/classifier'
 import { typeSafeAi } from '@ai-sdk/typesafe-ai'
 
-class NormalizedEvaluationModel extends MastraEvaluationModel {
-  protected override transformResult(result: EvaluationModelResult): EvaluationModelResult {
+class NormalizedDecisionModel extends MastraDecisionModel {
+  protected override transformResult(result: DecisionModelResult): DecisionModelResult {
     return {
       ...result,
       answers: normalizeAnswers(result.answers),
@@ -391,13 +413,15 @@ class NormalizedEvaluationModel extends MastraEvaluationModel {
 
 const classifier = new Classifier({
   id: 'normalized-classifier',
-  model: new NormalizedEvaluationModel(
-    typeSafeAi.evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
+  model: new NormalizedDecisionModel(
+    typeSafeAi.decisionModel('__AI_SDK_TYPESAFE_DECISION_MODEL__'),
   ),
 })
 ```
 
 `transformResult()` runs after the provider call and before `Classifier` validates the response.
+
+`MastraEvaluationModel` and `EvaluationModelResult` are deprecated aliases for `MastraDecisionModel` and `DecisionModelResult` and will be removed in a future release.
 
 ## Registering classifiers
 
@@ -410,7 +434,7 @@ import { typeSafeAi } from '@ai-sdk/typesafe-ai'
 
 export const safety = new Classifier({
   id: 'safety',
-  model: typeSafeAi.evaluationModel('__AI_SDK_TYPESAFE_EVALUATION_MODEL__'),
+  model: typeSafeAi.decisionModel('__AI_SDK_TYPESAFE_DECISION_MODEL__'),
   questions: {
     unsafe: { type: 'boolean' },
   },
@@ -444,7 +468,7 @@ const workflow = createWorkflow({
 
 A string reference resolves through the `Mastra` instance at execution time. The ID doesn't carry the question types, so supply them with a type argument to keep the answers typed. In Studio, the workflow graph shows the step as a classifier node.
 
-The workflow adapter doesn't include warnings, raw provider responses, headers, or provider metadata in step output. Use direct `evaluate()` calls or classifier observability when you need that provider-level detail.
+The workflow adapter doesn't include warnings, raw provider responses, headers, or provider metadata in step output. Use direct `decide()` calls or classifier observability when you need that provider-level detail.
 
 ## Related
 

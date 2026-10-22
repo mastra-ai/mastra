@@ -2484,51 +2484,6 @@ describe('Standard Schema path segment format (PathSegment objects) — mock sch
   });
 });
 
-describe('Standard Schema path segment format (PathSegment objects)', () => {
-  // The Standard Schema spec allows path segments to be either a plain PropertyKey
-  // (e.g. 'fieldName') OR a PathSegment object (e.g. { key: 'fieldName' }).
-  // Valibot and ArkType use the { key: PropertyKey } object format.
-  // This mock schema simulates that format without requiring those libraries.
-  function makeMockSchemaWithObjectPaths(issues: { message: string; path: { key: string }[] }[]) {
-    const jsonSchemaFn = () => ({ type: 'object' as const, properties: { name: { type: 'string' } } });
-    return {
-      '~standard': {
-        vendor: 'mock',
-        version: 1 as const,
-        validate: (_data: unknown) => ({ issues }),
-        types: undefined,
-        jsonSchema: { input: jsonSchemaFn, output: jsonSchemaFn },
-      },
-    } as any;
-  }
-
-  it('validateToolInput: nested error path renders field names, not [object Object]', () => {
-    const schema = makeMockSchemaWithObjectPaths([
-      { message: 'Invalid type', path: [{ key: 'user' }, { key: 'email' }] },
-    ]);
-
-    const result = validateToolInput(schema, { user: { email: 123 } });
-
-    expect(result.error).toBeDefined();
-    expect(result.error!.message).toContain('user.email');
-    expect(result.error!.message).not.toContain('[object Object]');
-  });
-
-  it('validateToolInput: multiple nested paths all render correctly', () => {
-    const schema = makeMockSchemaWithObjectPaths([
-      { message: 'Required', path: [{ key: 'address' }, { key: 'city' }] },
-      { message: 'Too short', path: [{ key: 'address' }, { key: 'zip' }] },
-    ]);
-
-    const result = validateToolInput(schema, { address: {} });
-
-    expect(result.error).toBeDefined();
-    expect(result.error!.message).toContain('address.city');
-    expect(result.error!.message).toContain('address.zip');
-    expect(result.error!.message).not.toContain('[object Object]');
-  });
-});
-
 describe('validateToolInput - Errors After Null-Strip Retry (GitHub #24539)', () => {
   it('reports the retry failure instead of already-stripped optional nulls', () => {
     const schema = z.object({
@@ -2583,5 +2538,73 @@ describe('validateRequestContext', () => {
     const result = validateRequestContext(schema as any, requestContext, 'tenant-tool');
 
     expect(result.error?.message).toContain('tenantId');
+  });
+});
+
+describe('validateToolInput - combined fallback corrections (GitHub #25825)', () => {
+  it('combines stringified JSON coercion with null stripping', () => {
+    const schema = z.object({ args: z.array(z.string()), note: z.string().optional() });
+    const result = validateToolInput(schema, { args: '["a.py"]', note: null });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ args: ['a.py'] });
+  });
+
+  it('combines prompt alias normalization with null stripping', () => {
+    const schema = z.object({ prompt: z.string(), threadId: z.string().optional() });
+    const result = validateToolInput(schema, { query: 'hi', threadId: null });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toMatchObject({ prompt: 'hi' });
+  });
+
+  it('strips nulls inside stringified JSON objects', () => {
+    const schema = z.object({ meta: z.object({ a: z.string().optional() }) });
+    const result = validateToolInput(schema, { meta: '{"a":null}' });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ meta: {} });
+  });
+
+  it('preserves nullable fields while combining corrections', () => {
+    const schema = z.object({
+      args: z.array(z.string()),
+      note: z.string().optional(),
+      parent: z.string().nullable(),
+    });
+    const result = validateToolInput(schema, { args: '["a.py"]', note: null, parent: null });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ args: ['a.py'], parent: null });
+  });
+
+  it('applies the prompt alias with a root refinement and keeps nullable fields', () => {
+    const schema = z
+      .object({ prompt: z.string(), parent: z.string().nullable() })
+      .refine(value => value.prompt.length > 0, { message: 'prompt required' });
+    const result = validateToolInput(schema, { query: 'hi', prompt: null, parent: null });
+    expect(result.error).toBeUndefined();
+    expect(result.data).toEqual({ prompt: 'hi', parent: null });
+  });
+
+  it('reports only remaining issues when corrections are not enough', () => {
+    const schema = z.object({ args: z.array(z.string()), note: z.string().optional(), count: z.number() });
+    const result = validateToolInput(schema, { args: '["a.py"]', note: null, count: 'x' });
+    expect(result.error).toBeDefined();
+    expect(result.error?.message).toContain('count');
+    expect(result.error?.message).not.toContain('- args');
+    expect(result.error?.message).not.toContain('- note');
+  });
+
+  it('reports remaining issues after a failed prompt alias retry', () => {
+    const schema = z.object({ prompt: z.string(), note: z.string().optional(), count: z.number() });
+    const result = validateToolInput(schema, { query: 'hi', note: null, count: 'x' });
+    expect(result.error).toBeDefined();
+    expect(result.error?.message).toContain('- count');
+    expect(result.error?.message).not.toContain('- prompt');
+    expect(result.error?.message).not.toContain('- note');
+  });
+
+  it('does not report fields already fixed by coercion', () => {
+    const schema = z.object({ args: z.array(z.string()), count: z.number() });
+    const result = validateToolInput(schema, { args: '["a"]', count: 'x' });
+    expect(result.error?.message).toContain('- count');
+    expect(result.error?.message).not.toContain('- args');
   });
 });

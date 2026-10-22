@@ -1,4 +1,4 @@
-import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
+import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
@@ -12,11 +12,11 @@ const STORAGE_KEY = 'settings-navigation-test';
 function renderNavigation() {
   return renderWithProviders(
     <MemoryRouter initialEntries={['/factories/fp-1/settings/preferences']}>
-      <MainSidebarProvider storageKey={STORAGE_KEY} mobileBreakpoint={0}>
+      <SidebarProvider storageKey={STORAGE_KEY} mobileBreakpoint={0}>
         <Routes>
           <Route path="/factories/:factoryId/settings/:section" element={<SettingsNavigation />} />
         </Routes>
-      </MainSidebarProvider>
+      </SidebarProvider>
     </MemoryRouter>,
   );
 }
@@ -53,6 +53,7 @@ describe('SettingsNavigation', () => {
       'Skills',
       'Behavior',
       'Repositories',
+      'Environment',
       'Work Intake',
       'Manage Factory',
     ]);
@@ -71,6 +72,10 @@ describe('SettingsNavigation', () => {
     expect(within(factory).getByRole('link', { name: 'Factory memory' })).toHaveAttribute(
       'href',
       '/factories/fp-1/settings/factory-memory',
+    );
+    expect(within(factory).getByRole('link', { name: 'Environment' })).toHaveAttribute(
+      'href',
+      '/factories/fp-1/settings/environment',
     );
   });
 

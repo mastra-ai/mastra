@@ -266,6 +266,8 @@ describe('DurableAgent onIterationComplete callback', () => {
 
     // The model calls the tool 2 times then stops naturally (3 iterations total)
     expect(onIterationComplete.mock.calls.length).toBeGreaterThanOrEqual(2);
+    // The injected feedback reaches the next model call.
+    expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).toContain('Keep going, you are doing great!');
 
     cleanup();
   });

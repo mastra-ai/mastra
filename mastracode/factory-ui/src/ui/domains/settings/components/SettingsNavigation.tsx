@@ -1,10 +1,11 @@
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
-import { MainSidebar, useMainSidebar } from '@mastra/playground-ui/components/MainSidebar';
+import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import {
   ArrowLeft,
   BookOpen,
   Bot,
+  Box,
   Brain,
   Building2,
   Cable,
@@ -19,7 +20,8 @@ import { useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
 import { useCloseSettings } from '../hooks/useCloseSettings';
 import { useSettingsSection } from '../hooks/useSettingsSection';
-import { SETTINGS_SECTION_LABELS, settingsSectionPath, type SettingsSection } from '../settingsSections';
+import { SETTINGS_SECTION_LABELS, settingsSectionPath } from '../settingsSections';
+import type { SettingsSection } from '../settingsSections';
 
 type SettingsNavItem = {
   id: SettingsSection;
@@ -35,44 +37,46 @@ type SettingsNavGroup = {
   items: SettingsNavItem[];
 };
 
+export const PERSONAL_SETTINGS_GROUP = {
+  id: 'personal',
+  label: 'Your settings',
+  items: [
+    {
+      id: 'account',
+      label: SETTINGS_SECTION_LABELS.account,
+      icon: CircleUserRound,
+      searchText: 'my account profile identity email authentication session log out sign out user',
+    },
+    {
+      id: 'preferences',
+      label: SETTINGS_SECTION_LABELS.preferences,
+      icon: Palette,
+      searchText: 'preferences general theme appearance color scheme completion sound',
+    },
+    {
+      id: 'personal-models',
+      label: SETTINGS_SECTION_LABELS['personal-models'],
+      icon: Bot,
+      searchText: 'your personal models default model api keys providers credentials sign in oauth',
+    },
+    {
+      id: 'memory',
+      label: SETTINGS_SECTION_LABELS.memory,
+      icon: Brain,
+      searchText:
+        'your personal memory observational recall observer reflector thresholds attachments summarize context',
+    },
+    {
+      id: 'connections',
+      label: SETTINGS_SECTION_LABELS.connections,
+      icon: Cable,
+      searchText: 'your personal connections connected accounts slack communication integrations',
+    },
+  ],
+} satisfies SettingsNavGroup;
+
 const SETTINGS_GROUPS: SettingsNavGroup[] = [
-  {
-    id: 'personal',
-    label: 'Your settings',
-    items: [
-      {
-        id: 'account',
-        label: SETTINGS_SECTION_LABELS.account,
-        icon: CircleUserRound,
-        searchText: 'my account profile identity email authentication session log out sign out user',
-      },
-      {
-        id: 'preferences',
-        label: SETTINGS_SECTION_LABELS.preferences,
-        icon: Palette,
-        searchText: 'preferences general theme appearance color scheme completion sound',
-      },
-      {
-        id: 'personal-models',
-        label: SETTINGS_SECTION_LABELS['personal-models'],
-        icon: Bot,
-        searchText: 'your personal models defaults model packs api keys providers credentials sign in oauth',
-      },
-      {
-        id: 'memory',
-        label: SETTINGS_SECTION_LABELS.memory,
-        icon: Brain,
-        searchText:
-          'your personal memory observational recall observer reflector thresholds attachments summarize context',
-      },
-      {
-        id: 'connections',
-        label: SETTINGS_SECTION_LABELS.connections,
-        icon: Cable,
-        searchText: 'your personal connections connected accounts slack communication integrations',
-      },
-    ],
-  },
+  PERSONAL_SETTINGS_GROUP,
   {
     id: 'factory',
     label: 'Factory settings',
@@ -110,6 +114,12 @@ const SETTINGS_GROUPS: SettingsNavGroup[] = [
         searchText: 'repositories source control git branches remotes code worktrees sandbox setup github',
       },
       {
+        id: 'environment',
+        label: SETTINGS_SECTION_LABELS.environment,
+        icon: Box,
+        searchText: 'environment sandbox resources cpu memory workdir repositories order setup teardown build triggers',
+      },
+      {
         id: 'intake',
         label: SETTINGS_SECTION_LABELS.intake,
         icon: Inbox,
@@ -130,7 +140,7 @@ export function SettingsNavigation() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const location = useLocation();
   const closeSettings = useCloseSettings();
-  const { state } = useMainSidebar();
+  const { state } = useSidebar();
   const [query, setQuery] = useState('');
   const normalizedQuery = query.trim().toLowerCase();
   const filteredGroups = SETTINGS_GROUPS.map(group => ({
@@ -142,14 +152,14 @@ export function SettingsNavigation() {
 
   return (
     <>
-      <MainSidebar.NavList>
-        <MainSidebar.NavLink asChild link={{ name: 'Back to app', url: '#', icon: <ArrowLeft /> }}>
+      <Sidebar.NavList>
+        <Sidebar.NavLink asChild link={{ name: 'Back to app', url: '#', icon: <ArrowLeft /> }}>
           <button type="button" aria-label="Back to app" onClick={closeSettings}>
             <ArrowLeft aria-hidden="true" />
-            <MainSidebar.NavLabel>Back to app</MainSidebar.NavLabel>
+            <Sidebar.NavLabel>Back to app</Sidebar.NavLabel>
           </button>
-        </MainSidebar.NavLink>
-      </MainSidebar.NavList>
+        </Sidebar.NavLink>
+      </Sidebar.NavList>
       {state === 'default' && (
         <div className="py-2">
           <SearchInput label="Search settings" placeholder="Search settings…" value={query} onValueChange={setQuery} />
@@ -159,17 +169,17 @@ export function SettingsNavigation() {
         filteredGroups.map(group => {
           const headerId = group.label ? `settings-${group.id}` : undefined;
           return (
-            <MainSidebar.NavSection
+            <Sidebar.NavSection
               key={group.id}
               aria-labelledby={headerId}
               aria-label={headerId ? undefined : (group.ariaLabel ?? group.id)}
             >
-              {group.label && <MainSidebar.NavHeader id={headerId}>{group.label}</MainSidebar.NavHeader>}
-              <MainSidebar.NavList>
+              {group.label && <Sidebar.NavHeader id={headerId}>{group.label}</Sidebar.NavHeader>}
+              <Sidebar.NavList>
                 {group.items.map(({ id, label, icon: Icon }) => {
                   const isActive = section === id;
                   return (
-                    <MainSidebar.NavLink
+                    <Sidebar.NavLink
                       key={id}
                       asChild
                       isActive={isActive}
@@ -182,13 +192,13 @@ export function SettingsNavigation() {
                         aria-current={isActive ? 'page' : undefined}
                       >
                         <Icon aria-hidden="true" />
-                        <MainSidebar.NavLabel>{label}</MainSidebar.NavLabel>
+                        <Sidebar.NavLabel>{label}</Sidebar.NavLabel>
                       </Link>
-                    </MainSidebar.NavLink>
+                    </Sidebar.NavLink>
                   );
                 })}
-              </MainSidebar.NavList>
-            </MainSidebar.NavSection>
+              </Sidebar.NavList>
+            </Sidebar.NavSection>
           );
         })
       ) : (

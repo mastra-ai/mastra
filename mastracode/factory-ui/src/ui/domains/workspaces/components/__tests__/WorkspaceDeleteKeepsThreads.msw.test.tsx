@@ -16,7 +16,8 @@ import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import type { FactoryUserSession } from '../../services/user-sessions';
-import { WorkspacesSection } from '../WorkspacesSection';
+import { SessionsSection } from '../SessionsSection';
+import { LIVE_SESSION, testChatSession } from './fixtures/sessionsSection';
 
 const projectRepositoryId = 'ghp-1';
 const sessionId = 'sess-1';
@@ -40,21 +41,9 @@ const workspace: FactoryUserSession = {
 function renderSection() {
   return renderWithProviders(
     <MemoryRouter initialEntries={['/factories/fp-1']}>
-      <ChatSessionContext.Provider
-        value={{
-          resourceId: 'resource-1',
-          sessionEnabled: true,
-          resourceReady: true,
-          sandboxReady: true,
-          sandboxPreparing: false,
-          resourceEnabled: true,
-          factorySessionState: { factoryProjectId: 'fp-1', projectRepositoryId },
-          baseUrl: TEST_BASE_URL,
-          kind: 'factory',
-        }}
-      >
+      <ChatSessionContext.Provider value={testChatSession('fp-1', projectRepositoryId, LIVE_SESSION)}>
         <Routes>
-          <Route path="/factories/:factoryId" element={<WorkspacesSection />} />
+          <Route path="/factories/:factoryId" element={<SessionsSection />} />
         </Routes>
       </ChatSessionContext.Provider>
     </MemoryRouter>,
@@ -68,9 +57,7 @@ describe('Deleting a workspace', () => {
     const threadRequests: string[] = [];
 
     server.use(
-      http.get(`${TEST_BASE_URL}/web/source-control/projects/${projectRepositoryId}/sessions`, () =>
-        HttpResponse.json({ sessions }),
-      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () => HttpResponse.json({ sessions })),
       http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items`, () => HttpResponse.json({ items: [] })),
       http.delete(`${TEST_BASE_URL}/web/user-sessions/:sessionId`, ({ params }) => {
         deletedSessions.push(String(params.sessionId));
@@ -89,7 +76,7 @@ describe('Deleting a workspace', () => {
     const user = userEvent.setup();
     const { client } = renderSection();
 
-    const group = await screen.findByRole('region', { name: 'Review Sessions' });
+    const group = await screen.findByRole('region', { name: 'Review sessions' });
     await user.click(within(group).getByRole('button', { name: 'Session actions for factory/pr-20474' }));
     await user.click(await screen.findByRole('menuitem', { name: 'Delete' }));
 

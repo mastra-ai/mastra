@@ -28,6 +28,7 @@ import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
+import { __resetExecutionFencesForTests } from '../execution-fence';
 import { globalRunRegistry } from '../run-registry';
 
 function hangingModel() {
@@ -279,14 +280,18 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
 
     // ---- The restart: nothing of process 1 survives but its storage.
     // clear() runs each entry's cleanup, which also disarms process 1's
-    // in-memory budget timer — exactly what a real crash does.
+    // in-memory budget timer — exactly what a real crash does. Process 1's
+    // hanging execution is still running here, so its local execution
+    // fence must be forgotten too.
     globalRunRegistry.clear();
+    __resetExecutionFencesForTests();
     await pubsub.close();
     pubsub = new EventEmitterPubSub();
 
-    // ---- Process 2: recover the run; the model hangs again. ----
+    // ---- Process 2: recover the run; the model hangs again. Process 1's
+    // claim is still within its lease, so recovering right away takes it over.
     const secondDurable = build();
-    const recovered = await secondDurable.recover(runId);
+    const recovered = await secondDurable.recover(runId, { force: true });
 
     // Read side: the rebuilt registry entry restored the budget from the
     // persisted snapshot.
@@ -300,4 +305,44 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     expect(errorChunk.payload.error.message).toContain('totalMs');
     recovered.cleanup();
   }, 30000);
+
+  it('keeps abort() reaching an in-flight tool after the run registry entry is evicted (#26126)', async () => {
+    let toolSignal: AbortSignal | undefined;
+    let markEntered!: () => void;
+    const entered = new Promise<void>(resolve => (markEntered = resolve));
+    const hold = createTool({
+      id: 'hold',
+      description: 'Holds until aborted or timed out',
+      inputSchema: z.object({ city: z.string() }),
+      execute: async (_input, context) => {
+        toolSignal = context?.abortSignal;
+        markEntered();
+        await new Promise(resolve => setTimeout(resolve, 500));
+        return { ok: true };
+      },
+    });
+    const durableAgent = setup(toolCallingModel('hold') as LanguageModelV2, { hold });
+
+    const result = await durableAgent.stream('hello', {
+      maxSteps: 2,
+      modelSettings: { timeout: { totalMs: 60_000 } },
+    });
+    const drained = drain(result.fullStream);
+    await entered;
+
+    // Fill the registry past capacity so the live run entry is evicted (and disposed).
+    for (let i = 0; i < 1000; i++) {
+      globalRunRegistry.set(`filler-${i}-${Math.random()}`, {} as any);
+    }
+    expect(globalRunRegistry.has(result.runId)).toBe(false);
+
+    await result.abort();
+
+    expect(toolSignal).toBeDefined();
+    expect(toolSignal?.aborted).toBe(true);
+
+    await drained;
+    globalRunRegistry.clear();
+    result.cleanup();
+  });
 });

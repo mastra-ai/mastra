@@ -99,6 +99,12 @@ describe('describeNonSuccessFinishReason', () => {
     expect(describeNonSuccessFinishReason('stop', undefined)).toBeUndefined();
     expect(describeNonSuccessFinishReason('tool-calls', undefined)).toBeUndefined();
   });
+
+  it('returns an error message when the stream ended without a finish reason', () => {
+    expect(describeNonSuccessFinishReason('', undefined)).toBe(
+      'The model stream ended without a finish reason before producing a final response.',
+    );
+  });
 });
 
 describe('AgentController: non-success finish reasons', () => {

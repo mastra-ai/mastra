@@ -1,4 +1,4 @@
-import { MainSidebarProvider } from '@mastra/playground-ui/components/MainSidebar';
+import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
 import {
   MessageScrollerContent,
   MessageScrollerProvider,
@@ -100,7 +100,7 @@ function renderSteerScroller() {
         <Route
           path="/factories/:factoryId/user/threads/:threadId"
           element={
-            <MainSidebarProvider storageKey="steer-scroll-test">
+            <SidebarProvider storageKey="steer-scroll-test">
               <ChatSessionTestProvider threadId={SESSION_ID} userScoped deferUntilMessagesReady={false}>
                 <OverlaysProvider>
                   <MessageScrollerProvider autoScroll>
@@ -111,7 +111,7 @@ function renderSteerScroller() {
                   </MessageScrollerProvider>
                 </OverlaysProvider>
               </ChatSessionTestProvider>
-            </MainSidebarProvider>
+            </SidebarProvider>
           }
         />
       </Routes>

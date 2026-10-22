@@ -29,6 +29,7 @@ import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
 import './filter-bar-chip.css';
 import { MENU_SIDE_OFFSET } from '@/ds/primitives/menu-item';
+import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { useIsApplePlatform } from '@/hooks/use-keyboard-shortcut-label';
 import { cn } from '@/lib/utils';
@@ -59,8 +60,10 @@ export const alwaysHighlightProps = { autoHighlight: 'always', keepHighlight: tr
 // keeps `divide-border` for the internal seams and takes its outer edge from the material's rim.
 // `overflow-hidden` is what gives every segment its end cap: the chip is the only node that
 // knows where the pill ends, and it keeps knowing it while a framework injects children.
+// `py-px` reserves the rim's top and bottom rows: both colours are translucent, so a divider
+// crossing them stacks its alpha and the joint reads brighter. Vertical only, so the width holds.
 export const chipClass = cn(
-  'filter-bar-chip relative flex max-w-full items-stretch divide-x divide-border overflow-hidden rounded-full',
+  'filter-bar-chip relative flex max-w-full items-stretch divide-x divide-border overflow-hidden rounded-full py-px',
   inputSurfaceAndFocusWithinStyle,
   controlHeight[FILTER_BAR_CONTROL_SIZE],
 );
@@ -342,6 +345,7 @@ function SegmentSearchInput<T>({
         className={comboboxStyles.searchInput}
         placeholder={placeholder}
         inputMode={inputMode}
+        {...passwordManagerOptOutProps}
         onKeyDown={event => onKeyDown?.(event, highlighted as T | null)}
       />
     </div>
@@ -562,6 +566,7 @@ function ValueEditor() {
     query,
     enabled: open,
     initialValue: chip.item.value,
+    setQuery,
     onCommit,
   });
 
@@ -600,7 +605,7 @@ function ValueOptions({ step, onCancel }: ValueInputProps) {
   const modEnterLabel = useIsApplePlatform() ? '⌘↵' : 'Ctrl ↵';
   return (
     <>
-      {step.hasSuggestions && (
+      {step.hasOptions && (
         <FilterBarOptionList<FilterBarOption>
           aria-label="Values"
           aria-multiselectable={step.isMany || undefined}
@@ -617,7 +622,7 @@ function ValueOptions({ step, onCancel }: ValueInputProps) {
           <Button size="sm" variant="ghost" onClick={onCancel}>
             Cancel
           </Button>
-          <Button size="sm" variant="default" onClick={() => step.commitSelection() || step.commitFreeText()}>
+          <Button size="sm" variant="default" onClick={() => step.commitDone()}>
             Done
             <Kbd size="xs">{modEnterLabel}</Kbd>
           </Button>

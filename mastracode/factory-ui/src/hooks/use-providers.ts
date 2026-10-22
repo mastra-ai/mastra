@@ -1,6 +1,7 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { QueryClient } from '@tanstack/react-query';
 
+import type { ApiClient } from '../api/client';
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import type {
@@ -12,31 +13,28 @@ import type {
 } from '../api/types';
 
 /**
- * Providers + API-key management (mirrors the TUI `/api-keys` command).
- *
- * React Query owns the cache: the list is fetched once and deduped across
- * consumers, and the save/remove mutations invalidate the list so it refetches
- * the server's source of truth instead of optimistic local edits. Keys are
- * write-only — never read back.
- */
-/**
  * A credential change (key saved/removed, OAuth completed, signed out) alters
- * which models are runnable, so the model catalog and the credential-gated
- * model packs must refetch along with the provider list.
+ * which models are runnable, so the model catalog must refetch along with the
+ * provider list.
  */
 function invalidateCredentialDependentQueries(queryClient: QueryClient) {
   return Promise.all([
     queryClient.invalidateQueries({ queryKey: queryKeys.providers() }),
     queryClient.invalidateQueries({ queryKey: queryKeys.availableModels() }),
-    queryClient.invalidateQueries({ queryKey: queryKeys.modelPacksAll() }),
   ]);
+}
+
+export function providersQueryOptions(client: ApiClient) {
+  return queryOptions({
+    queryKey: queryKeys.providers(),
+    queryFn: () => client.get<ProvidersResponse>('/web/config/providers'),
+  });
 }
 
 export function useProvidersQuery() {
   const { client } = useApiConfig();
   return useQuery({
-    queryKey: queryKeys.providers(),
-    queryFn: () => client.get<ProvidersResponse>('/web/config/providers'),
+    ...providersQueryOptions(client),
     select: (body: ProvidersResponse): ProviderInfo[] => body.providers,
   });
 }
@@ -50,8 +48,7 @@ export function useProvidersQuery() {
 export function useOrgKeyAdminQuery() {
   const { client } = useApiConfig();
   return useQuery({
-    queryKey: queryKeys.providers(),
-    queryFn: () => client.get<ProvidersResponse>('/web/config/providers'),
+    ...providersQueryOptions(client),
     select: (body: ProvidersResponse): boolean => body.orgKeyAdmin ?? true,
   });
 }

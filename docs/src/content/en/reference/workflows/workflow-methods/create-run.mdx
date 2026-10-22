@@ -7,7 +7,7 @@ packages:
 
 # Workflow\.createRun()
 
-The `.createRun()` method creates a new workflow run instance, allowing you to execute the workflow with specific input data. This is the current API that returns a `Run` instance.
+The `.createRun()` method creates a new workflow run instance, allowing you to execute the workflow with specific input data. It returns a promise that resolves to a `Run` instance.
 
 ## Usage example
 
@@ -47,8 +47,8 @@ await workflow.createRun()
   content={[
   {
     name: 'run',
-    type: 'Run',
-    description: 'A new workflow run instance that can be used to execute the workflow',
+    type: 'Promise<Run>',
+    description: 'A promise that resolves to a new workflow run instance that can be used to execute the workflow',
   },
 ]}
 />

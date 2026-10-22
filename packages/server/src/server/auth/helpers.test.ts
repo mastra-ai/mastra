@@ -235,6 +235,15 @@ describe('auth helpers', () => {
   });
 
   describe('isCustomRoutePublic', () => {
+    it('should let an overlapping protected pattern win over an earlier public pattern', () => {
+      const config = new Map<string, boolean>([
+        ['GET:/custom/*', false],
+        ['GET:/custom/private/:id', true],
+      ]);
+      expect(isCustomRoutePublic('/custom/private/123', 'GET', config)).toBe(false);
+      expect(isCustomRoutePublic('/custom/other', 'GET', config)).toBe(true);
+    });
+
     it('should return false when customRouteAuthConfig is undefined', () => {
       expect(isCustomRoutePublic('/api/test', 'GET', undefined)).toBe(false);
     });
@@ -554,6 +563,44 @@ describe('auth helpers', () => {
     });
   });
 
+  describe('coreAuthMiddleware - public custom routes', () => {
+    const customRouteAuthConfig = new Map<string, boolean>([
+      ['GET:/custom/health', false],
+      ['POST:/webhooks/:id', false],
+      ['GET:/custom/private', true],
+    ]);
+
+    const run = (path: string, method: string, requiresAuth?: boolean) =>
+      coreAuthMiddleware({
+        path,
+        method,
+        getHeader: () => undefined,
+        mastra: { getServer: () => ({}), getLogger: () => null } as any,
+        authConfig: { protected: ['/*'], authenticateToken: async () => null },
+        customRouteAuthConfig,
+        requestContext: { get: () => undefined, set: () => {} } as any,
+        rawRequest: {},
+        token: undefined,
+        requiresAuth,
+        buildAuthorizeContext: () => null,
+      } as any);
+
+    it('passes static and parameterized custom routes with requiresAuth false', async () => {
+      expect((await run('/custom/health', 'GET')).action).toBe('next');
+      expect((await run('/webhooks/abc', 'POST')).action).toBe('next');
+    });
+
+    it('still authenticates other methods, private routes, and unregistered routes', async () => {
+      expect((await run('/custom/health', 'POST')).action).toBe('error');
+      expect((await run('/custom/private', 'GET')).action).toBe('error');
+      expect((await run('/custom/unknown', 'GET')).action).toBe('error');
+    });
+
+    it('still authenticates when the middleware explicitly requires auth', async () => {
+      expect((await run('/custom/health', 'GET', true)).action).toBe('error');
+    });
+  });
+
   describe('coreAuthMiddleware - mapUserToResourceId', () => {
     function createMockMastra() {
       return {
@@ -598,6 +645,86 @@ describe('auth helpers', () => {
       expect(result.action).toBe('next');
       expect(requestContext.get(MASTRA_USER_KEY)).toBe(user);
       expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('user-123');
+    });
+
+    describe('provider pending response headers', () => {
+      // Mirrors how providers key per-request state: by the underlying web Request.
+      const unwrap = (req: any): Request => (req instanceof Request ? req : req.raw);
+
+      function stashingProvider(extra: Record<string, unknown> = {}) {
+        const pending = new WeakMap<Request, Record<string, string>>();
+        return {
+          protected: ['/api/*'],
+          authenticateToken: async (_t: string, req: any) => {
+            pending.set(unwrap(req), { 'Set-Cookie': 'wos-session=v2; Path=/' });
+            return { id: 'user-1' };
+          },
+          consumePendingResponseHeaders: (req: any) => pending.get(unwrap(req)),
+          ...extra,
+        };
+      }
+
+      it('emits headers the provider stashed against the raw Request', async () => {
+        const result = await coreAuthMiddleware({
+          ...baseCtx,
+          rawRequest: new Request('https://studio.example/api/agents'),
+          mastra: createMockMastra(),
+          authConfig: stashingProvider() as any,
+          requestContext: createRequestContext(),
+        });
+
+        expect(result.action).toBe('next');
+        expect((result as any).headers).toEqual({ 'Set-Cookie': 'wos-session=v2; Path=/' });
+      });
+
+      it('emits headers stashed during the post-refresh retry, not the stale first attempt', async () => {
+        const pending = new WeakMap<Request, Record<string, string>>();
+        let calls = 0;
+        const provider = {
+          protected: ['/api/*'],
+          authenticateToken: async (_t: string, req: any) => {
+            calls++;
+            if (calls === 1) return null; // expired session → middleware refreshes
+            pending.set(unwrap(req), { 'Set-Cookie': 'wos-session=v3; Path=/' });
+            return { id: 'user-1' };
+          },
+          consumePendingResponseHeaders: (req: any) => pending.get(unwrap(req)),
+          getSessionIdFromRequest: () => 'v1',
+          refreshSession: async () => ({ id: 'v2', userId: 'user-1', expiresAt: new Date(), createdAt: new Date() }),
+          getSessionHeaders: (session: { id: string }) => ({ 'Set-Cookie': `wos-session=${session.id}; Path=/` }),
+          getClearSessionHeaders: () => ({}),
+          createSession: async () => ({}),
+          validateSession: async () => null,
+          destroySession: async () => {},
+        };
+
+        const result = await coreAuthMiddleware({
+          ...baseCtx,
+          rawRequest: new Request('https://studio.example/api/agents', { headers: { Cookie: 'wos-session=v1' } }),
+          mastra: createMockMastra(),
+          authConfig: provider as any,
+          requestContext: createRequestContext(),
+        });
+
+        expect(result.action).toBe('next');
+        expect((result as any).headers).toEqual({ 'Set-Cookie': 'wos-session=v3; Path=/' });
+      });
+
+      it('still authenticates when consumePendingResponseHeaders throws', async () => {
+        const result = await coreAuthMiddleware({
+          ...baseCtx,
+          rawRequest: new Request('https://studio.example/api/agents'),
+          mastra: createMockMastra(),
+          authConfig: stashingProvider({
+            consumePendingResponseHeaders: () => {
+              throw new Error('boom');
+            },
+          }) as any,
+          requestContext: createRequestContext(),
+        });
+
+        expect(result.action).toBe('next');
+      });
     });
 
     it('should support composite resource IDs', async () => {

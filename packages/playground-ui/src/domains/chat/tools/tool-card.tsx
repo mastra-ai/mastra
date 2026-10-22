@@ -12,6 +12,7 @@ import { ChatAgentContext, useChatRunning, useChatSend } from '@/domains/chat/co
 import { AskUserTool } from '@/domains/chat/tools/ask-user-tool';
 import { CodeModeBadge } from '@/domains/chat/tools/badges/code-mode-badge';
 import { ObservationMarkerBadge } from '@/domains/chat/tools/badges/observation-marker-badge';
+import { ConnectPromptTool } from '@/domains/chat/tools/connect-prompt-tool';
 import {
   badgeStatus,
   codeModeCall,
@@ -78,7 +79,7 @@ export const ToolCardInner = ({
   const { isRunning } = useChatRunning();
   const handleMcpAppSendMessage = useCallback(
     (content: string) => {
-      send({ message: content });
+      void send({ message: content });
     },
     [send],
   );
@@ -106,6 +107,8 @@ export const ToolCardInner = ({
         return <AskUserTool toolName={toolName} toolCallId={toolCallId} output={output} metadata={metadata} />;
       }
       break;
+    case 'connect_prompt':
+      return <ConnectPromptTool output={output} readOnly={readOnly} />;
     case 'submit_plan':
       return (
         <SubmitPlanTool

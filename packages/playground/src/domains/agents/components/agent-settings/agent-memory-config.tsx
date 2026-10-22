@@ -2,12 +2,12 @@ import type { GetMemoryConfigResponse } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { KeyValueList } from '@mastra/playground-ui/components/KeyValueList';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { useMemoryConfig } from '@mastra/react/hooks/memory';
-import { ChevronRight } from 'lucide-react';
 import { z } from 'zod';
 
 interface MemoryConfigSection {
@@ -162,7 +162,7 @@ export function AgentMemoryConfig({ agentId }: { agentId: string }) {
               <Txt as="span" variant="body-sm">
                 {section.title}
               </Txt>
-              <ChevronRight className="size-4" />
+              <DisclosureChevron direction="right" className="size-4" />
             </CollapsibleTrigger>
             <CollapsibleContent className="pt-2">
               <MemoryConfigFields items={section.items} />

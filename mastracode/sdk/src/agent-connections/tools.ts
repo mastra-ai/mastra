@@ -9,8 +9,8 @@ import {
   readSentAgentSignals,
   updateAgentConnections,
   writeSentAgentSignals,
-  type AgentConnectionContext,
 } from './thread-state.js';
+import type { AgentConnectionContext } from './thread-state.js';
 import type {
   AgentConnectResult,
   AgentConnectionDeltaOp,
@@ -451,6 +451,25 @@ The target must already be saved and freshly advertise the same exact thread end
             accepted = { action: 'persist' };
           } else if (notification.decision.action === 'discard') {
             accepted = { action: 'discard' };
+          } else if (notification.record.status === 'pending') {
+            // Direct delivery failed, but the notification is saved in the
+            // target's inbox and the notification dispatcher retries it on its
+            // own. Sent history is skipped so a resend with the same messageId
+            // is not recorded, and the model is told not to resend at all.
+            const reason = notification.record.lastDeliveryError ?? 'the target thread owner did not acknowledge it';
+            return {
+              content: expectsReply
+                ? `Failed to establish a reply obligation: the signal was queued for ${untrustedPeerLabel(target)} but not delivered directly (${reason}). It is retried automatically, so do not resend it; the reply obligation is established once that retry delivers the signal.`
+                : `Queued for ${untrustedPeerLabel(target)}: direct delivery failed (${reason}), so the signal waits in their notification inbox and is retried automatically. Do not resend it.`,
+              target,
+              priority: priority as AgentSignalPriority,
+              expectsReply,
+              messageId,
+              replyTo,
+              returnPeerId,
+              routingAction: 'persist',
+              isError: expectsReply,
+            };
           } else {
             return {
               content: `Failed to send agent signal: ${notification.record.lastDeliveryError ?? 'delivery was not acknowledged by the target thread owner'}`,

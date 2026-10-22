@@ -224,7 +224,7 @@ MongoDB storage requires a replica set or sharded deployment with transaction su
 
 ## Listing and searching items
 
-[`listItems()`](/reference/datasets/listItems) supports pagination and full-text search:
+[`listItems()`](/reference/datasets/listItems) supports pagination and case-insensitive substring search:
 
 ```typescript title="src/mastra/datasets/list-items.ts"
 // Paginated list
@@ -233,7 +233,7 @@ const { items, pagination } = await dataset.listItems({
   perPage: 50,
 })
 
-// Full-text search
+// Substring search
 const { items: matches } = await dataset.listItems({
   search: 'Hello',
 })
@@ -245,10 +245,9 @@ const { items: v2Matches } = await dataset.listItems({
   page: 0,
   perPage: 50,
 })
-
-// Version-only snapshot returns a bare DatasetItem[]
-const v2Items = await dataset.listItems({ version: 2 })
 ```
+
+Calling `listItems({ version })` without `search`, `page`, or `perPage` returns a bare `DatasetItem[]`. This form is deprecated. Pass `page` and `perPage` to always receive the paginated shape.
 
 ## Versioning
 
@@ -283,7 +282,7 @@ for (const row of history) {
 Fetch the exact items that existed at a past version:
 
 ```typescript title="src/mastra/datasets/pin-version.ts"
-const items = await dataset.listItems({ version: 2 })
+const { items } = await dataset.listItems({ version: 2, page: 0, perPage: 100 })
 ```
 
 You can also pin experiments to a version, see [running experiments](/docs/evals/experiments). Visit the [`Dataset` reference](/reference/datasets/dataset) for the full list of methods and parameters.

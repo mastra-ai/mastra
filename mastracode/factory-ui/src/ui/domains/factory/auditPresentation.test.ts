@@ -1,18 +1,14 @@
-import assert from 'node:assert';
-
 import { describe, expect, it } from 'vitest';
 
 import {
   AUDIT_CATEGORIES,
   auditActionLabel,
-  auditActorLabel,
   auditCategory,
-  auditEventBounds,
-  auditMetadataPreview,
+  auditDetailLine,
   auditNamespacesForCategories,
   auditVisibleMetadata,
-  type AuditNamespace,
 } from './auditPresentation';
+import type { AuditNamespace } from './auditPresentation';
 import type { AuditEvent } from './services/audit';
 
 function event(overrides: Partial<AuditEvent> = {}): AuditEvent {
@@ -36,45 +32,25 @@ describe('audit presentation', () => {
     expect(auditCategory('factory.unknown.changed')).toBeUndefined();
   });
 
-  it('hides internal metadata from previews and details', () => {
+  it('hides internal metadata from the details', () => {
     const auditEvent = event({ metadata: { branch: 'feat/audit', attempts: 2, __actorProfile: { name: 'Ada' } } });
 
     expect(auditVisibleMetadata(auditEvent)).toEqual({ branch: 'feat/audit', attempts: 2 });
-    expect(auditMetadataPreview(auditEvent)).toBe('branch=feat/audit · attempts=2');
   });
 
-  it('formats stage transitions and actor names', () => {
-    expect(auditMetadataPreview(event({ action: 'factory.work_item.stage_moved', metadata: { to: 'review' } }))).toBe(
-      '→ Review',
-    );
-    expect(auditActorLabel(event(), 'Ada Lovelace')).toBe('Ada Lovelace');
-    expect(auditActorLabel(event({ actorType: 'agent', metadata: { agentName: 'Build agent' } }), undefined)).toBe(
-      'Build agent',
-    );
+  it('puts only a run outcome or a stage transition on the line, leaving raw metadata to the details', () => {
+    const moved = event({ action: 'factory.work_item.stage_moved', metadata: { from: 'execute', to: 'review' } });
+    const ended = event({ action: 'factory.run.ended', metadata: { reason: 'aborted', role: 'work' } });
+    const started = event({ action: 'factory.run.started', metadata: { role: 'work', branch: 'feat/x' } });
+
+    expect(auditDetailLine(moved)).toBe('Building → Review');
+    expect(auditDetailLine(ended)).toBe('aborted');
+    expect(auditDetailLine(started)).toBe('');
   });
 
   it('treats every selected category as no filter', () => {
     const all = new Set<AuditNamespace>(AUDIT_CATEGORIES.map(category => category.namespace));
     expect(auditNamespacesForCategories(all)).toBeUndefined();
     expect(auditNamespacesForCategories(new Set<AuditNamespace>(['agent', 'run']))).toEqual(['run', 'agent']);
-  });
-
-  it('spans the first and last event, padding a single-event log', () => {
-    const first = '2026-08-21T08:00:00.000Z';
-    const last = '2026-08-24T20:00:00.000Z';
-
-    expect(auditEventBounds([event({ occurredAt: last }), event({ occurredAt: first })])).toEqual({
-      from: Date.parse(first),
-      to: Date.parse(last),
-    });
-
-    const alone = auditEventBounds([event({ occurredAt: first })]);
-    assert(alone);
-    expect(alone.to - alone.from).toBe(60 * 60_000);
-  });
-
-  it('has no bounds when no event carries a usable time', () => {
-    expect(auditEventBounds([])).toBeUndefined();
-    expect(auditEventBounds([event({ occurredAt: 'not-a-date' })])).toBeUndefined();
   });
 });

@@ -6,7 +6,8 @@ import type {
   RouteResponse,
 } from '@mastra/client-js';
 import { SpanType } from '@mastra/core/observability';
-import { TraceStatus, type PaginationInfo } from '@mastra/core/storage';
+import { TraceStatus } from '@mastra/core/storage';
+import type { PaginationInfo } from '@mastra/core/storage';
 
 type GetTraceResponse = Awaited<ReturnType<MastraClient['getTrace']>>;
 type GetSpanResponse = Awaited<ReturnType<MastraClient['getSpan']>>;

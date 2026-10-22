@@ -1,6 +1,6 @@
 {
   "name": "@mastra/express",
-  "version": "1.5.19-alpha.6",
+  "version": "1.5.23",
   "description": "Mastra Express adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -22,8 +22,8 @@
     "build": "tsdown --silent --config tsdown.config.ts",
     "build:watch": "pnpm build --watch",
     "test": "vitest run",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix ."
   },
   "license": "Apache-2.0",
   "dependencies": {
@@ -31,7 +31,7 @@
     "@mastra/server": "workspace:*"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^2.0.115",
+    "@ai-sdk/openai": "^2.0.135",
     "@internal/lint": "workspace:*",
     "@mastra/server-adapters-test-suite": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
@@ -47,7 +47,6 @@
     "@types/node": "22.20.1",
     "@types/swagger-ui-express": "^4.1.8",
     "cors": "^2.8.6",
-    "eslint": "^10.7.0",
     "express": "^5.2.1",
     "swagger-ui-express": "^5.0.1",
     "tsdown": "0.22.9",

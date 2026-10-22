@@ -1,0 +1,52 @@
+{
+  "name": "template-vendor-risk-questionnaire",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Draft vendor risk questionnaire answers from approved evidence, review them with human oversight, and export completed XLSX or DOCX files in their original format.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": "^22.22.0 || >=24.12.0"
+  },
+  "scripts": {
+    "dev": "concurrently --kill-others --names mastra,web \"npm run dev:mastra\" \"npm run dev:ui\"",
+    "build": "MASTRA_TELEMETRY_DISABLED=1 mastra build",
+    "start": "MASTRA_TELEMETRY_DISABLED=1 mastra start",
+    "typecheck": "tsc --noEmit",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check .",
+    "test": "vitest run",
+    "demo": "node scripts/generate-demo.ts",
+    "review": "node --env-file-if-exists=.env scripts/review.ts",
+    "recover:writer": "node scripts/recover-writer.ts",
+    "eval:live": "node --env-file-if-exists=.env node_modules/vitest/vitest.mjs run --config vitest.live.config.ts",
+    "respond": "node --env-file-if-exists=.env scripts/respond.ts",
+    "dev:mastra": "MASTRA_TELEMETRY_DISABLED=1 mastra dev",
+    "dev:ui": "npm run dev --prefix demo_ui -- --port 5173 --strictPort"
+  },
+  "dependencies": {
+    "@libsql/client": "0.18.0",
+    "@mastra/core": "1.75.0",
+    "@mastra/duckdb": "1.14.0",
+    "@mastra/libsql": "1.25.1",
+    "@mastra/observability": "1.19.0",
+    "csv-parse": "7.0.3",
+    "fast-xml-parser": "5.11.2",
+    "fflate": "0.8.3",
+    "pdfjs-dist": "6.4.299",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@mastra/evals": "1.10.5",
+    "@types/node": "^22.20.1",
+    "concurrently": "9.2.1",
+    "hono": "4.13.13",
+    "mastra": "1.33.0",
+    "oxfmt": "0.72.0",
+    "typescript": "^5.9.3",
+    "vitest": "4.1.11"
+  },
+  "workspaces": [
+    "demo_ui"
+  ]
+}

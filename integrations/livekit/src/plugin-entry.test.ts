@@ -4,6 +4,12 @@ describe('plugin entry (@mastra/livekit/plugin)', () => {
   it('exposes exactly the plugin surface', async () => {
     const entry = await import('./plugin-entry');
 
-    expect(Object.keys(entry).sort()).toEqual(['MastraLLM', 'createRemoteAgentReplyGenerator']);
+    expect(Object.keys(entry).sort()).toEqual([
+      'MastraLLM',
+      'VOICE_TEXT_FLUSH',
+      'createRemoteAgentReplyGenerator',
+      'mastraLLMNode',
+      'observeVoiceSession',
+    ]);
   });
 });

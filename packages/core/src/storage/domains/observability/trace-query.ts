@@ -23,6 +23,23 @@ export const TRACE_QUERY_DISCOVERY_MAX_SEARCH_LENGTH = 256;
 export const TRACE_QUERY_DEFAULT_TIMEOUT_MS = 15_000;
 export const TRACE_QUERY_MAX_TIMEOUT_MS = 300_000;
 
+/**
+ * Fields trace and span queries can sort by. `timeToFirstChunkMs` is a number that can be empty;
+ * empty values sort last in both directions.
+ */
+export const TRACE_QUERY_ORDER_FIELDS = ['startedAt', 'endedAt', 'timeToFirstChunkMs'] as const;
+export type TraceQueryOrderField = (typeof TRACE_QUERY_ORDER_FIELDS)[number];
+/** A keyset cursor's sort value: an ISO timestamp, or a number or `null` for `timeToFirstChunkMs`. */
+export type TraceQuerySortValue = string | number | null;
+
+/** @internal Whether a decoded cursor's sort value has the kind its order field produces. */
+export function isTraceQuerySortValueFor(field: TraceQueryOrderField, value: TraceQuerySortValue): boolean {
+  return field === 'timeToFirstChunkMs' ? value === null || typeof value === 'number' : typeof value === 'string';
+}
+
+/** @internal Cursor sort values: ISO timestamps, or finite numbers and `null` for numeric fields. */
+export const traceQuerySortValueSchema = z.union([z.string().datetime({ offset: true }), z.number(), z.null()]);
+
 /** @internal Shared with the trace-aggregate request schema so both report identical complexity issues. */
 export const TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE = `Predicates are limited to ${TRACE_QUERY_MAX_NODES} nodes and ${TRACE_QUERY_MAX_DEPTH} levels`;
 const PREDICATE_COMPLEXITY_MESSAGE = TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE;
@@ -44,6 +61,7 @@ const collectionMemberSchema = literalStringSchema.refine(
   'Collection predicates require a non-empty string value',
 );
 const timestampLiteralSchema = z.string().datetime({ offset: true });
+const textLiteralSchema = z.object({ literal: literalStringSchema }).strict();
 const predicatePathSchema = z
   .string()
   .min(1)
@@ -52,6 +70,13 @@ const literalSchema = z.union([literalStringSchema, z.number(), z.boolean(), z.n
 const pathRefSchema = z.object({ path: predicatePathSchema }).strict();
 const literalRefSchema = z.object({ literal: literalSchema }).strict();
 const pathOrLiteralSchema = z.union([pathRefSchema, literalRefSchema]);
+// Not `.max()`: zod >=4.6.7 aborts oversized arrays before parsing them, which makes every predicate
+// union branch fail as aborted and collapses the issue to `where` instead of `where.set`.
+const membershipSetSchema = z
+  .array(literalSchema)
+  .min(1)
+  .refine(set => set.length <= TRACE_QUERY_MAX_SET_VALUES, 'Membership set is too large')
+  .meta({ maxItems: TRACE_QUERY_MAX_SET_VALUES });
 
 export const traceQueryScalarPredicateSchema: z.ZodType<TraceQueryScalarPredicate> = z.lazy(() =>
   z.union([
@@ -66,13 +91,14 @@ export const traceQueryScalarPredicateSchema: z.ZodType<TraceQueryScalarPredicat
       .object({
         op: z.enum(['in', 'notIn']),
         value: pathOrLiteralSchema,
-        set: z.array(literalSchema).min(1).max(TRACE_QUERY_MAX_SET_VALUES),
+        set: membershipSetSchema,
       })
       .strict(),
     z.object({ op: z.enum(['exists', 'notExists']), path: predicatePathSchema }).strict(),
     z
       .object({ op: z.enum(['includes', 'notIncludes']), path: predicatePathSchema, value: collectionMemberSchema })
       .strict(),
+    z.object({ op: z.enum(['matches', 'notMatches']), left: pathRefSchema, right: textLiteralSchema }).strict(),
     z
       .object({
         op: z.enum(['and', 'or']),
@@ -96,13 +122,14 @@ export const traceQueryPredicateSchema: z.ZodType<TraceQueryPredicate> = z.lazy(
       .object({
         op: z.enum(['in', 'notIn']),
         value: pathOrLiteralSchema,
-        set: z.array(literalSchema).min(1).max(TRACE_QUERY_MAX_SET_VALUES),
+        set: membershipSetSchema,
       })
       .strict(),
     z.object({ op: z.enum(['exists', 'notExists']), path: predicatePathSchema }).strict(),
     z
       .object({ op: z.enum(['includes', 'notIncludes']), path: predicatePathSchema, value: collectionMemberSchema })
       .strict(),
+    z.object({ op: z.enum(['matches', 'notMatches']), left: pathRefSchema, right: textLiteralSchema }).strict(),
     z
       .object({
         op: z.enum(['and', 'or']),
@@ -158,6 +185,8 @@ export const traceQueryOperatorSchema = z.enum([
   'notExists',
   'includes',
   'notIncludes',
+  'matches',
+  'notMatches',
 ]);
 export const traceQueryValueKindSchema = z.enum([
   'string',
@@ -173,8 +202,6 @@ const traceQueryDiscoveryTimeRangeSchema = traceQueryTimeRangeSchema.superRefine
   const to = new Date(timeRange.to);
   if (from >= to) {
     context.addIssue({ code: 'custom', path: [], message: '`from` must be earlier than `to`' });
-  } else if (to.getTime() - from.getTime() > 31 * 24 * 60 * 60 * 1000) {
-    context.addIssue({ code: 'custom', path: [], message: 'The time range cannot exceed 31 days' });
   }
 });
 const traceQueryDiscoverySearchSchema = z.string().trim().max(TRACE_QUERY_DISCOVERY_MAX_SEARCH_LENGTH).optional();
@@ -233,11 +260,37 @@ export const traceQueryObservedFieldDescriptorSchema = z
     occurrences: z.number().int().nonnegative(),
   })
   .strict();
+export const traceAggregateDimensionDescriptorSchema = z
+  .object({
+    path: z.string(),
+    valueKind: z.literal('string'),
+  })
+  .strict();
+export const traceAggregateMeasureDescriptorSchema = z
+  .object({
+    name: z.string(),
+    kind: z.enum(['count', 'duration', 'error', 'tokens', 'cost']),
+    statistic: z.enum(['avg', 'min', 'max', 'p50', 'p90', 'p95', 'p99', 'sum']).optional(),
+    unit: z.enum(['count', 'milliseconds', 'ratio', 'tokens', 'currency']),
+    approximate: z.boolean(),
+  })
+  .strict();
+export const traceAggregateDiscoverySchema = z
+  .object({
+    dimensions: z.array(traceAggregateDimensionDescriptorSchema),
+    measures: z.array(traceAggregateMeasureDescriptorSchema),
+  })
+  .strict()
+  .describe(
+    'What `aggregateTraces()` accepts. Present only for `predicateScope: "trace"` when the store supports aggregation. ' +
+      'Every observed field is also a groupable dimension, and `countDistinct.<field>` accepts any dimension or `traceId`.',
+  );
 export const getTraceQueryFieldsResponseSchema = z
   .object({
     canonicalFields: z.array(traceQueryCanonicalFieldDescriptorSchema),
     observedFields: z.array(traceQueryObservedFieldDescriptorSchema).max(TRACE_QUERY_DISCOVERY_MAX_LIMIT),
     observedFieldsTruncated: z.boolean(),
+    aggregate: traceAggregateDiscoverySchema.optional(),
   })
   .strict();
 export const getTraceQueryValuesResponseSchema = z
@@ -298,7 +351,7 @@ const traceQueryRequestObjectSchema = z
       .array(
         z
           .object({
-            field: z.enum(['startedAt', 'endedAt']),
+            field: z.enum(TRACE_QUERY_ORDER_FIELDS),
             direction: z.enum(['asc', 'desc']),
           })
           .strict(),
@@ -378,6 +431,8 @@ export const traceQueryTraceSchema = z
     createdAt: z.string().datetime({ offset: true }),
     metadata: z.record(z.string(), z.unknown()).nullable(),
     inputPreview: z.string().nullable(),
+    outputPreview: z.string().nullable(),
+    errorPreview: z.string().nullable(),
     threadId: z.string().nullable(),
     resourceId: z.string().nullable(),
     startedAt: z.string().datetime({ offset: true }),
@@ -386,6 +441,11 @@ export const traceQueryTraceSchema = z
     entityType: z.string().nullable(),
     environment: z.string().nullable(),
     status: z.enum(['success', 'error']),
+    /**
+     * The root span's time to first chunk; `null` when the root never streamed one.
+     * Absent when the store lacks the `trace-query-time-to-first-chunk` feature.
+     */
+    timeToFirstChunkMs: z.number().nullable().optional(),
   })
   .strict();
 
@@ -439,6 +499,7 @@ export type TraceQueryScalarPredicate =
   | { op: 'in' | 'notIn'; value: TraceQueryPathOrLiteral; set: TraceQueryLiteral[] }
   | { op: 'exists' | 'notExists'; path: string }
   | { op: 'includes' | 'notIncludes'; path: string; value: string }
+  | { op: 'matches' | 'notMatches'; left: { path: string }; right: { literal: string } }
   | { op: 'and' | 'or'; args: TraceQueryScalarPredicate[] }
   | { op: 'not'; arg: TraceQueryScalarPredicate };
 
@@ -497,6 +558,8 @@ export const TRACE_QUERY_ORDERED_OPERATORS = [...TRACE_QUERY_STRING_OPERATORS, '
 export const TRACE_QUERY_PRESENCE_OPERATORS = ['exists', 'notExists'] as const;
 /** Stored string collections such as `tags`. `exists` means at least one member; `notExists` means none. */
 export const TRACE_QUERY_ARRAY_OPERATORS = ['includes', 'notIncludes', 'exists', 'notExists'] as const;
+/** Human-written text such as feedback comments: exact string operators plus word matching. */
+export const TRACE_QUERY_TEXT_OPERATORS = [...TRACE_QUERY_STRING_OPERATORS, 'matches', 'notMatches'] as const;
 
 const stringField = (valueSuggestions: boolean): FieldRule => ({
   valueKind: 'string',
@@ -518,6 +581,11 @@ const arrayField = (): FieldRule => ({
   operators: TRACE_QUERY_ARRAY_OPERATORS,
   valueSuggestions: true,
 });
+const textField = (valueSuggestions: boolean): FieldRule => ({
+  valueKind: 'string',
+  operators: TRACE_QUERY_TEXT_OPERATORS,
+  valueSuggestions,
+});
 
 export const TRACE_QUERY_FIELD_REGISTRY = {
   trace: {
@@ -531,20 +599,25 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
     startedAt: orderedField('timestamp'),
     endedAt: orderedField('timestamp'),
     durationMs: orderedField('number'),
+    timeToFirstChunkMs: orderedField('number'),
+    entityId: stringField(false),
     entityName: stringField(true),
     entityType: stringField(true),
+    name: stringField(true),
+    spanType: stringField(true),
     environment: stringField(true),
     status: stringField(true),
     tags: arrayField(),
   },
   spans: {
-    name: stringField(true),
+    name: textField(true),
     spanType: stringField(true),
     model: stringField(true),
     provider: stringField(true),
     startedAt: orderedField('timestamp'),
     endedAt: orderedField('timestamp'),
     durationMs: orderedField('number'),
+    timeToFirstChunkMs: orderedField('number'),
     status: stringField(true),
     error: presenceField(),
     entityType: stringField(true),
@@ -579,9 +652,77 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
     rootEntityVersionId: stringField(false),
     value: orderedField('stringOrNumber'),
     timestamp: orderedField('timestamp'),
-    comment: presenceField(),
+    comment: textField(false),
   },
 } as const satisfies Record<TraceQueryPredicateScope, Record<string, FieldRule>>;
+
+/** Direct span queries have a separate policy from trace queries' related span predicates. */
+export const SPAN_QUERY_FIELD_REGISTRY = {
+  name: textField(true),
+  spanType: stringField(true),
+  status: stringField(true),
+  error: presenceField(),
+  startedAt: orderedField('timestamp'),
+  endedAt: orderedField('timestamp'),
+  durationMs: orderedField('number'),
+  timeToFirstChunkMs: orderedField('number'),
+  traceId: stringField(false),
+  spanId: stringField(false),
+  parentSpanId: stringField(false),
+  threadId: stringField(false),
+  organizationId: stringField(false),
+  resourceId: stringField(false),
+  runId: stringField(false),
+  sessionId: stringField(false),
+  userId: stringField(false),
+  requestId: stringField(false),
+  serviceName: stringField(true),
+  experimentId: stringField(false),
+  environment: stringField(true),
+  executionSource: stringField(true),
+  entityType: stringField(true),
+  entityId: stringField(false),
+  entityName: stringField(true),
+  entityVersionId: stringField(false),
+  parentEntityType: stringField(true),
+  parentEntityId: stringField(false),
+  parentEntityName: stringField(true),
+  parentEntityVersionId: stringField(false),
+  rootEntityType: stringField(true),
+  rootEntityId: stringField(false),
+  rootEntityName: stringField(true),
+  rootEntityVersionId: stringField(false),
+} as const satisfies Record<string, FieldRule>;
+
+export type SpanQueryField = keyof typeof SPAN_QUERY_FIELD_REGISTRY;
+
+/** Direct thread-row predicates apply after full-history representative selection. */
+export const THREAD_QUERY_FIELD_REGISTRY = {
+  threadId: stringField(false),
+  organizationId: stringField(false),
+  firstTraceId: stringField(false),
+  lastTraceId: stringField(false),
+  resourceId: stringField(false),
+  userId: stringField(false),
+  entityType: stringField(false),
+  entityId: stringField(false),
+  entityName: stringField(false),
+  entityVersionId: stringField(false),
+  runId: stringField(false),
+  sessionId: stringField(false),
+  requestId: stringField(false),
+  serviceName: stringField(false),
+  experimentId: stringField(false),
+  environment: stringField(false),
+  executionSource: stringField(false),
+  status: { ...stringField(false), operators: ['eq', 'ne', 'in', 'notIn'] },
+  startedAt: orderedField('timestamp'),
+  endedAt: orderedField('timestamp'),
+  traceCount: { ...orderedField('number'), operators: ['eq', 'ne', 'lt', 'lte', 'gt', 'gte'] },
+  timeToFirstChunkMs: orderedField('number'),
+} as const satisfies Record<string, FieldRule>;
+
+export type ThreadQueryField = keyof typeof THREAD_QUERY_FIELD_REGISTRY;
 
 const METADATA_FIELD_RULE: FieldRule = {
   valueKind: 'string',
@@ -595,6 +736,8 @@ export type TraceQuerySpanField = keyof (typeof TRACE_QUERY_FIELD_REGISTRY)['spa
 export type TraceQueryScoreField = keyof (typeof TRACE_QUERY_FIELD_REGISTRY)['scores'];
 export type TraceQueryFeedbackField = keyof (typeof TRACE_QUERY_FIELD_REGISTRY)['feedback'];
 export type TraceQueryCanonicalField =
+  | ThreadQueryField
+  | SpanQueryField
   | TraceQueryField
   | TraceQuerySpanField
   | TraceQueryScoreField
@@ -606,6 +749,7 @@ export type TraceQueryComparisonOperator = 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | '
 export type TraceQueryMembershipOperator = 'in' | 'notIn';
 export type TraceQueryPresenceOperator = 'exists' | 'notExists';
 export type TraceQueryCollectionOperator = 'includes' | 'notIncludes' | 'empty' | 'notEmpty';
+export type TraceQueryTextOperator = 'matches' | 'notMatches';
 
 export type GetTraceQueryFieldsArgs = z.input<typeof getTraceQueryFieldsArgsSchema>;
 export type NormalizedGetTraceQueryFieldsArgs = z.output<typeof getTraceQueryFieldsArgsSchema>;
@@ -614,6 +758,7 @@ export type NormalizedGetTraceQueryValuesArgs = z.output<typeof getTraceQueryVal
 export type TraceQueryCanonicalFieldDescriptor = z.infer<typeof traceQueryCanonicalFieldDescriptorSchema>;
 export type TraceQueryObservedFieldDescriptor = z.infer<typeof traceQueryObservedFieldDescriptorSchema>;
 export type GetTraceQueryFieldsResponse = z.infer<typeof getTraceQueryFieldsResponseSchema>;
+export type TraceAggregateDiscovery = z.infer<typeof traceAggregateDiscoverySchema>;
 export type GetTraceQueryValuesResponse = z.infer<typeof getTraceQueryValuesResponseSchema>;
 
 export type TrustedTraceQueryScalarPredicate =
@@ -632,6 +777,8 @@ export type TrustedTraceQueryScalarPredicate =
   | { type: 'presence'; field: TraceQueryPredicateField; operator: TraceQueryPresenceOperator }
   | { type: 'collection'; field: TraceQueryPredicateField; operator: 'includes' | 'notIncludes'; value: string }
   | { type: 'collection'; field: TraceQueryPredicateField; operator: 'empty' | 'notEmpty' }
+  /** `value` is the normalized word sequence from {@link normalizeTraceQueryText}. */
+  | { type: 'text'; field: TraceQueryPredicateField; operator: TraceQueryTextOperator; value: string }
   | { type: 'boolean'; operator: 'and' | 'or'; args: TrustedTraceQueryScalarPredicate[] }
   | { type: 'not'; arg: TrustedTraceQueryScalarPredicate };
 
@@ -687,14 +834,15 @@ export interface TrustedTraceQueryPagePlan {
 
 interface TrustedTraceQueryTracesBasePlan extends TrustedTraceQueryBasePlan {
   result: 'traces';
+  /** Empty `timeToFirstChunkMs` values sort last in both directions; ties break by ascending `traceId`. */
   orderBy: {
-    field: 'startedAt' | 'endedAt';
+    field: TraceQueryOrderField;
     direction: 'asc' | 'desc';
   };
 }
 
 export type TrustedTraceQueryKeysetTracesPlan = TrustedTraceQueryTracesBasePlan &
-  TrustedTraceQueryKeysetPlan & { cursor?: { sortValue: string; traceId: string } };
+  TrustedTraceQueryKeysetPlan & { cursor?: { sortValue: TraceQuerySortValue; traceId: string } };
 export type TrustedTraceQueryPaginatedTracesPlan = TrustedTraceQueryTracesBasePlan & TrustedTraceQueryPagePlan;
 export type TrustedTraceQueryDeltaTracesPlan = TrustedTraceQueryTracesBasePlan & {
   paginationMode: 'delta';
@@ -755,7 +903,7 @@ export type TraceQueryCursorPlan =
   | TrustedTraceQueryGroupsPlan
   | TrustedThreadQueryPlan;
 export type TraceQueryCursorValues =
-  | { result: 'traces'; sortValue: string; traceId: string }
+  | { result: 'traces'; sortValue: TraceQuerySortValue; traceId: string }
   | { result: 'groups'; threadId: string }
   | { result: 'threads'; threadId: string };
 
@@ -829,7 +977,7 @@ export function resolveTraceQueryTimeoutMs(timeoutMs = TRACE_QUERY_DEFAULT_TIMEO
   return timeoutMs;
 }
 
-type PredicateContext = TraceQueryPredicateScope;
+type PredicateContext = TraceQueryPredicateScope | 'spanQuery' | 'threadQuery';
 
 interface PlannerState {
   nodes: number;
@@ -1001,8 +1149,30 @@ export function normalizeTraceQueryTenantScope(
     : { organizationId: scope.organizationId, resourceId: scope.resourceId };
 }
 
+const STRUCTURAL_ISSUE_CODES = new Set<string>([
+  'invalid_type',
+  'invalid_value',
+  'invalid_union',
+  'invalid_key',
+  'invalid_element',
+  'unrecognized_keys',
+]);
+
+/**
+ * Reports the issues of the one union branch whose shape matched and that failed only checks
+ * (sizes, formats, refinements). Zod did this itself until 4.6.7 made an oversized array fail its
+ * size check before parsing the elements, which aborts the branch, so zod now reports only the union.
+ */
+function narrowUnionIssue(issue: z.core.$ZodIssue): z.core.$ZodIssue[] {
+  if (issue.code !== 'invalid_union') return [issue];
+  const matching = issue.errors
+    .map(branch => branch.flatMap(inner => narrowUnionIssue({ ...inner, path: [...issue.path, ...inner.path] })))
+    .filter(branch => branch.length > 0 && branch.every(inner => !STRUCTURAL_ISSUE_CODES.has(inner.code)));
+  return matching.length === 1 ? matching[0]! : [issue];
+}
+
 export function formatTraceQuerySchemaIssues(error: z.ZodError): TraceQueryIssue[] {
-  return error.issues.map(issue => {
+  return error.issues.flatMap(narrowUnionIssue).map(issue => {
     const customIssueCode =
       issue.code === 'custom'
         ? issue.message === PREDICATE_COMPLEXITY_MESSAGE
@@ -1048,12 +1218,6 @@ export function planTraceQuery(
   const to = new Date(request.timeRange.to);
   if (from >= to) {
     issues.push({ code: 'invalid_time_range', path: ['timeRange'], message: '`from` must be earlier than `to`' });
-  } else if (to.getTime() - from.getTime() > 31 * 24 * 60 * 60 * 1000) {
-    issues.push({
-      code: 'time_range_too_large',
-      path: ['timeRange'],
-      message: 'The time range cannot exceed 31 days',
-    });
   }
 
   if (request.group && request.orderBy) {
@@ -1142,6 +1306,9 @@ export function planTraceQuery(
     scope,
   });
   const cursor = page.after ? decodeTraceQueryCursor(page.after, result, binding) : undefined;
+  if (cursor?.result === 'traces' && !isTraceQuerySortValueFor(orderBy.field, cursor.sortValue)) {
+    throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_MALFORMED');
+  }
   return {
     result,
     timeRange,
@@ -1173,12 +1340,6 @@ export function planThreadQuery(
       code: 'invalid_time_range',
       path: ['traces', 'timeRange'],
       message: '`from` must be earlier than `to`',
-    });
-  } else if (to.getTime() - from.getTime() > 31 * 24 * 60 * 60 * 1000) {
-    issues.push({
-      code: 'time_range_too_large',
-      path: ['traces', 'timeRange'],
-      message: 'The time range cannot exceed 31 days',
     });
   }
 
@@ -1294,7 +1455,7 @@ const cursorEnvelopeSchema = z
       z
         .object({
           result: z.literal('traces'),
-          sortValue: z.string().datetime({ offset: true }),
+          sortValue: traceQuerySortValueSchema,
           traceId: z.string().min(1),
         })
         .strict(),
@@ -1362,14 +1523,23 @@ export function planTraceQuerySelectionPredicate(
   return planPredicate(where, 'trace', path, 1, state);
 }
 
-/** @internal Plans a span-row predicate using the same rules as `spans.some` / `spans.none`. */
+/** @internal Plans a direct span-row predicate without changing related trace predicates. */
 export function planSpanQuerySelectionPredicate(
   where: TraceQueryScalarPredicate,
   issues: TraceQueryIssue[],
 ): TrustedTraceQueryScalarPredicate | undefined {
   const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues };
   // Scalar grammar cannot produce a related-record predicate.
-  return planPredicate(where, 'spans', ['where'], 1, state) as TrustedTraceQueryScalarPredicate | undefined;
+  return planPredicate(where, 'spanQuery', ['where'], 1, state) as TrustedTraceQueryScalarPredicate | undefined;
+}
+
+/** @internal Shares scalar validation without admitting related-trace predicates. */
+export function planThreadQuerySelectionPredicate(
+  where: TraceQueryScalarPredicate,
+  issues: TraceQueryIssue[],
+): TrustedTraceQueryScalarPredicate | undefined {
+  const state: PlannerState = { nodes: 0, relatedClauses: 0, literalUnits: 0, issues };
+  return planPredicate(where, 'threadQuery', ['where'], 1, state) as TrustedTraceQueryScalarPredicate | undefined;
 }
 
 function planPredicate(
@@ -1461,6 +1631,31 @@ function planPredicate(
     };
   }
 
+  if (predicate.op === 'matches' || predicate.op === 'notMatches') {
+    state.literalUnits += 1;
+    if (state.literalUnits > TRACE_QUERY_MAX_LITERAL_UNITS) {
+      addPredicateComplexityIssue(
+        [...path, 'right', 'literal'],
+        `Trace queries are limited to ${TRACE_QUERY_MAX_LITERAL_UNITS} literal units`,
+        state,
+      );
+    }
+    const field = normalizeTraceQueryPath(predicate.left.path);
+    const rule = getRule(field, context, rules, [...path, 'left', 'path'], state);
+    if (!rule) return undefined;
+    if (!rule.operators.includes(predicate.op)) addOperatorIssue(predicate.op, field, [...path, 'op'], state);
+    const value = normalizeTraceQueryText(predicate.right.literal);
+    if (value === '') {
+      state.issues.push({
+        code: 'invalid_literal',
+        path: [...path, 'right', 'literal'],
+        message: 'Text predicates require at least one letter or digit',
+      });
+      return undefined;
+    }
+    return { type: 'text', field: field as TraceQueryPredicateField, operator: predicate.op, value };
+  }
+
   if (predicate.op === 'in' || predicate.op === 'notIn') {
     state.literalUnits += predicate.set.length;
     if (state.literalUnits > TRACE_QUERY_MAX_LITERAL_UNITS) {
@@ -1499,7 +1694,7 @@ function planPredicate(
     };
   }
 
-  const comparison = predicate as Extract<TraceQueryScalarPredicate, { left: TraceQueryPathOrLiteral }>;
+  const comparison = predicate as Extract<TraceQueryScalarPredicate, { op: TraceQueryComparisonOperator }>;
   state.literalUnits += 1;
   if (state.literalUnits > TRACE_QUERY_MAX_LITERAL_UNITS) {
     addPredicateComplexityIssue(
@@ -1533,6 +1728,8 @@ function planPredicate(
 }
 
 function rulesForContext(context: PredicateContext): Record<string, FieldRule> {
+  if (context === 'threadQuery') return THREAD_QUERY_FIELD_REGISTRY;
+  if (context === 'spanQuery') return SPAN_QUERY_FIELD_REGISTRY;
   return TRACE_QUERY_FIELD_REGISTRY[context];
 }
 
@@ -1585,6 +1782,28 @@ export function normalizeTraceQueryPath(path: string): string {
     return `metadata.${unwrapped.slice(prefixIndex + 'metadata.'.length)}`;
   }
   return normalized;
+}
+
+/**
+ * Lowercases text and reduces it to its words: maximal runs of Unicode letters, combining
+ * marks, and digits, joined by single spaces. Text is composed to NFC first, so an accent
+ * stored as a separate mark equals its precomposed form, and marks stay inside their word,
+ * so `नमस्ते` is one word. After that, `İ` folds to plain `i`: it is the only letter whose lowercase form
+ * is two code points, and the stores' `lower()` returns one. A Greek final `ς` becomes `σ`, since
+ * `toLowerCase()` picks the final form by position and the stores' `lower()` does not. `matches` succeeds when the
+ * normalized literal appears as a contiguous word sequence inside the normalized field
+ * value. Stores apply the same normalization in SQL, so `incorrect` matches
+ * `This answer is incorrect.` but not `This was incorrectly formatted.`
+ */
+export function normalizeTraceQueryText(text: string): string {
+  return text
+    .normalize('NFC')
+    .replace(/\u0130/g, 'i')
+    .toLowerCase()
+    .replace(/\u03c2/g, '\u03c3')
+    .split(/[^\p{L}\p{M}\p{N}]+/u)
+    .filter(word => word.length > 0)
+    .join(' ');
 }
 
 function normalizeLiteral(

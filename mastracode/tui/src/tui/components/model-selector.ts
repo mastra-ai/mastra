@@ -25,6 +25,8 @@ export interface ModelItem {
   apiKeyEnvVar?: string;
   /** Number of times this model has been selected (for ranking) */
   useCount?: number;
+  /** Optional label shown instead of the model ID */
+  displayName?: string;
 }
 
 export interface ModelSelectorOptions {
@@ -71,6 +73,32 @@ export function makeCustomModelItem(id: string, models: ModelItem[]): ModelItem 
   };
 }
 
+const MASTRACODE_GATEWAY_PREFIX = 'mastracode/';
+
+/**
+ * The shared catalog namespaces the MastraCode gateway's providers (the user's
+ * custom providers) as `mastracode/<provider>/<model>`, but Mastra Code
+ * resolves and saves them as `<provider>/<model>`. Show and
+ * select them under that canonical id so typed ids match catalog rows and the
+ * saved id resolves. When a canonical id is listed twice, keep the authenticated
+ * entry.
+ */
+export function toCanonicalModelItems(models: ModelItem[]): ModelItem[] {
+  const byId = new Map<string, ModelItem>();
+  for (const model of models) {
+    const canonical = model.provider.startsWith(MASTRACODE_GATEWAY_PREFIX)
+      ? {
+          ...model,
+          id: model.id.slice(MASTRACODE_GATEWAY_PREFIX.length),
+          provider: model.provider.slice(MASTRACODE_GATEWAY_PREFIX.length),
+        }
+      : model;
+    const existing = byId.get(canonical.id);
+    if (!existing || (!existing.hasApiKey && canonical.hasApiKey)) byId.set(canonical.id, canonical);
+  }
+  return [...byId.values()];
+}
+
 // =============================================================================
 // ModelSelectorComponent
 // =============================================================================
@@ -105,7 +133,7 @@ export class ModelSelectorComponent extends Box implements Focusable {
     this.tui = options.tui;
     this.title = options.title ?? 'Select Model';
     this.titleColor = options.titleColor;
-    this.allModels = this.sortModels(options.models, options.currentModelId);
+    this.allModels = this.sortModels(toCanonicalModelItems(options.models), options.currentModelId);
     this.currentModelId = options.currentModelId;
     this.onSelectCallback = options.onSelect;
     this.onCancelCallback = options.onCancel;
@@ -188,7 +216,7 @@ export class ModelSelectorComponent extends Box implements Focusable {
     // Apply fuzzy filter if there's a query, otherwise show all
     // Sorting already puts models with API keys first
     this.filteredModels = query
-      ? fuzzyFilter(this.allModels, query, m => `${m.id} ${m.provider} ${m.modelName}`)
+      ? fuzzyFilter(this.allModels, query, m => `${m.displayName ?? ''} ${m.id} ${m.provider} ${m.modelName}`)
       : this.allModels;
 
     // Show "Use: query" only for a complete provider/model-shaped ID.
@@ -235,6 +263,7 @@ export class ModelSelectorComponent extends Box implements Focusable {
 
       const isSelected = i === this.selectedIndex;
       const isCurrent = item.id === this.currentModelId;
+      const label = item.displayName ?? item.id;
       const checkmark = isCurrent ? theme.fg('success', ' ✓') : '';
       const noKeyIndicator = !item.hasApiKey
         ? theme.fg('error', ' ✗') + theme.fg('muted', item.apiKeyEnvVar ? ` (${item.apiKeyEnvVar})` : ' (no key)')
@@ -242,9 +271,9 @@ export class ModelSelectorComponent extends Box implements Focusable {
 
       let line = '';
       if (isSelected) {
-        line = theme.fg('accent', '→ ' + item.id) + checkmark + noKeyIndicator;
+        line = theme.fg('accent', '→ ' + label) + checkmark + noKeyIndicator;
       } else {
-        const modelText = item.hasApiKey ? item.id : theme.fg('muted', item.id);
+        const modelText = item.hasApiKey ? label : theme.fg('muted', label);
         line = '  ' + modelText + checkmark + noKeyIndicator;
       }
 

@@ -59,7 +59,7 @@ export default agentInstructions(({ requestContext }) => {
 })
 ```
 
-The function can be `async` and receives `mastra` alongside `requestContext`, so it can read from storage or another registered primitive before returning the prompt.
+The function can be `async`. Alongside `requestContext`, it receives `mastra`, the Mastra instance the agent is registered with, so it can read from storage or another registered primitive before returning the prompt. `mastra` is optional in the function type, so guard its use (for example, `mastra?.getStorage()`).
 
 Both files can also live in a [subagent](/reference/file-based-agents/subagents) directory, which follows the same rules.
 

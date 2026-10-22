@@ -131,6 +131,50 @@ describe('tool payload transform', () => {
     expect(transform?.display?.['input-delta']).toEqual({ suppress: true });
   });
 
+  it('keeps raw payloads for phases a tool transform does not define', async () => {
+    const source = {
+      toolTransform: {
+        transcript: {
+          output: ({ output }: { output?: unknown }) => ({ query: (output as { query: string }).query }),
+        },
+      },
+    };
+
+    const input = await transformToolPayloadForTargets(
+      { phase: 'input-available', toolName: 'lookup', toolCallId: 'call-1', input: { query: 'first' } },
+      source,
+    );
+    const error = await transformToolPayloadForTargets(
+      { phase: 'error', toolName: 'lookup', toolCallId: 'call-1', error: new Error('boom') },
+      source,
+    );
+    const output = await transformToolPayloadForTargets(
+      {
+        phase: 'output-available',
+        toolName: 'lookup',
+        toolCallId: 'call-1',
+        input: { query: 'first' },
+        output: { query: 'first', payload: 'x'.repeat(50) },
+      },
+      source,
+    );
+
+    expect(input).toBeUndefined();
+    expect(error).toBeUndefined();
+    expect(output?.transcript?.['output-available']).toEqual({ transformed: { query: 'first' } });
+  });
+
+  it('fails closed when a tool transformer returns undefined', async () => {
+    const transform = await transformToolPayloadForTargets(
+      { phase: 'output-available', toolName: 'lookup', toolCallId: 'call-1', output: { apiKey: 'secret' } },
+      { toolTransform: { transcript: { output: () => undefined } } },
+    );
+
+    expect(transform?.transcript?.['output-available']).toEqual({
+      transformed: { message: 'Tool output-available payload unavailable' },
+    });
+  });
+
   it('fails closed when a configured projector throws', async () => {
     const logger = { warn: vi.fn() };
     const transform = await transformToolPayloadForTargets(

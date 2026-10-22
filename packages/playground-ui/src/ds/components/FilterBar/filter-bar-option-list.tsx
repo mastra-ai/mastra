@@ -1,6 +1,7 @@
 import { CheckIcon } from 'lucide-react';
 import { forwardRef } from 'react';
 import type { ReactNode } from 'react';
+import { useFilterBarContext } from './filter-bar-context';
 import type { FilterBarOption } from './types';
 import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
 import { Spinner } from '@/ds/components/Spinner/spinner';
@@ -49,8 +50,9 @@ export function FilterBarOptionList<T>({
   'aria-label': ariaLabel,
   'aria-multiselectable': multiselectable,
 }: FilterBarOptionListProps<T>) {
+  const { describeSuggestionsError } = useFilterBarContext();
   const idle = !isLoading && error === undefined;
-  const menu = useFluidMenu<HTMLDivElement>();
+  const menu = useFluidMenu();
   return (
     <>
       {isLoading && (
@@ -60,7 +62,9 @@ export function FilterBarOptionList<T>({
         </ComboboxPrimitive.Status>
       )}
       {!isLoading && error !== undefined && (
-        <ComboboxPrimitive.Status className={comboboxStyles.empty}>Couldn't load values.</ComboboxPrimitive.Status>
+        <ComboboxPrimitive.Status className={comboboxStyles.empty}>
+          {describeSuggestionsError?.(error) ?? "Couldn't load values."}
+        </ComboboxPrimitive.Status>
       )}
       <ComboboxPrimitive.Empty className={comboboxStyles.empty}>{idle ? emptyText : null}</ComboboxPrimitive.Empty>
       <div

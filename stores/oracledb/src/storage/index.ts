@@ -22,7 +22,8 @@ import type { OracleStoreConfig } from './types';
 
 const STORE_NAME = 'ORACLEDB';
 const DOMAIN_SCHEMA_VERSIONS: Record<string, number> = {
-  R001_MEMORY_SCHEMA: 1,
+  // 2: observational memory supersededBy column.
+  R001_MEMORY_SCHEMA: 2,
   R002_WORKFLOWS_SCHEMA: 1,
   R003_OBSERVABILITY_SCHEMA: 1,
   R004_SCORES_SCHEMA: 1,
@@ -126,6 +127,12 @@ export class OracleStore extends MastraCompositeStore {
   private async runMigrations(forceRepeatable: boolean): Promise<OracleMigrationResult[]> {
     try {
       const results = await this.migrationRegistry.run(this.storageMigrations(), { forceRepeatable });
+      // Unchanged repeatable migrations are skipped, but observational memory rows retired by an
+      // older adapter version (which never set supersededBy) must be fenced on every start.
+      if (results.find(result => result.id === 'R001_MEMORY_SCHEMA')?.status === 'skipped') {
+        const memory = this.stores.memory;
+        if (memory instanceof MemoryOracle) await memory.backfillObservationalMemorySupersededBy();
+      }
       this.isInitialized = true;
       return results;
     } catch (error) {

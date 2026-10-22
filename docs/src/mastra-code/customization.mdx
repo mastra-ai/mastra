@@ -36,42 +36,37 @@ await session.sendMessage({ content: 'Explain the auth module' })
 
 ## Custom modes
 
-Override the default Build/Plan/Fast modes by passing a `modes` array:
+Override the default Build/Plan/Explore modes by passing a `modes` array:
 
 ```typescript title="src/custom-modes.ts"
 import { createMastraCode } from 'mastracode'
-import { Agent } from '@mastra/core/agent'
-
-const reviewAgent = new Agent({
-  id: 'review-agent',
-  name: 'Review Agent',
-  instructions:
-    'You are a code review specialist. Analyze code for bugs, security issues, and best practices.',
-  model: 'anthropic/claude-sonnet-4-6',
-})
 
 const { controller } = await createMastraCode({
   modes: [
     {
       id: 'review',
       name: 'Review',
-      default: true,
       defaultModelId: 'anthropic/claude-sonnet-4-6',
-      color: '#f59e0b',
-      agent: reviewAgent,
+      metadata: {
+        default: true,
+        color: '#f59e0b',
+      },
     },
     {
       id: 'build',
       name: 'Build',
-      defaultModelId: 'anthropic/claude-opus-4-7',
-      color: '#7c3aed',
-      agent: reviewAgent,
+      defaultModelId: 'anthropic/claude-opus-4-6',
+      metadata: {
+        color: '#7c3aed',
+      },
     },
   ],
 })
 ```
 
-Each mode requires an `id` and an `agent`. The `name`, `defaultModelId`, and `color` fields control how the mode appears in the TUI.
+Each mode requires an `id`. The `name` and `defaultModelId` fields control the mode's label and starting model. Put TUI display options such as `color` and the default-mode marker in `metadata`. All modes share the backing agent.
+
+Passing `modes: false` runs every session as a single Build agent with no mode switching.
 
 ## Extra tools
 
@@ -175,10 +170,11 @@ Mastra Code exports the `MastraTUI` class from `mastracode/tui` for building cus
 import { createMastraCode } from 'mastracode'
 import { MastraTUI } from 'mastracode/tui'
 
-const { controller, mcpManager, hookManager, authStorage } = await createMastraCode()
+const { controller, session, mcpManager, hookManager, authStorage } = await createMastraCode()
 
 const tui = new MastraTUI({
   controller,
+  session,
   hookManager,
   authStorage,
   mcpManager,
@@ -219,6 +215,8 @@ const { controller } = await createMastraCode({
 
 ### Available state fields
 
+`OMModel` accepts `"auto"` or a concrete model ID.
+
 | Field | Type | Default | Description |
 | - | - | - | - |
 | `yolo` | `boolean` | `true` | Auto-approve all tool calls |
@@ -226,7 +224,9 @@ const { controller } = await createMastraCode({
 | `smartEditing` | `boolean` | `true` | Use AST-based analysis for code edits |
 | `notifications` | `"bell" \| "system" \| "both" \| "off"` | `"off"` | Alert when the TUI needs attention |
 | `permissionRules` | `object` | Default policies | Per-category and per-tool approval policies |
-| `observerModelId` | `string` | `"google/gemini-2.5-flash"` | Model for observational memory observer |
-| `reflectorModelId` | `string` | `"google/gemini-2.5-flash"` | Model for observational memory reflector |
+| `observerModelId` | `string` | — | Legacy concrete model for the observational memory observer |
+| `reflectorModelId` | `string` | — | Legacy concrete model for the observational memory reflector |
+| `observerModelSelection` | `OMModel` | `"auto"` | Automatic or explicit observer model selection |
+| `reflectorModelSelection` | `OMModel` | `"auto"` | Automatic or explicit reflector model selection |
 | `observationThreshold` | `number` | `30000` | Token count triggering observation pass |
 | `reflectionThreshold` | `number` | `40000` | Token count triggering reflection pass |

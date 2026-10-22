@@ -44,7 +44,6 @@ export interface TraceSpanPanelProps {
   onPrevious?: () => void;
   onNext?: () => void;
   onSaveAsDatasetItem?: TraceDataPanelViewProps['onSaveAsDatasetItem'];
-  onAddTraceMocksToItem?: TraceDataPanelViewProps['onAddTraceMocksToItem'];
   feedbackTabBadge?: ReactNode;
   feedbackTabSlot?: TraceDataPanelViewProps['feedbackTabSlot'];
   /** Enables the "Messages" column (reconstructed turn) when the displayed root is a complete agent trace with a thread id. */
@@ -73,6 +72,8 @@ export interface TraceSpanPanelProps {
   depth?: TraceDataPanelViewProps['depth'];
   /** Rendered inside the drawer above the trace header (e.g. feedback context). */
   headerSlot?: ReactNode;
+  /** Integration actions displayed alongside the trace controls. */
+  headerActionsSlot?: ReactNode;
   /** Accessible drawer name; defaults to the trace id. */
   title?: string;
   showUnavailableFeaturesMsg?: TraceDataPanelViewProps['showUnavailableFeaturesMsg'];
@@ -103,7 +104,6 @@ export function TraceSpanPanel({
   onPrevious,
   onNext,
   onSaveAsDatasetItem,
-  onAddTraceMocksToItem,
   feedbackTabBadge,
   feedbackTabSlot,
   showPartialThread,
@@ -121,6 +121,7 @@ export function TraceSpanPanel({
   size,
   depth,
   headerSlot,
+  headerActionsSlot,
   title,
   showUnavailableFeaturesMsg,
   spanView,
@@ -164,7 +165,6 @@ export function TraceSpanPanel({
         onClose={onClose}
         onSpanSelect={onSpanSelect}
         onSaveAsDatasetItem={onSaveAsDatasetItem}
-        onAddTraceMocksToItem={onAddTraceMocksToItem}
         initialSpanId={initialSpanId ?? selectedSpanId}
         onPrevious={onPrevious}
         onNext={onNext}
@@ -174,6 +174,7 @@ export function TraceSpanPanel({
         size={size}
         depth={depth}
         headerSlot={headerSlot}
+        headerActionsSlot={headerActionsSlot}
         title={title}
         showUnavailableFeaturesMsg={showUnavailableFeaturesMsg}
         spanView={spanView}

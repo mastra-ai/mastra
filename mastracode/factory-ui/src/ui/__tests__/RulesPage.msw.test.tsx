@@ -76,15 +76,6 @@ function renderRulesPage(onDecisionRequest: (statuses: string | null) => void) {
 }
 
 describe('Rules page filters', () => {
-  it('opens the supervisor from a failed decision row', async () => {
-    const user = userEvent.setup();
-    const router = renderRulesPage(() => undefined);
-
-    await user.click(await screen.findByRole('button', { name: 'Ask supervisor about failed sendMessage decision' }));
-
-    expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/supervisor`);
-  });
-
   it('filters rule decisions with the mobile select', async () => {
     const statuses: Array<string | null> = [];
     const onDecisionRequest = vi.fn((status: string | null) => statuses.push(status));

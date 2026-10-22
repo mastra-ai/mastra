@@ -384,7 +384,7 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
     description:
       'Boot-time recovery behavior for orphaned agent and workflow runs. See [Crash recovery](/docs/harness/durable-agents#crash-recovery).',
     isOptional: true,
-    defaultValue: "{ durableAgents: 'off' }",
+    defaultValue: "{ durableAgents: 'off', workflows: 'auto', workflowConcurrency: 5 }",
     properties: [
       {
         type: 'object',
@@ -396,6 +396,22 @@ Visit the [Configuration reference](/reference/configuration) for detailed docum
             defaultValue: "'off'",
             description:
               "Set to `'auto'` to automatically re-drive orphaned RUNNING durable agent runs on server boot. This also controls the default snapshot-persistence policy for durable agents: `running` checkpoints are only written when set to `'auto'` (or when an agent sets a custom `shouldPersistSnapshot` that includes `running`). Recovery re-issues LLM calls and re-executes tool calls, so tools must be idempotent. See [Crash recovery](/docs/harness/durable-agents#crash-recovery).",
+          },
+          {
+            name: 'workflows',
+            type: "'auto' | 'off'",
+            isOptional: true,
+            defaultValue: "'auto'",
+            description:
+              "Set to `'off'` to skip restarting active workflow runs on server boot. Individual workflows can also opt out with `autoRestartActiveRuns: false`.",
+          },
+          {
+            name: 'workflowConcurrency',
+            type: 'number',
+            isOptional: true,
+            defaultValue: '5',
+            description:
+              'Maximum number of workflow runs restarted at the same time during boot recovery. Use `Infinity` for no limit. Workflow and durable agent recovery run in parallel.',
           },
         ],
       },
@@ -412,9 +428,17 @@ Re-drives every orphaned `running` durable-agent run across all registered durab
 
 Requires persistent storage. With an in-memory store, there's nothing to recover after a process restart.
 
+Recovery processes up to five agents concurrently, with up to five run waits per agent, independently of `recovery.workflowConcurrency`. Each built-in `recoverActiveRuns()` attempt waits up to 30 seconds in total for `recover()` setup and settlement of the whole recovered workflow, then frees its slot for another run. These limits bound waiting, not live executions. This isn't an overall recovery deadline: discovery and overridden custom recovery methods aren't bounded by this budget.
+
+A timed-out attempt continues in the background. Its outcome is `status: 'skipped'` with `reason: 'recovery-timeout'` and a future `retryAt`. It contributes only to `skipped`, not `recovered`, `succeeded`, or `failed`. Mastra schedules re-checks automatically. While the original attempt is pending, re-checks defer without starting another execution. After it settles, recovery checks the persisted snapshot and ownership before retrying; finished or suspended runs aren't restarted. Late settlement doesn't change the returned counts.
+
+When shutdown begins, recovery stops dispatching new agents and runs. The recovery traversal and original attempts, including timed-out setup or execution, participate in the same shared shutdown drain as active executions. A recovery wait timeout doesn't cancel the attempt or give it a separate shutdown drain window.
+
+A run that another execution still drives isn't taken over. It's counted in `skipped` and checked again once that execution's claim could have lapsed, so a run whose process crashed is recovered without another call. `shutdown()` cancels pending re-checks. See [run ownership](/docs/harness/durable-agents#run-ownership).
+
 ```typescript
 const result = await mastra.recoverAllDurableAgents()
-// { agents: 2, recovered: 3, succeeded: 3, failed: 0 }
+// { agents: 2, recovered: 3, succeeded: 3, failed: 0, skipped: 1 }
 ```
 
 Returns:
@@ -429,7 +453,7 @@ Returns:
   {
     name: 'recovered',
     type: 'number',
-    description: 'Total number of runs that were re-driven.',
+    description: 'Total number of runs that were re-driven: `succeeded` plus `failed`.',
   },
   {
     name: 'succeeded',
@@ -440,6 +464,12 @@ Returns:
     name: 'failed',
     type: 'number',
     description: 'Runs whose restart threw an error.',
+  },
+  {
+    name: 'skipped',
+    type: 'number',
+    description:
+      'Runs skipped because they are already active, recovery is already in progress, or the recovery wait timed out. Only ownership skips eligible for re-checks are checked again; recovery timeouts are not automatically retried.',
   },
 ]}
 />

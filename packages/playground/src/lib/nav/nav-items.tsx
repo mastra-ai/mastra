@@ -12,7 +12,7 @@ import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
 import { WorkflowIcon } from '@mastra/playground-ui/icons/WorkflowIcon';
 import { WorkspacesIcon } from '@mastra/playground-ui/icons/WorkspacesIcon';
-import { BookIcon, ClipboardCheck, LayoutGrid } from 'lucide-react';
+import { BookIcon, CableIcon, ClipboardCheck, LayoutGrid } from 'lucide-react';
 import type { ComponentType, SVGProps } from 'react';
 
 export type NavIcon = ComponentType<SVGProps<SVGSVGElement>>;
@@ -23,9 +23,7 @@ export interface NavItem {
   Icon: NavIcon;
   isOnMastraPlatform?: boolean;
   activePaths?: string[];
-  /** When true, the item stays in the registry (so breadcrumbs/routes can resolve it) but is hidden from the sidebar and command palette. */
   hidden?: boolean;
-  /** When true, the sidebar folds the item under "More" unless it was visited recently or the server reports it is in use. */
   foldable?: boolean;
 }
 
@@ -36,11 +34,7 @@ export interface NavSection {
   items: NavItem[];
 }
 
-// The Intelligence sidebar link is gated behind the dedicated MASTRA_SIGNALS_UI flag
-// so the feature can be toggled independently of the platform config that the
-// Intelligence route itself consumes.
-const isSignalsEnabled =
-  typeof window !== 'undefined' && (window as unknown as Record<string, unknown>).MASTRA_SIGNALS_UI === 'true';
+const isSignalsEnabled = typeof window !== 'undefined' && window.MASTRA_SIGNALS_UI === 'true';
 
 const signalsNavItem: NavItem = {
   name: 'Intelligence',
@@ -48,8 +42,6 @@ const signalsNavItem: NavItem = {
   activePaths: ['/intelligence'],
   Icon: LayoutGrid,
   isOnMastraPlatform: true,
-  // Kept in the registry so /intelligence routes and breadcrumbs always resolve, but
-  // only surfaced in the sidebar/command palette when the flag is enabled.
   hidden: !isSignalsEnabled,
 };
 
@@ -95,6 +87,13 @@ export const mainNav: NavSection[] = [
         url: '/tools',
         Icon: ToolsIcon,
         isOnMastraPlatform: true,
+        foldable: true,
+      },
+      {
+        name: 'Connections',
+        url: '/connections',
+        Icon: CableIcon,
+        isOnMastraPlatform: false,
         foldable: true,
       },
       {

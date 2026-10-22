@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { Agent } from '../agent';
+import { FGADeniedError } from '../auth/ee/fga-check';
+import type { IFGAProvider } from '../auth/ee/interfaces/fga';
+import { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 import { AgentController } from './agent-controller';
 import { createMockWorkspace } from './test-utils';
@@ -53,9 +56,11 @@ describe('AgentController.createSession — cross-session isolation', () => {
 
     await a.mode.switch({ modeId: 'plan' });
 
-    // Only session a moved to plan; b is untouched.
+    // Only session a moved to plan; neither session's model changed.
     expect(a.mode.get()).toBe('plan');
     expect(b.mode.get()).toBe('build');
+    expect(a.model.get()).toBe('openai/gpt-4o');
+    expect(b.model.get()).toBe('openai/gpt-4o');
   });
 
   it('isolates model selection between sessions', async () => {
@@ -65,7 +70,7 @@ describe('AgentController.createSession — cross-session isolation', () => {
     const a = await controller.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
     const b = await controller.createSession({ id: 'session-b', ownerId: 'test-owner', resourceId: 'user-b' });
 
-    await a.model.switch({ modelId: 'cerebras/zai-glm-4.7' });
+    await a.model.switch('cerebras/zai-glm-4.7');
 
     expect(a.model.get()).toBe('cerebras/zai-glm-4.7');
     // b still resolves its mode default, unaffected by a's override.
@@ -404,19 +409,30 @@ describe('AgentController session — cross-resource thread ownership', () => {
 });
 
 describe('AgentController session registry', () => {
-  it('resolves a created session by its resourceId', async () => {
+  it('resolves a created session by its sessionId', async () => {
     const controller = createController(new InMemoryStore());
     await controller.init();
 
     const a = await controller.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
     const b = await controller.createSession({ id: 'session-b', ownerId: 'test-owner', resourceId: 'user-b' });
 
-    expect(await controller.getSessionByResource('user-a')).toBe(a);
-    expect(await controller.getSessionByResource('user-b')).toBe(b);
-    expect(await controller.getSessionByResource('user-unknown')).toBeUndefined();
+    expect(await controller.getSession('session-a')).toBe(a);
+    expect(await controller.getSession('session-b')).toBe(b);
+    expect(await controller.getSession('user-a')).toBeUndefined();
+    expect(await controller.getSession('session-unknown')).toBeUndefined();
   });
 
-  it('returns the same session for the same resourceId (get-or-create)', async () => {
+  it('defaults the sessionId to the resourceId', async () => {
+    const controller = createController(new InMemoryStore());
+    await controller.init();
+
+    const session = await controller.createSession({ ownerId: 'test-owner', resourceId: 'user-a' });
+
+    expect(session.identity.getId()).toBe('user-a');
+    expect(await controller.getSession('user-a')).toBe(session);
+  });
+
+  it('returns the same session for the same sessionId (get-or-create)', async () => {
     const controller = createController(new InMemoryStore());
     await controller.init();
 
@@ -426,45 +442,113 @@ describe('AgentController session registry', () => {
     expect(second).toBe(first);
   });
 
-  it('follows a session when its resourceId changes', async () => {
+  it("refuses to hand another resource's live session to a caller that reuses its sessionId", async () => {
+    const controller = createController(new InMemoryStore());
+    await controller.init();
+
+    const victim = await controller.createSession({ id: 'session-b', ownerId: 'test-owner', resourceId: 'user-b' });
+    const victimThread = victim.thread.getId();
+    await controller.createSession({ id: 'own-thread', ownerId: 'test-owner', resourceId: 'user-a' });
+
+    await expect(
+      controller.createSession({
+        id: 'session-b',
+        ownerId: 'test-owner',
+        resourceId: 'user-a',
+        threadId: 'own-thread',
+      }),
+    ).rejects.toThrow('Session session-b belongs to another resource');
+    expect(victim.thread.getId()).toBe(victimThread);
+  });
+
+  it("authorizes a caller that leaves out resourceId against the live session's own resource", async () => {
+    const controller = createController(new InMemoryStore());
+    await controller.init();
+    const victim = await controller.createSession({ id: 'session-b', ownerId: 'test-owner', resourceId: 'user-b' });
+
+    // The caller may act on its own resource (and the controller default), never on user-b's.
+    const provider: IFGAProvider = {
+      check: async () => false,
+      require: async (user, { resource, permission, context }) => {
+        if ((context as { resourceId?: string } | undefined)?.resourceId === 'user-b') {
+          throw new FGADeniedError(user as { id: string }, resource, permission);
+        }
+      },
+      filterAccessible: async () => [],
+    };
+    controller.__registerMastra({ getServer: () => ({ fga: provider }) } as any);
+    const requestContext = new RequestContext();
+    requestContext.set('user', { id: 'user-a' });
+
+    await expect(controller.createSession({ id: 'session-b', requestContext })).rejects.toBeInstanceOf(FGADeniedError);
+    await expect(
+      controller.createSession({ id: 'session-b', resourceId: 'user-b', requestContext }),
+    ).rejects.toBeInstanceOf(FGADeniedError);
+    expect(await controller.getSession('session-b')).toBe(victim);
+  });
+
+  it('keeps a session reachable by its sessionId when its resourceId changes', async () => {
     const controller = createController(new InMemoryStore());
     await controller.init();
 
     const a = await controller.createSession({ id: 'session-a', ownerId: 'test-owner', resourceId: 'user-a' });
     await controller.setResourceId(a, { resourceId: 'user-a-renamed' });
 
-    expect(await controller.getSessionByResource('user-a-renamed')).toBe(a);
-    expect(await controller.getSessionByResource('user-a')).toBeUndefined();
+    expect(a.identity.getResourceId()).toBe('user-a-renamed');
+    expect(await controller.getSession('session-a')).toBe(a);
   });
 
-  it('creates independent sessions for the same resourceId under different scopes', async () => {
+  it('creates independent sessions for different sessionIds on one resource', async () => {
     const controller = createController(new InMemoryStore());
     await controller.init();
 
     const a = await controller.createSession({
-      id: 'user-a::wt-a',
+      id: 'run-a',
       ownerId: 'test-owner',
-      resourceId: 'user-a',
-      scope: '/worktrees/a',
+      resourceId: 'factory-1',
       tags: { projectPath: '/worktrees/a' },
     });
     const b = await controller.createSession({
-      id: 'user-a::wt-b',
+      id: 'run-b',
       ownerId: 'test-owner',
-      resourceId: 'user-a',
-      scope: '/worktrees/b',
+      resourceId: 'factory-1',
       tags: { projectPath: '/worktrees/b' },
     });
 
     expect(b).not.toBe(a);
-    // Each scoped session has its own thread binding and mode/model state.
+    expect(await controller.getSession('run-a')).toBe(a);
+    expect(await controller.getSession('run-b')).toBe(b);
+    // Each session has its own thread binding and mode/model state.
     expect(a.thread.getId()).not.toBe(b.thread.getId());
     await a.mode.switch({ modeId: 'plan' });
     expect(a.mode.get()).toBe('plan');
     expect(b.mode.get()).toBe('build');
   });
 
-  it('keeps the resolved workspace isolated on each scoped session', async () => {
+  it('binds each session on a shared resource to its own thread', async () => {
+    const controller = createController(new InMemoryStore());
+    await controller.init();
+
+    const a = await controller.createSession({
+      id: 'run-a',
+      threadId: 'run-a',
+      ownerId: 'test-owner',
+      resourceId: 'factory-1',
+    });
+    const b = await controller.createSession({
+      id: 'run-b',
+      threadId: 'run-b',
+      ownerId: 'test-owner',
+      resourceId: 'factory-1',
+    });
+
+    expect(a.thread.getId()).toBe('run-a');
+    expect(b.thread.getId()).toBe('run-b');
+    const threads = await a.thread.list();
+    expect(threads.map(thread => thread.id).sort()).toEqual(['run-a', 'run-b']);
+  });
+
+  it('keeps the resolved workspace isolated on each session sharing a resource', async () => {
     const controller = createController(new InMemoryStore());
     await controller.init();
     const workspaceA = createMockWorkspace();
@@ -474,14 +558,12 @@ describe('AgentController session registry', () => {
       id: 'user-a::wt-a',
       ownerId: 'test-owner',
       resourceId: 'user-a',
-      scope: '/worktrees/a',
       workspace: workspaceA,
     });
     const b = await controller.createSession({
       id: 'user-a::wt-b',
       ownerId: 'test-owner',
       resourceId: 'user-a',
-      scope: '/worktrees/b',
       workspace: workspaceB,
     });
 
@@ -490,61 +572,8 @@ describe('AgentController session registry', () => {
     expect(a.getWorkspace()).not.toBe(b.getWorkspace());
   });
 
-  it('returns the same session for the same resourceId and scope (get-or-create)', async () => {
-    const controller = createController(new InMemoryStore());
-    await controller.init();
-
-    const first = await controller.createSession({
-      id: 'user-a::wt-a',
-      ownerId: 'test-owner',
-      resourceId: 'user-a',
-      scope: '/worktrees/a',
-    });
-    const second = await controller.createSession({
-      id: 'user-a::wt-a',
-      ownerId: 'test-owner',
-      resourceId: 'user-a',
-      scope: '/worktrees/a',
-    });
-
-    expect(second).toBe(first);
-  });
-
-  it('resolves scoped sessions independently via getSessionByResource', async () => {
-    const controller = createController(new InMemoryStore());
-    await controller.init();
-
-    const unscoped = await controller.createSession({ id: 'user-a', ownerId: 'test-owner', resourceId: 'user-a' });
-    const scoped = await controller.createSession({
-      id: 'user-a::wt-a',
-      ownerId: 'test-owner',
-      resourceId: 'user-a',
-      scope: '/worktrees/a',
-    });
-
-    expect(await controller.getSessionByResource('user-a')).toBe(unscoped);
-    expect(await controller.getSessionByResource('user-a', '/worktrees/a')).toBe(scoped);
-    expect(await controller.getSessionByResource('user-a', '/worktrees/other')).toBeUndefined();
-  });
-
-  it('keeps the scope when a scoped session is re-keyed to a new resourceId', async () => {
-    const controller = createController(new InMemoryStore());
-    await controller.init();
-
-    const a = await controller.createSession({
-      id: 'user-a::wt-a',
-      ownerId: 'test-owner',
-      resourceId: 'user-a',
-      scope: '/worktrees/a',
-    });
-    await controller.setResourceId(a, { resourceId: 'user-a-renamed' });
-
-    expect(await controller.getSessionByResource('user-a-renamed', '/worktrees/a')).toBe(a);
-    expect(await controller.getSessionByResource('user-a', '/worktrees/a')).toBeUndefined();
-  });
-
-  it('exposes the authoritative scope through the session request context', async () => {
-    let observedScope: string | undefined;
+  it('exposes the sessionId through the session request context', async () => {
+    let observed: { sessionId?: string; resourceId?: string } | undefined;
     const agent = new Agent({
       name: 'test-agent',
       instructions: 'You are a test agent.',
@@ -555,15 +584,16 @@ describe('AgentController session registry', () => {
       storage: new InMemoryStore(),
       initialState: {},
       workspace: ({ requestContext }) => {
-        observedScope = requestContext.get('controller')?.scope;
+        const context = requestContext.get('controller');
+        observed = { sessionId: context?.sessionId, resourceId: context?.resourceId };
         return createMockWorkspace();
       },
       modes: [{ id: 'build', name: 'Build', default: true, agent, defaultModelId: 'openai/gpt-4o' }],
     });
     await controller.init();
 
-    await controller.createSession({ resourceId: 'user-a', scope: '/worktrees/a' });
+    await controller.createSession({ id: 'session-a', resourceId: 'user-a' });
 
-    expect(observedScope).toBe('/worktrees/a');
+    expect(observed).toEqual({ sessionId: 'session-a', resourceId: 'user-a' });
   });
 });

@@ -469,7 +469,7 @@ describe('ThreadViewByTrace', () => {
       if (!toolBadge) throw new Error('expected a tool badge for the tool part');
       await screen.findByLabelText('View details for span Recipe lookup');
 
-      fireEvent.click(within(toolBadge).getAllByRole('button')[0] as HTMLElement);
+      fireEvent.click(within(toolBadge).getAllByRole('button')[0]);
 
       expect(spanLabel('Recipe lookup').getAttribute('aria-selected')).toBe('false');
       expect(screen.queryByRole('heading', { name: /^Span/ })).toBeNull();
@@ -672,24 +672,11 @@ describe('ThreadViewByTrace', () => {
     });
 
     describe('given a scored trace', () => {
-      it('when scorerLink resolves, then "Open scorer run" links to the scorer run built by the link provider', async () => {
+      it('then the score card opens the score without an "Open scorer run" link', async () => {
         installHandlers();
         installFeedbackHandlers();
         installScore();
         renderView();
-
-        const row = within((await screen.findByText('Chef agent run')).closest('[data-trace-id]') as HTMLElement);
-        fireEvent.click(row.getByRole('tab', { name: /Scores/ }));
-
-        const link = await row.findByRole('link', { name: /Open scorer run/ });
-        expect(link.getAttribute('href')).toBe('/scorers/scorer-1?scoreId=score-1');
-      });
-
-      it('when the app has no scorer route, then "Open scorer run" is hidden', async () => {
-        installHandlers();
-        installFeedbackHandlers();
-        installScore();
-        renderView({ paths: { scorerLink: () => '' } });
 
         const row = within((await screen.findByText('Chef agent run')).closest('[data-trace-id]') as HTMLElement);
         fireEvent.click(row.getByRole('tab', { name: /Scores/ }));
@@ -909,22 +896,21 @@ describe('ThreadViewByTrace', () => {
       expect(requests[1]?.size).toBe(4);
     });
 
-    it('searches the last 31 days (the trace query maximum) and the whole thread with the legacy list', async () => {
+    it('searches the whole thread', async () => {
       const requests = installPagedHandlers();
       renderView({ withQueryTrace });
       await screen.findByText('Chef agent follow-up');
 
       if (withQueryTrace) {
-        const { from, to } = (requests[0]?.params as { timeRange: { from: string; to: string } }).timeRange;
-        const days = (Date.parse(to) - Date.parse(from)) / (24 * 60 * 60 * 1000);
-        expect(days).toBe(31);
+        const { from } = (requests[0]?.params as { timeRange: { from: string; to: string } }).timeRange;
+        expect(from).toBe(new Date(0).toISOString());
       } else {
         expect(requests[0]?.params.threadId).toBe(THREAD_ID);
         expect(requests[0]?.params).not.toHaveProperty('startedAt');
       }
     });
 
-    it('opens at the latest turn and stays there while rows grow, until the reader scrolls up', async () => {
+    it('opens at the latest turn and does not move when a row grows', async () => {
       installPagedHandlers();
       const { grow } = stubScrollLayout();
       renderView({ withQueryTrace });
@@ -933,10 +919,10 @@ describe('ThreadViewByTrace', () => {
 
       await waitFor(() => expect(viewport.scrollTop).toBe(600));
 
+      // Growth only comes from the reader expanding a row: the view must stay put.
       act(() => grow(1200));
-      expect(viewport.scrollTop).toBe(800);
+      expect(viewport.scrollTop).toBe(600);
 
-      // The reader scrolls up: growth no longer pulls them back down.
       act(() => scrollReaderTo(viewport, 300));
       act(() => grow(1500));
       expect(viewport.scrollTop).toBe(300);

@@ -75,11 +75,15 @@ Mastra Code uses Mastra's [model router](https://mastra.ai/models), which routes
 
 ### Interactive API key prompt
 
-`/models` switches model packs. Built-in packs keep every mode on one provider. Use `/model` to override the current mode with another model from that provider. Modified built-in packs are labeled in `/models`; selecting one highlights the overridden modes and lets you activate its overrides or reset it to the original built-in models. To mix providers, create or edit a custom pack with `/models`.
+`/models` switches model packs. Built-in packs keep every mode on one provider. Use `/model` to change the active pack's model for the current mode. Modified built-in packs are labeled in `/models`; selecting one highlights the overridden modes and lets you activate its overrides or reset it to the original built-in models. To mix providers, create or edit a custom pack with `/models`.
+
+Model choices belong to the pack, not to an individual thread. Updating a pack changes that mode's model for every thread that uses the pack. Each thread remembers its active pack and current model. When you switch modes, Mastra Code applies the active pack's model for the new mode.
+
+Start Mastra Code with `--pack <id>` to begin the session on a specific pack: a built-in pack id such as `anthropic` or `openai`, `custom:<name>`, or a bare custom-pack name. This applies the pack the way **Activate** in `/models` does — it becomes the default pack and is applied to the session, including any thread resumed at startup. An unknown id fails fast and lists the valid packs. `MASTRACODE_MODEL_ID` also sets a startup model; when both are given, `--pack` wins.
 
 `/models` also configures **fallback packs**: select a pack and choose **Set fallback…** from its action menu. When every account serving the active pack's provider is unavailable, either rate-limited or down after retries, the turn hops to the fallback pack's model for that mode. Fallbacks work for built-in and custom packs, and chains are allowed (A → B → C). Cycles are capped at one revisit per cascade (A → B → A), then the error surfaces. Every hop renders a notice in the transcript and is saved in the thread history. After a hop, the thread stays on the landed pack until you switch back with `/models`. There is no automatic recovery.
 
-When packs define an [observational memory model](#om-model-settings), the same chain also covers observational memory: if the active pack's OM provider is unavailable, the observer and reflector fall back to the next pack's OM model in chain order.
+When the active pack sets a concrete [memory model](#om-model-settings), the same chain also covers observational memory. If that model's provider is unavailable, the role falls back to the next pack's memory model in chain order.
 
 If the selected model needs a provider key, Mastra Code prompts for the key and displays its environment variable name, such as `ANTHROPIC_API_KEY`.
 
@@ -747,15 +751,19 @@ Configure the scope through:
 
 ### OM model settings
 
-The observer and reflector models default to `google/gemini-2.5-flash`. Set them through the `/om` panel or in the controller state.
+The observer and reflector default to **Auto**. Each role follows the active main model's provider, using that provider's built-in low-cost memory model when available and otherwise using the active main model. Changing the main model changes the effective model for automatic roles without changing their saved selection.
 
-Custom model packs can carry an optional memory model (stored as `models.memory`). When creating or editing a pack in `/models`, the memory step lets you choose a model or skip it. OM models resolve in this order:
+Use the `/memory` panel to select a concrete model or reset either role to **Auto** independently. Concrete selections remain pinned when the main model changes.
 
-1. Explicit observer/reflector overrides from the `/om` panel
-1. The active pack's OM model, followed by the OM models of its fallback packs in chain order
-1. The standalone OM settings, then the default model
+Observer and Reflector selections saved before Auto existed stay pinned after upgrading. Choose **Auto** in `/memory` to switch a role back.
 
-Packs without an OM model keep using your standalone OM configuration unchanged.
+Custom model packs can also set a memory model in `/models`. The pack's memory model is more specific than `/memory`, so while the pack is active it applies to both roles, including roles pinned in `/memory`. The `/memory` panel and status line show the model the pack selects:
+
+| Pack memory model | Behavior |
+| - | - |
+| Not set (default) | Each role uses its `/memory` selection |
+| **Auto** | Both roles use automatic selection |
+| Concrete model | Both roles use that model. If its provider is unavailable, the role uses the next fallback pack's memory model |
 
 ### OM thresholds
 
@@ -766,12 +774,12 @@ Packs without an OM model keep using your standalone OM configuration unchanged.
 
 ## Color theme
 
-Mastra Code detects your terminal's color scheme and applies a matching dark or light theme. You can override the detected theme with the `/theme` slash command or the `MASTRA_THEME` environment variable.
+Mastra Code detects your terminal's color scheme and applies a matching dark or light theme. Pick a bundled theme, follow your terminal with a theme pair, or load your own theme JSON. See [Themes](/themes) for the bundled list and the file format.
 
 ### Detection order
 
-1. `MASTRA_THEME` environment variable: explicit `dark` or `light`
-1. Persisted setting from `/theme` command (stored in `settings.json`)
+1. `MASTRA_THEME` environment variable: `dark`, `light`, a theme name, or a `light/dark` pair
+1. Persisted setting from `/theme` (stored in `settings.json`)
 1. OSC 11 query: asks your terminal for its actual background color
 1. `COLORFGBG` environment variable (set by some terminals like iTerm2 and Konsole)
 1. Falls back to dark theme
@@ -781,12 +789,17 @@ Mastra Code detects your terminal's color scheme and applies a matching dark or 
 Use the `/theme` command to change the theme at runtime:
 
 ```
-/theme light
-/theme dark
-/theme auto
+/theme                                      # interactive picker with live preview
+/theme light                                # built-in light
+/theme dark                                 # built-in dark
+/theme auto                                 # follow the terminal with the built-in palettes
+/theme tokyo-night                          # a bundled or custom theme
+/theme catppuccin-latte/catppuccin-mocha    # follow the terminal with a light/dark pair
+/theme status                               # active mode and stored preference
+/theme list                                 # all available themes
 ```
 
-Running `/theme` with no arguments shows the current theme. The choice is persisted across sessions.
+The choice is persisted across sessions.
 
 ## macOS sleep prevention
 
@@ -810,7 +823,7 @@ MASTRACODE_DISABLE_CAFFEINATE=1 mastracode
 | `MASTRA_OM_SCOPE` | Observational memory scope (`thread`, or deprecated `resource`) |
 | `DEFAULT_OM_MODEL_ID` | Default model for OM observer and reflector |
 | `MASTRA_PLANS_DIR` | Override the directory where approved plans are saved (default: app data directory) |
-| `MASTRA_THEME` | Color theme override (`dark` or `light`) |
+| `MASTRA_THEME` | Color theme override (`dark`, `light`, a theme name, or a `light/dark` pair) |
 | `MASTRACODE_SHELL` | Direct TUI `!` shell executable override |
 | `MASTRACODE_SHELL_MODE` | Direct TUI `!` shell mode (`default`, `path`, or `login`) |
 | `MASTRACODE_DISABLE_CAFFEINATE` | Disable active-run sleep prevention on macOS when set to `1` |

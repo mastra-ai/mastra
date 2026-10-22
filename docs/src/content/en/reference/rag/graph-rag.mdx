@@ -149,7 +149,8 @@ Returns an array of `RankedNode` objects, where each node contains:
   {
     name: 'metadata',
     type: 'Record<string, any>',
-    description: 'Additional metadata associated with the chunk',
+    isOptional: true,
+    description: 'Additional metadata associated with the chunk, when present',
   },
   {
     name: 'score',

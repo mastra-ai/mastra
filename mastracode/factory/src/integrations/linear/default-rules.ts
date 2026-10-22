@@ -1,3 +1,4 @@
+import { recordExplicitRuleOverrides } from '../../rules/event-rules.js';
 import type { FactoryLinearEventName, FactoryLinearRuleContext, FactoryRuleHandler } from '../../rules/types.js';
 import { linearClaimKey } from './claim.js';
 
@@ -42,20 +43,22 @@ function linearIssueObserved(context: FactoryLinearRuleContext) {
 
 function linearIssueClosed(context: FactoryLinearRuleContext) {
   if (!context.item || context.item.source !== 'linear-issue') return;
-  if (context.board !== 'work') return;
-  // Already off the board: nothing to reconcile.
-  if (context.item.stages.some(stage => stage === 'done' || stage === 'canceled')) return;
+  // The card's board decides where a closed source sends it; boards that declare no
+  // `sourceClosed` mapping keep the card where it is, as do cards already finished.
+  const closure = context.boardClosure;
+  if (!context.board || !closure || closure.itemTerminal) return;
   // Only terminal state types trigger close.
   const stateType = context.issue.stateType;
   if (stateType !== 'completed' && stateType !== 'canceled') return;
   const canceled = stateType === 'canceled';
+  const target = canceled ? closure.canceled : closure.completed;
   return {
     type: 'transition',
     idempotencyKey: `${context.ingress.id}:issue-closed`,
-    board: 'work',
-    stage: canceled ? 'canceled' : 'done',
+    board: context.board,
+    stage: target.phase,
     message: {
-      text: `Linear issue ${context.issue.identifier} was ${canceled ? 'canceled' : 'completed'}; this Work card was moved to ${canceled ? 'Canceled' : 'Done'}.`,
+      text: `Linear issue ${context.issue.identifier} was ${canceled ? 'canceled' : 'completed'}; this ${closure.boardTitle} card was moved to ${target.title}.`,
     },
   } as const;
 }
@@ -86,5 +89,5 @@ export function resolveLinearRules(overrides?: LinearRuleOverrides): LinearEvent
     }
     if (handler !== undefined) rules[key] = handler;
   }
-  return Object.freeze(rules) as LinearEventRules;
+  return recordExplicitRuleOverrides(Object.freeze(rules) as LinearEventRules, overrides);
 }

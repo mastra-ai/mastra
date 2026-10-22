@@ -43,7 +43,11 @@ export const StudioConfigProvider = ({
 }: StudioConfigProviderProps) => {
   const [urlHeaders] = useState<Record<string, string>>(readUrlAuthHeader);
   const hasUrlHeaders = Object.keys(urlHeaders).length > 0;
-  const { data: instanceStatus, isLoading: isStatusLoading, error } = useMastraInstanceStatus(endpoint, urlHeaders);
+  const {
+    data: instanceStatus,
+    isLoading: isStatusLoading,
+    error,
+  } = useMastraInstanceStatus(endpoint, defaultApiPrefix, urlHeaders);
   const [config, setConfig] = useState<StudioConfig & { isLoading: boolean }>({
     baseUrl: '',
     headers: urlHeaders,

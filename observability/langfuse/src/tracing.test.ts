@@ -70,6 +70,26 @@ vi.mock('@mastra/otel-exporter', () => {
     return { [key]: serialized };
   }
 
+  // Mirrors the real SpanConverter's mastra.<span_type>.<snake_key> attributes
+  // for the span types used in these tests.
+  function spanTypeAttributes(span: any): Record<string, unknown> {
+    const attrs = span.attributes ?? {};
+    const prefix = `mastra.${String(span.type).toLowerCase()}.`;
+    const out: Record<string, unknown> = {};
+    if (span.type === SpanType.MODEL_STEP) {
+      if (attrs.stepIndex !== undefined) out[`${prefix}step_index`] = attrs.stepIndex;
+      if (attrs.isContinued !== undefined) out[`${prefix}is_continued`] = attrs.isContinued;
+    }
+    if (span.type === SpanType.RAG_EMBEDDING) {
+      if (attrs.mode) out[`${prefix}mode`] = attrs.mode;
+      if (attrs.dimensions !== undefined) out[`${prefix}dimensions`] = attrs.dimensions;
+      if (attrs.inputCount !== undefined) out[`${prefix}input_count`] = attrs.inputCount;
+      // Test-only key that collides with the existing operationName metadata.
+      if (attrs.operationName !== undefined) out[`${prefix}operation_name`] = attrs.operationName;
+    }
+    return out;
+  }
+
   class MockSpanConverter {
     constructor(params: any) {
       converterConstructorArgs.push(params);
@@ -95,6 +115,7 @@ vi.mock('@mastra/otel-exporter', () => {
           : {}),
         ...ioAttributes(span, 'input'),
         ...ioAttributes(span, 'output'),
+        ...spanTypeAttributes(span),
         // Pass through entityId/entityName as gen_ai.agent.* (mirrors real SpanConverter behavior)
         ...(span.entityId ? { 'gen_ai.agent.id': span.entityId } : {}),
         ...(span.entityName ? { 'gen_ai.agent.name': span.entityName } : {}),
@@ -608,6 +629,124 @@ describe('LangfuseExporter', () => {
       expect(attrs['langfuse.trace.output']).toBeUndefined();
     });
 
+    it('keeps the original user message as trace input after a tool-approval resume', async () => {
+      // A resumed AGENT_RUN rejoins the suspended run's trace with
+      // parentSpanId === metadata.resumedFromSpanId. Its input is the approval
+      // payload; writing it as langfuse.trace.input would replace the user's
+      // message (last writer wins in Langfuse). Trace output is the final reply
+      // and must still be written. (#23704)
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          isRootSpan: true,
+          type: SpanType.AGENT_RUN,
+          parentSpanId: 'suspended-run',
+          metadata: { runId: 'run-1', resumed: true, resumedFromSpanId: 'suspended-run' },
+          input: { approved: true, toolName: 'navigateTool', toolCallId: 'call-1' },
+          output: { text: 'Opening the dashboard.' },
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.input']).toBeUndefined();
+      expect(attrs['langfuse.trace.output']).toBe(JSON.stringify({ text: 'Opening the dashboard.' }));
+    });
+
+    it('writes trace input for a resume that starts a new trace', async () => {
+      // Caller passed a fresh traceId on resume: core leaves parentSpanId
+      // empty, so this run is a genuine root and owns its trace input.
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          isRootSpan: true,
+          type: SpanType.AGENT_RUN,
+          metadata: { runId: 'run-1', resumed: true, resumedFromSpanId: 'suspended-run' },
+          input: { approved: true, toolName: 'navigateTool', toolCallId: 'call-1' },
+          output: { text: 'Opening the dashboard.' },
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.input']).toBe(
+        JSON.stringify({ approved: true, toolName: 'navigateTool', toolCallId: 'call-1' }),
+      );
+    });
+
+    it('does not write trace-level fields for a run nested under an existing span', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          isRootSpan: true,
+          nestedUnderParent: true,
+          externalParentSpanId: 'turn-span',
+          type: SpanType.AGENT_RUN,
+          entityId: 'judge',
+          entityName: 'Judge',
+          input: 'Grade the answer',
+          output: { text: '{"score":1}' },
+          metadata: {
+            runId: 'judge-run',
+            userId: 'judge-user',
+            sessionId: 'judge-session',
+            traceName: 'Judge trace',
+            langfuse: { tenant: 'acme', prompt: { name: 'judge-prompt', version: 2 } },
+          },
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      const traceLevelKeys = Object.keys(attrs).filter(
+        key => key.startsWith('langfuse.trace.') || key === 'user.id' || key === 'session.id',
+      );
+      expect(traceLevelKeys).toEqual([]);
+      // Observation-level data still goes out
+      expect(attrs['langfuse.observation.input']).toBe('Grade the answer');
+      expect(attrs['langfuse.observation.prompt.name']).toBe('judge-prompt');
+      expect(attrs['mastra.metadata.userId']).toBe('judge-user');
+    });
+
+    it('does not write trace-level fields for child spans of a nested run', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          isRootSpan: false,
+          nestedUnderParent: true,
+          metadata: { userId: 'judge-user', threadId: 'judge-thread', traceName: 'Judge trace' },
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['user.id']).toBeUndefined();
+      expect(attrs['session.id']).toBeUndefined();
+      expect(attrs['langfuse.trace.name']).toBeUndefined();
+    });
+
+    it('keeps trace-level fields for a root with a parent span id that is not nested', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          isRootSpan: true,
+          externalParentSpanId: 'http-span',
+          type: SpanType.AGENT_RUN,
+          entityId: 'assistant',
+          input: 'When does my order ship?',
+          output: { text: 'Friday' },
+          metadata: { userId: 'user-1' },
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.trace.name']).toBe('assistant');
+      expect(attrs['langfuse.trace.input']).toBe('When does my order ship?');
+      expect(attrs['langfuse.trace.output']).toBe(JSON.stringify({ text: 'Friday' }));
+      expect(attrs['user.id']).toBe('user-1');
+    });
+
     it('omits trace input/output that cannot be serialized instead of failing the export', async () => {
       exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
       const circular: Record<string, unknown> = {};
@@ -680,6 +819,56 @@ describe('LangfuseExporter', () => {
 
       const attrs = processedSpans[0].attributes;
       expect(attrs['langfuse.observation.metadata.spanType']).toBe(SpanType.MODEL_GENERATION);
+    });
+
+    it('promotes span-type attributes to camelCase observation metadata', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          type: SpanType.MODEL_STEP,
+          input: [{ role: 'user', content: 'Hello' }],
+          output: { text: 'Hi', toolCalls: [] },
+          attributes: { stepIndex: 1, isContinued: false },
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.observation.metadata.stepIndex']).toBe('1');
+      expect(attrs['langfuse.observation.metadata.isContinued']).toBe('false');
+      // Source attributes stay in place; input/output keep their own mapping.
+      expect(attrs['mastra.model_step.step_index']).toBe(1);
+      expect(attrs['mastra.model_step.is_continued']).toBe(false);
+      expect(attrs['langfuse.observation.metadata.input']).toBeUndefined();
+      expect(attrs['langfuse.observation.metadata.output']).toBeUndefined();
+      expect(attrs['langfuse.observation.input']).toBeDefined();
+    });
+
+    it('keeps existing observation metadata when a promoted key collides', async () => {
+      exporter = new LangfuseExporter({ publicKey: 'pk-test', secretKey: 'sk-test' });
+      await exportSpan(
+        exporter,
+        makeSpan({
+          type: SpanType.RAG_EMBEDDING,
+          operationName: 'embed',
+          attributes: {
+            model: 'text-embedding-3-small',
+            mode: 'batch',
+            dimensions: 1536,
+            inputCount: 3,
+            operationName: 'collision',
+          },
+        } as any),
+      );
+
+      const attrs = processedSpans[0].attributes;
+      expect(attrs['langfuse.observation.metadata.mode']).toBe('batch');
+      expect(attrs['langfuse.observation.metadata.dimensions']).toBe('1536');
+      expect(attrs['langfuse.observation.metadata.inputCount']).toBe('3');
+      expect(attrs['langfuse.observation.metadata.spanType']).toBe(SpanType.RAG_EMBEDDING);
+      // gen_ai.operation.name wins over the colliding mastra.rag_embedding.operation_name.
+      expect(attrs['mastra.rag_embedding.operation_name']).toBe('collision');
+      expect(attrs['langfuse.observation.metadata.operationName']).toBe('embed');
     });
 
     it('does not set observation metadata when source attributes are absent', async () => {

@@ -5,7 +5,7 @@ import { GroqIcon } from '@mastra/playground-ui/icons/GroqIcon';
 import { MistralIcon } from '@mastra/playground-ui/icons/MistralIcon';
 import { OpenAIIcon } from '@mastra/playground-ui/icons/OpenAIIcon';
 import { XGroqIcon } from '@mastra/playground-ui/icons/XGroqIcon';
-import type { ComponentType, SVGProps } from 'react';
+import type { ComponentType, ReactNode, SVGProps } from 'react';
 
 interface ProviderIconConfig {
   icon: ComponentType<SVGProps<SVGSVGElement>>;
@@ -25,11 +25,20 @@ const PROVIDER_ICON_CONFIG: Record<string, ProviderIconConfig> = {
 
 export interface ProviderBrandIconProps {
   provider: string;
+  /** Rendered in the icon slot when the provider has no brand icon, so rows of icons stay aligned. */
+  fallback?: ReactNode;
 }
 
-export function ProviderBrandIcon({ provider }: ProviderBrandIconProps) {
+export function ProviderBrandIcon({ provider, fallback }: ProviderBrandIconProps) {
   const config = PROVIDER_ICON_CONFIG[provider];
-  if (!config) return null;
+  if (!config) {
+    if (fallback == null) return null;
+    return (
+      <span aria-hidden="true" className="flex size-4 shrink-0 items-center justify-center">
+        {fallback}
+      </span>
+    );
+  }
 
   const Icon = config.icon;
 

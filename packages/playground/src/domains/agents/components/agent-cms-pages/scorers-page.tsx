@@ -7,6 +7,7 @@ import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Section, SubSectionRoot } from '@mastra/playground-ui/components/Section';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { JudgeIcon } from '@mastra/playground-ui/icons/JudgeIcon';
+import { passwordManagerOptOutProps } from '@mastra/playground-ui/primitives/password-manager-autofill';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
 import { useMemo, useState } from 'react';
@@ -129,6 +130,7 @@ export function ScorersPage() {
                         <EntityDescription>
                           <input
                             type="text"
+                            {...passwordManagerOptOutProps}
                             disabled={isDisabled}
                             className={cn(
                               'block w-full appearance-none border border-transparent bg-transparent text-muted-foreground',

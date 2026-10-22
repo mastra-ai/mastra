@@ -1436,6 +1436,27 @@ describe('transcript reducer error notices', () => {
     return notice.text;
   }
 
+  it('offers a provider login on a missing-credential error', () => {
+    const state = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: { type: 'error', error: { name: 'ProviderAuthRequiredError', message: 'Not logged in to Anthropic.' } },
+    });
+    expect(state.entries.at(-1)).toMatchObject({
+      kind: 'notice',
+      level: 'error',
+      text: 'Not logged in to Anthropic.',
+      action: 'provider-login',
+    });
+  });
+
+  it('offers no action on other errors', () => {
+    const state = transcriptReducer(initialTranscript, {
+      type: 'event',
+      event: { type: 'error', error: { name: 'Error', message: 'boom' } },
+    });
+    expect(state.entries.at(-1)).not.toHaveProperty('action');
+  });
+
   it('renders a string error payload verbatim', () => {
     expect(errorNoticeText({ error: 'model quota exhausted' })).toBe('model quota exhausted');
   });
@@ -1830,5 +1851,38 @@ describe('live user signals sent by someone else', () => {
     );
     expect(drawable).toHaveLength(1);
     expect(drawable[0]?.id).toMatch(/^local-/);
+  });
+
+  it("draws the viewer's own message sent from another client with no optimistic echo", () => {
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    const message = liveSignal('sig-3', 'hello from the TUI', { id: 'user_me', name: 'Me' });
+
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message }, viewerId: 'user_me' });
+
+    const entry = state.entries.find(e => 'id' in e && e.id === 'sig-3');
+    expect(messageParts(entry)).toEqual([{ type: 'text', text: 'hello from the TUI' }]);
+  });
+
+  it('draws a same-text message from another client after the composer send was echoed', () => {
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    const me = { id: 'user_me', name: 'Me' };
+    state = transcriptReducer(state, { type: 'localUser', text: 'yes' });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'message_start', message: liveSignal('sig-4', 'yes', me) },
+      viewerId: 'user_me',
+    });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'message_start', message: liveSignal('sig-5', 'yes', me) },
+      viewerId: 'user_me',
+    });
+
+    const drawable = state.entries.filter(
+      entry => entry.kind === 'message' && messageParts(entry).some(part => (part as { text?: string }).text === 'yes'),
+    );
+    expect(drawable).toHaveLength(2);
+    expect(drawable[0]?.id).toMatch(/^local-/);
+    expect(drawable[1]?.id).toBe('sig-5');
   });
 });

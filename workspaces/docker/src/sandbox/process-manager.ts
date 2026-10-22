@@ -8,6 +8,7 @@
  */
 
 import type { Duplex } from 'node:stream';
+import { StringDecoder } from 'node:string_decoder';
 
 import { ProcessHandle, SandboxProcessManager } from '@mastra/core/workspace';
 import type { CommandResult, ProcessInfo, SpawnProcessOptions } from '@mastra/core/workspace';
@@ -64,6 +65,9 @@ rm -f "$1" 2>/dev/null
 exit $ret
 `;
 
+/** KILL_SCRIPT exit code when no PGID file was readable or it was empty. */
+const NO_PGID_EXIT_CODE = 3;
+
 /**
  * Kill script: read the recorded PGID and SIGKILL the whole process group.
  * A negative PID targets the kernel-owned process group, so descendants that
@@ -79,11 +83,12 @@ i=0
 while [ ! -r "$f" ] && [ "$i" -lt 40 ]; do sleep 0.05; i=$((i + 1)); done
 # If the PGID was never recorded (file absent/unreadable after the wait, or
 # empty), we have no group to signal or verify — report failure rather than
-# falsely claiming the tree was terminated.
-[ -r "$f" ] || exit 1
+# falsely claiming the tree was terminated. Exit code 3 marks this case so
+# kill() can tell it apart from a failed termination (exit 1).
+[ -r "$f" ] || exit 3
 pgid=$(cat "$f" 2>/dev/null)
 rm -f "$f" 2>/dev/null
-[ -n "$pgid" ] || exit 1
+[ -n "$pgid" ] || exit 3
 kill -STOP -"$pgid" 2>/dev/null
 kill -KILL -"$pgid" 2>/dev/null
 # Fallback for images without setsid: the leader is not a group leader, so also
@@ -292,10 +297,12 @@ class DockerProcessHandle extends ProcessHandle {
         // Static script; the pgid file path is passed as $1 (sh sets $0='sh',
         // $1=path) so no runtime value is ever interpolated into the command.
         Cmd: ['sh', '-c', KILL_SCRIPT, 'sh', this._pgidFile],
-        AttachStdout: false,
-        AttachStderr: false,
+        // Podman's Docker-compatible API rejects an exec with no attached stream.
+        AttachStdout: true,
+        AttachStderr: true,
       });
       const killStream = await killExec.start({});
+      killStream.resume();
 
       try {
         // Exec.start() resolves when the exec stream is opened, not when the
@@ -308,6 +315,15 @@ class DockerProcessHandle extends ProcessHandle {
           killInfo = await killExec.inspect();
         }
         if (killInfo.ExitCode !== 0) {
+          // Exit 3 means no PGID was recorded. The spawn wrapper removes the file
+          // when the command exits on its own, so a kill racing a natural exit
+          // lands here. If the command's exec has stopped there is nothing to
+          // kill: report false quietly and let the natural exit result stand.
+          // Every other non-zero exit (e.g. unconfirmed group termination) stays loud.
+          if (killInfo.ExitCode === NO_PGID_EXIT_CODE) {
+            const selfInfo = await this._exec.inspect().catch(() => undefined);
+            if (selfInfo && !selfInfo.Running) return false;
+          }
           throw new Error(`kill helper exited with code ${killInfo.ExitCode}`);
         }
 
@@ -441,6 +457,11 @@ export class DockerProcessManager extends SandboxProcessManager {
       // Docker multiplexes stdout/stderr into a single stream with 8-byte headers
       // when Tty is false. We need to parse these headers.
       const buffer: Buffer[] = [];
+      // Frame boundaries are not UTF-8 character boundaries, so a multibyte
+      // character can be split across frames. Each stream gets its own decoder
+      // because stdout and stderr frames interleave.
+      const stdoutDecoder = new StringDecoder('utf8');
+      const stderrDecoder = new StringDecoder('utf8');
 
       stream.on('data', (chunk: Buffer) => {
         buffer.push(chunk);
@@ -458,11 +479,13 @@ export class DockerProcessManager extends SandboxProcessManager {
             break;
           }
 
-          const payload = combined.subarray(8, 8 + size).toString('utf-8');
+          const payload = combined.subarray(8, 8 + size);
           if (type === 1) {
-            handle.emitStdout(payload);
+            const text = stdoutDecoder.write(payload);
+            if (text) handle.emitStdout(text);
           } else if (type === 2) {
-            handle.emitStderr(payload);
+            const text = stderrDecoder.write(payload);
+            if (text) handle.emitStderr(text);
           }
 
           combined = combined.subarray(8 + size);
@@ -474,6 +497,17 @@ export class DockerProcessManager extends SandboxProcessManager {
         }
       });
 
+      // Flush any incomplete trailing sequence before anything reads the final output.
+      let decodersFlushed = false;
+      const flushDecoders = () => {
+        if (decodersFlushed) return;
+        decodersFlushed = true;
+        const stdoutRest = stdoutDecoder.end();
+        if (stdoutRest) handle.emitStdout(stdoutRest);
+        const stderrRest = stderrDecoder.end();
+        if (stderrRest) handle.emitStderr(stderrRest);
+      };
+
       // Every stream event settles through here and only the first one wins.
       // Previously 'end' resolved first and 'close' — the only path that attached
       // `killed`/`timedOut` — bailed out because the exit code was already set, so
@@ -483,6 +517,7 @@ export class DockerProcessManager extends SandboxProcessManager {
       const settle = (exitCode: number, metadata: Partial<CommandResult> = {}) => {
         if (settled) return;
         settled = true;
+        flushDecoders();
         handle._setExitCode(exitCode);
         resolve({
           success: exitCode === 0,
@@ -589,6 +624,7 @@ export class DockerProcessManager extends SandboxProcessManager {
           settleTerminated();
           return;
         }
+        flushDecoders();
         settle(1, { stderr: handle.stderr || 'Stream error' });
       });
     });

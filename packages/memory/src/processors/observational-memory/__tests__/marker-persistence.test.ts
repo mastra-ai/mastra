@@ -63,7 +63,9 @@ class TestStrategy extends ObservationStrategy {
   async process(): Promise<ProcessedObservation> {
     throw new Error('not used');
   }
-  async persist(): Promise<void> {}
+  async persist(): Promise<boolean> {
+    return true;
+  }
   async emitStartMarkers(): Promise<void> {}
   async emitEndMarkers(): Promise<void> {}
   async emitFailedMarkers(): Promise<void> {}

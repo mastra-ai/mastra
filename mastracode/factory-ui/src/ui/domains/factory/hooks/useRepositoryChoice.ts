@@ -5,7 +5,7 @@ import type { FactoryProject } from '../../workspaces/services/github';
 import { useCardRepositorySlug } from './useCardRepositorySlug';
 
 export function useRepositoryChoice(factory: FactoryProject, definition: InstalledBoardInfo) {
-  const repositorySlugFor = useCardRepositorySlug();
+  const repositorySlugFor = useCardRepositorySlug(factory.repositories);
   const [pendingSelect, setPendingSelect] = useState<(slug: string) => void>();
 
   const choose = async (

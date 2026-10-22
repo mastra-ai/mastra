@@ -30,6 +30,21 @@ describe('restartAllActiveWorkflowRunsHandler', () => {
     });
   });
 
+  it("skips the workflow sweep when recovery.workflows is 'off'", async () => {
+    const mastra = {
+      restartAllActiveWorkflowRuns: vi.fn(() => Promise.resolve()),
+      recoverAllDurableAgents: vi.fn(() => Promise.resolve()),
+      getLogger: vi.fn(() => ({ error: vi.fn() })),
+      recoveryConfig: { workflows: 'off', durableAgents: 'auto' },
+    } as unknown as Mastra;
+
+    const response = await restartAllActiveWorkflowRunsHandler(createContext(mastra));
+
+    expect(response.status).toBe(200);
+    expect(mastra.restartAllActiveWorkflowRuns).not.toHaveBeenCalled();
+    expect(mastra.recoverAllDurableAgents).toHaveBeenCalledTimes(1);
+  });
+
   it('logs a rejected durable-agent recovery without failing the request', async () => {
     const error = new Error('recovery unavailable');
     const logger = { error: vi.fn() };

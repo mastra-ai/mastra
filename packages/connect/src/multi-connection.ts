@@ -7,7 +7,7 @@ import type { ConnectClientOptions, ProjectConnection, ResolvedClient } from './
 import { platformMcpTransport } from './client.js';
 import { MastraConnectConfigError, MastraConnectError } from './errors.js';
 import type { McpProviderRegistration, ProxyProviderRegistration } from './registry.js';
-import { applyToolFilter } from './toolset.js';
+import { applyToolFilter, compileToolMatcher, expandToolPatterns } from './toolset.js';
 
 /**
  * A resolved candidate connection for one provider, tagged with the display
@@ -20,6 +20,8 @@ export interface NamedConnection {
   name: string;
   /** Raw accountLabel from the platform, if any (may be null/empty). */
   accountLabel?: string | null;
+  /** Resource key the connection is scoped to; null for global connections. */
+  resourceId?: string | null;
 }
 
 /**
@@ -54,7 +56,12 @@ export function toNamedConnections(candidates: ProjectConnection[]): NamedConnec
       }
     }
     usedNames.add(name);
-    named.push({ id: connection.id, name, accountLabel: connection.accountLabel ?? null });
+    named.push({
+      id: connection.id,
+      name,
+      accountLabel: connection.accountLabel ?? null,
+      resourceId: connection.resourceId ?? null,
+    });
   }
   return named;
 }
@@ -389,12 +396,20 @@ export async function buildMcpMultiConnectionTools(input: {
   disallowTools?: string[];
   requireApproval?: boolean | string[];
   client: ResolvedClient;
+  /**
+   * Resource-free client for global connections' transports. The MCP client
+   * cache is shared across resource scopes, so a global connection's
+   * transport must not carry whichever scope's resource header resolved it
+   * first. Defaults to `client` (already resource-free in the global scope).
+   */
+  globalClient?: ResolvedClient;
   mcpClients: Map<string, { integrationId: string; connectionId: string; client: MCPClient }>;
   resolverId: number;
 }): Promise<ToolsInput> {
   const { registration, connections, allowTools, disallowTools, requireApproval, client, mcpClients, resolverId } =
     input;
-  const requireApprovalFor = Array.isArray(requireApproval) ? new Set(requireApproval) : undefined;
+  const globalClient = input.globalClient ?? client;
+  const requireApprovalFor = Array.isArray(requireApproval) ? compileToolMatcher(requireApproval) : undefined;
   // The `<provider>__list_connections` key exists only on the wrapper; strip
   // it from either filter that reaches MCP discovery so a caller that
   // references it never trips the unknown-tool guard.
@@ -427,7 +442,7 @@ export async function buildMcpMultiConnectionTools(input: {
       const cacheKey = `${registration.integrationId}::${connection.id}`;
       let entry = mcpClients.get(cacheKey);
       if (!entry) {
-        const transport = platformMcpTransport(client, connection.id);
+        const transport = platformMcpTransport(connection.resourceId == null ? globalClient : client, connection.id);
         entry = {
           integrationId: registration.integrationId,
           connectionId: connection.id,
@@ -438,13 +453,13 @@ export async function buildMcpMultiConnectionTools(input: {
                 ...transport,
                 // Default: no approval required, matching @mastra/mcp's own
                 // default. Opt in with `requireApproval: true` or an array of
-                // tool keys to gate specific tools.
+                // tool keys/globs to gate a selection.
                 ...(requireApproval === true
                   ? { requireToolApproval: true as const }
                   : requireApprovalFor
                     ? {
                         requireToolApproval: ({ toolName }: { toolName: string }) =>
-                          requireApprovalFor.has(`${registration.integrationId}_${String(toolName)}`),
+                          requireApprovalFor(`${registration.integrationId}_${String(toolName)}`),
                       }
                     : {}),
               },
@@ -465,8 +480,15 @@ export async function buildMcpMultiConnectionTools(input: {
     for (const catalog of rawInnerCatalogs.values()) {
       for (const key of Object.keys(catalog)) catalogUnion.add(key);
     }
-    if (requireApprovalFor) {
-      const unknown = [...requireApprovalFor].filter(name => !catalogUnion.has(name));
+    if (Array.isArray(requireApproval)) {
+      // Globs that match nothing across the catalog union throw inside the
+      // expansion; literal names are validated here against the same union.
+      const expanded = expandToolPatterns(
+        requireApproval,
+        [...catalogUnion],
+        `requireApproval for '${registration.integrationId}'`,
+      );
+      const unknown = expanded.filter(name => !catalogUnion.has(name));
       if (unknown.length > 0) {
         throw new MastraConnectConfigError(
           `Unknown tool name(s) in requireApproval for '${registration.integrationId}': ${unknown.join(

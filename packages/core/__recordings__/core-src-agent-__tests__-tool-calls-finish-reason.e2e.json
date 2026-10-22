@@ -306,7 +306,7 @@
       }
     },
     {
-      "hash": "1ef781d975df5014",
+      "hash": "314918313b3d046e",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -353,7 +353,7 @@
             {
               "type": "function_call_output",
               "call_id": "call_XR39uSHyLuxG72ewr7BOfTfb",
-              "output": "{\"city\":\"Paris\",\"temperature\":22,\"condition\":\"sunny\"}"
+              "output": "{\"city\":\"Paris\",\"condition\":\"sunny\",\"temperature\":22}"
             },
             {
               "type": "function_call_output",
@@ -978,7 +978,7 @@
       }
     },
     {
-      "hash": "19afaa8214d94105",
+      "hash": "740f8e994177dd4b",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -1025,7 +1025,7 @@
             {
               "type": "function_call_output",
               "call_id": "call_PKyMj8lRpKwwljfvwVqAw3fp",
-              "output": "{\"city\":\"Paris\",\"temperature\":22,\"condition\":\"sunny\"}"
+              "output": "{\"city\":\"Paris\",\"condition\":\"sunny\",\"temperature\":22}"
             },
             {
               "type": "function_call_output",
@@ -1588,7 +1588,7 @@
       }
     },
     {
-      "hash": "efb554d4148abef4",
+      "hash": "df2686da3096814d",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -1635,7 +1635,7 @@
             {
               "type": "function_call_output",
               "call_id": "call_6CydvN7Wuwas5sJRZW58XJAv",
-              "output": "{\"city\":\"Paris\",\"temperature\":22,\"condition\":\"sunny\"}"
+              "output": "{\"city\":\"Paris\",\"condition\":\"sunny\",\"temperature\":22}"
             },
             {
               "type": "function_call_output",
@@ -2155,7 +2155,7 @@
       }
     },
     {
-      "hash": "4f8eda95f9b62ea6",
+      "hash": "65fdf9bb42af190e",
       "request": {
         "url": "https://api.openai.com/v1/responses",
         "method": "POST",
@@ -2202,7 +2202,7 @@
             {
               "type": "function_call_output",
               "call_id": "call_nFnrylfQSKwpghft6JmsNBNs",
-              "output": "{\"city\":\"Paris\",\"temperature\":22,\"condition\":\"sunny\"}"
+              "output": "{\"city\":\"Paris\",\"condition\":\"sunny\",\"temperature\":22}"
             },
             {
               "type": "function_call_output",
@@ -2586,7 +2586,6 @@
         "status": 200,
         "statusText": "OK",
         "headers": {
-          "anthropic-organization-id": "a4b2106b-a1ab-4fd5-8d96-cdf4b3e9dc14",
           "anthropic-ratelimit-input-tokens-limit": "4000000",
           "anthropic-ratelimit-input-tokens-remaining": "3997000",
           "anthropic-ratelimit-input-tokens-reset": "2026-05-18T10:51:20Z",
@@ -2653,7 +2652,7 @@
       }
     },
     {
-      "hash": "252e5905691ca55e",
+      "hash": "8455d42dfc9441a7",
       "request": {
         "url": "https://api.anthropic.com/v1/messages",
         "method": "POST",
@@ -2731,7 +2730,7 @@
                 {
                   "type": "tool_result",
                   "tool_use_id": "toolu_01CLwxtsayDi3V1dwVcjfTbu",
-                  "content": "{\"city\":\"Paris\",\"temperature\":22,\"condition\":\"sunny\"}"
+                  "content": "{\"city\":\"Paris\",\"condition\":\"sunny\",\"temperature\":22}"
                 },
                 {
                   "type": "tool_result",
@@ -2849,7 +2848,6 @@
         "status": 200,
         "statusText": "OK",
         "headers": {
-          "anthropic-organization-id": "a4b2106b-a1ab-4fd5-8d96-cdf4b3e9dc14",
           "anthropic-ratelimit-input-tokens-limit": "4000000",
           "anthropic-ratelimit-input-tokens-remaining": "3999000",
           "anthropic-ratelimit-input-tokens-reset": "2026-05-18T10:51:23Z",

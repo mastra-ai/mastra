@@ -81,7 +81,7 @@ export class CustomProvidersStorage extends FactoryStorageDomain {
   }
 
   async #toRecord(row: CustomProviderDbRow): Promise<CustomProviderRecord> {
-    const apiKey = row.api_key === null ? null : (await this.encryption.decrypt<string>(row.api_key)).value;
+    const apiKey = row.api_key === null ? null : (await this.#decryptApiKey(row.api_key)).value;
     return {
       id: row.id,
       orgId: row.org_id,
@@ -96,6 +96,18 @@ export class CustomProvidersStorage extends FactoryStorageDomain {
     };
   }
 
+  /**
+   * API keys are always strings. A legacy raw key that happens to be valid JSON
+   * (e.g. `12345`) decodes to a non-string, so keep the stored text instead.
+   */
+  async #decryptApiKey(stored: string): Promise<{ value: string; needsReencryption: boolean }> {
+    const decrypted = await this.encryption.decrypt<unknown>(stored);
+    return {
+      value: typeof decrypted.value === 'string' ? decrypted.value : stored,
+      needsReencryption: decrypted.needsReencryption,
+    };
+  }
+
   async #encryptApiKey(apiKey: string | undefined): Promise<string | null> {
     return apiKey === undefined ? null : this.encryption.encrypt(apiKey);
   }
@@ -103,7 +115,7 @@ export class CustomProvidersStorage extends FactoryStorageDomain {
   async #migrateApiKey(id: string): Promise<void> {
     await this.#db.updateAtomic<CustomProviderDbRow>('custom_providers', { id }, async row => {
       if (row.api_key === null) return null;
-      const decrypted = await this.encryption.decrypt<string>(row.api_key);
+      const decrypted = await this.#decryptApiKey(row.api_key);
       return decrypted.needsReencryption ? { api_key: await this.encryption.encrypt(decrypted.value) } : null;
     });
   }

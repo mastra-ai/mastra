@@ -24,7 +24,7 @@ on:
 jobs:
   test-unit:
     if: ${{ github.repository == 'mastra-ai/mastra' && inputs.workspace_packages != '[]' }}
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
@@ -54,7 +54,7 @@ jobs:
 
   test-docker:
     if: ${{ github.repository == 'mastra-ai/mastra' && inputs.workspace_docker_packages != '[]' }}
-    runs-on: starsling-ubuntu-24.04
+    runs-on: starsling-ubuntu-26.04
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}

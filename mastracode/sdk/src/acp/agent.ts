@@ -20,8 +20,8 @@ import type {
 } from '@agentclientprotocol/sdk';
 import type { AgentController, AgentControllerMode, Session } from '@mastra/core/agent-controller';
 import { AuthStorage, getOAuthProviders, PROVIDER_DEFAULT_MODELS } from '../auth/storage.js';
-import { seedProviderOMDefault } from '../onboarding/om-settings.js';
-import { getAvailableThinkingLevelsForModel, isThinkingLevelSetting } from '../thinking.js';
+import { getCatalogThinkingLevels, runCatalogThinkingLevel } from '../thinking-catalog.js';
+import { isThinkingLevelSetting } from '../thinking.js';
 import type { ThinkingLevelSetting } from '../thinking.js';
 import { openUrlInBrowser } from '../utils/open-url.js';
 import { getCurrentVersion } from '../utils/update-check.js';
@@ -207,11 +207,6 @@ export class MastraCodeAcpAgent implements Agent {
         throw needsTerminal();
       },
     });
-    try {
-      seedProviderOMDefault(methodId);
-    } catch (error) {
-      process.stderr.write(`[acp] memory model unchanged after sign-in: ${error}\n`);
-    }
   }
 
   newSession(request: NewSessionRequest): Promise<NewSessionResponse> {
@@ -237,7 +232,7 @@ export class MastraCodeAcpAgent implements Agent {
       const thread = await runtime.session.thread.create();
       await runtime.session.thread.switch({ threadId: thread.id });
       const defaultModelId = credentialedDefaultModel(available, runtime.session.model.get() ?? '');
-      if (defaultModelId) await runtime.session.model.switch({ modelId: defaultModelId });
+      if (defaultModelId) await runtime.session.model.switch(defaultModelId);
       const models: NewSessionResponse['models'] = {
         currentModelId: runtime.session.model.get() ?? '',
         availableModels: includeCurrentModel(
@@ -364,7 +359,7 @@ export class MastraCodeAcpAgent implements Agent {
         type: 'select',
         description: 'Requested reasoning level. The provider may adjust it for the selected model.',
         currentValue: this.thinkingLevel(entry),
-        options: getAvailableThinkingLevelsForModel(modelId).map(value => ({
+        options: getCatalogThinkingLevels(modelId).map(value => ({
           value,
           name: value[0]!.toUpperCase() + value.slice(1),
         })),
@@ -372,10 +367,9 @@ export class MastraCodeAcpAgent implements Agent {
     return options;
   }
 
-  private thinkingLevel(entry: SessionEntry): ThinkingLevelSetting {
+  private thinkingLevel(entry: SessionEntry, modelId = entry.session.model.get() ?? ''): ThinkingLevelSetting {
     const level = entry.getThinkingLevel?.() ?? 'off';
-    const levels = getAvailableThinkingLevelsForModel(entry.session.model.get() ?? '');
-    return levels.includes(level) ? level : 'xhigh';
+    return runCatalogThinkingLevel(modelId, level);
   }
 
   async setSessionConfigOption(params: SetSessionConfigOptionRequest): Promise<SetSessionConfigOptionResponse> {
@@ -391,14 +385,11 @@ export class MastraCodeAcpAgent implements Agent {
         throw RequestError.invalidParams(undefined, 'Unknown session configuration selection');
       }
       if (params.configId === 'model') {
-        await entry.session.model.switch({ modelId: String(params.value) });
+        await entry.session.model.switch(String(params.value));
       } else if (params.configId === 'mode') {
         await entry.session.mode.switch({ modeId: String(params.value) });
       } else if (isThinkingLevelSetting(params.value)) {
         await entry.session.state.set({ thinkingLevel: params.value });
-      }
-      if (entry.getThinkingLevel && entry.getThinkingLevel() !== this.thinkingLevel(entry)) {
-        await entry.session.state.set({ thinkingLevel: this.thinkingLevel(entry) });
       }
       return { configOptions: this.configOptions(entry) };
     });
@@ -432,7 +423,9 @@ export class MastraCodeAcpAgent implements Agent {
           if (turn.cancelled || this.disposed) return { stopReason: 'cancelled' };
           await entry.session.sendMessage({ content: expanded });
           const reason = await completion;
-          if (reason === 'error' && !state.cancelled && !state.stopReason) {
+          // An abort with a recorded error and no client cancel is an internal failure, not a cancel.
+          const failed = reason === 'error' || (reason === 'aborted' && state.error !== undefined);
+          if (failed && !state.cancelled && !turn.cancelled && !state.stopReason) {
             throw RequestError.internalError(undefined, state.error?.message ?? 'Mastra Code turn failed');
           }
           return {
@@ -513,7 +506,7 @@ export class MastraCodeAcpAgent implements Agent {
           'Model is unavailable or its provider is not configured. Refresh the model list.',
         );
       }
-      await entry.session.model.switch({ modelId: params.modelId });
+      await entry.session.model.switch(params.modelId);
     });
   }
 }

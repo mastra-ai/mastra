@@ -759,6 +759,33 @@ describe('InworldRealtimeVoice', () => {
       expect(outputs[0].item).toMatchObject({ type: 'function_call_output', call_id: 'call-1' });
       expect(JSON.parse(outputs[0].item.output)).toEqual({ time: '12:34' });
     });
+
+    it('should send a string output when a tool returns undefined', async () => {
+      const execute = vi.fn(async () => undefined);
+      voice.addTools({
+        notify: {
+          id: 'notify',
+          description: 'fire and forget',
+          inputSchema: undefined as any,
+          execute,
+        } as any,
+      });
+      await connectStubbed(voice);
+      const { instance } = getLastInstance();
+      const client = (voice as any).client as EventEmitter;
+
+      client.emit('response.done', {
+        response: {
+          id: 'r-void',
+          output: [{ type: 'function_call', call_id: 'call-void', name: 'notify', arguments: '{}' }],
+        },
+      });
+      await new Promise(r => setImmediate(r));
+
+      const outputs = sentEvents(instance).filter(e => e.type === 'conversation.item.create');
+      expect(outputs).toHaveLength(1);
+      expect(outputs[0].item).toMatchObject({ type: 'function_call_output', call_id: 'call-void', output: 'null' });
+    });
   });
 
   describe('WebSocket lifecycle', () => {

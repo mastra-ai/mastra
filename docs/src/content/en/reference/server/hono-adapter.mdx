@@ -59,7 +59,7 @@ export default app
     type: 'string',
     description: 'Route path prefix (e.g., `/api/v2`)',
     isOptional: true,
-    defaultValue: "''",
+    defaultValue: "'/api'",
   },
   {
     name: 'openapiPath',
@@ -185,7 +185,7 @@ Available context keys:
 | `mastra` | Mastra instance |
 | `requestContext` | Request context map |
 | `abortSignal` | Request cancellation signal |
-| `tools` | Available tools |
+| `registeredTools` | Tools registered with the adapter |
 | `taskStore` | Task store for A2A operations |
 | `customRouteAuthConfig` | Per-route auth overrides |
 | `user` | Authenticated user (if auth configured) |

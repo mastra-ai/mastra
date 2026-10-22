@@ -1,14 +1,16 @@
 import type { ClientScoreRowData, DatasetExperimentResult } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ReviewStatusBadge } from '@mastra/playground-ui/domains/review/components/review-status-badge';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
-import { AlertCircleIcon, GaugeIcon } from 'lucide-react';
+import { formatDuration } from '@mastra/playground-ui/utils/duration';
+import { GaugeIcon } from 'lucide-react';
+import { getResultErrorMessage, getResultOutputPreview } from '../utils/result-output';
+import { formatCostValue, formatTokenCount, totalTokens } from './comparison/comparison-metric-format';
+import { ScoreReasonHoverCard } from './comparison/score-reason-hover-card';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
 
 /**
@@ -20,21 +22,37 @@ export type ExperimentResultsListItem = {
   id: string;
   itemId: string;
   input?: unknown;
+  output?: unknown;
+  targetType?: DatasetExperimentResult['targetType'];
   error?: unknown;
   status?: DatasetExperimentResult['status'] | null;
   tags?: string[] | null;
   /** Inline scores, used by the summary `scores` column. */
   scores?: Record<string, number> | Array<{ score: number | null }> | null;
-  /** When the run started; drives the `startedAt` column. */
+  /** When the run started; with `completedAt`, drives the `duration` column. */
   startedAt?: string | Date | null;
+  /** When the run finished; with `startedAt`, drives the `duration` column. */
+  completedAt?: string | Date | null;
+  /** Token usage and cost of the run's trace; drives the `cost` and `tokens` columns. */
+  usage?: { inputTokens?: number; outputTokens?: number; estimatedCost?: number; costUnit?: string };
 };
 
-const BUILT_IN_COLUMNS = new Set(['itemId', 'id', 'status', 'input', 'tags', 'scores', 'startedAt']);
-
-export type ExperimentResultsSortKey = 'startedAt';
+const BUILT_IN_COLUMNS = new Set([
+  'itemId',
+  'id',
+  'status',
+  'input',
+  'output',
+  'error',
+  'tags',
+  'scores',
+  'cost',
+  'tokens',
+  'duration',
+]);
 
 export type ExperimentResultsListColumn = {
-  /** `itemId` (or `id`) | `status` | `input` | `tags` | `scores` | `startedAt` | a scorer id */
+  /** `itemId` (or `id`) | `status` | `input` | `tags` | `scores` | `cost` | `tokens` | `duration` | a scorer id */
   name: string;
   label: string;
   size: string;
@@ -46,7 +64,8 @@ export type ExperimentResultsListProps<T extends ExperimentResultsListItem> = {
   featuredResultId: string | null;
   onResultClick: (resultId: string) => void;
   columns: ExperimentResultsListColumn[];
-  scoresByItemId?: Record<string, ClientScoreRowData[]>;
+  /** Structurally narrowed to what the scorer cells read, so `ClientScoreRowData[]` fits. */
+  scoresByItemId?: Record<string, Array<Pick<ClientScoreRowData, 'scorerId' | 'score' | 'reason'>>>;
   scorerIds?: string[];
   setEndOfListElement?: (element: HTMLDivElement | null) => void;
   isFetchingNextPage?: boolean;
@@ -56,9 +75,6 @@ export type ExperimentResultsListProps<T extends ExperimentResultsListItem> = {
   onToggleSelect?: (resultId: string) => void;
   /** When provided with selection, renders a select-all checkbox in the header. */
   onToggleSelectAll?: () => void;
-  /** Server-side sort; the `startedAt` header is only sortable when `onSortChange` is provided. */
-  sort?: ListSort<ExperimentResultsSortKey>;
-  onSortChange?: (direction: 'asc' | 'desc', key: ExperimentResultsSortKey) => void;
 };
 
 /**
@@ -79,8 +95,6 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
   selectedIds,
   onToggleSelect,
   onToggleSelectAll,
-  sort,
-  onSortChange,
 }: ExperimentResultsListProps<T>) {
   const { Link: LinkComponent, paths } = useLinkComponent();
   const hasSelection = Boolean(selectedIds && onToggleSelect);
@@ -92,9 +106,13 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
   const hasItemIdColumn = hasColumn('itemId') || hasColumn('id');
   const hasStatusColumn = hasColumn('status');
   const hasInputColumn = hasColumn('input');
+  const hasOutputColumn = hasColumn('output');
+  const hasErrorColumn = hasColumn('error');
   const hasTagsColumn = hasColumn('tags');
   const hasScoresColumn = hasColumn('scores');
-  const hasStartedAtColumn = hasColumn('startedAt');
+  const hasCostColumn = hasColumn('cost');
+  const hasTokensColumn = hasColumn('tokens');
+  const hasDurationColumn = hasColumn('duration');
   const selectedVisibleCount = selectedIds ? results.filter(r => selectedIds.has(r.id)).length : 0;
   const isAllSelected = results.length > 0 && selectedVisibleCount === results.length;
 
@@ -114,15 +132,6 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
           <span className="min-w-0 truncate">{col.label}</span>
         </LinkComponent>
       </DataList.TopCell>
-    ) : col.name === 'startedAt' && onSortChange ? (
-      <DataList.SortableTopCell
-        key={col.name}
-        sortKey="startedAt"
-        sort={sort?.key === 'startedAt' ? sort.direction : undefined}
-        onSortChange={onSortChange}
-      >
-        {col.label}
-      </DataList.SortableTopCell>
     ) : (
       <DataList.TopCell key={col.name}>{col.label}</DataList.TopCell>
     );
@@ -132,7 +141,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
   }
 
   return (
-    <DataList columns={gridColumns} className="min-w-0" scrollRef={containerRef} fit="container">
+    <DataList columns={gridColumns} className="min-w-0" scrollRef={containerRef}>
       <DataList.Top hasLeadingCell={hasSelection}>
         {hasSelection &&
           (onToggleSelectAll ? (
@@ -162,23 +171,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
             const rowCells = (
               <>
                 {hasItemIdColumn && (
-                  <DataList.Cell className="flex items-center gap-1.5 text-body-sm tracking-wide text-muted-foreground">
-                    <span>{result.itemId?.slice(0, 8) ?? ''}</span>
-                    {hasError && (
-                      <Tooltip>
-                        <TooltipTrigger
-                          render={
-                            <AlertCircleIcon
-                              role="img"
-                              aria-label="Error"
-                              className="size-3.5 text-destructive-foreground"
-                            />
-                          }
-                        />
-                        <TooltipContent>{errorMessage(result.error)}</TooltipContent>
-                      </Tooltip>
-                    )}
-                  </DataList.Cell>
+                  <DataList.Cell className="text-muted-foreground">{result.itemId?.slice(0, 8) ?? ''}</DataList.Cell>
                 )}
 
                 {hasStatusColumn && (
@@ -193,6 +186,21 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
 
                 {hasInputColumn && (
                   <DataList.TextCell font="mono">{truncate(formatValue(result.input), 200)}</DataList.TextCell>
+                )}
+
+                {hasOutputColumn && (
+                  <DataList.Cell className="truncate font-mono" data-testid={`result-output-${result.id}`}>
+                    {getResultOutputPreview(result) ?? ''}
+                  </DataList.Cell>
+                )}
+
+                {hasErrorColumn && (
+                  <DataList.Cell
+                    className="truncate text-destructive-foreground"
+                    data-testid={`result-error-${result.id}`}
+                  >
+                    {getResultErrorMessage(result) ?? ''}
+                  </DataList.Cell>
                 )}
 
                 {hasTagsColumn && (
@@ -212,19 +220,44 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
                   </DataList.Cell>
                 )}
 
-                {hasStartedAtColumn &&
-                  (result.startedAt ? (
-                    <DataList.CreatedCell timestamp={result.startedAt} />
-                  ) : (
-                    <DataList.Cell className="text-placeholder">—</DataList.Cell>
-                  ))}
+                {hasCostColumn && (
+                  <DataList.Cell
+                    className="text-muted-foreground tabular-nums"
+                    data-testid={`result-cost-${result.id}`}
+                  >
+                    {formatCostValue(result.usage?.estimatedCost, result.usage?.costUnit)}
+                  </DataList.Cell>
+                )}
+
+                {hasTokensColumn && (
+                  <DataList.Cell
+                    className="text-muted-foreground tabular-nums"
+                    data-testid={`result-tokens-${result.id}`}
+                  >
+                    {formatTokenCount(totalTokens(result.usage))}
+                  </DataList.Cell>
+                )}
+
+                {hasDurationColumn && (
+                  <DataList.Cell
+                    className="text-muted-foreground tabular-nums"
+                    data-testid={`result-duration-${result.id}`}
+                  >
+                    {formatDuration(runDurationMs(result)) ?? '-'}
+                  </DataList.Cell>
+                )}
 
                 {scorerIds?.map(scorerId => {
                   const scores = scoresByItemId?.[result.itemId];
                   const score = scores?.find(s => s.scorerId === scorerId);
+                  const reason = score?.reason?.trim();
                   return (
-                    <DataList.Cell key={scorerId} className="text-body-sm text-muted-foreground tabular-nums">
+                    <DataList.Cell
+                      key={scorerId}
+                      className="flex items-center gap-1.5 text-muted-foreground tabular-nums"
+                    >
                       {score != null ? score.score.toFixed(3) : '-'}
+                      {reason && <ScoreReasonHoverCard scorerId={scorerId} reason={reason} nested />}
                     </DataList.Cell>
                   );
                 })}
@@ -236,6 +269,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
                 <DataList.RowButton
                   key={result.id}
                   featured={isFeatured}
+                  variant={hasError ? 'error' : 'default'}
                   data-selected={isFeatured || undefined}
                   onClick={() => onResultClick(result.id)}
                   {...getRowProps(index)}
@@ -255,6 +289,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
                 <DataList.RowButton
                   colStart={2}
                   featured={isFeatured}
+                  variant={hasError ? 'error' : 'default'}
                   data-selected={isFeatured || undefined}
                   onClick={() => onResultClick(result.id)}
                   {...getRowProps(index)}
@@ -300,11 +335,9 @@ function ScoresSummary({ scores }: { scores: ExperimentResultsListItem['scores']
   );
 }
 
-function errorMessage(error: unknown): string {
-  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
-    return error.message || 'Error';
-  }
-  return typeof error === 'string' && error ? error : 'Error';
+function runDurationMs({ startedAt, completedAt }: ExperimentResultsListItem): number | undefined {
+  if (!startedAt || !completedAt) return undefined;
+  return new Date(completedAt).getTime() - new Date(startedAt).getTime();
 }
 
 /** Format unknown value for display */

@@ -239,7 +239,7 @@ export class ClassifierProcessor<
     try {
       result = (await executeWithContext({
         span: observabilityContext.tracing.currentSpan,
-        fn: () => classifier.evaluate({ state, providerOptions: this.providerOptions }),
+        fn: () => classifier.decide({ state, providerOptions: this.providerOptions }),
       })) as ClassifierResult<Q>;
     } catch (error) {
       if (error instanceof TripWire) {

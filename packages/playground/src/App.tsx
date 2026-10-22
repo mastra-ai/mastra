@@ -1,4 +1,5 @@
 import { coreFeatures } from '@mastra/core/features';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { KeyboardShortcutsProvider } from '@mastra/playground-ui/keyboard/keyboard-shortcuts-context';
 import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { MastraReactProvider } from '@mastra/react';
@@ -22,6 +23,7 @@ import {
   workspaceSkillFileLink,
 } from './lib/app-routing';
 import { Link } from './lib/link';
+import { isSamePageHref } from './lib/same-page-href';
 import { StudioIndexRedirect } from './lib/studio-index-redirect';
 import { AgentBuilderRoot } from './pages/agent-builder';
 import AgentBuilderAgents from './pages/agent-builder/agents';
@@ -55,12 +57,12 @@ import CmsPromptBlocksCreatePage from './pages/cms/prompt-blocks/create';
 import CmsPromptBlocksEditPage from './pages/cms/prompt-blocks/edit';
 import CmsScorersCreatePage from './pages/cms/scorers/create';
 import CmsScorersEditPage from './pages/cms/scorers/edit';
+import ConnectionsPage from './pages/connections';
 import Datasets from './pages/datasets';
 import DatasetPage from './pages/datasets/dataset';
 import EditDatasetPage from './pages/datasets/dataset/edit';
 import DatasetItemVersionsComparePage from './pages/datasets/dataset/item/versions';
 import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
-import CreateDatasetPage from './pages/datasets/new';
 import Experiments from './pages/experiments';
 import CompareExperimentsPage from './pages/experiments/compare';
 import ExperimentPage from './pages/experiments/experiment';
@@ -70,7 +72,6 @@ import { Login } from './pages/login';
 import Logs from './pages/logs';
 import MCPs from './pages/mcps';
 import { McpServerPage } from './pages/mcps/[serverId]';
-import MCPServerToolExecutor from './pages/mcps/tool';
 import Metrics from './pages/metrics';
 import PromptBlocks from './pages/prompt-blocks';
 import Resources from './pages/resources';
@@ -80,8 +81,6 @@ import { StudioSettingsPage } from './pages/settings';
 import { SignUp } from './pages/signup';
 import Templates from './pages/templates';
 import Template from './pages/templates/template';
-import AgentTool from './pages/tools/agent-tool';
-import Tool from './pages/tools/tool';
 import Traces from './pages/traces';
 import Workflows from './pages/workflows';
 import SchedulePage from './pages/workflows/schedule';
@@ -132,7 +131,8 @@ declare global {
 
 const RootLayout = () => {
   const navigate = useNavigate();
-  const frameworkNavigate = (path: string) => navigate(path, { viewTransition: true });
+  const frameworkNavigate = (path: string) =>
+    navigate(path, { viewTransition: !isSamePageHref(path, window.location.pathname) });
 
   return (
     <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>
@@ -150,7 +150,8 @@ const RootLayout = () => {
 
 const MinimalRootLayout = () => {
   const navigate = useNavigate();
-  const frameworkNavigate = (path: string) => navigate(path, { viewTransition: true });
+  const frameworkNavigate = (path: string) =>
+    navigate(path, { viewTransition: !isSamePageHref(path, window.location.pathname) });
 
   return (
     <LinkComponentProvider Link={Link} navigate={frameworkNavigate} paths={paths}>
@@ -355,10 +356,6 @@ export const routes: RouteObject[] = [
         element: <CmsPromptBlocksEditPage />,
       },
       {
-        path: '/agents/:agentId/tools/:toolId',
-        element: <AgentTool />,
-      },
-      {
         path: '/agents/:agentId',
         element: (
           <AgentLayout>
@@ -388,14 +385,15 @@ export const routes: RouteObject[] = [
       },
 
       { path: '/tools', element: <Tools /> },
-      {
-        path: '/tools/:toolId',
-        element: <Tool />,
-      },
 
       {
         path: '/integrations',
         element: <IntegrationsPage />,
+      },
+
+      {
+        path: '/connections',
+        element: <ConnectionsPage />,
       },
 
       { path: '/processors', element: <Processors /> },
@@ -408,10 +406,6 @@ export const routes: RouteObject[] = [
       {
         path: '/mcps/:serverId',
         element: <McpServerPage />,
-      },
-      {
-        path: '/mcps/:serverId/tools/:toolId',
-        element: <MCPServerToolExecutor />,
       },
 
       { path: '/workspaces', element: <Workspace /> },
@@ -456,10 +450,6 @@ export const routes: RouteObject[] = [
       ...(isExperimentalFeatures
         ? [
             { path: '/datasets', element: <Datasets /> },
-            {
-              path: '/datasets/new',
-              element: <CreateDatasetPage />,
-            },
             {
               path: '/datasets/:datasetId',
               element: <DatasetPage />,
@@ -529,7 +519,12 @@ function App() {
   if (isLoading) {
     // Config is loaded from localStorage. However, there might be a race condition
     // between the first tanstack resolution and the React useLayoutEffect where headers are not set yet on the first HTTP request.
-    return null;
+    // The instance probe can also be slow, so show the same spinner as RoutePermissionsGate instead of a blank page.
+    return (
+      <div className="flex h-screen w-full items-center justify-center">
+        <Spinner />
+      </div>
+    );
   }
 
   if (!baseUrl) {

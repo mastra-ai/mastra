@@ -119,11 +119,28 @@ export function pullRequestStatusForItem(item: Pick<WorkItem, 'metadata' | 'stag
   return item.metadata.draft === true ? 'draft' : 'open';
 }
 
+/**
+ * Source key for a GitHub issue or pull request. Numbers repeat across a
+ * project's repositories, so the key is repository-scoped whenever the
+ * repository is known; the bare-number form remains for legacy callers.
+ */
+export function githubSourceKey(kind: 'issue' | 'pull-request', itemNumber: number, repositoryId?: number): string {
+  if (repositoryId !== undefined) return `github:${repositoryId}:${kind}:${itemNumber}`;
+  return kind === 'issue' ? `github-issue:${itemNumber}` : `github-pr:${itemNumber}`;
+}
+
+/**
+ * The candidate source key a card stands for. Cards stamped with their
+ * repository match only that repository's candidate, even when the card
+ * itself still carries a bare-number key from before keys were scoped.
+ */
 export function candidateSourceKeyForItem(item: WorkItem): string | undefined {
   const itemNumber = githubNumberForItem(item);
   if (itemNumber === undefined) return;
-  if (item.source === 'github-issue') return `github-issue:${itemNumber}`;
-  if (item.source === 'github-pr') return `github-pr:${itemNumber}`;
+  const repositoryId =
+    typeof item.metadata.githubRepositoryId === 'number' ? item.metadata.githubRepositoryId : undefined;
+  if (item.source === 'github-issue') return githubSourceKey('issue', itemNumber, repositoryId);
+  if (item.source === 'github-pr') return githubSourceKey('pull-request', itemNumber, repositoryId);
   return;
 }
 
@@ -202,6 +219,16 @@ export function persistedSourceKeys(items: readonly WorkItem[]): ReadonlySet<str
     if (item.sourceKey) keys.add(item.sourceKey);
     const candidateSourceKey = candidateSourceKeyForItem(item);
     if (candidateSourceKey) keys.add(candidateSourceKey);
+    // The URL names the repository, covering cards filed before they were stamped with one.
+    if (item.url && (item.source === 'github-issue' || item.source === 'github-pr')) keys.add(item.url);
   }
   return keys;
+}
+
+/** Whether a live candidate is already one of the given persisted cards. */
+export function isPersistedCandidate(
+  keys: ReadonlySet<string>,
+  candidate: { sourceKey: string; url: string },
+): boolean {
+  return keys.has(candidate.sourceKey) || keys.has(candidate.url);
 }

@@ -51,6 +51,10 @@ import type {
   TraceQueryGroupResponse,
   TraceQueryKeysetTraceResponse,
   TraceQueryResponse,
+  AggregateTracesArgs,
+  AggregateTracesResponse,
+  AggregateSpansArgs,
+  AggregateSpansResponse,
   GetTraceQueryFieldsArgs,
   GetTraceQueryFieldsResponse,
   GetTraceQueryValuesArgs,
@@ -126,6 +130,7 @@ import type { Body, PathParams, QueryParams, RouteResponse } from './route-types
 import type {
   ListFeedbackResponse,
   ClientOptions,
+  McpServerEventStreamFrame,
   CreateMemoryThreadParams,
   CreateMemoryThreadResponse,
   GetAgentResponse,
@@ -338,7 +343,7 @@ export class MastraClient extends BaseResource {
 
   /**
    * Scopes to an agent controller hosted on the connected Mastra instance. Use
-   * `getAgentController(id).session(resourceId)` to create/resume a session,
+   * `getAgentController(id).session(sessionId)` to create/resume a session,
    * stream its events, and send messages.
    * @param controllerId - The id the agent controller is registered under on Mastra
    */
@@ -885,6 +890,96 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Lists the event types an MCP server declares (experimental).
+   * `testEmit` is true when the server serves {@link emitMcpServerEvent} (under `mastra dev`).
+   * @param serverId - The ID of the MCP server.
+   */
+  public getMcpServerEvents(
+    serverId: PathParams<'GET /mcp/:serverId/events'>['serverId'],
+  ): Promise<RouteResponse<'GET /mcp/:serverId/events'>> {
+    return this.request(`/mcp/${encodeURIComponent(serverId)}/events`);
+  }
+
+  /**
+   * Reads occurrences of an MCP server event type, like the `events/poll` MCP request (experimental).
+   * Pass the returned `cursor` to the next call to resume.
+   * @param serverId - The ID of the MCP server.
+   * @param eventName - The event type name.
+   * @param body - Event arguments, resume cursor and page size.
+   */
+  public pollMcpServerEvent(
+    serverId: PathParams<'POST /mcp/:serverId/events/:eventName/poll'>['serverId'],
+    eventName: PathParams<'POST /mcp/:serverId/events/:eventName/poll'>['eventName'],
+    body: Body<'POST /mcp/:serverId/events/:eventName/poll'> = {},
+  ): Promise<RouteResponse<'POST /mcp/:serverId/events/:eventName/poll'>> {
+    return this.request(`/mcp/${encodeURIComponent(serverId)}/events/${encodeURIComponent(eventName)}/poll`, {
+      method: 'POST',
+      body,
+    });
+  }
+
+  /**
+   * Streams occurrences of a push-capable MCP server event type (experimental).
+   * Yields an `active` frame first, then `event`, `heartbeat` and `error` frames, and ends
+   * when the server ends the stream. Abort `options.signal` or break out of the loop to stop.
+   *
+   * @example
+   * ```typescript
+   * const controller = new AbortController();
+   * for await (const frame of client.streamMcpServerEvent('tickets', 'ticket.created', {}, { signal: controller.signal })) {
+   *   if (frame.type === 'event') console.log(frame.occurrence.data);
+   * }
+   * ```
+   */
+  public async *streamMcpServerEvent(
+    serverId: PathParams<'POST /mcp/:serverId/events/:eventName/stream'>['serverId'],
+    eventName: PathParams<'POST /mcp/:serverId/events/:eventName/stream'>['eventName'],
+    body: Body<'POST /mcp/:serverId/events/:eventName/stream'> = {},
+    options: { signal?: AbortSignal } = {},
+  ): AsyncGenerator<McpServerEventStreamFrame, void, undefined> {
+    const response: Response = await this.request(
+      `/mcp/${encodeURIComponent(serverId)}/events/${encodeURIComponent(eventName)}/stream`,
+      { method: 'POST', body, stream: true, signal: options.signal, retries: 0 },
+    );
+    if (!response.body) {
+      throw new Error('Response body is null');
+    }
+
+    const reader = response.body.pipeThrough(createSseJsonTransform<McpServerEventStreamFrame>()).getReader();
+    const cancel = () => void reader.cancel().catch(() => {});
+    options.signal?.addEventListener('abort', cancel, { once: true });
+    try {
+      while (true) {
+        const { value, done } = await reader.read();
+        if (done) return;
+        yield value;
+      }
+    } finally {
+      options.signal?.removeEventListener('abort', cancel);
+      await reader.cancel().catch(() => {});
+    }
+  }
+
+  /**
+   * Emits a test occurrence of an emit-fed MCP server event type (experimental).
+   * Only served under `mastra dev`; other servers respond 404. The occurrence's
+   * `eventId` starts with `mastra-test-`.
+   * @param serverId - The ID of the MCP server.
+   * @param eventName - The event type name.
+   * @param data - The event payload; validated against the event's payload schema.
+   */
+  public emitMcpServerEvent(
+    serverId: PathParams<'POST /mcp/:serverId/events/:eventName/emit'>['serverId'],
+    eventName: PathParams<'POST /mcp/:serverId/events/:eventName/emit'>['eventName'],
+    data: Body<'POST /mcp/:serverId/events/:eventName/emit'>['data'],
+  ): Promise<RouteResponse<'POST /mcp/:serverId/events/:eventName/emit'>> {
+    return this.request(`/mcp/${encodeURIComponent(serverId)}/events/${encodeURIComponent(eventName)}/emit`, {
+      method: 'POST',
+      body: { data },
+    });
+  }
+
+  /**
    * Gets an A2A client for interacting with an agent via the A2A protocol
    * @param agentId - ID of the agent to interact with
    * @returns A2A client instance
@@ -962,18 +1057,22 @@ export class MastraClient extends BaseResource {
    * @param threadId - ID of the thread.
    * @param workingMemory - The new working memory content.
    * @param resourceId - Optional ID of the resource.
+   * @param mode - `replace` (default) or `merge` to atomically deep-merge a partial JSON object
+   * into resource-scoped schema working memory (requires storage support, e.g. PostgreSQL).
    */
   public updateWorkingMemory({
     agentId,
     threadId,
     workingMemory,
     resourceId,
+    mode,
     requestContext,
   }: {
     agentId: string;
     threadId: string;
     workingMemory: string;
     resourceId?: string;
+    mode?: 'replace' | 'merge';
     requestContext?: RequestContext | Record<string, any>;
   }) {
     return this.request(
@@ -983,6 +1082,7 @@ export class MastraClient extends BaseResource {
         body: {
           workingMemory,
           resourceId,
+          ...(mode ? { mode } : {}),
         },
       },
     );
@@ -1137,6 +1237,23 @@ export class MastraClient extends BaseResource {
     return this.observability.queryTraces(params);
   }
 
+  /**
+   * Groups and measures the traces selected by a time range and optional trace-query predicate.
+   * Check `capabilities.traceAggregate` from `getObservabilityCapabilities()` first; servers without it return 404 or 501.
+   */
+  aggregateTraces(params: AggregateTracesArgs): Promise<AggregateTracesResponse> {
+    return this.observability.aggregateTraces(params);
+  }
+
+  /**
+   * Groups and measures individual completed spans selected by a time range and optional span-query predicate.
+   * Token and cost measures count usage recorded on each span itself. Check `capabilities.spanAggregate` from
+   * `getObservabilityCapabilities()` first; servers without it return 404 or 501.
+   */
+  aggregateSpans(params: AggregateSpansArgs): Promise<AggregateSpansResponse> {
+    return this.observability.aggregateSpans(params);
+  }
+
   /** Returns canonical and observed fields available to the advanced trace-query grammar. */
   getTraceQueryFields(
     params: GetTraceQueryFieldsArgs,
@@ -1153,8 +1270,8 @@ export class MastraClient extends BaseResource {
     return this.observability.getTraceQueryValues(params, options);
   }
 
-  /** Queries thread identities using eligible-trace and cross-trace predicates. */
-  queryTraceThreads(params: QueryTraceThreadsInput): Promise<QueryTraceThreadsResult> {
+  /** Queries full-history thread rows using a trace or thread activity window. */
+  queryTraceThreads<T extends QueryTraceThreadsInput>(params: T): Promise<QueryTraceThreadsResult<T>> {
     return this.observability.queryTraceThreads(params);
   }
 
@@ -1985,11 +2102,16 @@ export class MastraClient extends BaseResource {
    * Lists all datasets with optional pagination
    */
   public listDatasets(params?: ListDatasetsParams): Promise<SerializedRouteResponse<'GET /datasets'>> {
+    // An empty ID list matches no datasets, and repeated query params cannot carry an empty list.
+    if (params?.datasetIds?.length === 0) {
+      return Promise.resolve({ datasets: [], pagination: { total: 0, page: 0, perPage: false, hasMore: false } });
+    }
     const searchParams = new URLSearchParams();
     if (params?.page !== undefined) searchParams.set('page', String(params.page));
     if (params?.perPage !== undefined) searchParams.set('perPage', String(params.perPage));
     if (params?.targetType !== undefined) searchParams.set('targetType', params.targetType);
     for (const id of params?.targetIds ?? []) searchParams.append('targetIds', id);
+    for (const id of params?.datasetIds ?? []) searchParams.append('datasetIds', id);
     if (params?.orderBy) {
       searchParams.set('orderBy[field]', params.orderBy.field);
       searchParams.set('orderBy[direction]', params.orderBy.direction);
@@ -2298,6 +2420,19 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Gets an experiment by ID regardless of dataset association, including its
+   * `datasetId` (null for experiments orphaned by dataset deletion). When tenancy
+   * fields are supplied, experiments outside the tenant are reported as not found.
+   */
+  public getExperiment(
+    experimentId: PathParams<'GET /experiments/:experimentId'>['experimentId'],
+    options?: QueryParams<'GET /experiments/:experimentId'>,
+  ): Promise<SerializedRouteResponse<'GET /experiments/:experimentId'>> {
+    const qs = buildTenancyQuery(options);
+    return this.request(`/experiments/${encodeURIComponent(experimentId)}${qs}`);
+  }
+
+  /**
    * Deletes a dataset experiment and its results. Tenancy fields, when provided,
    * scope the dataset lookup on the server side.
    *
@@ -2482,7 +2617,8 @@ export class MastraClient extends BaseResource {
   }
 
   /**
-   * Compares two dataset experiments for regression detection
+   * Compares two to ten dataset experiments item by item against a baseline.
+   * Every experiment in `experimentIds` gets a result entry per item (`null` when it did not run that item).
    */
   public compareExperiments(params: CompareExperimentsParams): Promise<CompareExperimentsResponse> {
     const { datasetId, ...body } = params;

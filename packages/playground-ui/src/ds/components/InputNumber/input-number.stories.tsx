@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Field, FieldDescription, FieldError, FieldLabel } from '../Field';
 import { Input } from '../Input';
+import { InputGroupAddon, InputGroupText } from '../InputGroup';
 import {
   InputNumber,
   InputNumberDecrement,
@@ -49,6 +50,31 @@ export const WithField: Story = {
         </InputNumber>
         <FieldDescription>How many times a failed step runs again.</FieldDescription>
       </Field>
+    </div>
+  ),
+};
+
+export const FlushTrailingSteppers: Story = {
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'Use the flush addon variant to join trailing stepper buttons at the field edge. Add a margin to separate the unit label from the buttons.',
+      },
+    },
+  },
+  render: () => (
+    <div className="w-64">
+      <InputNumber defaultValue={30000} min={1} step={1000} format={{ maximumFractionDigits: 0 }}>
+        <InputNumberGroup size="sm">
+          <InputNumberInput aria-label="Observation threshold" />
+          <InputGroupAddon align="inline-end" variant="flush">
+            <InputGroupText className="mr-2">tokens</InputGroupText>
+            <InputNumberDecrement />
+            <InputNumberIncrement />
+          </InputGroupAddon>
+        </InputNumberGroup>
+      </InputNumber>
     </div>
   ),
 };

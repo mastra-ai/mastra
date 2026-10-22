@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader } from '@mastra/playground-ui/components/
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
@@ -15,7 +16,8 @@ import { HistoryIcon, ColumnsIcon, GitCompareArrowsIcon } from 'lucide-react';
 import { useParams, useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { DatasetItemDetails } from '@/domains/datasets';
-import { datasetCrumb, navCrumb, truncateItemIdCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
+import { datasetCrumb, navCrumb, truncateItemIdCrumb } from '@/domains/navigation/crumbs';
+import type { CrumbDef } from '@/domains/navigation/crumbs';
 
 function toDatasetItem(version: DatasetItemVersion, datasetId: string): DatasetItem {
   return {
@@ -191,14 +193,18 @@ function DatasetItemVersionsComparePage() {
           </CardHeader>
           <CardContent className="grid content-start gap-5 overflow-y-auto">
             {isLoading ? (
-              <div className="text-body text-muted-foreground">Loading...</div>
+              <Txt as="p" variant="body" tone="muted">
+                Loading...
+              </Txt>
             ) : leftItem ? (
               <DatasetItemDetails
                 item={leftItem}
                 diff={showDiff && rightItem ? { against: rightItem, side: leftIsOlder ? 'a' : 'b' } : undefined}
               />
             ) : (
-              <div className="text-body text-muted-foreground">Item data not available</div>
+              <Txt as="p" variant="body" tone="muted">
+                Item data not available
+              </Txt>
             )}
           </CardContent>
         </Card>
@@ -221,14 +227,18 @@ function DatasetItemVersionsComparePage() {
                 descriptionSlot="Pick a version above to compare it with the one on the left."
               />
             ) : isRightLoading ? (
-              <div className="text-body text-muted-foreground">Loading...</div>
+              <Txt as="p" variant="body" tone="muted">
+                Loading...
+              </Txt>
             ) : rightItem ? (
               <DatasetItemDetails
                 item={rightItem}
                 diff={showDiff && leftItem ? { against: leftItem, side: leftIsOlder ? 'b' : 'a' } : undefined}
               />
             ) : (
-              <div className="text-body text-muted-foreground">Version {rightNumber} not found</div>
+              <Txt as="p" variant="body" tone="muted">
+                Version {rightNumber} not found
+              </Txt>
             )}
           </CardContent>
         </Card>

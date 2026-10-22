@@ -146,7 +146,9 @@ export const isCustomRoutePublic = (
     return !customRouteAuthConfig.get(allRouteKey);
   }
 
-  // Check pattern matches for dynamic routes (e.g., '/users/:id')
+  // Check pattern matches for dynamic routes (e.g., '/users/:id').
+  // Any matching pattern that requires auth wins over overlapping public patterns.
+  let matchedPublic = false;
   for (const [routeKey, requiresAuth] of customRouteAuthConfig.entries()) {
     const colonIndex = routeKey.indexOf(':');
     if (colonIndex === -1) {
@@ -161,13 +163,15 @@ export const isCustomRoutePublic = (
       continue;
     }
 
-    // Check if path matches the pattern
     if (pathMatchesPattern(path, routePattern)) {
-      return !requiresAuth; // True when route opts out of auth
+      if (requiresAuth) {
+        return false;
+      }
+      matchedPublic = true;
     }
   }
 
-  return false;
+  return matchedPublic;
 };
 
 // NOTE: This uses isProtectedCustomRoute (default-allow for unknown paths) rather than
@@ -377,7 +381,10 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
   // When a route explicitly requires auth (requiresAuth: true), skip the
   // public-path bypass so the user is still authenticated and permissions
   // are injected into the request context.
-  if (!requiresAuth && canAccessPublicly(path, method, authConfig)) {
+  if (
+    !requiresAuth &&
+    (canAccessPublicly(path, method, authConfig) || isCustomRoutePublic(path, method, customRouteAuthConfig))
+  ) {
     return pass;
   }
 
@@ -387,9 +394,26 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
   let refreshHeaders: Record<string, string> | undefined;
   const authRequest = adaptToMastraAuthRequest(rawRequest);
 
+  type ConsumePendingResponseHeadersFn = (request: typeof authRequest) => Record<string, string> | undefined;
+  const mergePendingProviderHeaders = (request: typeof authRequest = authRequest) => {
+    const consume = (authConfig as { consumePendingResponseHeaders?: ConsumePendingResponseHeadersFn })
+      .consumePendingResponseHeaders;
+    if (typeof consume !== 'function') return;
+    let pending: Record<string, string> | undefined;
+    try {
+      pending = consume.call(authConfig, request);
+    } catch {
+      // Forwarding a rotated cookie is best-effort; never fail auth over it.
+      return;
+    }
+    if (!pending) return;
+    refreshHeaders = { ...(refreshHeaders ?? {}), ...pending };
+  };
+
   try {
     if (typeof authConfig.authenticateToken === 'function') {
       user = await authConfig.authenticateToken(token ?? '', authRequest);
+      mergePendingProviderHeaders();
     } else {
       throw new Error('No token verification method configured');
     }
@@ -426,7 +450,9 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
                 ? refreshedCookie.split('=').slice(1).join('=')
                 : refreshedCookie;
               try {
-                user = await authConfig.authenticateToken(cookieValue, adaptToMastraAuthRequest(refreshedRequest));
+                const retryAuthRequest = adaptToMastraAuthRequest(refreshedRequest);
+                user = await authConfig.authenticateToken(cookieValue, retryAuthRequest);
+                mergePendingProviderHeaders(retryAuthRequest);
               } catch (retryErr) {
                 retryHttpError = retryErr instanceof HTTPException ? retryErr : undefined;
                 throw retryErr;

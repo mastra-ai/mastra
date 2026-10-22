@@ -2,12 +2,12 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import type { OMResponse, ProviderOMDefaultsResponse, UpdateOMResponse } from '../api/types';
+import type { OMResponse, UpdateOMResponse } from '../api/types';
 
 /**
  * Observational Memory config (mirrors the TUI `/om` command). Settings are
  * persisted per user and can be managed without an active chat session. When a
- * session is available, resourceId and scope let the server apply changes to it
+ * session is available, its sessionId lets the server apply changes to it
  * immediately as well. When `factoryId` is set, the hooks address the factory
  * project's shared settings row (used by board runs and channel sessions)
  * instead of the caller's personal row.
@@ -16,14 +16,13 @@ import type { OMResponse, ProviderOMDefaultsResponse, UpdateOMResponse } from '.
  * straight into the cache via `setQueryData` instead of triggering a refetch —
  * preserving the single-response UX the section relies on.
  */
-export function useOMQuery(resourceId: string | undefined, scope?: string, factoryId?: string) {
+export function useOMQuery(sessionId: string | undefined, factoryId?: string) {
   const { client } = useApiConfig();
   return useQuery<OMResponse>({
-    queryKey: queryKeys.om(resourceId, factoryId),
+    queryKey: queryKeys.om(sessionId, factoryId),
     queryFn: () => {
       const params = new URLSearchParams();
-      if (resourceId) params.set('resourceId', resourceId);
-      if (scope) params.set('scope', scope);
+      if (sessionId) params.set('sessionId', sessionId);
       if (factoryId) params.set('factoryId', factoryId);
       const query = params.size > 0 ? `?${params.toString()}` : '';
       return client.get<OMResponse>(`/web/config/om${query}`);
@@ -31,42 +30,19 @@ export function useOMQuery(resourceId: string | undefined, scope?: string, facto
   });
 }
 
-export function useApplyProviderOMDefaults() {
-  const { client } = useApiConfig();
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: ({
-      providerId,
-      factoryModelId,
-      factoryId,
-    }: {
-      providerId: string;
-      factoryModelId: string;
-      factoryId?: string;
-    }) =>
-      client.post<ProviderOMDefaultsResponse>('/web/config/om/provider-defaults', {
-        providerId,
-        factoryModelId,
-        ...(factoryId ? { factoryId } : {}),
-      }),
-    onSuccess: (response, { factoryId }) =>
-      queryClient.setQueryData<OMResponse>(queryKeys.om(undefined, factoryId), { config: response.config }),
-  });
-}
-
 type OMRole = 'observer' | 'reflector';
 
 export interface UpdateOMModelArgs {
-  modelId: string;
+  modelId: 'auto' | string;
 }
 
-export function useUpdateOMModel(resourceId: string | undefined, role: OMRole, scope?: string, factoryId?: string) {
+export function useUpdateOMModel(sessionId: string | undefined, role: OMRole, factoryId?: string) {
   const { client } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ modelId }: UpdateOMModelArgs) =>
-      client.put<UpdateOMResponse>(`/web/config/om/${role}/model`, { resourceId, modelId, scope, factoryId }),
-    onSuccess: res => queryClient.setQueryData<OMResponse>(queryKeys.om(resourceId, factoryId), { config: res.config }),
+      client.put<UpdateOMResponse>(`/web/config/om/${role}/model`, { sessionId, modelId, factoryId }),
+    onSuccess: res => queryClient.setQueryData<OMResponse>(queryKeys.om(sessionId, factoryId), { config: res.config }),
   });
 }
 
@@ -75,13 +51,13 @@ export interface UpdateOMThresholdsArgs {
   reflectionThreshold?: number;
 }
 
-export function useUpdateOMThresholds(resourceId: string | undefined, scope?: string, factoryId?: string) {
+export function useUpdateOMThresholds(sessionId: string | undefined, factoryId?: string) {
   const { client } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (args: UpdateOMThresholdsArgs) =>
-      client.put<UpdateOMResponse>('/web/config/om/thresholds', { resourceId, scope, factoryId, ...args }),
-    onSuccess: res => queryClient.setQueryData<OMResponse>(queryKeys.om(resourceId, factoryId), { config: res.config }),
+      client.put<UpdateOMResponse>('/web/config/om/thresholds', { sessionId, factoryId, ...args }),
+    onSuccess: res => queryClient.setQueryData<OMResponse>(queryKeys.om(sessionId, factoryId), { config: res.config }),
   });
 }
 
@@ -89,12 +65,12 @@ export interface UpdateOMObserveAttachmentsArgs {
   value: 'auto' | boolean;
 }
 
-export function useUpdateOMObserveAttachments(resourceId: string | undefined, scope?: string, factoryId?: string) {
+export function useUpdateOMObserveAttachments(sessionId: string | undefined, factoryId?: string) {
   const { client } = useApiConfig();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: ({ value }: UpdateOMObserveAttachmentsArgs) =>
-      client.put<UpdateOMResponse>('/web/config/om/observe-attachments', { resourceId, value, scope, factoryId }),
-    onSuccess: res => queryClient.setQueryData<OMResponse>(queryKeys.om(resourceId, factoryId), { config: res.config }),
+      client.put<UpdateOMResponse>('/web/config/om/observe-attachments', { sessionId, value, factoryId }),
+    onSuccess: res => queryClient.setQueryData<OMResponse>(queryKeys.om(sessionId, factoryId), { config: res.config }),
   });
 }

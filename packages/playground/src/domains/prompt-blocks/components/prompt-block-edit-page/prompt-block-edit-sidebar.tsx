@@ -1,5 +1,6 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Field, FieldError, FieldLabel } from '@mastra/playground-ui/components/Field';
+import { InlineCode } from '@mastra/playground-ui/components/InlineCode';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { JSONSchemaForm, jsonSchemaToFields } from '@mastra/playground-ui/components/JSONSchemaForm';
 import type { SchemaField } from '@mastra/playground-ui/components/JSONSchemaForm';
@@ -142,7 +143,8 @@ export function PromptBlockEditSidebar({
             subtitle={
               <>
                 Define variables for this prompt block. Use{' '}
-                <code className="font-medium text-foreground">{'{{variableName}}'}</code> syntax in your content.
+                <InlineCode className="text-label text-foreground">{'{{variableName}}'}</InlineCode> syntax in your
+                content.
               </>
             }
           />

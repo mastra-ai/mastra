@@ -221,14 +221,14 @@ The `MastraRBACNeon` constructor accepts a `MastraRBACNeonOptions` object.
   },
   {
     name: 'getUserRoles?',
-    type: '(user: EEUser) => Promise<string[]> | string[]',
+    type: '(user: NeonAuthUser) => Promise<string[]> | string[]',
     description:
       'Custom function for extracting role names. When omitted, the provider fetches organization memberships from Neon Auth.',
   },
   {
     name: 'cache?',
     type: '{ ttlMs?: number; maxSize?: number }',
-    description: 'Role lookup cache configuration. The defaults are 30,000 ms and 1,000 entries.',
+    description: 'Role lookup cache configuration. The defaults are 60,000 ms and 1,000 entries.',
   },
 ]}
 />

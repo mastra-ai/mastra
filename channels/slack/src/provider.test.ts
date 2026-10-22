@@ -40,6 +40,15 @@ describe('stripTrailingSlash', () => {
 });
 
 describe('resolveSlackAdapterConfig', () => {
+  it('carries textDisplay through to the resolved adapter config', () => {
+    expect(resolveSlackAdapterConfig({ textDisplay: 'hidden' }).textDisplay).toBe('hidden');
+    expect(resolveSlackAdapterConfig({ adapterConfig: { textDisplay: 'hidden' } }).textDisplay).toBe('hidden');
+  });
+
+  it('omits textDisplay when unset so the core default governs', () => {
+    expect('textDisplay' in resolveSlackAdapterConfig({})).toBe(false);
+  });
+
   it('carries textFormat through to the resolved adapter config', () => {
     const resolved = resolveSlackAdapterConfig({ textFormat: 'plain' });
     expect(resolved.textFormat).toBe('plain');
@@ -92,6 +101,73 @@ describe('connect config hash', () => {
     expect(record?.configHash).toBe(
       hashConfig({ slashCommands: record!.data.slashCommands }, 'https://example.com', 'Helper', 'Helps'),
     );
+  });
+});
+
+describe('base URL resolution', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    delete process.env.MASTRA_SERVER_URL;
+  });
+
+  it('mints the app manifest against MASTRA_SERVER_URL when no baseUrl or server override is set', async () => {
+    process.env.MASTRA_SERVER_URL = 'https://my-app.server.example.com/';
+    const createApp = vi.spyOn(SlackManifestClient.prototype, 'createApp').mockResolvedValue({
+      appId: 'A1',
+      clientId: 'client-id',
+      clientSecret: 'client-secret',
+      signingSecret: 'signing-secret',
+      oauthAuthorizeUrl: 'https://slack.com/oauth/v2/authorize?client_id=client-id',
+    } as Awaited<ReturnType<SlackManifestClient['createApp']>>);
+
+    const store = new InMemoryStore();
+    const provider = new SlackProvider({
+      tokenResolver: async () => 'token',
+      encryptionKey: 'k'.repeat(32),
+    });
+    provider.__attach({
+      getStorage: () => store,
+      getAgentById: () => ({ name: 'Helper', getDescription: () => 'Helps' }),
+      getServer: () => undefined,
+    } as unknown as Mastra);
+
+    await provider.connect({ id: 'agent-1', name: 'Helper' });
+
+    const manifest = createApp.mock.calls[0]![0] as {
+      oauth_config: { redirect_urls: string[] };
+      settings: { event_subscriptions?: { request_url?: string } };
+    };
+    expect(manifest.oauth_config.redirect_urls).toEqual(['https://my-app.server.example.com/slack/oauth/callback']);
+    expect(manifest.settings.event_subscriptions?.request_url).toMatch(
+      /^https:\/\/my-app\.server\.example\.com\/slack\/events\//,
+    );
+  });
+
+  it('explicit server.studio* config beats MASTRA_SERVER_URL', async () => {
+    process.env.MASTRA_SERVER_URL = 'https://env-var.example.com';
+    const createApp = vi.spyOn(SlackManifestClient.prototype, 'createApp').mockResolvedValue({
+      appId: 'A1',
+      clientId: 'client-id',
+      clientSecret: 'client-secret',
+      signingSecret: 'signing-secret',
+      oauthAuthorizeUrl: 'https://slack.com/oauth/v2/authorize?client_id=client-id',
+    } as Awaited<ReturnType<SlackManifestClient['createApp']>>);
+
+    const store = new InMemoryStore();
+    const provider = new SlackProvider({
+      tokenResolver: async () => 'token',
+      encryptionKey: 'k'.repeat(32),
+    });
+    provider.__attach({
+      getStorage: () => store,
+      getAgentById: () => ({ name: 'Helper', getDescription: () => 'Helps' }),
+      getServer: () => ({ studioProtocol: 'https', studioHost: 'config-override.example.com', studioPort: 443 }),
+    } as unknown as Mastra);
+
+    await provider.connect({ id: 'agent-1', name: 'Helper' });
+
+    const manifest = createApp.mock.calls[0]![0] as { oauth_config: { redirect_urls: string[] } };
+    expect(manifest.oauth_config.redirect_urls).toEqual(['https://config-override.example.com/slack/oauth/callback']);
   });
 });
 

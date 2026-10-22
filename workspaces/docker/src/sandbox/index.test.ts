@@ -33,6 +33,7 @@ const { mockContainer, mockExec, mockStream, mockDocker, resetMockDefaults } = v
     write: vi.fn(),
     end: vi.fn(),
     destroy: vi.fn(),
+    resume: vi.fn(),
     writableEnded: false,
   };
 
@@ -293,6 +294,17 @@ describe('DockerSandbox', () => {
           expect.objectContaining({ Image: 'mastra-template:abc', WorkingDir: '/srv/repo' }),
         );
         expect(sandbox.workingDirectory).toBe('/srv/repo');
+      });
+
+      it('forwards onTemplateBuildProgress to the template build', async () => {
+        const template = fakeTemplate();
+        const onTemplateBuildProgress = vi.fn();
+        await new DockerSandbox({ template, onTemplateBuildProgress })._start();
+        expect(template.build).toHaveBeenCalledWith({
+          docker: mockDocker,
+          abortSignal: undefined,
+          onProgress: onTemplateBuildProgress,
+        });
       });
 
       it('keeps an explicit workingDirectory over the template workdir', async () => {
@@ -1219,6 +1231,87 @@ describe('DockerSandbox', () => {
       expect(result.exitCode).toBe(0);
     });
 
+    describe('UTF-8 decoding across multiplexed frames', () => {
+      // Docker multiplexed frame: 8-byte header (stream type, then payload size).
+      const frame = (type: 1 | 2, bytes: number[]) => {
+        const header = Buffer.alloc(8);
+        header[0] = type;
+        header.writeUInt32BE(bytes.length, 4);
+        return Buffer.concat([header, Buffer.from(bytes)]);
+      };
+
+      it('preserves multibyte characters split across interleaved stdout and stderr frames', async () => {
+        const sandbox = new DockerSandbox();
+        await sandbox._start();
+
+        const { PassThrough } = await import('node:stream');
+        const stream = new PassThrough();
+        mockExec.start.mockResolvedValueOnce(stream as any);
+
+        const stdoutChunks: string[] = [];
+        const stderrChunks: string[] = [];
+        const handle = await sandbox.processes!.spawn('emit', {
+          stdinMode: 'ignore',
+          onStdout: data => stdoutChunks.push(data),
+          onStderr: data => stderrChunks.push(data),
+        });
+
+        // € = E2 82 AC, 😀 = F0 9F 98 80
+        stream.write(frame(1, [0xe2]));
+        stream.write(frame(2, [0xf0, 0x9f]));
+        stream.write(frame(1, [0x82, 0xac]));
+        // Also split this frame itself across two chunks.
+        const last = frame(2, [0x98, 0x80]);
+        stream.write(last.subarray(0, 9));
+        stream.write(last.subarray(9));
+        stream.end();
+
+        const result = await handle.wait();
+        expect(result.stdout).toBe('€');
+        expect(result.stderr).toBe('😀');
+        expect(result.exitCode).toBe(0);
+        expect(stdoutChunks.join('')).toBe('€');
+        expect(stderrChunks.join('')).toBe('😀');
+        expect([...stdoutChunks, ...stderrChunks]).not.toContain('');
+      });
+
+      it('flushes an incomplete trailing sequence when the stream ends', async () => {
+        const sandbox = new DockerSandbox();
+        await sandbox._start();
+
+        const { PassThrough } = await import('node:stream');
+        const stream = new PassThrough();
+        mockExec.start.mockResolvedValueOnce(stream as any);
+
+        const handle = await sandbox.processes!.spawn('emit', { stdinMode: 'ignore' });
+
+        stream.write(frame(1, [0x61, 0xe2]));
+        stream.end();
+
+        const result = await handle.wait();
+        expect(result.stdout).toBe('a\uFFFD');
+      });
+
+      it('keeps flushed stderr instead of the fallback when the stream errors', async () => {
+        const sandbox = new DockerSandbox();
+        await sandbox._start();
+
+        const { PassThrough } = await import('node:stream');
+        const stream = new PassThrough();
+        mockExec.start.mockResolvedValueOnce(stream as any);
+
+        const handle = await sandbox.processes!.spawn('emit', { stdinMode: 'ignore' });
+
+        stream.write(frame(2, [0xe2]));
+        await new Promise(resolve => setImmediate(resolve));
+        stream.emit('error', new Error('ECONNRESET'));
+
+        const result = await handle.wait();
+        expect(result.exitCode).toBe(1);
+        expect(result.stderr).toBe('\uFFFD');
+      });
+    });
+
     it('should close the writable side of the exec stream to signal EOF', async () => {
       const sandbox = new DockerSandbox();
       await sandbox._start();
@@ -1320,7 +1413,7 @@ describe('DockerSandbox', () => {
       const pgidFile = spawnCmd[4];
 
       // Capture the kill exec call
-      const killStream = { destroy: vi.fn() };
+      const killStream = { destroy: vi.fn(), resume: vi.fn() };
       const killStart = vi.fn().mockResolvedValue(killStream);
       mockContainer.exec.mockResolvedValueOnce({
         id: 'kill-exec',
@@ -1335,6 +1428,9 @@ describe('DockerSandbox', () => {
       const killCall = mockContainer.exec.mock.calls[1]?.[0];
       expect(killCall.Cmd[0]).toBe('sh');
       expect(killCall.Cmd[1]).toBe('-c');
+      // Podman rejects execs with no attached stream, so the helper attaches and drains output.
+      expect(killCall).toMatchObject({ AttachStdout: true, AttachStderr: true });
+      expect(killStream.resume).toHaveBeenCalledOnce();
       const script = killCall.Cmd[2] as string;
       // The pgid file path is passed as a positional arg ($1), not interpolated,
       // so the script text is a static constant and the path travels in Cmd[4].
@@ -1359,19 +1455,89 @@ describe('DockerSandbox', () => {
       const handle = await sandbox.processes!.spawn('sleep 100');
 
       // The kill helper exec runs but exits non-zero (unrecorded/empty PGID).
-      const killStream = { destroy: vi.fn() };
+      const killStream = { destroy: vi.fn(), resume: vi.fn() };
       mockContainer.exec.mockResolvedValueOnce({
         id: 'kill-exec',
         start: vi.fn().mockResolvedValue(killStream),
         inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: 1 }),
       });
 
-      const killed = await handle.kill();
-      expect(killed).toBe(false);
-      expect(killStream.destroy).toHaveBeenCalledOnce();
+      // The target command is still running, so the failure is genuine.
+      mockExec.inspect.mockResolvedValue({ Running: true, ExitCode: null, Pid: 42 });
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
 
-      // The process stream was not destroyed, so wait() has not been resolved by kill().
-      expect(mockStream.destroy).not.toHaveBeenCalled();
+      try {
+        const killed = await handle.kill();
+        expect(killed).toBe(false);
+        expect(killStream.destroy).toHaveBeenCalledOnce();
+        expect(warn).toHaveBeenCalledWith(
+          expect.stringContaining('failed unexpectedly'),
+          expect.objectContaining({ message: 'kill helper exited with code 1' }),
+        );
+
+        // The process stream was not destroyed, so wait() has not been resolved by kill().
+        expect(mockStream.destroy).not.toHaveBeenCalled();
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it('should still warn when group termination is unconfirmed even though the leader exec has stopped', async () => {
+      // KILL_SCRIPT exits 1 when its verify loop cannot confirm the group is
+      // gone (timeout or EPERM). The wrapper leader was already SIGKILLed, so
+      // the command's exec reports stopped, but descendants may survive.
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      const handle = await sandbox.processes!.spawn('sleep 100');
+
+      const killStream = { destroy: vi.fn(), resume: vi.fn() };
+      mockContainer.exec.mockResolvedValueOnce({
+        id: 'kill-exec',
+        start: vi.fn().mockResolvedValue(killStream),
+        inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: 1 }),
+      });
+      mockExec.inspect.mockResolvedValue({ Running: false, ExitCode: 137, Pid: 42 });
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      try {
+        expect(await handle.kill()).toBe(false);
+        expect(warn).toHaveBeenCalledWith(
+          expect.stringContaining('failed unexpectedly'),
+          expect.objectContaining({ message: 'kill helper exited with code 1' }),
+        );
+      } finally {
+        warn.mockRestore();
+      }
+    });
+
+    it('should not warn when the helper exits non-zero because no PGID was recorded and the command already exited', async () => {
+      // The spawn wrapper removes the PGID file when the command exits on its
+      // own, so a kill racing a natural exit makes the helper exit 1. The
+      // command's exec has stopped, so there is nothing to kill.
+      const sandbox = new DockerSandbox();
+      await sandbox._start();
+
+      const handle = await sandbox.processes!.spawn('sh -c "printf ready; exit 0"');
+
+      const killStream = { destroy: vi.fn(), resume: vi.fn() };
+      mockContainer.exec.mockResolvedValueOnce({
+        id: 'kill-exec',
+        start: vi.fn().mockResolvedValue(killStream),
+        // Exit 3: no PGID file was readable.
+        inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: 3 }),
+      });
+      mockExec.inspect.mockResolvedValue({ Running: false, ExitCode: 0, Pid: 42 });
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      try {
+        const killed = await handle.kill();
+        expect(killed).toBe(false);
+        expect(warn).not.toHaveBeenCalled();
+        expect(mockStream.destroy).not.toHaveBeenCalled();
+      } finally {
+        warn.mockRestore();
+      }
     });
 
     it('should mark explicit kill results as killed without timeout', async () => {
@@ -1434,7 +1600,7 @@ describe('DockerSandbox', () => {
       const killHelperGate = new Promise<void>(resolve => {
         releaseKillHelper = resolve;
       });
-      const killStream = { destroy: vi.fn() };
+      const killStream = { destroy: vi.fn(), resume: vi.fn() };
       mockContainer.exec.mockImplementationOnce(async () => {
         await killHelperGate;
         return {
@@ -1484,7 +1650,7 @@ describe('DockerSandbox', () => {
         await firstKillGate;
         return {
           id: 'kill-exec-1',
-          start: vi.fn().mockResolvedValue({ destroy: vi.fn() }),
+          start: vi.fn().mockResolvedValue({ destroy: vi.fn(), resume: vi.fn() }),
           inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: 0 }),
         };
       });
@@ -1492,7 +1658,7 @@ describe('DockerSandbox', () => {
       // confirmation, it would clear `_terminationPromise` straight away.
       mockContainer.exec.mockImplementationOnce(async () => ({
         id: 'kill-exec-2',
-        start: vi.fn().mockResolvedValue({ destroy: vi.fn() }),
+        start: vi.fn().mockResolvedValue({ destroy: vi.fn(), resume: vi.fn() }),
         inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: 1 }),
       }));
 
@@ -1617,7 +1783,7 @@ describe('DockerSandbox', () => {
         const killHelperGate = new Promise<void>(resolve => {
           releaseKillHelper = resolve;
         });
-        const killStream = { destroy: vi.fn() };
+        const killStream = { destroy: vi.fn(), resume: vi.fn() };
         mockContainer.exec.mockImplementationOnce(async () => {
           await killHelperGate;
           return {
@@ -1670,7 +1836,7 @@ describe('DockerSandbox', () => {
         const killHelperGate = new Promise<void>(resolve => {
           releaseKillHelper = resolve;
         });
-        const killStream = { destroy: vi.fn() };
+        const killStream = { destroy: vi.fn(), resume: vi.fn() };
         mockContainer.exec.mockImplementationOnce(async () => {
           await killHelperGate;
           return {
@@ -1837,7 +2003,7 @@ describe('DockerSandbox', () => {
           await killHelperGate;
           return {
             id: 'kill-exec',
-            start: vi.fn().mockResolvedValue({ destroy: vi.fn() }),
+            start: vi.fn().mockResolvedValue({ destroy: vi.fn(), resume: vi.fn() }),
             inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: 0 }),
           };
         });
@@ -1890,7 +2056,7 @@ describe('DockerSandbox', () => {
         // The kill helper confirms normally.
         mockContainer.exec.mockImplementationOnce(async () => ({
           id: 'kill-exec',
-          start: vi.fn().mockResolvedValue({ destroy: vi.fn() }),
+          start: vi.fn().mockResolvedValue({ destroy: vi.fn(), resume: vi.fn() }),
           inspect: vi.fn().mockResolvedValue({ Running: false, ExitCode: 0 }),
         }));
 
@@ -1928,7 +2094,7 @@ describe('DockerSandbox', () => {
       const killHelperGate = new Promise<void>(resolve => {
         releaseKillHelper = resolve;
       });
-      const killStream = { destroy: vi.fn() };
+      const killStream = { destroy: vi.fn(), resume: vi.fn() };
       mockContainer.exec.mockImplementationOnce(async () => {
         await killHelperGate;
         return {

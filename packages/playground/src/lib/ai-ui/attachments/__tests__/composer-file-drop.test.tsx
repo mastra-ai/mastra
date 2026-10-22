@@ -5,7 +5,7 @@ import { ComposerAttachments } from '../attachment';
 import { ComposerAttachmentsProvider } from '../composer-attachments';
 import { ComposerFileDrop } from '../composer-file-drop';
 
-// The OS drag-and-drop is the only browser boundary; the real provider validates the files.
+// The OS drag-and-drop is the only browser boundary; the real provider classifies the files.
 const dropOnWindow = (files: File[]) => {
   for (const type of ['dragenter', 'drop']) {
     const event = new Event(type, { bubbles: true, cancelable: true });
@@ -48,13 +48,12 @@ describe('ComposerFileDrop', () => {
     });
   });
 
-  describe('when an unsupported spreadsheet is dropped', () => {
-    it('explains how to attach readable data instead', async () => {
+  describe('when a spreadsheet is dropped', () => {
+    it('attaches it to the composer', async () => {
       renderComposer();
       dropOnWindow([new File(['binary'], 'leads.xlsx')]);
-      const alert = await screen.findByRole('alert');
-      expect(alert.textContent).toContain('leads.xlsx');
-      expect(alert.textContent).toContain('CSV');
+      expect(await screen.findByRole('button', { name: 'Remove leads.xlsx' })).toBeTruthy();
+      expect(screen.queryByRole('alert')).toBeNull();
     });
   });
 

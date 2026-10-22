@@ -4,20 +4,61 @@
     "muse-spark-1.2",
     "muse-spark-1.2-contributor",
     "muse-spark-1.3",
-    "muse-spark-1.3-contributor"
+    "muse-spark-1.3-contributor",
+    "muse-wonder-1.0"
   ],
   "temperature": [
     "muse-spark-1.1",
     "muse-spark-1.2",
     "muse-spark-1.2-contributor",
     "muse-spark-1.3",
-    "muse-spark-1.3-contributor"
+    "muse-spark-1.3-contributor",
+    "muse-wonder-1.0"
   ],
   "structuredOutput": [
     "muse-spark-1.1",
     "muse-spark-1.2",
     "muse-spark-1.2-contributor",
     "muse-spark-1.3",
-    "muse-spark-1.3-contributor"
-  ]
+    "muse-spark-1.3-contributor",
+    "muse-wonder-1.0"
+  ],
+  "reasoning": {
+    "muse-spark-1.3-contributor": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "muse-spark-1.3": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "muse-spark-1.2": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "muse-wonder-1.0": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "muse-spark-1.2-contributor": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "muse-spark-1.1": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ]
+  }
 }

@@ -13,6 +13,8 @@ export const legacyAgentChatLoader = ({ params, request }: LoaderFunctionArgs) =
   return redirect(`/agents/${params.agentId}/threads/${params.threadId ?? 'new'}${search}`);
 };
 
+const toolSearch = (toolId: string) => `?${new URLSearchParams({ tool: toolId }).toString()}`;
+
 export const legacyAgentSettingsLoader = ({ params, request }: LoaderFunctionArgs) => {
   const search = new URL(request.url).search;
   return redirect(`/agents/${params.agentId}/threads/new${search}`);
@@ -44,7 +46,8 @@ export function workspaceSkillFileLink(workspaceId?: string, skillPath?: string 
 
 export const paths: LinkComponentProviderProps['paths'] = {
   agentLink: (agentId: string) => `/agents/${agentId}/threads/new`,
-  agentToolLink: (agentId: string, toolId: string) => `/agents/${agentId}/tools/${toolId}`,
+  agentToolLink: (agentId: string, toolId: string, threadId?: string) =>
+    `/agents/${agentId}/threads/${threadId ?? 'new'}${toolSearch(toolId)}`,
   agentSkillLink: (_agentId: string, _skillName: string, skillPath?: string, workspaceId?: string) =>
     workspaceSkillFileLink(workspaceId, skillPath),
   agentsLink: () => `/agents`,
@@ -75,7 +78,7 @@ export const paths: LinkComponentProviderProps['paths'] = {
   promptBlocksLink: () => '/prompts',
   cmsPromptBlockCreateLink: () => '/cms/prompts/create',
   cmsPromptBlockEditLink: (promptBlockId: string) => `/cms/prompts/${promptBlockId}/edit`,
-  toolLink: (toolId: string) => `/tools/${toolId}`,
+  toolLink: (toolId: string) => `/tools${toolSearch(toolId)}`,
   skillLink: (_skillName: string, skillPath?: string, workspaceId?: string) =>
     workspaceSkillFileLink(workspaceId, skillPath),
   workspaceLink: (workspaceId?: string) => (workspaceId ? `/workspaces/${workspaceId}` : `/workspaces`),
@@ -85,7 +88,7 @@ export const paths: LinkComponentProviderProps['paths'] = {
   processorsLink: () => `/processors`,
   processorLink: (processorId: string) => `/processors/${processorId}`,
   mcpServerLink: (serverId: string) => `/mcps/${serverId}`,
-  mcpServerToolLink: (serverId: string, toolId: string) => `/mcps/${serverId}/tools/${toolId}`,
+  mcpServerToolLink: (serverId: string, toolId: string) => `/mcps/${serverId}${toolSearch(toolId)}`,
   workflowRunLink: (workflowId: string, runId: string) => `/workflows/${workflowId}/graph/${runId}`,
   datasetLink: (datasetId: string) => `/datasets/${datasetId}`,
   datasetItemLink: (datasetId: string, itemId: string) => `/datasets/${datasetId}/items/${itemId}`,

@@ -1,4 +1,4 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ bb789a55bfcf — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ a5dad336b416 — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -33,6 +33,7 @@ export function moveFileTool(proxy: PlatformProxy) {
         params: {
           addParents: input.toFolderId,
           removeParents: input.fromFolderId,
+          supportsAllDrives: 'true',
           fields: 'id,name,mimeType,parents',
         },
         retries: 3,

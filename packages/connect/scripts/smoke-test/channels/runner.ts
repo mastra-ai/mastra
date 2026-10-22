@@ -37,9 +37,9 @@ const PLATFORM_IDS: Record<ChannelId, string> = {
   telegram: 'telegram',
 };
 
-/** Integration overrides disabling every channel except `keep`. */
-function disableAllExcept(keep: ChannelId): Record<string, { disabled: true }> {
-  return Object.fromEntries(CHANNEL_IDS.filter(id => id !== keep).map(id => [id, { disabled: true as const }]));
+/** Provider overrides excluding every channel except `keep` via the `false` shorthand. */
+function disableAllExcept(keep: ChannelId): Record<string, false> {
+  return Object.fromEntries(CHANNEL_IDS.filter(id => id !== keep).map(id => [id, false as const]));
 }
 
 const sleep = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
@@ -191,7 +191,7 @@ async function resolverContractOutcome(
       const allDisabled = await channels({
         projectId,
         client: clientOptions,
-        integrations: Object.fromEntries(CHANNEL_IDS.map(id => [id, { disabled: true as const }])),
+        providers: Object.fromEntries(CHANNEL_IDS.map(id => [id, false as const])),
       });
       const disabledRoutes = allDisabled.getRoutes();
       const disabledMap = await allDisabled();
@@ -258,30 +258,15 @@ async function resolverContractOutcome(
             ),
       );
 
-      resolver.invalidate();
-      const afterInvalidate = await resolver();
-      steps.push(
-        afterInvalidate !== resolved && sameKeys(afterInvalidate, resolved)
-          ? makeStep('invalidate() forces refetch', undefined, 'pass')
-          : makeStep(
-              'invalidate() forces refetch',
-              undefined,
-              'fail',
-              afterInvalidate === resolved
-                ? 'resolution still served the invalidated snapshot'
-                : 'refetched map keys changed',
-            ),
-      );
-
       const refreshed = await resolver.refresh();
       steps.push(
-        refreshed !== afterInvalidate && sameKeys(refreshed, afterInvalidate)
+        refreshed !== resolved && sameKeys(refreshed, resolved)
           ? makeStep('refresh() fetches a new snapshot', undefined, 'pass')
           : makeStep(
               'refresh() fetches a new snapshot',
               undefined,
               'fail',
-              refreshed === afterInvalidate ? 'refresh() returned the cached snapshot' : 'refreshed map keys changed',
+              refreshed === resolved ? 'refresh() returned the cached snapshot' : 'refreshed map keys changed',
             ),
       );
       resolved = refreshed;
@@ -291,8 +276,10 @@ async function resolverContractOutcome(
 
     // --- concurrent resolution shares one inflight build --------------------
     try {
-      resolver.invalidate();
-      const [a, b] = await Promise.all([resolver(), resolver()]);
+      // A fresh resolver has no cached snapshot, so both racing resolutions
+      // must go through (and dedupe on) the single inflight build.
+      const fresh = await channels({ projectId, client: clientOptions });
+      const [a, b] = await Promise.all([fresh(), fresh()]);
       steps.push(
         a === b
           ? makeStep('concurrent resolves share one inflight build', undefined, 'pass')
@@ -303,7 +290,6 @@ async function resolverContractOutcome(
               'two concurrent resolutions produced different snapshots — the inflight gate did not dedupe',
             ),
       );
-      resolved = a;
     } catch (error) {
       steps.push(makeStep('concurrent resolves share one inflight build', undefined, 'fail', errorMessage(error)));
     }
@@ -370,7 +356,7 @@ async function resolverContractOutcome(
         const pinned = await channels({
           projectId,
           client: clientOptions,
-          integrations: { [pinnableId]: { connectionId: 'conn-mastra-smoke-nonexistent' } },
+          providers: { [pinnableId]: { connectionId: 'conn-mastra-smoke-nonexistent' } },
         });
         const pinnedMap = await pinned();
         steps.push(
@@ -519,15 +505,7 @@ async function channelOutcome(
   steps.push(
     provider
       ? makeStep('present in resolved provider map', undefined, 'pass', `connection ${connection.id}`)
-      : makeStep(
-          'present in resolved provider map',
-          undefined,
-          'fail',
-          id === 'microsoft-teams' && !process.env.MASTRA_ENCRYPTION_KEY
-            ? 'active connection did not resolve — the Teams channel requires MASTRA_ENCRYPTION_KEY ' +
-                '(its install store persists per-agent bot secrets); without it channels() warn-and-skips the provider'
-            : 'active connection did not resolve',
-        ),
+      : makeStep('present in resolved provider map', undefined, 'fail', 'active connection did not resolve'),
   );
 
   if (provider) {
@@ -674,7 +652,7 @@ async function discordWebhookFlow(
     const resolver = await channels({
       projectId,
       client: clientOptions,
-      integrations: {
+      providers: {
         ...disableAllExcept('discord'),
         discord: { providerOptions: { publicKey: publicKeyHex, gateway: false } },
       },
@@ -877,7 +855,7 @@ async function slackManifestFlow(projectId: string, client: ResolvedClient): Pro
     const resolver = await channels({
       projectId,
       client: clientOptions,
-      integrations: disableAllExcept('slack-channels'),
+      providers: disableAllExcept('slack-channels'),
     });
     // The agent exists only so connect() can derive the app's display name;
     // its model is never invoked.
@@ -1077,7 +1055,7 @@ async function teamsProvisionFlow(
     const resolver = await channels({
       projectId,
       client: clientOptions,
-      integrations: disableAllExcept('microsoft-teams'),
+      providers: disableAllExcept('microsoft-teams'),
     });
     const resolved = await resolver();
     provider = resolved['microsoft-teams'] as ProvisionProvider | undefined;
@@ -1088,8 +1066,9 @@ async function teamsProvisionFlow(
       return steps;
     }
     // Delegated connect() refuses to register a bot without a messaging
-    // endpoint; a local placeholder is fine because nothing ever calls it.
-    await provider.configure?.({ baseUrl: 'http://127.0.0.1:4111' });
+    // endpoint; a placeholder is fine because nothing ever calls it, but the
+    // Dev Portal rejects non-HTTPS endpoints so it must be an https URL.
+    await provider.configure?.({ baseUrl: 'https://smoke.invalid' });
 
     if (typeof provider.connect !== 'function' || typeof provider.disconnect !== 'function') {
       steps.push(

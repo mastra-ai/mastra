@@ -1,33 +1,37 @@
 import { SettingsContainer } from '@mastra/playground-ui/new/settings';
 
-import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
+import { usePersonalAvailableModelsQuery } from '../../../../hooks/useAvailableModels';
 import { useProviderConnectionState } from '../hooks/useProviderConnectionState';
-import { ModelPacksSection } from './ModelPacksSection';
+import { DefaultModelSection } from './DefaultModelSection';
+import { FactoryModelScopeNotice } from './FactoryModelScopeNotice';
 import { ProviderAccessSection } from './ProviderAccessSection';
 import { SettingsSubsection } from './SettingsSubsection';
 
-export function PersonalModelsSettings({ models }: { models: AvailableModelOption[] }) {
+export function PersonalModelsSettings() {
   const { anyConnected, providersKnown } = useProviderConnectionState();
+  // Personal defaults run only in user-scope Factories, on the caller's own credentials.
+  const modelsQuery = usePersonalAvailableModelsQuery();
+  const models = modelsQuery.data ?? [];
 
   return (
     <div className="flex flex-col gap-8">
+      <FactoryModelScopeNotice />
       {(!providersKnown || anyConnected) && (
         <SettingsSubsection
           scope="personal"
-          id="model-packs"
+          id="default-model"
           title="Your defaults"
-          description="The pack you run with. Creating or removing a pack changes the list for your whole org."
+          description="The model new chats start on."
         >
           <SettingsContainer>
             <div className="p-4">
-              <ModelPacksSection models={models} />
+              <DefaultModelSection models={models} modelsLoaded={modelsQuery.isSuccess} />
             </div>
           </SettingsContainer>
         </SettingsSubsection>
       )}
       <ProviderAccessSection
         fixedScope="user"
-        showOrgCoverage
         description="Connect your own provider account for interactive chats. Organization credentials are managed in Factory settings."
       />
     </div>

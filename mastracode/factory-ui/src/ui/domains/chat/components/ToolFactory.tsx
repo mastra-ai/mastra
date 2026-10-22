@@ -114,6 +114,22 @@ function ToolFactoryComponent({
     );
   }
 
+  // Any other tool paused with a question (a role's stage move asking for approval)
+  // is answered on its own row, as the standalone suspension card would.
+  const pausedQuestion = status === 'running' && onRespond ? askUserPayload(input) : undefined;
+  if (pausedQuestion) {
+    return (
+      <AskUser
+        role="group"
+        aria-label="Question from the agent"
+        payload={pausedQuestion}
+        isSubmitting={isSubmitting}
+        onSubmit={answer => onRespond?.(answer)}
+        className="w-full max-w-full"
+      />
+    );
+  }
+
   return fallback();
 }
 

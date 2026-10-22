@@ -9,8 +9,8 @@
  */
 
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
-import type { MastraModelConfig } from '@mastra/core/llm';
-import { ProviderAuthRequiredError } from '../auth/provider-auth-error.js';
+import type { OpenAICompatibleProvider } from '@ai-sdk/openai-compatible';
+import { ProviderAuthRequiredError, rejectUnauthorizedResponse } from '../auth/provider-auth-error.js';
 import { AuthStorage } from '../auth/storage.js';
 import type { CredentialStore } from '../auth/types.js';
 
@@ -66,7 +66,10 @@ export function buildXAIOAuthFetch(opts: { authStorage?: CredentialStore } = {})
     headers.set('Authorization', `Bearer ${accessToken}`);
 
     try {
-      return await fetch(url, { ...init, headers });
+      return await rejectUnauthorizedResponse(await fetch(url, { ...init, headers }), {
+        providerName: 'xAI',
+        requestUrl: url instanceof URL ? url.toString() : typeof url === 'string' ? url : (url as Request).url,
+      });
     } catch (error) {
       if (error && typeof error === 'object') {
         Object.assign(error as Record<string, unknown>, {
@@ -85,7 +88,7 @@ export function buildXAIOAuthFetch(opts: { authStorage?: CredentialStore } = {})
 export function xaiProvider(
   modelId: string,
   options?: { headers?: Record<string, string>; authStorage?: CredentialStore },
-): MastraModelConfig {
+): ReturnType<OpenAICompatibleProvider['chatModel']> {
   const provider = createOpenAICompatible({
     name: XAI_PROVIDER_ID,
     baseURL: XAI_BASE_URL,

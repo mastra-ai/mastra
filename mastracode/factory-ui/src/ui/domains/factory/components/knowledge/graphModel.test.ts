@@ -1,15 +1,26 @@
 import { describe, expect, it } from 'vitest';
 
-import type { KnowledgeGraphEdge, KnowledgeGraphNode } from '../../services/knowledge';
+import type {
+  KnowledgeBoundaryNode,
+  KnowledgeGraphEdge,
+  KnowledgeGraphNode,
+  KnowledgeGraphRecord,
+} from '../../services/knowledge';
 import {
+  BOUNDARY_NODE_SIZE,
   degreeMap,
   deriveRecordElements,
   egoGraph,
   filterGraph,
+  graphNodesWithBoundaries,
+  graphRecordsWithBoundaries,
+  graphTraversalEdges,
+  knowledgeEdgeHoverText,
   RECORD_DOT_SIZE,
   RECORD_JUNCTION_SIZE,
   RECORD_PIN_SIZE,
   recordPairEdges,
+  renderedGraphEdges,
   NODE_SIZE_DOT,
   NODE_SIZE_MAX,
   NODE_SIZE_MIN,
@@ -38,6 +49,47 @@ function node(id: string, overrides: Partial<KnowledgeGraphNode> = {}): Knowledg
 function edge(source: string, target: string, type: 'wikilink' = 'wikilink'): KnowledgeGraphEdge {
   return { id: `${type}:${source}:${target}`, source, target, type, recordId: 'f-1' };
 }
+
+describe('bounded graph endpoints', () => {
+  it('connects record wikilinks to authorized nodes outside the node window', () => {
+    const boundary: KnowledgeBoundaryNode = {
+      id: 'outside',
+      name: 'Elsewhere',
+      scope: ['org:o', 'resource:r'],
+      rung: 'resource',
+    };
+    const records: KnowledgeGraphRecord[] = [
+      { id: 'record', nodeIds: ['owner'], pinned: false, text: 'See [[Elsewhere]] and [[Elsewhere]].' },
+    ];
+    expect(graphNodesWithBoundaries([node('owner')], [boundary], records)).toEqual([node('owner')]);
+    const connected = graphRecordsWithBoundaries(records, [boundary]);
+    const graphNodes = graphNodesWithBoundaries([node('owner')], [boundary], connected);
+
+    expect(graphNodes).toEqual([
+      node('owner'),
+      {
+        ...boundary,
+        kind: 'outside view',
+        isBoundary: true,
+        pinned: false,
+        recordCount: 0,
+      },
+    ]);
+    expect(connected[0]?.nodeIds).toEqual(['owner', 'outside']);
+    const pairEdges = recordPairEdges(connected);
+    expect(pairEdges).toEqual([expect.objectContaining({ source: 'owner', target: 'outside', recordId: 'record' })]);
+    expect(toFlowGraph(graphNodes, pairEdges).nodes[1]).toEqual(
+      expect.objectContaining({
+        id: 'outside',
+        width: BOUNDARY_NODE_SIZE,
+        height: BOUNDARY_NODE_SIZE,
+        draggable: false,
+        selectable: false,
+        focusable: false,
+      }),
+    );
+  });
+});
 
 describe('nodeSize (Amendments A3 + A5)', () => {
   it('weights incoming edges heavier than outgoing', () => {
@@ -95,6 +147,15 @@ describe('filterGraph', () => {
     const result = filterGraph(nodes, edges, { rungs: new Set(['resource'] as const), pinnedOnly: false });
     expect(result.nodes.map(node => node.id)).toEqual(['res-1', 'res-pinned']);
     expect(result.edges.map(e => e.id)).toEqual(['wikilink:res-1:res-pinned']);
+  });
+
+  it('keeps structural scope nodes when filtering identity rungs', () => {
+    const structural = node('scope-1', { isScope: true, rung: null, scope: null });
+    const result = filterGraph([...nodes, structural], edges, {
+      rungs: new Set(['resource'] as const),
+      pinnedOnly: false,
+    });
+    expect(result.nodes.map(node => node.id)).toEqual(['res-1', 'res-pinned', 'scope-1']);
   });
 
   it('pin filter keeps only accented nodes', () => {
@@ -218,11 +279,41 @@ describe('egoGraph (Amendment A5)', () => {
   });
 });
 
+describe('structural lens edge composition', () => {
+  it('keeps containment edges when records replace payload wikilinks', () => {
+    const contains: KnowledgeGraphEdge = {
+      id: 'contains:scope:a',
+      source: 'scope',
+      target: 'a',
+      type: 'contains',
+    };
+    const records = [{ id: 'm1', nodeIds: ['a', 'b'], pinned: false, text: 'record m1' }];
+    const traversal = graphTraversalEdges([contains, edge('a', 'b')], records);
+    expect(traversal.map(edge => edge.type)).toEqual(['contains', 'wikilink']);
+
+    const nodeFlow = toFlowGraph([node('scope'), node('a'), node('b')], traversal);
+    const recordFlow = toFlowGraph([node('a'), node('b')], recordPairEdges(records));
+    const rendered = renderedGraphEdges(nodeFlow.edges, recordFlow.edges, true);
+    expect(rendered.map(edge => edge.data?.linkType)).toEqual(['contains', 'wikilink']);
+  });
+
+  it('describes containment separately from knowledge-record mentions', () => {
+    const [contains, wikilink] = toFlowGraph(
+      [node('scope'), node('a'), node('b')],
+      [{ id: 'contains:scope:a', source: 'scope', target: 'a', type: 'contains' }, edge('a', 'b')],
+    ).edges;
+    if (!contains || !wikilink) throw new Error('Expected both graph edges');
+
+    expect(knowledgeEdgeHoverText(contains)).toBe('Direct member of this scope');
+    expect(knowledgeEdgeHoverText(wikilink)).toBe('Mentioned in a knowledge record');
+  });
+});
+
 describe('toFlowGraph', () => {
   it('maps nodes to sized flow nodes and typed edges', () => {
     const { nodes, edges } = toFlowGraph([node('a'), node('b')], [edge('a', 'b'), edge('b', 'a')]);
     expect(nodes[0]).toMatchObject({ id: 'a', type: 'knowledgeNode' });
-    expect(nodes[0]!.data.size).toBeGreaterThanOrEqual(NODE_SIZE_MIN);
+    expect(nodes[0].data.size).toBeGreaterThanOrEqual(NODE_SIZE_MIN);
     expect(edges.map(e => e.data?.linkType)).toEqual(['wikilink', 'wikilink']);
     expect(edges.every(e => e.type === 'knowledgeLink')).toBe(true);
   });
@@ -231,8 +322,8 @@ describe('toFlowGraph', () => {
     const positions = new Map([['a', { x: 10, y: 20 }]]);
     const { nodes } = toFlowGraph([node('a')], [], positions);
     // 'a' is an unreferenced dot (size 26): top-left = center - 13.
-    expect(nodes[0]!.data.size).toBe(NODE_SIZE_DOT);
-    expect(nodes[0]!.position).toEqual({ x: 10 - 13, y: 20 - 13 });
+    expect(nodes[0].data.size).toBe(NODE_SIZE_DOT);
+    expect(nodes[0].position).toEqual({ x: 10 - 13, y: 20 - 13 });
   });
 
   it('forces the focused node to max size and labels it even with zero incoming', () => {
@@ -279,11 +370,11 @@ describe('runLayout', () => {
     const positions = runLayout(mixed, dense);
     for (let i = 0; i < mixed.length; i++) {
       for (let j = i + 1; j < mixed.length; j++) {
-        const p1 = positions.get(mixed[i]!.id)!;
-        const p2 = positions.get(mixed[j]!.id)!;
+        const p1 = positions.get(mixed[i].id)!;
+        const p2 = positions.get(mixed[j].id)!;
         const distance = Math.hypot(p1.x - p2.x, p1.y - p2.y);
         // Every pair clears the sum of radii — no node sits inside another.
-        expect(distance).toBeGreaterThan(mixed[i]!.size / 2 + mixed[j]!.size / 2);
+        expect(distance).toBeGreaterThan(mixed[i].size / 2 + mixed[j].size / 2);
       }
     }
   });

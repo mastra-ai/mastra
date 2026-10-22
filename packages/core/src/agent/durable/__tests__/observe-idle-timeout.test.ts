@@ -8,8 +8,8 @@ import {
   emitFinishEvent,
   emitSuspendedEvent,
   emitAbortEvent,
-  type DurableAgentStreamResult,
 } from '../stream-adapter';
+import type { DurableAgentStreamResult } from '../stream-adapter';
 
 /**
  * Idle / liveness timeout for `createDurableAgentStream` (and therefore

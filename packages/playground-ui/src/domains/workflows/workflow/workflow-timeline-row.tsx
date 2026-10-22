@@ -72,10 +72,6 @@ export function WorkflowTimelineRow({
     >
       <button
         type="button"
-        className={cn(
-          'flex min-h-9 min-w-0 cursor-pointer items-center gap-2.5 text-left text-meta text-foreground focus-visible:rounded-sm aria-disabled:cursor-default',
-          focusRing,
-        )}
         aria-disabled={row.isNestedEntry}
         aria-pressed={isSelected}
         onClick={() => {
@@ -83,6 +79,11 @@ export function WorkflowTimelineRow({
           onSelectStep(row.stepId);
         }}
         title={row.stepId}
+        className={cn(
+          'text-foreground',
+          'flex min-h-9 min-w-0 cursor-pointer items-center gap-2.5 text-left focus-visible:rounded-sm aria-disabled:cursor-default',
+          focusRing,
+        )}
       >
         <span
           aria-label={status.label}
@@ -94,7 +95,9 @@ export function WorkflowTimelineRow({
           <StatusIcon aria-hidden className={cn('size-3.5', row.status === 'running' && 'motion-safe:animate-spin')} />
         </span>
         <span className="min-w-0">
-          <span className="block truncate">{label}</span>
+          <Txt as="span" variant="meta" className="block truncate">
+            {label}
+          </Txt>
           {row.isNestedEntry && (
             <Txt as="span" variant="meta" tone="muted" className="flex min-w-0 items-center gap-1">
               <CornerDownRight aria-hidden className="size-3 shrink-0" />

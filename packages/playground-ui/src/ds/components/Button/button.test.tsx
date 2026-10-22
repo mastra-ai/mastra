@@ -105,6 +105,88 @@ describe('Button', () => {
     expect(new Set(slots.map(slot => slot.className)).size).toBe(1);
   });
 
+  describe('iconEnd prop', () => {
+    it('renders the icon inside an <Icon> slot after the label', () => {
+      render(
+        <Button iconEnd={<svg data-testid="arrow" />} size="sm">
+          Open portal
+        </Button>,
+      );
+
+      const button = screen.getByRole('button', { name: 'Open portal' });
+      const slot = button.querySelector('[data-slot="button-icon-end"]');
+      expect(slot?.contains(screen.getByTestId('arrow'))).toBe(true);
+      expect(button.lastElementChild).toBe(slot);
+    });
+
+    it('is ignored in icon-mode sizes', () => {
+      render(
+        <Button size="icon-md" iconEnd={<svg data-testid="ignored" />} aria-label="Close">
+          <svg data-testid="child" />
+        </Button>,
+      );
+      expect(screen.queryByTestId('ignored')).toBeNull();
+    });
+  });
+
+  describe('link variant', () => {
+    function RouterLink({ to, ...props }: { to: string; className?: string; children?: React.ReactNode }) {
+      return <a href={to} {...props} />;
+    }
+
+    it('renders a router link with its label in its own slot', () => {
+      render(
+        <Button variant="link" render={<RouterLink to="/usage" />}>
+          View usage
+        </Button>,
+      );
+
+      const link = screen.getByRole('link', { name: 'View usage' });
+      expect(link.getAttribute('href')).toBe('/usage');
+      expect(link.querySelector('[data-slot="button-label"]')?.textContent).toBe('View usage');
+    });
+
+    it('keeps the label before a trailing icon', () => {
+      render(
+        <Button variant="link" render={<a href="#" />} iconEnd={<svg data-testid="arrow" />}>
+          Open billing portal
+        </Button>,
+      );
+
+      const link = screen.getByRole('link', { name: 'Open billing portal' });
+      expect(link.firstElementChild?.getAttribute('data-slot')).toBe('button-label');
+      expect(link.lastElementChild?.contains(screen.getByTestId('arrow'))).toBe(true);
+    });
+
+    it('renders an icon-mode size as a text link rather than an icon button', () => {
+      render(
+        <Button variant="link" size="icon-sm" render={<a href="#" />}>
+          Docs
+        </Button>,
+      );
+
+      const link = screen.getByRole('link', { name: 'Docs' });
+      expect(link.hasAttribute('data-shape')).toBe(false);
+      expect(link.querySelector('[data-slot="button-label"]')?.textContent).toBe('Docs');
+    });
+
+    it('keeps a disabled link an anchor with its href', () => {
+      render(
+        <Button variant="link" disabled render={<a href="/usage" />}>
+          View usage
+        </Button>,
+      );
+
+      const link = screen.getByRole('link', { name: 'View usage' });
+      expect(link.getAttribute('href')).toBe('/usage');
+      expect(link.getAttribute('aria-disabled')).toBe('true');
+
+      const clickEvent = new MouseEvent('click', { bubbles: true, cancelable: true });
+      link.dispatchEvent(clickEvent);
+      expect(clickEvent.defaultPrevented).toBe(true);
+    });
+  });
+
   describe('icon prop', () => {
     it('renders the icon inside an <Icon> slot before the label', () => {
       render(

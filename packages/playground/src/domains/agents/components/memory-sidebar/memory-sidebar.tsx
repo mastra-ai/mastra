@@ -60,7 +60,7 @@ function ConfigBadge({ icon: Icon, tooltip, enabled, value }: ConfigBadgeProps) 
         >
           <Icon className="h-3 w-3 shrink-0" />
           {value !== undefined && (
-            <Txt as="span" variant="meta" className="leading-none tabular-nums">
+            <Txt as="span" variant="meta" className="tabular-nums">
               {value}
             </Txt>
           )}

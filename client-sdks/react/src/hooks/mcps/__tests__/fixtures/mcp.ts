@@ -1,4 +1,5 @@
 import type { McpServerListResponse, McpServerToolListResponse } from '@mastra/client-js';
+import type { ReadMcpServerResourceResponse } from '../../use-mcp-app-html';
 
 export const mcpServersResponse: McpServerListResponse = {
   servers: [
@@ -22,4 +23,8 @@ export const weatherToolsResponse: McpServerToolListResponse = {
       _meta: { ui: { resourceUri: 'ui://weather/map' } },
     },
   ],
+};
+
+export const mapAppResourceResponse: ReadMcpServerResourceResponse = {
+  contents: [{ uri: 'ui://weather/map', text: '<html><body>Map</body></html>' }],
 };

@@ -11,7 +11,11 @@ import {
   listFactoryProjects,
   unlinkRepository,
 } from '../ui/domains/workspaces/services/github';
-import type { FactoryProject, SourceControlRepository } from '../ui/domains/workspaces/services/github';
+import type {
+  FactoryProject,
+  LinkedRepositoryPayload,
+  SourceControlRepository,
+} from '../ui/domains/workspaces/services/github';
 import { registerGitLabRepository } from '../ui/domains/factory/services/gitlab';
 import { fetchIntakeConfig, selectIntakeSource } from '../ui/domains/factory/services/intake';
 import { useSaveIntakeConfigMutation } from './useIntakeConfig';
@@ -70,7 +74,15 @@ export function useLinkRepositoryMutation() {
   const queryClient = useQueryClient();
   const saveIntakeConfig = useSaveIntakeConfigMutation();
   return useMutation({
-    mutationFn: async ({ factoryProjectId, repo }: { factoryProjectId: string; repo: SourceControlRepository }) => {
+    mutationFn: async ({
+      factoryProjectId,
+      repo,
+      onLinked,
+    }: {
+      factoryProjectId: string;
+      repo: SourceControlRepository;
+      onLinked?: (linked: LinkedRepositoryPayload) => Promise<void>;
+    }) => {
       const gitlab = isGitLabRepository(repo);
       const linkableRepo = gitlab ? await registerGitLabRepository(baseUrl, repo.id) : repo;
       const connectionId = await connectInstallation(
@@ -80,6 +92,7 @@ export function useLinkRepositoryMutation() {
         gitlab ? 'gitlab' : 'github',
       );
       const linked = await linkRepository(baseUrl, factoryProjectId, connectionId, linkableRepo);
+      await onLinked?.(linked);
       try {
         const config = await fetchIntakeConfig(baseUrl);
         if (gitlab) {

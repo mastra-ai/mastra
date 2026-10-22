@@ -3,8 +3,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AuthCredential, CredentialStore } from '../auth/types.js';
 import {
   hasCredentialStoreProvider,
+  prepareCredentialTenant,
+  withCredentialTenantPreparation,
   resolveCredentialStore,
   resolveTenantFromRequestContext,
+  setCredentialLogger,
   setCredentialStoreProvider,
 } from './credential-resolver.js';
 import { MastraCodeGateway } from './mastracode-gateway.js';
@@ -48,11 +51,11 @@ describe('credential store provider registry', () => {
     ctx.set('user', { workosId: 'user_1', id: 'prov_1', organizationId: 'org_1' });
 
     expect(resolveCredentialStore(ctx)).toBe(store);
-    expect(seenTenant).toEqual({ orgId: 'org_1', userId: 'user_1' });
+    expect(seenTenant).toEqual({ orgId: 'org_1', userId: 'user_1', credentialScope: 'user' });
   });
 
   it('fails closed without an authenticated tenant on the request context', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => {});
     setCredentialStoreProvider(() => fakeStore({}));
     const withoutContext = resolveCredentialStore(undefined);
     const emptyContext = resolveCredentialStore(new RequestContext());
@@ -63,18 +66,31 @@ describe('credential store provider registry', () => {
     expect(warn).toHaveBeenNthCalledWith(1, '[MastraCode] Tenant credential resolution failed closed', {
       reason: 'missing-user-context',
       hasRequestContext: false,
-      factorySession: false,
     });
     expect(warn).toHaveBeenNthCalledWith(2, '[MastraCode] Tenant credential resolution failed closed', {
       reason: 'missing-user-context',
       hasRequestContext: true,
-      factorySession: false,
     });
     warn.mockRestore();
   });
 
+  it('logs failures through a registered logger', () => {
+    const error = vi.fn();
+    setCredentialLogger({ error });
+    try {
+      setCredentialStoreProvider(() => fakeStore({}));
+      resolveCredentialStore(new RequestContext());
+      expect(error).toHaveBeenCalledWith('[MastraCode] Tenant credential resolution failed closed', {
+        reason: 'missing-user-context',
+        hasRequestContext: true,
+      });
+    } finally {
+      setCredentialLogger(undefined);
+    }
+  });
+
   it('fails closed when the tenant store provider cannot resolve a store', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => {});
     setCredentialStoreProvider(() => undefined);
     const ctx = new RequestContext();
     ctx.set('user', { workosId: 'user_1', organizationId: 'org_1' });
@@ -85,7 +101,8 @@ describe('credential store provider registry', () => {
     expect(warn).toHaveBeenCalledWith('[MastraCode] Tenant credential resolution failed closed', {
       reason: 'credential-store-unavailable',
       hasOrganization: true,
-      orgFirst: false,
+      credentialScope: 'user',
+      ownerResolved: true,
     });
     warn.mockRestore();
   });
@@ -93,13 +110,21 @@ describe('credential store provider registry', () => {
   it('falls back to the provider id when workosId is absent', () => {
     const ctx = new RequestContext();
     ctx.set('user', { id: 'prov_2' });
-    expect(resolveTenantFromRequestContext(ctx)).toEqual({ orgId: undefined, userId: 'prov_2' });
+    expect(resolveTenantFromRequestContext(ctx)).toEqual({
+      orgId: undefined,
+      userId: 'prov_2',
+      credentialScope: 'user',
+    });
   });
 
   it('reads a session-shaped user, whose org lives on the session half', () => {
     const ctx = new RequestContext();
     ctx.set('user', { session: { activeOrganizationId: 'org_1' }, user: { id: 'prov_3' } });
-    expect(resolveTenantFromRequestContext(ctx)).toEqual({ orgId: 'org_1', userId: 'prov_3' });
+    expect(resolveTenantFromRequestContext(ctx)).toEqual({
+      orgId: 'org_1',
+      userId: 'prov_3',
+      credentialScope: 'user',
+    });
   });
 
   it('takes a session-shaped user org from the session half only, never the inner user', () => {
@@ -108,41 +133,186 @@ describe('credential store provider registry', () => {
     // `toFactoryAuthUser` in `@mastra/factory` reads the session half and nothing
     // else. Falling back to the inner user here would resolve a tenant the
     // Factory refuses, and the two would disagree about who the caller is.
-    expect(resolveTenantFromRequestContext(ctx)).toEqual({ orgId: undefined, userId: 'prov_4' });
-  });
-
-  it('carries the org-first flag only when it is exactly true', () => {
-    const flagged = new RequestContext();
-    flagged.set('user', { workosId: 'user_1', organizationId: 'org_1', orgFirstCredentials: true });
-    expect(resolveTenantFromRequestContext(flagged)).toEqual({ orgId: 'org_1', userId: 'user_1', orgFirst: true });
-
-    const truthy = new RequestContext();
-    truthy.set('user', { workosId: 'user_1', organizationId: 'org_1', orgFirstCredentials: 'yes' });
-    expect(resolveTenantFromRequestContext(truthy)).toEqual({ orgId: 'org_1', userId: 'user_1' });
-  });
-
-  it('reads the org-first flag stamped on a session-shaped wrapper', () => {
-    const ctx = new RequestContext();
-    ctx.set('user', {
-      session: { activeOrganizationId: 'org_1' },
-      user: { id: 'prov_6' },
-      orgFirstCredentials: true,
+    expect(resolveTenantFromRequestContext(ctx)).toEqual({
+      orgId: undefined,
+      userId: 'prov_4',
+      credentialScope: 'user',
     });
-    expect(resolveTenantFromRequestContext(ctx)).toEqual({ orgId: 'org_1', userId: 'prov_6', orgFirst: true });
   });
 
-  it('flips org-first for runs on a factory-owned session, keyed off controller state', () => {
+  it.each(['factory', 'user'] as const)('ignores client-writable %s scope and identity', credentialScope => {
     const ctx = new RequestContext();
     ctx.set('user', { workosId: 'user_1', organizationId: 'org_1' });
-    ctx.set('controller', { state: { factoryProjectId: 'project-1' } });
-    expect(resolveTenantFromRequestContext(ctx)).toEqual({ orgId: 'org_1', userId: 'user_1', orgFirst: true });
+    ctx.set('controller', {
+      state: {
+        factoryProjectId: 'project-1',
+        factoryModelScope: credentialScope,
+        factoryOwnerUserId: 'victim',
+        factoryOrgId: 'foreign-org',
+      },
+    });
+    expect(resolveTenantFromRequestContext(ctx)).toEqual({
+      orgId: 'org_1',
+      userId: 'user_1',
+      credentialScope: 'user',
+    });
   });
 
-  it('keeps user-first when controller state carries no factory project', () => {
+  it('accepts only host-resolved policy and passes it to cloned subagent contexts', async () => {
+    const tenant = { orgId: 'org_1', userId: 'owner', credentialScope: 'user' as const };
+    setCredentialStoreProvider(
+      () => fakeStore({}),
+      async () => tenant,
+    );
+    const ctx = new RequestContext();
+    ctx.set('user', { workosId: 'sender', organizationId: 'org_1' });
+    ctx.set('mastracode__credentialPolicy', tenant);
+    expect(resolveTenantFromRequestContext(ctx)).toBeUndefined();
+    await prepareCredentialTenant(ctx);
+    expect(resolveTenantFromRequestContext(ctx)).toEqual(tenant);
+    const clone = new RequestContext(ctx.entries());
+    expect(resolveTenantFromRequestContext(clone)).toEqual(tenant);
+    const roundTripped = new RequestContext(JSON.parse(JSON.stringify([...ctx.entries()])));
+    expect(resolveTenantFromRequestContext(roundTripped)).toBeUndefined();
+  });
+
+  it('binds a primed principal context to its session and preserves that origin in forked contexts', async () => {
+    const resolve = vi.fn(async () => ({ orgId: 'org_1', userId: 'owner', credentialScope: 'factory' as const }));
+    setCredentialStoreProvider(() => undefined, resolve);
+    const principal = new RequestContext();
+    principal.set('user', { id: 'user_1', organizationId: 'org_1' });
+    await prepareCredentialTenant(principal);
+    const session = new RequestContext(principal.entries());
+    session.set('controller', { resourceId: 'session-1', threadId: 'thread-1' });
+    await prepareCredentialTenant(session);
+    expect(resolve).toHaveBeenLastCalledWith(session);
+    const fork = new RequestContext(session.entries());
+    fork.set('controller', { resourceId: 'session-1', threadId: 'fork-thread' });
+    await prepareCredentialTenant(fork);
+    expect(resolve).toHaveBeenLastCalledWith(session);
+    expect(resolveTenantFromRequestContext(fork)).toEqual({
+      orgId: 'org_1',
+      userId: 'owner',
+      credentialScope: 'factory',
+    });
+  });
+
+  it('refreshes policy for each invocation and invalidates it when lookup fails', async () => {
+    const factory = { orgId: 'org_1', userId: 'owner', credentialScope: 'factory' as const };
+    const user = { ...factory, credentialScope: 'user' as const };
+    const resolver = vi
+      .fn()
+      .mockResolvedValueOnce(factory)
+      .mockResolvedValueOnce(user)
+      .mockRejectedValueOnce(new Error('database unavailable'));
+    setCredentialStoreProvider(() => fakeStore({}), resolver);
+    const ctx = new RequestContext();
+    const resolve = vi.fn(({ requestContext }) => resolveTenantFromRequestContext(requestContext));
+    const model = withCredentialTenantPreparation(resolve);
+    await expect(model({ requestContext: ctx })).resolves.toEqual(factory);
+    await expect(model({ requestContext: ctx })).resolves.toEqual(user);
+    await expect(model({ requestContext: ctx })).rejects.toThrow('database unavailable');
+    expect(resolve).toHaveBeenCalledTimes(2);
+    expect(resolveTenantFromRequestContext(ctx)).toBeUndefined();
+  });
+
+  it('retains the trusted origin during concurrent preparations of a stripped context', async () => {
+    const tenant = { orgId: 'org_1', userId: 'owner', credentialScope: 'factory' as const };
+    const resolver = vi.fn(async (_context: RequestContext) => tenant);
+    setCredentialStoreProvider(() => fakeStore({}), resolver);
+    const parent = new RequestContext();
+    parent.set('controller', { resourceId: 'session-1', threadId: 'thread-1' });
+    await prepareCredentialTenant(parent);
+    const child = new RequestContext(parent.entries());
+    child.set('controller', { resourceId: '', threadId: null });
+    let finishLookup = () => {};
+    const pendingLookup = new Promise<typeof tenant>(resolve => {
+      finishLookup = () => resolve(tenant);
+    });
+    resolver.mockReturnValueOnce(pendingLookup);
+    const pending = prepareCredentialTenant(child);
+    await prepareCredentialTenant(child);
+    expect(resolver.mock.calls.slice(1).map(([source]) => source)).toEqual([parent, parent]);
+    finishLookup();
+    await pending;
+    expect(resolveTenantFromRequestContext(child)).toEqual(tenant);
+  });
+
+  it('fails closed when required host policy is absent, even with a valid principal', async () => {
+    const provider = vi.fn(() => fakeStore({}));
+    setCredentialStoreProvider(provider, async () => undefined);
+    const ctx = new RequestContext();
+    ctx.set('user', { id: 'sender', organizationId: 'org_1' });
+    await expect(prepareCredentialTenant(ctx)).rejects.toThrow('could not be resolved');
+    await expect(resolveCredentialStore(ctx)?.getApiKey('openai')).resolves.toBeUndefined();
+    expect(provider).not.toHaveBeenCalled();
+    await expect(prepareCredentialTenant()).rejects.toThrow('requires a request context');
+  });
+
+  it('says why tenant resolution failed and logs non-secret diagnostics', async () => {
+    const warn = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      setCredentialStoreProvider(
+        () => fakeStore({}),
+        async () => undefined,
+      );
+      const anonymous = new RequestContext();
+      anonymous.set('controller', { resourceId: 'session-1', threadId: 'thread-1' });
+      await expect(prepareCredentialTenant(anonymous)).rejects.toThrow(
+        'could not be resolved: the request has no authenticated user.',
+      );
+      expect(warn).toHaveBeenLastCalledWith(
+        expect.stringContaining('could not be resolved'),
+        expect.objectContaining({
+          reason: 'missing-user-context',
+          hasUser: false,
+          hasControllerResource: true,
+          hasControllerThread: true,
+          resourceId: 'session-1',
+          threadId: 'thread-1',
+          contextKeys: expect.arrayContaining(['controller']),
+          stack: expect.stringContaining('prepareCredentialTenant'),
+        }),
+      );
+
+      const authenticated = new RequestContext();
+      authenticated.set('user', { id: 'sender', organizationId: 'org_1' });
+      await expect(prepareCredentialTenant(authenticated)).rejects.toThrow(
+        'could not be resolved: no credential policy applies to this request.',
+      );
+      expect(warn).toHaveBeenLastCalledWith(
+        expect.any(String),
+        expect.objectContaining({ reason: 'no-policy-for-principal', hasUser: true }),
+      );
+      expect(JSON.stringify(warn.mock.calls)).not.toContain('org_1');
+    } finally {
+      warn.mockRestore();
+    }
+  });
+
+  it('ignores the removed principal precedence flag', () => {
+    const ctx = new RequestContext();
+    ctx.set('user', {
+      workosId: 'user_1',
+      organizationId: 'org_1',
+      ['orgFirstCredentials']: true,
+    });
+    expect(resolveTenantFromRequestContext(ctx)).toEqual({
+      orgId: 'org_1',
+      userId: 'user_1',
+      credentialScope: 'user',
+    });
+  });
+
+  it('uses user scope when controller state carries no Factory identity', () => {
     const ctx = new RequestContext();
     ctx.set('user', { workosId: 'user_1', organizationId: 'org_1' });
     ctx.set('controller', { state: { projectPath: '/tmp/x' } });
-    expect(resolveTenantFromRequestContext(ctx)).toEqual({ orgId: 'org_1', userId: 'user_1' });
+    expect(resolveTenantFromRequestContext(ctx)).toEqual({
+      orgId: 'org_1',
+      userId: 'user_1',
+      credentialScope: 'user',
+    });
   });
 
   it('ignores malformed user values', () => {

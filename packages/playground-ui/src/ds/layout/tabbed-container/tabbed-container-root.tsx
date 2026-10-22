@@ -67,13 +67,7 @@ export const DataListControls = ({ dataLists }: { dataLists: ReactElement<Tabbed
     const active = value === tabs?.value;
     const filterCount = filter ? (Array.isArray(filter.value) ? filter.value.length : filter.value ? 1 : 0) : 0;
     return (
-      <div
-        key={value}
-        data-slot="tabbed-container-controls"
-        data-active={active || undefined}
-        aria-hidden={!active}
-        inert={!active}
-      >
+      <div key={value} data-slot="tabbed-container-controls" data-active={active || undefined} hidden={!active}>
         <div data-slot="tabbed-container-query">
           {search ? (
             <div data-slot="tabbed-container-search">

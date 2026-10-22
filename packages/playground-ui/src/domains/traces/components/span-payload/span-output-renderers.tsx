@@ -19,10 +19,10 @@ import { SpanPayloadProcessor } from './span-payload-processor';
 import { asCoreSpan, hasItems, pickRenderer } from './span-payload-registry';
 import type { PayloadRegistry } from './span-payload-registry';
 import { ReasoningActivity } from '@/ds/components/ai/activity';
-import { Card, CardContent } from '@/ds/components/Card';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { InlineCode } from '@/ds/components/InlineCode/inline-code';
 import { Notice } from '@/ds/components/Notice';
+import { Txt } from '@/ds/components/Txt';
 
 function SpanTextRenderer({ value }: { value: string }) {
   return <SpanPayloadMarkdown>{value}</SpanPayloadMarkdown>;
@@ -65,9 +65,9 @@ function SpanAgentRunResultRenderer({ value }: { value: AgentRunResult }) {
         <Notice variant="destructive" title="Tripwire">
           {value.tripwire.reason && <Notice.Message>{value.tripwire.reason}</Notice.Message>}
           {value.tripwire.processorId && (
-            <div className="text-caption">
+            <Txt as="p" variant="caption">
               Processor <InlineCode>{value.tripwire.processorId}</InlineCode>
-            </div>
+            </Txt>
           )}
         </Notice>
       )}
@@ -179,11 +179,5 @@ export function SpanOutputRenderer({ span }: SpanOutputRendererProps) {
   if (!description) return null;
   if (description.type === 'json') return <SpanPayloadJson value={description.value} />;
   const Renderer = pickRenderer(SPAN_OUTPUT_RENDERERS, description);
-  return (
-    <Card data-slot="span-output-card" className="min-w-0">
-      <CardContent>
-        <Renderer value={description.value} />
-      </CardContent>
-    </Card>
-  );
+  return <Renderer value={description.value} />;
 }

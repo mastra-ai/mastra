@@ -1,5 +1,5 @@
 {
-  "attachment": ["MiniMax-M3", "MiniMax-M3.1-Flash-Preview"],
+  "attachment": ["MiniMax-M3", "MiniMax-M3.1-Flash", "MiniMax-M3.1-Flash-Preview"],
   "temperature": [
     "MiniMax-M2",
     "MiniMax-M2.1",
@@ -8,6 +8,26 @@
     "MiniMax-M2.7",
     "MiniMax-M2.7-highspeed",
     "MiniMax-M3",
+    "MiniMax-M3.1-Flash",
     "MiniMax-M3.1-Flash-Preview"
-  ]
+  ],
+  "reasoning": {
+    "MiniMax-M3": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "MiniMax-M3.1-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "MiniMax-M3.1-Flash-Preview": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ]
+  }
 }

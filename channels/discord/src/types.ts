@@ -155,9 +155,9 @@ export interface DiscordProviderConfig {
    */
   waitUntil?: WaitUntilFn;
   /**
-   * Start the Gateway WebSocket (core-owned) so the bot receives DMs, @mentions,
-   * and reactions in addition to slash commands. Set `false` for interactions-
-   * only serverless deployments. Forwarded to the adapter entry as `gateway`.
+   * Start the Gateway WebSocket (provider-owned reconnect loop with backoff)
+   * so the bot receives DMs, @mentions, and reactions in addition to slash
+   * commands. Set `false` for interactions-only serverless deployments.
    *
    * @default true
    */

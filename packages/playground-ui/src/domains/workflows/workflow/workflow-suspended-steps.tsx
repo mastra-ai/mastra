@@ -1,5 +1,5 @@
 import type { GetWorkflowResponse } from '@mastra/client-js';
-import { ChevronRight, CirclePause, MoveDownLeft, MoveUpRight, Play } from 'lucide-react';
+import { CirclePause, MoveDownLeft, MoveUpRight, Play } from 'lucide-react';
 import { useState } from 'react';
 import type { CSSProperties } from 'react';
 import { parse } from 'superjson';
@@ -11,6 +11,7 @@ import { ActivityWick } from '@/ds/components/Activity';
 import { Badge } from '@/ds/components/Badge';
 import { CodeEditor } from '@/ds/components/CodeEditor';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons/Icon';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
@@ -158,11 +159,7 @@ function SuspendedStepCard({ step, stepSchema, description, onResume }: Suspende
             >
               <span className="flex min-w-0 items-center gap-2">
                 <Icon>
-                  <ChevronRight
-                    className={cn('text-muted-foreground transition-transform', {
-                      'rotate-90 transform': isPayloadOpen,
-                    })}
-                  />
+                  <DisclosureChevron direction="right" className="text-muted-foreground" />
                 </Icon>
                 <Txt as="span" variant="body" tone="ink" className="truncate">
                   {getPayloadLabel(step.suspendPayload, step.stepId)}

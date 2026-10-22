@@ -3,6 +3,7 @@ import type { McpAppToolInfo } from '@mastra/react/hooks/mcps';
 import { useQuery } from '@tanstack/react-query';
 import { useCallback } from 'react';
 import { McpAppViewer } from './mcp-app-viewer';
+import { Txt } from '@/ds/components/Txt';
 
 interface McpAppToolResultProps {
   appInfo: McpAppToolInfo;
@@ -44,9 +45,9 @@ export function McpAppToolResult({ appInfo, toolArgs, toolResult, onSendMessage,
 
   if (isLoading || !html) {
     return (
-      <div className="rounded-md border border-border bg-background p-4 text-body text-muted-foreground">
+      <Txt as="p" variant="body" tone="muted" className="rounded-md border border-border bg-background p-4">
         Loading MCP App UI…
-      </div>
+      </Txt>
     );
   }
 

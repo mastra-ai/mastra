@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { ArrowDown, ArrowUp } from 'lucide-react';
-import { type ReactNode, useState } from 'react';
+import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { Txt } from '../components/Txt/Txt';
 import { ARRIVING_CLASS, ARRIVING_MS } from './animations';
 import { FoundationPage, FoundationSection, Specimen, SpecimenGroup } from './foundations-layout';
@@ -231,7 +232,7 @@ export const UtilitiesFoundations: Story = {
       title="Utilities foundations"
       description="These are the classes that carry a decision rather than a value. Each one exists because the obvious Tailwind spelling of the same idea breaks in one theme, on one surface, or under a scroller."
       note="Every animation and transition on this page stops under prefers-reduced-motion."
-      noteAside="Declared in src/index.css, theme/motion.css and ds/components/Arrival/arrival.css."
+      noteAside="Declared in components.css, theme/motion.css and ds/components/Arrival/arrival.css."
     >
       <FoundationSection
         label="Interaction layer"

@@ -5,6 +5,12 @@ import { parseSqlIdentifier } from '@mastra/core/utils';
  */
 export type SqlParam = string | number | boolean | null | undefined;
 
+/** A SQL boolean expression and the parameters it binds. */
+export interface SqlCondition {
+  sql: string;
+  params: SqlParam[];
+}
+
 /**
  * Interface for SQL query options with generic type support
  */
@@ -114,6 +120,7 @@ export class SqlBuilder {
    * @param values Values to insert
    * @param conflictColumns Columns to check for conflict (usually PK or UNIQUE)
    * @param updateMap Object mapping columns to update to their new value (e.g. { name: 'excluded.name' })
+   * @param guard Condition the statement writes under: when it is false, neither the insert nor the conflict update happens
    */
   insert(
     table: string,
@@ -121,23 +128,25 @@ export class SqlBuilder {
     values: SqlParam[],
     conflictColumns?: string[],
     updateMap?: Record<string, string>,
+    guard?: SqlCondition,
   ): SqlBuilder {
     const parsedTableName = parseSqlIdentifier(table, 'table name');
     const parsedColumns = columns.map(col => parseSqlIdentifier(col, 'column name'));
     const placeholders = parsedColumns.map(() => '?').join(', ');
+    // A guarded row is proposed through SELECT ... WHERE, so a false guard proposes nothing. The WHERE
+    // clause also keeps SQLite from parsing ON CONFLICT as a join constraint.
+    const source = guard ? `SELECT ${placeholders} WHERE ${guard.sql}` : `VALUES (${placeholders})`;
+
+    this.sql = `INSERT INTO ${parsedTableName} (${parsedColumns.join(', ')}) ${source}`;
+    this.params.push(...values, ...(guard?.params ?? []));
 
     if (conflictColumns && updateMap) {
       const parsedConflictColumns = conflictColumns.map(col => parseSqlIdentifier(col, 'column name'));
       const updateClause = Object.entries(updateMap)
         .map(([col, expr]) => `${col} = ${expr}`)
         .join(', ');
-      this.sql = `INSERT INTO ${parsedTableName} (${parsedColumns.join(', ')}) VALUES (${placeholders}) ON CONFLICT(${parsedConflictColumns.join(', ')}) DO UPDATE SET ${updateClause}`;
-      this.params.push(...values);
-      return this;
+      this.sql += ` ON CONFLICT(${parsedConflictColumns.join(', ')}) DO UPDATE SET ${updateClause}`;
     }
-
-    this.sql = `INSERT INTO ${parsedTableName} (${parsedColumns.join(', ')}) VALUES (${placeholders})`;
-    this.params.push(...values);
 
     return this;
   }

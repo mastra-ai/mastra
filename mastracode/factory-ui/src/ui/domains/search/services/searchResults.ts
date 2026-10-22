@@ -1,6 +1,6 @@
 import type { WorkspacesData } from '../../../../hooks/useWorkspaces';
 import type { BoardCandidate } from '../../factory/boardCandidates';
-import { persistedSourceKeys, SOURCE_LABELS } from '../../factory/boardItems';
+import { isPersistedCandidate, persistedSourceKeys, SOURCE_LABELS } from '../../factory/boardItems';
 import { currentItemStageLabel } from '../../factory/boardStages';
 import { relationshipLabel, relationshipPath, workItemIdentifier } from '../../factory/services/relationships';
 import type { WorkItem, WorkItemSessionRef } from '../../factory/services/workItems';
@@ -195,7 +195,7 @@ export function createWorkItemSearchResults(input: {
   candidates: Array<{ candidate: BoardCandidate; updatedAt: string }>;
 }): WorkItemSearchResult[] {
   const filed = persistedSourceKeys(input.workItems);
-  const candidates = input.candidates.filter(({ candidate }) => !filed.has(candidate.sourceKey));
+  const candidates = input.candidates.filter(({ candidate }) => !isPersistedCandidate(filed, candidate));
 
   return [
     ...input.workItems

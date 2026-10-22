@@ -99,7 +99,15 @@ function buildObject(schema: JsonSchema): z.ZodTypeAny {
   return additional && typeof additional === 'object' ? out.catchall(convert(additional)) : out;
 }
 
+function isNullSchema(schema: JsonSchema): boolean {
+  return typeof schema === 'object' && schema !== null && schema.type === 'null';
+}
+
 function buildComposite(schemas: JsonSchema[]): z.ZodTypeAny {
+  // `T | null` is a nullable `T`, not a two-way choice: a union would render a second, unlabeled input for null.
+  const nonNull = schemas.filter(schema => !isNullSchema(schema));
+  if (nonNull.length > 0 && nonNull.length < schemas.length) return buildComposite(nonNull).nullable();
+
   const options = schemas.map(convert);
   if (options.length === 0) return z.any();
   const [only] = options;

@@ -29,10 +29,7 @@ import {
   handleOMReflectionEnd,
   handleOMFailed,
   handleOMBufferingStart,
-  handleOMBufferingEnd,
-  handleOMBufferingFailed,
   handleOMActivation,
-  handleOMThreadTitleUpdated,
   handleAskQuestion,
   handleSandboxAccessRequest,
   handlePlanApproval,
@@ -53,6 +50,7 @@ import {
   clearToolInputParsers,
 } from './handlers/index.js';
 import type { EventHandlerContext } from './handlers/types.js';
+import { reconcilePackAfterModeChange } from './model-packs/apply.js';
 import { flushRender } from './render-scheduler.js';
 import type { TUIState } from './state.js';
 import { getGithubPrSubscriptionsFromMetadata } from './state.js';
@@ -357,7 +355,7 @@ export async function dispatchEvent(
     }
 
     case 'info':
-      ectx.showInfo(event.message);
+      ectx.showInfo(event.message.replace(/^Switched model route:/, 'Switched model pack:'));
       break;
 
     case 'error':
@@ -365,10 +363,12 @@ export async function dispatchEvent(
       break;
 
     case 'mode_changed':
+      await reconcilePackAfterModeChange(ectx, event.modeId);
       await ectx.refreshModelAuthStatus();
       break;
 
     case 'model_changed':
+      ectx.updateStatusLine();
       await ectx.refreshModelAuthStatus();
       break;
 
@@ -390,7 +390,7 @@ export async function dispatchEvent(
       state.taskToolInsertIndex = -1;
       await ectx.renderExistingMessages(isCurrent);
       if (!isCurrent()) break;
-      await state.controller.loadOMProgress(state.session, isCurrent);
+      await state.local?.controller.loadOMProgress(state.local.session, isCurrent);
       if (!isCurrent()) break;
       // Refresh git branch async so TUI status line reflects the current branch
       getCurrentGitBranchAsync(state.projectInfo.rootPath).then(freshBranch => {
@@ -411,7 +411,7 @@ export async function dispatchEvent(
         state.githubPrGradientAnimator?.stop();
         // Load the objective from the durable ThreadState slot, falling back to
         // the legacy thread-metadata goal for pre-migration threads.
-        await state.goalManager.loadFromThread(state, isCurrent);
+        if (state.local) await state.goalManager.loadFromThread(state.local, isCurrent);
         if (!isCurrent()) break;
         if (!state.goalManager.getGoal()) {
           state.goalManager.loadFromThreadMetadata(metadata);
@@ -439,7 +439,7 @@ export async function dispatchEvent(
       // do not bleed into unrelated new threads.
       const shouldPersistPendingGoal = state.goalManager?.consumePersistOnNextThreadCreate() ?? false;
       if (shouldPersistPendingGoal) {
-        state.goalManager?.saveToThread(state).catch(() => {});
+        if (state.local) state.goalManager?.saveToThread(state.local).catch(() => {});
       } else {
         state.goalManager?.loadFromThreadMetadata(event.thread.metadata as Record<string, unknown> | undefined);
       }
@@ -525,15 +525,7 @@ export async function dispatchEvent(
       break;
 
     case 'om_buffering_start':
-      handleOMBufferingStart(ectx, event.operationType, event.tokensToBuffer);
-      break;
-
-    case 'om_buffering_end':
-      handleOMBufferingEnd(ectx, event.operationType, event.tokensBuffered, event.bufferedTokens, event.observations);
-      break;
-
-    case 'om_buffering_failed':
-      handleOMBufferingFailed(ectx, event.operationType, event.error);
+      handleOMBufferingStart(ectx);
       break;
 
     case 'om_activation': {
@@ -568,7 +560,6 @@ export async function dispatchEvent(
     case 'om_thread_title_updated':
       if (event.threadId !== state.session.thread.getId()) break;
       setCurrentThreadTitle(state, event.newTitle);
-      handleOMThreadTitleUpdated(ectx, event.newTitle, event.oldTitle);
       ectx.updateStatusLine();
       break;
 

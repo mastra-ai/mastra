@@ -9,10 +9,12 @@ allowBuilds:
   protobufjs: false
 
 catalog:
-  tsx: ^4.21.0
+  tsx: ^4.23.15
   typescript: ^5.9.3
 
 overrides:
+  # Vanta 2026-10-21: GHSA-587h-7wmj-h5pm (CVE-2026-112942/3/4) via vitest 4 (vite ^6||^7||^8)
+  'vite@>=8.0.0 <8.3.3': 8.3.4
   '@fastify/proxy-addr@<=5.1.0': 5.1.1
   proxy-addr: 2.0.8
   '@mastra/core': link:../../../../packages/core
@@ -36,13 +38,15 @@ overrides:
   '@fastify/forwarded@<=3.0.1': 3.0.2
   brace-expansion@>=1.0.0 <1.1.21: 1.1.21
   jose@>=4.14.0 <6.2.12: 6.2.12
-  hono@<4.13.8: 4.13.8
-  better-auth: ^1.6.26
+  hono@<4.13.11: 4.13.11
+  better-auth: ^1.7.7
+  '@better-auth/drizzle-adapter@<1.7.7': 1.7.7
+  '@modelcontextprotocol/sdk@>=1.0.0 <1.32.0': 1.32.1
   '@ai-sdk/provider-utils@>=3.0.0 <3.0.38': 3.0.38
   es-toolkit@<1.52.0: 1.52.0
   fast-copy@<4.1.1: 4.1.1
   ioredis@>=5.0.0 <6.0.0: 6.0.0
-  zod@>=4.0.0 <4.6.5: 4.6.5
+  zod@>=4.0.0 <4.6.7: 4.6.7
   # Vanta 2026-09-28: nested-lock security floors
   'uuid@>=8.0.0 <11.1.1': 11.1.1
   'minimatch@>=9.0.0 <9.0.7': 9.0.7
@@ -53,3 +57,5 @@ overrides:
   'yargs@<18.1.0': 18.2.0
   'protobufjs@<8.8.0': 8.8.0
   'nanoid@<5.1.16': 5.1.16
+  # Vanta 2026-10-06: nested-lock security floors
+  'source-map-js@>=1.0.0 <1.2.2': 1.2.2

@@ -1,7 +1,6 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import assert from 'node:assert';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
@@ -36,26 +35,20 @@ describe('Composer on a lazy user-session draft', () => {
       ),
     );
     const user = userEvent.setup();
-    const { client, container } = renderDraft();
+    const { client } = renderDraft();
 
     const message = await screen.findByRole('textbox', { name: 'Message' });
     await waitFor(() => expect(message).toBeEnabled());
-    expect(screen.getByRole('button', { name: 'Attach image' })).toBeDisabled();
     expect(createBodies).toEqual([]);
     expect(preparation.controllerCreates).toBe(0);
     expect(preparation.sessionLookups).toBe(0);
 
-    const form = container.querySelector('form');
-    assert(form);
-    fireEvent.drop(form, { dataTransfer: { files: [new File(['png'], 'shot.png', { type: 'image/png' })] } });
-    expect(await screen.findByText('Images can be attached once the session is ready.')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'Remove shot.png' })).not.toBeInTheDocument();
-    expect(createBodies).toEqual([]);
-
     await user.type(message, '  fix the login bug  ');
     await user.keyboard('{Enter}');
 
-    await waitFor(() => expect(createBodies).toEqual([{ sessionId: SESSION_ID, title: 'fix the login bug' }]));
+    await waitFor(() =>
+      expect(createBodies).toEqual([{ sessionId: SESSION_ID, title: 'fix the login bug', visibility: 'private' }]),
+    );
     expect(screen.getByTestId('pathname')).toHaveTextContent(`/factories/${FACTORY_ID}/user/new/${SESSION_ID}`);
     expect(preparation.controllerCreates).toBe(0);
 
@@ -104,25 +97,72 @@ describe('Composer on a lazy user-session draft', () => {
     expect(preparation.posted).toEqual(['recover this prompt']);
   });
 
-  it('applies a draft-selected pack before dispatching the first prompt', async () => {
-    const preparation = stubPreparingSession({ createdSessionTitle: 'use my pack' });
+  describe('when the first send fails', () => {
+    const MESSAGES = `${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId/messages`;
+
+    async function sendFirstPrompt(text: string, failure: () => Response) {
+      const preparation = stubPreparingSession({ createdSessionTitle: text });
+      const attempts: string[] = [];
+      server.use(
+        http.post(`${TEST_BASE_URL}/web/source-control/projects/${PROJECT_REPOSITORY_ID}/sessions`, () =>
+          HttpResponse.json({ session: createdDraftSession(text) }),
+        ),
+        http.post(MESSAGES, async ({ request }) => {
+          attempts.push(JSON.stringify(await request.json()));
+          return failure();
+        }),
+      );
+      const user = userEvent.setup();
+      const { client } = renderDraft();
+      const message = await screen.findByRole('textbox', { name: 'Message' });
+      await waitFor(() => expect(message).toBeEnabled());
+      await user.type(message, text);
+      await user.keyboard('{Enter}');
+      await waitFor(() =>
+        expect(screen.getByTestId('pathname')).toHaveTextContent(`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`),
+      );
+      preparation.finishWorkspace();
+      await waitForMutationsIdle(client);
+      await waitFor(() => expect(attempts).toHaveLength(1));
+      return attempts;
+    }
+
+    it('warns that a send which may have reached the server could already be in the transcript', async () => {
+      const attempts = await sendFirstPrompt('maybe delivered', () => HttpResponse.error());
+
+      expect(await screen.findByText(/may have been sent\. Check the transcript before retrying/)).toBeInTheDocument();
+      await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('maybe delivered'));
+      expect(attempts).toHaveLength(1);
+    });
+
+    it('gives a refused send back without the duplicate warning', async () => {
+      await sendFirstPrompt('refused', () => HttpResponse.json({ message: 'Message too long' }, { status: 413 }));
+
+      expect(await screen.findByText(/Message too long/)).toBeInTheDocument();
+      expect(screen.queryByText(/may have been sent/)).not.toBeInTheDocument();
+      await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' })).toHaveValue('refused'));
+    });
+  });
+
+  it('applies a draft-selected model before dispatching the first prompt', async () => {
+    const preparation = stubPreparingSession({ createdSessionTitle: 'use my model' });
     server.use(
       http.post(`${TEST_BASE_URL}/web/source-control/projects/${PROJECT_REPOSITORY_ID}/sessions`, () =>
-        HttpResponse.json({ session: createdDraftSession('use my pack') }),
+        HttpResponse.json({ session: createdDraftSession('use my model') }),
       ),
     );
     const user = userEvent.setup();
     const { client } = renderDraft();
 
     const modelPicker = await screen.findByLabelText('Session model');
-    await waitFor(() => expect(modelPicker).toHaveAttribute('title', expect.stringContaining('Balanced')));
+    await waitFor(() => expect(modelPicker).toHaveAttribute('title', expect.stringContaining('gpt-4o-mini')));
     await user.click(modelPicker);
-    await user.click(await screen.findByRole('option', { name: /Model pack Mine/ }));
-    expect(modelPicker).toHaveAttribute('title', expect.stringContaining('Mine'));
+    await user.click(await screen.findByRole('option', { name: /gpt-5.4-mini/ }));
+    expect(modelPicker).toHaveAttribute('title', expect.stringContaining('gpt-5.4-mini'));
     expect(preparation.operations).toEqual([]);
 
     const message = screen.getByRole('textbox', { name: 'Message' });
-    await user.type(message, 'use my pack');
+    await user.type(message, 'use my model');
     await user.keyboard('{Enter}');
     await waitFor(() =>
       expect(screen.getByTestId('pathname')).toHaveTextContent(`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`),
@@ -130,20 +170,18 @@ describe('Composer on a lazy user-session draft', () => {
 
     preparation.finishWorkspace();
     await waitForMutationsIdle(client);
-    await waitFor(() => expect(preparation.delivered).toEqual(['use my pack']));
-    // Activation applies the pack's models server-side, so no separate model
-    // switch is sent for the pack-derived model.
-    expect(preparation.operations).toEqual(['mode:build', 'pack:mine', 'message']);
+    await waitFor(() => expect(preparation.delivered).toEqual(['use my model']));
+    expect(preparation.operations).toEqual(['model:openai/gpt-5.4-mini', 'message']);
   });
 
-  it('still dispatches the first prompt when draft pack activation fails', async () => {
+  it('still dispatches the first prompt when the draft model switch fails', async () => {
     const preparation = stubPreparingSession({ createdSessionTitle: 'keep my prompt' });
     server.use(
       http.post(`${TEST_BASE_URL}/web/source-control/projects/${PROJECT_REPOSITORY_ID}/sessions`, () =>
         HttpResponse.json({ session: createdDraftSession('keep my prompt') }),
       ),
-      http.post(`${TEST_BASE_URL}/web/config/model-packs/mine/activate`, () =>
-        HttpResponse.json({ error: 'Pack unavailable' }, { status: 500 }),
+      http.post(`${TEST_BASE_URL}/api/agent-controller/code/sessions/${SESSION_ID}/model`, () =>
+        HttpResponse.json({ error: 'Model unavailable' }, { status: 500 }),
       ),
     );
     const user = userEvent.setup();
@@ -151,7 +189,7 @@ describe('Composer on a lazy user-session draft', () => {
 
     const modelPicker = await screen.findByLabelText('Session model');
     await user.click(modelPicker);
-    await user.click(await screen.findByRole('option', { name: /Model pack Mine/ }));
+    await user.click(await screen.findByRole('option', { name: /gpt-5.4-mini/ }));
     const message = screen.getByRole('textbox', { name: 'Message' });
     await user.type(message, 'keep my prompt');
     await user.keyboard('{Enter}');
@@ -162,11 +200,7 @@ describe('Composer on a lazy user-session draft', () => {
     preparation.finishWorkspace();
     await waitForMutationsIdle(client);
     await waitFor(() => expect(preparation.delivered).toEqual(['keep my prompt']));
-    // The user must learn the pack was not applied.
-    expect(await screen.findByText('Pack unavailable')).toBeInTheDocument();
-    // The pack failed, so its build model must not be half-applied either —
-    // the session keeps its own defaults.
-    expect(preparation.operations).toEqual(['mode:build', 'message']);
+    expect(preparation.operations).toEqual(['message']);
   });
 
   it('restores the exact prompt after failure and retries with the same route UUID', async () => {
@@ -204,8 +238,8 @@ describe('Composer on a lazy user-session draft', () => {
       expect(screen.getByTestId('pathname')).toHaveTextContent(`/factories/${FACTORY_ID}/user/threads/${SESSION_ID}`),
     );
     expect(createBodies).toEqual([
-      { sessionId: SESSION_ID, title: 'retry this prompt' },
-      { sessionId: SESSION_ID, title: 'retry this prompt' },
+      { sessionId: SESSION_ID, title: 'retry this prompt', visibility: 'private' },
+      { sessionId: SESSION_ID, title: 'retry this prompt', visibility: 'private' },
     ]);
 
     preparation.finishWorkspace();

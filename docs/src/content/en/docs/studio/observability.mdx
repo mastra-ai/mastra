@@ -80,7 +80,7 @@ Visit the [metrics overview](/docs/observability/metrics/overview) for more deta
 
 :::note
 
-Metrics require a separate OLAP store for observability. Relational databases like PostgreSQL, LibSQL, etc. aren't supported for metrics. In-memory storage resets on restart.
+Metrics require an observability store that supports them, such as DuckDB, ClickHouse, or `PostgresStoreVNext` with its observability domain enabled. LibSQL, MSSQL, and MongoDB don't support metrics. In-memory storage resets on restart. See [storage support](/docs/observability/metrics/overview#storage-support) for the full list.
 
 :::
 
@@ -88,7 +88,11 @@ Metrics require a separate OLAP store for observability. Relational databases li
 
 When you run an agent or workflow, the Observability tab displays traces that highlight the key AI operations such as model calls, tool executions, and workflow steps. Follow these traces to see how data moves, where time is spent, and what's happening under the hood.
 
-Above the trace list, open **Columns** to show or hide input, entity, duration, input token, output token, estimated cost, and custom metadata columns. To display custom metadata, add the top-level key used in `tracingOptions.metadata`. Studio saves the selection in browser storage for the current Mastra server and API prefix.
+Above the trace list, open **Columns** to show or hide input, entity, duration, input token, output token, estimated cost, and custom metadata columns. Studio saves the selection in browser storage for the current Mastra server and API prefix.
+
+Custom metadata columns require an observability store that supports trace queries (`queryTraces`), such as the DuckDB observability store in the [quickstart](#quickstart). In **Columns**, select **Add metadata column** and enter the top-level key used in `tracingOptions.metadata`.
+
+With a store that doesn't support trace queries, such as LibSQL alone, Studio hides **Add metadata column**. Advanced filters, including metadata and tags, are also unavailable. Storing metadata on spans doesn't enable these trace-list features.
 
 Token and estimated cost columns require an observability store that supports metrics. These columns stay hidden in the **Branches** view because several branch rows can belong to the same trace.
 

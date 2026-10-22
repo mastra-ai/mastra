@@ -28,6 +28,7 @@ const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, 
   const handleConditionChange = (index: number, condition: Rule | RuleGroup) => {
     onChange({
       ...group,
+      // oxlint-disable-next-line typescript/no-unnecessary-type-assertion -- Built core declarations distinguish the recursive group's depth from its children.
       conditions: group.conditions.map((c, i) => (i === index ? (condition as Rule | RuleGroupDepth1) : c)),
     });
   };
@@ -79,13 +80,15 @@ const RuleGroupView: React.FC<RuleGroupViewProps> = ({ schema, group, onChange, 
                 type="button"
                 onClick={handleToggleOperator}
                 className={cn(
-                  'absolute top-0 left-1/2 z-10 -translate-1/2 cursor-pointer rounded-full px-3 py-0.5 text-meta',
+                  'absolute top-0 left-1/2 z-10 -translate-1/2 cursor-pointer rounded-full px-3 py-0.5',
                   group.operator === 'OR'
                     ? 'bg-badge-amber-subtle text-badge-amber-foreground hover:bg-badge-amber-strong'
                     : 'bg-badge-blue-subtle text-badge-blue-foreground hover:bg-badge-blue-strong',
                 )}
               >
-                {group.operator.toLowerCase()}
+                <Txt as="span" variant="meta" className="block">
+                  {group.operator.toLowerCase()}
+                </Txt>
               </button>
             )}
 
@@ -156,13 +159,15 @@ export const RuleBuilder: React.FC<RuleBuilderProps> = ({
         className={cn(
           quietTextHover,
           controlStateColorTransition,
-          'flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-border p-2 text-caption',
+          'flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-border p-2',
         )}
       >
         <Icon>
           <Plus />
         </Icon>
-        Add conditional rule
+        <Txt as="span" variant="caption" className="block">
+          Add conditional rule
+        </Txt>
       </button>
     );
   }

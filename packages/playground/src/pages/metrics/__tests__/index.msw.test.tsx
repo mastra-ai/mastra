@@ -14,6 +14,7 @@ import {
   emptyEntityNames,
   emptyEnvironments,
   emptyServiceNames,
+  emptyScores,
   emptyTags,
 } from './fixtures/metrics';
 import { TestLinkProvider } from '@/test/link-provider';
@@ -26,6 +27,7 @@ function observeRequests() {
   const onMetrics = vi.fn();
   const onDiscovery = vi.fn();
   server.use(
+    http.get(`${TEST_BASE_URL}/api/observability/scores`, () => HttpResponse.json(emptyScores)),
     http.post(`${TEST_BASE_URL}/api/observability/metrics/:operation`, ({ params }) => {
       onMetrics();
       switch (params.operation) {
@@ -60,7 +62,7 @@ function observeRequests() {
 
 function LocationProbe() {
   const location = useLocation();
-  return <output data-testid="location">{location.search}</output>;
+  return <output data-testid="location">{`${location.pathname}${location.search}`}</output>;
 }
 
 function renderPage(path = '/metrics') {
@@ -107,7 +109,7 @@ describe('Metrics storage support', () => {
       const { queryClient } = renderPage();
 
       expect(await screen.findByText(unavailableTitle)).toBeTruthy();
-      expect(screen.getByRole('button', { name: 'Last 24 hours' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Value: Last 24 hours' })).toBeTruthy();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
       expect(onMetrics).not.toHaveBeenCalled();
       expect(onDiscovery).not.toHaveBeenCalled();
@@ -123,7 +125,7 @@ describe('Metrics storage support', () => {
 
       expect(await screen.findByText(unavailableTitle)).toBeTruthy();
       expect(screen.getByText('production')).toBeTruthy();
-      expect(screen.getByTestId('location').textContent).toBe('?filterEnvironment=production');
+      expect(screen.getByTestId('location').textContent).toBe('/metrics?filterEnvironment=production');
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
       expect(onMetrics).not.toHaveBeenCalled();
       expect(onDiscovery).not.toHaveBeenCalled();
@@ -138,11 +140,11 @@ describe('Metrics storage support', () => {
       const { queryClient } = renderPage();
       expect(await screen.findByText(unavailableTitle)).toBeTruthy();
 
-      fireEvent.click(screen.getByRole('button', { name: 'Last 24 hours' }));
-      fireEvent.click(await screen.findByRole('menuitem', { name: 'Last 7 days' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Value: Last 24 hours' }));
+      fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Last 7 days' }));
 
-      await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('?period=7d'));
-      expect(screen.getByRole('button', { name: 'Last 7 days' })).toBeTruthy();
+      await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/metrics?period=7d'));
+      expect(screen.getByRole('button', { name: 'Value: Last 7 days' })).toBeTruthy();
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
       expect(onMetrics).not.toHaveBeenCalled();
       expect(onDiscovery).not.toHaveBeenCalled();
@@ -166,7 +168,7 @@ describe('Metrics storage support', () => {
       await act(() => queryClient.invalidateQueries({ queryKey: ['observability-capabilities'] }));
 
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
-      expect(screen.getByText('Agent runs')).toBeTruthy();
+      expect(screen.getByRole('heading', { name: 'Agent runs' })).toBeTruthy();
       expect(onMetrics).toHaveBeenCalled();
     });
   });
@@ -192,8 +194,8 @@ describe('Metrics storage support', () => {
       await waitFor(() => expect(onCapabilities).toHaveBeenCalled());
       try {
         expect(screen.getByRole('status', { name: 'Loading storage capabilities' })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Last 24 hours' })).toBeTruthy();
-        expect(screen.getByRole('button', { name: 'Add Filter' }).hasAttribute('disabled')).toBe(true);
+        expect(screen.getByRole('button', { name: 'Value: Last 24 hours' })).toBeTruthy();
+        expect(screen.getByRole('group', { name: 'Metrics filters' })).toBeTruthy();
         expect(onMetrics).not.toHaveBeenCalled();
         expect(onDiscovery).not.toHaveBeenCalled();
       } finally {
@@ -203,7 +205,7 @@ describe('Metrics storage support', () => {
       expect(screen.queryByRole('status', { name: 'Loading storage capabilities' })).toBeNull();
       expect(onMetrics).toHaveBeenCalled();
       expect(onDiscovery).toHaveBeenCalled();
-      expect(screen.getByText('Agent runs')).toBeTruthy();
+      expect(screen.getByRole('heading', { name: 'Agent runs' })).toBeTruthy();
     });
   });
 
@@ -225,6 +227,26 @@ describe('Metrics storage support', () => {
       renderPage(path);
 
       expect((await screen.findAllByText(`+20% ${comparison} (100)`)).length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('when the dashboard has data', () => {
+    it('opens traces with the dashboard filters from "View in Traces"', async () => {
+      observeRequests();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(supportedStorage)),
+      );
+
+      renderPage('/metrics?period=7d&filterEnvironment=production');
+
+      const [tokenUsageTraces] = await screen.findAllByRole('button', { name: 'View in Traces' });
+      if (!tokenUsageTraces) throw new Error('No "View in Traces" button');
+      fireEvent.click(tokenUsageTraces);
+
+      await waitFor(() => expect(screen.getByTestId('location').textContent).toMatch(/^\/traces\?/));
+      const url = new URL(screen.getByTestId('location').textContent ?? '', 'http://localhost');
+      expect(url.searchParams.get('datePreset')).toBe('last-7d');
+      expect(url.searchParams.get('filterEnvironment')).toBe('production');
     });
   });
 });

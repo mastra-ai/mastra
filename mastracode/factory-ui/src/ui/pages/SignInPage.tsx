@@ -19,6 +19,7 @@ import {
   signUpWithPassword,
 } from '../domains/auth/services/auth';
 import { FactoryHalftoneField } from '../domains/auth/components/FactoryHalftoneField';
+import { AuthPendingSkeleton } from '../domains/auth/components/RootGuards';
 import '../domains/auth/components/sign-in-page.css';
 
 // Browsers can normalize backslashes into cross-origin redirects.
@@ -39,12 +40,12 @@ function CustomDomainAuthError({ hostname }: { hostname: string }) {
       <Txt as="h2" variant="subheading" className="text-destructive-foreground">
         Mastra Platform sign-in isn&apos;t available on custom domains
       </Txt>
-      <Txt as="p" variant="caption" tone="muted" className="mt-2 leading-5">
+      <Txt as="p" variant="caption" tone="muted" className="mt-2">
         This Factory is served from {hostname}. Mastra Platform authentication only works on Mastra-hosted domains
         (*.mastra.cloud). To use a custom domain, configure your own auth provider — for example WorkOS (WORKOS_API_KEY
         + WORKOS_CLIENT_ID) or Better Auth — and redeploy.
       </Txt>
-      <Txt as="p" variant="caption" tone="muted" className="mt-3 flex flex-wrap gap-x-3 gap-y-1 leading-5">
+      <Txt as="p" variant="caption" tone="muted" className="mt-3 flex flex-wrap gap-x-3 gap-y-1">
         <a
           href="https://mastra.ai/docs/auth/overview"
           target="_blank"
@@ -167,7 +168,7 @@ function CredentialSignInForm({ returnTo, signUpDisabled }: { returnTo: string; 
 
 export function SignInPage() {
   const { baseUrl } = useApiConfig();
-  const auth = useFactoryAuth();
+  const auth = useFactoryAuth({ monitorSession: true });
   const [searchParams] = useSearchParams();
   const [redirecting, setRedirecting] = useState(false);
   const returnTo = safeReturnTo(searchParams.get('returnTo') ?? undefined);
@@ -184,7 +185,12 @@ export function SignInPage() {
   const hostedLoginLabel = studioAuth ? 'Sign in with Mastra Platform' : 'Continue with GitHub';
   const hostedLoginPendingLabel = studioAuth ? 'Opening Mastra Platform…' : 'Opening GitHub…';
 
-  if (!auth.isPending && (!auth.data?.authEnabled || auth.data.authenticated)) {
+  // A cached signed-in result may predate the redirect here. Check the cookie
+  // again before sending the user back into the protected app.
+  if (auth.isPending || !auth.isFetchedAfterMount) return <AuthPendingSkeleton />;
+
+  const canReturnToApp = auth.data && (!auth.data.authEnabled || auth.data.authenticated);
+  if (!auth.isFetching && !auth.isError && canReturnToApp) {
     return <Navigate to={returnTo} replace />;
   }
 
@@ -192,15 +198,10 @@ export function SignInPage() {
     <main className="bg-background text-foreground min-h-dvh">
       <div className="mx-auto grid min-h-dvh w-full max-w-7xl grid-cols-1 px-6 sm:px-10 lg:grid-cols-[minmax(380px,0.82fr)_minmax(540px,1.18fr)]">
         <section className="relative z-3 flex max-w-xl flex-col justify-center py-11 lg:py-17">
-          <h1 className="max-w-xl text-[clamp(2.625rem,5.3vw,4.25rem)] leading-[1.1] font-[520] tracking-[0.015em] text-balance [font-stretch:112%]">
+          <Txt as="h1" variant="hero" className="max-w-xl text-balance">
             Build with an agent factory
-          </h1>
-          <Txt
-            as="p"
-            variant="body"
-            tone="muted"
-            className="mt-6 max-w-lg text-[clamp(1.0625rem,1.65vw,1.375rem)] leading-[1.36] tracking-[0.015em]"
-          >
+          </Txt>
+          <Txt as="p" variant="lead" tone="muted" className="mt-6 max-w-lg">
             Turn a repository into a working factory. Agents pick up scoped work, collaborate, and ship changes you can
             review.
           </Txt>
@@ -212,26 +213,35 @@ export function SignInPage() {
                   {accessDenied ? 'Access denied' : 'Sign-in failed'}
                 </Txt>
                 {authErrorDescription ? (
-                  <Txt as="p" variant="caption" tone="muted" className="mt-1 leading-5">
+                  <Txt as="p" variant="caption" tone="muted" className="mt-1">
                     {authErrorDescription}
                   </Txt>
                 ) : null}
                 {accessDenied ? (
-                  <Txt as="p" variant="caption" tone="muted" className="mt-1 leading-5">
+                  <Txt as="p" variant="caption" tone="muted" className="mt-1">
                     Ask an organization admin to add your account, then sign in again.
                   </Txt>
                 ) : null}
               </div>
             ) : null}
-            {customDomainBlocked ? (
+            {auth.isError ? (
+              <div role="alert" className="space-y-3">
+                <Txt as="p" variant="body" tone="muted">
+                  Unable to check your sign-in status. Check your connection and try again.
+                </Txt>
+                <Button onClick={() => void auth.refetch()} disabled={auth.isFetching}>
+                  Try again
+                </Button>
+              </div>
+            ) : customDomainBlocked ? (
               <CustomDomainAuthError hostname={window.location.hostname} />
             ) : credentialForm ? (
               <>
                 <div className="mb-6">
-                  <Txt as="h2" variant="title" className="font-display">
+                  <Txt font="display" as="h2" variant="title">
                     Welcome back
                   </Txt>
-                  <Txt as="p" variant="body" tone="muted" className="mt-2 leading-6">
+                  <Txt as="p" variant="body" tone="muted" className="mt-2">
                     Sign in to continue building with your team.
                   </Txt>
                 </div>

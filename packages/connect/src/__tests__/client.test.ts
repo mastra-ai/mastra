@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   getConnectionContext,
   getCredential,
+  getProjectIntegrationSettings,
   listIntegrations,
   listProjectConnections,
   proxyRequest,
@@ -102,6 +103,25 @@ describe('resolveClient', () => {
     vi.stubEnv('MASTRA_ORG_ID', 'org_env');
     expect(resolveClient({ accessToken: TOKEN }).headers['x-organization-id']).toBe('org_env');
   });
+
+  it('omits x-mastra-project-id unless configured', () => {
+    vi.stubEnv('MASTRA_PROJECT_ID', '');
+    const client = resolveClient({ accessToken: TOKEN });
+    expect(client.headers['x-mastra-project-id']).toBeUndefined();
+  });
+
+  it('sends x-mastra-project-id from the option or MASTRA_PROJECT_ID', () => {
+    expect(resolveClient({ accessToken: TOKEN, projectId: 'proj_1' }).headers['x-mastra-project-id']).toBe('proj_1');
+    vi.stubEnv('MASTRA_PROJECT_ID', 'proj_env');
+    expect(resolveClient({ accessToken: TOKEN }).headers['x-mastra-project-id']).toBe('proj_env');
+  });
+
+  it('sends project attribution and resource scope together', () => {
+    const client = resolveClient({ accessToken: TOKEN, projectId: 'proj_1', resourceId: 'user-1' });
+    expect(client.headers['x-mastra-project-id']).toBe('proj_1');
+    expect(client.headers['x-mastra-resource-id']).toBe('user-1');
+    expect(client.resourceId).toBe('user-1');
+  });
 });
 
 describe('listProjectConnections', () => {
@@ -189,7 +209,15 @@ describe('listIntegrations', () => {
     );
     const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
 
-    await expect(listIntegrations(client)).resolves.toEqual([{ id: 'catalog-mcp', capabilities: { mcp: true } }]);
+    await expect(listIntegrations(client)).resolves.toEqual([
+      {
+        id: 'catalog-mcp',
+        capabilities: { mcp: true },
+        displayName: 'Catalog MCP',
+        logoUrl: null,
+        authType: 'MCP_OAUTH2_GENERIC',
+      },
+    ]);
     expect(fetchMock.mock.calls[0]![0]).toBe('https://example.test/v2/integrations');
   });
 
@@ -198,6 +226,42 @@ describe('listIntegrations', () => {
     const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
 
     await expect(listIntegrations(client)).rejects.toMatchObject({ code: 'platform_error' });
+  });
+});
+
+describe('getProjectIntegrationSettings', () => {
+  it('returns the project provider configuration from the platform', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ endUserProviders: ['linear', 'slack'] }));
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+
+    await expect(getProjectIntegrationSettings(client, 'proj/1')).resolves.toEqual({
+      endUserProviders: ['linear', 'slack'],
+    });
+    expect(fetchMock.mock.calls[0]![0]).toBe('https://example.test/v2/projects/proj%2F1/integration-settings');
+  });
+
+  it('preserves null inheritance and rejects malformed settings', async () => {
+    const inheritedFetch = vi.fn().mockResolvedValue(Response.json({ endUserProviders: null }));
+    await expect(
+      getProjectIntegrationSettings(makeClient(inheritedFetch, { baseUrl: 'https://example.test' }), 'proj_1'),
+    ).resolves.toEqual({ endUserProviders: null });
+
+    const malformedFetch = vi.fn().mockResolvedValue(Response.json({ endUserProviders: [42] }));
+    await expect(
+      getProjectIntegrationSettings(makeClient(malformedFetch, { baseUrl: 'https://example.test' }), 'proj_1'),
+    ).rejects.toMatchObject({ code: 'platform_error' });
+  });
+
+  it('reports a missing project integration-settings endpoint as a platform error', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(Response.json({ detail: 'Project not found' }, { status: 404 }));
+
+    await expect(
+      getProjectIntegrationSettings(makeClient(fetchMock, { baseUrl: 'https://example.test' }), 'proj_404'),
+    ).rejects.toMatchObject({
+      code: 'platform_error',
+      status: 404,
+      message: 'Integration settings were not found for project proj_404.',
+    });
   });
 });
 

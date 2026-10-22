@@ -1,4 +1,4 @@
-import { ChartNoAxesGantt, ChevronDown, ChevronsDownUp, ChevronsUpDown } from 'lucide-react';
+import { ChartNoAxesGantt, ChevronsDownUp, ChevronsUpDown } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
 import { useCurrentRun } from '../context/use-current-run';
 import { useWorkflowSelectedStep } from '../context/use-workflow-selected-step';
@@ -7,6 +7,7 @@ import { WorkflowTimelineRow } from './workflow-timeline-row';
 import { buildTimeline } from './workflow-timeline-utils';
 import { Button } from '@/ds/components/Button';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { Txt } from '@/ds/components/Txt';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { useAutoscroll } from '@/hooks/use-autoscroll';
@@ -61,10 +62,7 @@ export function WorkflowTimeline() {
               {rows.length} events
             </Txt>
             <span className="ml-auto">
-              <ChevronDown
-                aria-hidden
-                className={cn('size-4 transition-transform motion-reduce:transition-none', isCollapsed && '-rotate-90')}
-              />
+              <DisclosureChevron direction="right" className="size-4" />
             </span>
           </CollapsibleTrigger>
           {!isCollapsed && (

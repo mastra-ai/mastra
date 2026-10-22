@@ -1,3 +1,11 @@
 {
-  "temperature": ["echo"]
+  "temperature": ["echo"],
+  "reasoning": {
+    "echo": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ]
+  }
 }

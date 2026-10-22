@@ -1,13 +1,3 @@
-/**
- * Connect / reconnect controls for Platform-managed provider accounts,
- * completed headlessly in the Factory SPA.
- *
- * OAuth providers open the provider's own consent popup; API-key providers
- * collect the key in a dialog and submit it directly — the same UX as Mastra
- * Platform's own settings, with no Nango-branded screens and no Platform
- * round trip.
- */
-
 import { Button } from '@mastra/playground-ui/components/Button';
 import {
   Dialog,
@@ -83,10 +73,14 @@ export interface ProviderConnectControlProps {
   /** Reconnect an existing connection instead of creating a new one. */
   reconnectConnectionId?: string;
   label: string;
+  /** Short visible action when the provider is already named beside it. */
+  buttonLabel?: string;
   size?: 'sm' | 'md';
   variant?: 'default' | 'ghost' | 'primary';
   /** Leading icon inside the button, e.g. the provider's logomark. */
   icon?: ReactNode;
+  /** Layout classes forwarded to the connect button. */
+  className?: string;
   /** Called after the provider confirmed the authorization. */
   onCompleted?: () => void;
 }
@@ -99,9 +93,11 @@ export function ProviderConnectControl({
   provider,
   reconnectConnectionId,
   label,
+  buttonLabel,
   size = 'sm',
   variant = 'default',
   icon,
+  className,
   onCompleted,
 }: ProviderConnectControlProps) {
   const meta = PLATFORM_CONNECT_PROVIDERS[provider];
@@ -136,10 +132,12 @@ export function ProviderConnectControl({
         size={size}
         variant={variant}
         icon={icon}
+        className={className}
         disabled={pending}
+        aria-label={buttonLabel && !pending ? label : undefined}
         onClick={() => (meta.authKind === 'apiKey' ? setCollectingApiKey(true) : void run())}
       >
-        {pending ? 'Connecting…' : label}
+        {pending ? 'Connecting…' : (buttonLabel ?? label)}
       </Button>
       {collectingApiKey && (
         <ApiKeyDialog

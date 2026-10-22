@@ -10,7 +10,8 @@ import type { FactoryDecisionStatus, FactoryDecisionSummary } from '../../../fac
 import type { PullRequestSubscription } from '../../../factory/services/githubSubscriptions';
 import type { WorkItemSessionRef } from '../../../factory/services/workItems';
 import type { FactoryUserSession } from '../../services/user-sessions';
-import { WorkspacesSection } from '../WorkspacesSection';
+import { SessionsSection } from '../SessionsSection';
+import { LIVE_SESSION, testChatSession } from './fixtures/sessionsSection';
 
 const factoryProjectId = 'factory-project-1';
 const projectRepositoryId = 'github-project-1';
@@ -164,7 +165,7 @@ function stubWorkspaceStatuses({
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryProjectId}/decisions`, () =>
       HttpResponse.json({ decisions }),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${projectRepositoryId}/sessions`, () =>
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () =>
       HttpResponse.json({ sessions: [workSession, reviewSession] }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryProjectId}/work-items`, () =>
@@ -182,8 +183,9 @@ function stubWorkspaceStatuses({
     http.get(`${TEST_BASE_URL}/web/github/subscriptions`, ({ request }) => {
       const url = new URL(request.url);
       const threadId = url.searchParams.get('threadId');
-      const scope = url.searchParams.get('scope');
-      const key = `${threadId ?? ''}:${scope ?? ''}`;
+      // Each row reads its own session's subscriptions.
+      const sessionId = url.searchParams.get('sessionId');
+      const key = `${threadId ?? ''}:${sessionId ?? ''}`;
       return HttpResponse.json({
         subscriptions: subscriptionsBySession[key] ?? [],
       });
@@ -217,21 +219,9 @@ function baseItems(knownMerged: boolean) {
 function renderSection() {
   return renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/${factoryProjectId}/workspaces/${workSession.sessionId}`]}>
-      <ChatSessionContext.Provider
-        value={{
-          resourceId,
-          sessionEnabled: true,
-          resourceReady: true,
-          sandboxReady: true,
-          sandboxPreparing: false,
-          resourceEnabled: true,
-          factorySessionState: { factoryProjectId, projectRepositoryId },
-          baseUrl: TEST_BASE_URL,
-          kind: 'factory',
-        }}
-      >
+      <ChatSessionContext.Provider value={testChatSession(factoryProjectId, projectRepositoryId, LIVE_SESSION)}>
         <Routes>
-          <Route path="/factories/:factoryId/workspaces/:sessionId" element={<WorkspacesSection />} />
+          <Route path="/factories/:factoryId/workspaces/:sessionId" element={<SessionsSection />} />
         </Routes>
       </ChatSessionContext.Provider>
     </MemoryRouter>,

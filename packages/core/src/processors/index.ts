@@ -23,7 +23,9 @@ import type { ChunkType } from '../stream';
 import type { DataChunkType, LanguageModelUsage, LLMStepResult, ProviderMetadata } from '../stream/types';
 import type { Workflow } from '../workflows';
 import type { OutputWriter } from '../workflows/types';
+import type { AnyWorkspace } from '../workspace/workspace';
 import type { StructuredOutputOptions } from './processors';
+import type { ProcessorState } from './runner';
 import type { ProcessorStepOutput } from './step-schema';
 
 /**
@@ -361,6 +363,8 @@ export interface ProcessLLMRequestArgs<TTripwireMetadata = unknown> extends Proc
   model: MastraLanguageModel;
   /** The message list the prompt was built from, for provenance that the converted prompt no longer carries (e.g. per-message metadata stamps). */
   messageList?: MessageList;
+  /** The workspace of this step, the one the agent's tools use. Undefined when the agent has none. */
+  workspace?: AnyWorkspace;
   /** The current step number (0-indexed) within the agentic loop. */
   stepNumber: number;
   /** All completed steps so far. */
@@ -974,6 +978,17 @@ export type ProcessorWorkflow = Workflow<any, any, string, any, ProcessorStepOut
   __processToolResult?: boolean;
   /** @internal Direct adapter execution, only for framework-generated plain processor chains. */
   __executeOutputStream?: ProcessorStepExecutor;
+  /**
+   * @internal End-of-stream counterpart of `__executeOutputStream`: releases the parts the
+   * chained processors still hold, each pushed through the processors after its holder.
+   */
+  __flushOutputStream?: (args: Parameters<ProcessorStepExecutor>[0]) => Promise<ChunkType[]>;
+  /**
+   * @internal Failure counterpart of `__flushOutputStream`: drops what the chained processors
+   * hold without emitting their content or running any further checks, returning the held
+   * control parts (oldest first).
+   */
+  __discardOutputStream?: (processorStates?: Map<string, ProcessorState>) => Promise<ChunkType[]>;
 };
 
 /**
@@ -1008,11 +1023,16 @@ export type LLMRequestProcessorOrWorkflow<TTripwireMetadata = unknown> =
 
 export { isProcessorWorkflow } from './is-processor-workflow';
 
-export { defaultStabilityErrorProcessors, STABILITY_ERROR_PROCESSOR_IDS } from './stability-defaults';
+export {
+  defaultStabilityErrorProcessors,
+  isMalformedFunctionCallError,
+  STABILITY_ERROR_PROCESSOR_IDS,
+} from './stability-defaults';
 
 export * from './processors';
 export { CyberRefusalHandler } from './cyber-refusal-handler';
 export { PrefillErrorHandler } from './prefill-error-handler';
+export { UnsupportedFileHandler } from './unsupported-file-handler';
 export {
   ProviderHistoryCompat,
   anthropicToolIdFormat,

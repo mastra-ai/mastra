@@ -17,9 +17,11 @@ import { WorkflowHeader } from './workflow-header';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { useHasObservability } from '@/domains/configuration/hooks/use-has-observability';
-import { navCrumb, workflowCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
+import { navCrumb, workflowCrumb } from '@/domains/navigation/crumbs';
+import type { CrumbDef } from '@/domains/navigation/crumbs';
 import { WorkflowRunActions } from '@/domains/run-options/components/workflow-run-actions';
-import { WorkflowPageTabs, type WorkflowPageTab } from '@/domains/workflows/components/workflow-page-tabs';
+import { WorkflowPageTabs } from '@/domains/workflows/components/workflow-page-tabs';
+import type { WorkflowPageTab } from '@/domains/workflows/components/workflow-page-tabs';
 
 export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
   const { workflowId, runId } = useParams();
@@ -29,14 +31,13 @@ export const WorkflowLayout = ({ children }: { children: React.ReactNode }) => {
       title="Unable to display this workflow"
       description="The workflow data could not be displayed. Try again or open another workflow."
     >
-      {workflowId ? <WorkflowRoute>{children}</WorkflowRoute> : <WorkflowRoute>{children}</WorkflowRoute>}
+      <WorkflowRoute>{children}</WorkflowRoute>
     </ErrorBoundary>
   );
 };
 
-const WORKFLOW_PAGE_TABS: readonly WorkflowPageTab[] = ['graph', 'traces', 'schedules'];
 const isWorkflowPageTab = (segment: string | undefined): segment is WorkflowPageTab =>
-  WORKFLOW_PAGE_TABS.includes(segment as WorkflowPageTab);
+  segment === 'graph' || segment === 'traces' || segment === 'schedules';
 
 /** Shadows the global "go to" sequences with workflow-scoped targets while a workflow page is mounted. */
 const WorkflowShortcuts = ({ workflowId }: { workflowId: string }) => {
@@ -78,7 +79,7 @@ function WorkflowRoute({ children }: { children: React.ReactNode }) {
     );
   }
 
-  if (isWorkflowLoading) {
+  if (isWorkflowLoading && activeTab === 'graph') {
     return (
       <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
         <h1 className="sr-only">{workflowId}</h1>

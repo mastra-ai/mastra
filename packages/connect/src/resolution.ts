@@ -6,7 +6,7 @@ import { toNamedConnections } from './multi-connection.js';
 /** Identifies one provider's connection-resolution inputs. */
 export interface ConnectionRequest {
   integrationId: string;
-  /** Fallback connection-id environment variable when more than one active connection exists. */
+  /** Legacy connection-id env fallback; kept working but intentionally undocumented. */
   envVar: string;
   /** Pinned connection id from per-integration options. */
   connectionId?: string;
@@ -14,12 +14,12 @@ export interface ConnectionRequest {
 
 const INTEGRATION_ID_PATTERN = /^[a-zA-Z0-9_-]{1,128}$/;
 
-export function validateIntegrationOverrides(integrations: Record<string, unknown> | undefined): void {
-  for (const integrationId of Object.keys(integrations ?? {})) {
+export function validateProviderIds(providers: Record<string, unknown> | undefined): void {
+  for (const integrationId of Object.keys(providers ?? {})) {
     if (!INTEGRATION_ID_PATTERN.test(integrationId)) {
       throw new MastraConnectError(
         'invalid_options',
-        `Invalid provider '${integrationId}' in integrations option: expected 1-128 letters, numbers, underscores, or hyphens.`,
+        `Invalid provider '${integrationId}' in providers option: expected 1-128 letters, numbers, underscores, or hyphens.`,
       );
     }
   }
@@ -40,51 +40,6 @@ export function groupByIntegrationId(connections: ProjectConnection[]): Map<stri
 }
 
 /**
- * Resolves the connection to use for one provider, per the contract:
- * option/env var wins; else a single active connection; anything else
- * (ambiguity, needs_reauth, no usable candidate) warns and skips so one bad
- * integration never takes down the whole resolution. A needs_reauth
- * connection is never silently mapped.
- */
-export function resolveConnection(request: ConnectionRequest, candidates: ProjectConnection[]): string | undefined {
-  const integrationId = request.integrationId;
-  const directed = request.connectionId?.trim() || process.env[request.envVar]?.trim() || undefined;
-  if (directed) {
-    const match = candidates.find(connection => connection.id === directed);
-    if (!match) {
-      console.warn(
-        `[@mastra/connect] Skipping ${integrationId}: pinned connection ${directed} is not attached to this project.`,
-      );
-      return undefined;
-    }
-    if (match.status === 'needs_reauth') {
-      console.warn(`[@mastra/connect] Skipping ${integrationId}: connection ${directed} needs re-auth.`);
-      return undefined;
-    }
-    if (match.status !== 'active') {
-      console.warn(
-        `[@mastra/connect] Skipping ${integrationId}: connection ${directed} is not active (status '${match.status}').`,
-      );
-      return undefined;
-    }
-    return directed;
-  }
-
-  const active = candidates.filter(connection => connection.status === 'active');
-  if (active.length === 1) return active[0]!.id;
-  if (active.length === 0) {
-    console.warn(
-      `[@mastra/connect] Skipping ${integrationId}: no active connections (found ${candidates.length} in other states).`,
-    );
-    return undefined;
-  }
-  console.warn(
-    `[@mastra/connect] Skipping ${integrationId}: ${active.length} active connections; pin one with connectionId or ${request.envVar}.`,
-  );
-  return undefined;
-}
-
-/**
  * Discriminated resolution of one provider request against its candidate
  * connections. `single` maps to unwrapped tools with the connection id baked
  * in; `multi` triggers connection_name wrapping so the agent picks a
@@ -97,7 +52,7 @@ export type ProviderResolution =
 
 /**
  * Resolves how to configure one provider given its candidate connections:
- *   - An explicit pin (option or env var) forces `single` at that id.
+ *   - An explicit pin (`connectionId`) forces `single` at that id.
  *   - Exactly one active connection → `single`.
  *   - Two or more active connections → `multi`; the caller wraps tools with
  *     `connection_name` so the agent chooses per call at execute time.

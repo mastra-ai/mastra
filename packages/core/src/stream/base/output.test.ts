@@ -688,6 +688,222 @@ describe('MastraModelOutput', () => {
       expect(toolCalls.length).toBeGreaterThan(0);
       expect(toolCalls[0].payload.args).toEqual({ query: 'SELECT 1' });
     });
+
+    it('does not emit a synthetic empty-args tool-call when the input stream had no deltas', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      const toolCallId = 'tool-1';
+
+      const stream = createChunkStream([
+        {
+          type: 'tool-call-input-streaming-start',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId, toolName: 'my-tool', title: 'My tool' },
+        },
+        {
+          type: 'tool-call-input-streaming-end',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId },
+        },
+        {
+          type: 'tool-call',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId, toolName: 'my-tool', args: { query: 'SELECT 1' } as any },
+        },
+        createStepFinishChunk(runId),
+        createFinishChunk(runId),
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      const emitted: ChunkType[] = [];
+      for await (const chunk of output.fullStream) {
+        // Snapshot each chunk: a later mutation of an already-emitted chunk must not hide what consumers saw.
+        emitted.push(structuredClone(chunk));
+      }
+
+      const toolCallChunks = emitted.filter(chunk => chunk.type === 'tool-call');
+      expect(toolCallChunks).toHaveLength(1);
+      expect(toolCallChunks[0]!.payload).toMatchObject({ args: { query: 'SELECT 1' }, title: 'My tool' });
+      expect(emitted.findIndex(chunk => chunk.type === 'tool-call-input-streaming-end')).toBeLessThan(
+        emitted.findIndex(chunk => chunk.type === 'tool-call'),
+      );
+      expect((await output.toolCalls).map(tc => tc.payload.args)).toEqual([{ query: 'SELECT 1' }]);
+    });
+
+    it('records an empty-args tool-call at step end when no final tool-call arrives', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      const toolCallId = 'tool-1';
+
+      const stream = createChunkStream([
+        {
+          type: 'tool-call-input-streaming-start',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId, toolName: 'my-tool' },
+        },
+        {
+          type: 'tool-call-input-streaming-end',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId },
+        },
+        createStepFinishChunk(runId),
+        createFinishChunk(runId),
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      await output.consumeStream();
+
+      const toolCalls = await output.toolCalls;
+      expect(toolCalls).toHaveLength(1);
+      expect(toolCalls[0]!.payload).toMatchObject({ toolCallId, toolName: 'my-tool', args: {} });
+    });
+
+    it('records streamed args once at step end when no final tool-call arrives', async () => {
+      const runId = 'test-run';
+      const toolCallId = 'tool-1';
+
+      const stream = createChunkStream([
+        {
+          type: 'tool-call-input-streaming-start',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId, toolName: 'my-tool' },
+        },
+        {
+          type: 'tool-call-delta',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId, toolName: 'my-tool', argsTextDelta: '{"query":' },
+        },
+        {
+          type: 'tool-call-delta',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId, toolName: 'my-tool', argsTextDelta: '"SELECT 1"}' },
+        },
+        {
+          type: 'tool-call-input-streaming-end',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId },
+        },
+        createStepFinishChunk(runId),
+        createFinishChunk(runId),
+      ] as ChunkType[]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      const emitted: ChunkType[] = [];
+      for await (const chunk of output.fullStream) {
+        emitted.push(chunk);
+      }
+
+      const toolCallChunks = emitted.filter(c => c.type === 'tool-call');
+      expect(toolCallChunks).toHaveLength(1);
+      expect(toolCallChunks[0]!.payload).toMatchObject({ toolCallId, args: { query: 'SELECT 1' } });
+      expect(emitted.findIndex(c => c.type === 'tool-call')).toBeLessThan(
+        emitted.findIndex(c => c.type === 'step-finish'),
+      );
+      expect((await output.toolCalls).map(tc => tc.payload.args)).toEqual([{ query: 'SELECT 1' }]);
+    });
+
+    it('emits a repeated tool-call with the same id only once', async () => {
+      const runId = 'test-run';
+      const toolCallId = 'tool-1';
+      const toolCall = {
+        type: 'tool-call',
+        runId,
+        from: ChunkFrom.AGENT,
+        payload: { toolCallId, toolName: 'my-tool', args: { query: 'SELECT 1' } as any },
+      } as ChunkType;
+
+      const stream = createChunkStream([
+        toolCall,
+        structuredClone(toolCall),
+        createStepFinishChunk(runId),
+        createFinishChunk(runId),
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      const emitted: ChunkType[] = [];
+      for await (const chunk of output.fullStream) {
+        emitted.push(chunk);
+      }
+
+      expect(emitted.filter(c => c.type === 'tool-call')).toHaveLength(1);
+      expect(await output.toolCalls).toHaveLength(1);
+    });
+
+    it('does not record a pending no-args tool-call when the run bails with a tripwire', async () => {
+      const runId = 'test-run';
+      const toolCallId = 'tool-1';
+      const finish = createFinishChunk(runId) as any;
+      finish.payload.stepResult.reason = 'tripwire';
+
+      const stream = createChunkStream([
+        {
+          type: 'tool-call-input-streaming-start',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId, toolName: 'my-tool' },
+        },
+        {
+          type: 'tool-call-input-streaming-end',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { toolCallId },
+        },
+        finish,
+      ]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: 'test-model', provider: 'test', version: 'v3' },
+        stream,
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+
+      const emitted: ChunkType[] = [];
+      for await (const chunk of output.fullStream) {
+        emitted.push(chunk);
+      }
+
+      expect(emitted.filter(c => c.type === 'tool-call')).toHaveLength(0);
+      expect(await output.toolCalls).toHaveLength(0);
+    });
   });
 
   describe('usage raw passthrough', () => {
@@ -1193,6 +1409,179 @@ describe('MastraModelOutput', () => {
       });
       expect(finishPayload.response).toEqual({});
       expect(finishPayload.content).toEqual([]);
+    });
+
+    it('should report usage from steps completed before the abort in the aborted onFinish payload', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      let finishPayload: any;
+
+      const stream = createChunkStream([
+        createStepFinishChunk(runId),
+        {
+          type: 'text-delta',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: { text: 'partial answer' },
+        },
+        {
+          type: 'abort',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {},
+        },
+        createStepFinishChunk(runId, undefined, { inputTokens: 99, outputTokens: 99, totalTokens: 198 }),
+      ] as ChunkType[]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: '__GATEWAY_OPENAI_MODEL__', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: {
+          runId,
+          onFinish: async payload => {
+            finishPayload = payload;
+          },
+        },
+      });
+
+      await output.consumeStream();
+
+      expect(finishPayload.finishReason).toBe('aborted');
+      expect(finishPayload.usage).toMatchObject({ inputTokens: 10, outputTokens: 20, totalTokens: 30 });
+      expect(finishPayload.totalUsage).toMatchObject({ inputTokens: 10, outputTokens: 20, totalTokens: 30 });
+    });
+
+    it('should sum usage across all steps completed before the abort and report the last step as usage', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      let finishPayload: any;
+
+      const stream = createChunkStream([
+        createStepFinishChunk(runId, undefined, {
+          inputTokens: 10,
+          outputTokens: 20,
+          totalTokens: 30,
+          reasoningTokens: 3,
+          cachedInputTokens: 4,
+        }),
+        createStepFinishChunk(runId, undefined, {
+          inputTokens: 5,
+          outputTokens: 5,
+          totalTokens: 10,
+          reasoningTokens: 2,
+        }),
+        {
+          type: 'abort',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {},
+        },
+      ] as ChunkType[]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: '__GATEWAY_OPENAI_MODEL__', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: {
+          runId,
+          onFinish: async payload => {
+            finishPayload = payload;
+          },
+        },
+      });
+
+      await output.consumeStream();
+
+      expect(finishPayload.finishReason).toBe('aborted');
+      expect(finishPayload.totalUsage).toMatchObject({
+        inputTokens: 15,
+        outputTokens: 25,
+        totalTokens: 40,
+        reasoningTokens: 5,
+        cachedInputTokens: 4,
+      });
+      expect(finishPayload.usage).toMatchObject({
+        inputTokens: 5,
+        outputTokens: 5,
+        totalTokens: 10,
+        reasoningTokens: 2,
+      });
+    });
+
+    it('should keep completed-step usage in the aborted payload after a continuing goal truncates the step buffer', async () => {
+      const runId = 'test-run';
+      const messageList = new MessageList({ threadId: 'test-thread' });
+      let finishPayload: any;
+
+      const stream = createChunkStream([
+        createStepFinishChunk(runId, undefined, { inputTokens: 10, outputTokens: 20, totalTokens: 30 }),
+        createGoalChunk(runId, { shouldContinue: true }),
+        { type: 'text-delta', runId, from: ChunkFrom.AGENT, payload: { id: 'text-1', text: 'next turn' } },
+        {
+          type: 'abort',
+          runId,
+          from: ChunkFrom.AGENT,
+          payload: {},
+        },
+      ] as ChunkType[]);
+
+      const output = new MastraModelOutput({
+        model: { modelId: '__GATEWAY_OPENAI_MODEL__', provider: 'test', version: 'v3' },
+        stream,
+        messageList,
+        messageId: 'msg-1',
+        options: {
+          runId,
+          onFinish: async payload => {
+            finishPayload = payload;
+          },
+        },
+      });
+
+      await output.consumeStream();
+
+      expect(finishPayload.finishReason).toBe('aborted');
+      expect(finishPayload.totalUsage).toMatchObject({ inputTokens: 10, outputTokens: 20, totalTokens: 30 });
+      expect(finishPayload.usage).toMatchObject({ inputTokens: 10, outputTokens: 20, totalTokens: 30 });
+    });
+
+    it('should keep completed-step usage in the aborted payload after restoring serialized state', async () => {
+      const runId = 'test-run';
+      let finishPayload: any;
+
+      const first = new MastraModelOutput({
+        model: { modelId: '__GATEWAY_OPENAI_MODEL__', provider: 'test', version: 'v3' },
+        stream: createChunkStream([
+          createStepFinishChunk(runId, undefined, { inputTokens: 10, outputTokens: 20, totalTokens: 30 }),
+          createGoalChunk(runId, { shouldContinue: true }),
+        ] as ChunkType[]),
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: { runId },
+      });
+      await first.consumeStream();
+
+      const restored = new MastraModelOutput({
+        model: { modelId: '__GATEWAY_OPENAI_MODEL__', provider: 'test', version: 'v3' },
+        stream: createChunkStream([{ type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} }] as ChunkType[]),
+        messageList: new MessageList({ threadId: 'test-thread' }),
+        messageId: 'msg-1',
+        options: {
+          runId,
+          onFinish: async payload => {
+            finishPayload = payload;
+          },
+        },
+        initialState: JSON.parse(JSON.stringify(first.serializeState())),
+      });
+      await restored.consumeStream();
+
+      expect(finishPayload.finishReason).toBe('aborted');
+      expect(finishPayload.totalUsage).toMatchObject({ inputTokens: 10, outputTokens: 20, totalTokens: 30 });
+      expect(finishPayload.usage).toMatchObject({ inputTokens: 10, outputTokens: 20, totalTokens: 30 });
     });
 
     it('reports finishReason "aborted" and no tripwire when a caller abort bails through the tripwire path', async () => {
@@ -1720,12 +2109,10 @@ describe('MastraModelOutput', () => {
 
   describe('goal evaluation run-buffer truncation', () => {
     /**
-     * The normal terminal goal-loop sequence in durable-engine chunk order:
-     * each judged turn ends with a step-finish followed by a goal evaluation,
-     * and the LAST evaluation is terminal (`shouldContinue: false`) — the
-     * final turn's chunks arrive BEFORE it, never after. (In-process engines
-     * emit the goal chunk before the judged turn's step-finish; covered
-     * separately below.)
+     * A terminal goal-loop sequence the run buffer must handle: each judged
+     * turn's step-finish is followed by a goal evaluation, and the LAST
+     * evaluation is terminal (`shouldContinue: false`). The final turn's
+     * chunks arrive before that terminal evaluation, never after it.
      */
     function createGoalLoopChunks(runId: string): ChunkType[] {
       return [

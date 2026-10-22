@@ -445,14 +445,18 @@ export function SankeySignals({
               />
             ) : null}
             {isDrilledEmpty ? (
-              <section className="rounded-lg border border-border bg-background p-6 text-body text-muted-foreground">
-                This theme is not present in the selected snapshot. Use the clear filter action above to return to the
-                full flow.
+              <section className="rounded-lg border border-border bg-background p-6 text-muted-foreground">
+                <Txt as="span" variant="body" className="block">
+                  This theme is not present in the selected snapshot. Use the clear filter action above to return to the
+                  full flow.
+                </Txt>
               </section>
             ) : graphSummary.records.length === 0 ? (
-              <section className="rounded-lg border border-border bg-background p-6 text-body text-muted-foreground">
-                No cross-signal flow for this snapshot — its trace signals have not overlapped on shared traces yet.
-                Pick another snapshot from the timeline below.
+              <section className="rounded-lg border border-border bg-background p-6 text-muted-foreground">
+                <Txt as="span" variant="body" className="block">
+                  No cross-signal flow for this snapshot — its trace signals have not overlapped on shared traces yet.
+                  Pick another snapshot from the timeline below.
+                </Txt>
               </section>
             ) : (
               <FlowCard
@@ -469,7 +473,7 @@ export function SankeySignals({
               />
             )}
             {perspectiveMutation.isPending ? (
-              <Txt variant="caption" tone="muted" font="mono" role="status">
+              <Txt variant="caption" tone="muted" role="status">
                 Reloading snapshots for new trace signal perspective…
               </Txt>
             ) : null}

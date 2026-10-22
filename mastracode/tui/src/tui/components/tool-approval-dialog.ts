@@ -1,19 +1,35 @@
 /**
- * Tool approval dialog component.
- * Shows tool details and prompts user to approve or decline execution.
+ * Tool approval prompt: one inline row in the chat, directly under the pending tool call.
  *
  * Keyboard shortcuts:
  *   y       — approve this one call
  *   n / Esc — decline this call
  *   a       — always allow this category for this thread
  *   Y       — switch to YOLO mode (approve all)
+ *   Ctrl+E  — show / hide long arguments in full (when the card lists them)
  */
-import { Box, getKeybindings, Spacer, Text } from '@earendil-works/pi-tui';
-import type { Focusable } from '@earendil-works/pi-tui';
+import { getKeybindings, truncateToWidth, visibleWidth, wrapTextWithAnsi } from '@earendil-works/pi-tui';
+import type { Component, Focusable } from '@earendil-works/pi-tui';
 import { safeStringify } from '@mastra/core/utils';
 import chalk from 'chalk';
 import { decodePrintableShortcut } from '../key-input.js';
 import { theme } from '../theme.js';
+import { card } from './surface.js';
+
+/** Long argument values (e.g. file contents) stop after this many lines until expanded with Ctrl+E. */
+const TARGET_MAX_LINES = 40;
+
+/**
+ * Arguments come from the model, so control characters must not reach the terminal: escape sequences could
+ * restyle, move or clear what the card shows. They're shown as visible \xNN escapes (the card shows exactly
+ * what gets approved); newlines stay, CRLF becomes a newline and tabs become spaces.
+ */
+function escapeControls(text: string): string {
+  return text
+    .replace(/\r\n/g, '\n')
+    .replace(/\t/g, '  ')
+    .replace(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/g, c => `\\x${c.charCodeAt(0).toString(16).padStart(2, '0')}`);
+}
 
 export type ApprovalAction =
   | { type: 'approve' }
@@ -27,14 +43,24 @@ export interface ToolApprovalDialogOptions {
   args: unknown;
   /** Human-readable category label, e.g. "Edit" or "Execute" */
   categoryLabel?: string;
+  /**
+   * Name the tool and list its arguments in the card. Set when no visible tool row shows this exact call,
+   * e.g. a wrapper tool asking approval for an inner tool, or a tool without a call row.
+   */
+  showTarget?: boolean;
   onAction: (action: ApprovalAction) => void;
+  /** Re-render after the card changes on its own (Ctrl+E). */
+  requestRender?: () => void;
 }
 
-export class ToolApprovalDialogComponent extends Box implements Focusable {
+export class ToolApprovalDialogComponent implements Component, Focusable {
   private toolName: string;
   private args: unknown;
   private categoryLabel: string | undefined;
+  private showTarget: boolean;
   private onAction: (action: ApprovalAction) => void;
+  private requestRender?: () => void;
+  private expanded = false;
   private resolved = false;
 
   // Focusable implementation
@@ -47,60 +73,96 @@ export class ToolApprovalDialogComponent extends Box implements Focusable {
   }
 
   constructor(options: ToolApprovalDialogOptions) {
-    super(2, 1, text => theme.bg('overlayBg', text));
-
     this.toolName = options.toolName;
     this.args = options.args;
     this.categoryLabel = options.categoryLabel;
+    this.showTarget = options.showTarget ?? false;
     this.onAction = options.onAction;
-
-    this.buildUI();
+    this.requestRender = options.requestRender;
   }
 
-  private buildUI(): void {
-    // Title
-    this.addChild(new Text(theme.fg('warning', '⚠ Tool Approval Required'), 0, 0));
-    this.addChild(new Spacer(1));
+  invalidate(): void {}
 
-    // Tool name
-    this.addChild(new Text(theme.fg('accent', `Tool: `) + theme.fg('text', this.toolName), 0, 0));
-    if (this.categoryLabel) {
-      this.addChild(new Text(theme.fg('accent', `Category: `) + theme.fg('text', this.categoryLabel), 0, 0));
+  /**
+   * One inline row under the pending tool call (which already shows the command / path):
+   *   ▎ Allow?   y yes  ·  a always allow Execute  ·  Y YOLO  ·  n no
+   * On narrow terminals the options wrap under "Allow?".
+   * When no visible row shows this exact call (`showTarget`), the card names the tool and lists its arguments:
+   *   ▎ Allow write_file?
+   *   ▎   path: src/auth.ts
+   *   ▎ y yes  ·  a always allow Edit  ·  Y YOLO  ·  n no
+   */
+  render(width: number): string[] {
+    const warning = theme.getTheme().warning;
+    const key = (k: string, label: string) => `${chalk.bold.hex(warning)(k)} ${theme.fg('muted', label)}`;
+    const always = this.categoryLabel ? `always allow ${this.categoryLabel}` : 'always allow category';
+    const options = [key('y', 'yes'), key('a', always), key('Y', 'YOLO'), key('n', 'no')];
+    const sep = theme.fg('dim', '  ·  ');
+    const room = width - 2; // "▎ "
+    if (!this.showTarget) {
+      const label = theme.bold(theme.fg('text', 'Allow?'));
+      const line = `${label}   ${options.join(sep)}`;
+      if (visibleWidth(line) <= room) return card(warning, [line]);
     }
-    this.addChild(new Spacer(1));
+    const label = this.showTarget
+      ? theme.bold(theme.fg('text', `Allow ${this.toolName}?`))
+      : theme.bold(theme.fg('text', 'Allow?'));
+    const argRows = this.showTarget ? this.targetArgRows(room - 2).map(row => theme.fg('muted', `  ${row}`)) : [];
+    // The question on its own row (then the arguments), then the options packed into as few rows as fit.
+    const rows = [label, ...argRows];
+    let row = '';
+    for (const option of options) {
+      const next = row ? `${row}${sep}${option}` : option;
+      if (row && visibleWidth(next) > room) {
+        rows.push(row);
+        row = option;
+      } else {
+        row = next;
+      }
+    }
+    rows.push(row);
+    return card(warning, rows).map(l => truncateToWidth(l, width));
+  }
 
-    // Arguments (formatted)
-    this.addChild(new Text(theme.fg('muted', 'Arguments:'), 0, 0));
-    const argsText = this.formatArgs(this.args);
-    for (const line of argsText.split('\n').slice(0, 10)) {
-      this.addChild(new Text(theme.fg('text', '  ' + line), 0, 0));
+  /**
+   * Every argument in full, wrapped to `width`: this is what gets approved, so nothing is cut to one line.
+   * Very long values (file contents and the like) stop after TARGET_MAX_LINES until Ctrl+E shows the rest.
+   */
+  private targetArgRows(width: number): string[] {
+    const args = this.args;
+    if (args === null || args === undefined || typeof args !== 'object')
+      return [escapeControls(String(args ?? '(none)'))];
+    const entries = Object.entries(args as Record<string, unknown>).filter(([, v]) => v !== null && v !== undefined);
+    if (entries.length === 0) return ['(none)'];
+    const rows: string[] = [];
+    for (const [key, value] of entries) {
+      const text = escapeControls(`${key}: ${typeof value === 'string' ? value : safeStringify(value)}`);
+      const wrapped = text.split('\n').flatMap(line => (line ? wrapTextWithAnsi(line, Math.max(10, width)) : ['']));
+      if (this.expanded || wrapped.length <= TARGET_MAX_LINES) {
+        rows.push(...wrapped);
+      } else {
+        rows.push(...wrapped.slice(0, TARGET_MAX_LINES));
+        rows.push(`… ${wrapped.length - TARGET_MAX_LINES} more lines · ctrl+e to show all`);
+      }
     }
-    if (argsText.split('\n').length > 10) {
-      this.addChild(new Text(theme.fg('muted', '  ... (truncated)'), 0, 0));
-    }
+    return rows;
+  }
 
-    this.addChild(new Spacer(1));
-    // Prompt text with keyboard shortcuts
-    const categoryHint = this.categoryLabel
-      ? `lways allow ${this.categoryLabel.toLowerCase()}`
-      : 'lways allow category';
-    const dimColor = chalk.hex(theme.getTheme().dim);
-    const key = chalk.hex(theme.getTheme().text).bold;
-    this.addChild(
-      new Text(
-        theme.fg('accent', 'Allow? ') +
-          key('y') +
-          dimColor('es  ') +
-          key('n') +
-          dimColor('o  ') +
-          key('a') +
-          dimColor(categoryHint + '  ') +
-          key('Y') +
-          dimColor('olo'),
-        0,
-        0,
-      ),
-    );
+  /**
+   * Whether Ctrl+E belongs to the card (it lists the arguments). Otherwise Ctrl+E keeps its usual job of
+   * expanding the tool row above, so a collapsed preview can be read in full before approving.
+   */
+  handlesExpand(): boolean {
+    return this.showTarget;
+  }
+
+  /** Arguments as "key: value" lines (used by tests and for tools without a call row). */
+  describeArgs(): string {
+    return this.formatArgs(this.args);
+  }
+
+  get tool(): string {
+    return this.toolName;
   }
 
   private formatArgs(args: unknown): string {
@@ -149,6 +211,13 @@ export class ToolApprovalDialogComponent extends Box implements Focusable {
       return;
     }
 
+    // Ctrl+E shows long arguments in full, so nothing has to be approved unseen.
+    if (data === '\x05' && this.showTarget) {
+      this.expanded = !this.expanded;
+      this.requestRender?.();
+      return;
+    }
+
     switch (decodePrintableShortcut(data)) {
       case 'y':
         this.emit({ type: 'approve' });
@@ -163,9 +232,5 @@ export class ToolApprovalDialogComponent extends Box implements Focusable {
         this.emit({ type: 'yolo' });
         break;
     }
-  }
-
-  render(maxWidth: number): string[] {
-    return super.render(maxWidth);
   }
 }

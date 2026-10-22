@@ -41,6 +41,21 @@ export const weatherTool = createTool({
 
 The first `execute` parameter is the validated value from `inputSchema`. Destructure schema fields directly in the function signature, as shown with `{ location }`. The optional second parameter contains the execution context.
 
+### Display-only tools
+
+For a tool that only asks the client to display something, set `renderOnly: true` instead of defining `execute`:
+
+```typescript
+const showCard = createTool({
+  id: 'show-card',
+  description: 'Display a product card',
+  inputSchema: z.object({ productId: z.string() }),
+  renderOnly: true,
+})
+```
+
+Mastra streams the tool call and returns `{ acknowledged: true }` as its result, allowing the agent to continue generating text without a client round trip. This also works for tools owned by sub-agents. Their calls appear as nested `tool-output` stream events. Don't set an incompatible `outputSchema` on a render-only tool. The acknowledgement means the call was emitted, **not** that the browser rendered it. Don't use this for client actions whose outcome matters to the agent. For those, omit `execute` and return the result from the client, or use a suspending server tool when a sub-agent needs user input.
+
 ## Parameters
 
 <PropertiesTable
@@ -74,6 +89,13 @@ The first `execute` parameter is the validated value from `inputSchema`. Destruc
     name: 'outputSchema',
     type: 'StandardJSONSchemaV1',
     description: "A Standard JSON Schema defining the expected output structure of the tool's `execute` function.",
+    isOptional: true,
+  },
+  {
+    name: 'renderOnly',
+    type: 'boolean',
+    description:
+      'When true, streams a display-only tool call and automatically returns `{ acknowledged: true }` to the model so it can continue. Cannot be used with `execute`. The acknowledgement does not confirm that the client rendered the call.',
     isOptional: true,
   },
   {
@@ -123,7 +145,14 @@ The first `execute` parameter is the validated value from `inputSchema`. Destruc
     name: 'requireApproval',
     type: 'boolean',
     description:
-      'When true, the tool requires explicit approval before execution. The agent will emit a `tool-call-approval` chunk and pause until approved or declined.',
+      'When true, the tool requires explicit approval before execution. The agent will emit a `tool-call-approval` chunk and pause until approved or declined. Input is validated against `inputSchema` first: if it is invalid, the validation error is returned to the model and no approval is requested.',
+    isOptional: true,
+  },
+  {
+    name: 'beforeApproval',
+    type: '(input, context) => void | { proceed: false; output: unknown } | Promise<...>',
+    description:
+      'Runs before the approval gate for calls that require approval, receiving the input validated against `inputSchema` (defaults applied) and a context with `toolCallId`, `toolName`, `requestContext`, and `workspace`. Return `{ proceed: false, output }` to reject the call: the agent does not pause for approval, `execute` is not called, and `output` is returned to the model as the tool result. Return nothing to continue to the approval gate. Not run when the input fails `inputSchema` validation (the validation error is returned to the model without asking for approval) or when resuming after an approval decision. If the hook throws, the error is logged and the call proceeds to the approval gate, so keep validating inside `execute` as well.',
     isOptional: true,
   },
   {

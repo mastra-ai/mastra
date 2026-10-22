@@ -21,7 +21,7 @@ export function SectionHeader({ title, subtitle, icon, className }: SectionHeade
         {title}
       </Txt>
       {subtitle && (
-        <Txt tone="muted" className="text-body">
+        <Txt variant="body" tone="muted">
           {subtitle}
         </Txt>
       )}

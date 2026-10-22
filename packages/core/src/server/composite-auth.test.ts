@@ -93,3 +93,38 @@ describe('CompositeAuth.getUsers', () => {
     await expect(composite.getUsers!([])).resolves.toEqual([]);
   });
 });
+
+describe('CompositeAuth.consumePendingResponseHeaders', () => {
+  class HeaderAuth extends NonUserAuth {
+    constructor(private readonly impl: () => Record<string, string> | undefined) {
+      super();
+    }
+    consumePendingResponseHeaders() {
+      return this.impl();
+    }
+  }
+
+  const req = new Request('https://studio.example/api/agents');
+
+  it('delegates to inner providers and merges their headers', () => {
+    const composite = new CompositeAuth([
+      new NonUserAuth(),
+      new HeaderAuth(() => ({ 'Set-Cookie': 'wos-session=v2; Path=/' })),
+    ]);
+    expect(composite.consumePendingResponseHeaders(req)).toEqual({ 'Set-Cookie': 'wos-session=v2; Path=/' });
+  });
+
+  it('returns undefined when no provider has pending headers', () => {
+    expect(new CompositeAuth([new NonUserAuth()]).consumePendingResponseHeaders(req)).toBeUndefined();
+  });
+
+  it('ignores a provider that throws', () => {
+    const composite = new CompositeAuth([
+      new HeaderAuth(() => {
+        throw new Error('boom');
+      }),
+      new HeaderAuth(() => ({ 'X-Test': '1' })),
+    ]);
+    expect(composite.consumePendingResponseHeaders(req)).toEqual({ 'X-Test': '1' });
+  });
+});

@@ -3,10 +3,9 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
 import type { ScoreRowData } from '@mastra/core/evals';
 import { safeStringify } from '@mastra/core/utils/safe-stringify';
-import { CalculatorIcon } from 'lucide-react';
 import { SaveAsDatasetItemDialog } from '@/domains/datasets';
-import type { SideDialogRootProps } from '@/ds/components/SideDialog';
-import { TextAndIcon, getShortId } from '@/ds/components/Text';
+import type { DataPanelProps } from '@/ds/components/DataPanel';
+import { getShortId } from '@/ds/components/Text';
 
 type ScoreForDatasetItem = ScoreRowData | ClientScoreRowData;
 
@@ -14,7 +13,7 @@ export type ScoreAsItemDialogProps = {
   score?: ScoreForDatasetItem;
   isOpen: boolean;
   onClose: () => void;
-  level?: SideDialogRootProps['level'];
+  depth?: DataPanelProps['depth'];
 };
 
 function getInitialInput(score?: ScoreForDatasetItem): string {
@@ -31,19 +30,15 @@ function getInitialGroundTruth(score?: ScoreForDatasetItem): string {
   return safeStringify({ score: score.score, reason: score.reason ?? null }, 2);
 }
 
-export function ScoreAsItemDialog({ score, isOpen, onClose, level = 2 }: ScoreAsItemDialogProps) {
+export function ScoreAsItemDialog({ score, isOpen, onClose, depth }: ScoreAsItemDialogProps) {
   return (
     <SaveAsDatasetItemDialog
       initialInput={getInitialInput(score)}
       initialGroundTruth={getInitialGroundTruth(score)}
-      breadcrumb={
-        <TextAndIcon>
-          <CalculatorIcon /> {getShortId(score?.id)}
-        </TextAndIcon>
-      }
+      breadcrumb={getShortId(score?.id)}
       isOpen={isOpen}
       onClose={onClose}
-      level={level}
+      depth={depth}
       source={score?.traceId ? { type: 'trace', referenceId: score.traceId } : undefined}
     />
   );

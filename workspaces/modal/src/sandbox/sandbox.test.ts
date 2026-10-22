@@ -51,9 +51,9 @@ vi.mock('modal', async () => {
 });
 
 // Import after mock registration
-// eslint-disable-next-line import/order
+// oxlint-disable-next-line mastra/import-order
 import { ClientClosedError, NotFoundError } from 'modal';
-// eslint-disable-next-line import/order
+// oxlint-disable-next-line mastra/import-order
 import { SandboxNotReadyError } from '@mastra/core/workspace';
 import { ModalSandbox } from './index';
 

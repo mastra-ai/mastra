@@ -20,7 +20,7 @@ const Row = React.forwardRef<HTMLButtonElement, React.ButtonHTMLAttributes<HTMLB
 Row.displayName = 'Row';
 
 function Menu({ rows = ['a', 'b', 'c'], activeAttr }: { rows?: string[]; activeAttr?: 'data-selected' }) {
-  const menu = useFluidMenu<HTMLDivElement>(activeAttr ? { activeAttr } : undefined);
+  const menu = useFluidMenu(activeAttr ? { activeAttr } : undefined);
   return (
     <div data-testid="menu" className={menu.containerClassName} {...menu.getContainerProps({})}>
       <FluidMenuItems menu={menu}>

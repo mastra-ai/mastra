@@ -740,6 +740,47 @@ describe('Agent MCP tool resolution', () => {
     expect(tools['server-tool-2']).toBeDefined();
   });
 
+  it('should select no tools when the agent-level tools map is omitted', async () => {
+    const codeServer = new TestMCPServer({
+      id: 'omitted-server',
+      name: 'Omitted Server',
+      version: '1.0.0',
+      tools: {
+        'server-tool-1': vi.fn(),
+        'server-tool-2': vi.fn(),
+      } as any,
+    });
+
+    const freshStorage = createTestStorage();
+    const freshEditor = new MastraEditor();
+    const freshMastra = new Mastra({
+      storage: freshStorage,
+      editor: freshEditor,
+      mcpServers: { 'omitted-server': codeServer },
+    });
+    await freshMastra.getStorage()?.init();
+
+    const agentsStore = await freshStorage.getStore('agents');
+    await agentsStore?.create({
+      agent: {
+        id: 'agent-omitted-server',
+        name: 'Omitted Server Agent',
+        instructions: 'Test',
+        model: { provider: 'openai', name: 'gpt-4' },
+        mcpClients: {
+          'omitted-server': {},
+        },
+      },
+    });
+
+    const agent = await freshEditor.agent.getById('agent-omitted-server');
+    expect(agent).toBeInstanceOf(Agent);
+
+    const tools = await agent!.listTools();
+    expect(tools['server-tool-1']).toBeUndefined();
+    expect(tools['server-tool-2']).toBeUndefined();
+  });
+
   it('should combine tools from stored MCP client, code-defined MCP server, and regular tools', async () => {
     const codeServer = new TestMCPServer({
       id: 'code-srv',

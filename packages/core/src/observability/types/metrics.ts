@@ -47,6 +47,8 @@ export type TokenMetrics = (typeof TokenMetrics)[keyof typeof TokenMetrics];
 export interface MetricEmitOptions {
   /** Canonical model/cost context for this specific metric row */
   costContext?: CostContext;
+  /** Shared by every token/cost row emitted from the same model usage observation */
+  usageId?: string;
 }
 
 export interface MetricsContext {
@@ -127,6 +129,15 @@ export interface ExportedMetric {
 
   /** Context for cost estimation */
   costContext?: CostContext;
+
+  /**
+   * Identifies one model usage observation. Every token/cost metric row emitted
+   * from the same usage (one model call, or one hidden call rolled up onto a
+   * visible ancestor) shares this id; separate observations get distinct ids,
+   * even when they share a span. Retries resend the same id. Undefined for
+   * non-usage metrics.
+   */
+  usageId?: string;
 
   /**
    * User-defined metadata.

@@ -7,7 +7,8 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import type { ReactNode } from 'react';
 
-import { CREATE_FACTORY_STEPS, type CreateFactoryFlowStep } from '../../hooks/useCreateFactoryFlow';
+import { CREATE_FACTORY_STEPS } from '../../hooks/useCreateFactoryFlow';
+import type { CreateFactoryFlowStep } from '../../hooks/useCreateFactoryFlow';
 
 export interface CreateFactoryPaletteProps {
   step: CreateFactoryFlowStep;
@@ -64,11 +65,12 @@ export function CreateFactoryPalette({
           </Button>
         )}
         <Txt
+          tone="ink"
           key={step}
           as="p"
           aria-hidden="true"
           variant="body"
-          className={cn('text-foreground min-w-0 flex-1 truncate', stepTransition)}
+          className={cn('min-w-0 flex-1 truncate', stepTransition)}
         >
           {title}
         </Txt>
@@ -133,7 +135,7 @@ export function CreateFactoryPaletteAlert({ children }: { children: ReactNode })
 
 export function CreateFactoryPaletteMessage({ children }: { children: ReactNode }) {
   return (
-    <Txt as="p" variant="caption" className="text-muted-foreground m-0 px-3 py-2">
+    <Txt tone="muted" as="p" variant="caption" className="m-0 px-3 py-2">
       {children}
     </Txt>
   );

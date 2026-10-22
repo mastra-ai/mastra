@@ -2,8 +2,9 @@ import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { platformMcpTransport, resolveClient } from '../client.js';
-import { connect } from '../connect.js';
-import { PROVIDERS, type ProviderRegistration } from '../registry.js';
+import { PROVIDERS } from '../registry.js';
+import type { ProviderRegistration } from '../registry.js';
+import { tools as connect } from '../tools.js';
 
 const PLATFORM_TOKEN = 'platform-token';
 const INTEGRATION_ID = 'catalog-mcp';
@@ -21,6 +22,8 @@ function requestBody(init?: RequestInit): Record<string, unknown> {
 function createGatewayFetch(
   options: {
     connections?: Array<Record<string, unknown>>;
+    /** Catalog entries served from /v2/integrations; defaults to one MCP + one HTTP-only entry. */
+    integrations?: Array<Record<string, unknown>>;
     matchAnyConnectionMcpPath?: boolean;
     /**
      * Per-connection-id tool list overrides. Keys are raw connection ids
@@ -36,7 +39,7 @@ function createGatewayFetch(
     failToolsListForConnectionIds?: Set<string>;
   } = {},
 ) {
-  const protocolRequests: Array<{ body: Record<string, unknown>; headers: Headers; method: string }> = [];
+  const protocolRequests: Array<{ body: Record<string, unknown>; headers: Headers; method: string; path: string }> = [];
   let initializeCount = 0;
   const initializeCountByConnectionId = new Map<string, number>();
   const connections = options.connections ?? [
@@ -54,14 +57,22 @@ function createGatewayFetch(
     const url = new URL(String(input));
     if (url.pathname === '/v2/integrations') {
       return Response.json({
-        integrations: [
+        integrations: options.integrations ?? [
           { id: INTEGRATION_ID, capabilities: { mcp: true } },
           { id: 'http-only', capabilities: { mcp: false } },
         ],
       });
     }
     if (url.pathname === '/v2/projects/project-1/connections') {
-      return Response.json({ connections });
+      // Scope the list the way the platform does: no params → global-only;
+      // resourceId=X&includeGlobal=true → global + that resource's rows.
+      const resourceId = url.searchParams.get('resourceId');
+      const rows = connections.filter(connection =>
+        resourceId === null
+          ? (connection.resourceId ?? null) === null
+          : (connection.resourceId ?? null) === null || connection.resourceId === resourceId,
+      );
+      return Response.json({ connections: rows });
     }
     const isMcpPath = options.matchAnyConnectionMcpPath
       ? /^\/v2\/connections\/[^/]+\/mcp$/.test(url.pathname)
@@ -71,7 +82,7 @@ function createGatewayFetch(
 
     const body = requestBody(init);
     const headers = new Headers(init?.headers);
-    protocolRequests.push({ body, headers, method: init?.method ?? 'GET' });
+    protocolRequests.push({ body, headers, method: init?.method ?? 'GET', path: url.pathname });
     const method = body.method;
     if (method === 'initialize') {
       initializeCount += 1;
@@ -228,7 +239,7 @@ describe('catalog-backed MCP providers', () => {
     });
     const tools = connect({
       projectId: 'project-1',
-      integrations: { [INTEGRATION_ID]: { allowTools: ['catalog-mcp_list_records'] } },
+      providers: { [INTEGRATION_ID]: { allowTools: ['catalog-mcp_list_records'] } },
       client: {
         accessToken: PLATFORM_TOKEN,
         baseUrl: 'https://integrations.example.test',
@@ -306,11 +317,11 @@ describe('catalog-backed MCP providers', () => {
 
 describe('MCP tool approval', () => {
   type ApprovalTool = { requireApproval?: boolean; needsApprovalFn?: (args: unknown, ctx?: unknown) => unknown };
-  const discover = async (integrations?: Record<string, { requireApproval?: boolean | string[] }>) => {
+  const discover = async (providers?: Record<string, { requireApproval?: boolean | string[] }>) => {
     const gateway = createGatewayFetch();
     const tools = connect({
       projectId: 'project-1',
-      integrations,
+      providers,
       client: { accessToken: PLATFORM_TOKEN, baseUrl: 'https://integrations.example.test', fetch: gateway.fetchMock },
     });
     resolvers.push(tools);
@@ -355,11 +366,24 @@ describe('MCP tool approval', () => {
     });
   });
 
+  it('matches * globs in the requireApproval list against discovered tools', async () => {
+    const discovered = await discover({ [INTEGRATION_ID]: { requireApproval: ['catalog-mcp_update_*'] } });
+    expect(await discovered['catalog-mcp_list_records']!.needsApprovalFn!({}, {})).toBe(false);
+    expect(await discovered['catalog-mcp_update_record']!.needsApprovalFn!({}, {})).toBe(true);
+  });
+
+  it('fails resolution when a requireApproval glob matches no discovered tool', async () => {
+    await expect(discover({ [INTEGRATION_ID]: { requireApproval: ['catalog-mcp_nope_*'] } })).rejects.toMatchObject({
+      code: 'invalid_options',
+      message: expect.stringContaining("Pattern 'catalog-mcp_nope_*'"),
+    });
+  });
+
   it('rejects the removed autoApproveTools option by name', () => {
     expect(() =>
       connect({
         projectId: 'project-1',
-        integrations: {
+        providers: {
           [INTEGRATION_ID]: { autoApproveTools: ['catalog-mcp_list_records'] } as never,
         },
         client: { accessToken: PLATFORM_TOKEN, baseUrl: 'https://integrations.example.test', fetch: vi.fn() as never },
@@ -394,11 +418,11 @@ describe('MCP tool approval — multi-connection wrappers', () => {
     },
   ];
 
-  const discover = async (integrations?: Record<string, { requireApproval?: boolean | string[] }>) => {
+  const discover = async (providers?: Record<string, { requireApproval?: boolean | string[] }>) => {
     const gateway = createGatewayFetch({ connections: TWO_CONNECTIONS, matchAnyConnectionMcpPath: true });
     const tools = connect({
       projectId: 'project-1',
-      integrations,
+      providers,
       client: { accessToken: PLATFORM_TOKEN, baseUrl: 'https://integrations.example.test', fetch: gateway.fetchMock },
     });
     resolvers.push(tools);
@@ -475,7 +499,7 @@ describe('MCP tool approval — multi-connection wrappers', () => {
     });
     const tools = connect({
       projectId: 'project-1',
-      integrations: { [INTEGRATION_ID]: { requireApproval: ['catalog-mcp_delete_record'] } },
+      providers: { [INTEGRATION_ID]: { requireApproval: ['catalog-mcp_delete_record'] } },
       client: { accessToken: PLATFORM_TOKEN, baseUrl: 'https://integrations.example.test', fetch: gateway.fetchMock },
     });
     resolvers.push(tools);
@@ -573,17 +597,107 @@ describe('MCP tool approval — multi-connection wrappers', () => {
     expect(acmeInitsAfterFailure).toBeGreaterThanOrEqual(1);
     warnSpy.mockRestore();
 
-    // Recovery: unblock Globex, invalidate the empty snapshot, and refresh.
-    // If the mcpClients cache still held the first-pass Acme MCPClient, it
-    // would be reused with no fresh `initialize`. The cleanup evicts +
-    // disconnects Acme's client, so both connections re-initialize on the
-    // retry. (`.invalidate()` clears only the snapshot cache, not the
+    // Recovery: unblock Globex and force a refetch past the cached empty
+    // snapshot. If the mcpClients cache still held the first-pass Acme
+    // MCPClient, it would be reused with no fresh `initialize`. The cleanup
+    // evicts + disconnects Acme's client, so both connections re-initialize
+    // on the retry. (`.refresh()` rebuilds only the snapshot, not the
     // MCPClient cache we are exercising here.)
     failing.clear();
-    tools.invalidate();
-    const discovered = (await tools()) as Record<string, unknown>;
+    const discovered = (await tools.refresh()) as Record<string, unknown>;
     expect(discovered).toHaveProperty('catalog-mcp_update_record');
     expect(gateway.getInitializeCountForConnection(acmeId)).toBeGreaterThan(acmeInitsAfterFailure);
     expect(gateway.getInitializeCountForConnection(globexId)).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('resource-scoped MCP resolution', () => {
+  const USER_CONNECTION_ID = 'mcp_01K2E7Q11BCDEFGHJKMNPQRSTX';
+  const USER_INTEGRATION_ID = 'catalog-mcp-user';
+
+  function createScopedGateway() {
+    return createGatewayFetch({
+      matchAnyConnectionMcpPath: true,
+      integrations: [
+        { id: INTEGRATION_ID, capabilities: { mcp: true } },
+        { id: USER_INTEGRATION_ID, capabilities: { mcp: true } },
+      ],
+      connections: [
+        { id: CONNECTION_ID, integrationId: INTEGRATION_ID, status: 'active', resourceId: null },
+        {
+          id: USER_CONNECTION_ID,
+          integrationId: USER_INTEGRATION_ID,
+          status: 'active',
+          resourceId: 'end-user-1',
+        },
+      ],
+    });
+  }
+
+  it('asserts the resource key on MCP protocol requests for a scoped resolution', async () => {
+    const gateway = createScopedGateway();
+    const scoped = connect({
+      projectId: 'project-1',
+      resourceId: 'end-user-1',
+      client: { accessToken: PLATFORM_TOKEN, baseUrl: 'https://integrations.example.test', fetch: gateway.fetchMock },
+    });
+    resolvers.push(scoped);
+
+    const discovered = await scoped();
+    expect(Object.keys(discovered).sort()).toEqual([
+      'catalog-mcp-user_list_records',
+      'catalog-mcp-user_update_record',
+      'catalog-mcp_list_records',
+      'catalog-mcp_update_record',
+      'request_connection',
+    ]);
+
+    // The scoped connection's MCP requests carry the assertion header. The
+    // global connection's MCP client is shared across every resource scope,
+    // so its transport is resource-free: it must not be stamped with whichever
+    // scope's resource header resolved it first.
+    const scopedRequests = gateway.protocolRequests.filter(request => request.path.includes(USER_CONNECTION_ID));
+    const globalRequests = gateway.protocolRequests.filter(request => request.path.includes(CONNECTION_ID));
+    expect(scopedRequests.length).toBeGreaterThan(0);
+    expect(globalRequests.length).toBeGreaterThan(0);
+    for (const request of scopedRequests) {
+      expect(request.headers.get('x-mastra-resource-id')).toBe('end-user-1');
+    }
+    for (const request of globalRequests) {
+      expect(request.headers.get('x-mastra-resource-id')).toBeNull();
+    }
+  });
+
+  it('keeps an MCP client used only by the resource scope alive across a global-scope refresh', async () => {
+    const gateway = createScopedGateway();
+    const clientOptions = {
+      accessToken: PLATFORM_TOKEN,
+      baseUrl: 'https://integrations.example.test',
+      fetch: gateway.fetchMock,
+    };
+    const scoped = connect({ projectId: 'project-1', resourceId: 'end-user-1', client: clientOptions });
+    const globalOnly = connect({ projectId: 'project-1', client: clientOptions });
+    resolvers.push(scoped, globalOnly);
+
+    const scopedTools = await scoped();
+    expect(scopedTools).toHaveProperty('catalog-mcp-user_update_record');
+
+    // Refreshing the global scope resolves only the global connection. The
+    // prune must not disconnect the user connection's MCP client: the resource
+    // scope's snapshot still references it.
+    const globalTools = await globalOnly.refresh();
+    expect(Object.keys(globalTools).sort()).toEqual(['catalog-mcp_list_records', 'catalog-mcp_update_record']);
+    const userDeletes = gateway.fetchMock.mock.calls.filter(
+      ([input, init]) => String(input).includes(USER_CONNECTION_ID) && init?.method === 'DELETE',
+    );
+    expect(userDeletes).toHaveLength(0);
+
+    // The scoped snapshot's tool still executes over the original transport:
+    // no re-initialize happened for the user connection.
+    const updateRecord = scopedTools['catalog-mcp-user_update_record'] as (typeof scopedTools)[string] & {
+      execute: (input: unknown, context: { requestContext: RequestContext }) => Promise<unknown>;
+    };
+    await updateRecord.execute({ value: 'still-alive' }, { requestContext: new RequestContext() });
+    expect(gateway.getInitializeCountForConnection(USER_CONNECTION_ID)).toBe(1);
   });
 });

@@ -172,14 +172,28 @@ describe('MODEL_INFERENCE tools', () => {
     expect(spans.map(span => span.attributes?.availableTools)).toEqual(perStep);
   });
 
-  it("records no tools when a processor sets toolChoice to 'none'", async () => {
+  it("records the tools still sent when a processor sets toolChoice to 'none'", async () => {
     const agent = createAgent(1, [{ id: 'none', processInputStep: async () => ({ toolChoice: 'none' }) }]);
 
     await run(agent);
 
+    expect(providerTools).toEqual([['a', 'b', 'hidden']]);
+    const [span] = inferenceSpans();
+    expect(span!.attributes?.availableTools).toEqual(['a', 'b', 'hidden']);
+    expect(names(span!.attributes?.tools)).toEqual(['a', 'b', 'hidden']);
+    expect(span!.attributes?.toolChoice).toBe('none');
+  });
+
+  it("records no tools when toolChoice is 'none' with a structured-output schema", async () => {
+    const agent = createAgent(1, [{ id: 'none', processInputStep: async () => ({ toolChoice: 'none' }) }]);
+
+    const result = await agent.stream('go', {
+      structuredOutput: { schema: z.object({ answer: z.string() }), errorStrategy: 'warn' },
+    });
+    await result.consumeStream();
+
     expect(providerTools).toEqual([[]]);
     const [span] = inferenceSpans();
-    expect(span!.attributes?.availableTools).toEqual([]);
     expect(span!.attributes?.tools).toBeUndefined();
     expect(span!.attributes?.toolChoice).toBe('none');
   });

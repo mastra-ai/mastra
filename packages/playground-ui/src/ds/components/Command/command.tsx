@@ -8,6 +8,7 @@ import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import type { ScrollAreaMask } from '@/ds/components/ScrollArea';
 import { Txt } from '@/ds/components/Txt';
 import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
+import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 import { heightTransition, transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -30,7 +31,7 @@ type CommandDialogVariant = 'default' | 'inset';
 
 const commandDialogContentClasses: Record<CommandDialogVariant, string> = {
   default: 'overflow-hidden py-0',
-  inset: 'top-1/4 translate-y-0 overflow-hidden rounded-[calc(var(--radius-xl)+--spacing(1))] bg-muted p-1',
+  inset: 'overflow-hidden sm:top-1/4 sm:translate-y-0 rounded-[calc(var(--radius-xl)+--spacing(1))] bg-muted p-1',
 };
 
 const commandDialogCommandClasses: Record<CommandDialogVariant, string> = {
@@ -175,6 +176,7 @@ const CommandInput = React.forwardRef<React.ElementRef<typeof CommandPrimitive.I
       className={cn('flex items-center border-b border-border px-3', transitions.colors, wrapperClassName)}
     >
       <Search className={cn('mr-2 size-4 shrink-0 text-muted-foreground', transitions.colors)} />
+      {/* cmdk renders autocomplete="off" itself; a command search is never a credential field. */}
       <CommandPrimitive.Input
         ref={ref}
         className={cn(
@@ -185,6 +187,7 @@ const CommandInput = React.forwardRef<React.ElementRef<typeof CommandPrimitive.I
           className,
         )}
         {...props}
+        {...passwordManagerOptOutProps}
       />
       {rightSlot && (
         <div data-slot="command-input-right-slot" className="ml-2 flex shrink-0 items-center text-muted-foreground">
@@ -219,7 +222,7 @@ const CommandList = React.forwardRef<React.ElementRef<typeof CommandPrimitive.Li
     },
     ref,
   ) => {
-    const menu = useFluidMenu<HTMLDivElement>({ activeAttr: 'data-selected' });
+    const menu = useFluidMenu({ activeAttr: 'data-selected' });
     const animateHeight = React.useContext(CommandDialogVariantContext) === 'inset';
     const list = (
       <CommandPrimitive.List
@@ -241,8 +244,9 @@ const CommandList = React.forwardRef<React.ElementRef<typeof CommandPrimitive.Li
 
     if (!scrollArea) return list;
 
+    // The list fills Command's `rounded-xl` box, so its scrollbar takes that radius's inset.
     return (
-      <ScrollArea className={cn('min-h-0', scrollAreaClassName)} mask={scrollAreaMask}>
+      <ScrollArea className={cn('min-h-0 scrollbar-inset-xl', scrollAreaClassName)} mask={scrollAreaMask}>
         <ScrollAreaViewport className={scrollAreaViewportClassName}>{list}</ScrollAreaViewport>
       </ScrollArea>
     );
@@ -266,7 +270,8 @@ const CommandGroup = React.forwardRef<
     ref={ref}
     className={cn(
       'overflow-hidden p-1 text-muted-foreground',
-      '[&_[cmdk-group-heading]]:text-meta **:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:pt-1.5 **:[[cmdk-group-heading]]:pb-1 **:[[cmdk-group-heading]]:tracking-wider **:[[cmdk-group-heading]]:text-muted-foreground **:[[cmdk-group-heading]]:uppercase',
+      '**:[[cmdk-group-heading]]:px-2 **:[[cmdk-group-heading]]:pt-1.5 **:[[cmdk-group-heading]]:pb-1 **:[[cmdk-group-heading]]:text-muted-foreground',
+      '[&_[cmdk-group-heading]]:text-meta [&_[cmdk-group-heading]]:uppercase',
       'in-data-[heading-case=sentence]:**:[[cmdk-group-heading]]:tracking-normal in-data-[heading-case=sentence]:**:[[cmdk-group-heading]]:normal-case',
       className,
     )}

@@ -15,7 +15,9 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
 import type { FactoryUserSession } from '../../services/user-sessions';
-import { UserSessionsSection } from '../UserSessionsSection';
+import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
+import { SessionsSection } from '../SessionsSection';
+import { testChatSession } from './fixtures/sessionsSection';
 
 const projectRepositoryId = 'ghp-1';
 
@@ -59,9 +61,7 @@ function stubFactoryWithRepository(sessions: FactoryUserSession[]) {
         ],
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${projectRepositoryId}/sessions`, () =>
-      HttpResponse.json({ sessions }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () => HttpResponse.json({ sessions })),
   );
 }
 
@@ -72,10 +72,12 @@ function LocationProbe() {
 function renderSection() {
   return renderWithProviders(
     <MemoryRouter initialEntries={['/factories/fp-1']}>
-      <Routes>
-        <Route path="/factories/:factoryId" element={<UserSessionsSection />} />
-        <Route path="*" element={<UserSessionsSection />} />
-      </Routes>
+      <ChatSessionContext.Provider value={testChatSession('fp-1', projectRepositoryId)}>
+        <Routes>
+          <Route path="/factories/:factoryId" element={<SessionsSection />} />
+          <Route path="*" element={<SessionsSection />} />
+        </Routes>
+      </ChatSessionContext.Provider>
       <LocationProbe />
     </MemoryRouter>,
   );

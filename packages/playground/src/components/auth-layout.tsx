@@ -7,7 +7,7 @@ import { Outlet } from 'react-router';
 // Shell for `/login` and `/signup`: same providers and Studio card as the app, no sidebar, no auth gate.
 export function AuthLayout() {
   return (
-    <div className="h-screen bg-sidebar font-body">
+    <div className="h-screen bg-sidebar">
       <Toaster position="bottom-right" />
       <ThemeProvider defaultTheme="system">
         <TooltipProvider delayDuration={0}>

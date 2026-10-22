@@ -22,6 +22,21 @@ const SHUTDOWN_GRACE_PERIOD_MS = 5_000;
 const SHUTDOWN_ABORT_MESSAGE = 'Background task manager is shutting down';
 const TASK_OWNERSHIP_LOST_MESSAGE = 'Background task execution ownership was taken over by another worker';
 
+function workflowRunError(result: { status: string; error?: unknown; tripwire?: { reason?: string } }): unknown {
+  if (result.error !== undefined) return result.error;
+  if (result.tripwire?.reason) return new Error(result.tripwire.reason);
+  return new Error(`Background task workflow run ended with status '${result.status}'`);
+}
+
+// Workflow results carry errors serialized to plain objects, not Error instances.
+function toTaskError(err: unknown): { message: string; stack?: string } {
+  if (err && typeof err === 'object' && typeof (err as { message?: unknown }).message === 'string') {
+    const { message, stack } = err as { message: string; stack?: unknown };
+    return typeof stack === 'string' ? { message, stack } : { message };
+  }
+  return { message: String(err) };
+}
+
 export class BackgroundTaskManager {
   private pubsub!: PubSub;
   private readonly workerId = globalThis.crypto.randomUUID();
@@ -748,6 +763,10 @@ export class BackgroundTaskManager {
    * - `task.resumed` (status: 'running') — suspended task resumed
    *
    * The stream stays open until the caller's AbortSignal fires (client disconnect).
+   *
+   * Events are scoped to a resource: when `resourceId` is omitted, only tasks without a
+   * `resourceId` are delivered. Pass `allResources: true` to receive events for every
+   * resource (privileged consumers only — payloads include task args and results).
    */
   stream(options?: {
     agentId?: string;
@@ -757,10 +776,24 @@ export class BackgroundTaskManager {
     taskId?: string;
     abortSignal?: AbortSignal;
     includeExisting?: boolean;
+    allResources?: boolean;
   }): ReadableStream<Record<string, unknown>> {
     const manager = this;
     const pubsub = this.pubsub;
-    const { agentId, runId, threadId, resourceId, abortSignal, taskId, includeExisting = true } = options ?? {};
+    const {
+      agentId,
+      runId,
+      threadId,
+      resourceId,
+      abortSignal,
+      taskId,
+      includeExisting = true,
+      allResources = false,
+    } = options ?? {};
+    const matchesResource = (taskResourceId: string | null | undefined) => {
+      if (resourceId !== undefined) return taskResourceId === resourceId;
+      return allResources || taskResourceId == null;
+    };
 
     const EVENT_STATUS_MAP: Record<string, BackgroundTaskStatus> = {
       'task.running': 'running',
@@ -793,7 +826,7 @@ export class BackgroundTaskManager {
           if (agentId && data.agentId !== agentId) return;
           if (runId && data.runId !== runId) return;
           if (threadId && data.threadId !== threadId) return;
-          if (resourceId && data.resourceId !== resourceId) return;
+          if (!matchesResource(data.resourceId)) return;
           if (taskId && data.taskId !== taskId) return;
 
           const payload: Record<string, unknown> = {
@@ -866,7 +899,7 @@ export class BackgroundTaskManager {
           const storage = await manager.getStorage();
           if (taskId) {
             const task = await storage.getTask(taskId);
-            if (task && task.status === 'running') {
+            if (task && task.status === 'running' && matchesResource(task.resourceId)) {
               controller.enqueue({
                 type: 'background-task-running',
                 payload: {
@@ -891,6 +924,7 @@ export class BackgroundTaskManager {
 
             for (const task of existing) {
               if (abortSignal?.aborted) break;
+              if (!matchesResource(task.resourceId)) continue;
               try {
                 controller.enqueue({
                   type: 'background-task-running',
@@ -1281,17 +1315,19 @@ export class BackgroundTaskManager {
       const run = await workflow.createRun({ runId: taskId });
       if (this.shuttingDown) return false;
       const runPromise = shouldRestart ? run.restart() : run.start({ inputData: { taskId } });
+      const action = shouldRestart ? 'restart' : 'start';
       void runPromise
-        .then(result => {
-          if (result.status !== 'suspended') {
-            void workflow.deleteWorkflowRunById(taskId);
-          }
-        })
-        .catch(err => {
-          this.#mastra
-            ?.getLogger?.()
-            ?.error(`background-task workflow ${shouldRestart ? 'restart' : 'start'} failed for ${taskId}:`, err);
-        })
+        .then(
+          result => {
+            if (result.status !== 'suspended') {
+              void workflow.deleteWorkflowRunById(taskId);
+            }
+            if (result.status !== 'success' && result.status !== 'suspended') {
+              return this.failUnsettledTask(taskId, action, workflowRunError(result));
+            }
+          },
+          err => this.failUnsettledTask(taskId, action, err),
+        )
         .finally(() => {
           // The run has settled (suspended or terminal), so this worker no
           // longer owns the lease: stop renewing it.
@@ -1380,14 +1416,17 @@ export class BackgroundTaskManager {
     const run = await workflow.createRun({ runId: taskId });
     void run
       .resume({ resumeData })
-      .then(result => {
-        if (result.status !== 'suspended') {
-          void workflow.deleteWorkflowRunById(taskId);
-        }
-      })
-      .catch(err => {
-        this.#mastra?.getLogger?.()?.error(`background-task workflow resume failed for ${taskId}:`, err);
-      })
+      .then(
+        result => {
+          if (result.status !== 'suspended') {
+            void workflow.deleteWorkflowRunById(taskId);
+          }
+          if (result.status !== 'success' && result.status !== 'suspended') {
+            return this.failUnsettledTask(taskId, 'resume', workflowRunError(result));
+          }
+        },
+        err => this.failUnsettledTask(taskId, 'resume', err),
+      )
       .finally(() => {
         // The resumed run has settled (suspended or terminal): stop renewing
         // the lease this worker held for it.
@@ -1396,6 +1435,47 @@ export class BackgroundTaskManager {
         void this.drainPending();
       });
     return true;
+  }
+
+  /**
+   * Settles a task whose background-task workflow run ended in a non-success,
+   * non-suspended state (or rejected). On the ordinary failure path
+   * classify-outcome has already moved the task to `failed`, so the CAS below
+   * is a no-op. It only takes effect when a step threw before persisting a
+   * terminal status (e.g. the `completed` write failed), which would otherwise
+   * leave the task `running` forever.
+   */
+  private async failUnsettledTask(taskId: string, action: 'start' | 'restart' | 'resume', err: unknown) {
+    const errorInfo = toTaskError(err);
+    try {
+      const storage = await this.getStorage();
+      const marked = await storage.updateTask(
+        taskId,
+        {
+          status: 'failed',
+          error: errorInfo,
+          completedAt: new Date(),
+          ownerId: undefined,
+          leaseExpiresAt: undefined,
+        },
+        { expectedStatus: 'running', expectedOwnerId: this.workerId },
+      );
+      if (!marked) return;
+      this.#mastra?.getLogger?.()?.error(`background-task workflow ${action} failed for ${taskId}:`, err);
+      const failedTask = await storage.getTask(taskId);
+      if (failedTask?.status === 'failed') {
+        await this.runLocalCompletionHooks(failedTask, 'failed', { error: failedTask.error ?? errorInfo });
+        await this.publishLifecycleEvent('task.failed', failedTask);
+      }
+    } catch (settleError) {
+      this.#mastra
+        ?.getLogger?.()
+        ?.error(`background-task workflow ${action} failed for ${taskId} and the task could not be marked failed:`, {
+          error: err,
+          settleError,
+        });
+      this.deregisterTaskContext(taskId);
+    }
   }
 
   /**
@@ -1492,6 +1572,10 @@ export class BackgroundTaskManager {
         // handleResult so they fire once per subscribing process.
         await ctx.onFailed?.(task);
       }
+    } catch (hookError) {
+      // Callers publish the terminal lifecycle event right after this; a
+      // throwing per-task hook must not suppress it.
+      this.#mastra?.getLogger?.()?.warn(`background-task ${status} hooks threw for ${task.id}:`, hookError);
     } finally {
       this.deregisterTaskContext(task.id);
     }
