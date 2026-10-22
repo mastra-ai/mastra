@@ -40,7 +40,7 @@ const worker = new Agent({
   model: '__GATEWAY_OPENAI_MODEL__',
   memory,
   goal: {
-    judge: '__GATEWAY_OPENAI_MODEL_MINI__',
+    judge: '__GATEWAY_OPENAI_MODEL_LUNA__',
     maxRuns: 50,
   },
 })
@@ -112,7 +112,7 @@ To hand the decision to your own scorer, pass it as `scorer` and keep `judge` se
 
 ```typescript oxfmt:false
 goal: {
-  judge: '__GATEWAY_OPENAI_MODEL_MINI__',
+  judge: '__GATEWAY_OPENAI_MODEL_LUNA__',
   // Replaces the built-in judge pipeline. `prompt`, `tools`, and `maxSteps` no longer apply.
   scorer: 'tests-pass',
 }

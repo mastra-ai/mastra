@@ -9,6 +9,7 @@
 export const TextRoles = [
   'hero',
   'lead',
+  'display-lg',
   'display',
   'title',
   'heading',

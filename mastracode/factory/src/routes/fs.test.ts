@@ -852,6 +852,7 @@ describe('workspace changes', () => {
       expect(script).toContain('ls-files --others --exclude-standard -z');
       expect(script).toContain('GIT_OBJECT_DIRECTORY="$object_dir"');
       expect(args.slice(2)).toEqual(['mastracode-numstat', WORKDIR, BASE_SHA]);
+      // oxlint-disable-next-line no-useless-concat -- Keep NUL-delimited records separate from the next record's leading digit.
       return { exitCode: 0, stdout: '3\t1\tsrc/edited.ts\0' + '5\t0\t\0/dev/null\0src/new.ts\0' };
     });
 

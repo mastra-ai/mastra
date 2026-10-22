@@ -783,6 +783,14 @@ export function cleanStepResult(stepResult: unknown): unknown {
   const result = stepResult as Record<string, unknown>;
   const cleaned = cleanSingleResult(result);
 
+  // The evented engine persists a running forEach with null slots for unfinished iterations
+  // (they drive storage merges and completion checks). Those are bookkeeping, not output:
+  // like the default engine, a running step exposes no output until it finishes.
+  if (cleaned.status === 'running' && Array.isArray(cleaned.output)) {
+    delete cleaned.output;
+    return cleaned;
+  }
+
   // If output is an array (forEach results), clean each iteration result
   // Iteration results can have __state (for suspended) or metadata.nestedRunId (for nested workflows)
   if (Array.isArray(cleaned.output)) {

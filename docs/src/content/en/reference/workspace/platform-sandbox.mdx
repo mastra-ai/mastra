@@ -314,6 +314,25 @@ The `command` argument is a shell string and is concatenated verbatim into the r
 
 :::
 
+### Background processes
+
+`sandbox.processes` runs commands in the background. Output streams while they run, and you can list, attach to and stop them:
+
+```typescript
+const handle = await sandbox.processes.spawn('pnpm dev', {
+  onStdout: data => console.log(data),
+})
+
+// Everything running in the sandbox, plus exited processes not read yet
+const running = await sandbox.processes.list()
+
+await handle.kill()
+```
+
+A process has no time limit unless you pass `timeout` to `spawn()` or the constructor. Call `get(pid)` to attach to a process this manager didn't start, for example after your app restarts. Output written before attaching isn't available.
+
+A long-running process's output stream reconnects periodically, and the process keeps running through it. Output written during a reconnect is lost, and a process that exits while its stream reconnects reports exit code `1` from `wait()` instead of its real exit code.
+
 ## Constructor parameters
 
 <PropertiesTable
@@ -457,9 +476,9 @@ The `command` argument is a shell string and is concatenated verbatim into the r
   },
   {
     name: 'processes',
-    type: 'PlatformProcessManager',
+    type: 'SandboxProcessManager',
     description:
-      'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
+      "Background process manager. `spawn()` streams output while the process runs, `kill()` stops it, `list()` shows what is running in the sandbox, and `get(pid)` attaches to a process this manager didn't start. See [Background processes](#background-processes) and the [SandboxProcessManager reference](/reference/workspace/process-manager).",
   },
   {
     name: 'filesystem',

@@ -2922,15 +2922,31 @@ export class WorkflowEventProcessor extends EventProcessor {
           // Merge foreach step-level properties (suspendPayload, resumePayload, suspendedAt, resumedAt)
           // New iteration's resume properties take precedence for resumePayload/resumedAt (most recent resume)
           // Existing step's suspend properties are preserved (first suspend)
+          const stillSettling =
+            (prevResult.status === 'success' || prevResult.status === 'suspended') &&
+            existingStepResult?.status !== 'failed'
+              ? existingStepResult?.status === 'suspended'
+                ? ('suspended' as const)
+                : ('running' as const)
+              : undefined;
           newResult = {
             ...existingStepResult, // Preserve step-level properties
             ...prevResult, // Get iteration timing info
             // An iteration that finishes after a sibling failed must not mark the foreach successful.
             ...(existingStepResult?.status === 'failed' ? { status: 'failed' as const } : {}),
+            // One iteration settling doesn't settle the foreach: the coordinator below writes
+            // 'success' or 'suspended' once every iteration has settled. Until then the step stays
+            // 'running' with no suspendedAt/endedAt (as in the default engine); an already-suspended
+            // aggregate (e.g. while one of several suspended iterations is resumed) stays suspended.
+            ...(stillSettling ? { status: stillSettling, endedAt: undefined } : {}),
+            startedAt: existingStepResult?.startedAt ?? prevResult.startedAt,
             output: currentResult,
             payload: originalPayload,
             suspendPayload,
-            suspendedAt: existingStepResult?.suspendedAt ?? (prevResult as any).suspendedAt,
+            suspendedAt:
+              stillSettling === 'running'
+                ? undefined
+                : (existingStepResult?.suspendedAt ?? (prevResult as any).suspendedAt),
             // Update resume metadata to most recent resume (new iteration takes precedence)
             resumePayload: (prevResult as any).resumePayload ?? existingStepResult?.resumePayload,
             resumedAt: (prevResult as any).resumedAt ?? existingStepResult?.resumedAt,
@@ -3121,6 +3137,8 @@ export class WorkflowEventProcessor extends EventProcessor {
             payload: foreachResult!.payload,
             suspendedAt: Date.now(),
             startedAt: foreachResult!.startedAt ?? Date.now(),
+            // A suspended step hasn't ended; drop any endedAt merged in from a finished iteration.
+            endedAt: undefined,
             suspendPayload: {
               ...firstSuspendedIterationPayload,
               __workflow_meta: {

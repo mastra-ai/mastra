@@ -43,6 +43,7 @@ export default defineConfig({
   rules: {
     'no-dupe-keys': 'error',
     'no-unneeded-ternary': 'error',
+    'no-useless-concat': 'error',
     'no-restricted-globals': ['error', 'global'],
     'no-unexpected-multiline': 'error',
     'no-warning-comments': [
@@ -132,6 +133,7 @@ export default defineConfig({
           },
         ],
         'typescript/no-require-imports': 'off',
+        'typescript/prefer-as-const': 'error',
         'typescript/ban-ts-comment': [
           'off',
           {

@@ -113,14 +113,14 @@ const groupRegions = () =>
 
 const rowNamesIn = (groupLabel: string) =>
   within(screen.getByRole('region', { name: groupLabel }))
-    .getAllByRole('button', { name: /^\w+ (old|new)$/ })
+    .getAllByRole('link', { name: /^\w+ (old|new)$/ })
     .map(row => row.getAttribute('aria-label'));
 
 describe('Sessions sidebar groups', () => {
   it('groups sessions by board: Work, Review, custom boards, then User', async () => {
     renderSection();
 
-    await screen.findByRole('button', { name: 'Release old' });
+    await screen.findByRole('link', { name: 'Release old' });
     expect(groupRegions()).toEqual(['Work sessions', 'Review sessions', 'Release Preview sessions', 'User sessions']);
     expect(rowNamesIn('Release Preview sessions')).toEqual(['Release old', 'Release new']);
   });
@@ -128,7 +128,7 @@ describe('Sessions sidebar groups', () => {
   it('applies one sort to every group', async () => {
     const user = userEvent.setup();
     renderSection();
-    await screen.findByRole('button', { name: 'Release old' });
+    await screen.findByRole('link', { name: 'Release old' });
     expect(rowNamesIn('Work sessions')).toEqual(['Work old', 'Work new']);
     expect(rowNamesIn('Review sessions')).toEqual(['Review old', 'Review new']);
     expect(rowNamesIn('Release Preview sessions')).toEqual(['Release old', 'Release new']);
@@ -145,7 +145,7 @@ describe('Sessions sidebar groups', () => {
   it('regroups the list by status and remembers the choice', async () => {
     const user = userEvent.setup();
     const { unmount } = renderSection();
-    await screen.findByRole('button', { name: 'Release old' });
+    await screen.findByRole('link', { name: 'Release old' });
 
     await openNestedSessionProperty(user, 'Group', 'Group by');
     await user.click(await screen.findByRole('menuitemradio', { name: 'Status' }));
@@ -157,7 +157,7 @@ describe('Sessions sidebar groups', () => {
 
     unmount();
     renderSection();
-    await screen.findByRole('button', { name: 'Release old' });
+    await screen.findByRole('link', { name: 'Release old' });
 
     expect(groupRegions()).toEqual(['Initializing sessions', 'Idle sessions']);
   });
@@ -165,7 +165,7 @@ describe('Sessions sidebar groups', () => {
   it('drops the headers when grouping is None', async () => {
     const user = userEvent.setup();
     renderSection();
-    await screen.findByRole('button', { name: 'Release old' });
+    await screen.findByRole('link', { name: 'Release old' });
 
     await openNestedSessionProperty(user, 'Group', 'Group by');
     await user.click(await screen.findByRole('menuitemradio', { name: 'None' }));
@@ -178,7 +178,7 @@ describe('Sessions sidebar groups', () => {
   it('hides a group from the menu until reset', async () => {
     const user = userEvent.setup();
     renderSection();
-    await screen.findByRole('button', { name: 'Release old' });
+    await screen.findByRole('link', { name: 'Release old' });
 
     await openSessionProperty(user, 'Group');
     await user.click(await screen.findByRole('menuitemcheckbox', { name: 'Review' }));
@@ -212,7 +212,7 @@ describe('Sessions sidebar groups', () => {
     localStorage.setItem('mastracode.sessionListView', JSON.stringify({ hiddenGroups: { status: ['status:idle'] } }));
     const user = userEvent.setup();
     renderSection();
-    await screen.findByRole('button', { name: 'Release old' });
+    await screen.findByRole('link', { name: 'Release old' });
     expect(sessionPropertiesTrigger(1)).toBeInTheDocument();
 
     await openSessionProperties(user);
@@ -229,7 +229,7 @@ describe('Sessions sidebar groups', () => {
     );
     const user = userEvent.setup();
     renderSection();
-    await screen.findByRole('button', { name: 'Release old' });
+    await screen.findByRole('link', { name: 'Release old' });
 
     await pickSessionProperty(user, 'Status', 'Done');
 
@@ -239,7 +239,7 @@ describe('Sessions sidebar groups', () => {
   it('moves a group with Alt and the arrow keys, keeping focus on it', async () => {
     const user = userEvent.setup();
     renderSection();
-    await screen.findByRole('button', { name: 'Release old' });
+    await screen.findByRole('link', { name: 'Release old' });
 
     await openSessionProperty(user, 'Group');
     await user.keyboard('{ArrowDown}');
@@ -256,7 +256,7 @@ describe('Sessions sidebar groups', () => {
   it('forgets the group order once the groups are moved back', async () => {
     const user = userEvent.setup();
     renderSection();
-    await screen.findByRole('button', { name: 'Release old' });
+    await screen.findByRole('link', { name: 'Release old' });
 
     await openSessionProperty(user, 'Group');
     await user.keyboard('{ArrowDown}');
@@ -283,11 +283,11 @@ describe('Sessions sidebar groups', () => {
     );
     const user = userEvent.setup();
     renderSection();
-    await screen.findByRole('button', { name: 'Work old' });
+    await screen.findByRole('link', { name: 'Work old' });
 
     await pickSessionProperty(user, 'Status', 'Idle');
 
-    expect(screen.queryByRole('button', { name: 'Release new' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'Release new' })).not.toBeInTheDocument();
     releaseCatalog();
   });
 });
