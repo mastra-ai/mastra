@@ -27,7 +27,7 @@ export function DataPanelCloseButton({
 }: DataPanelCloseButtonProps) {
   return (
     <Button
-      size="sm"
+      size="icon-sm"
       variant={variant}
       onClick={onClick}
       aria-label={label}
