@@ -4228,12 +4228,13 @@ Notes:
       runtimeMemory?.memoryConfig?.observationalMemory,
     );
     // A disabled override normalizes to undefined, but must not restore instance defaults.
-    const threadConfig = runtimeMemory?.memoryConfig?.observationalMemory !== undefined
-      ? this.getMergedThreadConfig({
-          ...runtimeMemory?.memoryConfig,
-          observationalMemory: runtimeObservationalMemory ?? false,
-        } as MemoryConfigInternal)
-      : this.threadConfig;
+    const threadConfig =
+      runtimeMemory?.memoryConfig?.observationalMemory !== undefined
+        ? this.getMergedThreadConfig({
+            ...runtimeMemory?.memoryConfig,
+            observationalMemory: runtimeObservationalMemory ?? false,
+          } as MemoryConfigInternal)
+        : this.threadConfig;
 
     const effectiveConfig = normalizeObservationalMemoryConfig(threadConfig.observationalMemory);
     if (!effectiveConfig) return null;
