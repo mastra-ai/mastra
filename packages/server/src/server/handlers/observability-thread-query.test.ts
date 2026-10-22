@@ -217,6 +217,38 @@ describe('QUERY_THREADS', () => {
     expect(observabilityStore.queryThreads).toHaveBeenCalledOnce();
   });
 
+  it('returns 422 before calling a store without root span entityId support for trace-scope entityId', async () => {
+    const entityIdIs = { op: 'eq', left: { path: 'entityId' }, right: { literal: 'nightly-scorer' } };
+    const requests = [
+      { traces: { timeRange: TIME_RANGE, where: entityIdIs } },
+      { traces: { timeRange: TIME_RANGE }, where: { traces: { some: entityIdIs } } },
+    ];
+    for (const request of requests) {
+      const { mastra, observabilityStore } = createHarness(['thread-query', 'trace-query-root-span-fields']);
+      const error = await captureHttpException(QUERY_THREADS.handler(params(mastra, request)));
+
+      expect(error.status).toBe(422);
+      expect(await error.getResponse().json()).toMatchObject({
+        code: 'TRACE_QUERY_INVALID',
+        issues: [{ code: 'field_not_allowed', path: ['where'] }],
+      });
+      expect(observabilityStore.queryThreads).not.toHaveBeenCalled();
+    }
+
+    const supported = createHarness(['thread-query', 'trace-query-root-entity-id']);
+    await QUERY_THREADS.handler(params(supported.mastra, requests[1]!));
+    expect(supported.observabilityStore.queryThreads).toHaveBeenCalledOnce();
+
+    const legacy = createHarness(['thread-query']);
+    await QUERY_THREADS.handler(
+      params(legacy.mastra, {
+        traces: { timeRange: TIME_RANGE },
+        where: { traces: { some: { spans: { some: entityIdIs } } } },
+      }),
+    );
+    expect(legacy.observabilityStore.queryThreads).toHaveBeenCalledOnce();
+  });
+
   it('returns 501 before calling an older store for root duration predicates in thread relations', async () => {
     const { mastra, observabilityStore } = createHarness(['thread-query']);
     const error = await captureHttpException(

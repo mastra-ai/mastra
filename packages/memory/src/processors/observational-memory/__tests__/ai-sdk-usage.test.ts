@@ -463,6 +463,45 @@ describe('AI SDK: buffer in one turn, activate + generateText in next', () => {
     }
   });
 
+  it('observes a later revision of a message saved under an id that was activated', async () => {
+    const messages = createMessagesExceedingThreshold(5, threadId);
+    await storage.saveMessages({ messages });
+    expect((await om.buffer({ threadId })).buffered).toBe(true);
+    expect((await om.activate({ threadId })).activated).toBe(true);
+
+    // The host appends to an activated assistant message under the same id.
+    const last = messages.at(-1)!;
+    const revision: MastraDBMessage = {
+      ...last,
+      createdAt: new Date(Date.now() + 1000),
+      content: {
+        ...last.content,
+        parts: [...last.content.parts, { type: 'text', text: 'Later addition: '.padEnd(400, 'y') }],
+      },
+    };
+    await storage.saveMessages({ messages: [revision] });
+
+    const result = await om.observe({ threadId, messages: [revision], force: true });
+    expect(result.observed).toBe(true);
+  });
+
+  it('observes content appended to an observed message after a reflection', async () => {
+    // Six messages, so the last one is the assistant message that carries the observation markers.
+    const messages = createMessagesExceedingThreshold(6, threadId);
+    await storage.saveMessages({ messages });
+    expect((await om.observe({ threadId, messages, force: true })).observed).toBe(true);
+    const currentRecord = (await storage.getObservationalMemory(threadId, null))!;
+    await storage.createReflectionGeneration({ currentRecord, reflection: '- compressed', tokenCount: 2 });
+
+    // The host appends to the last observed message under the same id and timestamp.
+    const last = (await storage.listMessagesById({ messageIds: [messages.at(-1)!.id] })).messages[0]!;
+    last.content.parts.push({ type: 'text', text: 'Later addition: '.padEnd(400, 'y') });
+    await storage.saveMessages({ messages: [last] });
+
+    const result = await om.observe({ threadId, messages: [last], force: true });
+    expect(result.observed).toBe(true);
+  });
+
   it('writes observer-exchange repro captures for buffering', async () => {
     const reproDir = mkdtempSync('.tmp-om-repro-');
     const previousCapture = process.env.OM_REPRO_CAPTURE;

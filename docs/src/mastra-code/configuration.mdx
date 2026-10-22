@@ -753,15 +753,15 @@ Configure the scope through:
 
 The observer and reflector default to **Auto**. Each role follows the active main model's provider, using that provider's built-in low-cost memory model when available and otherwise using the active main model. Changing the main model changes the effective model for automatic roles without changing their saved selection.
 
-Use the `/om` panel to select a concrete model or reset either role to **Auto** independently. Concrete selections remain pinned when the main model changes.
+Use the `/memory` panel to select a concrete model or reset either role to **Auto** independently. Concrete selections remain pinned when the main model changes.
 
-Observer and Reflector selections saved before Auto existed stay pinned after upgrading. Choose **Auto** in `/om` to switch a role back.
+Observer and Reflector selections saved before Auto existed stay pinned after upgrading. Choose **Auto** in `/memory` to switch a role back.
 
-Custom model packs can also set a memory model in `/models`. The pack's memory model is more specific than `/om`, so while the pack is active it applies to both roles, including roles pinned in `/om`. The `/om` panel and status line show the model the pack selects:
+Custom model packs can also set a memory model in `/models`. The pack's memory model is more specific than `/memory`, so while the pack is active it applies to both roles, including roles pinned in `/memory`. The `/memory` panel and status line show the model the pack selects:
 
 | Pack memory model | Behavior |
 | - | - |
-| Not set (default) | Each role uses its `/om` selection |
+| Not set (default) | Each role uses its `/memory` selection |
 | **Auto** | Both roles use automatic selection |
 | Concrete model | Both roles use that model. If its provider is unavailable, the role uses the next fallback pack's memory model |
 

@@ -108,9 +108,34 @@ Combine predicates with `and`, `or` and `not`. Membership uses `{ op: 'in', valu
 
 Each summary includes identity, context, entity lineage, status, timestamps, `durationMs`, model/provider and input/output/error previews. Model/provider are available in returned rows but aren't filterable.
 
-The additional identity, context and parent/root entity filters require an updated storage adapter. With an older adapter, requests using these filters return a structured `422` error.
+Check `capabilities.spanQueryContextFields` from `getObservabilityCapabilities()` before using the additional identity, context and parent/root entity filters. A missing or false value means these filters aren't available. With an older adapter, requests using these filters return a structured `422` error.
 
-DuckDB returns `null` for parent/root entity type, ID and name, and for `executionSource`. Equality filters on these fields match no spans. Parent/root entity version IDs remain available.
+DuckDB returns `null` for parent/root entity type, ID and name on spans written before `@mastra/duckdb` stored them. Equality filters on these fields don't match those spans.
+
+### Aggregate spans
+
+`aggregateSpans()` groups the spans `querySpans()` selects and returns one row per group. It counts spans at any depth, such as nested agent runs that trace aggregation misses:
+
+```typescript
+const { capabilities } = await mastraClient.getObservabilityCapabilities()
+
+if (capabilities.spanAggregate) {
+  const { rows, truncated } = await mastraClient.aggregateSpans({
+    timeRange: {
+      from: '2026-10-01T00:00:00.000Z',
+      to: '2026-10-08T00:00:00.000Z',
+    },
+    where: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'agent_run' } },
+    groupBy: ['status'],
+    interval: '1d',
+    measures: ['count', 'errorRate'],
+  })
+}
+```
+
+The request and response match `aggregateTraces()`, with span dimensions such as `spanType`, `name`, and `parentEntityName`. Token and cost measures belong to the span that recorded the usage and aren't added to parent spans. Check `capabilities.spanAggregate` before calling.
+
+See [Aggregate spans](/reference/observability/tracing/advanced-queries#aggregate-spans) for selection, dimensions, per-span usage, and how to list the spans behind a group.
 
 ## Querying threads
 

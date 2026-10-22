@@ -22,7 +22,13 @@
     "zai-org/glm-5.2"
   ],
   "reasoning": {
-    "moonshotai/kimi-k2.5": [
+    "zai-org/glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "zai-org/glm-5.1": [
       {
         "type": "toggle"
       }
@@ -51,13 +57,7 @@
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "zai-org/glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "zai-org/glm-5.1": [
+    "moonshotai/kimi-k2.5": [
       {
         "type": "toggle"
       }

@@ -115,7 +115,7 @@ const intakeRule = context =>
     : undefined;
 ```
 
-**Migration:** Remove former global `rules.work` and `rules.review` configuration. Built-in customization is deferred; there is no built-in override or replacement API. Define custom-board handlers on their phases instead. Deployments that relied on automatic issue triage or review proposals on arrival should add an appropriate custom-board handler.
+**Migration:** Remove former global `rules.work` and `rules.review` configuration. To customize Work or Review, set `includeDefaultBoards: false` and install a same-ID replacement, following the compatibility guidance above. Define lifecycle handlers on the replacement board's phases. Deployments that relied on automatic issue triage or review proposals on arrival should add an appropriate handler to the installed board.
 
 There is no global rules object. Every rule has one owner: boards own lifecycle handlers, transition policy, phase semantics, tool-result rules, and how their cards react to integration events; integrations own their default event handlers. The runtime only executes rules.
 
@@ -166,7 +166,7 @@ const releaseBoard = defineBoard({
 
 The handler receives the bound item, actor, board, tool name, normalized result, and `configVersion`, and returns one decision or `undefined`. Tool names follow the identifier rules for decision roles; `onResult` must be a function and the leaf may contain nothing else. Violations are `BoardDefinitionError`s at definition time.
 
-Work declares one rule: `submit_plan`. When a `plan`-seated agent on a Planning card reports a result starting with `Plan approved.`, the card transitions to Execute. Review declares none. Resolution is fail-closed: a tool result on a card whose board is not installed, or whose board does not declare that tool, fires no rule — a custom board inherits nothing from Work even if it reuses Work's phase names.
+The default Work board declares one rule: `submit_plan`. In an interactive session, a successful result whose content starts with `Plan approved.` transitions a Planning card to Execute when the actor is an agent in the `plan` role. Review declares none. Rules resolve from the installed board, so a replacement `work` board can declare its own `tools.submit_plan.onResult`. Resolution is fail-closed: a tool result on a card whose board is not installed, or whose board does not declare that tool, fires no rule. Other boards inherit nothing from Work even if they reuse its phase names.
 
 ### Board event rules
 
@@ -236,7 +236,7 @@ new MastraFactory({ storage, rules: defaultFactoryRules({ version: 'v2', overrid
 new MastraFactory({ storage, configVersion: 'v2', boards: [defineBoard({ ..., tools: { my_tool: { onResult } } })] });
 ```
 
-Contexts that carried `ruleSetVersion` now carry `configVersion`. Work's `submit_plan` rule cannot be replaced from config; built-in customization remains deferred.
+Contexts that carried `ruleSetVersion` now carry `configVersion`. To customize Work's `submit_plan` rule, declare `tools.submit_plan.onResult` on the installed replacement `work` board.
 
 ### Board transition policy
 
@@ -274,8 +274,6 @@ Return `undefined` for no additional restriction, `{ type: 'allow' }` with optio
 Policies must be side-effect-free. They run on initial entry, reentry, and same-stage requests, but completed replays use the stored result. Concurrent attempts can evaluate more than once. Policy and lifecycle evaluation share one timeout budget; a timeout does not cancel arbitrary work started by a callback.
 
 A policy cannot bypass topology, ingress authorization, board ownership, external-author safety, revision checks, decision validation, replay handling, or atomic persistence. Returning `allow` is not an authorization override.
-
-**Remaining limitations:** Built-in board replacement and customization remain unsupported.
 
 ### Board phase semantics
 
@@ -316,7 +314,7 @@ phases: {
 }
 ```
 
-**Remaining limitations:** Throughput and lead-time metrics still count completions by Work's `done` phase. `factory-ui` still renders the built-in stage and role pipeline. Built-in board replacement and customization remain unsupported.
+**Remaining limitations:** Throughput and lead-time metrics still count completions by Work's `done` phase. `factory-ui` still renders the built-in stage and role pipeline.
 
 ### Execute a custom board
 
@@ -665,7 +663,7 @@ A person's own Factory session (a user session) gets tools to find, file and man
 | `factory_retry_decision`        | `decisionId`                                                                                                                                    |
 | `factory_dismiss_decision`      | `decisionId`                                                                                                                                    |
 | `factory_resolve_proposal`      | `decisionId`, `action` (`approve` or `dismiss`)                                                                                                 |
-| `factory_start_session`         | `prompt` (up to 8000 characters), optional `title`; for a work-item role, `workItem` and `role`                                                 |
+| `factory_start_session`         | `prompt` (up to 8000 characters), optional `title`, optional `model`; for a work-item role, `workItem` and `role`                               |
 | `factory_answer_approval`       | `sessionId`, `toolCallId`, `decision` (approve or decline), optional `reason`                                                                   |
 | `factory_switch_session_model`  | `sessionId`, `modelId`                                                                                                                          |
 | `factory_signal_session`        | `sessionId`, `message` (up to 4000 characters), optional `priority` (`low`, `medium`, `high`, `urgent`; default `medium`)                       |
@@ -681,7 +679,7 @@ Read tools and `factory_message_origin` are available on every turn. The other t
 
 `factory_signal_session` messages any other session in the same Factory that the caller can see: a work item's role session, or a teammate's session that isn't private. The message arrives as a `factory-session` notification on that session's own thread. Factory brings an offline session back online first, and the turn it wakes runs as that session's owner, with the owner's credentials, never as the sender.
 
-How a message is delivered depends on its priority. `urgent` always delivers, even into a running turn. `high` and `medium` wake an idle session; while it is busy, `high` arrives as a summary and then in full, and `medium` waits for the current step. `low` arrives as a summary. Agents can read the full text of any notification with `notification_inbox`. A session can send at most 10 messages, replies and reports, together, to the same session thread in 10 minutes; past that, the tools refuse until the window moves on. `progress` reports don't count, since they replace each other.
+How a message is delivered depends on its priority. `urgent` always delivers, even into a running turn. `high` and `medium` wake an idle session; while it is busy, `high` arrives as a summary and then in full, and `medium` waits for the current step. `low` arrives as a summary. Agents can read the full text of any notification with `notification_inbox`. A session can have at most 10 messages, replies and reports, together, delivered to the same session thread in 10 minutes. Past that, the tools queue the message and say when it will be delivered, so the sender does not send it again; it goes out, oldest first, once the window has a slot. `progress` reports don't count, since they replace each other.
 
 `factory_message_origin` with `inReplyTo` answers a message. `inReplyTo` must name a `factory-session` message that reached the answering session's own thread, and the reply goes to the session and thread that sent it, never to an address the agent supplies. Each message can be answered once, and replies, reports and other notifications can't be answered, so two agents can't ping-pong. Replies arrive at `high` priority and carry an `in-reply-to` attribute. Messages and replies are recorded in the audit trail as `factory.agent.signaled`.
 
@@ -689,10 +687,10 @@ How a message is delivered depends on its priority. `urgent` always delivers, ev
 
 `factory_start_session` starts another session for the caller and sends `prompt` as its first message. It has two modes:
 
-- **Side session** (no `workItem`): a standalone session with no work item, for a one-off job. It uses the same repository as the session that started it. Factory stores that session on the new session's row (`origin_session_id`, `origin_thread_id`) and copies the parent's visibility.
+- **Side session** (no `workItem`): a standalone session with no work item, for a one-off job. It uses the same repository as the session that started it. Factory stores that session on the new session's row (`origin_session_id`, `origin_thread_id`) and copies the parent's visibility. It runs on the model of the session that started it, or on `model` when one is passed. That model has to be one the session's credentials can run; an unknown or unrunnable model is refused before anything is created. When the parent has no model set, the side session keeps the Factory's default worker model.
 - **Work-item role** (`workItem` and `role`): starts a role the item's board seats, the same way **Start** does in the Factory UI. The card does not move and no autonomy is armed. The tool refuses when the role already has a session, naming it so the agent can message it instead, and refuses an item linked to several repositories. The caller is subscribed to the item, and the run is recorded as `factory.run.started` with the caller as the person who started it.
 
-Both modes attribute the new session to the caller, so it runs with the caller's credentials (the caller's own keys under the `user` model scope, the organization's under `factory`) and keeps the Factory's default worker model. The first message runs with only the caller as its user, never the rest of the parent turn's context. The tool needs no approval but, like the other management tools, only appears on turns a signed-in person started.
+Both modes attribute the new session to the caller, so it runs with the caller's credentials (the caller's own keys under the `user` model scope, the organization's under `factory`). A work-item role keeps the Factory's default worker model. The first message runs with only the caller as its user, never the rest of the parent turn's context. The tool needs no approval but, like the other management tools, only appears on turns a signed-in person started.
 
 #### Reports
 

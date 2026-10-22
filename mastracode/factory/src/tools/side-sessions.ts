@@ -112,12 +112,12 @@ export async function listSideSessions(
 
 /** The model a session's thread uses: the live session's selection, else the persisted one. */
 export async function sessionModel(
-  controller: Pick<FactoryDeliveryController, 'getSessionByResource' | 'queryThreads' | 'queryThreadById'>,
+  controller: Pick<FactoryDeliveryController, 'getSession' | 'queryThreads' | 'queryThreadById'>,
   sessions: Parameters<typeof resolveSessionThread>[0]['sessions'],
   workItems: Parameters<typeof resolveSessionThread>[0]['workItems'],
   sessionId: string,
 ): Promise<string | null> {
-  const live = await controller.getSessionByResource(sessionId);
+  const live = await controller.getSession(sessionId);
   const liveModel = live?.model.get();
   if (liveModel) return liveModel;
   const threadId = await resolveSessionThread({ controller, sessions, workItems, sessionId });

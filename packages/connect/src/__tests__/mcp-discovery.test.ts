@@ -22,6 +22,8 @@ function requestBody(init?: RequestInit): Record<string, unknown> {
 function createGatewayFetch(
   options: {
     connections?: Array<Record<string, unknown>>;
+    /** Catalog entries served from /v2/integrations; defaults to one MCP + one HTTP-only entry. */
+    integrations?: Array<Record<string, unknown>>;
     matchAnyConnectionMcpPath?: boolean;
     /**
      * Per-connection-id tool list overrides. Keys are raw connection ids
@@ -37,7 +39,7 @@ function createGatewayFetch(
     failToolsListForConnectionIds?: Set<string>;
   } = {},
 ) {
-  const protocolRequests: Array<{ body: Record<string, unknown>; headers: Headers; method: string }> = [];
+  const protocolRequests: Array<{ body: Record<string, unknown>; headers: Headers; method: string; path: string }> = [];
   let initializeCount = 0;
   const initializeCountByConnectionId = new Map<string, number>();
   const connections = options.connections ?? [
@@ -55,14 +57,22 @@ function createGatewayFetch(
     const url = new URL(String(input));
     if (url.pathname === '/v2/integrations') {
       return Response.json({
-        integrations: [
+        integrations: options.integrations ?? [
           { id: INTEGRATION_ID, capabilities: { mcp: true } },
           { id: 'http-only', capabilities: { mcp: false } },
         ],
       });
     }
     if (url.pathname === '/v2/projects/project-1/connections') {
-      return Response.json({ connections });
+      // Scope the list the way the platform does: no params → global-only;
+      // resourceId=X&includeGlobal=true → global + that resource's rows.
+      const resourceId = url.searchParams.get('resourceId');
+      const rows = connections.filter(connection =>
+        resourceId === null
+          ? (connection.resourceId ?? null) === null
+          : (connection.resourceId ?? null) === null || connection.resourceId === resourceId,
+      );
+      return Response.json({ connections: rows });
     }
     const isMcpPath = options.matchAnyConnectionMcpPath
       ? /^\/v2\/connections\/[^/]+\/mcp$/.test(url.pathname)
@@ -72,7 +82,7 @@ function createGatewayFetch(
 
     const body = requestBody(init);
     const headers = new Headers(init?.headers);
-    protocolRequests.push({ body, headers, method: init?.method ?? 'GET' });
+    protocolRequests.push({ body, headers, method: init?.method ?? 'GET', path: url.pathname });
     const method = body.method;
     if (method === 'initialize') {
       initializeCount += 1;
@@ -598,5 +608,96 @@ describe('MCP tool approval — multi-connection wrappers', () => {
     expect(discovered).toHaveProperty('catalog-mcp_update_record');
     expect(gateway.getInitializeCountForConnection(acmeId)).toBeGreaterThan(acmeInitsAfterFailure);
     expect(gateway.getInitializeCountForConnection(globexId)).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('resource-scoped MCP resolution', () => {
+  const USER_CONNECTION_ID = 'mcp_01K2E7Q11BCDEFGHJKMNPQRSTX';
+  const USER_INTEGRATION_ID = 'catalog-mcp-user';
+
+  function createScopedGateway() {
+    return createGatewayFetch({
+      matchAnyConnectionMcpPath: true,
+      integrations: [
+        { id: INTEGRATION_ID, capabilities: { mcp: true } },
+        { id: USER_INTEGRATION_ID, capabilities: { mcp: true } },
+      ],
+      connections: [
+        { id: CONNECTION_ID, integrationId: INTEGRATION_ID, status: 'active', resourceId: null },
+        {
+          id: USER_CONNECTION_ID,
+          integrationId: USER_INTEGRATION_ID,
+          status: 'active',
+          resourceId: 'end-user-1',
+        },
+      ],
+    });
+  }
+
+  it('asserts the resource key on MCP protocol requests for a scoped resolution', async () => {
+    const gateway = createScopedGateway();
+    const scoped = connect({
+      projectId: 'project-1',
+      resourceId: 'end-user-1',
+      client: { accessToken: PLATFORM_TOKEN, baseUrl: 'https://integrations.example.test', fetch: gateway.fetchMock },
+    });
+    resolvers.push(scoped);
+
+    const discovered = await scoped();
+    expect(Object.keys(discovered).sort()).toEqual([
+      'catalog-mcp-user_list_records',
+      'catalog-mcp-user_update_record',
+      'catalog-mcp_list_records',
+      'catalog-mcp_update_record',
+      'request_connection',
+    ]);
+
+    // The scoped connection's MCP requests carry the assertion header. The
+    // global connection's MCP client is shared across every resource scope,
+    // so its transport is resource-free: it must not be stamped with whichever
+    // scope's resource header resolved it first.
+    const scopedRequests = gateway.protocolRequests.filter(request => request.path.includes(USER_CONNECTION_ID));
+    const globalRequests = gateway.protocolRequests.filter(request => request.path.includes(CONNECTION_ID));
+    expect(scopedRequests.length).toBeGreaterThan(0);
+    expect(globalRequests.length).toBeGreaterThan(0);
+    for (const request of scopedRequests) {
+      expect(request.headers.get('x-mastra-resource-id')).toBe('end-user-1');
+    }
+    for (const request of globalRequests) {
+      expect(request.headers.get('x-mastra-resource-id')).toBeNull();
+    }
+  });
+
+  it('keeps an MCP client used only by the resource scope alive across a global-scope refresh', async () => {
+    const gateway = createScopedGateway();
+    const clientOptions = {
+      accessToken: PLATFORM_TOKEN,
+      baseUrl: 'https://integrations.example.test',
+      fetch: gateway.fetchMock,
+    };
+    const scoped = connect({ projectId: 'project-1', resourceId: 'end-user-1', client: clientOptions });
+    const globalOnly = connect({ projectId: 'project-1', client: clientOptions });
+    resolvers.push(scoped, globalOnly);
+
+    const scopedTools = await scoped();
+    expect(scopedTools).toHaveProperty('catalog-mcp-user_update_record');
+
+    // Refreshing the global scope resolves only the global connection. The
+    // prune must not disconnect the user connection's MCP client: the resource
+    // scope's snapshot still references it.
+    const globalTools = await globalOnly.refresh();
+    expect(Object.keys(globalTools).sort()).toEqual(['catalog-mcp_list_records', 'catalog-mcp_update_record']);
+    const userDeletes = gateway.fetchMock.mock.calls.filter(
+      ([input, init]) => String(input).includes(USER_CONNECTION_ID) && init?.method === 'DELETE',
+    );
+    expect(userDeletes).toHaveLength(0);
+
+    // The scoped snapshot's tool still executes over the original transport:
+    // no re-initialize happened for the user connection.
+    const updateRecord = scopedTools['catalog-mcp-user_update_record'] as (typeof scopedTools)[string] & {
+      execute: (input: unknown, context: { requestContext: RequestContext }) => Promise<unknown>;
+    };
+    await updateRecord.execute({ value: 'still-alive' }, { requestContext: new RequestContext() });
+    expect(gateway.getInitializeCountForConnection(USER_CONNECTION_ID)).toBe(1);
   });
 });

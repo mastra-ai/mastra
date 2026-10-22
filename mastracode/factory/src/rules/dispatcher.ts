@@ -325,14 +325,20 @@ interface DispatcherSession extends SkillSession {
   stream: { isActive(): boolean };
   abort(): void;
   sendSignal(
-    input: { id: string; type: 'user'; tagName: 'user'; contents: string },
+    input: {
+      id: string;
+      type: 'user' | 'reactive';
+      tagName: string;
+      attributes?: { name: string };
+      contents: string;
+    },
     options: { requestContext: RequestContext; requireDelivery?: boolean },
   ): { accepted: Promise<{ accepted: true; runId?: string; action?: string }> };
   subscribe(listener: AgentControllerEventListener): () => void;
   respondToToolSuspension(input: { resumeData: SubmitPlanResumeData; toolCallId?: string }): Promise<void>;
 }
 
-type FactoryController = Pick<AgentController<MastraCodeState>, 'getSessionByResource' | 'listActiveThreadRuns'>;
+type FactoryController = Pick<AgentController<MastraCodeState>, 'getSession' | 'listActiveThreadRuns'>;
 type BoundDispatcherSession = Session<MastraCodeState>;
 
 function factoryRequestContext(input: {
@@ -347,6 +353,7 @@ function factoryRequestContext(input: {
   requestContext.set('controller', {
     state: session.state.get(),
     getState: () => session.state.get(),
+    sessionId: binding.sessionId,
     threadId: binding.threadId,
     resourceId: binding.resourceId,
     session: {
@@ -749,7 +756,7 @@ export class FactoryDecisionDispatcher {
         // suspension and run state belong to that thread. Lookup failures revoke.
         keep: async binding => {
           try {
-            const session = await this.#controller.getSessionByResource(binding.resourceId);
+            const session = await this.#controller.getSession(binding.sessionId);
             if (session?.thread.getId() !== binding.threadId) return false;
             return session.suspensions.hasPending() || session.run.isRunning();
           } catch {
@@ -997,17 +1004,17 @@ export class FactoryDecisionDispatcher {
           const resolved =
             decision.skillName === undefined
               ? await resolvePromptInvocation(this.#controller, {
-                  resourceId: binding.resourceId,
+                  sessionId: binding.sessionId,
                   prompt: decision.prompt,
                 })
               : decision.resume === true
                 ? await resolveSkillResumeInvocation(this.#controller, {
-                    resourceId: binding.resourceId,
+                    sessionId: binding.sessionId,
                     name: decision.skillName,
                     arguments: decision.arguments,
                   })
                 : await resolveSkillInvocation(this.#controller, {
-                    resourceId: binding.resourceId,
+                    sessionId: binding.sessionId,
                     name: decision.skillName,
                     arguments: decision.arguments,
                   });
@@ -1069,8 +1076,19 @@ export class FactoryDecisionDispatcher {
           const kickoffContents = await withWorkItemFeed(
             this.#feedReader,
             { orgId: record.orgId, factoryProjectId: record.factoryProjectId, workItemId: record.workItemId },
-            resolved.message,
+            resolved.contents,
           );
+          // A skill kickoff is system-generated, not something the human typed: send it
+          // as a typed `skill` signal so the model sees `<skill name="…">` and traces
+          // record the skill name. Plain-prompt kickoffs stay user messages.
+          const kickoffSignal =
+            resolved.skillName !== undefined
+              ? {
+                  type: 'reactive' as const,
+                  tagName: 'skill',
+                  attributes: { name: resolved.skillName },
+                }
+              : { type: 'user' as const, tagName: 'user' };
           // The feed read is async storage I/O; the card can move while it runs.
           if (await kickoffLanded()) return;
           if (await kickoffStale()) throw new FactoryDecisionSuperseded();
@@ -1114,8 +1132,7 @@ export class FactoryDecisionDispatcher {
             const result = session.sendSignal(
               {
                 id: deliveryId,
-                type: 'user',
-                tagName: 'user',
+                ...kickoffSignal,
                 contents: kickoffContents,
               },
               // Without `requireDelivery` the session resolves `accepted` on the
@@ -1542,7 +1559,7 @@ export class FactoryDecisionDispatcher {
   ): Promise<FactoryRunBindingRecord> {
     const binding = await this.#findBinding(record, role);
     if (binding) {
-      const session = await this.#controller.getSessionByResource(binding.resourceId);
+      const session = await this.#controller.getSession(binding.sessionId);
       if (session) return binding;
     }
     if (!this.#prepareBinding) {
@@ -1557,7 +1574,7 @@ export class FactoryDecisionDispatcher {
   }
 
   async #findSession(binding: FactoryRunBindingRecord): Promise<BoundDispatcherSession | undefined> {
-    const session = await this.#controller.getSessionByResource(binding.resourceId);
+    const session = await this.#controller.getSession(binding.sessionId);
     if (!session) return undefined;
     await this.#switchThread(session, binding);
     return session;

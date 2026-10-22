@@ -39,7 +39,7 @@ overrides:
   '@hono/node-server@<1.19.15': 1.19.15
   '@noble/hashes@>=2.0.0 <2.4.0': 2.4.0
   # Vanta 2026-10-02: force fixed majors for findings whose parents have no release on them yet.
-  'undici@<8.11.2': 8.11.2
+  'undici@<8.12.2': 8.12.2
   'yargs@<18.1.0': 18.2.0
   'raw-body@<4.0.0': 4.0.0
   'nanoid@<5.1.16': 5.1.16

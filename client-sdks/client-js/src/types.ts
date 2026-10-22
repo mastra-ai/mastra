@@ -675,6 +675,21 @@ export type McpServerToolListResponse = GeneratedResponse<'GET /mcp/:serverId/to
  */
 export type McpToolExecuteResponse = RouteResponse<'POST /mcp/:serverId/tools/:toolId/execute'>;
 
+/** Event types an MCP server declares, plus whether test emit is served (experimental). */
+export type McpServerEventListResponse = GeneratedResponse<'GET /mcp/:serverId/events'>;
+
+/** One declared MCP server event type (experimental). */
+export type McpServerEventInfo = McpServerEventListResponse['events'][number];
+
+/** Result of polling an MCP server event type (experimental). */
+export type McpServerEventPollResponse = GeneratedResponse<'POST /mcp/:serverId/events/:eventName/poll'>;
+
+/** One occurrence of an MCP server event (experimental). */
+export type McpServerEventOccurrence = McpServerEventPollResponse['events'][number];
+
+/** A frame yielded by `streamMcpServerEvent` (experimental). */
+export type McpServerEventStreamFrame = GeneratedResponse<'POST /mcp/:serverId/events/:eventName/stream'>;
+
 /**
  * Client version of ScoreRowData with dates serialized as strings (from JSON)
  */
@@ -2515,7 +2530,7 @@ export type AgentControllerInfo = GeneratedResponse<'GET /agent-controller'>['ag
 
 export type CreateAgentControllerSessionResponse = GeneratedResponse<'POST /agent-controller/:controllerId/sessions'>;
 
-export type AgentControllerSessionState = GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:resourceId'>;
+export type AgentControllerSessionState = GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:sessionId'>;
 
 /**
  * Agent behavior settings, mirroring the TUI's `/settings` toggles. An absent
@@ -2548,24 +2563,24 @@ export type AgentControllerActiveRun =
  * sharing the resourceId.
  */
 export type AgentControllerThreadInfo =
-  GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/threads'>['threads'][number];
+  GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:sessionId/threads'>['threads'][number];
 
 /** A thread as returned by `createThread()` and `cloneThread()`. */
 export type CreateAgentControllerThreadResponse =
-  GeneratedResponse<'POST /agent-controller/:controllerId/sessions/:resourceId/threads'>;
+  GeneratedResponse<'POST /agent-controller/:controllerId/sessions/:sessionId/threads'>;
 
 export type AgentControllerWorkspaceStatus = GeneratedResponse<'GET /agent-controller/:controllerId/workspace'>;
 
 export type AgentControllerGoalRecord = NonNullable<
-  GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/goal'>['goal']
+  GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:sessionId/goal'>['goal']
 >;
 
 /** Per-category and per-tool approval policies. */
-export type PermissionRules = GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/permissions'>;
+export type PermissionRules = GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:sessionId/permissions'>;
 
 export type SendNotificationInput = GeneratedRequest<
-  Body<'POST /agent-controller/:controllerId/sessions/:resourceId/notifications'>
+  Body<'POST /agent-controller/:controllerId/sessions/:sessionId/notifications'>
 >;
 
 export type SendNotificationResult =
-  GeneratedResponse<'POST /agent-controller/:controllerId/sessions/:resourceId/notifications'>;
+  GeneratedResponse<'POST /agent-controller/:controllerId/sessions/:sessionId/notifications'>;

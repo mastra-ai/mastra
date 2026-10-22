@@ -8,6 +8,9 @@ export const spanQueryFeatures =
     ? (['span-query', 'span-query-context-fields'] as const)
     : ([] as const);
 
+export const spanAggregateFeatures =
+  typeof coreStorage.planSpanAggregate === 'function' ? (['span-aggregate'] as const) : ([] as const);
+
 /** Core versions without the field reject it in trace query results, so it is only returned when core knows it. */
 export const timeToFirstChunkSupported = 'timeToFirstChunkMs' in coreStorage.TRACE_QUERY_FIELD_REGISTRY.trace;
 

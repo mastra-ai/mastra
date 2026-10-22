@@ -7,14 +7,13 @@
     "anthropic/claude-opus-4.7",
     "anthropic/claude-opus-4.8",
     "anthropic/claude-sonnet-4.6",
-    "moonshotai/Kimi-K2.6",
-    "moonshotai/kimi-k2.7-code-highspeed",
     "openai/gpt-5.5"
   ],
   "temperature": [
     "MiniMaxAI/MiniMax-M2.7",
     "MiniMaxAI/MiniMax-M3",
     "Qwen/Qwen3.7-Max",
+    "Qwen/Qwen3.8-Flash",
     "Qwen/Qwen3.8-Max",
     "anthropic/claude-opus-4.6",
     "anthropic/claude-sonnet-4.6",
@@ -36,9 +35,22 @@
     "zai-org/GLM-5.2-FP8"
   ],
   "reasoning": {
-    "MiniMaxAI/MiniMax-M3": [
+    "zai-org/GLM-5.2-FP8": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "anthropic/claude-opus-4.8": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "anthropic/claude-opus-4.7": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
     "anthropic/claude-opus-4.6": [
@@ -55,31 +67,7 @@
         "max": 63999
       }
     ],
-    "anthropic/claude-opus-4.8": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "anthropic/claude-opus-4.7": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "openai/gpt-5.5": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "zai-org/GLM-5.2-FP8": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "Qwen/Qwen3.8-Max": [
+    "MiniMaxAI/MiniMax-M3": [
       {
         "type": "toggle"
       }
@@ -87,6 +75,17 @@
     "Qwen/Qwen3.8-Flash": [
       {
         "type": "toggle"
+      }
+    ],
+    "Qwen/Qwen3.8-Max": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "openai/gpt-5.5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ]
   }

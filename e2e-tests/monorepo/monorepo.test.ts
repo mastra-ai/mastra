@@ -865,13 +865,16 @@ export const transitiveOnlyRoute = registerApiRoute('/transitive-only', {
       });
     }, timeout);
 
-    it('should resolve tsconfig paths', async () => {
-      const inputFile = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'index.mjs');
+    it('should resolve tsconfig paths with TypeScript 7 installed', async () => {
+      const appDir = join(fixturePath, 'apps', 'custom');
+      const typescriptPackage = JSON.parse(
+        await readFile(join(appDir, 'node_modules', 'typescript', 'package.json'), 'utf-8'),
+      );
+      const inputFile = join(appDir, '.mastra', 'output', 'index.mjs');
       const content = await readFile(inputFile, 'utf-8');
 
-      const hasMappedPkg = content.includes('@/agents');
-
-      expect(hasMappedPkg).toBeFalsy();
+      expect(typescriptPackage.version).toBe('7.0.2');
+      expect(content).not.toContain('@/agents');
     });
 
     it('should resolve workspace package tsconfig paths', async () => {

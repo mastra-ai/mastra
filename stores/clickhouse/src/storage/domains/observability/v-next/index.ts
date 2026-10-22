@@ -95,9 +95,11 @@ import type {
   GetTraceQueryValuesResponse,
   QueryThreadsResult,
   TraceQueryObservedFieldsResult,
+  SpanAggregateResponse,
   TraceAggregateResponse,
   TraceQueryResponse,
   TrustedThreadQueryPlan,
+  TrustedSpanAggregatePlan,
   TrustedTraceAggregatePlan,
   TrustedTraceQueryObservedFieldsPlan,
   TrustedTraceQueryPlan,
@@ -190,6 +192,8 @@ const spanQueryFeatures =
   typeof coreStorage.planSpanQuery === 'function'
     ? (['span-query', 'span-query-context-fields'] as const)
     : ([] as const);
+const spanAggregateFeatures =
+  typeof coreStorage.planSpanAggregate === 'function' ? (['span-aggregate'] as const) : ([] as const);
 const threadQueryFeatures =
   typeof coreStorage.planThreadRowsQuery === 'function' ? (['thread-query-rows'] as const) : ([] as const);
 
@@ -969,8 +973,10 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
         'trace-query-context-ids',
         ...traceQueryOps.timeToFirstChunkFeatures,
         'trace-query-root-span-fields',
+        'trace-query-root-entity-id',
         'trace-aggregate',
         ...spanQueryFeatures,
+        ...spanAggregateFeatures,
         ...threadQueryFeatures,
       ] as const;
     }
@@ -994,8 +1000,10 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       'trace-query-context-ids',
       ...traceQueryOps.timeToFirstChunkFeatures,
       'trace-query-root-span-fields',
+      'trace-query-root-entity-id',
       'trace-aggregate',
       ...spanQueryFeatures,
+      ...spanAggregateFeatures,
       ...threadQueryFeatures,
     ] as const;
   }
@@ -1200,6 +1208,26 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
       throw new MastraError(
         {
           id: createStorageErrorId('CLICKHOUSE', 'AGGREGATE_TRACES', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+  override async aggregateSpans(plan: TrustedSpanAggregatePlan): Promise<SpanAggregateResponse> {
+    try {
+      return await traceAggregateOps.aggregateSpans(this.#client, plan, this.#traceQueryTimeoutMs);
+    } catch (error) {
+      if (
+        error instanceof MastraError ||
+        error instanceof coreStorage.TraceQueryExecutionError ||
+        error instanceof coreStorage.TraceQueryResourceLimitError
+      )
+        throw error;
+      throw new MastraError(
+        {
+          id: createStorageErrorId('CLICKHOUSE', 'AGGREGATE_SPANS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
         },
