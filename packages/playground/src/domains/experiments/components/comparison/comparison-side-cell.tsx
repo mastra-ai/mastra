@@ -142,7 +142,7 @@ export function ComparisonSideCell({
         <ComparisonSection
           title="Metadata"
           framed
-          actions={<CopyButton content={formatValue(data.metadata)} size="sm" variant="ghost" />}
+          actions={<CopyButton content={formatValue(data.metadata)} variant="ghost" />}
         >
           <ComparisonPayload value={data.metadata} />
         </ComparisonSection>
