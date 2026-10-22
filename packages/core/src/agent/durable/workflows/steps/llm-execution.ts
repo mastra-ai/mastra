@@ -2541,7 +2541,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
             // 12. Add assistant response to message list
             materializeStreamedMessages();
-            messageList.enrichLastStepStart(currentModel.modelId);
+            if (currentModel.provider && currentModel.modelId) {
+              messageList.enrichLastStepStart(`${currentModel.provider}/${currentModel.modelId}`);
+            }
 
             // 13. Determine if we should continue (has tool calls). Pending
             // tool calls must never override a terminal finish reason:

@@ -135,6 +135,9 @@ describe('empty final step with observational memory (#27920)', () => {
             message.content.parts.some(part => part.type === 'text' && part.text === 'Saved.'),
         );
         expect(savedMessage?.content.parts.map(part => part.type)).toEqual(['tool-invocation', 'step-start', 'text']);
+        expect(savedMessage?.content.parts.find(part => part.type === 'step-start')).toMatchObject({
+          model: 'openai.chat/actor',
+        });
       } finally {
         await mastra.stopWorkers();
       }
