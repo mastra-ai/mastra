@@ -1535,7 +1535,7 @@ describe('agent-controller routes', () => {
 
         expect(result.success).toBe(false);
         const body = formatZodError(result.error!, 'query parameters', 'query');
-        expect(body.problem.code).toBe('AGENT_CONTROLLER_LIMIT_REQUIRES_PAGE');
+        expect(body.code).toBe('AGENT_CONTROLLER_LIMIT_REQUIRES_PAGE');
         expect(body.issues).toContainEqual({
           field: 'limit',
           message: `limit cannot be combined with ${field}; use perPage instead`,
@@ -1547,7 +1547,7 @@ describe('agent-controller routes', () => {
       const result = LIST_AGENT_CONTROLLER_THREAD_MESSAGES_ROUTE.queryParamSchema!.safeParse({ page: '-1' });
 
       expect(result.success).toBe(false);
-      expect(formatZodError(result.error!, 'query parameters', 'query').problem.code).toBe('REQUEST_VALIDATION_FAILED');
+      expect(formatZodError(result.error!, 'query parameters', 'query').code).toBe('REQUEST_VALIDATION_FAILED');
     });
   });
 

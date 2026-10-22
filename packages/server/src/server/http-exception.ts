@@ -6,7 +6,7 @@
  */
 
 import { SERVER_ERROR_CODES } from './error-codes';
-import type { ServerErrorCode, ServerProblem } from './error-codes';
+import type { ServerErrorCode } from './error-codes';
 
 type InfoStatusCode = 100 | 101 | 102 | 103;
 type SuccessStatusCode = 200 | 201 | 202 | 203 | 204 | 205 | 206 | 207 | 208 | 226;
@@ -69,8 +69,8 @@ export type StatusCode =
 
 /**
  * Options for creating an `HTTPException`.
- * @property code - Business error code from `SERVER_ERROR_CODES`, serialized as `problem.code`. Defaults to `UNCATEGORIZED_ERROR`.
- * @property metadata - Optional JSON-serializable details serialized as `problem.metadata`. Never put stack traces, raw causes or secrets here.
+ * @property code - Business error code from `SERVER_ERROR_CODES`, serialized as the body's `code`. Defaults to `UNCATEGORIZED_ERROR`.
+ * @property metadata - Optional JSON-serializable details serialized as the body's `metadata`. Never put stack traces, raw causes or secrets here.
  * @property res - Optional response object to use.
  * @property message - Optional custom error message.
  * @property cause - Optional cause of the error.
@@ -114,7 +114,8 @@ export type HTTPExceptionOptions = {
 export class HTTPException extends Error {
   readonly res?: Response;
   readonly status: StatusCode;
-  readonly problem: ServerProblem;
+  readonly code: ServerErrorCode;
+  readonly metadata?: Record<string, unknown>;
 
   /**
    * Creates an instance of `HTTPException`.
@@ -126,13 +127,13 @@ export class HTTPException extends Error {
     this.res = options?.res;
     this.status = status;
     this.stack = options?.stack || this.stack;
-    const code = options?.code ?? SERVER_ERROR_CODES.UNCATEGORIZED_ERROR;
-    this.problem = options?.metadata ? { code, metadata: options.metadata } : { code };
+    this.code = options?.code ?? SERVER_ERROR_CODES.UNCATEGORIZED_ERROR;
+    this.metadata = options?.metadata;
   }
 
   /**
    * Returns the response object associated with the exception.
-   * If a response object is not provided, a JSON `{ error, problem }` response is created with the status code.
+   * If a response object is not provided, a JSON `{ error, code, metadata? }` response is created with the status code.
    * @returns The response object.
    */
   getResponse(): Response {
@@ -143,6 +144,6 @@ export class HTTPException extends Error {
       });
       return newResponse;
     }
-    return Response.json({ error: this.message, problem: this.problem }, { status: this.status });
+    return Response.json({ error: this.message, code: this.code, metadata: this.metadata }, { status: this.status });
   }
 }

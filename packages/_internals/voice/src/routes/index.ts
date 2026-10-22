@@ -50,11 +50,10 @@ export type VoiceErrorCode =
   | 'AGENT_LISTENER_GET_FAILED'
   | 'REQUEST_ARGUMENT_REQUIRED';
 
-type VoiceProblem = { code: VoiceErrorCode; metadata?: Record<string, unknown> };
-
 class HTTPException extends Error {
   readonly status: StatusCode;
-  readonly problem: VoiceProblem;
+  readonly code: VoiceErrorCode;
+  readonly metadata?: Record<string, unknown>;
 
   constructor(
     status: StatusCode,
@@ -68,7 +67,8 @@ class HTTPException extends Error {
   ) {
     super(options.message, { cause: options.cause });
     this.status = status;
-    this.problem = options.metadata ? { code: options.code, metadata: options.metadata } : { code: options.code };
+    this.code = options.code;
+    this.metadata = options.metadata;
     this.stack = options.stack || this.stack;
   }
 }

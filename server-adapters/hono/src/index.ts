@@ -13,9 +13,9 @@ import {
   applyMcpRequestAuth,
   checkRouteFGA,
   getFGAProvider,
-  ensureProblem,
+  ensureErrorCode,
   formatErrorResponse,
-  getCustomHTTPExceptionResponseWithProblem,
+  getCustomHTTPExceptionResponseWithCode,
   isSafeObjectKey,
   isZodError,
   normalizeQueryParams,
@@ -492,11 +492,11 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           onError: (c: Context) => {
             let errorResponse: unknown = {
               error: 'Request body too large',
-              problem: { code: SERVER_ERROR_CODES.REQUEST_BODY_TOO_LARGE },
+              code: SERVER_ERROR_CODES.REQUEST_BODY_TOO_LARGE,
             };
             if (route.maxBodySize === undefined && this.bodyLimitOptions) {
               try {
-                errorResponse = ensureProblem(
+                errorResponse = ensureErrorCode(
                   this.bodyLimitOptions.onError(errorResponse),
                   SERVER_ERROR_CODES.REQUEST_BODY_TOO_LARGE,
                 );
@@ -535,7 +535,10 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
 
           // If this is an auth error (not just a success-with-headers), return error response
           if (authResult.error) {
-            return c.json({ error: authResult.error, problem: authResult.problem }, authResult.status as any);
+            return c.json(
+              { error: authResult.error, code: authResult.code, metadata: authResult.metadata },
+              authResult.status as any,
+            );
           }
         }
 
@@ -548,10 +551,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             {
               error: 'Invalid request body',
               issues,
-              problem: {
-                code: params.bodyParseError.code ?? SERVER_ERROR_CODES.REQUEST_BODY_INVALID_JSON,
-                metadata: { issues },
-              },
+              code: params.bodyParseError.code ?? SERVER_ERROR_CODES.REQUEST_BODY_INVALID_JSON,
             },
             400,
           );
@@ -573,10 +573,8 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
               {
                 error: 'Invalid query parameters',
                 issues,
-                problem: {
-                  code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED,
-                  metadata: { issues, location: 'query' },
-                },
+                code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED,
+                metadata: { location: 'query' },
               },
               400,
             );
@@ -599,7 +597,8 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
               {
                 error: 'Invalid request body',
                 issues,
-                problem: { code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED, metadata: { issues, location: 'body' } },
+                code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED,
+                metadata: { location: 'body' },
               },
               400,
             );
@@ -623,7 +622,8 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
               {
                 error: 'Invalid path parameters',
                 issues,
-                problem: { code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED, metadata: { issues, location: 'path' } },
+                code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED,
+                metadata: { location: 'path' },
               },
               400,
             );
@@ -660,7 +660,8 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
                 {
                   error: permissionError.error,
                   message: permissionError.message,
-                  problem: permissionError.problem,
+                  code: permissionError.code,
+                  metadata: permissionError.metadata,
                 },
                 permissionError.status as any,
               );
@@ -676,7 +677,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         });
         if (fgaError) {
           return c.json(
-            { error: fgaError.error, message: fgaError.message, problem: fgaError.problem },
+            { error: fgaError.error, message: fgaError.message, code: fgaError.code, metadata: fgaError.metadata },
             fgaError.status as any,
           );
         }
@@ -700,7 +701,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
               method: route.method,
             });
           }
-          const customResponse = await getCustomHTTPExceptionResponseWithProblem(error);
+          const customResponse = await getCustomHTTPExceptionResponseWithCode(error);
           if (customResponse) {
             return customResponse;
           }
@@ -746,7 +747,10 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             }
           }
           if (authError.error) {
-            return c.json({ error: authError.error, problem: authError.problem }, authError.status as any);
+            return c.json(
+              { error: authError.error, code: authError.code, metadata: authError.metadata },
+              authError.status as any,
+            );
           }
         }
 
@@ -765,7 +769,12 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             );
             if (permissionError) {
               return c.json(
-                { error: permissionError.error, message: permissionError.message, problem: permissionError.problem },
+                {
+                  error: permissionError.error,
+                  message: permissionError.message,
+                  code: permissionError.code,
+                  metadata: permissionError.metadata,
+                },
                 permissionError.status as any,
               );
             }
@@ -808,7 +817,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         });
         if (fgaError) {
           return c.json(
-            { error: fgaError.error, message: fgaError.message, problem: fgaError.problem },
+            { error: fgaError.error, message: fgaError.message, code: fgaError.code, metadata: fgaError.metadata },
             fgaError.status as any,
           );
         }
@@ -840,10 +849,8 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           return c.json(
             {
               error: 'Not Found',
-              problem: {
-                code: SERVER_ERROR_CODES.ROUTE_NOT_FOUND,
-                metadata: { method: c.req.method, path: c.req.path },
-              },
+              code: SERVER_ERROR_CODES.ROUTE_NOT_FOUND,
+              metadata: { method: c.req.method, path: c.req.path },
             },
             404,
           );

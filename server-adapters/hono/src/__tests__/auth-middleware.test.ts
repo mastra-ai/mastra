@@ -96,7 +96,7 @@ describe('Hono auth middleware helper', () => {
     expect(response.status).toBe(503);
     await expect(response.json()).resolves.toEqual({
       error: 'Authentication service unavailable',
-      problem: { code: 'AUTHENTICATION_FAILED' },
+      code: 'AUTHENTICATION_FAILED',
     });
   });
 

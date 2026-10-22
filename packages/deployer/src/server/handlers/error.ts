@@ -1,5 +1,5 @@
-import { SERVER_ERROR_CODES, isServerProblem } from '@mastra/server/error-codes';
-import type { ServerErrorCode, ServerProblem } from '@mastra/server/error-codes';
+import { SERVER_ERROR_CODES, getServerErrorInfo } from '@mastra/server/error-codes';
+import type { ServerErrorCode, ServerErrorInfo } from '@mastra/server/error-codes';
 import { HTTPException as ServerHTTPException } from '@mastra/server/server-adapter';
 import type { Context } from 'hono';
 import { HTTPException } from 'hono/http-exception';
@@ -22,24 +22,20 @@ export function handleError(error: unknown, fallback: { message: string; code: S
 
 // An HTTP exception without a business code (for example Hono's, thrown by a custom route)
 // was thrown on purpose, so it is uncategorized rather than unexpected.
-function getProblem(err: Error): ServerProblem {
-  const problem = (err as { problem?: unknown }).problem;
-  return isServerProblem(problem) ? problem : { code: SERVER_ERROR_CODES.UNCATEGORIZED_ERROR };
+function getErrorInfo(err: Error): ServerErrorInfo {
+  return getServerErrorInfo(err) ?? { code: SERVER_ERROR_CODES.UNCATEGORIZED_ERROR };
 }
 
 export function errorHandler(err: Error, c: Context, isDev?: boolean): Response {
   if (err instanceof HTTPException || err instanceof ServerHTTPException) {
     const status = err.status as ContentfulStatusCode;
-    const problem = getProblem(err);
+    const errorInfo = getErrorInfo(err);
     if (isDev) {
-      return c.json({ error: err.message, problem, cause: err.cause, stack: err.stack }, status);
+      return c.json({ error: err.message, ...errorInfo, cause: err.cause, stack: err.stack }, status);
     }
-    return c.json({ error: err.message, problem }, status);
+    return c.json({ error: err.message, ...errorInfo }, status);
   }
 
   c.get('mastra').getLogger().error(err);
-  return c.json(
-    { error: 'Internal Server Error', problem: { code: SERVER_ERROR_CODES.UNEXPECTED_ERROR } satisfies ServerProblem },
-    500,
-  );
+  return c.json({ error: 'Internal Server Error', code: SERVER_ERROR_CODES.UNEXPECTED_ERROR }, 500);
 }

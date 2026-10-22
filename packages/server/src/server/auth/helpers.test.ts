@@ -765,7 +765,7 @@ describe('auth helpers', () => {
           status: 500,
           body: {
             error: 'Failed to map authenticated user to a resource ID',
-            problem: { code: 'AUTHENTICATED_USER_RESOURCE_MAPPING_FAILED' },
+            code: 'AUTHENTICATED_USER_RESOURCE_MAPPING_FAILED',
           },
         });
         expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
@@ -827,7 +827,7 @@ describe('auth helpers', () => {
         status: 500,
         body: {
           error: 'Failed to map authenticated user to a resource ID',
-          problem: { code: 'AUTHENTICATED_USER_RESOURCE_MAPPING_FAILED' },
+          code: 'AUTHENTICATED_USER_RESOURCE_MAPPING_FAILED',
         },
       });
       expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBeUndefined();
@@ -872,7 +872,7 @@ describe('auth helpers', () => {
       expect(result).toMatchObject({
         action: 'error',
         status: 401,
-        body: { error: 'Invalid or expired token', problem: { code: 'AUTHENTICATION_TOKEN_INVALID' } },
+        body: { error: 'Invalid or expired token', code: 'AUTHENTICATION_TOKEN_INVALID' },
       });
     });
   });
@@ -1056,7 +1056,7 @@ describe('auth helpers', () => {
       expect(result).toEqual({
         action: 'error',
         status: 401,
-        body: { error: 'Invalid or expired token', problem: { code: 'AUTHENTICATION_TOKEN_INVALID' } },
+        body: { error: 'Invalid or expired token', code: 'AUTHENTICATION_TOKEN_INVALID' },
       });
     });
 
@@ -1084,7 +1084,7 @@ describe('auth helpers', () => {
       expect(result).toEqual({
         action: 'error',
         status: 401,
-        body: { error: 'Invalid or expired token', problem: { code: 'AUTHENTICATION_TOKEN_INVALID' } },
+        body: { error: 'Invalid or expired token', code: 'AUTHENTICATION_TOKEN_INVALID' },
       });
     });
 
@@ -1108,7 +1108,7 @@ describe('auth helpers', () => {
       expect(result).toEqual({
         action: 'error',
         status: 401,
-        body: { error: 'Invalid or expired token', problem: { code: 'AUTHENTICATION_TOKEN_INVALID' } },
+        body: { error: 'Invalid or expired token', code: 'AUTHENTICATION_TOKEN_INVALID' },
       });
     });
 
@@ -1136,7 +1136,7 @@ describe('auth helpers', () => {
       expect(result).toEqual({
         action: 'error',
         status: 401,
-        body: { error: 'Invalid or expired token', problem: { code: 'AUTHENTICATION_TOKEN_INVALID' } },
+        body: { error: 'Invalid or expired token', code: 'AUTHENTICATION_TOKEN_INVALID' },
       });
     });
 

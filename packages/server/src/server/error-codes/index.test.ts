@@ -2,7 +2,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import ts from 'typescript-classic';
 import { describe, expect, it } from 'vitest';
-import { SERVER_ERROR_CODES, isServerErrorCode, isServerProblem } from './index';
+import { SERVER_ERROR_CODES, getServerErrorInfo, isServerErrorCode } from './index';
 
 const HTTP_STATUS_NAMES = [
   'BAD_REQUEST',
@@ -50,29 +50,33 @@ describe('isServerErrorCode', () => {
   });
 });
 
-describe('isServerProblem', () => {
-  it('accepts a problem without metadata', () => {
-    expect(isServerProblem({ code: 'AGENT_NOT_FOUND' })).toBe(true);
+describe('getServerErrorInfo', () => {
+  it('reads a catalog code without metadata', () => {
+    expect(getServerErrorInfo({ error: 'x', code: 'AGENT_NOT_FOUND' })).toEqual({ code: 'AGENT_NOT_FOUND' });
   });
 
-  it('accepts a problem with plain-object metadata', () => {
-    expect(isServerProblem({ code: 'AGENT_NOT_FOUND', metadata: { agentId: 'a' } })).toBe(true);
+  it('reads a catalog code with plain-object metadata', () => {
+    expect(getServerErrorInfo({ code: 'AGENT_NOT_FOUND', metadata: { agentId: 'a' } })).toEqual({
+      code: 'AGENT_NOT_FOUND',
+      metadata: { agentId: 'a' },
+    });
   });
 
-  it('rejects a missing or unknown code', () => {
-    expect(isServerProblem({})).toBe(false);
-    expect(isServerProblem({ code: 'NOT_FOUND' })).toBe(false);
+  it('ignores a missing or foreign code', () => {
+    expect(getServerErrorInfo({})).toBeUndefined();
+    expect(getServerErrorInfo({ code: 'NOT_FOUND' })).toBeUndefined();
+    expect(getServerErrorInfo(Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' }))).toBeUndefined();
   });
 
-  it('rejects non-object metadata', () => {
-    expect(isServerProblem({ code: 'AGENT_NOT_FOUND', metadata: 'x' })).toBe(false);
-    expect(isServerProblem({ code: 'AGENT_NOT_FOUND', metadata: ['x'] })).toBe(false);
-    expect(isServerProblem({ code: 'AGENT_NOT_FOUND', metadata: null })).toBe(false);
+  it('drops non-object metadata', () => {
+    expect(getServerErrorInfo({ code: 'AGENT_NOT_FOUND', metadata: 'x' })).toEqual({ code: 'AGENT_NOT_FOUND' });
+    expect(getServerErrorInfo({ code: 'AGENT_NOT_FOUND', metadata: ['x'] })).toEqual({ code: 'AGENT_NOT_FOUND' });
+    expect(getServerErrorInfo({ code: 'AGENT_NOT_FOUND', metadata: null })).toEqual({ code: 'AGENT_NOT_FOUND' });
   });
 
-  it('rejects non-objects', () => {
-    expect(isServerProblem(null)).toBe(false);
-    expect(isServerProblem('AGENT_NOT_FOUND')).toBe(false);
+  it('ignores non-objects', () => {
+    expect(getServerErrorInfo(null)).toBeUndefined();
+    expect(getServerErrorInfo('AGENT_NOT_FOUND')).toBeUndefined();
   });
 });
 

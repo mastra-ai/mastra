@@ -12,7 +12,7 @@ import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
   formatErrorResponse,
-  getCustomHTTPExceptionResponseWithProblem,
+  getCustomHTTPExceptionResponseWithCode,
   isSafeObjectKey,
   isZodError,
   normalizeQueryParams,
@@ -139,7 +139,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
             status = (err as any).details.status;
           }
         }
-        // Format the original throwable so status or problem fields on non-Error values survive.
+        // Format the original throwable so status or code fields on non-Error values survive.
         const { body } = formatErrorResponse(err);
         ctx.status = status;
         ctx.body = { ...body, error: error.message || 'Unknown error' };
@@ -385,7 +385,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       // If this is an auth error (not just a success-with-headers), return error response
       if (authError.error) {
         ctx.status = authError.status;
-        ctx.body = { error: authError.error, problem: authError.problem };
+        ctx.body = { error: authError.error, code: authError.code, metadata: authError.metadata };
         return;
       }
     }
@@ -399,10 +399,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       ctx.body = {
         error: 'Invalid request body',
         issues,
-        problem: {
-          code: params.bodyParseError.code ?? SERVER_ERROR_CODES.REQUEST_BODY_INVALID_JSON,
-          metadata: { issues },
-        },
+        code: params.bodyParseError.code ?? SERVER_ERROR_CODES.REQUEST_BODY_INVALID_JSON,
       };
       return;
     }
@@ -425,7 +422,8 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         ctx.body = {
           error: 'Invalid query parameters',
           issues,
-          problem: { code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED, metadata: { issues, location: 'query' } },
+          code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED,
+          metadata: { location: 'query' },
         };
         return;
       }
@@ -449,7 +447,8 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         ctx.body = {
           error: 'Invalid request body',
           issues,
-          problem: { code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED, metadata: { issues, location: 'body' } },
+          code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED,
+          metadata: { location: 'body' },
         };
         return;
       }
@@ -474,7 +473,8 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         ctx.body = {
           error: 'Invalid path parameters',
           issues,
-          problem: { code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED, metadata: { issues, location: 'path' } },
+          code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED,
+          metadata: { location: 'path' },
         };
         return;
       }
@@ -510,7 +510,8 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           ctx.body = {
             error: permissionError.error,
             message: permissionError.message,
-            problem: permissionError.problem,
+            code: permissionError.code,
+            metadata: permissionError.metadata,
           };
           return;
         }
@@ -525,7 +526,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
     });
     if (fgaError) {
       ctx.status = fgaError.status;
-      ctx.body = { error: fgaError.error, message: fgaError.message, problem: fgaError.problem };
+      ctx.body = { error: fgaError.error, message: fgaError.message, code: fgaError.code, metadata: fgaError.metadata };
       return;
     }
 
@@ -546,7 +547,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
         });
         (ctx as any)._mastraLoggedNotImplementedError = httpStatus === 501 ? error : undefined;
       }
-      const customResponse = await getCustomHTTPExceptionResponseWithProblem(error);
+      const customResponse = await getCustomHTTPExceptionResponseWithCode(error);
       if (customResponse) {
         ctx.status = customResponse.status;
         customResponse.headers.forEach((value, name) => ctx.set(name, value));
@@ -982,7 +983,7 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
 
               if (authError.error) {
                 ctx.status = authError.status;
-                ctx.body = { error: authError.error, problem: authError.problem };
+                ctx.body = { error: authError.error, code: authError.code, metadata: authError.metadata };
                 return;
               }
             }
@@ -1006,7 +1007,8 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
                 ctx.body = {
                   error: permissionError.error,
                   message: permissionError.message,
-                  problem: permissionError.problem,
+                  code: permissionError.code,
+                  metadata: permissionError.metadata,
                 };
                 return;
               }
@@ -1023,7 +1025,12 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
           });
           if (fgaError) {
             ctx.status = fgaError.status;
-            ctx.body = { error: fgaError.error, message: fgaError.message, problem: fgaError.problem };
+            ctx.body = {
+              error: fgaError.error,
+              message: fgaError.message,
+              code: fgaError.code,
+              metadata: fgaError.metadata,
+            };
             return;
           }
         }

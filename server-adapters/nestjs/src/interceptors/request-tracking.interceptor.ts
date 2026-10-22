@@ -20,7 +20,7 @@ export class RequestTrackingInterceptor implements NestInterceptor {
     if (this.shutdownService.shuttingDown) {
       throw new ServiceUnavailableException({
         message: 'Server is shutting down',
-        problem: { code: SERVER_ERROR_CODES.SERVER_SHUTTING_DOWN },
+        code: SERVER_ERROR_CODES.SERVER_SHUTTING_DOWN,
       });
     }
 

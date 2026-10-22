@@ -230,7 +230,7 @@ describe('Vector Handlers', () => {
       const error = await run().catch(e => e);
       expect(error).toBeInstanceOf(HTTPException);
       expect(error.status).toBe(400);
-      expect(error.problem).toEqual({ code: 'VECTOR_INDEX_NAME_REQUIRED' });
+      expect(error.code).toBe('VECTOR_INDEX_NAME_REQUIRED');
     });
   });
 

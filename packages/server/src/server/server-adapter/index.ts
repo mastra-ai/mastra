@@ -22,8 +22,8 @@ import {
   isStudioClientTypeHeader,
 } from '../constants';
 import type { MastraAuthMode } from '../constants';
-import { SERVER_ERROR_CODES, isServerErrorCode, isServerProblem } from '../error-codes';
-import type { ServerErrorBody, ServerErrorCode, ServerProblem } from '../error-codes';
+import { SERVER_ERROR_CODES, getServerErrorInfo, isServerErrorCode } from '../error-codes';
+import type { ServerErrorBody, ServerErrorCode, ServerErrorInfo } from '../error-codes';
 import { formatZodError } from '../handlers/error';
 import { HTTPException } from '../http-exception';
 export { isZodError, type ZodErrorLike } from '../handlers/error';
@@ -64,11 +64,12 @@ export function getCustomHTTPExceptionResponse(error: unknown): Response | undef
 }
 
 /**
- * Like `getCustomHTTPExceptionResponse`, but JSON bodies that don't carry a
- * valid `problem` get the exception's own problem added, so every JSON error
- * body keeps the `problem` contract. Other bodies are sent as is.
+ * Like `getCustomHTTPExceptionResponse`, but JSON object bodies without a
+ * `code` get the exception's `code` and `metadata` added, so every JSON error
+ * body carries a business code. Bodies that already have a `code` and non-JSON
+ * bodies are sent as is.
  */
-export async function getCustomHTTPExceptionResponseWithProblem(error: unknown): Promise<Response | undefined> {
+export async function getCustomHTTPExceptionResponseWithCode(error: unknown): Promise<Response | undefined> {
   const response = getCustomHTTPExceptionResponse(error);
   if (!response || !(error instanceof HTTPException)) {
     return response;
@@ -86,16 +87,17 @@ export async function getCustomHTTPExceptionResponseWithProblem(error: unknown):
   }
 
   const isObject = body !== null && typeof body === 'object' && !Array.isArray(body);
-  if (isObject && isServerProblem((body as Record<string, unknown>).problem)) {
+  if (isObject && typeof (body as Record<string, unknown>).code === 'string') {
     return new Response(text, { status: response.status, statusText: response.statusText, headers: response.headers });
   }
 
-  const withProblem = isObject
-    ? { ...(body as Record<string, unknown>), problem: error.problem }
-    : { error: error.message, problem: error.problem };
+  const errorInfo = { code: error.code, metadata: error.metadata };
+  const withCode = isObject
+    ? { ...(body as Record<string, unknown>), ...errorInfo }
+    : { error: error.message, ...errorInfo };
   const headers = new Headers(response.headers);
   headers.delete('content-length');
-  return new Response(JSON.stringify(withProblem), {
+  return new Response(JSON.stringify(withCode), {
     status: response.status,
     statusText: response.statusText,
     headers,
@@ -131,10 +133,16 @@ function getExplicitErrorStatus(error: unknown): number | undefined {
   return undefined;
 }
 
+/** Errors whose `id` is a catalog code keep it; others are classified by whether they carry an HTTP status. */
+function getFallbackErrorCode(error: unknown, explicitStatus: number | undefined): ServerErrorCode {
+  const id = error && typeof error === 'object' ? (error as { id?: unknown }).id : undefined;
+  if (isServerErrorCode(id)) return id;
+  return explicitStatus !== undefined ? SERVER_ERROR_CODES.UNCATEGORIZED_ERROR : SERVER_ERROR_CODES.UNEXPECTED_ERROR;
+}
+
 /**
  * Serializes an error thrown by a route handler into the status and JSON body
- * every adapter returns. The body always carries a `problem` with a catalog
- * code. Errors without a business code get `UNCATEGORIZED_ERROR` when they
+ * every adapter returns. The body always carries a catalog `code`. Errors without a business code get `UNCATEGORIZED_ERROR` when they
  * carry an HTTP status (thrown on purpose, for example by a custom route) and
  * `UNEXPECTED_ERROR` otherwise.
  */
@@ -143,41 +151,30 @@ export function formatErrorResponse(error: unknown): { status: number; body: Err
   const status = explicitStatus ?? 500;
   const message = error instanceof Error ? error.message : 'Unknown error';
 
-  let problem: ServerProblem;
-  if (error instanceof HTTPException) {
-    problem = error.problem;
-  } else if (error && typeof error === 'object' && isServerProblem((error as { problem?: unknown }).problem)) {
-    problem = (error as { problem: ServerProblem }).problem;
-  } else if (error && typeof error === 'object' && isServerErrorCode((error as { id?: unknown }).id)) {
-    problem = { code: (error as { id: ServerErrorCode }).id };
-  } else if (explicitStatus !== undefined) {
-    problem = { code: SERVER_ERROR_CODES.UNCATEGORIZED_ERROR };
-  } else {
-    problem = { code: SERVER_ERROR_CODES.UNEXPECTED_ERROR };
-  }
+  // HTTPException and other errors carrying a catalog `code` (such as voice route errors) keep it.
+  let errorInfo: ServerErrorInfo = getServerErrorInfo(error) ?? { code: getFallbackErrorCode(error, explicitStatus) };
 
   const failingItems = getSafeFailingItems(error);
   if (failingItems) {
-    problem = { ...problem, metadata: { ...problem.metadata, failingItems } };
+    errorInfo = { ...errorInfo, metadata: { ...errorInfo.metadata, failingItems } };
   }
 
   return {
     status,
-    body: { error: message, problem, ...(failingItems ? { cause: { failingItems } } : {}) },
+    body: { error: message, ...errorInfo, ...(failingItems ? { cause: { failingItems } } : {}) },
   };
 }
 
 /**
- * Adds `problem: { code: fallbackCode }` to a JSON error body built outside
- * `HTTPException` (user hooks, custom handlers) when it doesn't already carry
- * a valid problem.
+ * Adds `code: fallbackCode` to a JSON error body built outside `HTTPException`
+ * (user hooks, custom handlers) when it doesn't already carry a `code`.
  */
-export function ensureProblem(body: unknown, fallbackCode: ServerErrorCode): Record<string, unknown> {
+export function ensureErrorCode(body: unknown, fallbackCode: ServerErrorCode): Record<string, unknown> {
   if (body && typeof body === 'object' && !Array.isArray(body)) {
     const record = body as Record<string, unknown>;
-    return isServerProblem(record.problem) ? record : { ...record, problem: { code: fallbackCode } };
+    return typeof record.code === 'string' ? record : { ...record, code: fallbackCode };
   }
-  return { error: typeof body === 'string' ? body : 'Unknown error', problem: { code: fallbackCode } };
+  return { error: typeof body === 'string' ? body : 'Unknown error', code: fallbackCode };
 }
 
 /**
@@ -798,7 +795,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       /** Build framework-specific context for authorize() callback */
       buildAuthorizeContext?: () => unknown;
     },
-  ): Promise<{ status: number; error: string; problem?: ServerProblem; headers?: Record<string, string> } | null> {
+  ): Promise<({ status: number; error: string; headers?: Record<string, string> } & Partial<ServerErrorInfo>) | null> {
     // Determine which auth config to use based on request type
     const effectiveAuth = this.getEffectiveAuthConfig(context.getHeader);
 
@@ -859,18 +856,16 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     }
 
     // Translate AuthResult error to the {status, error} format adapters expect
-    const errorBody = result.body as { error?: string; problem?: unknown } | undefined;
-    const problem: ServerProblem = isServerProblem(errorBody?.problem)
-      ? errorBody.problem
-      : {
-          code:
-            result.status === 401
-              ? SERVER_ERROR_CODES.AUTHENTICATION_REQUIRED
-              : result.status === 403
-                ? SERVER_ERROR_CODES.PERMISSION_DENIED
-                : SERVER_ERROR_CODES.AUTHORIZATION_CHECK_FAILED,
-        };
-    return { status: result.status, error: errorBody?.error ?? 'Access denied', problem, headers: result.headers };
+    const errorBody = result.body as { error?: string } | undefined;
+    const errorInfo: ServerErrorInfo = getServerErrorInfo(errorBody) ?? {
+      code:
+        result.status === 401
+          ? SERVER_ERROR_CODES.AUTHENTICATION_REQUIRED
+          : result.status === 403
+            ? SERVER_ERROR_CODES.PERMISSION_DENIED
+            : SERVER_ERROR_CODES.AUTHORIZATION_CHECK_FAILED,
+    };
+    return { status: result.status, error: errorBody?.error ?? 'Access denied', ...errorInfo, headers: result.headers };
   }
 
   /**
@@ -910,7 +905,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     userPermissions: string[] | undefined,
     hasPermissionFn: (userPerms: string[], required: string) => boolean,
     requestContext?: RequestContext,
-  ): { status: number; error: string; message: string; problem: ServerProblem } | null {
+  ): ({ status: number; error: string; message: string } & ServerErrorInfo) | null {
     // If RBAC is not configured, skip permission checks entirely
     // Auth-only mode = authenticated users get full access
     const rbacProvider = requestContext ? this.getEffectiveRBACProvider(requestContext) : this.mastra.getServer()?.rbac;
@@ -937,7 +932,8 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
         status: 403,
         error: 'Forbidden',
         message: `Missing required permission: ${permissions.join(' or ')}`,
-        problem: { code: SERVER_ERROR_CODES.PERMISSION_DENIED, metadata: { requiredPermissions: permissions } },
+        code: SERVER_ERROR_CODES.PERMISSION_DENIED,
+        metadata: { requiredPermissions: permissions },
       };
     }
 
@@ -1264,12 +1260,12 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
         });
       }
       // An error thrown with an HTTP status (Mastra's or Hono's HTTPException) is
-      // deliberate: keep its status, message and problem.
+      // deliberate: keep its status, message and code.
       if (explicitStatus !== undefined) {
         const { status, body } = formatErrorResponse(err);
         return c.json(body, status as ContentfulStatusCode);
       }
-      return c.json({ error: 'Internal Server Error', problem: { code: SERVER_ERROR_CODES.UNEXPECTED_ERROR } }, 500);
+      return c.json({ error: 'Internal Server Error', code: SERVER_ERROR_CODES.UNEXPECTED_ERROR }, 500);
     });
 
     // Register each custom route
@@ -1549,7 +1545,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       try {
         const result = hook(error, context);
         if (result) {
-          return { ...result, body: ensureProblem(result.body, SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED) };
+          return { ...result, body: ensureErrorCode(result.body, SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED) };
         }
       } catch (hookError) {
         this.mastra.getLogger()?.error('Error in custom onValidationError hook', {
@@ -1574,7 +1570,7 @@ export async function checkRouteFGA(
   route: ServerRoute,
   requestContext: RequestContext,
   params: Record<string, unknown>,
-): Promise<{ status: number; error: string; message: string; problem: ServerProblem } | null> {
+): Promise<({ status: number; error: string; message: string } & ServerErrorInfo) | null> {
   // Use request context to determine which FGA provider to use (studio vs server)
   const fgaProvider = getFGAProvider(mastra, requestContext);
   if (!fgaProvider) return null;
@@ -1586,7 +1582,7 @@ export async function checkRouteFGA(
         status: 403,
         error: 'Forbidden',
         message: 'FGA authorization denied: route FGA metadata is required',
-        problem: { code: SERVER_ERROR_CODES.FGA_ROUTE_METADATA_REQUIRED },
+        code: SERVER_ERROR_CODES.FGA_ROUTE_METADATA_REQUIRED,
       };
     }
     return null;
@@ -1598,7 +1594,7 @@ export async function checkRouteFGA(
       status: 403,
       error: 'Forbidden',
       message: 'FGA authorization denied: authenticated user is required',
-      problem: { code: SERVER_ERROR_CODES.FGA_USER_REQUIRED },
+      code: SERVER_ERROR_CODES.FGA_USER_REQUIRED,
     };
   }
 
@@ -1611,7 +1607,7 @@ export async function checkRouteFGA(
       status: 403,
       error: 'Forbidden',
       message: 'FGA authorization denied: route FGA metadata is incomplete',
-      problem: { code: SERVER_ERROR_CODES.FGA_ROUTE_METADATA_INCOMPLETE },
+      code: SERVER_ERROR_CODES.FGA_ROUTE_METADATA_INCOMPLETE,
     };
   }
   const effectivePermission = route.path ? getEffectivePermission(route) : null;
@@ -1631,10 +1627,8 @@ export async function checkRouteFGA(
       status: 403,
       error: 'Forbidden',
       message: `FGA authorization denied: cannot ${permission} on ${fgaConfig.resourceType}:${resourceId}`,
-      problem: {
-        code: SERVER_ERROR_CODES.FGA_AUTHORIZATION_DENIED,
-        metadata: { permission, resourceType: fgaConfig.resourceType, resourceId },
-      },
+      code: SERVER_ERROR_CODES.FGA_AUTHORIZATION_DENIED,
+      metadata: { permission, resourceType: fgaConfig.resourceType, resourceId },
     };
   }
 

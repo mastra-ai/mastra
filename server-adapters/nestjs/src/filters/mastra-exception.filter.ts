@@ -1,9 +1,9 @@
-import { SERVER_ERROR_CODES, isServerProblem } from '@mastra/server/error-codes';
-import type { ServerProblem } from '@mastra/server/error-codes';
+import { SERVER_ERROR_CODES, getServerErrorInfo } from '@mastra/server/error-codes';
+import type { ServerErrorInfo } from '@mastra/server/error-codes';
 import { formatZodError, isZodError } from '@mastra/server/handlers/error';
 import {
   formatErrorResponse,
-  getCustomHTTPExceptionResponseWithProblem,
+  getCustomHTTPExceptionResponseWithCode,
   HTTPException as MastraHTTPException,
 } from '@mastra/server/server-adapter';
 import { Catch, HttpException, HttpStatus, Logger } from '@nestjs/common';
@@ -15,7 +15,6 @@ import { ValidationError } from '../services/route-handler.service';
 interface NormalizedError {
   status: number;
   error: string;
-  code?: string;
   issues?: Array<{ field?: string; path?: string[]; message: string }>;
 }
 
@@ -26,8 +25,8 @@ interface NormalizedError {
  * ```json
  * {
  *   "error": "Error message",
- *   "problem": { "code": "BUSINESS_ERROR_CODE", "metadata": { ... } },
- *   "code": "ERROR_CODE",
+ *   "code": "BUSINESS_ERROR_CODE",
+ *   "metadata": { ... },
  *   "issues": [{ "field": "fieldName", "message": "..." }],
  *   "requestId": "...",
  *   "timestamp": "..."
@@ -53,7 +52,7 @@ export class MastraExceptionFilter implements ExceptionFilter {
       return;
     }
 
-    const customResponse = await getCustomHTTPExceptionResponseWithProblem(exception);
+    const customResponse = await getCustomHTTPExceptionResponseWithCode(exception);
     if (customResponse) {
       customResponse.headers.forEach((value, name) => {
         if (name.toLowerCase() !== 'set-cookie') {
@@ -91,8 +90,7 @@ export class MastraExceptionFilter implements ExceptionFilter {
 
     response.status(normalized.status).json({
       error: normalized.error,
-      problem: this.resolveProblem(exception, normalized),
-      ...(normalized.code && { code: normalized.code }),
+      ...this.resolveErrorInfo(exception, normalized),
       ...(normalized.issues && { issues: normalized.issues }),
       ...(requestId && { requestId }),
       timestamp: new Date().toISOString(),
@@ -100,19 +98,17 @@ export class MastraExceptionFilter implements ExceptionFilter {
   }
 
   /**
-   * Resolve the business problem for an error. Exceptions thrown by Mastra code carry their own
-   * problem; Nest exceptions without one were thrown on purpose and are uncategorized;
+   * Resolve the business code for an error. Exceptions thrown by Mastra code carry their own
+   * code; Nest exceptions without one were thrown on purpose and are uncategorized;
    * express body-parser failures are mapped by type.
    */
-  private resolveProblem(exception: unknown, normalized: NormalizedError): ServerProblem {
+  private resolveErrorInfo(exception: unknown, normalized: NormalizedError): ServerErrorInfo {
     if (exception instanceof HttpException) {
-      const response = exception.getResponse();
-      const problem = typeof response === 'object' && response !== null ? (response as any).problem : undefined;
-      return isServerProblem(problem) ? problem : { code: SERVER_ERROR_CODES.UNCATEGORIZED_ERROR };
+      return getServerErrorInfo(exception.getResponse()) ?? { code: SERVER_ERROR_CODES.UNCATEGORIZED_ERROR };
     }
 
     if (isZodError(exception)) {
-      return { code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED, metadata: { issues: normalized.issues } };
+      return { code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED };
     }
 
     const bodyParserType = typeof exception === 'object' && exception !== null ? (exception as any).type : undefined;
@@ -123,7 +119,8 @@ export class MastraExceptionFilter implements ExceptionFilter {
       return { code: SERVER_ERROR_CODES.REQUEST_BODY_INVALID_JSON };
     }
 
-    return formatErrorResponse(exception).body.problem;
+    const { code, metadata } = formatErrorResponse(exception).body;
+    return { code, metadata };
   }
 
   /**
@@ -139,7 +136,6 @@ export class MastraExceptionFilter implements ExceptionFilter {
         return {
           status,
           error: 'An internal error occurred',
-          code: this.getErrorCode(status),
         };
       }
 
@@ -147,7 +143,6 @@ export class MastraExceptionFilter implements ExceptionFilter {
         return {
           status,
           error: response,
-          code: this.getErrorCode(status),
         };
       }
 
@@ -157,7 +152,6 @@ export class MastraExceptionFilter implements ExceptionFilter {
         return {
           status,
           error: message || resp.error || exception.message,
-          code: resp.code || this.getErrorCode(status),
           issues: resp.issues,
         };
       }
@@ -165,7 +159,6 @@ export class MastraExceptionFilter implements ExceptionFilter {
       return {
         status,
         error: exception.message,
-        code: this.getErrorCode(status),
       };
     }
 
@@ -175,7 +168,6 @@ export class MastraExceptionFilter implements ExceptionFilter {
       return {
         status: HttpStatus.BAD_REQUEST,
         error: 'Validation failed',
-        code: 'VALIDATION_ERROR',
         issues: formatted.issues,
       };
     }
@@ -186,7 +178,6 @@ export class MastraExceptionFilter implements ExceptionFilter {
       return {
         status: HttpStatus.BAD_REQUEST,
         error: exception.message,
-        code: 'VALIDATION_ERROR',
         issues: formatted.issues,
       };
     }
@@ -199,7 +190,6 @@ export class MastraExceptionFilter implements ExceptionFilter {
         return {
           status,
           error: status >= 500 ? 'An internal error occurred' : (exception as any).message || 'An error occurred',
-          code: this.getErrorCode(status),
         };
       }
     }
@@ -219,7 +209,6 @@ export class MastraExceptionFilter implements ExceptionFilter {
         return {
           status,
           error: status >= 500 ? 'An internal error occurred' : (exception as any).message || 'An error occurred',
-          code: (exception as any).code || this.getErrorCode(status),
         };
       }
     }
@@ -229,7 +218,6 @@ export class MastraExceptionFilter implements ExceptionFilter {
       return {
         status: HttpStatus.INTERNAL_SERVER_ERROR,
         error: 'An internal error occurred',
-        code: 'INTERNAL_ERROR',
       };
     }
 
@@ -237,45 +225,6 @@ export class MastraExceptionFilter implements ExceptionFilter {
     return {
       status: HttpStatus.INTERNAL_SERVER_ERROR,
       error: 'An unexpected error occurred',
-      code: 'INTERNAL_ERROR',
     };
-  }
-
-  /**
-   * Get error code from HTTP status.
-   */
-  private getErrorCode(status: number): string {
-    switch (status) {
-      case 400:
-        return 'BAD_REQUEST';
-      case 401:
-        return 'UNAUTHORIZED';
-      case 403:
-        return 'FORBIDDEN';
-      case 404:
-        return 'NOT_FOUND';
-      case 405:
-        return 'METHOD_NOT_ALLOWED';
-      case 408:
-        return 'REQUEST_TIMEOUT';
-      case 409:
-        return 'CONFLICT';
-      case 413:
-        return 'PAYLOAD_TOO_LARGE';
-      case 422:
-        return 'UNPROCESSABLE_ENTITY';
-      case 429:
-        return 'RATE_LIMIT_EXCEEDED';
-      case 500:
-        return 'INTERNAL_ERROR';
-      case 502:
-        return 'BAD_GATEWAY';
-      case 503:
-        return 'SERVICE_UNAVAILABLE';
-      case 504:
-        return 'GATEWAY_TIMEOUT';
-      default:
-        return 'ERROR';
-    }
   }
 }

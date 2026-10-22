@@ -1,5 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
-import { isServerProblem } from '@mastra/server/error-codes';
+import { isServerErrorCode } from '@mastra/server/error-codes';
 import { handleError } from '@mastra/server/handlers/error';
 import { createRoute, HTTPException, SERVER_ROUTES } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
@@ -236,7 +236,8 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
           expect(response.data).toEqual({
             error: 'Invalid request body',
             issues,
-            problem: { code: 'REQUEST_VALIDATION_FAILED', metadata: { issues, location: 'body' } },
+            code: 'REQUEST_VALIDATION_FAILED',
+            metadata: { location: 'body' },
           });
         } else {
           expect(response.status).toBe(200);
@@ -277,7 +278,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
         expect(rejected.status).toBe(400);
         expect(rejected.data).toEqual({
           error: 'Scalar schema rejected body',
-          problem: { code: 'REQUEST_VALIDATION_FAILED' },
+          code: 'REQUEST_VALIDATION_FAILED',
         });
       });
     });
@@ -318,7 +319,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
           expect(response.status).toBe(400);
           expect(response.data).toEqual({
             error: 'Required schema rejected body',
-            problem: { code: 'REQUEST_VALIDATION_FAILED' },
+            code: 'REQUEST_VALIDATION_FAILED',
           });
         },
       );
@@ -368,7 +369,8 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       expect(response.data).toEqual({
         error: 'Invalid request body',
         issues,
-        problem: { code: 'REQUEST_VALIDATION_FAILED', metadata: { issues, location: 'body' } },
+        code: 'REQUEST_VALIDATION_FAILED',
+        metadata: { location: 'body' },
       });
     });
 
@@ -899,8 +901,8 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
 
           const errorData = response.data as any;
           expect(typeof errorData.error).toBe('string');
-          expect(isServerProblem(errorData.problem)).toBe(true);
-          expect(errorData.problem.code).not.toBe('UNEXPECTED_ERROR');
+          expect(isServerErrorCode(errorData.code)).toBe(true);
+          expect(errorData.code).not.toBe('UNEXPECTED_ERROR');
         });
       });
 
@@ -990,7 +992,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
         }
       }
 
-      it('preserves an attached JSON response and headers, adding the exception problem', async () => {
+      it('preserves an attached JSON response and headers, keeping its code', async () => {
         const custom = await setupCustomErrorRoutes();
 
         const response = await executeHttpRequest(custom.app, {
@@ -1004,7 +1006,6 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
         expect(response.data).toEqual({
           code: 'TRACE_QUERY_CURSOR_CONFLICT',
           message: 'The cursor does not match the query',
-          problem: { code: 'TRACE_QUERY_CURSOR_CONFLICT' },
         });
         expect(custom.getHandlerCalls()).toBe(1);
       });
@@ -1033,7 +1034,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
         });
 
         expect(response.status).toBe(404);
-        expect(response.data).toEqual({ error: 'Legacy fallback', problem: { code: 'AGENT_NOT_FOUND' } });
+        expect(response.data).toEqual({ error: 'Legacy fallback', code: 'AGENT_NOT_FOUND' });
         expect(custom.getHandlerCalls()).toBe(1);
       });
     });
@@ -1076,7 +1077,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
 
         expect(response.status).toBe(409);
         expect(response.headers['content-type']).toContain('application/json');
-        expect(response.data).toEqual({ error: 'Run conflict', code, problem: { code } });
+        expect(response.data).toEqual({ error: 'Run conflict', code });
       });
     });
 

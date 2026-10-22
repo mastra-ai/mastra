@@ -45,7 +45,7 @@ export class BodyLimitMiddleware implements NestMiddleware {
         this.logger.warn(`Request body too large: ${length} bytes exceeds ${this.maxSize} bytes limit`);
         throw new PayloadTooLargeException({
           message: `Request body too large. Maximum size is ${formatBytes(this.maxSize)}.`,
-          problem: { code: SERVER_ERROR_CODES.REQUEST_BODY_TOO_LARGE },
+          code: SERVER_ERROR_CODES.REQUEST_BODY_TOO_LARGE,
         });
       }
     }

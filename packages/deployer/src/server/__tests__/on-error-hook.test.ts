@@ -127,7 +127,7 @@ describe('onError hook integration tests', () => {
       const result = await response.json();
 
       // Should use default error format from errorHandler
-      expect(result).toEqual({ error: 'Internal Server Error', problem: { code: 'UNEXPECTED_ERROR' } });
+      expect(result).toEqual({ error: 'Internal Server Error', code: 'UNEXPECTED_ERROR' });
     });
 
     it('should return UNCATEGORIZED_ERROR for an HTTPException thrown without a code', async () => {
@@ -150,10 +150,10 @@ describe('onError hook integration tests', () => {
       const response = await app.request(new Request('http://localhost/test/hono-http-exception'));
 
       expect(response.status).toBe(404);
-      expect(await response.json()).toEqual({ error: 'Thing not found', problem: { code: 'UNCATEGORIZED_ERROR' } });
+      expect(await response.json()).toEqual({ error: 'Thing not found', code: 'UNCATEGORIZED_ERROR' });
     });
 
-    it('should return the business problem for an unknown agent', async () => {
+    it('should return the business code for an unknown agent', async () => {
       const mastra = new Mastra({});
       const app = await createHonoServer(mastra, { tools: {} });
 
@@ -161,10 +161,13 @@ describe('onError hook integration tests', () => {
 
       expect(response.status).toBe(404);
       const result = await response.json();
-      expect(result.problem).toEqual({ code: 'AGENT_NOT_FOUND', metadata: { agentId: 'does-not-exist' } });
+      expect({ code: result.code, metadata: result.metadata }).toEqual({
+        code: 'AGENT_NOT_FOUND',
+        metadata: { agentId: 'does-not-exist' },
+      });
     });
 
-    it('should return the body-limit problem for oversized requests', async () => {
+    it('should return the body-limit code for oversized requests', async () => {
       const mastra = new Mastra({ server: { bodySizeLimit: 10 } });
       const app = await createHonoServer(mastra, { tools: {} });
 
@@ -179,7 +182,7 @@ describe('onError hook integration tests', () => {
       expect(response.status).toBe(413);
       expect(await response.json()).toEqual({
         error: 'Request body too large',
-        problem: { code: 'REQUEST_BODY_TOO_LARGE' },
+        code: 'REQUEST_BODY_TOO_LARGE',
       });
     });
 

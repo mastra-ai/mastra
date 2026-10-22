@@ -443,7 +443,7 @@ describe('Koa onError hook integration tests', () => {
       expect(response.status).toBe(500);
       const result = await response.json();
       // Should fall back to default error response
-      expect(result).toEqual({ error: 'Original error', problem: { code: 'UNEXPECTED_ERROR' } });
+      expect(result).toEqual({ error: 'Original error', code: 'UNEXPECTED_ERROR' });
       // onError should only be called once (guard prevents double invocation)
       expect(onErrorCallCount).toBe(1);
     });
@@ -468,7 +468,7 @@ describe('Koa onError hook integration tests', () => {
 
       expect(response.status).toBe(403);
       const result = await response.json();
-      expect(result.problem).toEqual({ code: 'UNCATEGORIZED_ERROR' });
+      expect(result.code).toBe('UNCATEGORIZED_ERROR');
     });
   });
 });

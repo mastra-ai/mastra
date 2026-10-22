@@ -1,10 +1,10 @@
 /**
  * Business error codes returned by every non-streaming Mastra server route.
  *
- * Every JSON error body carries a `problem` object next to the human-readable `error` message:
+ * Every JSON error body carries a business `code` (and optional `metadata`) next to the human-readable `error` message:
  *
  * ```json
- * { "error": "Agent with id foo not found", "problem": { "code": "AGENT_NOT_FOUND", "metadata": { "agentId": "foo" } } }
+ * { "error": "Agent with id foo not found", "code": "AGENT_NOT_FOUND", "metadata": { "agentId": "foo" } }
  * ```
  *
  * Codes describe what failed in business terms (`<DOMAIN>_<SUBJECT>_<REASON>`), never the HTTP status.
@@ -742,14 +742,14 @@ export const SERVER_ERROR_CODES = {
 
 export type ServerErrorCode = keyof typeof SERVER_ERROR_CODES;
 
-export type ServerProblem = {
+/** Business fields every JSON error body carries next to its `error` message. */
+export type ServerErrorInfo = {
   code: ServerErrorCode;
   metadata?: Record<string, unknown>;
 };
 
-export type ServerErrorBody = {
+export type ServerErrorBody = ServerErrorInfo & {
   error: string;
-  problem: ServerProblem;
 };
 
 export function isServerErrorCode(value: unknown): value is ServerErrorCode {
@@ -762,7 +762,13 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
   return proto === Object.prototype || proto === null;
 }
 
-export function isServerProblem(value: unknown): value is ServerProblem {
-  if (!isPlainObject(value) || !isServerErrorCode(value.code)) return false;
-  return value.metadata === undefined || isPlainObject(value.metadata);
+/**
+ * Reads the business `code` and `metadata` of an error or error body. Only catalog codes count,
+ * so foreign `code` values (such as Node's `ECONNRESET`) are ignored.
+ */
+export function getServerErrorInfo(value: unknown): ServerErrorInfo | undefined {
+  if (typeof value !== 'object' || value === null) return undefined;
+  const { code, metadata } = value as { code?: unknown; metadata?: unknown };
+  if (!isServerErrorCode(code)) return undefined;
+  return isPlainObject(metadata) ? { code, metadata } : { code };
 }

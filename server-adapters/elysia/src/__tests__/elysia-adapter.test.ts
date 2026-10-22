@@ -877,7 +877,8 @@ describe('Elysia Server Adapter', () => {
       expect(response.status).toBe(404);
       expect(await response.json()).toEqual({
         error: 'Not Found',
-        problem: { code: 'ROUTE_NOT_FOUND', metadata: { method: 'GET', path: '/custom/missing' } },
+        code: 'ROUTE_NOT_FOUND',
+        metadata: { method: 'GET', path: '/custom/missing' },
       });
 
       await cleanup();

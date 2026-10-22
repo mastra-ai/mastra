@@ -10,9 +10,9 @@ import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-ada
 import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
-  ensureProblem,
+  ensureErrorCode,
   formatErrorResponse,
-  getCustomHTTPExceptionResponseWithProblem,
+  getCustomHTTPExceptionResponseWithCode,
   isSafeObjectKey,
   isZodError,
   normalizeQueryParams,
@@ -532,10 +532,13 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
       });
 
       if (authError) {
-        return new Response(JSON.stringify({ error: authError.error, problem: authError.problem }), {
-          status: authError.status,
-          headers: { 'Content-Type': 'application/json', ...authError.headers },
-        });
+        return new Response(
+          JSON.stringify({ error: authError.error, code: authError.code, metadata: authError.metadata }),
+          {
+            status: authError.status,
+            headers: { 'Content-Type': 'application/json', ...authError.headers },
+          },
+        );
       }
 
       const authConfig = this.mastra.getServer()?.auth;
@@ -549,7 +552,8 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
               JSON.stringify({
                 error: permissionError.error,
                 message: permissionError.message,
-                problem: permissionError.problem,
+                code: permissionError.code,
+                metadata: permissionError.metadata,
               }),
               {
                 status: permissionError.status,
@@ -584,11 +588,11 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
         if (exceedsDeclaredLimit || exceedsStreamedJsonLimit) {
           let errorResponse: unknown = {
             error: 'Request body too large',
-            problem: { code: SERVER_ERROR_CODES.REQUEST_BODY_TOO_LARGE },
+            code: SERVER_ERROR_CODES.REQUEST_BODY_TOO_LARGE,
           };
           if (route.maxBodySize === undefined && this.bodyLimitOptions) {
             try {
-              errorResponse = ensureProblem(
+              errorResponse = ensureErrorCode(
                 this.bodyLimitOptions.onError(errorResponse),
                 SERVER_ERROR_CODES.REQUEST_BODY_TOO_LARGE,
               );
@@ -650,10 +654,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
           JSON.stringify({
             error: 'Invalid request body',
             issues: [{ field: 'body', message: params.bodyParseError.message }],
-            problem: {
-              code: params.bodyParseError.code ?? SERVER_ERROR_CODES.REQUEST_BODY_INVALID_JSON,
-              metadata: { issues: [{ field: 'body', message: params.bodyParseError.message }] },
-            },
+            code: params.bodyParseError.code ?? SERVER_ERROR_CODES.REQUEST_BODY_INVALID_JSON,
           }),
           {
             status: 400,
@@ -681,7 +682,8 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
             JSON.stringify({
               error: 'Invalid query parameters',
               issues,
-              problem: { code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED, metadata: { issues, location: 'query' } },
+              code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED,
+              metadata: { location: 'query' },
             }),
             {
               status: 400,
@@ -710,7 +712,8 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
             JSON.stringify({
               error: 'Invalid request body',
               issues,
-              problem: { code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED, metadata: { issues, location: 'body' } },
+              code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED,
+              metadata: { location: 'body' },
             }),
             {
               status: 400,
@@ -740,7 +743,8 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
             JSON.stringify({
               error: 'Invalid path parameters',
               issues,
-              problem: { code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED, metadata: { issues, location: 'path' } },
+              code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED,
+              metadata: { location: 'path' },
             }),
             {
               status: 400,
@@ -757,7 +761,12 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
       });
       if (fgaError) {
         return new Response(
-          JSON.stringify({ error: fgaError.error, message: fgaError.message, problem: fgaError.problem }),
+          JSON.stringify({
+            error: fgaError.error,
+            message: fgaError.message,
+            code: fgaError.code,
+            metadata: fgaError.metadata,
+          }),
           {
             status: fgaError.status,
             headers: { 'Content-Type': 'application/json' },
@@ -792,7 +801,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
           method: route.method,
         });
 
-        const customResponse = await getCustomHTTPExceptionResponseWithProblem(error);
+        const customResponse = await getCustomHTTPExceptionResponseWithCode(error);
         if (customResponse) {
           return customResponse;
         }
@@ -851,10 +860,13 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
             });
 
             if (authError) {
-              return new Response(JSON.stringify({ error: authError.error, problem: authError.problem }), {
-                status: authError.status,
-                headers: { 'Content-Type': 'application/json', ...authError.headers },
-              });
+              return new Response(
+                JSON.stringify({ error: authError.error, code: authError.code, metadata: authError.metadata }),
+                {
+                  status: authError.status,
+                  headers: { 'Content-Type': 'application/json', ...authError.headers },
+                },
+              );
             }
 
             const authConfig = this.mastra.getServer()?.auth;
@@ -868,7 +880,8 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
                     JSON.stringify({
                       error: permissionError.error,
                       message: permissionError.message,
-                      problem: permissionError.problem,
+                      code: permissionError.code,
+                      metadata: permissionError.metadata,
                     }),
                     {
                       status: permissionError.status,
@@ -887,7 +900,12 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
           });
           if (fgaError) {
             return new Response(
-              JSON.stringify({ error: fgaError.error, message: fgaError.message, problem: fgaError.problem }),
+              JSON.stringify({
+                error: fgaError.error,
+                message: fgaError.message,
+                code: fgaError.code,
+                metadata: fgaError.metadata,
+              }),
               {
                 status: fgaError.status,
                 headers: { 'Content-Type': 'application/json' },
@@ -913,10 +931,8 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
         if (!response) {
           const body = {
             error: 'Not Found',
-            problem: {
-              code: SERVER_ERROR_CODES.ROUTE_NOT_FOUND,
-              metadata: { method: ctx.request.method, path: new URL(ctx.request.url).pathname },
-            },
+            code: SERVER_ERROR_CODES.ROUTE_NOT_FOUND,
+            metadata: { method: ctx.request.method, path: new URL(ctx.request.url).pathname },
           };
           return new Response(JSON.stringify(body), {
             status: 404,
@@ -953,16 +969,15 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
         JSON.stringify({
           error: httpStatus < 500 ? message : 'Internal server error',
           ...(httpStatus < 500 ? { issues: [] } : {}),
-          problem:
-            ctx.code === 'PARSE'
-              ? {
-                  code: ctx.request?.headers?.get('content-type')?.includes('multipart/form-data')
-                    ? SERVER_ERROR_CODES.REQUEST_MULTIPART_INVALID
-                    : SERVER_ERROR_CODES.REQUEST_BODY_INVALID_JSON,
-                }
-              : ctx.code === 'VALIDATION'
-                ? { code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED }
-                : formatErrorResponse(error).body.problem,
+          ...(ctx.code === 'PARSE'
+            ? {
+                code: ctx.request?.headers?.get('content-type')?.includes('multipart/form-data')
+                  ? SERVER_ERROR_CODES.REQUEST_MULTIPART_INVALID
+                  : SERVER_ERROR_CODES.REQUEST_BODY_INVALID_JSON,
+              }
+            : ctx.code === 'VALIDATION'
+              ? { code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED }
+              : (({ code, metadata }) => ({ code, metadata }))(formatErrorResponse(error).body)),
         }),
         {
           status: httpStatus,

@@ -339,7 +339,7 @@ const listMessagesQuerySchema = z
           code: 'custom',
           message: `limit cannot be combined with ${field}; use perPage instead`,
           path: ['limit'],
-          params: { problemCode: SERVER_ERROR_CODES.AGENT_CONTROLLER_LIMIT_REQUIRES_PAGE },
+          params: { errorCode: SERVER_ERROR_CODES.AGENT_CONTROLLER_LIMIT_REQUIRES_PAGE },
         });
       }
     }

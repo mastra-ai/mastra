@@ -1,7 +1,7 @@
 import type { ZodError } from 'zod';
 
 import { SERVER_ERROR_CODES, isServerErrorCode } from '../error-codes';
-import type { ServerErrorCode, ServerProblem } from '../error-codes';
+import type { ServerErrorBody, ServerErrorCode } from '../error-codes';
 import { HTTPException } from '../http-exception';
 import type { StatusCode } from '../http-exception';
 import type { ApiError } from '../types';
@@ -20,13 +20,13 @@ export interface ZodErrorLike {
 
 /**
  * Custom Zod issues can carry a business code through
- * `ctx.addIssue({ code: 'custom', params: { problemCode } })`; the first one
+ * `ctx.addIssue({ code: 'custom', params: { errorCode } })`; the first one
  * found replaces `REQUEST_VALIDATION_FAILED`.
  */
-function getIssueProblemCode(error: ZodErrorLike): ServerErrorCode {
+function getIssueErrorCode(error: ZodErrorLike): ServerErrorCode {
   for (const issue of error.issues) {
-    const problemCode = issue.params?.problemCode;
-    if (isServerErrorCode(problemCode)) return problemCode;
+    const errorCode = issue.params?.errorCode;
+    if (isServerErrorCode(errorCode)) return errorCode;
   }
   return SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED;
 }
@@ -133,13 +133,13 @@ export function isZodError(error: unknown): error is ZodError<any> {
 /**
  * Formats a ZodError into a structured validation error response.
  * Returns an object with an error message, an array of field-specific issues,
- * and a `REQUEST_VALIDATION_FAILED` problem carrying the same issues.
+ * a `REQUEST_VALIDATION_FAILED` code and the request location in `metadata`.
  */
 export function formatZodError(
   error: ZodErrorLike,
   context: string,
   location?: 'query' | 'body' | 'path',
-): { error: string; issues: Array<{ field: string; message: string }>; problem: ServerProblem } {
+): ServerErrorBody & { issues: Array<{ field: string; message: string }> } {
   const issues = error.issues.map(e => ({
     field: e.path.length > 0 ? e.path.map(p => String(p)).join('.') : 'root',
     message: e.message,
@@ -148,10 +148,8 @@ export function formatZodError(
   return {
     error: `Invalid ${context}`,
     issues,
-    problem: {
-      code: getIssueProblemCode(error),
-      metadata: location ? { issues, location } : { issues },
-    },
+    code: getIssueErrorCode(error),
+    ...(location ? { metadata: { location } } : {}),
   };
 }
 
@@ -189,7 +187,7 @@ function mergeMetadata(...parts: Array<Record<string, unknown> | undefined>): Re
 
 // Helper to handle errors consistently
 /**
- * Rethrows `error` as an `HTTPException` carrying a business `problem`.
+ * Rethrows `error` as an `HTTPException` carrying a business `code`.
  * A string fallback is only the message: the code then depends on the error,
  * `UNCATEGORIZED_ERROR` when it carries an HTTP status and `UNEXPECTED_ERROR` otherwise.
  */
@@ -203,7 +201,7 @@ export function handleError(error: unknown, fallbackOrMessage: HandleErrorFallba
     return hasStatus ? SERVER_ERROR_CODES.UNCATEGORIZED_ERROR : SERVER_ERROR_CODES.UNEXPECTED_ERROR;
   };
 
-  // Already carries its own problem; rethrow as-is so nested handlers don't overwrite it.
+  // Already carries its own code; rethrow as-is so nested handlers don't overwrite it.
   if (error instanceof HTTPException) {
     throw error;
   }
@@ -215,16 +213,14 @@ export function handleError(error: unknown, fallbackOrMessage: HandleErrorFallba
       offendingLabel: error.offendingLabel,
     };
     const metadata = mergeMetadata(fallback.metadata, modelPolicy);
-    const problem: ServerProblem = metadata
-      ? { code: SERVER_ERROR_CODES.MODEL_NOT_ALLOWED, metadata }
-      : { code: SERVER_ERROR_CODES.MODEL_NOT_ALLOWED };
     const body = {
       error: {
         code: error.code,
         message: error.message,
         ...modelPolicy,
       },
-      problem,
+      code: SERVER_ERROR_CODES.MODEL_NOT_ALLOWED,
+      metadata,
     };
     const res = new Response(JSON.stringify(body), {
       status: 422,
@@ -239,28 +235,16 @@ export function handleError(error: unknown, fallbackOrMessage: HandleErrorFallba
     });
   }
 
-  const errorId = getErrorId(error);
-
   // A losing concurrent resume or time travel, or a recover of a run that is live or suspended, is
   // a conflict on run state, not a malformed request, so it maps to 409 and clients can
   // distinguish it from a 400/500 and re-read the run.
   if (isRunClaimConflictError(error) || isDurableRunConflictError(error)) {
-    const code = resolveCode(true);
-    const metadata = mergeMetadata(fallback.metadata, getErrorDetails(error));
-    const problem: ServerProblem = metadata ? { code, metadata } : { code };
-    const res = isRunClaimConflictError(error)
-      ? new Response(JSON.stringify({ error: error.message, code: error.id, problem }), {
-          status: 409,
-          headers: { 'content-type': 'application/json' },
-        })
-      : undefined;
     throw new HTTPException(409, {
-      res,
       message: error.message,
       stack: error.stack,
       cause: error,
-      code,
-      metadata,
+      code: resolveCode(true),
+      metadata: mergeMetadata(fallback.metadata, getErrorDetails(error)),
     });
   }
 

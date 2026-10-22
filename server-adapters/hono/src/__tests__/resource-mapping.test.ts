@@ -52,7 +52,7 @@ describe('resource mapping at the HTTP authentication boundary', () => {
     expect(response.status).toBe(500);
     expect(await response.json()).toEqual({
       error: 'Failed to map authenticated user to a resource ID',
-      problem: { code: 'AUTHENTICATED_USER_RESOURCE_MAPPING_FAILED' },
+      code: 'AUTHENTICATED_USER_RESOURCE_MAPPING_FAILED',
     });
     expect(listThreads).not.toHaveBeenCalled();
     expect(getThread).not.toHaveBeenCalled();

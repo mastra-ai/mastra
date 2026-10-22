@@ -534,7 +534,12 @@ function getEventsServer(mastra: Mastra | undefined, serverId: string): MastraMC
       code: SERVER_ERROR_CODES.MCP_SERVER_LOOKUP_UNSUPPORTED,
     });
   }
-  const server = mastra.getMCPServerById(serverId);
+  let server: MastraMCPServerImplementation | undefined;
+  try {
+    server = mastra.getMCPServerById(serverId);
+  } catch (error) {
+    return handleError(error, { message: 'Error getting MCP server', code: SERVER_ERROR_CODES.MCP_SERVER_GET_FAILED });
+  }
   if (!server) {
     throw new HTTPException(404, {
       message: `MCP server with ID '${serverId}' not found`,

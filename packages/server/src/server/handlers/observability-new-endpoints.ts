@@ -78,7 +78,7 @@ import {
   MASTRA_CLIENT_TYPE_HEADER,
   isStudioClientTypeHeader,
 } from '../constants';
-import type { ServerErrorCode, ServerProblem } from '../error-codes';
+import type { ServerErrorCode } from '../error-codes';
 import { SERVER_ERROR_CODES } from '../error-codes';
 import { HTTPException } from '../http-exception';
 import { listFeedbackResponseSchema } from '../schemas/feedback';
@@ -185,35 +185,21 @@ function createNewRoute<
 
 type TraceQueryErrorBody = { code: ServerErrorCode; message: string; issues?: unknown[] };
 
-/**
- * Adds the `problem` envelope shared by every server error body to a trace-query error body.
- * `problemCode` overrides `problem.code` when it is more specific than the body's legacy top-level `code`.
- */
-function withTraceQueryProblem(body: TraceQueryErrorBody, problemCode: ServerErrorCode = body.code) {
-  const problem: ServerProblem = { code: problemCode };
-  if (body.issues) problem.metadata = { issues: body.issues };
-  return { ...body, problem };
-}
-
-const traceQueryProblemSchema = z
-  .object({
-    code: z.string(),
-    metadata: z.record(z.string(), z.unknown()).optional(),
-  })
-  .strict();
+const errorMetadataSchema = z.record(z.string(), z.unknown()).optional();
 
 const traceQueryMalformedBodyErrorSchema = z
   .object({
     error: z.literal('Invalid request body'),
     issues: z.array(z.object({ field: z.literal('body'), message: z.string() }).strict()),
-    problem: traceQueryProblemSchema,
+    code: z.string(),
+    metadata: errorMetadataSchema,
   })
   .strict();
 
 const traceQueryBodyTooLargeErrorSchema = z
   .object({
     error: z.literal('Request body too large'),
-    problem: traceQueryProblemSchema,
+    code: z.literal(SERVER_ERROR_CODES.REQUEST_BODY_TOO_LARGE),
   })
   .strict();
 
@@ -221,7 +207,6 @@ const traceQueryMalformedCursorErrorSchema = z
   .object({
     code: z.literal(SERVER_ERROR_CODES.TRACE_QUERY_CURSOR_MALFORMED),
     message: z.string(),
-    problem: traceQueryProblemSchema,
   })
   .strict();
 
@@ -229,7 +214,6 @@ const traceQueryCursorConflictErrorSchema = z
   .object({
     code: z.literal(SERVER_ERROR_CODES.TRACE_QUERY_CURSOR_CONFLICT),
     message: z.string(),
-    problem: traceQueryProblemSchema,
   })
   .strict();
 
@@ -246,7 +230,6 @@ const traceQueryValidationResponseSchema = z
     code: z.literal(SERVER_ERROR_CODES.TRACE_QUERY_INVALID),
     message: z.string(),
     issues: z.array(traceQueryValidationIssueSchema),
-    problem: traceQueryProblemSchema,
   })
   .strict();
 
@@ -254,7 +237,6 @@ const traceQueryUnsupportedErrorSchema = z
   .object({
     code: z.literal(SERVER_ERROR_CODES.TRACE_QUERY_UNSUPPORTED),
     message: z.string(),
-    problem: traceQueryProblemSchema,
   })
   .strict();
 
@@ -262,7 +244,6 @@ const traceQueryTimeoutErrorSchema = z
   .object({
     code: z.literal(SERVER_ERROR_CODES.TRACE_QUERY_EXECUTION_TIMEOUT),
     message: z.string(),
-    problem: traceQueryProblemSchema,
   })
   .strict();
 
@@ -270,7 +251,6 @@ const traceQueryResourceLimitErrorSchema = z
   .object({
     code: z.literal(SERVER_ERROR_CODES.TRACE_QUERY_RESOURCE_LIMIT),
     message: z.string(),
-    problem: traceQueryProblemSchema,
   })
   .strict();
 
@@ -278,13 +258,12 @@ const traceQueryDiscoveryUnsupportedErrorSchema = z
   .object({
     code: z.literal(SERVER_ERROR_CODES.TRACE_QUERY_DISCOVERY_UNSUPPORTED),
     message: z.string(),
-    problem: traceQueryProblemSchema,
   })
   .strict();
 
 const traceQueryValidationError: ValidationErrorHook = error => ({
   status: 422,
-  body: withTraceQueryProblem({
+  body: {
     code: SERVER_ERROR_CODES.TRACE_QUERY_INVALID,
     message: 'The trace query is invalid',
     issues: error.issues.map(issue => ({
@@ -292,20 +271,15 @@ const traceQueryValidationError: ValidationErrorHook = error => ({
       path: issue.path.map(part => (typeof part === 'symbol' ? String(part) : part)),
       message: issue.message,
     })),
-  }),
+  },
 });
 
-function throwTraceQueryError(
-  status: 400 | 409 | 413 | 422 | 501 | 503 | 504,
-  body: TraceQueryErrorBody,
-  problemCode?: ServerErrorCode,
-): never {
-  const problemBody = withTraceQueryProblem(body, problemCode);
+function throwTraceQueryError(status: 400 | 409 | 413 | 422 | 501 | 503 | 504, body: TraceQueryErrorBody): never {
   throw new HTTPException(status, {
     message: body.message,
-    code: problemBody.problem.code,
-    metadata: problemBody.problem.metadata,
-    res: new Response(JSON.stringify(problemBody), {
+    code: body.code,
+    metadata: body.issues ? { issues: body.issues } : undefined,
+    res: new Response(JSON.stringify(body), {
       status,
       headers: { 'content-type': 'application/json' },
     }),
@@ -421,14 +395,10 @@ export const QUERY_TRACES = createNewRoute(NEW_ROUTE_DEFS.QUERY_TRACES, {
     }
 
     if (plan.paginationMode === 'delta' && !observabilityStore.getFeatures()?.includes('delta-polling')) {
-      throwTraceQueryError(
-        501,
-        {
-          code: SERVER_ERROR_CODES.TRACE_QUERY_UNSUPPORTED,
-          message: 'This storage provider does not support observability delta polling',
-        },
-        SERVER_ERROR_CODES.OBSERVABILITY_DELTA_POLLING_UNSUPPORTED,
-      );
+      throwTraceQueryError(501, {
+        code: SERVER_ERROR_CODES.TRACE_QUERY_UNSUPPORTED,
+        message: 'This storage provider does not support observability delta polling',
+      });
     }
 
     try {
@@ -487,14 +457,13 @@ const traceAggregateUnsupportedErrorSchema = z
   .object({
     code: z.literal(SERVER_ERROR_CODES.TRACE_AGGREGATE_UNSUPPORTED),
     message: z.string(),
-    problem: traceQueryProblemSchema,
   })
   .strict();
 
 /** Never echoes caller input: only the predicate-complexity issue keeps its own fixed message. */
 const traceAggregateValidationError: ValidationErrorHook = error => ({
   status: 422,
-  body: withTraceQueryProblem({
+  body: {
     code: SERVER_ERROR_CODES.TRACE_QUERY_INVALID,
     message: 'The trace aggregate query is invalid',
     issues: error.issues.map(issue => {
@@ -508,7 +477,7 @@ const traceAggregateValidationError: ValidationErrorHook = error => ({
           : 'The value does not match the trace-aggregate request contract',
       };
     }),
-  }),
+  },
 });
 
 export const AGGREGATE_TRACES = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_TRACES, {
@@ -617,14 +586,13 @@ const spanAggregateUnsupportedErrorSchema = z
   .object({
     code: z.literal(SERVER_ERROR_CODES.SPAN_AGGREGATE_UNSUPPORTED),
     message: z.string(),
-    problem: traceQueryProblemSchema,
   })
   .strict();
 
 /** Never echoes caller input: only the predicate-complexity issue keeps its own fixed message. */
 const spanAggregateValidationError: ValidationErrorHook = error => ({
   status: 422,
-  body: withTraceQueryProblem({
+  body: {
     code: SERVER_ERROR_CODES.TRACE_QUERY_INVALID,
     message: 'The span aggregate query is invalid',
     issues: error.issues.map(issue => {
@@ -638,7 +606,7 @@ const spanAggregateValidationError: ValidationErrorHook = error => ({
           : 'The value does not match the span-aggregate request contract',
       };
     }),
-  }),
+  },
 });
 
 export const AGGREGATE_SPANS = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_SPANS, {
@@ -741,13 +709,12 @@ const spanQueryUnsupportedErrorSchema = z
   .object({
     code: z.literal(SERVER_ERROR_CODES.SPAN_QUERY_UNSUPPORTED),
     message: z.string(),
-    problem: traceQueryProblemSchema,
   })
   .strict();
 
 const spanQueryValidationError: ValidationErrorHook = error => ({
   status: 422,
-  body: withTraceQueryProblem({
+  body: {
     code: SERVER_ERROR_CODES.TRACE_QUERY_INVALID,
     message: 'The span query is invalid',
     issues: error.issues.map(issue => ({
@@ -755,7 +722,7 @@ const spanQueryValidationError: ValidationErrorHook = error => ({
       path: issue.path.map(part => (typeof part === 'symbol' ? String(part) : part)),
       message: issue.message,
     })),
-  }),
+  },
 });
 
 export const QUERY_SPANS = createNewRoute(NEW_ROUTE_DEFS.QUERY_SPANS, {

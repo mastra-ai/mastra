@@ -181,18 +181,6 @@ describe('AGGREGATE_TRACES', () => {
       issues: [
         { code: 'invalid_request', path: [], message: 'The value does not match the trace-aggregate request contract' },
       ],
-      problem: {
-        code: 'TRACE_QUERY_INVALID',
-        metadata: {
-          issues: [
-            {
-              code: 'invalid_request',
-              path: [],
-              message: 'The value does not match the trace-aggregate request contract',
-            },
-          ],
-        },
-      },
     });
 
     const unknownMeasure = strictValidationError({ timeRange: TIME_RANGE, measures: ['tokens.total'] });
@@ -227,7 +215,6 @@ describe('AGGREGATE_TRACES', () => {
     expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
       code: 'TRACE_AGGREGATE_UNSUPPORTED',
       message: 'Trace aggregation is not supported by the configured observability store',
-      problem: { code: 'TRACE_AGGREGATE_UNSUPPORTED' },
     });
     expect(observabilityStore.aggregateTraces).not.toHaveBeenCalled();
   });
@@ -244,7 +231,6 @@ describe('AGGREGATE_TRACES', () => {
     expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
       code: 'TRACE_AGGREGATE_UNSUPPORTED',
       message: 'Observability storage domain is not available',
-      problem: { code: 'TRACE_AGGREGATE_UNSUPPORTED' },
     });
   });
 
@@ -261,7 +247,6 @@ describe('AGGREGATE_TRACES', () => {
     expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
       code: 'TRACE_AGGREGATE_UNSUPPORTED',
       message: 'Root duration predicates are not supported by the configured observability store',
-      problem: { code: 'TRACE_AGGREGATE_UNSUPPORTED' },
     });
     expect(older.observabilityStore.aggregateTraces).not.toHaveBeenCalled();
 
@@ -285,7 +270,6 @@ describe('AGGREGATE_TRACES', () => {
     expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
       code: 'TRACE_AGGREGATE_UNSUPPORTED',
       message: 'Time to first chunk predicates are not supported by the configured observability store',
-      problem: { code: 'TRACE_AGGREGATE_UNSUPPORTED' },
     });
     expect(older.observabilityStore.aggregateTraces).not.toHaveBeenCalled();
 
@@ -314,7 +298,6 @@ describe('AGGREGATE_TRACES', () => {
       expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
         code: 'TRACE_AGGREGATE_UNSUPPORTED',
         message: 'Context identifier predicates are not supported by the configured observability store',
-        problem: { code: 'TRACE_AGGREGATE_UNSUPPORTED' },
       });
       expect(observabilityStore.aggregateTraces).not.toHaveBeenCalled();
     }
@@ -469,7 +452,6 @@ describe('AGGREGATE_TRACES', () => {
     expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
       code: 'TRACE_AGGREGATE_UNSUPPORTED',
       message: 'The configured observability store cannot enforce the trusted tenant scope',
-      problem: { code: 'TRACE_AGGREGATE_UNSUPPORTED' },
     });
     expect(unscopedStore.observabilityStore.aggregateTraces).not.toHaveBeenCalled();
 
@@ -524,7 +506,6 @@ describe('AGGREGATE_TRACES', () => {
     expect(getDeclaredErrorSchema(504).parse(await error.getResponse().json())).toEqual({
       code: 'TRACE_QUERY_EXECUTION_TIMEOUT',
       message: 'The query exceeded its execution timeout',
-      problem: { code: 'TRACE_QUERY_EXECUTION_TIMEOUT' },
     });
   });
 

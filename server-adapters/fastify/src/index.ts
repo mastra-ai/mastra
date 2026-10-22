@@ -11,7 +11,7 @@ import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
   formatErrorResponse,
-  getCustomHTTPExceptionResponseWithProblem,
+  getCustomHTTPExceptionResponseWithCode,
   isSafeObjectKey,
   isZodError,
   normalizeQueryParams,
@@ -584,7 +584,9 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
 
         // If this is an auth error (not just a success-with-headers), return error response
         if (authError.error) {
-          return reply.status(authError.status).send({ error: authError.error, problem: authError.problem });
+          return reply
+            .status(authError.status)
+            .send({ error: authError.error, code: authError.code, metadata: authError.metadata });
         }
       }
 
@@ -596,10 +598,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         return reply.status(400).send({
           error: 'Invalid request body',
           issues,
-          problem: {
-            code: params.bodyParseError.code ?? SERVER_ERROR_CODES.REQUEST_BODY_INVALID_JSON,
-            metadata: { issues },
-          },
+          code: params.bodyParseError.code ?? SERVER_ERROR_CODES.REQUEST_BODY_INVALID_JSON,
         });
       }
 
@@ -618,7 +617,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           return reply.status(400).send({
             error: 'Invalid query parameters',
             issues,
-            problem: { code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED, metadata: { issues, location: 'query' } },
+            code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED,
+            metadata: { location: 'query' },
           });
         }
       }
@@ -638,7 +638,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           return reply.status(400).send({
             error: 'Invalid request body',
             issues,
-            problem: { code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED, metadata: { issues, location: 'body' } },
+            code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED,
+            metadata: { location: 'body' },
           });
         }
       }
@@ -659,7 +660,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
           return reply.status(400).send({
             error: 'Invalid path parameters',
             issues,
-            problem: { code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED, metadata: { issues, location: 'path' } },
+            code: SERVER_ERROR_CODES.REQUEST_VALIDATION_FAILED,
+            metadata: { location: 'path' },
           });
         }
       }
@@ -693,7 +695,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             return reply.status(permissionError.status).send({
               error: permissionError.error,
               message: permissionError.message,
-              problem: permissionError.problem,
+              code: permissionError.code,
+              metadata: permissionError.metadata,
             });
           }
         }
@@ -708,7 +711,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
       if (fgaError) {
         return reply
           .status(fgaError.status)
-          .send({ error: fgaError.error, message: fgaError.message, problem: fgaError.problem });
+          .send({ error: fgaError.error, message: fgaError.message, code: fgaError.code, metadata: fgaError.metadata });
       }
 
       try {
@@ -727,7 +730,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             method: route.method,
           });
         }
-        const customResponse = await getCustomHTTPExceptionResponseWithProblem(error);
+        const customResponse = await getCustomHTTPExceptionResponseWithCode(error);
         if (customResponse) {
           customResponse.headers.forEach((value, name) => reply.header(name, value));
           await reply.status(customResponse.status).send(Buffer.from(await customResponse.arrayBuffer()));
@@ -753,7 +756,7 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             if (error.code === 'FST_ERR_CTP_BODY_TOO_LARGE') {
               return reply.status(413).send({
                 error: 'Request body too large',
-                problem: { code: SERVER_ERROR_CODES.REQUEST_BODY_TOO_LARGE },
+                code: SERVER_ERROR_CODES.REQUEST_BODY_TOO_LARGE,
               });
             }
             throw error;
@@ -829,7 +832,9 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             }
           }
           if (authError.error) {
-            return reply.status(authError.status).send({ error: authError.error, problem: authError.problem });
+            return reply
+              .status(authError.status)
+              .send({ error: authError.error, code: authError.code, metadata: authError.metadata });
           }
         }
 
@@ -858,7 +863,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
               return reply.status(permissionError.status).send({
                 error: permissionError.error,
                 message: permissionError.message,
-                problem: permissionError.problem,
+                code: permissionError.code,
+                metadata: permissionError.metadata,
               });
             }
           }
@@ -873,9 +879,12 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
             : {}),
         });
         if (fgaError) {
-          return reply
-            .status(fgaError.status)
-            .send({ error: fgaError.error, message: fgaError.message, problem: fgaError.problem });
+          return reply.status(fgaError.status).send({
+            error: fgaError.error,
+            message: fgaError.message,
+            code: fgaError.code,
+            metadata: fgaError.metadata,
+          });
         }
 
         const response = await this.handleCustomRouteRequest(
@@ -889,10 +898,8 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         if (!response) {
           reply.status(404).send({
             error: 'Not Found',
-            problem: {
-              code: SERVER_ERROR_CODES.ROUTE_NOT_FOUND,
-              metadata: { method: request.method, path: request.url.split('?')[0] },
-            },
+            code: SERVER_ERROR_CODES.ROUTE_NOT_FOUND,
+            metadata: { method: request.method, path: request.url.split('?')[0] },
           });
           return;
         }

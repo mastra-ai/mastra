@@ -2,7 +2,7 @@ import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-import { isServerProblem } from '../../error-codes';
+import { isServerErrorCode } from '../../error-codes';
 import { formatErrorResponse } from '../index';
 import { A2A_ROUTES } from './a2a';
 import type { ServerRoute } from '.';
@@ -110,7 +110,7 @@ describe('error code contract', () => {
   });
 
   it.each(jsonRoutes.map(route => [routeName(route), route] as const))(
-    '%s returns a catalog problem when it fails',
+    '%s returns a catalog code when it fails',
     async (name, route) => {
       const outcome = await runRoute(route);
       if ('timedOut' in outcome) {
@@ -123,10 +123,10 @@ describe('error code contract', () => {
       expect(ROUTES_THAT_SUCCEED_WITHOUT_MASTRA.has(name), `${name} is allowlisted but failed`).toBe(false);
 
       const { body } = formatErrorResponse(outcome.error);
-      expect(isServerProblem(body.problem)).toBe(true);
+      expect(isServerErrorCode(body.code)).toBe(true);
       // Built-in routes always set a business code: these two are reserved for errors that carry none.
-      expect(body.problem.code).not.toBe('UNEXPECTED_ERROR');
-      expect(body.problem.code).not.toBe('UNCATEGORIZED_ERROR');
+      expect(body.code).not.toBe('UNEXPECTED_ERROR');
+      expect(body.code).not.toBe('UNCATEGORIZED_ERROR');
     },
   );
 });

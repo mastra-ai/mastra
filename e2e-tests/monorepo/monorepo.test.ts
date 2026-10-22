@@ -390,7 +390,8 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
         status: 400,
         body: {
           error: expect.stringContaining('calculatorTool'),
-          problem: { code: 'MCP_TOOL_INPUT_INVALID', metadata: { serverId: 'calculator', toolId: 'calculatorTool' } },
+          code: 'MCP_TOOL_INPUT_INVALID',
+          metadata: { serverId: 'calculator', toolId: 'calculatorTool' },
         },
       });
     });
@@ -402,7 +403,8 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
         status: 404,
         body: {
           error: expect.any(String),
-          problem: { code: 'AGENT_NOT_FOUND', metadata: { agentId: 'does-not-exist' } },
+          code: 'AGENT_NOT_FOUND',
+          metadata: { agentId: 'does-not-exist' },
         },
       });
     });

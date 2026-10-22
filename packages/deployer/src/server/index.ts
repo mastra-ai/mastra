@@ -203,7 +203,7 @@ export async function createHonoServer(
     maxSize: bodyLimitMaxSize,
     onError: () => ({
       error: 'Request body too large',
-      problem: { code: SERVER_ERROR_CODES.REQUEST_BODY_TOO_LARGE },
+      code: SERVER_ERROR_CODES.REQUEST_BODY_TOO_LARGE,
     }),
   };
 

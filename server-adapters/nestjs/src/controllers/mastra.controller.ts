@@ -79,7 +79,8 @@ export class MastraController {
     if (!routePath) {
       throw new NotFoundException({
         message: `Route not found: ${method} ${path}`,
-        problem: { code: SERVER_ERROR_CODES.ROUTE_NOT_FOUND, metadata: { method, path } },
+        code: SERVER_ERROR_CODES.ROUTE_NOT_FOUND,
+        metadata: { method, path },
       });
     }
 
@@ -87,7 +88,8 @@ export class MastraController {
     if (routePath.includes('//')) {
       throw new NotFoundException({
         message: `Route not found: ${method} ${path}`,
-        problem: { code: SERVER_ERROR_CODES.ROUTE_NOT_FOUND, metadata: { method, path } },
+        code: SERVER_ERROR_CODES.ROUTE_NOT_FOUND,
+        metadata: { method, path },
       });
     }
 
@@ -97,7 +99,8 @@ export class MastraController {
     if (!matchResult) {
       throw new NotFoundException({
         message: `Route not found: ${method} ${path}`,
-        problem: { code: SERVER_ERROR_CODES.ROUTE_NOT_FOUND, metadata: { method, path } },
+        code: SERVER_ERROR_CODES.ROUTE_NOT_FOUND,
+        metadata: { method, path },
       });
     }
 

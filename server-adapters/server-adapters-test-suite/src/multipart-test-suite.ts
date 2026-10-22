@@ -380,7 +380,7 @@ export function createMultipartTestSuite(config: MultipartTestSuiteConfig) {
 
       expect(response.status).toBe(400);
       const result: any = await response.json();
-      expect(result.problem.code).toBe('REQUEST_MULTIPART_INVALID');
+      expect(result.code).toBe('REQUEST_MULTIPART_INVALID');
     });
 
     it('should ignore form fields named with special object keys', async () => {

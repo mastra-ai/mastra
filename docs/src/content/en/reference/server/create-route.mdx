@@ -361,15 +361,15 @@ Common status codes:
 
 ### Error codes
 
-JSON error responses include a `problem` object with a business `code`. Errors you throw without a code get one based on their status:
+JSON error responses include a business `code`. Errors you throw without a code get one based on their status:
 
-| Error | `problem.code` |
+| Error | `code` |
 | - | - |
 | Has a `status` (Hono `HTTPException`, `HttpError` above) | `UNCATEGORIZED_ERROR` |
 | No `status` | `UNEXPECTED_ERROR` (sent as a 500) |
 
 ```json
-{ "error": "Agent 'support' not found", "problem": { "code": "UNCATEGORIZED_ERROR" } }
+{ "error": "Agent 'support' not found", "code": "UNCATEGORIZED_ERROR" }
 ```
 
 To send a specific code, throw `HTTPException` from `@mastra/server/server-adapter`. `code` accepts any value from `SERVER_ERROR_CODES` in `@mastra/server/error-codes`, and `metadata` is sent as-is:
@@ -387,7 +387,8 @@ throw new HTTPException(404, {
 ```json
 {
   "error": "Agent 'support' not found",
-  "problem": { "code": "AGENT_NOT_FOUND", "metadata": { "agentId": "support" } }
+  "code": "AGENT_NOT_FOUND",
+  "metadata": { "agentId": "support" }
 }
 ```
 

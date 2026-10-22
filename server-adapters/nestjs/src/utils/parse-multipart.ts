@@ -34,7 +34,7 @@ export function parseMultipartFormData(
       reject(
         new BadRequestException({
           message: 'Content-Type header is required for multipart requests',
-          problem: { code: SERVER_ERROR_CODES.REQUEST_MULTIPART_INVALID },
+          code: SERVER_ERROR_CODES.REQUEST_MULTIPART_INVALID,
         }),
       );
       return;
@@ -57,10 +57,8 @@ export function parseMultipartFormData(
             reject(
               new BadRequestException({
                 message: `Invalid file type: ${mimetype}. Allowed types: ${options.allowedMimeTypes.join(', ')}`,
-                problem: {
-                  code: SERVER_ERROR_CODES.REQUEST_FILE_TYPE_NOT_ALLOWED,
-                  metadata: { mimetype },
-                },
+                code: SERVER_ERROR_CODES.REQUEST_FILE_TYPE_NOT_ALLOWED,
+                metadata: { mimetype },
               }),
             );
             return;
@@ -80,7 +78,7 @@ export function parseMultipartFormData(
           reject(
             new PayloadTooLargeException({
               message: `File size limit exceeded${maxSize ? ` (max: ${formatBytes(maxSize)})` : ''}`,
-              problem: { code: SERVER_ERROR_CODES.REQUEST_FILE_TOO_LARGE },
+              code: SERVER_ERROR_CODES.REQUEST_FILE_TOO_LARGE,
             }),
           );
         });
@@ -113,7 +111,7 @@ export function parseMultipartFormData(
       reject(
         new BadRequestException({
           message: `Failed to parse multipart form data: ${error.message}`,
-          problem: { code: SERVER_ERROR_CODES.REQUEST_MULTIPART_INVALID },
+          code: SERVER_ERROR_CODES.REQUEST_MULTIPART_INVALID,
         }),
       );
     });
