@@ -109,9 +109,9 @@ describe('reply_in_thread in the transcript', () => {
     expect(screen.getAllByText('Sent to Slack')).toHaveLength(1);
 
     const [postCopy, turnCopy] = screen.getAllByRole('button', { name: 'Copy message' });
-    await user.click(postCopy!);
+    await user.click(postCopy);
     expect(await navigator.clipboard.readText()).toBe('Hello world');
-    await user.click(turnCopy!);
+    await user.click(turnCopy);
     expect(await navigator.clipboard.readText()).toBe('I posted hello world in the thread.');
   });
 
@@ -124,7 +124,7 @@ describe('reply_in_thread in the transcript', () => {
     expect(within(post).getByText(/^Claude Opus 4\.6/)).toBeInTheDocument();
     const copies = screen.getAllByRole('button', { name: 'Copy message' });
     expect(copies).toHaveLength(1);
-    await user.click(copies[0]!);
+    await user.click(copies[0]);
     expect(await navigator.clipboard.readText()).toBe('Hello world');
   });
 

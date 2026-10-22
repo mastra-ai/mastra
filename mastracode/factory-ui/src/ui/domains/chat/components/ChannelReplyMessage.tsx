@@ -59,7 +59,7 @@ export function replyText(args: unknown, argsText: string | undefined): string |
   if (!start) return undefined;
   let out = '';
   for (let i = start.index + start[0].length; i < argsText.length; i++) {
-    const ch = argsText[i]!;
+    const ch = argsText[i];
     if (ch === '"') break;
     if (ch !== '\\') {
       out += ch;
