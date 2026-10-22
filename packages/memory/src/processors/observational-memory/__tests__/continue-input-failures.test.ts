@@ -1,12 +1,14 @@
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { LLMock } from '@copilotkit/aimock';
 import { Agent } from '@mastra/core/agent';
+import type { MastraDBMessage } from '@mastra/core/agent';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { Memory } from '../../../index';
+import { ObservationalMemory } from '../observational-memory';
 
 const filler = Array.from({ length: 400 }, (_, i) => `shipment event ${i} at depot`).join('\n');
 let mock: LLMock;
@@ -16,6 +18,7 @@ beforeAll(async () => {
   await mock.start();
 });
 afterEach(() => {
+  vi.restoreAllMocks();
   mock.clearFixtures();
   mock.clearRequests();
   mock.resetMatchCounts();
@@ -29,6 +32,7 @@ function setup(
   hooks?: { afterObservation: () => Promise<never> },
   failurePolicy: 'abort' | 'continue' = 'continue',
   overflowAfterTool = false,
+  configureMemory?: (memory: Memory) => void,
 ) {
   const openai = createOpenAI({ apiKey: 'test', baseURL: `${mock.url.replace(/\/+$/, '')}/v1` });
   const memory = new Memory({
@@ -49,6 +53,7 @@ function setup(
       },
     },
   });
+  configureMemory?.(memory);
   const agent = new Agent({
     id: 'observation-failure',
     name: 'observation-failure',
@@ -110,6 +115,64 @@ describe('OM continue policy for input failures', () => {
       expect(afterObservation).toHaveBeenCalledOnce();
     },
   );
+
+  it('retains loaded memory history after a failed input context build', async () => {
+    const failedBuild = vi
+      .spyOn(ObservationalMemory.prototype, 'buildContextSystemMessages')
+      .mockImplementationOnce(async () => {
+        throw new Error('context build failed');
+      });
+    const history: MastraDBMessage = {
+      id: 'earlier-order-history',
+      role: 'user',
+      type: 'text',
+      content: { format: 2, parts: [{ type: 'text', text: 'Earlier order HISTORY_MARKER' }] },
+      createdAt: new Date(),
+    };
+    const agent = setup(new InMemoryStore(), undefined, 'continue', false, memory => {
+      const getContext = memory.getContext.bind(memory);
+      vi.spyOn(memory, 'getContext').mockImplementation(async args => {
+        const context = await getContext(args);
+        return { ...context, messages: [...context.messages, history] };
+      });
+    });
+    const result = await agent.generate('Find order 4471', {
+      memory: { thread: 'history-on-input-failure', resource: 'r' },
+      maxSteps: 3,
+    });
+    expect(result.text).toBe('The order shipped.');
+    expect(failedBuild).toHaveBeenCalled();
+    const requests = mock.getRequests().filter(entry => (entry.body as { model?: string }).model === 'actor');
+    expect(JSON.stringify((requests[0]!.body as { messages: unknown }).messages)).toContain('HISTORY_MARKER');
+  });
+
+  it('restores message seals when observation fails after mutating the live list', async () => {
+    mock.on(
+      { endpoint: 'chat', model: 'observer' },
+      { content: '<observations>\n## October 22, 2026\n- User asked for order status\n</observations>' },
+    );
+    const seal = ObservationalMemory.prototype.sealMessagesForBuffering;
+    const failedSeal = vi
+      .spyOn(ObservationalMemory.prototype, 'sealMessagesForBuffering')
+      .mockImplementationOnce(function (messages) {
+        seal.call(this, messages);
+        throw new Error('seal interrupted');
+      });
+    const storage = new InMemoryStore();
+    const agent = setup(storage);
+    const result = await agent.generate('Find order 4471', {
+      memory: { thread: 'seal-on-input-failure', resource: 'r' },
+      maxSteps: 3,
+    });
+    expect(result.text).toBe('The order shipped.');
+    expect(failedSeal).toHaveBeenCalled();
+    const store = (await storage.getStore('memory'))!;
+    const { messages } = await store.listMessages({ threadId: 'seal-on-input-failure' });
+    const toolResult = messages.find(message => JSON.stringify(message.content).includes('SHIPPED'))!;
+    expect((toolResult.content.metadata as { mastra?: { sealed?: boolean } } | undefined)?.mastra?.sealed).not.toBe(
+      true,
+    );
+  });
 
   it('still fails the turn when the observation policy is abort', async () => {
     mock.on(

@@ -274,7 +274,26 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       // Restore pre-step message-list state when continuing without OM.
       const preStepMessages =
         this.engine.config.observation.failurePolicy === 'continue' ? messageList.serialize() : undefined;
+      // serialize() preserves nested references. Detach the fields OM seals in place without
+      // structuredClone(), which cannot copy provider functions carried in message parts.
+      if (preStepMessages) {
+        preStepMessages.messages = preStepMessages.messages.map(message => ({
+          ...message,
+          content: {
+            ...message.content,
+            metadata: message.content.metadata && {
+              ...message.content.metadata,
+              mastra: { ...(message.content.metadata.mastra as object) },
+            },
+            parts: message.content.parts?.map(part => {
+              const metadata = (part as { metadata?: { mastra?: object } }).metadata;
+              return { ...part, ...(metadata && { metadata: { ...metadata, mastra: { ...metadata.mastra } } }) };
+            }),
+          },
+        }));
+      }
       let previousRecord: ObservationalMemoryRecord | undefined;
+      let loadedContextMessages: MastraDBMessage[] | undefined;
       const continueWithoutObservation = async (error: unknown) => {
         const err = error instanceof Error ? error : new Error(String(error));
         if (this.engine.config.observation.failurePolicy !== 'continue' || abortSignal?.aborted) {
@@ -296,28 +315,34 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         state.__omTurn = undefined;
         state.__omInputFailed = true;
         messageList.deserialize(preStepMessages!);
-        args.agent
-          ?.__getLogger()
-          .warn(`Observational memory input failed; continuing without observation: ${err.message}`);
-        if (previousRecord) {
-          try {
-            const systemMessages = await this.engine.buildContextSystemMessages({
-              threadId,
-              resourceId,
-              record: previousRecord,
-            });
-            injectObservationContextMessages({
-              messageList,
-              systemMessages,
-              continuationMessage: undefined,
-              threadId,
-              resourceId,
-            });
-          } catch (contextError) {
-            args.agent
-              ?.__getLogger()
-              .warn('Observational memory could not restore prior context after input failure', contextError);
-          }
+        for (const message of loadedContextMessages ?? []) {
+          messageList.add(message, 'memory');
+        }
+        const logMessage = `Observational memory input failed; continuing without observation (threadId=${threadId}, resourceId=${resourceId}): ${err.message}`;
+        if (args.agent) {
+          args.agent.__getLogger().warn(logMessage, err);
+        } else if (args.loggerVNext) {
+          args.loggerVNext.error(logMessage, { error: err.stack ?? err.message, threadId, resourceId });
+        } else {
+          console.error(logMessage, err);
+        }
+        try {
+          const systemMessages = await this.engine.buildContextSystemMessages({
+            threadId,
+            resourceId,
+            record: previousRecord,
+          });
+          injectObservationContextMessages({
+            messageList,
+            systemMessages,
+            continuationMessage: undefined,
+            threadId,
+            resourceId,
+          });
+        } catch (contextError) {
+          args.agent
+            ?.__getLogger()
+            .warn('Observational memory could not restore prior context after input failure', contextError);
         }
         return messageList;
       };
@@ -374,6 +399,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           this.turn.agent = args.agent;
           this.turn.requestContext = requestContext;
           await this.turn.start(this.memory, runState);
+          loadedContextMessages = this.turn.context.messages.filter(message => message.role !== 'system');
           // A run recovered by another worker can continue a response message that the dead
           // worker already observed. That worker rotated the id in memory, but the rotation was
           // lost with it. Seal and rotate again so the rest of the turn isn't merged into the observed message.
