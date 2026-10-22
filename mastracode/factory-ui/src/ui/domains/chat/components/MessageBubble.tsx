@@ -105,8 +105,32 @@ export function MessageBubble({
   const steeringPending = entry.deliveryStatus === 'pending';
   const steeringFailed = entry.deliveryStatus === 'failed';
   const metadata = entry.message.content.metadata;
-  const replyModelId = meta && typeof metadata?.modelId === 'string' ? metadata.modelId : undefined;
-  const credentialLabel = replyModelId && metadata ? replyCredentialLabel(metadata, owner, viewerId) : undefined;
+  const modelId = typeof metadata?.modelId === 'string' ? metadata.modelId : undefined;
+  const credentialLabel = modelId && metadata ? replyCredentialLabel(metadata, owner, viewerId) : undefined;
+  const modelLabel = modelId && (
+    <Tooltip>
+      <TooltipTrigger
+        render={
+          <MessageMetadata tabIndex={0}>
+            {formatModelName(modelId)}
+            {credentialLabel && ` · ${credentialLabel}`}
+          </MessageMetadata>
+        }
+      />
+      <TooltipContent>{modelId}</TooltipContent>
+    </Tooltip>
+  );
+  const replyFooter = entry.streaming
+    ? undefined
+    : (text: string) => (
+        <>
+          {modelLabel}
+          <MessageActions>
+            <MessageCopyButton text={text} />
+            <MessageTimestamp value={entry.message.createdAt} />
+          </MessageActions>
+        </>
+      );
   const messageActions = meta ? (
     <MessageActions>
       <MessageCopyButton text={meta} />
@@ -147,19 +171,7 @@ export function MessageBubble({
         footer={
           messageActions && (
             <div className="flex flex-wrap items-center gap-2">
-              {replyModelId && (
-                <Tooltip>
-                  <TooltipTrigger
-                    render={
-                      <MessageMetadata tabIndex={0}>
-                        {formatModelName(replyModelId)}
-                        {credentialLabel && ` · ${credentialLabel}`}
-                      </MessageMetadata>
-                    }
-                  />
-                  <TooltipContent>{replyModelId}</TooltipContent>
-                </Tooltip>
-              )}
+              {modelLabel}
               {messageActions}
             </div>
           )
@@ -230,6 +242,7 @@ export function MessageBubble({
             toolCallId={tool.toolCallId}
             input={suspension?.suspendPayload ?? tool.args}
             argsText={tool.argsText}
+            replyFooter={replyFooter}
             output={tool.result}
             status={suspension ? 'running' : tool.status}
             isSubmitting={isSubmitting}

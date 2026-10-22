@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SlackIcon } from '@mastra/playground-ui/icons/SlackIcon';
@@ -10,18 +11,29 @@ type ReplyStatus = 'running' | 'done' | 'error';
  * The agent's `reply_in_thread` call drawn as the message it posted, the way
  * people in the Slack thread read it, instead of a JSON tool card.
  */
-export function ChannelReplyMessage({ text, status }: { text: string; status: ReplyStatus }) {
+export function ChannelReplyMessage({
+  text,
+  status,
+  footer,
+}: {
+  text: string;
+  status: ReplyStatus;
+  footer?: ReactNode;
+}) {
   // Each post says where it went, so it stays apart from the agent's own text
   // in the same turn, which only the web UI sees.
   const label = status === 'running' ? 'Sending to Slack…' : status === 'error' ? 'Not sent to Slack' : 'Sent to Slack';
   return (
     <div role="group" aria-label="Reply in Slack thread" className="my-3">
       <MarkdownRenderer streaming={status === 'running'}>{text}</MarkdownRenderer>
-      <div className="text-muted-foreground mt-1 flex items-center gap-1">
-        <SlackIcon className="size-3" aria-hidden="true" />
-        <Txt as="span" variant="meta" className={status === 'error' ? 'text-destructive-foreground' : undefined}>
-          {label}
-        </Txt>
+      <div className="text-muted-foreground mt-1 flex flex-wrap items-center gap-2">
+        <span className="flex items-center gap-1">
+          <SlackIcon className="size-3" aria-hidden="true" />
+          <Txt as="span" variant="meta" className={status === 'error' ? 'text-destructive-foreground' : undefined}>
+            {label}
+          </Txt>
+        </span>
+        {footer}
       </div>
     </div>
   );

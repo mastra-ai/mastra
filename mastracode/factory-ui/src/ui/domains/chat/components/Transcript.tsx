@@ -20,7 +20,7 @@ import { replySteps } from '../services/turns';
 import { ArrivalScope, useArriving } from '@mastra/playground-ui/components/Arrival';
 import { MessageBubble } from './MessageBubble';
 import { ProviderReconnectAction } from './ProviderReconnectAction';
-import { channelReplyText, draws, messageText, renderableParts } from './transcript-parts';
+import { draws, messageText, renderableParts } from './transcript-parts';
 import { isRecord } from './transcript-shared';
 import { NotificationCard, NotificationSummaryCard } from './TranscriptNotifications';
 import { ApprovalCard, SubagentCard, SuspensionCard } from './TranscriptPromptCards';
@@ -143,17 +143,12 @@ export function TranscriptEntries({
         // ending, so no stamp lands mid-turn.
         const steps = replySteps(group);
         const replyEnd = steps.at(-1);
-        // The footer copies the agent's own text. A turn that only posted to a
-        // chat thread copies what it posted there instead.
-        const prose = steps
-          .map(step => messageText(renderableParts(step)))
-          .filter(Boolean)
-          .join('\n\n');
+        // Posts to a chat thread carry their own footer, so this one is only
+        // the agent's own text.
         const reply = runningTurn
           ? undefined
-          : prose ||
-            steps
-              .map(step => channelReplyText(renderableParts(step)))
+          : steps
+              .map(step => messageText(renderableParts(step)))
               .filter(Boolean)
               .join('\n\n');
 

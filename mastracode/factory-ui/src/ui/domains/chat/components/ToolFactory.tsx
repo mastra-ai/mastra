@@ -19,6 +19,8 @@ export interface ToolFactoryProps {
   input?: unknown;
   /** The args JSON streamed so far, before `input` is parsed. */
   argsText?: string;
+  /** Model, copy and time under a finished `reply_in_thread` post, copying `text`. */
+  replyFooter?: (text: string) => ReactNode;
   output?: unknown;
   status: ToolStatus;
   isSubmitting?: boolean;
@@ -73,6 +75,7 @@ function ToolFactoryComponent({
   toolCallId,
   input,
   argsText,
+  replyFooter,
   output,
   status,
   isSubmitting = false,
@@ -102,7 +105,10 @@ function ToolFactoryComponent({
 
   if (toolName === REPLY_IN_THREAD_TOOL) {
     const text = replyText(input, argsText);
-    if (text) return <ChannelReplyMessage text={text} status={status} />;
+    if (text)
+      return (
+        <ChannelReplyMessage text={text} status={status} footer={status === 'done' ? replyFooter?.(text) : undefined} />
+      );
   }
 
   if (toolName === 'skill') {
