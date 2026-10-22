@@ -467,6 +467,11 @@ type AcceptedIdleMessage = {
   admission?: Promise<AcceptedIdleMessage>;
 };
 
+type PendingThreadAdmission = {
+  runId: string;
+  accepted: Promise<SendAgentSignalAccepted<any>>;
+};
+
 type AgentThreadRuntimeState = {
   threadRunsById: Map<string, AgentThreadRunRecord<any>>;
   threadRunsByStreamId: Map<string, AgentThreadRunRecord<any>>;
@@ -510,6 +515,8 @@ type AgentThreadRuntimeState = {
   drainingPendingSignalsByThread: Map<string, { signal: CreatedAgentSignal; cancelled: boolean; handedOff: boolean }>;
   pendingContinuationsByThread: Map<string, PendingContinuation<any>[]>;
   claimedThreadOwnerDiscoveries: Map<string, Promise<string | undefined>>;
+  /** Idle-start reservations whose execution lease has not resolved yet. */
+  pendingThreadAdmissions: Map<string, PendingThreadAdmission>;
   /**
    * Idle signals this process has already acted on, keyed by request id, with the
    * reply it sent. Backends deliver at least once, so a redelivery of a signal
@@ -746,6 +753,7 @@ function createRuntimeState(): AgentThreadRuntimeState {
     drainingPendingSignalsByThread: new Map(),
     pendingContinuationsByThread: new Map(),
     claimedThreadOwnerDiscoveries: new Map(),
+    pendingThreadAdmissions: new Map(),
     handledIdleSignals: createRecentRequests<HandledIdleSignal>(),
     acceptedIdleMessagesByIdentity: createRecentRequests<AcceptedIdleMessage>(),
     claimedThreadOwners: new Map(),
@@ -3324,6 +3332,7 @@ export class AgentThreadStreamRuntime {
     state.drainingPendingSignalsByThread.clear();
     state.pendingContinuationsByThread.clear();
     state.claimedThreadOwnerDiscoveries.clear();
+    state.pendingThreadAdmissions.clear();
     state.handledIdleSignals.clear();
     state.acceptedIdleMessagesByIdentity.clear();
     for (const claim of [...state.claimedThreadOwners.values()]) {
@@ -6398,6 +6407,34 @@ export class AgentThreadStreamRuntime {
         // by another runtime instance is reached only via PubSub; treat it as a
         // follow-up, since the sender cannot see the owner's request state.
         const isLocalReservedRun = state.threadKeysByRunId.get(runId) === key;
+        const pendingAdmission = isLocalReservedRun ? state.pendingThreadAdmissions.get(key) : undefined;
+        if (pendingAdmission?.runId === runId) {
+          const pendingKey = key;
+          const queue = state.preRunSignalsByThread.get(key) ?? [];
+          queue.push(signal);
+          state.preRunSignalsByThread.set(key, queue);
+          this.#recordLocallyQueuedSignal(state, key, signal.id);
+          this.#notifyPendingSignals(state, key);
+          const accepted = pendingAdmission.accepted.then(async admission => {
+            if (admission.action === 'wake') {
+              // The reserved run owns the lease and takes this signal from the pre-run queue.
+              return { action: 'deliver' as const, runId: admission.runId };
+            }
+            if (admission.action === 'deliver') {
+              // The reservation lost its lease. Its cleanup removed the pre-run copy, so
+              // hand this signal to the same real owner before acknowledging it.
+              await this.#publishAndWait(pubsub, pendingKey, {
+                type: 'signal-enqueued',
+                runId: admission.runId,
+                signal: this.#serializeSignal(signal),
+                sourceId: this.#getSourceId(),
+              }).catch(() => {});
+            }
+            return admission;
+          });
+          void accepted.catch(() => {});
+          return { signal, accepted };
+        }
         const claimedOwnerDiscovery = isLocalReservedRun ? state.claimedThreadOwnerDiscoveries.get(key) : undefined;
         if (claimedOwnerDiscovery) {
           const accepted = this.#deliverAfterClaimedOwnerDiscovery<OUTPUT>(
@@ -6511,8 +6548,9 @@ export class AgentThreadStreamRuntime {
     // resolve a `wake` accepted result carrying the owned stream. On loss, hand the user
     // signal off to the winning process via signal-enqueued and resolve a `deliver` result
     // (the signal was queued onto the winning run, not run locally).
+    const localClaimedOwner = state.claimedThreadOwners.get(reservedKey);
+    const sharePendingAdmission = !localClaimedOwner && !target.ifIdle?.requireClaimedOwner;
     const accepted: Promise<SendAgentSignalAccepted<OUTPUT>> = (async () => {
-      const localClaimedOwner = state.claimedThreadOwners.get(reservedKey);
       if (localClaimedOwner) {
         if (state.activeThreadRunIds.get(reservedKey) === reservedRunId) {
           state.activeThreadRunIds.delete(reservedKey);
@@ -6665,6 +6703,16 @@ export class AgentThreadStreamRuntime {
         throw error;
       }
     })();
+    if (sharePendingAdmission) {
+      const pendingAdmission: PendingThreadAdmission = { runId: reservedRunId, accepted };
+      state.pendingThreadAdmissions.set(reservedKey, pendingAdmission);
+      const clearPendingAdmission = () => {
+        if (state.pendingThreadAdmissions.get(reservedKey) === pendingAdmission) {
+          state.pendingThreadAdmissions.delete(reservedKey);
+        }
+      };
+      void accepted.then(clearPendingAdmission, clearPendingAdmission);
+    }
     // Attach a detached no-op catch so that if stream setup throws (a misconfigured
     // agent: no/unsupported model, FGA denial) and the caller never awaits
     // `result.accepted`, the rejection does not surface as an unhandled rejection.
