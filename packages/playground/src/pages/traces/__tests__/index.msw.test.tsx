@@ -2,7 +2,7 @@ import type { GetObservabilityCapabilitiesResponse } from '@mastra/client-js';
 import { EntityType } from '@mastra/core/observability';
 import { serializeTraceColumnPreferences } from '@mastra/playground-ui/domains/traces/trace-list-columns';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
-import { http, HttpResponse } from 'msw';
+import { delay, http, HttpResponse } from 'msw';
 import { useLocation } from 'react-router';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import TracesPage from '..';
@@ -95,7 +95,12 @@ const setTracePageHandlers = (capabilities: GetObservabilityCapabilitiesResponse
 
 const LocationProbe = () => {
   const location = useLocation();
-  return <div data-testid="location">{location.search}</div>;
+  return (
+    <>
+      <div data-testid="location">{location.search}</div>
+      <div data-testid="pathname">{location.pathname}</div>
+    </>
+  );
 };
 
 const renderPage = (initialEntry = '/traces', props: React.ComponentProps<typeof TracesPage> = {}) =>
@@ -392,6 +397,16 @@ describe('Traces page list source', () => {
       expect(onTraceQuery).not.toHaveBeenCalled();
     });
 
+    it('keeps the breadcrumb header without the Traces/Spans switch', async () => {
+      setTracePageHandlers(legacyTraceCapabilities);
+
+      const { queryClient } = renderPage();
+
+      expect(await screen.findByRole('navigation', { name: 'Breadcrumb' })).toBeTruthy();
+      await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+      expect(screen.queryByRole('navigation', { name: 'Observability views' })).toBeNull();
+    });
+
     it('shows no Feedback tab on the trace or span panel and never requests feedback', async () => {
       const onFeedback = vi.fn<() => void>();
       setTracePageHandlers(metricsCapableCapabilities);
@@ -450,6 +465,101 @@ describe('Traces page list source', () => {
       expect(screen.queryByRole('tab', { name: /feedback/i })).toBeNull();
       expect(screen.queryByRole('button', { name: /^feedback/i })).toBeNull();
       expect(onFeedback).not.toHaveBeenCalled();
+    });
+  });
+});
+
+describe('Traces page view switch', () => {
+  describe('when the store supports span queries', () => {
+    it('keeps the Traces breadcrumb in the header, with the Traces/Spans switch below it', async () => {
+      setTracePageHandlers(traceQueryCapabilities);
+
+      renderPage();
+
+      const views = await screen.findByRole('navigation', { name: 'Observability views' });
+      const breadcrumb = screen.getByRole('navigation', { name: 'Breadcrumb' });
+      expect(within(breadcrumb).getByText('Traces')).toBeTruthy();
+      expect(breadcrumb.closest('header')).not.toBeNull();
+      expect(views.closest('header')).toBeNull();
+      expect(views.closest('main')).toBeNull();
+    });
+
+    it('puts the filter bar in the page body, above the list', async () => {
+      setTracePageHandlers(traceQueryCapabilities);
+
+      renderPage();
+
+      const filterInput = await screen.findByPlaceholderText('Filter traces…');
+      expect(filterInput.closest('main')).not.toBeNull();
+    });
+
+    it('shows each view with its icon', async () => {
+      setTracePageHandlers(traceQueryCapabilities);
+
+      renderPage();
+
+      const views = await screen.findByRole('navigation', { name: 'Observability views' });
+      for (const tab of within(views).getAllByRole('tab')) {
+        expect(tab.querySelector('svg')).not.toBeNull();
+      }
+    });
+
+    it('marks Traces as the current view', async () => {
+      setTracePageHandlers(traceQueryCapabilities);
+
+      renderPage();
+
+      const views = within(await screen.findByRole('navigation', { name: 'Observability views' }));
+      expect(views.getByRole('tab', { name: 'Traces' }).getAttribute('aria-selected')).toBe('true');
+      expect(views.getByRole('tab', { name: 'Spans' }).getAttribute('aria-selected')).toBe('false');
+    });
+  });
+
+  describe('while the storage capabilities are loading', () => {
+    it('shows the Traces breadcrumb and a placeholder for the Traces/Spans switch below it', async () => {
+      setTracePageHandlers(traceQueryCapabilities);
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, async () => {
+          await delay('infinite');
+          return HttpResponse.json(traceQueryCapabilities);
+        }),
+      );
+
+      renderPage();
+
+      const placeholder = await screen.findByRole('status', { name: 'Loading views' });
+      expect(placeholder.closest('header')).toBeNull();
+      expect(placeholder.closest('main')).toBeNull();
+      expect(screen.getByRole('navigation', { name: 'Breadcrumb' }).closest('header')).not.toBeNull();
+    });
+  });
+
+  describe('while the filter fields are still loading', () => {
+    it('keeps the Traces/Spans switch above the loading skeleton', async () => {
+      setTracePageHandlers(traceQueryCapabilities);
+      server.use(
+        http.post(`${TEST_BASE_URL}/api/observability/traces/query/fields`, async () => {
+          await delay('infinite');
+          return HttpResponse.json(emptyTraceQueryFields);
+        }),
+      );
+
+      renderPage();
+
+      expect(await screen.findByRole('navigation', { name: 'Observability views' })).toBeTruthy();
+      expect(screen.getByTestId('traces-page-skeleton')).toBeTruthy();
+    });
+  });
+
+  describe('when Spans is clicked in the view switch', () => {
+    it('navigates to the spans page', async () => {
+      setTracePageHandlers(traceQueryCapabilities);
+
+      renderPage();
+      const views = within(await screen.findByRole('navigation', { name: 'Observability views' }));
+      fireEvent.click(views.getByRole('tab', { name: 'Spans' }));
+
+      await waitFor(() => expect(screen.getByTestId('pathname').textContent).toBe('/spans'));
     });
   });
 });
@@ -1403,6 +1513,12 @@ describe('Traces page filter bar', () => {
       expect(screen.queryByRole('option', { name: 'Primitive type' })).toBeNull();
       expect(screen.queryByRole('option', { name: 'Primitive ID' })).toBeNull();
     });
+
+    it('does not render the Traces/Spans switch', async () => {
+      await renderScoped();
+
+      expect(screen.queryByRole('navigation', { name: 'Observability views' })).toBeNull();
+    });
   });
 });
 
@@ -1622,8 +1738,9 @@ describe('Traces page sorting', () => {
     setTracePageHandlers(metricsUnavailableCapabilities);
     server.use(
       http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
-        const body = (await request.json()) as { orderBy?: unknown };
-        orderBys.push(body.orderBy);
+        const body = (await request.json()) as { orderBy?: unknown; mode?: string };
+        // Delta polls share this endpoint but never sort; only the list request carries the order.
+        if (body.mode !== 'delta') orderBys.push(body.orderBy);
         return HttpResponse.json(traceQueryPage);
       }),
     );

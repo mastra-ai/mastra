@@ -21,8 +21,11 @@ export function fixedWindowRefetchInterval(error: unknown): number | false {
   return isRejectedTraceListRequest(error) ? false : TRACES_LIST_REFETCH_INTERVAL_MS;
 }
 
-/** With delta polling the list only reloads to recover from a transient failure; delta polls bring new traces. */
-function deltaListRefetchInterval(error: unknown): number | false {
+/**
+ * For an infinite list that must not reload its pages on a timer: it only reloads to recover from a
+ * transient failure. With delta polling, delta polls bring the new traces instead.
+ */
+export function recoveryRefetchInterval(error: unknown): number | false {
   return error && !isRejectedTraceListRequest(error) ? TRACES_LIST_REFETCH_INTERVAL_MS : false;
 }
 
@@ -61,7 +64,7 @@ export function useTracesListSource({
   const refetchInterval = !autoRefetch
     ? false
     : delta
-      ? (query: { state: { error: unknown } }) => deltaListRefetchInterval(query.state.error)
+      ? (query: { state: { error: unknown } }) => recoveryRefetchInterval(query.state.error)
       : !rolling
         ? (query: { state: { error: unknown } }) => fixedWindowRefetchInterval(query.state.error)
         : false;
