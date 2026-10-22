@@ -43,13 +43,21 @@ describe('NestJS Adapter - per-route RBAC, FGA, and studio auth', () => {
     vi.restoreAllMocks();
   });
 
-  async function start({ server, studio }: { server?: Record<string, unknown>; studio?: Record<string, unknown> }) {
+  async function start({
+    server,
+    studio,
+    auth,
+  }: {
+    server?: Record<string, unknown>;
+    studio?: Record<string, unknown>;
+    auth?: { enabled?: boolean };
+  }) {
     vi.spyOn(context.mastra, 'getServer').mockReturnValue((server ?? {}) as any);
     if (studio) {
       vi.spyOn(context.mastra, 'getStudio').mockReturnValue(studio as any);
     }
     const moduleRef = await Test.createTestingModule({
-      imports: [MastraModule.register({ mastra: context.mastra, rateLimitOptions: { enabled: false } })],
+      imports: [MastraModule.register({ mastra: context.mastra, auth, rateLimitOptions: { enabled: false } })],
     }).compile();
     app = moduleRef.createNestApplication();
     expressApp = app.getHttpAdapter().getInstance() as Application;
@@ -81,6 +89,15 @@ describe('NestJS Adapter - per-route RBAC, FGA, and studio auth', () => {
       expect.objectContaining({ id: 'user_admin' }),
       expect.objectContaining({ resource: { type: 'agent', id: 'test-agent' } }),
     );
+  });
+
+  it('skips RBAC and FGA when Mastra auth is explicitly disabled', async () => {
+    const check = vi.fn(async () => false);
+    await start({ server: { auth: roleAuth, rbac: roleRbac, fga: { check } }, auth: { enabled: false } });
+
+    expect((await get('/api/tools')).status).toBe(200);
+    expect((await get('/api/agents/test-agent')).status).toBe(200);
+    expect(check).not.toHaveBeenCalled();
   });
 
   it('allows the request when the FGA provider grants the resource', async () => {

@@ -303,12 +303,15 @@ export class RouteHandlerService {
   /**
    * Enforce the route's RBAC permission and FGA check, matching the other server adapters.
    * Relies on the auth guard having stored the user, permissions, and auth mode in the request context.
+   * Skipped when Mastra auth is explicitly disabled (`auth.enabled: false`), since no Mastra user is resolved.
    */
   private async authorizeRoute(
     route: ServerRoute,
     requestContext: RequestContext,
     params: Record<string, unknown>,
   ): Promise<void> {
+    if (this.options.auth?.enabled === false) return;
+
     const studio = this.mastra.getStudio?.();
     const server = this.mastra.getServer();
     if (studio?.auth || server?.auth) {
