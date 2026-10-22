@@ -46,11 +46,10 @@ import type {
   Body,
   PathParams,
   QueryParams,
-  RouteErrorCode,
+  RouteError,
   RouteKey,
   RouteResponse,
   ServerError,
-  ServerErrorCode,
   Simplify,
 } from './route-types.generated.js';
 import type { JSONValue, ToolInvocationUIPart } from './utils/ai-sdk-v4';
@@ -2008,7 +2007,7 @@ export class MastraClientError extends Error {
 
   /**
    * Business error code from the server's response body, if present.
-   * Narrow the error with `isServerError` or `isRouteError` to type `code` and `metadata` together.
+   * Use `getServerError` to get `{ error, code, metadata }` typed together.
    */
   readonly code?: string;
 
@@ -2034,105 +2033,38 @@ function isPlainObject(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * A `MastraClientError` whose `code` is one of the codes `C`, with `metadata` typed for that code.
- * It's a union over `C`, so `switch (error.code)` narrows `error.metadata` in each case.
- */
-export type TypedMastraClientError<C extends ServerErrorCode = ServerErrorCode> = C extends ServerErrorCode
-  ? Simplify<Omit<MastraClientError, 'code' | 'metadata'> & Omit<ServerError<C>, 'error'>>
-  : never;
-
-/**
- * Whether `error` is a `MastraClientError` carrying a business `code` from the Mastra server.
+ * Returns the server error carried by `error` as a plain `{ error, code, metadata }` object, typed as
+ * a union over every code, so `switch (serverError.code)` narrows `metadata`. Pass the route of the
+ * call that threw to narrow the union to the codes that route can return.
  *
- * Codes returned by custom routes (`registerApiRoute`) aren't part of the server's catalog, so keep a
- * `default` branch when switching on `code`.
- */
-export function isServerError(error: unknown): error is TypedMastraClientError {
-  return error instanceof MastraClientError && typeof error.code === 'string';
-}
-
-/**
- * Whether `error` is a `MastraClientError` carrying a business `code`, typed as the codes `route` can return.
- *
- * `route` only selects the type: pass the route of the call that threw.
+ * Returns `undefined` when `error` didn't come from a Mastra server response (network failures,
+ * aborted requests, bugs). Routes added with `registerApiRoute` can return codes outside the catalog,
+ * so keep a `default` branch.
  *
  * @example
  * ```ts
  * try {
  *   await client.getAgent('weather').details();
  * } catch (error) {
- *   if (isRouteError(error, 'GET /agents/:agentId')) {
- *     switch (error.code) {
- *       case 'AGENT_NOT_FOUND':
- *         console.log(error.metadata.agentId);
- *         break;
- *     }
+ *   const serverError = getServerError(error, 'GET /agents/:agentId');
+ *   if (serverError?.code === 'AGENT_NOT_FOUND') {
+ *     toast(`Unknown agent ${serverError.metadata.agentId}`);
+ *   } else {
+ *     toast(serverError?.error ?? 'Something went wrong');
  *   }
  * }
  * ```
  */
-export function isRouteError<K extends RouteKey>(
-  error: unknown,
-  _route: K,
-): error is TypedMastraClientError<RouteErrorCode<K>> {
-  return isServerError(error);
-}
-
-/**
- * One handler per error code, each receiving the error with its typed `metadata`.
- *
- * Either handle every code (exhaustive, `default` optional) or some codes plus `default`.
- * `default` also receives errors that aren't server errors, such as network failures.
- */
-export type ServerErrorHandlers<C extends ServerErrorCode, R> =
-  | ({ [K in C]: (error: TypedMastraClientError<K>) => R } & { default?: (error: unknown) => R })
-  | ({ [K in C]?: (error: TypedMastraClientError<K>) => R } & { default: (error: unknown) => R });
-
-/**
- * Calls the handler matching the error's code, or `default`. Rethrows `error` when nothing matches.
- *
- * @example
- * ```ts
- * const message = matchServerError(error, {
- *   AGENT_NOT_FOUND: e => `Unknown agent ${e.metadata.agentId}`,
- *   default: () => 'Something went wrong',
- * });
- * ```
- */
-export function matchServerError<R>(error: unknown, handlers: ServerErrorHandlers<ServerErrorCode, R>): R {
-  return dispatchServerError(error, handlers);
-}
-
-/**
- * Like `matchServerError`, limited to the codes `route` can return. Without `default`, every code
- * the route can return must be handled.
- *
- * @example
- * ```ts
- * try {
- *   await client.getAgent('weather').details();
- * } catch (error) {
- *   matchRouteError(error, 'GET /agents/:agentId', {
- *     AGENT_NOT_FOUND: e => toast(`Unknown agent ${e.metadata.agentId}`),
- *     AUTHENTICATION_REQUIRED: () => redirectToLogin(),
- *     default: () => toast('Something went wrong'),
- *   });
- * }
- * ```
- */
-export function matchRouteError<K extends RouteKey, R>(
-  error: unknown,
-  _route: K,
-  handlers: ServerErrorHandlers<RouteErrorCode<K>, R>,
-): R {
-  return dispatchServerError(error, handlers);
-}
-
-function dispatchServerError<R>(error: unknown, handlers: Record<string, ((error: any) => R) | undefined>): R {
-  const handler = isServerError(error) ? handlers[error.code] : undefined;
-  if (handler) return handler(error);
-  if (handlers.default) return handlers.default(error);
-  throw error;
+export function getServerError(error: unknown): ServerError | undefined;
+export function getServerError<K extends RouteKey>(error: unknown, route: K): RouteError<K> | undefined;
+export function getServerError(error: unknown): ServerError | undefined {
+  if (!(error instanceof MastraClientError) || error.code === undefined) return undefined;
+  const body = isPlainObject(error.body) ? error.body : {};
+  const message =
+    typeof body.error === 'string' ? body.error : typeof body.message === 'string' ? body.message : error.message;
+  const serverError = { error: message, code: error.code, ...(error.metadata ? { metadata: error.metadata } : {}) };
+  // The body comes from the server, which types `metadata` by `code`.
+  return serverError as ServerError;
 }
 
 // ============================================
