@@ -10,6 +10,7 @@ import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
   getCustomHTTPExceptionResponse,
+  getHTTPErrorResponse,
   isSafeObjectKey,
   isZodError,
   normalizeQueryParams,
@@ -615,24 +616,8 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
             return;
           }
 
-          // Check if it's an HTTPException or MastraError with a status code
-          let status = 500;
-          if (error && typeof error === 'object') {
-            // Check for direct status property (HTTPException)
-            if ('status' in error) {
-              status = (error as any).status;
-            }
-            // Check for MastraError with status in details
-            else if (
-              'details' in error &&
-              error.details &&
-              typeof error.details === 'object' &&
-              'status' in error.details
-            ) {
-              status = (error.details as any).status;
-            }
-          }
-          res.status(status).json({ error: error instanceof Error ? error.message : 'Unknown error' });
+          const { status, body } = getHTTPErrorResponse(error);
+          res.status(status).json(body);
         }
       },
     );

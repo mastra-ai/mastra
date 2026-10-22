@@ -9,6 +9,7 @@ import {
   MastraServer as MastraServerBase,
   checkRouteFGA,
   getCustomHTTPExceptionResponse,
+  getHTTPErrorResponse,
   isSafeObjectKey,
   isZodError,
   normalizeQueryParams,
@@ -763,26 +764,9 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
           return customResponse;
         }
 
-        // Check if it's an error with a status code
-        if (error && typeof error === 'object') {
-          if ('status' in error) {
-            const status = (error as any).status;
-            return new Response(JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }), {
-              status,
-              headers: { 'Content-Type': 'application/json' },
-            });
-          }
-          if ('details' in error && error.details && typeof error.details === 'object' && 'status' in error.details) {
-            const status = (error.details as any).status;
-            return new Response(JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }), {
-              status,
-              headers: { 'Content-Type': 'application/json' },
-            });
-          }
-        }
-
-        return new Response(JSON.stringify({ error: error instanceof Error ? error.message : 'Unknown error' }), {
-          status: 500,
+        const { status, body } = getHTTPErrorResponse(error);
+        return new Response(JSON.stringify(body), {
+          status,
           headers: { 'Content-Type': 'application/json' },
         });
       }
