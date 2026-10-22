@@ -24,6 +24,7 @@ import { prepareAgentControllerMount } from '@mastra/code-sdk';
 import { getDynamicMemory } from '@mastra/code-sdk/agents/memory';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentControllerRequestContext, BuiltinToolId } from '@mastra/core/agent-controller';
+import type { MastraBrowser } from '@mastra/core/browser';
 import { AgentControllerChannels } from '@mastra/core/channels';
 import { EventEmitterPubSub } from '@mastra/core/events';
 import type { PubSub } from '@mastra/core/events';
@@ -247,6 +248,8 @@ export interface MastraFactoryConfig {
    * disabled.
    */
   sandbox?: MastraFactorySandboxOption;
+  /** Browser automation provider for Factory agent sessions. */
+  browser?: MastraBrowser;
   /**
    * When a session's sandbox boots: on the agent's first command (`'lazy'`,
    * the default) or as soon as the session's workspace is first resolved
@@ -1268,6 +1271,7 @@ export class MastraFactory {
     const prepared = await timedPhase('prepare.controllerMount', () =>
       prepareAgentControllerMount({
         controllerId: CONTROLLER_ID,
+        browser: this.#config.browser,
         coAuthor: { name: 'mastra-platform[bot]' },
         ...(this.#config.disableBuiltinTools?.length ? { disableBuiltinTools: this.#config.disableBuiltinTools } : {}),
         modes: false,
