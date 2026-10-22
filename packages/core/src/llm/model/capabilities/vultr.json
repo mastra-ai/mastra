@@ -39,27 +39,12 @@
     "qwen3.8-flash-next"
   ],
   "reasoning": {
-    "deepseek-v4-flash-0731": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "nemotron-3.5-content-safety": [
+    "minimax-m3": [
       {
         "type": "toggle"
       }
     ],
-    "nemotron-3-nano-omni-30b-a3b-reasoning": [
+    "laguna-s-2.1": [
       {
         "type": "toggle"
       }
@@ -73,15 +58,10 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "glm-5.3": [
+    "muse-glimmer-30b": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "mimo-v2.6-flash-rl": [
-      {
-        "type": "toggle"
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "qwen3.8-flash-next": [
@@ -90,13 +70,12 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "glm-5.2": [
+    "mimo-v2.6-flash-rl": [
       {
-        "type": "effort",
-        "values": ["none", "high", "max"]
+        "type": "toggle"
       }
     ],
-    "glm-5.x-menthol": [
+    "nemotron-3-nano-omni-30b-a3b-reasoning": [
       {
         "type": "toggle"
       }
@@ -110,25 +89,46 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "laguna-s-2.1": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "minimax-m3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "muse-glimmer-30b": [
+    "glm-5.2": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "nemotron-3.5-content-safety": [
+      {
+        "type": "toggle"
       }
     ],
     "mimo-v2.6-pro-rl": [
       {
         "type": "toggle"
+      }
+    ],
+    "deepseek-v4-flash-0731": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "glm-5.x-menthol": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }

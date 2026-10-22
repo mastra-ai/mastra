@@ -118,6 +118,8 @@ export interface FactoryApiRoutesDeps {
   intakeReady: boolean;
   factoryReady: boolean;
   knowledgeEnabled: boolean;
+  /** The Factory MCP endpoint is mounted; surfaced so the UI can show its URL. */
+  mcpEnabled: boolean;
   /** Providers the operator opted in to run on the server process's own credentials. */
   deploymentModelProviders?: ReadonlySet<string>;
   knowledgeKey?: string;
@@ -637,6 +639,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
     'POST /web/github/projects/:id/sessions',
     'GET /web/user-sessions/:sessionId',
     'DELETE /web/user-sessions/:sessionId',
+    'POST /web/user-sessions/:sessionId/owner',
     'POST /web/user-sessions/:sessionId/title',
   ]);
   const providerRoutes = integrationRoutes.filter(
@@ -651,6 +654,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           projects: deps.domains.projects,
           ...(deps.users ? { users: deps.users } : {}),
           controller: deps.controller,
+          audit: deps.audit,
           memorySettings: deps.domains.memorySettings,
           sessionRetirement: deps.sessionRetirement,
           // A local sandbox's destroy keeps the session directory, so recreate
@@ -748,7 +752,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       memorySettings: deps.domains.memorySettings,
       factoryProjects: deps.domains.projects,
       customProviders: deps.domains.customProviders,
-      features: { knowledge: deps.knowledgeEnabled },
+      features: { knowledge: deps.knowledgeEnabled, mcp: deps.mcpEnabled },
       deploymentProviders: deps.deploymentModelProviders,
       onCredentialsChanged: invalidateTenantCredentialSnapshots,
       onCustomProvidersChanged: invalidateCustomProvidersSnapshots,

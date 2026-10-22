@@ -31,7 +31,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "railway": "^3.5.5"
+    "railway": "^3.16.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",

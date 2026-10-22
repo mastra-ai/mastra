@@ -44,7 +44,7 @@
     "mastra": "link:../../packages/cli",
     "tinyexec": "^1.2.4",
     "typescript": "^7.0.2",
-    "varlock": "^1.9.0",
+    "varlock": "^1.23.0",
     "vitest": "4.1.11",
     "zod": "^4.6.7"
   },

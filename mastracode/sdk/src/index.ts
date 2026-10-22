@@ -22,7 +22,7 @@ import { Knowledge } from '@mastra/core/knowledge';
 import { PROVIDER_REGISTRY, findGatewayForModel, getGatewayId } from '@mastra/core/llm';
 import type { MastraModelGatewayInterface, ProviderConfig } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
-import { defaultNotificationDeliveryDecision } from '@mastra/core/notifications';
+import { defaultNotificationDeliveryDecision, readNotificationRoutingRequirement } from '@mastra/core/notifications';
 import {
   AgentsMDInjector,
   createBackgroundWorkSignalProcessor,
@@ -455,8 +455,8 @@ export interface MastraCodeConfig {
    * Bring the session that owns `resourceId` online when a notification is
    * delivered and no session in this process owns it (a deferred delivery
    * after the session closed, a restart, another replica). Without it such a
-   * delivery wakes the thread with no request context: no owner identity, no
-   * model selection. Create the session as its owner, or throw when the owner
+   * notification stays pending until a process whose session runs the thread
+   * delivers it. Create the session as its owner, or throw when the owner
    * can't be resolved. When set, a delivery that still finds no owning session
    * fails with that error instead of running.
    */
@@ -1356,26 +1356,37 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
             decision.action === 'deliver' || decision.action === 'summarize'
               ? await resolveWakeOwner(target, notificationDispatchLeases)
               : await findWakeSession(controller, liveSessions, target, notificationDispatchLeases);
-          // A session here serves the resource but not the thread's project:
-          // another process sharing the resource runs it. Leave it pending for
-          // that process, whose own dispatch pass for the thread's scope
-          // delivers it, rather than running it with this one's workspace.
-          if (owner === FOREIGN_THREAD) return { ...decision, hold: true };
-          const streamOptions = owner
-            ? await getWakeStreamOptions({
-                resourceId: input.record.resourceId,
-                threadId: input.record.threadId,
-                owner,
-              })
-            : undefined;
+          // No session here runs the thread: a session here serves the
+          // resource but not the thread's project, or none serves the resource.
+          // Another process sharing the database runs it, with its own
+          // workspace and model. Never wake it from here, where the run would
+          // start with no session: leave it pending for that process's own
+          // dispatch pass. `hold` covers that at delivery time but is ignored
+          // when a notification is first sent, so an action that wakes the
+          // thread at first send becomes a delivery due now. A sender that
+          // asked for the thread's claimed owner is already routed to that
+          // process, so its first send goes ahead.
+          if (owner === FOREIGN_THREAD || owner === undefined) {
+            const wakesAtFirstSend = decision.action === 'deliver' || decision.action === 'queue';
+            const routedToOwner = readNotificationRoutingRequirement(input.record.metadata)?.requireClaimedOwner;
+            if (!wakesAtFirstSend || routedToOwner) return { ...decision, hold: true };
+            return { action: 'defer', deliverAt: input.now, reason: decision.reason, hold: true };
+          }
+          const streamOptions = await getWakeStreamOptions({
+            resourceId: input.record.resourceId,
+            threadId: input.record.threadId,
+            owner,
+          });
           const withOptions = streamOptions ? { ...decision, streamOptions } : decision;
+          // With a pubsub of its own the embedder runs no dispatch timer here,
+          // so this process delivers its own resources from the shared schedule.
           if (!ownsNotificationDispatch) return withOptions;
           // `hold` only applies at delivery time; it is ignored when a
           // notification is first sent.
           const hold = shouldHoldNotificationDelivery({
             resourceId: input.record.resourceId,
-            scope: owner?.scope,
-            ownedHere: owner !== undefined,
+            scope: owner.scope,
+            ownedHere: true,
             dispatcher: notificationDispatcher,
           });
           return hold ? { ...withOptions, hold: true } : withOptions;
