@@ -766,7 +766,7 @@ export abstract class ObservationStrategy {
     threadId: string,
     resourceId?: string,
   ): Promise<boolean> {
-    if (!messageList) return false;
+    if (this.opts.abortSignal?.aborted || !messageList) return false;
     const allMsgs = getObservableMessages(messageList);
     for (let i = allMsgs.length - 1; i >= 0; i--) {
       const msg = allMsgs[i];

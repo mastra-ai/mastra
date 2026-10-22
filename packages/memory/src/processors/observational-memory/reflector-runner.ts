@@ -1040,6 +1040,7 @@ export class ReflectorRunner {
             committedContext?.abortSignal,
           );
         } catch {
+          committedContext?.abortSignal?.throwIfAborted();
           // Timeout or error - proceed with what we have
         }
       }

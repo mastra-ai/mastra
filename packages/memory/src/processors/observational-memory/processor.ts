@@ -228,7 +228,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       : undefined;
     state.__omActorModelContext = actorModelContext;
 
-    return this.engine.getTokenCounter().runWithModelContext(actorModelContext, async () => {
+    const processing = this.engine.getTokenCounter().runWithModelContext(actorModelContext, async () => {
       // Repro capture setup
       const reproCaptureEnabled = isOmReproCaptureEnabled();
       const preRecordSnapshot = reproCaptureEnabled
@@ -448,6 +448,16 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       }
 
       return messageList;
+    });
+    return processing.catch(async error => {
+      // Input processing can fail after prepare(), before output processors get a chance to run.
+      const failedTurn = asLiveTurn(state.__omTurn) ?? this.turn;
+      if (failedTurn && !failedTurn.ended) {
+        await failedTurn.end().catch(() => {});
+      }
+      if (this.turn === failedTurn) this.turn = undefined;
+      state.__omTurn = undefined;
+      throw error;
     });
   }
 
