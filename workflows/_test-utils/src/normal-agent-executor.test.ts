@@ -163,11 +163,6 @@ createDurableAgentTestSuite({
   },
 
   skip: {
-    // Explicitly enabled: `{}.constructor` is Object's constructor (truthy),
-    // so legs that omit this key silently skip the constructor domain.
-    // `false` opts this leg in.
-    constructor: false,
-
     // ── Durable-only machinery (no plain-Agent equivalent) ──────────────
     prepare: true, // pins prepare() → workflowInput serialization
     pubsub: true, // pins event-bus topics/chunks
