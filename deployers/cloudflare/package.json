@@ -60,7 +60,7 @@
     "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
-    "wrangler": "^4.147.0",
+    "wrangler": "^4.151.2",
     "zod": "^3.25.76"
   },
   "homepage": "https://mastra.ai",

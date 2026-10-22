@@ -137,12 +137,17 @@ describe('Agent client-side tools', () => {
     const resp = await agent.stream('weather?', { clientTools: { weatherTool } });
 
     let lastChunk: any = null;
+    let clientToolResultChunk: any = null;
     await resp.processDataStream({
       onChunk: async chunk => {
         lastChunk = chunk;
+        if (chunk.type === 'tool-result' && chunk.payload?.toolCallId === toolCallId) {
+          clientToolResultChunk = chunk;
+        }
       },
     });
 
+    expect(clientToolResultChunk?.payload?.args).toEqual({ location: 'NYC' });
     expect(lastChunk?.type).toBe('finish');
     expect(lastChunk?.payload?.stepResult?.reason).toBe('stop');
     // Client tool executed
