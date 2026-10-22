@@ -4,7 +4,7 @@
 
 Factory settings are grouped by topic: **Account** (My account, Preferences, Connections), **Agent** (Models, Memory, Skills, Behavior) and **Factory** (Repositories, Environment, Work Intake, Manage Factory).
 
-**Models** is now one page. Pick **Personal**, **Hybrid** or **Factory** routing, and a map shows which defaults chats and work-item runs use. Each set of defaults has its own model and providers. The set the routing does not use folds away, and **Settings** on its card still opens it, so you can change the Factory default in a Personal-routed Factory, where chats fall back to it. Keys added under Personal defaults are yours; keys added under Factory defaults are shared with the organization and only organization admins can change them.
+**Models** is now one page. Pick **Personal**, **Hybrid** or **Factory** routing. A map shows which defaults chats and work-item runs use. Personal defaults and Factory defaults each have their own model and providers. The set your routing does not use folds away. Click **Settings** on its card to open it again. Chats with no personal default still use the Factory default, so you can change it from a Personal-routed Factory. Keys added under Personal defaults are yours. Keys added under Factory defaults are shared with the organization. Only organization admins can change them.
 
 **Memory** shows personal memory (used by chats) and Factory memory (used by work-item runs) on one page, each laid out top to bottom from messages to the observer and the reflector.
 
