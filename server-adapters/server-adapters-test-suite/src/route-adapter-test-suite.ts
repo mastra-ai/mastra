@@ -1,4 +1,5 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { registerApiRoute } from '@mastra/core/server';
 import { handleError } from '@mastra/server/handlers/error';
 import { createRoute, HTTPException, SERVER_ROUTES } from '@mastra/server/server-adapter';
 import type { ServerRoute } from '@mastra/server/server-adapter';
@@ -10,7 +11,6 @@ import { createRouteTestSuite } from './route-test-suite';
 import { expectValidSchema } from './route-test-utils';
 import { buildRouteRequest, createDefaultTestContext, parseDatesInResponse } from './test-helpers';
 import type { AdapterTestContext, AdapterTestSuiteConfig, HttpRequest } from './test-helpers';
-import { registerApiRoute } from '@mastra/core/server';
 
 /**
  * Creates a standardized integration test suite for server adapters (Express/Hono)
@@ -375,15 +375,12 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
     const deprecatedRoutes = SERVER_ROUTES.filter(r => r.deprecated);
 
     // Group deprecated routes by first path segment
-    const deprecatedByCategory = deprecatedRoutes.reduce(
-      (acc, route) => {
-        const category = route.path.split('/')[1] || 'root';
-        if (!acc[category]) acc[category] = [];
-        acc[category].push(route);
-        return acc;
-      },
-      {} as Record<string, typeof deprecatedRoutes>,
-    );
+    const deprecatedByCategory = deprecatedRoutes.reduce<Record<string, typeof deprecatedRoutes>>((acc, route) => {
+      const category = route.path.split('/')[1] || 'root';
+      if (!acc[category]) acc[category] = [];
+      acc[category].push(route);
+      return acc;
+    }, {});
 
     Object.entries(deprecatedByCategory).forEach(([category, routes]) => {
       describe(category, () => {
@@ -517,15 +514,12 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
     const devOnlyRoutes = ['/mcp/:serverId/events/:eventName/emit'];
 
     // Group routes by first path segment (e.g., /agents/:id/tools -> 'agents')
-    const routesByCategory = activeRoutes.reduce(
-      (acc, route) => {
-        const category = route.path.split('/')[1] || 'root';
-        if (!acc[category]) acc[category] = [];
-        acc[category].push(route);
-        return acc;
-      },
-      {} as Record<string, typeof activeRoutes>,
-    );
+    const routesByCategory = activeRoutes.reduce<Record<string, typeof activeRoutes>>((acc, route) => {
+      const category = route.path.split('/')[1] || 'root';
+      if (!acc[category]) acc[category] = [];
+      acc[category].push(route);
+      return acc;
+    }, {});
 
     Object.entries(routesByCategory).forEach(([category, routes]) => {
       describe(category, () => {
