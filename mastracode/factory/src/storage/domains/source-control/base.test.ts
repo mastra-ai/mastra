@@ -774,39 +774,53 @@ describe('SourceControlStorage', () => {
       return { first, second };
     }
 
-    it.each(['github-issue', 'github-pr'] as const)('starts %s cards numbered 13 in two repositories and reuses retries (#28048)', async source => {
-      const project = await createProject();
-      const { first, second } = await twoLinks(project.id);
-      const start = (projectRepositoryId: string, id: string) => ensureFactorySourceSession({
-        sourceControl: github, orgId: 'org-1', factoryProjectId: project.id, projectRepositoryId,
-        branch: workItemBranch({ id, source, metadata: { number: 13 } }),
-      });
-      const a = await start(first.id, 'aaaaaaaa-0000-4000-8000-000000000001');
-      const b = await start(second.id, 'bbbbbbbb-0000-4000-8000-000000000002');
-      expect(a.branch).not.toBe(b.branch);
-      expect(a.userId).toBe(b.userId);
-      expect(a.sessionId).not.toBe(b.sessionId);
-      expect(await start(first.id, 'aaaaaaaa-0000-4000-8000-000000000001')).toEqual(a);
-      expect(await github.sessions.listByProjectRepository({ projectRepositoryId: first.id })).toHaveLength(1);
-      expect(await github.sessions.listByProjectRepository({ projectRepositoryId: second.id })).toHaveLength(1);
-    });
+    it.each(['github-issue', 'github-pr'] as const)(
+      'starts %s cards numbered 13 in two repositories and reuses retries (#28048)',
+      async source => {
+        const project = await createProject();
+        const { first, second } = await twoLinks(project.id);
+        const start = (projectRepositoryId: string, id: string) =>
+          ensureFactorySourceSession({
+            sourceControl: github,
+            orgId: 'org-1',
+            factoryProjectId: project.id,
+            projectRepositoryId,
+            branch: workItemBranch({ id, source, metadata: { number: 13 } }),
+          });
+        const a = await start(first.id, 'aaaaaaaa-0000-4000-8000-000000000001');
+        const b = await start(second.id, 'bbbbbbbb-0000-4000-8000-000000000002');
+        expect(a.branch).not.toBe(b.branch);
+        expect(a.userId).toBe(b.userId);
+        expect(a.sessionId).not.toBe(b.sessionId);
+        expect(await start(first.id, 'aaaaaaaa-0000-4000-8000-000000000001')).toEqual(a);
+        expect(await github.sessions.listByProjectRepository({ projectRepositoryId: first.id })).toHaveLength(1);
+        expect(await github.sessions.listByProjectRepository({ projectRepositoryId: second.id })).toHaveLength(1);
+      },
+    );
 
-    it.each(['github-issue', 'github-pr'] as const)('reuses an existing legacy %s branch only on its repository link', async source => {
-      const project = await createProject();
-      const { first, second } = await twoLinks(project.id);
-      const branch = source === 'github-pr' ? 'factory/pr-13' : 'factory/issue-13';
-      const existing = await github.sessions.create(sessionInput('legacy-card', first.id, 'user-1', branch));
-      const start = (projectRepositoryId: string, id: string) => ensureFactorySourceSession({
-        sourceControl: github, orgId: 'org-1', factoryProjectId: project.id, projectRepositoryId,
-        branch: workItemBranch({ id, source, metadata: { number: 13 } }),
-      });
-      const resumed = await start(first.id, 'aaaaaaaa-0000-4000-8000-000000000001');
-      expect(resumed).toMatchObject({ sessionId: existing.sessionId, branch });
-      const fresh = await start(second.id, 'bbbbbbbb-0000-4000-8000-000000000002');
-      expect(fresh.sessionId).not.toBe(existing.sessionId);
-      expect(fresh.branch).not.toBe(branch);
-      expect(await github.sessions.listByProjectRepository({ projectRepositoryId: first.id })).toHaveLength(1);
-    });
+    it.each(['github-issue', 'github-pr'] as const)(
+      'reuses an existing legacy %s branch only on its repository link',
+      async source => {
+        const project = await createProject();
+        const { first, second } = await twoLinks(project.id);
+        const branch = source === 'github-pr' ? 'factory/pr-13' : 'factory/issue-13';
+        const existing = await github.sessions.create(sessionInput('legacy-card', first.id, 'user-1', branch));
+        const start = (projectRepositoryId: string, id: string) =>
+          ensureFactorySourceSession({
+            sourceControl: github,
+            orgId: 'org-1',
+            factoryProjectId: project.id,
+            projectRepositoryId,
+            branch: workItemBranch({ id, source, metadata: { number: 13 } }),
+          });
+        const resumed = await start(first.id, 'aaaaaaaa-0000-4000-8000-000000000001');
+        expect(resumed).toMatchObject({ sessionId: existing.sessionId, branch });
+        const fresh = await start(second.id, 'bbbbbbbb-0000-4000-8000-000000000002');
+        expect(fresh.sessionId).not.toBe(existing.sessionId);
+        expect(fresh.branch).not.toBe(branch);
+        expect(await github.sessions.listByProjectRepository({ projectRepositoryId: first.id })).toHaveLength(1);
+      },
+    );
 
     it('create derives the factory from the link and rejects a mismatching one', async () => {
       const project = await createProject();
@@ -849,7 +863,12 @@ describe('SourceControlStorage', () => {
       );
       await expect(
         github.sessions.create(sessionInput('00000000-0000-4000-8000-000000000112', second.id)),
-      ).rejects.toMatchObject({ name: 'SessionBranchHeldError', sessionId: session.sessionId, branch: 'feat/x', message: expect.stringContaining(session.sessionId) });
+      ).rejects.toMatchObject({
+        name: 'SessionBranchHeldError',
+        sessionId: session.sessionId,
+        branch: 'feat/x',
+        message: expect.stringContaining(session.sessionId),
+      });
       const forced = await insertLegacySession({
         sessionId: '00000000-0000-4000-8000-000000000113',
         projectRepositoryId: second.id,

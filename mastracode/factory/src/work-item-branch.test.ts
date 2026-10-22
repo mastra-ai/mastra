@@ -48,7 +48,9 @@ describe('workItemBranch', () => {
 
   it.each(['github-issue', 'github-pr'] as const)('keeps %s branches stable for the same card', source => {
     const card = { id, source, metadata: { number: 13 } };
-    expect(workItemBranch(card)).toBe(workItemBranch({ ...card, metadata: { number: 13, repository: 'renamed/repo' } }));
+    expect(workItemBranch(card)).toBe(
+      workItemBranch({ ...card, metadata: { number: 13, repository: 'renamed/repo' } }),
+    );
   });
 
   it('accepts the intake fallback `number` key for github cards', () => {
@@ -120,6 +122,15 @@ describe('pullRequestNumberFromBranch', () => {
     expect(pullRequestNumberFromBranch('factory/pr-0')).toBeUndefined();
     expect(pullRequestNumberFromBranch('factory/pr-7x')).toBeUndefined();
     expect(pullRequestNumberFromBranch('factory/pr-7-unsafe!')).toBeUndefined();
+    for (const branch of [
+      'factory/pr-7-',
+      'factory/pr-7-abcdefghijklm',
+      'factory/pr-7-ABC',
+      'factory/pr-9007199254740992-abc',
+      'factory/pr-07-abc',
+    ]) {
+      expect(pullRequestNumberFromBranch(branch)).toBeUndefined();
+    }
     expect(pullRequestNumberFromBranch('feat/pr-7')).toBeUndefined();
   });
 
