@@ -91,7 +91,7 @@ export function SpanPayloadSection({
           {title}
         </DataPanelSectionHeading>
         <div className="ml-auto flex items-center gap-2">
-          <CopyButton content={JSON.stringify(raw, null, 2)} size="sm" variant="ghost" />
+          <CopyButton content={JSON.stringify(raw, null, 2)} variant="ghost" />
           {hasRich && <ViewToggle view={view} onChange={setView} />}
         </div>
       </div>
