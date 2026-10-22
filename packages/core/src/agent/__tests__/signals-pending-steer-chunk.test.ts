@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { isUserMessagePendingChunk, isUserMessageCancelledChunk } from '../../stream/types';
+import type { UserMessageCancelledChunk, UserMessagePendingChunk } from '../../stream/types';
 import { Agent } from '../agent';
 import { AgentThreadStreamRuntime, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import {
@@ -19,6 +19,10 @@ function collect(subscription: { stream: AsyncIterable<unknown> }) {
 }
 const hasType = (part: unknown, type: string) =>
   !!part && typeof part === 'object' && 'type' in part && part.type === type;
+const isUserMessagePendingChunk = (part: unknown): part is UserMessagePendingChunk =>
+  hasType(part, 'data-user-message-pending');
+const isUserMessageCancelledChunk = (part: unknown): part is UserMessageCancelledChunk =>
+  hasType(part, 'data-user-message-cancelled');
 
 describe('Agent signals: steer shown to subscribers on accept', () => {
   beforeEach(() => {

@@ -6,8 +6,13 @@ import type {
   MastraToolInvocation,
   MastraToolInvocationPart,
 } from '@mastra/core/agent/message-list';
-import type { AgentChunkType, ChunkType, NetworkChunkType } from '@mastra/core/stream';
-import { isUserMessagePendingChunk, isUserMessageCancelledChunk } from '@mastra/core/stream';
+import type {
+  AgentChunkType,
+  ChunkType,
+  NetworkChunkType,
+  UserMessageCancelledChunk,
+  UserMessagePendingChunk,
+} from '@mastra/core/stream';
 import type { StepResult, WorkflowStreamResult } from '@mastra/core/workflows';
 import { uint8ArrayToBase64, encodeFilePartDataForStorage } from '../../agent/signal-data';
 import { formatCompletionFeedback, formatStreamCompletionFeedback } from './formatCompletionFeedback';
@@ -569,6 +574,12 @@ export interface AccumulateChunkArgs {
  */
 const isQueuedUserBubble = (message: MastraDBMessage): boolean =>
   message.role === 'user' && message.content.metadata?.queued === true;
+
+const isUserMessagePendingChunk = (chunk: ChunkType): chunk is UserMessagePendingChunk =>
+  chunk.type === 'data-user-message-pending';
+
+const isUserMessageCancelledChunk = (chunk: ChunkType): chunk is UserMessageCancelledChunk =>
+  chunk.type === 'data-user-message-cancelled';
 
 export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChunkArgs): MastraDBMessage[] => {
   const result = [...conversation];
@@ -1411,7 +1422,8 @@ export const accumulateChunk = ({ chunk, conversation, metadata }: AccumulateChu
       // Workflow stream output: accumulate into watch-result state
       if (payloadOutput?.type?.startsWith('workflow-')) {
         const existingWorkflowState = (toolPart.toolInvocation as any).result as
-          WorkflowStreamResult<any, any, any, any> | undefined;
+          | WorkflowStreamResult<any, any, any, any>
+          | undefined;
         const updated = mapWorkflowStreamChunkToWatchResult(existingWorkflowState, payloadOutput);
 
         parts[toolPartIndex] = {

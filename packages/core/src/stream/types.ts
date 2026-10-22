@@ -869,35 +869,6 @@ export type UserMessageCancelledChunk = BaseChunkType & {
   data: { id: string };
 };
 
-export function isUserMessagePendingChunk(value: unknown): value is UserMessagePendingChunk {
-  if (!value || typeof value !== 'object' || !('type' in value) || value.type !== 'data-user-message-pending')
-    return false;
-  if (!('data' in value) || !value.data || typeof value.data !== 'object') return false;
-  const data = value.data;
-  return (
-    'id' in data &&
-    typeof data.id === 'string' &&
-    'contents' in data &&
-    'metadata' in data &&
-    !!data.metadata &&
-    typeof data.metadata === 'object' &&
-    'status' in data.metadata &&
-    (data.metadata.status === 'pending' || data.metadata.status === 'queued')
-  );
-}
-
-export function isUserMessageCancelledChunk(value: unknown): value is UserMessageCancelledChunk {
-  if (!value || typeof value !== 'object' || !('type' in value) || value.type !== 'data-user-message-cancelled')
-    return false;
-  return (
-    'data' in value &&
-    !!value.data &&
-    typeof value.data === 'object' &&
-    'id' in value.data &&
-    typeof value.data.id === 'string'
-  );
-}
-
 export type DataChunkType = {
   type: `data-${string}`;
   data: any;
@@ -1281,7 +1252,8 @@ export type MastraStreamTransform<OUTPUT = undefined> = () => TransformStream<Ch
 
 /** @experimental This API may change in a future release. */
 export type MastraStreamTransformOptions<OUTPUT = undefined> =
-  MastraStreamTransform<OUTPUT> | readonly MastraStreamTransform<OUTPUT>[];
+  | MastraStreamTransform<OUTPUT>
+  | readonly MastraStreamTransform<OUTPUT>[];
 
 export type MastraModelOutputOptions<OUTPUT = undefined> = {
   runId: string;

@@ -72,7 +72,7 @@ export type { FullOutput } from './base/output';
 // ============================================================================
 // Enums & Classes
 // ============================================================================
-export { ChunkFrom, isUserMessagePendingChunk, isUserMessageCancelledChunk } from './types';
+export { ChunkFrom } from './types';
 export { MastraAgentNetworkStream } from './MastraAgentNetworkStream';
 export { MastraModelOutput } from './base/output';
 export { WorkflowRunOutput } from './RunOutput';
