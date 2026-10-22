@@ -91,10 +91,8 @@ export function ExperimentTraceTimelineTools({
             Other
           </Button>
         )}
-        <Button onClick={onLegendReset} disabled={fadedTypes?.length === 0}>
-          <Icon>
-            <XIcon />
-          </Icon>
+        <Button size="icon-md" onClick={onLegendReset} disabled={fadedTypes?.length === 0}>
+          <XIcon />
         </Button>
       </ButtonsGroup>
     </div>

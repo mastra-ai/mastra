@@ -293,7 +293,7 @@ function DatasetItemPanelBody({ datasetId, item, items, onItemChange, onClose }:
           {!isEditing && (
             <DropdownMenu>
               <DropdownMenu.Trigger asChild>
-                <Button size="sm" variant="ghost" tooltip="Open actions menu" aria-label="Open actions menu">
+                <Button size="icon-sm" variant="ghost" tooltip="Open actions menu" aria-label="Open actions menu">
                   <EllipsisVerticalIcon />
                 </Button>
               </DropdownMenu.Trigger>

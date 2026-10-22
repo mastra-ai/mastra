@@ -155,7 +155,7 @@ export function DatasetItemsToolbar({
             </CreateButton>
             <DropdownMenu>
               <DropdownMenu.Trigger asChild>
-                <Button aria-label="Dataset actions menu">
+                <Button size="icon-md" aria-label="Dataset actions menu">
                   <ChevronDown />
                 </Button>
               </DropdownMenu.Trigger>

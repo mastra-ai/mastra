@@ -2,6 +2,7 @@
 //   mastra/restricted-syntax          ESLint's no-restricted-syntax: options are { selector, message } objects
 //   mastra/test-needs-when-describe   every test()/it() inside a describe('when …') block (BDD test layout)
 //   mastra/import-order               eslint-plugin-import-x's `order` rule, without its module resolver
+//   mastra/icon-button-size           a playground-ui <Button> holding only an icon uses an `icon-*` size
 //   mastra/sentence-case-labels       button, menu item and tab labels in sentence case ("Add credits", not "Add Credits")
 
 import { isBuiltin } from 'node:module';
@@ -19,6 +20,83 @@ function restrictedSyntax(context) {
     };
   }
   return handlers;
+}
+
+// --- mastra/icon-button-size ---------------------------------------------------------------------------
+// A text size (`sm`, `md`, `lg`, or none) pads the button for a label, so an icon on its own renders as a
+// pill. `icon-sm|md|lg` is the same height as a square, which the design system rounds into a circle.
+// Only literal sizes are checked: a forwarded `size={size}` is the wrapping component's call to make.
+
+// An icon is a component imported from an icon module (lucide-react, an `icons/` folder), one named
+// `*Icon` (`Icon`, `XIcon`, `TraceIcon`), or a spinner. Anything else may render text, like a badge.
+const iconModulePattern = /^lucide-react$|\/icons?(\/|$)/;
+
+function isIconName(name, iconImports) {
+  return iconImports.has(name) || /Icon$/.test(name) || name === 'Spinner';
+}
+
+function isIconElement(node, iconImports) {
+  if (node.type !== 'JSXElement') return false;
+  const { name } = node.openingElement;
+  return name.type === 'JSXIdentifier' && isIconName(name.name, iconImports);
+}
+
+function isIconExpression(node, iconImports) {
+  if (node.type === 'JSXElement') return isIconElement(node, iconImports);
+  if (node.type === 'ConditionalExpression')
+    return isIconExpression(node.consequent, iconImports) && isIconExpression(node.alternate, iconImports);
+  if (node.type === 'LogicalExpression' && node.operator === '&&') return isIconExpression(node.right, iconImports);
+  return false;
+}
+
+function hasOnlyIconChildren(children, iconImports) {
+  const content = children.filter(child => !(child.type === 'JSXText' && !child.value.trim()));
+  return (
+    content.length > 0 &&
+    content.every(child =>
+      child.type === 'JSXExpressionContainer'
+        ? isIconExpression(child.expression, iconImports)
+        : isIconElement(child, iconImports),
+    )
+  );
+}
+
+function literalAttribute(value) {
+  if (value?.type === 'Literal') return value.value;
+  if (value?.type === 'JSXExpressionContainer' && value.expression.type === 'Literal') return value.expression.value;
+  return undefined;
+}
+
+function iconButtonSize(context) {
+  const { components = ['Button'] } = context.options[0] ?? {};
+  const names = new Set(components);
+  const iconImports = new Set();
+  return {
+    ImportDeclaration(node) {
+      if (!iconModulePattern.test(node.source.value)) return;
+      for (const specifier of node.specifiers) iconImports.add(specifier.local.name);
+    },
+    JSXElement(node) {
+      const { openingElement } = node;
+      if (openingElement.name.type !== 'JSXIdentifier' || !names.has(openingElement.name.name)) return;
+      const attributes = new Map();
+      for (const attribute of openingElement.attributes) {
+        // A spread may carry the size; leave those to the component that builds the props.
+        if (attribute.type === 'JSXSpreadAttribute') return;
+        attributes.set(attribute.name.name, attribute.value);
+      }
+      if (attributes.has('icon') || attributes.has('iconEnd')) return;
+      if (literalAttribute(attributes.get('variant')) === 'link') return;
+      if (attributes.has('size') && literalAttribute(attributes.get('size')) === undefined) return;
+      const size = literalAttribute(attributes.get('size')) ?? 'md';
+      if (typeof size !== 'string' || size.startsWith('icon-')) return;
+      if (!hasOnlyIconChildren(node.children, iconImports)) return;
+      context.report({
+        node: openingElement,
+        message: `This ${openingElement.name.name} holds only an icon: use size="icon-${size}" so it renders as a circle, not a pill.`,
+      });
+    },
+  };
 }
 
 const testFunctionNames = new Set(['test', 'it']);
@@ -472,6 +550,10 @@ const plugin = {
     'restricted-syntax': {
       meta: { type: 'suggestion', schema: false },
       create: restrictedSyntax,
+    },
+    'icon-button-size': {
+      meta: { type: 'suggestion', schema: false },
+      create: iconButtonSize,
     },
     'sentence-case-labels': {
       meta: { type: 'suggestion', schema: false },

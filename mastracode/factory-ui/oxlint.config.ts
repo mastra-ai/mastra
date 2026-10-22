@@ -5,6 +5,7 @@ export default defineConfig({
   extends: [rootConfig],
   // This package did not previously run lint; adopt assertion checks without an unrelated lint migration.
   rules: {
+    'mastra/icon-button-size': 'error',
     'mastra/import-order': 'off',
     'typescript/no-unnecessary-type-assertion': 'error',
     'typescript/no-unnecessary-template-expression': 'error',

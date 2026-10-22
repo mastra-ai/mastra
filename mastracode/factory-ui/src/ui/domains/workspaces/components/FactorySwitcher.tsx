@@ -4,7 +4,7 @@ import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Check, ChevronsUpDown, Factory as FactoryIcon, Plus } from 'lucide-react';
-import { useLocation, useNavigate, useParams } from 'react-router';
+import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import { useFactoriesQuery, useFactoryQuery } from '../../../../hooks/useFactories';
 import { createFactoryPath, factorySwitchPath } from '../services/factoryPaths';
 
@@ -45,12 +45,7 @@ export function FactorySwitcher() {
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="start" className="w-64">
         {factories.map(factory => (
-          <DropdownMenu.Item
-            key={factory.id}
-            onSelect={() => {
-              void navigate(factorySwitchPath(factory, location));
-            }}
-          >
+          <DropdownMenu.Item key={factory.id} render={<Link to={factorySwitchPath(factory, location)} />}>
             <FactoryIcon />
             <span className="flex min-w-0 flex-1 flex-col">
               <span className="truncate">{factory.name}</span>

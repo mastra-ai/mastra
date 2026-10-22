@@ -77,6 +77,7 @@ const HeaderListFormItem = ({ index, header, onRemove }: HeaderListFormItemProps
     </Field>
 
     <Button
+      size="icon-md"
       type="button"
       onClick={onRemove}
       aria-label="Remove header"

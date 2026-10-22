@@ -195,7 +195,7 @@ export default function Scorer() {
   const scorerActionsMenu = isStoredScorer ? (
     <DropdownMenu>
       <DropdownMenu.Trigger asChild>
-        <Button size="lg" aria-label="Scorer actions menu">
+        <Button size="icon-lg" aria-label="Scorer actions menu">
           <MoreVertical />
         </Button>
       </DropdownMenu.Trigger>

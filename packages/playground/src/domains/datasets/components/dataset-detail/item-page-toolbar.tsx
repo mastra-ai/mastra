@@ -33,7 +33,7 @@ export function ItemPageToolbar({ onBack, onEdit, onDelete, isEditing = false }:
 
             <Popover open={open} onOpenChange={setOpen}>
               <PopoverTrigger asChild>
-                <Button size="md" aria-label="Actions menu">
+                <Button size="icon-md" aria-label="Actions menu">
                   <ChevronDownIcon />
                 </Button>
               </PopoverTrigger>

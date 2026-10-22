@@ -69,9 +69,16 @@
   --text-card-title-strong--font-weight: 600;
   --text-card-title-strong--letter-spacing: var(--text-card-title--letter-spacing);
 
-  --text-body-sm: 0.8125rem; /* 13px — dense body: table cells, menus, field values */
+  --text-body-sm: 0.8125rem; /* 13px — dense body: table cells and field values */
   --text-body-sm--line-height: 150%;
   --text-body-sm--font-weight: 400;
+
+  /* Menus use a weight between body copy and button labels, with their own
+     tracking so they do not inherit the trigger's text style. */
+  --text-menu: 0.8125rem;
+  --text-menu--line-height: 1.25rem;
+  --text-menu--font-weight: 450;
+  --text-menu--letter-spacing: -0.01em;
 
   --text-column: 0.75rem; /* 12px — column headers and small strong labels */
   --text-column--line-height: 150%;

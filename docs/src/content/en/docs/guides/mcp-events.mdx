@@ -261,7 +261,7 @@ const triage = new Agent({
   id: 'triage',
   name: 'Triage',
   instructions: 'You triage support tickets. Reply with a priority and one sentence of reasoning.',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
 })
 
 const subscription = await mcp.events.subscribe('tickets', 'ticket.created', { project: 'web' })
