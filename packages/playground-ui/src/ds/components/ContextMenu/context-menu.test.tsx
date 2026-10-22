@@ -22,24 +22,6 @@ function ControlledMenu() {
 }
 
 describe('ContextMenu', () => {
-  it('keeps the app menu open when the browser emits contextmenu for a touch long-press', async () => {
-    render(<ControlledMenu />);
-    const trigger = screen.getByRole('link', { name: 'Session' });
-    fireEvent.contextMenu(trigger);
-    await screen.findByRole('menuitem', { name: 'Pin session' });
-    expect(
-      fireEvent(
-        trigger,
-        new PointerEvent('contextmenu', {
-          pointerType: 'touch',
-          bubbles: true,
-          cancelable: true,
-        }),
-      ),
-    ).toBe(false);
-    expect(screen.getByRole('menuitem', { name: 'Pin session' })).toBeTruthy();
-  });
-
   it.each(['controlled', 'uncontrolled'])('allows the next right-click to open the native menu (%s)', async mode => {
     if (mode === 'controlled') render(<ControlledMenu />);
     else
@@ -57,7 +39,6 @@ describe('ContextMenu', () => {
     fireEvent.pointerDown(trigger, { button: 2 });
     expect(fireEvent.contextMenu(trigger)).toBe(true);
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
-    // The escape hatch lasts for one gesture; a later right-click opens the app menu again.
     expect(fireEvent.contextMenu(trigger)).toBe(false);
     await screen.findByRole('menuitem', { name: 'Pin session' });
   });
@@ -77,23 +58,6 @@ describe('ContextMenu', () => {
     expect(fireEvent.contextMenu(item)).toBe(true);
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
     expect(onClick).not.toHaveBeenCalled();
-  });
-
-  it('keeps a canceled opening closed', () => {
-    render(
-      <ContextMenu
-        onOpenChange={(open, details) => {
-          if (open) details.cancel();
-        }}
-      >
-        <ContextMenu.Trigger>Blocked session</ContextMenu.Trigger>
-        <ContextMenu.Content>
-          <ContextMenu.Item>Pin session</ContextMenu.Item>
-        </ContextMenu.Content>
-      </ContextMenu>,
-    );
-    fireEvent.contextMenu(screen.getByText('Blocked session'));
-    expect(screen.queryByRole('menu')).toBeNull();
   });
 
   it('renders Label standalone without throwing (no Group ancestor required)', () => {

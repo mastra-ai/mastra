@@ -2,7 +2,7 @@ import { ContextMenu as ContextMenuPrimitive } from '@base-ui/react/context-menu
 import type { ContextMenuPopupProps, ContextMenuPositionerProps } from '@base-ui/react/context-menu';
 import { CheckIcon, ChevronDown } from 'lucide-react';
 import * as React from 'react';
-import { useNativeContextMenu } from './use-native-context-menu';
+import { allowNativeMenuAfterRightPressOutside } from './native-context-menu';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
 import { useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
 import {
@@ -30,6 +30,10 @@ const ContextMenuRadioGroup = ContextMenuPrimitive.RadioGroup;
 
 const ContextMenuTrigger = ContextMenuPrimitive.Trigger;
 
+const ContextMenuActionsContext = React.createContext<React.RefObject<ContextMenuPrimitive.Root.Actions | null> | null>(
+  null,
+);
+
 type ContextMenuContentPositionerProps = Omit<ContextMenuPositionerProps, keyof ContextMenuPopupProps>;
 
 type ContextMenuContentProps = ContextMenuPopupProps &
@@ -55,6 +59,7 @@ const ContextMenuContent = React.forwardRef<HTMLDivElement, ContextMenuContentPr
       disableAnchorTracking,
       collisionAvoidance,
       children,
+      onContextMenu,
       ...props
     },
     ref,
@@ -78,6 +83,7 @@ const ContextMenuContent = React.forwardRef<HTMLDivElement, ContextMenuContentPr
     // portal into the trap container to stay clickable and above it; explicit `container` wins.
     const resolvedContainer = usePortalContainer(container);
     const menu = useFluidMenu();
+    const actions = React.useContext(ContextMenuActionsContext);
 
     return (
       <ContextMenuPrimitive.Portal container={resolvedContainer}>
@@ -87,6 +93,11 @@ const ContextMenuContent = React.forwardRef<HTMLDivElement, ContextMenuContentPr
             data-slot="context-menu-content"
             className={cn(menuPopupClass, menuScrollPopupClass, className)}
             {...props}
+            onContextMenu={event => {
+              onContextMenu?.(event);
+              // Base UI leaves the native menu to popup items; ours must not linger behind it.
+              actions?.current?.close();
+            }}
           >
             <MenuScrollArea menu={menu}>{children}</MenuScrollArea>
           </ContextMenuPrimitive.Popup>
@@ -263,22 +274,22 @@ function ContextMenu({
   onOpenChange?: ContextMenuPrimitive.Root.Props['onOpenChange'];
   children: React.ReactNode;
 }) {
-  const [uncontrolledOpen, setUncontrolledOpen] = React.useState(defaultOpen ?? false);
-  const isOpen = open ?? uncontrolledOpen;
   const actions = React.useRef<ContextMenuPrimitive.Root.Actions | null>(null);
-  useNativeContextMenu(isOpen, actions);
 
   return (
-    <ContextMenuRoot
-      open={isOpen}
-      actionsRef={actions}
-      onOpenChange={(nextOpen, details) => {
-        onOpenChange?.(nextOpen, details);
-        if (!details.isCanceled && open === undefined) setUncontrolledOpen(nextOpen);
-      }}
-    >
-      {children}
-    </ContextMenuRoot>
+    <ContextMenuActionsContext.Provider value={actions}>
+      <ContextMenuRoot
+        open={open}
+        defaultOpen={defaultOpen}
+        actionsRef={actions}
+        onOpenChange={(nextOpen, details) => {
+          onOpenChange?.(nextOpen, details);
+          allowNativeMenuAfterRightPressOutside(details);
+        }}
+      >
+        {children}
+      </ContextMenuRoot>
+    </ContextMenuActionsContext.Provider>
   );
 }
 
