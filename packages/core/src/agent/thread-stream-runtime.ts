@@ -1019,8 +1019,9 @@ export class AgentThreadStreamRuntime {
    * Takes back a lease that lapsed while its run was still going because this process was late:
    * it stalled past the TTL, so a renewal went out after the lease had run out, or not at all
    * before the deadline. Acquiring succeeds only when the lease is free or
-   * still this run's, so a run another process took over is still stopped. A backend that doesn't
-   * answer within a TTL counts as a lost lease, as the deadline did before.
+   * still this run's, so a run another process took over is still stopped. The run keeps calling the model
+   * while this waits, so a backend that doesn't answer within one renewal interval counts as a lost lease:
+   * a process that only stalled answers at once when it runs again.
    */
   #retakeLease(pubsub: PubSub, key: string, runId: string, timer: ReturnType<typeof setInterval>): Promise<boolean> {
     const state = this.#getState(pubsub);
@@ -1033,7 +1034,9 @@ export class AgentThreadStreamRuntime {
         this.#getLeaseProvider(pubsub)
           .acquireLease(key, runId, AGENT_THREAD_LEASE_TTL_MS)
           .catch(() => undefined),
-        new Promise<undefined>(resolve => (giveUp = setTimeout(() => resolve(undefined), AGENT_THREAD_LEASE_TTL_MS))),
+        new Promise<undefined>(
+          resolve => (giveUp = setTimeout(() => resolve(undefined), AGENT_THREAD_LEASE_RENEW_INTERVAL_MS)),
+        ),
       ]).finally(() => clearTimeout(giveUp));
       if (!lease?.acquired) return false;
       if (state.leaseRenewalTimers.get(runId) !== timer) {

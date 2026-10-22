@@ -996,6 +996,54 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     expect(await output.finishReason).not.toBe('aborted');
   }, 20_000);
 
+  it('stops a run whose lapsed lease is not taken back within a renewal interval', async () => {
+    const thread = 'slow-retake-thread';
+    for (let i = 0; i < 100; i++) {
+      llm.on(
+        { userMessage: 'slow retake', sequenceIndex: i },
+        { toolCalls: [{ id: `call_slow_retake_${i}`, name: 'tick', arguments: {} }] },
+      );
+    }
+    const shared = new SharedLeases();
+    /** Once cut, renewals never answer and taking the lease back answers only after most of a TTL (300ms). */
+    class SlowBackendPubSub extends ReplicaPubSub {
+      cut = false;
+      override async renewLease(key: string, owner: string, ttlMs: number) {
+        if (this.cut && key.startsWith(`${RESOURCE}\u0000`)) await new Promise(() => {});
+        return super.renewLease(key, owner, ttlMs);
+      }
+      override async acquireLease(key: string, owner: string, ttlMs: number) {
+        if (this.cut && key.startsWith(`${RESOURCE}\u0000`)) await new Promise(resolve => setTimeout(resolve, 250));
+        return super.acquireLease(key, owner, ttlMs);
+      }
+    }
+    const pubsub = new SlowBackendPubSub(shared);
+    let ticks = 0;
+    const tick = createTool({
+      id: 'tick',
+      description: 'Tick once',
+      inputSchema: z.object({}),
+      execute: async () => {
+        ticks++;
+        await new Promise(resolve => setTimeout(resolve, 20));
+        return 'ticked';
+      },
+    });
+    const { output, drain } = await startStream(replica(shared, new MockMemory(), { tick }, pubsub), 'slow retake', {
+      maxSteps: 100,
+      memory: { thread, resource: RESOURCE },
+    });
+    const done = drain().catch(() => undefined);
+    await vi.waitFor(() => expect(ticks).toBeGreaterThanOrEqual(2), { timeout: 5_000 });
+
+    // A backend this slow can't show the run still holds the thread before another process could take it.
+    pubsub.cut = true;
+    await done;
+
+    expect(await output.finishReason).toBe('aborted');
+    expect(ticks).toBeLessThan(100);
+  }, 20_000);
+
   it('keeps a run going when a late renewal finds its lease expired and no other run took the thread', async () => {
     const thread = 'late-renewal-expired-thread';
     for (let i = 0; i < 8; i++) {
