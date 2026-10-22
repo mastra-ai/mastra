@@ -1,6 +1,6 @@
 import { Card, CardContent } from '@mastra/playground-ui/components/Card';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import type { ReactNode } from 'react';
+import type { ReactNode, Ref } from 'react';
 
 import { IconTile } from './IconTile';
 import { MODEL_DEFAULTS_LABELS, MODEL_LANE_ICONS, MODEL_LANE_LABELS } from './model-routes';
@@ -14,7 +14,7 @@ export function LaneCard({
 }: {
   lane: ModelLane;
   destination: ModelDefaults;
-  anchorRef: (element: HTMLElement | null) => void;
+  anchorRef: Ref<HTMLDivElement>;
   children: ReactNode;
 }) {
   return (

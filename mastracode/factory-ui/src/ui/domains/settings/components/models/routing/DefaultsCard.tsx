@@ -6,7 +6,7 @@ import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useState } from 'react';
-import type { ReactNode } from 'react';
+import type { ReactNode, Ref } from 'react';
 import { useLocation } from 'react-router';
 
 import { MODEL_DEFAULTS_ANCHORS } from '../../../settingsSections';
@@ -28,7 +28,7 @@ export function DefaultsCard({
 }: {
   defaults: ModelDefaults;
   inUse: boolean;
-  anchorRef: (element: HTMLElement | null) => void;
+  anchorRef: Ref<HTMLElement>;
   model: ReactNode;
   providers: ReactNode;
 }) {
