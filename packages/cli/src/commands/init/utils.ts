@@ -106,10 +106,10 @@ export function areValidComponents(values: string[]): values is Component[] {
 }
 
 export const getModelIdentifier = (llmProvider: LLMProvider): ModelRouterModelId => {
-  let model: ModelRouterModelId = 'openai/gpt-5-mini';
+  let model: ModelRouterModelId = 'openai/gpt-6.1-sol';
 
   if (llmProvider === 'anthropic') {
-    model = 'anthropic/claude-sonnet-5';
+    model = 'anthropic/claude-sonnet-5-5';
   } else if (llmProvider === 'groq') {
     model = 'groq/llama-3.3-70b-versatile';
   } else if (llmProvider === 'google') {
@@ -117,7 +117,7 @@ export const getModelIdentifier = (llmProvider: LLMProvider): ModelRouterModelId
   } else if (llmProvider === 'cerebras') {
     model = 'cerebras/llama-3.3-70b';
   } else if (llmProvider === 'mistral') {
-    model = 'mistral/mistral-medium-2508';
+    model = 'mistral/mistral-medium-2604';
   }
 
   return model;
