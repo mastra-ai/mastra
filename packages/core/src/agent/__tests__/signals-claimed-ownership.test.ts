@@ -1558,6 +1558,247 @@ describe('Agent signals: claimed thread ownership', () => {
     claim.unsubscribe();
   });
 
+  it('discards a forwarded concurrent input from the losing claimed reservation', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const runtime = agentThreadStreamRuntime;
+    const target = { resourceId: 'claim-replay-user', threadId: 'claim-replay-thread' };
+    const key = `${target.resourceId}\u0000${target.threadId}`;
+    const agent = new Agent({
+      id: 'claim-replay-agent',
+      name: 'Claim Replay Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('ok'),
+      pubsub,
+    });
+    const claim = await runtime.claimThreadOwnership(agent, target, pubsub);
+    let releaseAcquire!: () => void;
+    pubsub.acquireLeaseWait = new Promise<void>(resolve => (releaseAcquire = resolve));
+    const acquireStarted = new Promise<void>(resolve => {
+      pubsub.onAcquireLease = resolve;
+    });
+    try {
+      const first = runtime.sendSignal(
+        agent,
+        { type: 'user-message', contents: 'first wake' },
+        { ...target, ifIdle: { behavior: 'wake' } },
+        pubsub,
+      );
+      await acquireStarted;
+
+      const second = runtime.sendSignal(
+        agent,
+        { type: 'user-message', contents: 'concurrent replay marker' },
+        target,
+        pubsub,
+      );
+
+      pubsub.owners.set(key, 'real-successor');
+      releaseAcquire();
+
+      const [firstAccepted, secondAccepted] = await Promise.all([first.accepted, second.accepted]);
+      expect(firstAccepted).toMatchObject({ action: 'deliver', runId: 'real-successor' });
+      expect(secondAccepted).toMatchObject({ action: 'deliver', runId: 'real-successor' });
+      expect(
+        pubsub.publishedData.filter(
+          data =>
+            data?.type === 'signal-enqueued' && data.signal?.id === second.signal.id && data.runId === 'real-successor',
+        ),
+      ).toHaveLength(1);
+
+      await pubsub.releaseLease(key, 'real-successor');
+      expect(await pubsub.acquireLease(key, 'recovery-run')).toEqual({
+        acquired: true,
+        owner: 'recovery-run',
+      });
+      let finishRecovery!: () => void;
+      const finished = new Promise<void>(resolve => (finishRecovery = resolve));
+      await runtime.registerRun(
+        agent,
+        {
+          runId: 'recovery-run',
+          status: 'running',
+          fullStream: (async function* () {})(),
+          _waitUntilFinished: () => finished,
+        } as any,
+        { runId: 'recovery-run', memory: { resource: target.resourceId, thread: target.threadId } } as any,
+        pubsub,
+      );
+      // The concurrent input was already forwarded to the real successor, so the
+      // reservation's losing rollback must not leave a local copy behind.
+      expect(runtime.drainPendingSignals('recovery-run', pubsub, 'pre-run')).toEqual([]);
+      finishRecovery();
+    } finally {
+      releaseAcquire();
+      claim.unsubscribe();
+      runtime.resetForTests();
+    }
+  });
+
+  it('discards the concurrent input when the claimed attempt settles blocked', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const runtime = agentThreadStreamRuntime;
+    const target = { resourceId: 'claim-blocked-user', threadId: 'claim-blocked-thread' };
+    const key = `${target.resourceId}\u0000${target.threadId}`;
+    const agent = new Agent({
+      id: 'claim-blocked-agent',
+      name: 'Claim Blocked Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('ok'),
+      pubsub,
+    });
+    const claim = await runtime.claimThreadOwnership(agent, target, pubsub);
+    let releaseAcquire!: () => void;
+    pubsub.acquireLeaseWait = new Promise<void>(resolve => (releaseAcquire = resolve));
+    const acquireStarted = new Promise<void>(resolve => {
+      pubsub.onAcquireLease = resolve;
+    });
+    try {
+      const first = runtime.sendSignal(
+        agent,
+        { type: 'user-message', contents: 'first wake' },
+        { ...target, ifIdle: { behavior: 'wake' } },
+        pubsub,
+      );
+      await acquireStarted;
+
+      const second = runtime.sendSignal(agent, { type: 'user-message', contents: 'blocked marker' }, target, pubsub);
+
+      claim.unsubscribe();
+      releaseAcquire();
+
+      const firstOutcome = await first.accepted.then(
+        (value: unknown) => ({ value }),
+        (error: unknown) => ({ error }),
+      );
+      expect(firstOutcome.error).toBeDefined();
+      await expect(second.accepted).resolves.toMatchObject({ action: 'blocked' });
+      expect(
+        pubsub.publishedData.filter(data => data?.type === 'signal-enqueued' && data.signal?.id === second.signal.id),
+      ).toEqual([]);
+
+      expect(await pubsub.acquireLease(key, 'recovery-run')).toEqual({
+        acquired: true,
+        owner: 'recovery-run',
+      });
+      let finishRecovery!: () => void;
+      const finished = new Promise<void>(resolve => (finishRecovery = resolve));
+      await runtime.registerRun(
+        agent,
+        {
+          runId: 'recovery-run',
+          status: 'running',
+          fullStream: (async function* () {})(),
+          _waitUntilFinished: () => finished,
+        } as any,
+        { runId: 'recovery-run', memory: { resource: target.resourceId, thread: target.threadId } } as any,
+        pubsub,
+      );
+      // A blocked outcome delivered nothing, and it acknowledged nothing as
+      // delivered, so no local copy may survive for a later run to replay.
+      expect(runtime.drainPendingSignals('recovery-run', pubsub, 'pre-run')).toEqual([]);
+      finishRecovery();
+    } finally {
+      releaseAcquire();
+      claim.unsubscribe();
+      runtime.resetForTests();
+    }
+  });
+
+  it('keeps a later claimed attempt queuing its own concurrent input after a losing attempt cleaned up', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const runtime = agentThreadStreamRuntime;
+    const target = { resourceId: 'claim-retain-user', threadId: 'claim-retain-thread' };
+    const key = `${target.resourceId}\u0000${target.threadId}`;
+    const agent = new Agent({
+      id: 'claim-retain-agent',
+      name: 'Claim Retain Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('ok'),
+      pubsub,
+    });
+    let releaseAcquire!: () => void;
+    const firstClaim = await runtime.claimThreadOwnership(agent, target, pubsub);
+    pubsub.acquireLeaseWait = new Promise<void>(resolve => (releaseAcquire = resolve));
+    const firstAcquireStarted = new Promise<void>(resolve => {
+      pubsub.onAcquireLease = resolve;
+    });
+    try {
+      const first = runtime.sendSignal(
+        agent,
+        { type: 'user-message', contents: 'losing wake' },
+        { ...target, ifIdle: { behavior: 'wake' } },
+        pubsub,
+      );
+      await firstAcquireStarted;
+      const second = runtime.sendSignal(agent, { type: 'user-message', contents: 'lost marker' }, target, pubsub);
+      firstClaim.unsubscribe();
+      releaseAcquire();
+      await expect(second.accepted).resolves.toMatchObject({ action: 'blocked' });
+      await first.accepted.catch(() => {});
+
+      // A fresh claimed attempt must still be able to queue concurrent input
+      // behind its own reservation and forward it exactly once.
+      const secondClaim = await runtime.claimThreadOwnership(agent, target, pubsub);
+      pubsub.acquireLeaseWait = new Promise<void>(resolve => (releaseAcquire = resolve));
+      const secondAcquireStarted = new Promise<void>(resolve => {
+        pubsub.onAcquireLease = resolve;
+      });
+      try {
+        const third = runtime.sendSignal(
+          agent,
+          { type: 'user-message', contents: 'later wake' },
+          { ...target, ifIdle: { behavior: 'wake' } },
+          pubsub,
+        );
+        await secondAcquireStarted;
+        const fourth = runtime.sendSignal(agent, { type: 'user-message', contents: 'retained marker' }, target, pubsub);
+
+        pubsub.owners.set(key, 'second-successor');
+        releaseAcquire();
+
+        await expect(fourth.accepted).resolves.toMatchObject({
+          action: 'deliver',
+          runId: 'second-successor',
+        });
+        await third.accepted.catch(() => {});
+        expect(
+          pubsub.publishedData.filter(
+            data =>
+              data?.type === 'signal-enqueued' &&
+              data.signal?.id === fourth.signal.id &&
+              data.runId === 'second-successor',
+          ),
+        ).toHaveLength(1);
+
+        await pubsub.releaseLease(key, 'second-successor');
+        expect(await pubsub.acquireLease(key, 'recovery-run-2')).toEqual({
+          acquired: true,
+          owner: 'recovery-run-2',
+        });
+        let finishRecovery!: () => void;
+        const finished = new Promise<void>(resolve => (finishRecovery = resolve));
+        await runtime.registerRun(
+          agent,
+          {
+            runId: 'recovery-run-2',
+            status: 'running',
+            fullStream: (async function* () {})(),
+            _waitUntilFinished: () => finished,
+          } as any,
+          { runId: 'recovery-run-2', memory: { resource: target.resourceId, thread: target.threadId } } as any,
+          pubsub,
+        );
+        expect(runtime.drainPendingSignals('recovery-run-2', pubsub, 'pre-run')).toEqual([]);
+        finishRecovery();
+      } finally {
+        secondClaim.unsubscribe();
+      }
+    } finally {
+      releaseAcquire();
+      runtime.resetForTests();
+    }
+  });
+
   it('does not start a claimed-owner run when lease acquisition completes after the admission deadline', async () => {
     const now = vi.spyOn(Date, 'now').mockReturnValue(1_000);
     try {
