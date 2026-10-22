@@ -1977,7 +1977,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     abortThreadStream(abortOptions) {
       const scopeKey = `${abortOptions.threadId ?? ''}|${abortOptions.resourceId ?? ''}`;
       const wrapperClose = getScopeStreamSlot(activeStreamUntilIdle, scopeKey, abortOptions.expectedRunId);
-      if (wrapperClose) {
+      if (wrapperClose && !abortOptions.localOnly) {
         wrapperClose();
         return true;
       }

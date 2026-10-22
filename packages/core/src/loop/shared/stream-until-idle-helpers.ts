@@ -435,6 +435,14 @@ export async function runIdleLoop<
   let parked = false;
   let innerReader: ReadableStreamDefaultReader<any> | undefined;
   const outerAbort = new AbortController();
+  const continuationRunIds = new Set<string>();
+  const releaseWrapperSlots = () => {
+    releaseStreamSlot(deps.activeStreams, scopeKey, wrapperRunId, abortWrapper);
+    for (const runId of continuationRunIds) {
+      releaseStreamSlot(deps.activeStreams, null, runId, abortWrapper);
+    }
+    continuationRunIds.clear();
+  };
 
   // --- Close / idle timer ---
   const forceClose = (opts?: { keepInnerRuns?: boolean }) => {
@@ -445,7 +453,7 @@ export async function runIdleLoop<
       clearTimeout(idleTimer);
       idleTimer = undefined;
     }
-    releaseStreamSlot(deps.activeStreams, scopeKey, wrapperRunId, abortWrapper);
+    releaseWrapperSlots();
     outerAbort.abort();
     try {
       outerController.close();
@@ -477,7 +485,7 @@ export async function runIdleLoop<
     }
     aborting = true;
     // External engines route abortRunStream back through this registry; release before forwarding.
-    releaseStreamSlot(deps.activeStreams, scopeKey, wrapperRunId, abortWrapper);
+    releaseWrapperSlots();
     initialAbort.abort();
     continuationAbort?.abort();
     hooks?.onAbortActive?.();
@@ -585,6 +593,14 @@ export async function runIdleLoop<
           if (activeInnerRunId) agent.abortRunStream?.(activeInnerRunId);
         }
         return;
+      }
+      if (
+        hooks?.detachOnCancel &&
+        activeInnerRunId &&
+        getRunStreamSlot(deps.activeStreams, activeInnerRunId) !== abortWrapper
+      ) {
+        acquireRunStreamSlot(deps.activeStreams, activeInnerRunId, abortWrapper);
+        continuationRunIds.add(activeInnerRunId);
       }
       await pipeInner(inner.fullStream);
       if (continuationAbort === segmentAbort) continuationAbort = undefined;

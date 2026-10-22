@@ -2,4 +2,4 @@
 '@mastra/inngest': patch
 ---
 
-Stop detached Inngest until-idle schedulers on explicit run or thread abort so background completion cannot start another turn.
+Explicitly cancelling a disconnected Inngest run or thread prevents the agent from starting another reply. Local-only thread cleanup leaves remote execution running.

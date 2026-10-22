@@ -14,9 +14,105 @@ const BG_CONFIG = { enabled: true, globalConcurrency: 5, perAgentConcurrency: 3 
 describeForAllEngines('AIMock loop scenario: durable untilIdle observer detach (COR-1489)', engine => {
   const getMock = useLoopScenarioAimock();
 
+  if (isDurableEngineVariant(engine)) {
+    for (const abortBy of ['run', 'thread'] as const) {
+      it(`aborting a detached continuation by ${abortBy} prevents another background reply`, async () => {
+        const llm = getMock();
+        const memory = new MockMemory();
+        const gates = [Promise.withResolvers<void>(), Promise.withResolvers<void>()];
+        const research = createTool({
+          id: 'research',
+          description: 'Research in the background',
+          inputSchema: z.object({ stage: z.number().int().min(0).max(1) }),
+          background: { enabled: true },
+          execute: async ({ stage }) => {
+            await gates[stage]!.promise;
+            return { summary: `Research ${stage} complete.` };
+          },
+        });
+        const { agent, mastra } = await createSharedAgent(llm, {
+          engine,
+          memory,
+          tools: { research },
+          agentBackgroundTasks: { tools: { research: true } },
+          backgroundTasks: BG_CONFIG,
+        });
+        for (const stage of [0, 1]) {
+          llm.on(
+            { endpoint: 'chat', sequenceIndex: stage * 2 },
+            {
+              toolCalls: [{ id: `research-${stage}`, name: 'research', arguments: { stage } }],
+            },
+          );
+          llm.on({ endpoint: 'chat', sequenceIndex: stage * 2 + 1 }, { content: `Research ${stage} dispatched.` });
+        }
+        llm.on({ endpoint: 'chat', sequenceIndex: 4 }, { content: 'Unexpected final reply.' });
+        const thread = { thread: `continuation-abort-${engine}-${abortBy}`, resource: 'detach-user' };
+        const signal = new AbortController();
+        const output = await agent.streamUntilIdle('Start', {
+          memory: thread,
+          maxSteps: 8,
+          maxIdleMs: 5_000,
+          abortSignal: signal.signal,
+        });
+        const reader = output.fullStream.getReader();
+        let continuationId: string | undefined;
+        let taskId: string | undefined;
+        try {
+          for (const stage of [0, 1]) {
+            while (true) {
+              const { value, done } = await reader.read();
+              expect(done).toBe(false);
+              if (value.type === 'background-task-started') taskId = value.payload.taskId;
+              if (value.type === 'finish') {
+                if (stage === 1) continuationId = value.runId;
+                break;
+              }
+            }
+            if (stage === 0) gates[0]!.resolve();
+          }
+          expect(continuationId).toBeTypeOf('string');
+          expect(continuationId).not.toBe(output.runId);
+          expect(await mastra.backgroundTaskManager!.getTask(taskId!)).toMatchObject({ status: 'running' });
+          await reader.cancel();
+          const aborted =
+            abortBy === 'run'
+              ? agent.abortRunStream(continuationId!)
+              : agent.abortThreadStream({
+                  threadId: thread.thread,
+                  resourceId: thread.resource,
+                  expectedRunId: continuationId,
+                });
+          expect(await aborted).toBe(true);
+          gates[1]!.resolve();
+          await vi.waitFor(async () => {
+            expect(await mastra.backgroundTaskManager!.getTask(taskId!)).toMatchObject({ status: 'completed' });
+          });
+          // Bounded grace period for a negative assertion, not consumer-delivery synchronization.
+          await new Promise(resolve => setTimeout(resolve, 100));
+          expect(llm.getRequests()).toHaveLength(4);
+          const { messages } = await memory.recall({ threadId: thread.thread, resourceId: thread.resource });
+          expect(JSON.stringify(messages)).not.toContain('Unexpected final reply.');
+        } finally {
+          signal.abort();
+          for (const gate of gates) gate.resolve();
+          reader.releaseLock();
+        }
+      }, 30_000);
+    }
+  }
+
   for (const resumed of [false, true, 'legacy'] as const) {
-    for (const action of ['read', 'cancel', 'cancel-signal', 'cancel-abort', 'cancel-thread-abort'] as const) {
+    for (const action of [
+      'read',
+      'cancel',
+      'cancel-signal',
+      'cancel-abort',
+      'cancel-thread-abort',
+      'cancel-local-only',
+    ] as const) {
       if ((action === 'cancel-abort' || action === 'cancel-thread-abort') && !isDurableEngineVariant(engine)) continue;
+      if (action === 'cancel-local-only' && engine !== 'inngest') continue;
       it(`${resumed === 'legacy' ? 'legacy resumed' : resumed ? 'resumed' : 'initial'} background research ${action} persists the continuation only while execution is live`, async () => {
         const llm = getMock();
         const memory = new MockMemory();
@@ -103,6 +199,9 @@ describeForAllEngines('AIMock loop scenario: durable untilIdle observer detach (
               }),
             ).toBe(true);
           }
+          if (action === 'cancel-local-only') {
+            agent.abortThreadStream({ threadId: thread.thread, resourceId: thread.resource, localOnly: true });
+          }
           gate.resolve();
           if (action === 'read')
             while (!(await reader.read()).done) {
@@ -111,7 +210,10 @@ describeForAllEngines('AIMock loop scenario: durable untilIdle observer detach (
           await vi.waitFor(async () => {
             expect(await mastra.backgroundTaskManager!.getTask(taskId!)).toMatchObject({ status: 'completed' });
           });
-          const completes = action === 'read' || (action === 'cancel' && isDurableEngineVariant(engine));
+          const completes =
+            action === 'read' ||
+            action === 'cancel-local-only' ||
+            (action === 'cancel' && isDurableEngineVariant(engine));
           if (completes) {
             await vi.waitFor(
               async () => {
@@ -123,7 +225,7 @@ describeForAllEngines('AIMock loop scenario: durable untilIdle observer detach (
             expect(llm.getRequests()).toHaveLength(offset + 3);
             expect(JSON.stringify(llm.getRequests()[offset + 2]!.body)).toContain('Research complete.');
           } else {
-            // Let terminal-task delivery settle before checking that cancellation prevented a new turn.
+            // Bounded grace period for negative assertions; persisted status does not synchronize consumer delivery.
             await new Promise(resolve => setTimeout(resolve, 100));
             expect(llm.getRequests()).toHaveLength(offset + 2);
             const { messages } = await memory.recall({ threadId: thread.thread, resourceId: thread.resource });
