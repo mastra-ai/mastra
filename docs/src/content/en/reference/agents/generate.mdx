@@ -1351,6 +1351,13 @@ For the streaming version of the same chunk shape, see the [ChunkType reference]
     ],
   },
   {
+    name: 'resumeSchema',
+    type: 'string',
+    isOptional: true,
+    description:
+      'JSON Schema, serialized as a string, describing the data `resumeGenerate()` or `resumeStream()` expects. Present when `finishReason` is `suspended`; the same value also appears inside `suspendPayload`.',
+  },
+  {
     name: 'runId',
     type: 'string',
     isOptional: true,
