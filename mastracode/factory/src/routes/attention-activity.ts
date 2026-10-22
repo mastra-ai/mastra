@@ -1,5 +1,6 @@
 /** Projects `activity.ts` fan-out rows. */
 
+import { boardForWorkItem } from '../boards/index.js';
 import type {
   WorkItemActivityRow,
   WorkItemCommentRow,
@@ -29,7 +30,6 @@ import {
   receiptScope,
   SCAN_PAGE_SIZE,
   scanBatches,
-  workItemBoard,
 } from './attention-providers.js';
 
 interface ResolvedActivity {
@@ -191,7 +191,7 @@ function toActivityItem(scope: AttentionScope, resolved: ResolvedActivity) {
     target: {
       kind: 'work-item' as const,
       workItemId: activity.workItemId,
-      board: workItemBoard(item),
+      board: boardForWorkItem(item),
       commentId: activity.latestCommentId,
     },
   };

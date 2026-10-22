@@ -317,6 +317,76 @@ describe('QUERY_SPANS', () => {
     expect(observabilityStore.querySpans).not.toHaveBeenCalled();
   });
 
+  it('returns 501 before calling an older store for time to first chunk predicates', async () => {
+    const { mastra, observabilityStore } = createHarness();
+    const error = await captureHttpException(
+      QUERY_SPANS.handler(
+        params(mastra, {
+          timeRange: TIME_RANGE,
+          where: {
+            op: 'and',
+            args: [
+              { op: 'eq', left: { path: 'spanType' }, right: { literal: 'model_generation' } },
+              { op: 'gt', left: { path: 'timeToFirstChunkMs' }, right: { literal: 500 } },
+            ],
+          },
+        }),
+      ),
+    );
+
+    expect(error.status).toBe(501);
+    expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
+      code: 'SPAN_QUERY_UNSUPPORTED',
+      message: 'Time to first chunk predicates are not supported by the configured observability store',
+    });
+    expect(observabilityStore.querySpans).not.toHaveBeenCalled();
+  });
+
+  it('passes time to first chunk predicates to stores that advertise support', async () => {
+    const { mastra, observabilityStore } = createHarness(['span-query', 'trace-query-time-to-first-chunk']);
+
+    await QUERY_SPANS.handler(
+      params(mastra, {
+        timeRange: TIME_RANGE,
+        where: { op: 'lte', left: { path: 'timeToFirstChunkMs' }, right: { literal: 0 } },
+      }),
+    );
+
+    expect(observabilityStore.querySpans).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { type: 'comparison', field: 'timeToFirstChunkMs', operator: 'lte', value: 0 },
+      }),
+    );
+  });
+
+  it('returns 501 before calling an older store for a time to first chunk sort', async () => {
+    const { mastra, observabilityStore } = createHarness(['span-query', 'trace-query-time-to-first-chunk']);
+    const error = await captureHttpException(
+      QUERY_SPANS.handler(
+        params(mastra, { timeRange: TIME_RANGE, orderBy: [{ field: 'timeToFirstChunkMs', direction: 'asc' }] }),
+      ),
+    );
+
+    expect(error.status).toBe(501);
+    expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
+      code: 'SPAN_QUERY_UNSUPPORTED',
+      message: 'Sorting by time to first chunk is not supported by the configured observability store',
+    });
+    expect(observabilityStore.querySpans).not.toHaveBeenCalled();
+  });
+
+  it('passes a time to first chunk sort to stores that advertise support', async () => {
+    const { mastra, observabilityStore } = createHarness(['span-query', 'trace-query-time-to-first-chunk-sort']);
+
+    await QUERY_SPANS.handler(
+      params(mastra, { timeRange: TIME_RANGE, orderBy: [{ field: 'timeToFirstChunkMs', direction: 'desc' }] }),
+    );
+
+    expect(observabilityStore.querySpans).toHaveBeenCalledWith(
+      expect.objectContaining({ orderBy: { field: 'timeToFirstChunkMs', direction: 'desc' } }),
+    );
+  });
+
   it('returns the same structured 501 when observability storage is unavailable', async () => {
     const mastra = {
       getStorage: vi.fn(() => ({ getStore: vi.fn().mockResolvedValue(undefined) })),

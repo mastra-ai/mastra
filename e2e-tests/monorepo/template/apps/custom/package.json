@@ -25,6 +25,8 @@
     "@inner/hello-world": "workspace:*",
     "@inner/subpath-only": "workspace:*",
     "@inner/transitive-a": "workspace:*",
+    "@inner/transitive-only-dependent": "workspace:*",
+    "@inner/transitive-only-leaf": "workspace:*",
     "@inner/versionless": "workspace:*",
     "@inner/versionless-dependent": "workspace:*",
     "@inner/raw-ts": "workspace:*",
@@ -38,6 +40,7 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
-    "mastra": "monorepo-test"
+    "mastra": "monorepo-test",
+    "typescript": "7.0.2"
   }
 }

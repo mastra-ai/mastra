@@ -1661,13 +1661,13 @@ Inspect the command with:
 mastra api trace query --help
 ```
 
-For supported fields, operators, and request options, see [Trace queries](/reference/observability/tracing/trace-query). For a local Mastra server, you can also inspect its request and response schemas:
+For supported fields, operators, and request options, see [Query traces](/reference/observability/tracing/advanced-queries#query-traces). For a local Mastra server, you can also inspect its request and response schemas:
 
 ```bash
 mastra api --url http://localhost:4111 trace query --schema
 ```
 
-Mastra Platform doesn't currently expose the schema endpoint used by `--schema`. To find fields and values recorded in your project, use [field and value discovery](/reference/observability/tracing/trace-query#discover-fields-and-values).
+Mastra Platform doesn't currently expose the schema endpoint used by `--schema`. To find fields and values recorded in your project, use [field and value discovery](/reference/observability/tracing/advanced-queries#discover-fields-and-values).
 
 The response remains nested under `data` to preserve cursor pagination:
 
@@ -1680,7 +1680,7 @@ The response remains nested under `data` to preserve cursor pagination:
 }
 ```
 
-Each invocation makes one query. Pass a non-null `data.page.next` value back as `page.after` in the next query. See [Pagination and errors](/reference/observability/tracing/trace-query#pagination-and-errors) for pagination modes, cursor handling, and errors.
+Each invocation makes one query. Pass a non-null `data.page.next` value back as `page.after` in the next query. See [Pagination and errors](/reference/observability/tracing/advanced-queries#pagination-and-errors) for pagination modes, cursor handling, and errors.
 
 To load a numbered page and then poll, keep the same time range and predicate in both requests:
 
@@ -1691,7 +1691,42 @@ mastra api trace query '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"20
 
 Replace `CURSOR_FROM_NUMBERED_RESPONSE` with `data.deltaCursor` from the first response. Delta results remain under `data`, with `traces`, `delta: { limit, hasMore }`, and `deltaCursor`. Merge traces by `traceId`, retain each returned cursor, and continue immediately while `data.delta.hasMore` is `true`. Don't combine delta mode with `page`, `pagination`, or `orderBy`.
 
-Omitting `after` establishes a cursor and returns no historical traces. Changing the time range or predicate requires a fresh numbered request. See [Delta polling limitations](/reference/observability/tracing/trace-query#poll-after-loading-a-numbered-page) before using this workflow to maintain a local trace list.
+Omitting `after` establishes a cursor and returns no historical traces. Changing the time range or predicate requires a fresh numbered request. See [Delta polling limitations](/reference/observability/tracing/advanced-queries#poll-after-loading-a-numbered-page) before using this workflow to maintain a local trace list.
+
+#### `mastra api trace aggregate`
+
+Groups the traces selected by a time range and optional `where` predicate, and returns one row of measures per group. The inline JSON input is required and accepts the same predicates as `trace query`. Like other observability commands, it targets `https://observability.mastra.ai` by default.
+
+```bash
+mastra api trace aggregate <input>
+mastra api trace aggregate '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"groupBy":["entityName"],"measures":["count","errorRate"]}'
+```
+
+Set `interval` to `1m`, `5m`, `15m`, `1h`, or `1d` to split each group into time buckets:
+
+```bash
+mastra api trace aggregate '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"where":{"op":"eq","left":{"path":"entityName"},"right":{"literal":"weather-agent"}},"interval":"1d","measures":["count","duration.p95"]}'
+```
+
+For dimensions, measures, and request options, see [Aggregate traces](/reference/client-js/observability#aggregate-traces). Run `mastra api trace aggregate --help` for more examples.
+
+The response stays nested under `data` so `truncated` is preserved. `truncated` is `true` when more groups matched than `limit`:
+
+```json
+{
+  "data": {
+    "rows": [
+      {
+        "dimensions": { "entityName": "weather-agent" },
+        "measures": { "count": 42, "errorRate": 0.05 }
+      }
+    ],
+    "truncated": false
+  }
+}
+```
+
+Servers whose observability store doesn't support trace aggregation return `501`. The CLI prints it like other request failures, as an `HTTP_ERROR` with the server response in `error.details.body`.
 
 #### `mastra api trace get`
 

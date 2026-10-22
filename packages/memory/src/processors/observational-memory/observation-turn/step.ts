@@ -84,6 +84,7 @@ export class ObservationStep {
     // new head (storage resolves the head and carries chunks across the rollover).
     const step0Messages = this.stepNumber === 0 ? getObservableMessages(messageList) : [];
     if (this.stepNumber === 0) {
+      this.turn.inputMessageIds = messageList.get.input.db().map(msg => msg.id);
       const activation = await om.activate({
         threadId,
         resourceId,
@@ -250,6 +251,7 @@ export class ObservationStep {
             .catch((err: Error) => {
               omDebug(`[OM:buffer] fire-and-forget buffer failed: ${err?.message}`);
             }),
+          { threadId, resourceId },
         );
         buffered = true;
       }
@@ -266,8 +268,12 @@ export class ObservationStep {
     // the band). Without a ready chunk, defer to a later step.
     const bandDefersObservation = statusSnapshot.inAsyncObservationBand && !statusSnapshot.canActivate;
     const willObserveNow = statusSnapshot.shouldObserve && !hasIncompleteToolCalls && !bandDefersObservation;
-    /** In-flight message ids the step-0 cleanup must never remove from live context. */
-    let step0PreserveIds: string[] | undefined;
+    /**
+     * In-flight message ids cleanup must never remove from live context: the turn's own
+     * request, plus whatever the model has not read yet (the pending messages at step 0, the
+     * previous step's output — e.g. a tool result — at step > 0).
+     */
+    let inFlightIds: string[] | undefined;
     if (this.stepNumber > 0 || willObserveNow) {
       if (this.stepNumber > 0) {
         // Save messages from previous step. Drain the buckets synchronously so nothing that lands
@@ -276,6 +282,24 @@ export class ObservationStep {
         const newInput = messageList.clear.input.db();
         const newOutput = messageList.clear.response.db();
         const messagesToSave = [...newInput, ...newOutput];
+        // A message drained again only because OM markers were appended to it was already read.
+        // A message drained on an earlier step can also change in place without returning to a
+        // bucket — e.g. a background task result merged over its placeholder after the response
+        // message id rotated. Its new parts are just as unread.
+        const drainedIds = new Set(messagesToSave.map(msg => msg.id));
+        const updatedEarlier = messageList.get.all
+          .db()
+          .filter(msg => !drainedIds.has(msg.id) && this.turn.drainedPartKeys.has(msg.id));
+        const drainedKeys = new Map<string, Set<string>>();
+        const unreadIds = [...messagesToSave, ...updatedEarlier]
+          .filter(msg => {
+            const keys = getPartKeys(msg);
+            const seen = this.turn.drainedPartKeys.get(msg.id);
+            drainedKeys.set(msg.id, new Set([...(seen ?? []), ...keys]));
+            return !seen || keys.some(key => !seen.has(key));
+          })
+          .map(msg => msg.id);
+        inFlightIds = [...new Set([...this.turn.inputMessageIds, ...unreadIds])];
         if (messagesToSave.length > 0) {
           for (const msg of messagesToSave) {
             messageList.add(msg, 'memory');
@@ -287,6 +311,11 @@ export class ObservationStep {
             restoreDrainedMessages(messageList, newOutput, 'response');
             throw error;
           }
+        }
+        // Record parts as seen only once the save succeeded: a failed save returns the messages
+        // to their buckets, and a retry must still treat them as unread.
+        for (const [id, keys] of drainedKeys) {
+          this.turn.drainedPartKeys.set(id, keys);
         }
       } else {
         // Step 0: persist pending input WITHOUT draining the buckets. The input bucket is
@@ -304,7 +333,7 @@ export class ObservationStep {
         // protect it (and everything else pending) from cleanup by identity rather than
         // relying on the token-based retention floor, which resolves to 0 for sync-only,
         // resource-scope, and explicit `bufferActivation: 1` configs.
-        step0PreserveIds = pending.map(msg => msg.id);
+        inFlightIds = pending.map(msg => msg.id);
       }
 
       // Step-0 observation: seed an empty assistant message under the active response id
@@ -336,11 +365,11 @@ export class ObservationStep {
           observed = true;
           didThresholdCleanup = true;
 
-          // Cleanup after observation. At step 0 the just-observed messages include the
-          // fresh prompt the model is about to answer — preserve the in-flight messages
-          // by identity (the token-based retention floor resolves to 0 for sync-only,
+          // Cleanup after observation. The just-observed messages include the request the
+          // model is working on and the output it has not read yet — preserve the in-flight
+          // messages by identity (the token-based retention floor resolves to 0 for sync-only,
           // resource-scope, and explicit `bufferActivation: 1` configs, so it cannot be
-          // relied on to keep them). Step > 0 semantics are unchanged.
+          // relied on to keep them).
           const observedIds = obsResult.cleanupMessageIds;
           const minRemaining = resolveRetentionFloor(
             om.getObservationConfig().bufferActivation ?? 1,
@@ -353,7 +382,9 @@ export class ObservationStep {
             messages: messageList,
             observedMessageIds: observedIds,
             retentionFloor: minRemaining,
-            preserveMessageIds: step0PreserveIds,
+            // Re-check right before removal: output merged in place while the Observer ran (e.g.
+            // a background task result) has not been read either.
+            preserveMessageIds: [...(inFlightIds ?? []), ...this.changedSinceDrain(messageList)],
           });
 
           if (statusSnapshot.asyncObservationEnabled) {
@@ -400,7 +431,10 @@ export class ObservationStep {
         : undefined;
 
       const pendingMessageIds = new Set(
-        [...messageList.get.input.db(), ...messageList.get.response.db()].map(msg => msg.id).filter(Boolean),
+        [...messageList.get.input.db(), ...messageList.get.response.db()]
+          .map(msg => msg.id)
+          .concat(inFlightIds ?? [], this.turn.inputMessageIds, this.changedSinceDrain(messageList))
+          .filter(Boolean),
       );
 
       filterObservedMessages({
@@ -431,6 +465,17 @@ export class ObservationStep {
     };
     this._prepared = true;
     return this._context;
+  }
+
+  /** Ids of already-drained messages that now hold parts the model has not been sent. */
+  private changedSinceDrain(messageList: MessageList): string[] {
+    return messageList.get.all
+      .db()
+      .filter(msg => {
+        const seen = this.turn.drainedPartKeys.get(msg.id);
+        return seen !== undefined && getPartKeys(msg).some(key => !seen.has(key));
+      })
+      .map(msg => msg.id);
   }
 
   /**
@@ -590,6 +635,7 @@ export class ObservationStep {
         sendSignal: this.turn.sendSignal,
         sendStateSignal: this.turn.sendStateSignal,
         requestContext: this.turn.requestContext,
+        currentModel: this.turn.actorModelContext,
         writer: this.turn.writer,
         observabilityContext: this.turn.observabilityContext,
       });
@@ -684,4 +730,56 @@ function restoreDrainedMessages(messageList: MessageList, drained: MastraDBMessa
   for (const msg of messageList.removeByIds(ids)) {
     messageList.add(msg, source, { merge: false });
   }
+}
+
+/**
+ * Identity keys of a message's non-marker parts. Tool parts are keyed by call id, state and result,
+ * so a result merged in place into an existing tool-invocation part yields a new key. Bookkeeping
+ * fields that change when a part is re-stamped are not part of the identity.
+ */
+function getPartKeys(msg: MastraDBMessage): string[] {
+  const seen = new Map<string, number>();
+  return (msg.content.parts ?? []).flatMap(part => {
+    if (part.type.startsWith('data-om-')) return [];
+    let identity: string;
+    if (part.type === 'tool-invocation') {
+      identity = toolPartIdentity(part.toolInvocation);
+    } else {
+      const {
+        providerMetadata: _providerMetadata,
+        createdAt: _createdAt,
+        updatedAt: _updatedAt,
+        ...rest
+      } = part as typeof part & {
+        createdAt?: unknown;
+        updatedAt?: unknown;
+      };
+      identity = JSON.stringify(rest);
+    }
+    // Ordinal keeps identical parts within one message distinct.
+    const ordinal = seen.get(identity) ?? 0;
+    seen.set(identity, ordinal + 1);
+    return [`${identity}#${ordinal}`];
+  });
+}
+
+type ToolInvocation = Extract<
+  MastraDBMessage['content']['parts'][number],
+  { type: 'tool-invocation' }
+>['toolInvocation'];
+
+/**
+ * Serializing a tool result on every step is quadratic in turn length (each step rescans every drained
+ * message), so the identity is cached per invocation object and reused while its state and result
+ * reference are unchanged. A result merged in place replaces that reference and is re-serialized.
+ */
+const toolPartIdentityCache = new WeakMap<ToolInvocation, { state: string; result: unknown; identity: string }>();
+
+function toolPartIdentity(invocation: ToolInvocation): string {
+  const result = invocation.state === 'result' ? invocation.result : null;
+  const cached = toolPartIdentityCache.get(invocation);
+  if (cached && cached.state === invocation.state && cached.result === result) return cached.identity;
+  const identity = JSON.stringify(['tool-invocation', invocation.toolCallId, invocation.state, result]);
+  toolPartIdentityCache.set(invocation, { state: invocation.state, result, identity });
+  return identity;
 }

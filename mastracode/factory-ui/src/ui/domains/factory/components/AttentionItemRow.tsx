@@ -17,7 +17,8 @@ import {
   TriangleAlert,
   X,
 } from 'lucide-react';
-import { createElement, type ReactNode } from 'react';
+import { createElement } from 'react';
+import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 
 import { relativeTime } from '../../../../lib/date/relativeTime';

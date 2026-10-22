@@ -11,6 +11,7 @@ const GROUP_ICONS: Record<SessionGroupIcon, ReactNode> = {
   board: <SquareKanban />,
   review: <GitPullRequest />,
   user: <MessageSquare />,
+  slack: <MessageSquare />,
   status: <CircleDashed />,
   owner: <UserRound />,
   all: null,

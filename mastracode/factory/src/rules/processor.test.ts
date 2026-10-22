@@ -15,7 +15,6 @@ const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
 function requestContext(
   overrides: Partial<{
     threadId: string;
-    scope: string;
     authenticated: boolean;
     modelId: string;
     thinkingLevel: 'off' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
@@ -28,7 +27,7 @@ function requestContext(
   context.set('controller', {
     resourceId: 'resource-1',
     threadId: overrides.threadId ?? 'thread-1',
-    scope: overrides.scope ?? '/worktree',
+    sessionId: 'resource-1',
     state: { factoryProjectId: PROJECT_ID, thinkingLevel: overrides.thinkingLevel ?? 'high' },
     getState: () => ({ factoryProjectId: PROJECT_ID, thinkingLevel: overrides.thinkingLevel ?? 'high' }),
     session: { modelId: overrides.modelId ?? 'openai/gpt-5.6-sol', modeId: 'review' },
@@ -189,7 +188,7 @@ describe('FactoryPhaseStateProcessor', () => {
     context.set('controller', {
       resourceId: 'resource-2',
       threadId: 'thread-2',
-      scope: '/worktree',
+      sessionId: 'resource-2',
       state: { thinkingLevel: 'high' },
       getState: () => ({ thinkingLevel: 'high' }),
       session: { modelId: 'openai/gpt-5.6-sol', modeId: 'build' },
@@ -217,7 +216,7 @@ describe('FactoryPhaseStateProcessor', () => {
     context.set('controller', {
       resourceId: 'resource-1',
       threadId: 'thread-1',
-      scope: '/worktree',
+      sessionId: 'resource-1',
       state: {},
       getState: () => ({}),
       session: { modelId: 'openai/gpt-5.6-sol', modeId: 'build' },
@@ -271,7 +270,7 @@ describe('FactoryPhaseStateProcessor', () => {
     context.set('controller', {
       resourceId: 'resource-1',
       threadId: 'thread-1',
-      scope: '/worktree',
+      sessionId: 'resource-1',
       state: {},
       getState: () => ({}),
       session: { modelId: 'openai/gpt-5.6-sol', modeId: 'build' },

@@ -2241,6 +2241,11 @@
       "permanent": true
     },
     {
+      "source": "/reference/observability/tracing/trace-query",
+      "destination": "/reference/observability/tracing/advanced-queries",
+      "permanent": true
+    },
+    {
       "source": "/docs/workspace/overview/llms.txt",
       "destination": "/docs/sandbox/overview/llms.txt",
       "permanent": true
@@ -4073,6 +4078,11 @@
     {
       "source": "/reference/agents/getTools/llms.txt",
       "destination": "/reference/agents/listTools/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/observability/tracing/trace-query/llms.txt",
+      "destination": "/reference/observability/tracing/advanced-queries/llms.txt",
       "permanent": true
     }
   ]

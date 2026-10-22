@@ -1,4 +1,5 @@
-import { PlatformClient, type PlatformClientOptions } from './client.js';
+import { PlatformClient } from './client.js';
+import type { PlatformClientOptions } from './client.js';
 
 export type JsonPrimitive = null | boolean | number | string;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };

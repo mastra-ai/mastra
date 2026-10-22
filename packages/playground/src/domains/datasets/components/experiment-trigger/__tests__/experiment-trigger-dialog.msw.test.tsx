@@ -197,8 +197,9 @@ describe('ExperimentTriggerDialog', () => {
       expect(datasetField().value).toBe('Dataset 1');
       expect(await screen.findByText('3 items · v11')).toBeDefined();
       await waitFor(() => expect(chipLabels()).toEqual(['Quality scorer']));
-      // A pinned version opens Advanced so it shows.
-      expect(screen.getByText('Dataset version')).toBeDefined();
+      // The pinned version shows in the dataset hint; Advanced stays closed.
+      expect(advancedToggle().getAttribute('aria-expanded')).toBe('false');
+      expect(screen.queryByText('Dataset version')).toBeNull();
 
       fireEvent.click(runButton());
       await waitFor(() => expect(triggerCalls).toHaveLength(1));
@@ -336,11 +337,13 @@ describe('ExperimentTriggerDialog', () => {
       expect(triggerCalls[0].body).not.toHaveProperty('description');
     });
 
-    it('pre-fills name and description from a rerun and opens Advanced for the description', async () => {
+    it('pre-fills name and description from a rerun behind a closed Advanced', async () => {
       const { triggerCalls } = setupHandlers();
       renderDialog({ initialName: 'Baseline', initialDescription: 'First pass' });
 
-      expect(await screen.findByLabelText<HTMLInputElement>('Experiment name')).toBeDefined();
+      await waitFor(() => expect(datasetField().value).toBe('Dataset 1'));
+      expect(advancedToggle().getAttribute('aria-expanded')).toBe('false');
+      await openAdvanced();
       expect(nameInput().value).toBe('Baseline');
       expect(descriptionInput().value).toBe('First pass');
 

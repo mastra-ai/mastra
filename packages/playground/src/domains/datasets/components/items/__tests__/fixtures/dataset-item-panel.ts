@@ -14,6 +14,11 @@ export const itemWithMocks: DatasetItem = {
   toolMocks: [{ toolName: 'getWeather', args: { city: 'Seattle' }, output: { temp: 52 } }],
 };
 
+export const itemWithEmptyToolMocks: DatasetItem = {
+  ...baseItem,
+  toolMocks: [],
+};
+
 export const itemWithScorers: DatasetItem = {
   ...baseItem,
   scorerIds: ['quality'],
@@ -28,6 +33,16 @@ export const itemWithTextPayload: DatasetItem = {
 export const itemWithPreviousTextInput: DatasetItem = {
   ...baseItem,
   input: 'What was the weather in Seattle?',
+};
+
+export const itemWithEmptyStringGroundTruth: DatasetItem = {
+  ...baseItem,
+  groundTruth: '',
+};
+
+export const itemWithEmptyObjectGroundTruth: DatasetItem = {
+  ...baseItem,
+  groundTruth: {},
 };
 
 export const itemWithUuid: DatasetItem = {

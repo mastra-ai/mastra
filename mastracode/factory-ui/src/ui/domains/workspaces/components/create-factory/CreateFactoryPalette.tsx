@@ -7,7 +7,8 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { ArrowLeft, ArrowRight } from 'lucide-react';
 import type { ReactNode } from 'react';
 
-import { CREATE_FACTORY_STEPS, type CreateFactoryFlowStep } from '../../hooks/useCreateFactoryFlow';
+import { CREATE_FACTORY_STEPS } from '../../hooks/useCreateFactoryFlow';
+import type { CreateFactoryFlowStep } from '../../hooks/useCreateFactoryFlow';
 
 export interface CreateFactoryPaletteProps {
   step: CreateFactoryFlowStep;

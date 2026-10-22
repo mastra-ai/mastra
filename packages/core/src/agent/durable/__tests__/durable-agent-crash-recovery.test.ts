@@ -12,15 +12,40 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
+import { createScorer } from '../../../evals';
+import type { SerializedWorkflowRow } from '../../../storage/domains/workflows/serializing-store.test-utils';
 import type { ToolHooks } from '../../../tools/types';
 import type { WorkflowRunState } from '../../../workflows/types';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../constants';
 import { MAP_FINAL_OUTPUT_STEP_ID } from '../workflows/durable-loop-builder';
+import { consumeText, createRestartScenario, findRow } from './restart-harness';
 
 const RECOVERY_TIMEOUT_MS = 5_000;
 
 /** `defaultOptions.hooks` given to the agent of every process started after it is set. */
 let processDefaultHooks: ToolHooks | undefined;
+
+// Every simulated process evaluates a fresh module graph, and each graph
+// creates its own module-level AsyncLocalStorage instances. On Node 22, every
+// enabled instance adds work to each promise created afterwards, so a few
+// hundred recoveries slow down until the tests time out. Disabling a dead
+// process's stores keeps each recovery's cost constant.
+const asyncStores = vi.hoisted(() => new Set<{ disable(): void }>());
+vi.mock('node:async_hooks', async importOriginal => {
+  const actual = await importOriginal<typeof import('node:async_hooks')>();
+  class TrackedAsyncLocalStorage<T> extends actual.AsyncLocalStorage<T> {
+    constructor() {
+      super();
+      asyncStores.add(this);
+    }
+  }
+  return { ...actual, AsyncLocalStorage: TrackedAsyncLocalStorage };
+});
+
+function disposeAsyncStores() {
+  for (const store of asyncStores) store.disable();
+  asyncStores.clear();
+}
 
 type SnapshotRow = { workflowName: string; runId: string; resourceId?: string; snapshot: WorkflowRunState };
 type Checkpoint = {
@@ -149,9 +174,10 @@ const finish = (finishReason: string, usage: TestUsage) => ({ type: 'finish', fi
 
 // Decides from the transcript, so a recovered process makes the same call the
 // original process made for the same history: two tool rounds, then text.
-function createModel(usages: TestUsage[] = [completeUsage, completeUsage, completeUsage]) {
+function createModel(usages: TestUsage[] = [completeUsage, completeUsage, completeUsage], onCall?: () => void) {
   return new MockLanguageModelV2({
     doStream: async ({ prompt }) => {
+      onCall?.();
       const answered = prompt.filter(m => m.role === 'tool').flatMap(m => m.content).length;
       const parts =
         answered < 2
@@ -180,10 +206,18 @@ function createModel(usages: TestUsage[] = [completeUsage, completeUsage, comple
 // `evented-fallback` is an EventedAgent on a store without atomic concurrent
 // updates, which runs the loop on the default engine instead.
 type AgentKind = 'durable' | 'evented-fallback';
+type StorageMode = 'in-memory' | 'serializing';
 
 // A fresh module graph per process keeps module-level state (run registry,
 // local recovery claims) from leaking between the original run and recovery.
-async function startProcess(kind: AgentKind, usages?: TestUsage[], observability?: SpanRecorder) {
+async function startProcess(
+  kind: AgentKind,
+  usages?: TestUsage[],
+  observability?: SpanRecorder,
+  storageMode: StorageMode = 'in-memory',
+  onWrite?: (rows: SerializedWorkflowRow[]) => void,
+) {
+  disposeAsyncStores();
   vi.resetModules();
   const [
     { Mastra },
@@ -217,7 +251,12 @@ async function startProcess(kind: AgentKind, usages?: TestUsage[], observability
     ...(processDefaultHooks ? { defaultOptions: { hooks: processDefaultHooks } } : {}),
   });
   const durableAgent = kind === 'durable' ? createDurableAgent({ agent }) : createEventedAgent({ agent });
-  const storage = new InMemoryStore();
+  const storage =
+    storageMode === 'serializing'
+      ? (await import('../../../storage/domains/workflows/serializing-store.test-utils')).createSerializingStore(
+          onWrite,
+        ).store
+      : new InMemoryStore();
   // Before `new Mastra(...)`: the engine resolves during agent registration.
   if (kind === 'evented-fallback') {
     vi.spyOn(storage.stores.workflows!, 'supportsConcurrentUpdates').mockReturnValue(false);
@@ -272,22 +311,42 @@ function outerTargetId({ outer }: Checkpoint) {
 
 // Runs a two-round tool-calling turn to completion, copying the workflow store
 // after every write.
-async function captureCheckpoints(kind: AgentKind, usages?: TestUsage[], observability?: SpanRecorder) {
-  const original = await startProcess(kind, usages, observability);
-  const rows = new Map<string, SnapshotRow>();
+async function captureCheckpoints(
+  kind: AgentKind,
+  usages?: TestUsage[],
+  observability?: SpanRecorder,
+  storageMode: StorageMode = 'in-memory',
+) {
   const checkpoints: Checkpoint[] = [];
-  const persist = original.workflows.persistWorkflowSnapshot.bind(original.workflows);
-  original.workflows.persistWorkflowSnapshot = async args => {
-    rows.set(`${args.workflowName}:${args.runId}`, structuredClone(args));
-    const copy = [...rows.values()].map(row => structuredClone(row));
+  const capture = (rows: SnapshotRow[]) => {
     checkpoints.push({
-      outer: copy.find(row => row.workflowName === DurableStepIds.AGENTIC_LOOP)?.snapshot,
-      inner: copy.find(row => row.workflowName !== DurableStepIds.AGENTIC_LOOP)?.snapshot,
-      rows: copy,
+      outer: rows.find(row => row.workflowName === DurableStepIds.AGENTIC_LOOP)?.snapshot,
+      inner: rows.find(row => row.workflowName !== DurableStepIds.AGENTIC_LOOP)?.snapshot,
+      rows,
       endedSpanCount: observability?.ended.length ?? 0,
     });
-    return persist(args);
   };
+  const original = await startProcess(kind, usages, observability, storageMode, rows => {
+    // The observer runs synchronously after a successful write, including partial
+    // updates. Recover only from JSON actually committed at this boundary.
+    capture(
+      rows.map(({ workflowName, runId, resourceId, snapshot }) => ({
+        workflowName,
+        runId,
+        resourceId,
+        snapshot: JSON.parse(snapshot),
+      })),
+    );
+  });
+  if (storageMode === 'in-memory') {
+    const rows = new Map<string, SnapshotRow>();
+    const persist = original.workflows.persistWorkflowSnapshot.bind(original.workflows);
+    original.workflows.persistWorkflowSnapshot = async args => {
+      rows.set(`${args.workflowName}:${args.runId}`, structuredClone(args));
+      capture([...rows.values()].map(row => structuredClone(row)));
+      return persist(args);
+    };
+  }
 
   const result = await original.durableAgent.stream('Look two things up');
   let text = '';
@@ -316,8 +375,14 @@ async function recoverFrom(
   expectedUsage: TestUsage = { inputTokens: 30, outputTokens: 60, totalTokens: 90 },
   usages?: TestUsage[],
   observability?: SpanRecorder,
+  storageMode: StorageMode = 'in-memory',
 ): Promise<string> {
-  const { durableAgent, workflows, globalRunRegistry, pubsub } = await startProcess(kind, usages, observability);
+  const { durableAgent, workflows, globalRunRegistry, pubsub } = await startProcess(
+    kind,
+    usages,
+    observability,
+    storageMode,
+  );
   for (const row of checkpoint.rows) await workflows.persistWorkflowSnapshot(row);
 
   let finishEvents = 0;
@@ -379,30 +444,132 @@ async function recoverFrom(
 }
 
 describe('DurableAgent crash recovery', () => {
-  it('recovers from every checkpoint of a tool-calling run', async () => {
-    const { checkpoints, runId } = await captureCheckpoints('durable');
+  it.each(['before-finish', 'after-finish', 'after-scorers'] as const)(
+    'finishes genuine evented recovery %s without repeating saved effects (COR-1354)',
+    async boundary => {
+      const runId = `evented-finish-${boundary}`;
+      const effects: Array<{ generation: number; effect: 'model' | 'tool' | 'scorer' }> = [];
+      const matchesBoundary = (snapshot: WorkflowRunState) => {
+        if (snapshot.status !== 'running') return false;
+        const results = snapshot.context;
+        if (boundary === 'before-finish') {
+          return (
+            results?.[DurableStepIds.AGENTIC_EXECUTION]?.status === 'success' && !results?.[MAP_FINAL_OUTPUT_STEP_ID]
+          );
+        }
+        if (boundary === 'after-finish') {
+          return results?.[MAP_FINAL_OUTPUT_STEP_ID]?.status === 'success' && !results?.['execute-scorers'];
+        }
+        return results?.['execute-scorers']?.status === 'success';
+      };
+      const scenario = createRestartScenario({
+        kind: 'evented',
+        runId,
+        timeoutMs: RECOVERY_TIMEOUT_MS,
+        hold: { workflowName: DurableStepIds.AGENTIC_LOOP, when: matchesBoundary },
+        build: ({ core, generation }) => {
+          const record = (effect: 'model' | 'tool' | 'scorer') => effects.push({ generation, effect });
+          const scorer = createScorer({ id: 'recovery-scorer', name: 'Recovery scorer' }).generateScore(() => {
+            record('scorer');
+            return 1;
+          });
+          return new core.Agent({
+            id: 'evented-finish-agent',
+            name: 'Evented finish agent',
+            instructions: 'Use your tools.',
+            model: createModel(undefined, () => void record('model')),
+            tools: {
+              lookup: core.createTool({
+                id: 'lookup',
+                description: 'Look something up',
+                inputSchema: z.object({ index: z.number() }),
+                execute: async () => {
+                  record('tool');
+                  return { ok: true };
+                },
+              }),
+            },
+            scorers: { recovery: { scorer, sampling: { type: 'ratio', rate: 1 } } },
+          });
+        },
+      });
+      const original = await scenario.start(async ({ agent }) =>
+        consumeText(await agent.stream('Look two things up', { runId })),
+      );
+      try {
+        expect(original.graph.agent.getWorkflow().engineType).toBe('evented');
+        let held = false;
+        void original.held.then(() => (held = true));
+        await vi.waitFor(() => expect(held).toBe(true), { timeout: RECOVERY_TIMEOUT_MS });
+        const checkpoint = await original.checkpoint();
+        const snapshot = findRow(checkpoint, DurableStepIds.AGENTIC_LOOP, runId)?.snapshot;
+        expect(snapshot && matchesBoundary(snapshot)).toBe(true);
+        expect(effects.filter(e => e.generation === 1 && e.effect === 'model')).toHaveLength(3);
+        expect(effects.filter(e => e.generation === 1 && e.effect === 'tool')).toHaveLength(2);
+        if (boundary === 'after-scorers') {
+          await vi.waitFor(
+            () => expect(effects.filter(e => e.generation === 1 && e.effect === 'scorer')).toHaveLength(1),
+            { timeout: RECOVERY_TIMEOUT_MS },
+          );
+        }
+        const recovered = await scenario.restart(checkpoint);
+        expect(recovered.graph.agent.getWorkflow().engineType).toBe('evented');
+        expect(recovered.executionError).toBeUndefined();
+        expect(recovered.streamErrors).toEqual([]);
+        expect(recovered.text).toBe('done');
+        expect(recovered.usage).toMatchObject({ inputTokens: 30, outputTokens: 60, totalTokens: 90 });
+        expect(recovered.chunkTypes.filter(type => type === 'finish')).toHaveLength(1);
+        expect(recovered.finishEvents).toBe(1);
+        expect(recovered.onFinishCalls).toBe(1);
+        if (boundary !== 'after-scorers') {
+          await vi.waitFor(
+            () => expect(effects.filter(e => e.generation === 2 && e.effect === 'scorer')).toHaveLength(1),
+            { timeout: RECOVERY_TIMEOUT_MS },
+          );
+        }
+        expect(effects.filter(e => e.generation === 2)).toEqual(
+          boundary === 'after-scorers' ? [] : [{ generation: 2, effect: 'scorer' }],
+        );
+        original.releaseHold();
+        await original.settled;
+        expect(recovered.finishEvents).toBe(1);
+        expect(recovered.onFinishCalls).toBe(1);
+      } finally {
+        original.releaseHold();
+        await scenario.stop();
+      }
+    },
+    30_000,
+  );
 
-    const recoverable = checkpoints.filter(checkpoint => !knownUnrecoverable(checkpoint));
-    // Each case the trimming used to break must be among the recovered checkpoints.
-    const inner = (c: Checkpoint) => c.inner?.status === 'running';
-    expect(recoverable.some(c => inner(c) && activeStepIds(c.inner).includes(DurableStepIds.TOOL_CALL))).toBe(true);
-    expect(recoverable.some(c => inner(c) && activeStepIds(c.inner).length === 0)).toBe(true);
-    expect(recoverable.some(c => inner(c) && activeStepIds(c.outer).length === 0)).toBe(true);
-    // FINISH already went out: once with map-final-output as the step to resume
-    // from, once with scorer execution running.
-    const targets = (id: string) => recoverable.some(c => finishedBeforeCrash(c) && outerTargetId(c) === id);
-    expect(targets(MAP_FINAL_OUTPUT_STEP_ID)).toBe(true);
-    expect(targets('execute-scorers')).toBe(true);
+  it.each<StorageMode>(['in-memory', 'serializing'])(
+    'recovers from every checkpoint of a tool-calling run (%s)',
+    async storageMode => {
+      const { checkpoints, runId } = await captureCheckpoints('durable', undefined, undefined, storageMode);
 
-    const failures: string[] = [];
-    for (const [index, checkpoint] of checkpoints.entries()) {
-      if (knownUnrecoverable(checkpoint)) continue;
-      const outcome = await recoverFrom(checkpoint, runId, 'durable');
-      if (outcome !== 'ok') failures.push(`#${index} ${describeCheckpoint(checkpoint)}: ${outcome}`);
-    }
-    expect(failures).toEqual([]);
-    expect(checkpoints.length - recoverable.length).toBeLessThanOrEqual(3);
-  }, 120_000);
+      const recoverable = checkpoints.filter(checkpoint => !knownUnrecoverable(checkpoint));
+      // Each case the trimming used to break must be among the recovered checkpoints.
+      const inner = (c: Checkpoint) => c.inner?.status === 'running';
+      expect(recoverable.some(c => inner(c) && activeStepIds(c.inner).includes(DurableStepIds.TOOL_CALL))).toBe(true);
+      expect(recoverable.some(c => inner(c) && activeStepIds(c.inner).length === 0)).toBe(true);
+      expect(recoverable.some(c => inner(c) && activeStepIds(c.outer).length === 0)).toBe(true);
+      // FINISH already went out: once with map-final-output as the step to resume
+      // from, once with scorer execution running.
+      const targets = (id: string) => recoverable.some(c => finishedBeforeCrash(c) && outerTargetId(c) === id);
+      expect(targets(MAP_FINAL_OUTPUT_STEP_ID)).toBe(true);
+      expect(targets('execute-scorers')).toBe(true);
+
+      const failures: string[] = [];
+      for (const [index, checkpoint] of checkpoints.entries()) {
+        if (knownUnrecoverable(checkpoint)) continue;
+        const outcome = await recoverFrom(checkpoint, runId, 'durable', undefined, undefined, undefined, storageMode);
+        if (outcome !== 'ok') failures.push(`#${index} ${describeCheckpoint(checkpoint)}: ${outcome}`);
+      }
+      expect(failures).toEqual([]);
+      expect(checkpoints.length - recoverable.length).toBeLessThanOrEqual(3);
+    },
+    120_000,
+  );
 
   it('runs defaultOptions.hooks.beforeToolCall on a tool call executed after recovery', async () => {
     const hookCalls: number[] = [];

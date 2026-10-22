@@ -195,6 +195,14 @@ export const mastra = new Mastra({
       'How long the agentic loop waits for a background task to complete before moving on. If a task has not finished within this time, the loop proceeds without setting isContinued. Default: undefined (do not wait). Can be overridden per-agent or per-tool.',
   },
   {
+    name: 'untilIdleMaxIdleMs',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '300000',
+    description:
+      'Default idle timeout, in milliseconds, for `agent.stream(..., { untilIdle: true })` calls that do not set `maxIdleMs`. The stream closes when background tasks are still running but no event has arrived for this long. Set it above your longest expected background task so its completion still triggers a continuation turn. A per-call `untilIdle: { maxIdleMs }` takes precedence. Default: 5 minutes.',
+  },
+  {
     name: 'onTaskComplete',
     type: '(task: BackgroundTask) => void | Promise<void>',
     isOptional: true,
@@ -748,6 +756,34 @@ export const mastra = new Mastra({
   },
 })
 ```
+
+### bundler.pnpmWorkspaceSettings
+
+**Type:** `Record<string, JSONValue>`\
+**Default:** `{}`
+
+Explicit settings to write to the generated `pnpm-workspace.yaml` when installing deployment dependencies with pnpm. Values can be strings, numbers, booleans, null, arrays, or nested objects. Other package managers ignore this option.
+
+Use this option for pnpm install-policy settings that your deployment install should follow:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
+export const mastra = new Mastra({
+  bundler: {
+    pnpmWorkspaceSettings: {
+      blockExoticSubdeps: false,
+      minimumReleaseAge: 0,
+    },
+  },
+})
+```
+
+Explicit values override copied source settings. Omitting this option preserves the existing workspace-copy behavior; it doesn't copy all settings from the source workspace.
+
+Only these keys are supported: `allowBuilds`, `onlyBuiltDependencies`, `ignoredBuiltDependencies`, `minimumReleaseAge`, `minimumReleaseAgeExclude`, `trustPolicy`, `trustPolicyExclude`, `trustPolicyIgnoreAfter`, and `blockExoticSubdeps`. Any other key throws an error before pnpm runs, including keys Mastra generates for deployment output (`packages`, `overrides`, `patchedDependencies`, `allowUnusedPatches`, `supportedArchitectures`, `nodeLinker`) and settings that change TLS verification, registries, network access, store integrity, dependency extensions, catalogs, or build-script permissions. `neverBuiltDependencies` is rejected because pnpm 10 runs every build script it doesn't list. This option doesn't accept command-line flags and isn't a place for secrets.
+
+Explicit `allowBuilds` and `onlyBuiltDependencies` values use the same validation as copied source build approvals.
 
 ## Server options
 
