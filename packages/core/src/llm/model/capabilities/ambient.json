@@ -43,16 +43,9 @@
     "zai-org/GLM-5.2-FP8"
   ],
   "reasoning": {
-    "z-ai/glm-5.2": [
+    "xiaomi/mimo-v2.5": [
       {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "ambient/large": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
+        "type": "toggle"
       }
     ],
     "deepseek/deepseek-v4-flash": [
@@ -73,12 +66,24 @@
         "values": ["high", "max"]
       }
     ],
-    "xiaomi/mimo-v2.5": [
+    "zai-org/GLM-5.2-FP8": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "z-ai/glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "minimax/minimax-m3": [
       {
         "type": "toggle"
       }
     ],
-    "zai-org/GLM-5.2-FP8": [
+    "ambient/large": [
       {
         "type": "effort",
         "values": ["high", "max"]
@@ -90,7 +95,7 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "minimax/minimax-m3": [
+    "qwen/qwen3.6-27b": [
       {
         "type": "toggle"
       }
@@ -102,11 +107,6 @@
       {
         "type": "effort",
         "values": ["low", "medium", "xhigh"]
-      }
-    ],
-    "qwen/qwen3.6-27b": [
-      {
-        "type": "toggle"
       }
     ]
   }

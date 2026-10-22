@@ -446,7 +446,7 @@ import { ModerationProcessor } from '@mastra/core/processors'
 export const mastra = new Mastra({
   processors: {
     moderation: new ModerationProcessor({
-      model: '__GATEWAY_OPENAI_MODEL_MINI__',
+      model: '__GATEWAY_OPENAI_MODEL_LUNA__',
       categories: ['hate', 'harassment', 'violence'],
     }),
   },
@@ -493,7 +493,7 @@ import { createToxicityScorer } from '@mastra/evals/scorers/prebuilt'
 
 export const mastra = new Mastra({
   scorers: {
-    toxicity: createToxicityScorer({ model: '__GATEWAY_OPENAI_MODEL_MINI__' }),
+    toxicity: createToxicityScorer({ model: '__GATEWAY_OPENAI_MODEL_LUNA__' }),
   },
 })
 ```

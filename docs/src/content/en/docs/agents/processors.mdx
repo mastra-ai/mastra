@@ -47,10 +47,10 @@ export const moderatedAgent = new Agent({
   id: 'moderated-agent',
   name: 'moderated-agent',
   instructions: 'You are a helpful assistant',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   inputProcessors: [
     new ModerationProcessor({
-      model: '__GATEWAY_OPENAI_MODEL_MINI__',
+      model: '__GATEWAY_OPENAI_MODEL_LUNA__',
       categories: ['hate', 'harassment', 'violence'],
       threshold: 0.7,
       strategy: 'block',
@@ -106,9 +106,9 @@ const agent = new Agent({
   instructions: '...',
   inputProcessors: [
     new TokenLimiter(4000),
-    new ModerationProcessor({ model: '__GATEWAY_OPENAI_MODEL_NANO__' }),
+    new ModerationProcessor({ model: '__GATEWAY_OPENAI_MODEL_LUNA__' }),
   ],
-  outputProcessors: [new ModerationProcessor({ model: '__GATEWAY_OPENAI_MODEL_NANO__' })],
+  outputProcessors: [new ModerationProcessor({ model: '__GATEWAY_OPENAI_MODEL_LUNA__' })],
   errorProcessors: [new PrefillErrorHandler()],
 })
 ```
@@ -255,7 +255,7 @@ export class DynamicModelProcessor implements Processor {
   }: ProcessInputStepArgs): Promise<ProcessInputStepResult> {
     // Use a fast model for initial response
     if (stepNumber === 0) {
-      return { model: '__GATEWAY_OPENAI_MODEL_MINI__' }
+      return { model: '__GATEWAY_OPENAI_MODEL_LUNA__' }
     }
 
     // Disable tools after 5 steps to force completion
@@ -311,7 +311,7 @@ The `prepareStep()` callback on `generate()` or `stream()` is a shorthand for `p
 await agent.generate('Complex task', {
   prepareStep: async ({ stepNumber, model }) => {
     if (stepNumber === 0) {
-      return { model: '__GATEWAY_OPENAI_MODEL_MINI__' }
+      return { model: '__GATEWAY_OPENAI_MODEL_LUNA__' }
     }
     if (stepNumber > 5) {
       return { toolChoice: 'none' }
@@ -716,8 +716,54 @@ await agent.generate('Your prompt', { maxSteps: MAX_STEPS })
 ```
 
 :::note
-Reactive signals default to `tagName: 'system-reminder'`. Visit [Signals](/docs/harness/signals#send-processor-context) for more on processor-emitted signals.
+Reactive signals default to `tagName: 'system-reminder'`. [When the agent sees your input](/docs/signals/sending-signals#when-the-agent-sees-your-input) covers when processor-emitted signals reach the model.
 :::
+
+### Send context after a tool reads a file
+
+A processor can watch tool results and inject follow-up instructions once, rather than on every step. This example sends the contents of an `AGENTS.md` file after a tool call reads it, and skips the signal if the same file was already sent.
+
+Signals sent from `processInputStep()` follow the same interrupt and wait rules as any other input. The processor finishes before Mastra cancels the request it prepared; output processors settle before the next request, and processor side effects aren't undone. A processor that sends on every pass can duplicate context when a request is replaced, so inspect history and react to a specific trigger.
+
+```typescript title="src/mastra/processors/agents-md-reminder.ts"
+import type { Processor, ProcessInputStepArgs } from '@mastra/core/processors'
+
+export const agentsMdReminderProcessor: Processor = {
+  id: 'agents-md-reminder',
+  async processInputStep({ messageList, sendSignal }: ProcessInputStepArgs) {
+    const messages = messageList.get.all.db()
+    const agentsMdPath = findAgentsMdPathFromToolCalls(messages)
+
+    if (!agentsMdPath || hasAlreadySentAgentsMdReminder(messages, agentsMdPath)) {
+      return messageList
+    }
+
+    await sendSignal?.({
+      type: 'reactive',
+      contents: readAgentsMdInstructions(agentsMdPath),
+      attributes: {
+        type: 'dynamic-agents-md',
+        path: agentsMdPath,
+      },
+      metadata: {
+        path: agentsMdPath,
+      },
+    })
+
+    return messageList
+  },
+}
+```
+
+The model receives this context as:
+
+```xml
+<system-reminder type="dynamic-agents-md" path="packages/ui/AGENTS.md">
+  $agentsMdFileContents
+</system-reminder>
+```
+
+Awaiting `sendSignal()` preserves stream echo ordering when a subscribed thread is active.
 
 ### Deliver a reminder without retaining it
 
@@ -883,19 +929,19 @@ const moderationWorkflow = createWorkflow({
   .parallel([
     createStep(
       new PIIDetector({
-        model: '__GATEWAY_OPENAI_MODEL_NANO__',
+        model: '__GATEWAY_OPENAI_MODEL_LUNA__',
         strategy: 'redact',
       }),
     ),
     createStep(
       new PromptInjectionDetector({
-        model: '__GATEWAY_OPENAI_MODEL_NANO__',
+        model: '__GATEWAY_OPENAI_MODEL_LUNA__',
         strategy: 'block',
       }),
     ),
     createStep(
       new ModerationProcessor({
-        model: '__GATEWAY_OPENAI_MODEL_NANO__',
+        model: '__GATEWAY_OPENAI_MODEL_LUNA__',
         strategy: 'block',
       }),
     ),
@@ -975,7 +1021,7 @@ All processors expose an `onViolation` property that fires whenever a policy vio
 import { ModerationProcessor, TokenCostControl } from '@mastra/core/processors'
 
 const moderation = new ModerationProcessor({
-  model: '__GATEWAY_OPENAI_MODEL_NANO__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   strategy: 'block',
 })
 
