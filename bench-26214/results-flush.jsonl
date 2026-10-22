@@ -1,0 +1,12 @@
+{"label":"flush-iv1000","store":"libsql","n":1000,"size":2000,"delayMs":0,"intervalMs":1000,"c":1,"writes":5,"bytes":6091253,"largest":4048067,"wallMs":134,"storeMs":71,"diskGrowth":12749960}
+{"label":"flush-iv0","store":"libsql","n":1000,"size":2000,"delayMs":0,"intervalMs":0,"c":1,"writes":908,"bytes":935809042,"largest":4048067,"wallMs":7830,"storeMs":7615,"diskGrowth":943480}
+{"label":"flush-iv1000","store":"libsql","n":1000,"size":2000,"delayMs":0,"intervalMs":1000,"c":10,"writes":13,"bytes":6174929,"largest":4048068,"wallMs":165,"storeMs":72,"diskGrowth":0}
+{"label":"flush-iv0","store":"libsql","n":1000,"size":2000,"delayMs":0,"intervalMs":0,"c":10,"writes":101,"bytes":99155010,"largest":4048068,"wallMs":904,"storeMs":826,"diskGrowth":0}
+{"label":"flush-iv1000","store":"libsql","n":1000,"size":2000,"delayMs":0,"intervalMs":1000,"c":1,"writes":4,"bytes":6090911,"largest":4048067,"wallMs":151,"storeMs":69,"diskGrowth":0}
+{"label":"flush-iv0","store":"libsql","n":1000,"size":2000,"delayMs":0,"intervalMs":0,"c":1,"writes":908,"bytes":935809042,"largest":4048067,"wallMs":8003,"storeMs":7800,"diskGrowth":0}
+{"label":"flush-iv1000","store":"libsql","n":1000,"size":2000,"delayMs":0,"intervalMs":1000,"c":10,"writes":13,"bytes":6174929,"largest":4048068,"wallMs":179,"storeMs":81,"diskGrowth":0}
+{"label":"flush-iv0","store":"libsql","n":1000,"size":2000,"delayMs":0,"intervalMs":0,"c":10,"writes":101,"bytes":99155010,"largest":4048068,"wallMs":932,"storeMs":857,"diskGrowth":0}
+{"label":"flush-iv1000","store":"libsql","n":1000,"size":2000,"delayMs":0,"intervalMs":1000,"c":1,"writes":4,"bytes":6090911,"largest":4048067,"wallMs":166,"storeMs":65,"diskGrowth":0}
+{"label":"flush-iv0","store":"libsql","n":1000,"size":2000,"delayMs":0,"intervalMs":0,"c":1,"writes":908,"bytes":935809042,"largest":4048067,"wallMs":7823,"storeMs":7629,"diskGrowth":0}
+{"label":"flush-iv1000","store":"libsql","n":1000,"size":2000,"delayMs":0,"intervalMs":1000,"c":10,"writes":13,"bytes":6174929,"largest":4048068,"wallMs":155,"storeMs":69,"diskGrowth":0}
+{"label":"flush-iv0","store":"libsql","n":1000,"size":2000,"delayMs":0,"intervalMs":0,"c":10,"writes":101,"bytes":99155010,"largest":4048068,"wallMs":881,"storeMs":805,"diskGrowth":0}

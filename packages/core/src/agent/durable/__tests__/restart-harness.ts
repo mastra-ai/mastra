@@ -393,6 +393,13 @@ export function createRestartScenario<K extends RestartKind>(options: ScenarioOp
       for (const method of WRITE_METHODS) {
         const original = graph.workflows[method].bind(graph.workflows);
         graph.workflows[method] = async (...args: unknown[]) => {
+          // InMemoryStore keeps the snapshot object by reference, so later in-place mutations of
+          // live step results would leak into rows that were never written. Real stores serialize
+          // at write time; clone here so checkpoints only show what was actually persisted.
+          if (method === 'persistWorkflowSnapshot' && args[0]) {
+            const write = args[0] as { snapshot: unknown };
+            args[0] = { ...write, snapshot: structuredClone(write.snapshot) };
+          }
           const result = await original(...args);
           checkpoints.push({ rows: await copyRows(graph.workflows), write: ++writes });
           if (held || !options.hold || !holdGate) return result;

@@ -1118,13 +1118,14 @@ export async function executeForeach(
   let checkpointChain: Promise<void> = Promise.resolve();
   let checkpointFailure: { error: unknown } | undefined;
   let lastCheckpointAt = 0;
+  const checkpointIntervalMs = opts?.checkpointIntervalMs ?? FOREACH_CHECKPOINT_INTERVAL_MS;
   let foreachEnded = false;
   let wakeCheckpoint: (() => void) | undefined;
 
   const runCheckpoints = async () => {
     try {
       while (checkpointDirtyIndex !== undefined && !foreachEnded && !checkpointFailure) {
-        const wait = lastCheckpointAt + FOREACH_CHECKPOINT_INTERVAL_MS - Date.now();
+        const wait = lastCheckpointAt + checkpointIntervalMs - Date.now();
         if (wait > 0) {
           await new Promise<void>(resolve => {
             const timer = setTimeout(resolve, wait);

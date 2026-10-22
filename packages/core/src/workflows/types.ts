@@ -849,6 +849,11 @@ export type ForeachConcurrencyResolver = (context: ForeachConcurrencyContext) =>
 
 export interface ForeachOptions {
   concurrency: number | ForeachConcurrencyResolver;
+  /**
+   * @internal Minimum spacing between item-end progress checkpoints. Defaults to
+   * FOREACH_CHECKPOINT_INTERVAL_MS; 0 writes as soon as an item finishes (still one write in flight).
+   */
+  checkpointIntervalMs?: number;
 }
 
 export type SerializedStep<TEngineType = DefaultEngineType> = Pick<

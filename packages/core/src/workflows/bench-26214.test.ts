@@ -14,6 +14,7 @@ const C = Number(process.env.BENCH_C ?? 1);
 const LABEL = process.env.BENCH_LABEL ?? 'unknown';
 const OUT = process.env.BENCH_OUT ?? '/tmp/bench.jsonl';
 const DELAY = Number(process.env.BENCH_DELAY_MS ?? 0);
+const INTERVAL = process.env.BENCH_INTERVAL_MS === undefined ? undefined : Number(process.env.BENCH_INTERVAL_MS);
 const DB_FILE = '/tmp/bench-26214.db';
 const PG_URL = 'postgresql://postgres:postgres@127.0.0.1:5432/bench';
 
@@ -88,7 +89,7 @@ it(
       inputSchema: z.array(z.number()),
       outputSchema: z.array(z.object({ i: z.number(), data: z.string() })),
     })
-      .foreach(item, { concurrency: C })
+      .foreach(item, { concurrency: C, ...(INTERVAL !== undefined ? { checkpointIntervalMs: INTERVAL } : {}) })
       .commit();
     new Mastra({ logger: false, storage, workflows: { bench: workflow } });
 
@@ -119,6 +120,7 @@ it(
       n: N,
       size: SIZE,
       delayMs: DELAY,
+      intervalMs: INTERVAL ?? 1000,
       c: C,
       writes: stats.writes,
       bytes: stats.bytes,
