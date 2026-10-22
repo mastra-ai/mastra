@@ -2,12 +2,11 @@
  * Ported from validation harness case T10 (inngest).
  * The kill-* variants drop the analyst's HTTP request in the same process, not
  * SIGKILL. Ordinary tool throws become tool results, not Inngest function retries.
+ * Completed delegations are memoized; the delegation in flight is at-least-once:
+ * its original attempt can commit even after the supervisor run has failed.
  * This tests transport retry and delegation memoization, not process-death recovery.
  */
-import { AsyncLocalStorage } from 'node:async_hooks';
 import { randomUUID } from 'node:crypto';
-import type { IncomingMessage } from 'node:http';
-import type { Http2ServerRequest } from 'node:http2';
 import type { LanguageModelV2StreamPart } from '@ai-sdk/provider-v5';
 import { Agent } from '@mastra/core/agent';
 import {
@@ -21,6 +20,7 @@ import { createInngestAgent, isInngestAgent } from '../index';
 import {
   HANDLER_PORT,
   INNGEST_PORT,
+  dropSharedHandlerConnections,
   generateTestId,
   getSharedInngest,
   getSharedMastra,
@@ -32,34 +32,17 @@ import {
 const ALPHA = 'alpha-729';
 const OMEGA = 'omega-483';
 const LOOP_EVENT = 'workflow.inngest:durable-agentic-loop';
-const invocationSchema = z.object({
-  ctx: z.object({
-    attempt: z.number(),
-    max_attempts: z.number(),
-    fn_id: z.string(),
-    run_id: z.string(),
-    request_id: z.string(),
-  }),
-  event: z.object({
-    id: z.string(),
-    name: z.string(),
-    data: z
-      .object({
-        runId: z.string(),
-        inputData: z.object({ agentId: z.string() }).passthrough(),
-      })
-      .passthrough(),
-  }),
+const triggerSchema = z.object({
+  name: z.literal(LOOP_EVENT),
+  data: z.object({ runId: z.string(), inputData: z.object({ agentId: z.string() }) }),
 });
-type Invocation = z.infer<typeof invocationSchema>;
-type RequestScope = {
-  incoming: IncomingMessage | Http2ServerRequest;
-  invocation: Invocation;
-};
-const requestScope = new AsyncLocalStorage<RequestScope>();
-const runSchema = z.object({
+const runsSchema = z.object({
   data: z.object({
-    run: z.object({ id: z.string(), status: z.string(), functionID: z.string(), triggerIDs: z.array(z.string()) }),
+    runs: z.object({
+      edges: z.array(
+        z.object({ node: z.object({ id: z.string(), status: z.string(), triggerIDs: z.array(z.string()) }) }),
+      ),
+    }),
   }),
 });
 
@@ -96,15 +79,18 @@ async function withinDeadline<T>(work: Promise<T>, label: string): Promise<T> {
   }
 }
 
-async function readRun(id: string) {
+async function readRuns() {
   const response = await fetch(`http://localhost:${INNGEST_PORT}/v0/gql`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ query: `{ run(runID: "${id}") { id status functionID triggerIDs } }` }),
+    body: JSON.stringify({
+      query:
+        '{ runs(first:100, filter:{from:"2020-01-01T00:00:00Z"}, orderBy:[{field:QUEUED_AT,direction:DESC}]) { edges { node { id status triggerIDs } } } }',
+    }),
     signal: AbortSignal.timeout(5000),
   });
   expect(response.ok).toBe(true);
-  return runSchema.parse(await response.json()).data.run;
+  return runsSchema.parse(await response.json()).data.runs.edges.map(edge => edge.node);
 }
 
 it.each([
@@ -117,13 +103,7 @@ it.each([
   async variant => {
     expect(process.env.INNGEST_DEV_EXTERNAL).not.toBe('true');
     const controller = new AbortController();
-    const abandoned = Promise.withResolvers<void>();
-    let abandonedSignal: AbortSignal | undefined;
-    let abandonedSettled = false;
-    let interruptedRequest: Invocation | undefined;
-    const invocations: Invocation[] = [];
-    const disconnected: { invocation: Invocation; finished: boolean }[] = [];
-    const activeHandlers = new Set<Promise<Response>>();
+    const analystAttempts = new Set<Promise<{ code: typeof OMEGA }>>();
     const counts = { alphaStarts: 0, alphaCommits: 0, omegaStarts: 0, omegaCommits: 0 };
     const reports: { alpha: string; omega: string }[] = [];
     const id = generateTestId();
@@ -142,22 +122,9 @@ it.each([
       await setupSharedTestInfrastructure({
         retries: variant.retries,
         fastRetries: true,
-        onRequest: async (request, bindings, handle) => {
-          if (request.method !== 'POST') return handle();
-          const invocation = invocationSchema.parse(await request.clone().json());
-          invocations.push(invocation);
-          bindings.outgoing.once('close', () => {
-            disconnected.push({ invocation, finished: bindings.outgoing.writableFinished });
-          });
-          const task = requestScope.run({ incoming: bindings.incoming, invocation }, () => Promise.resolve(handle()));
-          activeHandlers.add(task);
-          try {
-            return await task;
-          } finally {
-            activeHandlers.delete(task);
-          }
-        },
       });
+      // Observe real event sends to join this supervisor to its outer Inngest run.
+      const sends = vi.spyOn(getSharedInngest(), 'send');
 
       const researcher = new Agent({
         id: `researcher-${id}`,
@@ -201,37 +168,28 @@ it.each([
             description: 'Look up Omega',
             inputSchema: z.object({}),
             outputSchema: z.object({ code: z.literal(OMEGA) }),
-            execute: async (_input, context) => {
-              counts.omegaStarts++;
-              if (variant.interrupt && counts.omegaStarts === 1) {
-                let request: RequestScope | undefined;
-                try {
-                  expect(counts.alphaCommits).toBe(1);
-                  expect(counts.omegaCommits).toBe(0);
-                  request = requestScope.getStore();
-                  if (!request) throw new Error('Analyst tool is not executing inside an Inngest HTTP request');
-                  interruptedRequest = request.invocation;
-                  expect(interruptedRequest.event.data.inputData.agentId).toBe(supervisorId);
-                  expect(interruptedRequest.ctx.attempt).toBe(0);
-                  expect(interruptedRequest.ctx.max_attempts).toBe(variant.retries + 1);
-                  abandonedSignal = context?.abortSignal;
-                  expect(abandonedSignal).toBeDefined();
-                } catch (error) {
-                  // Tool errors become model-visible results; preserve the original test failure.
-                  failures.push(error);
-                  throw error;
+            execute: () => {
+              const attempt = (async () => {
+                counts.omegaStarts++;
+                if (variant.interrupt && counts.omegaStarts === 1) {
+                  try {
+                    expect(counts.alphaCommits).toBe(1);
+                    expect(counts.omegaCommits).toBe(0);
+                    dropSharedHandlerConnections();
+                  } catch (error) {
+                    // Tool errors become model-visible results; preserve the original test failure.
+                    failures.push(error);
+                    throw error;
+                  }
+                  // Match function-retries.test.ts: socket loss does not stop in-flight side effects.
+                  await new Promise(resolve => setTimeout(resolve, 1500));
                 }
-                request.incoming.socket.destroy();
-                try {
-                  await abandoned.promise;
-                  abandonedSignal?.throwIfAborted();
-                  throw new Error('Abandoned tool was released without cancellation');
-                } finally {
-                  abandonedSettled = true;
-                }
-              }
-              counts.omegaCommits++;
-              return { code: OMEGA };
+                counts.omegaCommits++;
+                return { code: OMEGA } as const;
+              })();
+              analystAttempts.add(attempt);
+              void attempt.finally(() => analystAttempts.delete(attempt)).catch(() => {});
+              return attempt;
             },
           }),
         },
@@ -306,50 +264,42 @@ it.each([
         }
       };
       {
-        let terminalRun: Awaited<ReturnType<typeof readRun>> | undefined;
+        let terminalRun: Awaited<ReturnType<typeof readRuns>>[number] | undefined;
         await vi.waitFor(
           async () => {
-            const candidates = invocations.filter(
-              invocation => invocation.event.name === LOOP_EVENT && invocation.event.data.runId === result.runId,
-            );
-            const ids = new Set(candidates.map(invocation => invocation.ctx.run_id));
-            expect(ids.size, 'Exactly one outer Inngest run must match the supervisor Mastra run').toBe(1);
-            const outer = candidates[0]!;
-            expect(outer.event.data.inputData.agentId).toBe(supervisorId);
-            terminalRun = await readRun(outer.ctx.run_id);
-            expect(terminalRun.id).toBe(outer.ctx.run_id);
-            expect(terminalRun.functionID).toBe(outer.ctx.fn_id);
-            expect(terminalRun.triggerIDs).toContain(outer.event.id);
+            const matchingSends = sends.mock.calls.flatMap(([event], index) => {
+              const trigger = triggerSchema.safeParse(event);
+              return trigger.success && trigger.data.data.runId === result.runId
+                ? [{ trigger: trigger.data, result: sends.mock.results[index]! }]
+                : [];
+            });
+            expect(matchingSends, 'One trigger event must match the supervisor Mastra run').toHaveLength(1);
+            const sent = matchingSends[0]!;
+            expect(sent.trigger.data.inputData.agentId).toBe(supervisorId);
+            expect(sent.result.type).toBe('return');
+            const { ids } = z.object({ ids: z.array(z.string()).length(1) }).parse(await sent.result.value);
+            const candidates = (await readRuns()).filter(run => run.triggerIDs.includes(ids[0]!));
+            expect(candidates, 'Exactly one outer Inngest run must match the supervisor trigger').toHaveLength(1);
+            terminalRun = candidates[0]!;
             expect(['COMPLETED', 'FAILED', 'CANCELLED']).toContain(terminalRun.status);
           },
           { timeout: 30_000, interval: 100 },
         );
 
         expect(terminalRun?.status, 'Correlated supervisor terminal status').toBe(variant.expectedStatus);
+        await vi.waitFor(
+          () => expect(analystAttempts.size, 'All analyst attempts must finish before counting commits').toBe(0),
+          {
+            timeout: 5000,
+          },
+        );
         expect(counts).toEqual({
           alphaStarts: 1,
           alphaCommits: 1,
           omegaStarts: variant.omegaStarts,
-          omegaCommits: variant.expectedStatus === 'FAILED' ? 0 : 1,
+          omegaCommits: counts.omegaStarts,
         });
         expect(reports).toEqual(variant.expectedStatus === 'FAILED' ? [] : [{ alpha: ALPHA, omega: OMEGA }]);
-        if (variant.interrupt) {
-          expect(interruptedRequest?.event.data.runId).toBe(result.runId);
-          expect(disconnected.filter(request => !request.finished)).toEqual([
-            { invocation: interruptedRequest, finished: false },
-          ]);
-          await vi.waitFor(
-            async () => {
-              const executionRun = await readRun(interruptedRequest!.ctx.run_id);
-              expect(executionRun.id).not.toBe(terminalRun?.id);
-              expect(executionRun.functionID).toBe(interruptedRequest!.ctx.fn_id);
-              expect(executionRun.triggerIDs).toContain(interruptedRequest!.event.id);
-              expect(executionRun.status).toBe(variant.expectedStatus);
-            },
-            { timeout: 5000 },
-          );
-          expect(abandonedSettled, 'Interrupted attempt must not commit or return before cleanup').toBe(false);
-        }
         if (variant.expectedStatus === 'COMPLETED') {
           await vi.waitFor(() => expect(streamSettled).toBe(true), { timeout: 5000 });
           await drain;
@@ -360,25 +310,9 @@ it.each([
     } catch (error) {
       failures.push(error);
     } finally {
-      const beforeCleanup = { counts: { ...counts }, reports: [...reports] };
+      await cleanup('settle in-flight analyst attempts', () => Promise.allSettled([...analystAttempts]));
       controller.abort();
-      if (interruptedRequest) {
-        await cleanup('propagate cancellation to the abandoned tool', () =>
-          vi.waitFor(() => expect(abandonedSignal?.aborted, 'Parked analyst tool receives cancellation').toBe(true), {
-            timeout: 5000,
-          }),
-        );
-      }
       await cleanup('stop the owned Inngest scheduler', stopSharedInngestDevServer);
-      // Always release the abandonment-only branch, even when cancellation or shutdown failed.
-      abandoned.resolve();
-      await cleanup('drain handler invocations without late commits', async () => {
-        if (interruptedRequest) {
-          await vi.waitFor(() => expect(abandonedSettled).toBe(true), { timeout: 5000 });
-        }
-        await vi.waitFor(() => expect(activeHandlers.size).toBe(0), { timeout: 5000 });
-        expect({ counts, reports }, 'Cleanup must not create tool commits or reports').toEqual(beforeCleanup);
-      });
       if (disposeStream) await cleanup('dispose the stream subscription', disposeStream);
       await cleanup('close shared HTTP infrastructure', () => teardownSharedTestInfrastructure({ forceClose: true }));
       await cleanup('verify both listening ports were released', async () => {

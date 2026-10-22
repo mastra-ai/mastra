@@ -9,8 +9,6 @@
 import type { ChildProcess } from 'node:child_process';
 import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
-import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { Http2ServerRequest, Http2ServerResponse } from 'node:http2';
 import { serve } from '@hono/node-server';
 import type { ServerType } from '@hono/node-server';
 import { Mastra } from '@mastra/core/mastra';
@@ -215,16 +213,10 @@ export async function setupSharedTestInfrastructure({
   observability,
   retries,
   fastRetries = false,
-  onRequest,
 }: {
   observability?: NonNullable<ConstructorParameters<typeof Mastra>[0]>['observability'];
   retries?: InngestFlowControlConfig['retries'];
   fastRetries?: boolean;
-  onRequest?: (
-    request: Request,
-    bindings: { incoming: IncomingMessage | Http2ServerRequest; outgoing: ServerResponse | Http2ServerResponse },
-    handle: () => Response | Promise<Response>,
-  ) => Response | Promise<Response>;
 } = {}): Promise<void> {
   // Start Inngest dev server first (needs to be running before we create the app server)
   // Skip if INNGEST_DEV_EXTERNAL=true (for running against Docker or existing server)
@@ -271,8 +263,7 @@ export async function setupSharedTestInfrastructure({
   // Create and start shared server
   const app = await createHonoServer(sharedMastra);
   sharedServer = serve({
-    fetch: (request, bindings) =>
-      onRequest ? onRequest(request, bindings, () => app.fetch(request, bindings)) : app.fetch(request, bindings),
+    fetch: app.fetch,
     port: HANDLER_PORT,
   });
 
@@ -291,7 +282,15 @@ export async function setupSharedTestInfrastructure({
   await waitForInngestSync(2000);
 }
 
-/** Stop retries before an interrupted handler is allowed to drain. */
+/** Simulate a dropped serve request without stopping its in-flight tool execution. */
+export function dropSharedHandlerConnections(): void {
+  if (!sharedServer || !('closeAllConnections' in sharedServer)) {
+    throw new Error('Shared HTTP handler server is not initialized');
+  }
+  sharedServer.closeAllConnections();
+}
+
+/** Stop the owned scheduler and wait for its process and listening port to close. */
 export async function stopSharedInngestDevServer(): Promise<void> {
   const server = inngestDevServer;
   if (!server) return;
