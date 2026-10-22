@@ -90,7 +90,7 @@ export function ComparisonSideCell({
   const traceAction =
     traceId && onShowTrace ? (
       <Button
-        size="sm"
+        size="icon-sm"
         variant="ghost"
         tooltip="View trace"
         aria-label="View trace"
@@ -104,7 +104,7 @@ export function ComparisonSideCell({
   const resultActions = (content: string) => (
     <>
       {!hasMetrics && traceAction}
-      <CopyButton content={content} size="sm" variant="ghost" />
+      <CopyButton content={content} variant="ghost" />
     </>
   );
 

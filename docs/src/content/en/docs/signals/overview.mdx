@@ -1,0 +1,102 @@
+---
+title: 'Signals'
+description: 'Send asynchronous input into a Mastra agent thread while Mastra manages whether the agent is active or idle.'
+packages:
+  - '@mastra/core'
+  - '@mastra/libsql'
+  - '@mastra/memory'
+---
+
+# Signals
+
+**Added in:** `@mastra/core@1.39.0`
+
+Signals let you send input to an agent's [thread](/docs/memory/message-history#threads-and-resources) at any time, including while the agent is working. That input might be a user message, an update from a background job, or an external event. Each signal has a type that tells Mastra what kind of input it carries.
+
+For an ongoing conversation, use signals to send input and a [thread stream](/docs/signals/thread-streams) to receive output. Subscribe to the stream first, then send input whenever it becomes available. By default, Mastra delivers it to the active run or starts a run when the thread is idle. You don't need to check whether the agent is running before sending.
+
+For a one-off request, use [`agent.stream()`](/reference/streaming/agents/stream) to start a run and read its response directly. It can also use Memory, but it doesn't give you a subscription that follows later runs on the same thread.
+
+:::tip[📹 Watch]
+
+Watch [Mastra signals overview](https://www.youtube.com/watch?v=7It2y89TVP4) to see how signals wake and steer long-running agents.
+
+:::
+
+## Quickstart
+
+Create an agent, subscribe to a thread, then send input to that thread. Subscribing first means the subscription is already open when the input starts a run.
+
+### Use an Agent
+
+This example stores thread history with [Memory](/docs/memory/overview), using a local libSQL database, so the same conversation is available across runs and process restarts. Memory accepts any supported storage adapter, and the thread is created on the first run.
+
+```typescript title="src/mastra/signals.ts"
+import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+import { LibSQLStore } from '@mastra/libsql'
+
+const agent = new Agent({
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: 'Help the user compare options.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  memory: new Memory({
+    storage: new LibSQLStore({
+      id: 'signals-storage',
+      url: 'file:./signals.db',
+    }),
+  }),
+})
+
+const thread = {
+  resourceId: 'user_123',
+  threadId: 'thread_456',
+}
+
+const subscription = await agent.subscribeToThread(thread)
+
+await agent.sendMessage('Compare that with the previous option.', thread)
+
+for await (const chunk of subscription.stream) {
+  console.log(chunk)
+}
+```
+
+The loop prints output chunks as the agent responds. It stays subscribed after the run finishes, ready for output from later messages to the same thread. Call `subscription.unsubscribe()` when you no longer need output. [Sending signals](/docs/signals/sending-signals) explains how to send further messages and other kinds of input.
+
+### Use the client SDK
+
+The same order applies through [`client.getAgent()`](/reference/client-js/mastra-client#methods): call `subscribeToThread()` first, then send a message to the same thread. The client returns the subscription stream and leaves run ownership on the server. [Thread streams](/docs/signals/thread-streams) shows the full client example.
+
+## How signals reach a thread
+
+Sending input to an active run doesn't always interrupt the model immediately. Mastra waits until the run can accept it. If the current answer needs to finish first, queue a follow-up instead. You can also store input for later without starting a run, or discard it based on the thread's state.
+
+[Sending signals](/docs/signals/sending-signals#when-the-agent-sees-your-input) explains these delivery choices and how to check whether input was accepted. When your app runs on several processes, [configure a shared backend](/docs/signals/running-across-processes) so signals reach the process running the thread.
+
+## Choose an API surface
+
+| Surface | Use it for | Canonical reference |
+| - | - | - |
+| Direct `Agent` methods | Server-side code that owns the agent instance | [Agent reference](/reference/agents/agent#thread-signals) |
+| HTTP or the JavaScript client SDK | Applications that call a running Mastra server | [Server agent routes](/reference/server/routes#agent-message-routes), [`client.getAgent()`](/reference/client-js/agents) |
+| AgentController `Session` | Long-running assistants and coding agents built on AgentController | [Agent Controller](/docs/harness/agent-controller) |
+
+Start with `Agent` methods when your code runs alongside the agent, or the client SDK when it calls a server. If you're already using [Agent Controller](/docs/harness/agent-controller), its `Session` manages the thread and subscription for you.
+
+## Next steps
+
+Use this table to find the right page for what you want to do next:
+
+| Goal | Start here |
+| - | - |
+| Stream a thread's output and lifecycle into your app | [Thread streams](/docs/signals/thread-streams) |
+| Send a user message, typed signal, state signal, or notification | [Sending signals](/docs/signals/sending-signals) |
+| Understand when a signal interrupts a run or waits for the next step | [When the agent sees your input](/docs/signals/sending-signals#when-the-agent-sees-your-input) |
+| Keep named, thread-scoped context across turns | [State signals](/docs/signals/state-signals) |
+| Deliver external events through a durable inbox | [Notifications](/docs/signals/notifications) |
+| Connect polling sources or webhooks to agents | [Signal providers](/docs/signals/signal-providers) |
+| Coordinate threads across multiple processes | [Running across processes](/docs/signals/running-across-processes) |
+| Look up notification records, priorities, and delivery policies | [Notifications reference](/reference/signals/notifications) |
+| Observe queued messages with [`subscribeThreadEvents()`](/reference/signals/thread-events) | [Thread events reference](/reference/signals/thread-events) |
