@@ -327,8 +327,10 @@ function importOrder(context) {
 // Options: { elements?: string[], properNouns?: string[] } add label elements and proper nouns to the defaults below.
 
 // Elements whose text is a label: `button`, any component named like a button, dialog action or tab
-// (`Button`, `CopyButton`, `DialogAction`, `AlertDialog.Cancel`, `MetricsCard.Tab`), and menu items.
-const labelElementPattern = /(?:^button|Button|Action|Cancel|Tab|\.Item|\.CheckboxItem|\.RadioItem|\.SubTrigger)$/;
+// (`Button`, `CopyButton`, `DialogAction`, `AlertDialog.Cancel`, `MetricsCard.Tab`), menu items
+// (`DropdownMenu.Item`, `DropdownMenuItem`), and tooltip content.
+const labelElementPattern =
+  /(?:^button|Button|Action|Cancel|Tab|TooltipContent|Menu\.?(?:Item|CheckboxItem|RadioItem|SubTrigger))$/;
 const labelProps = new Set(['aria-label', 'tooltip', 'confirmLabel', 'cancelLabel', 'submitLabel', 'actionLabel']);
 const properNouns = [
   'Mastra Cloud',
@@ -339,6 +341,7 @@ const properNouns = [
   'Studio',
   'Trace Intelligence',
   'Factory',
+  'MastraCode',
   'GitHub',
   'GitLab',
   'Google',
@@ -349,6 +352,8 @@ const properNouns = [
   'Slack',
   'Discord',
   'Linear',
+  'Jira',
+  'WorkOS',
   'Vercel',
   'Cloudflare',
   'Netlify',
@@ -358,6 +363,7 @@ const properNouns = [
   'Sentry',
   'Stripe',
   'Chrome',
+  'Base UI',
   'Markdown',
 ];
 

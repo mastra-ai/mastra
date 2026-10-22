@@ -142,7 +142,7 @@ export const AgentWorkingMemory = ({ agentId }: AgentWorkingMemoryProps) => {
                 </>
               ) : (
                 <Txt as="p" variant="body" tone="muted">
-                  No working memory content yet. Click "Edit Working Memory" to add content.
+                  No working memory content yet. Click "Edit working memory" to add content.
                 </Txt>
               )}
             </>

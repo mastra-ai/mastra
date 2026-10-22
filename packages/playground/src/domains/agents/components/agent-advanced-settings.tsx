@@ -229,7 +229,7 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
                     </Icon>
                   </button>
                 </TooltipTrigger>
-                <TooltipContent>Format the Provider Options JSON</TooltipContent>
+                <TooltipContent>Format the provider options JSON</TooltipContent>
               </Tooltip>
 
               <Tooltip>
@@ -240,7 +240,7 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
                     </Icon>
                   </button>
                 </TooltipTrigger>
-                <TooltipContent>Copy Provider Options</TooltipContent>
+                <TooltipContent>Copy provider options</TooltipContent>
               </Tooltip>
 
               {canEdit && (
@@ -255,7 +255,7 @@ export const AgentAdvancedSettingsBody = ({ canEdit = true }: AgentAdvancedSetti
                       <Icon>{saved ? <CheckIcon /> : <SaveIcon />}</Icon>
                     </button>
                   </TooltipTrigger>
-                  <TooltipContent>{saved ? 'Saved' : 'Save Provider Options'}</TooltipContent>
+                  <TooltipContent>{saved ? 'Saved' : 'Save provider options'}</TooltipContent>
                 </Tooltip>
               )}
             </div>

@@ -52,7 +52,7 @@ export const AgentEntityHeader = ({ agentId }: AgentEntityHeaderProps) => {
               )}
             </button>
           </TooltipTrigger>
-          <TooltipContent>Copy Agent ID for use in code</TooltipContent>
+          <TooltipContent>Copy agent ID for use in code</TooltipContent>
         </Tooltip>
       </div>
     </TooltipProvider>
