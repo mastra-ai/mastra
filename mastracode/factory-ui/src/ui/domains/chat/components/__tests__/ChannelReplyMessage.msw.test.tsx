@@ -147,6 +147,20 @@ describe('reply_in_thread in the transcript', () => {
     expect(screen.getByText('Sending to Slack…')).toBeInTheDocument();
     expect(screen.queryByText('Sent to Slack')).not.toBeInTheDocument();
   });
+
+  it('says a reply was not sent when its input was rejected before it could post', () => {
+    renderEntries([
+      replyEntry({
+        state: 'result',
+        args: { text: 'Here is the report', extra: true },
+        result: { error: true, message: 'Tool validation failed for reply_in_thread' },
+      }),
+    ]);
+
+    const post = screen.getByRole('group', { name: 'Reply in Slack thread' });
+    expect(within(post).getByText('Not sent to Slack')).toBeInTheDocument();
+    expect(within(post).queryByText('Sent to Slack')).not.toBeInTheDocument();
+  });
 });
 
 describe('replyText', () => {
