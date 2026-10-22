@@ -249,7 +249,7 @@ export class LocalFilesystem extends MastraFilesystem {
         const remainder = nodePath.relative(currentPath, absolutePath);
         return nodePath.join(realPath, remainder);
       } catch (error: unknown) {
-        if (!isEnoentError(error)) return undefined;
+        if (!isEnoentError(error)) throw error;
       }
 
       const parentPath = nodePath.dirname(currentPath);
