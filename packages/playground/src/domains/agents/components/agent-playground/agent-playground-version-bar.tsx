@@ -138,7 +138,7 @@ export function AgentPlaygroundVersionBar({
           </Txt>
         )}
 
-        {currentValue && <CopyButton content={currentValue} tooltip="Copy version ID" size="sm" />}
+        {currentValue && <CopyButton content={currentValue} tooltip="Copy version ID" />}
 
         <InfoTooltip aria-label="Version information" side="bottom" align="start" contentClassName="max-w-56">
           {versionInfoText}
@@ -205,8 +205,8 @@ export function AgentPlaygroundVersionBar({
               </Button>
               <DropdownMenu>
                 <DropdownMenu.Trigger asChild>
-                  <Button variant="default" disabled={saveDisabled} aria-label="More save options">
-                    <ChevronDown className="size-3.5" />
+                  <Button size="icon-md" variant="default" disabled={saveDisabled} aria-label="More save options">
+                    <ChevronDown />
                   </Button>
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end">
