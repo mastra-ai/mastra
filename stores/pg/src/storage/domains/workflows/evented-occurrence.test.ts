@@ -102,6 +102,56 @@ describe('Postgres evented occurrence replay', () => {
     20_000,
   );
 
+  it('finishes a loop when an older worker leaves saved rows without occurrence metadata', async () => {
+    const driver = new RedeliveryDriver();
+    const schema = z.object({ n: z.number() });
+    const calls: number[] = [];
+    const body = createStep({
+      id: 'increment',
+      inputSchema: schema,
+      outputSchema: schema,
+      execute: async ({ inputData }) => {
+        calls.push(inputData.n + 1);
+        return { n: inputData.n + 1 };
+      },
+    });
+    const workflow = createWorkflow({ id: `legacy-loop-${randomUUID()}`, inputSchema: schema, outputSchema: schema })
+      .dountil(body, async ({ inputData }) => inputData.n === 3)
+      .commit();
+    const mastra = new Mastra({ storage, pubsub: driver.pubsub, workflows: { workflow } });
+    const publish = driver.pubsub.publish.bind(driver.pubsub);
+    let legacyWrite = false;
+    const olderWorker = vi.spyOn(driver.pubsub, 'publish').mockImplementation(async (topic, event, options) => {
+      if (
+        !legacyWrite &&
+        topic === 'workflows' &&
+        event.type === 'workflow.step.run' &&
+        event.data.prevResult?.output?.n === 1
+      ) {
+        const store = await storage.getStore('workflows');
+        const snapshot = await store!.loadWorkflowSnapshot({ workflowName: workflow.id, runId: event.runId });
+        expect(snapshot?.context[body.id]).toMatchObject({ status: 'success', output: { n: 1 } });
+        for (const result of Object.values(snapshot!.context)) {
+          if (result?.metadata) delete result.metadata.startedBy;
+        }
+        await store!.persistWorkflowSnapshot({ workflowName: workflow.id, runId: event.runId, snapshot: snapshot! });
+        legacyWrite = true;
+      }
+      return publish(topic, event, options);
+    });
+    await mastra.startWorkers();
+    try {
+      const run = await workflow.createRun();
+      expect(await run.start({ inputData: { n: 0 } })).toMatchObject({ status: 'success', result: { n: 3 } });
+      expect(legacyWrite).toBe(true);
+      expect(calls).toEqual([1, 2, 3]);
+    } finally {
+      olderWorker.mockRestore();
+      await mastra.stopWorkers();
+      driver.dispose();
+    }
+  });
+
   it('continues with committed loop state when a slower duplicate loses completion', async () => {
     const driver = new RedeliveryDriver();
     const schema = z.object({ n: z.number() });

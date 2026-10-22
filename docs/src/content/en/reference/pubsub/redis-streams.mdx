@@ -256,7 +256,7 @@ With Postgres storage, distributed evented agents publish worker orchestration e
 
 Keep `reclaimIdleMs` above 30 seconds (the default is 60 seconds). A lower value can reclaim an event while the stopped worker's step lease is still held, causing the event to be acknowledged without running.
 
-Upgrade `@mastra/core` and `@mastra/pg` together. Drain runs started on older versions before upgrading. Their saved steps don't contain the occurrence identifiers needed to reject stale deliveries safely. Other storage adapters keep distributed internal orchestration on the worker process.
+Runs started on older versions can finish after upgrading, but don't have guaranteed crash recovery. Saved steps without occurrence identifiers keep their existing unguarded behavior. Other storage adapters keep distributed internal orchestration on the worker process.
 
 An interrupted step can execute again, so make external side effects idempotent. Completed step occurrences are protected against stale redeliveries, and a completed loop iteration reuses its saved result and loop decision. Guarded execution persists the records needed for recovery even when `shouldPersistSnapshot` returns `false`. Resume, time travel, restart races, and individual `foreach` items aren't covered by these occurrence guards.
 

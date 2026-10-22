@@ -229,8 +229,8 @@ describe('Postgres workflow occurrence guards', () => {
     ).rejects.toMatchObject({ code: 'WORKFLOW_STEP_CONFLICT', reason: 'missing' });
   });
 
-  it('preserves legacy records and reports that they need draining before upgrading', async () => {
-    const { a, b, runId, write, load } = await setup();
+  it.each(['start', 'completion'] as const)('accepts a legacy row on a guarded %s write', async phase => {
+    const { a, b, runId, write, finish, load } = await setup();
     await a!.updateWorkflowResults({
       workflowName,
       runId,
@@ -238,8 +238,14 @@ describe('Postgres workflow occurrence guards', () => {
       requestContext: {},
       result: { status: 'running', startedAt: 1, payload: {} },
     });
+    if (phase === 'start') await write(b, 'first');
+    else await finish('first', 1);
+    expect((await load())!.context.step).toMatchObject({
+      status: phase === 'start' ? 'running' : 'success',
+      metadata: { startedBy: 'first' },
+    });
     const before = await load();
-    await expect(write(b, 'first')).rejects.toMatchObject({ code: 'WORKFLOW_STEP_CONFLICT', reason: 'legacy' });
+    await expect(write(b, 'competing')).rejects.toMatchObject({ reason: 'stale' });
     expect(await load()).toEqual(before);
   });
 

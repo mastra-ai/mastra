@@ -16,14 +16,12 @@ export class WorkflowStepConflictError extends Error {
   readonly code = 'WORKFLOW_STEP_CONFLICT';
 
   constructor(
-    readonly reason: 'stale' | 'completed' | 'legacy' | 'missing',
+    readonly reason: 'stale' | 'completed' | 'missing',
     readonly storedResult?: StepResult<any, any, any, any>,
     readonly storedRequestContext?: Record<string, any>,
     readonly storedSnapshot?: WorkflowRunState,
   ) {
-    super(
-      `Workflow step delivery rejected (${reason}).${reason === 'legacy' ? ' Legacy runs must be drained with their original core/store versions.' : ''}`,
-    );
+    super(`Workflow step delivery rejected (${reason}).`);
   }
 }
 
@@ -47,7 +45,8 @@ export function assertWorkflowStepGuard({
   if (!snapshot) throw new WorkflowStepConflictError('missing');
   const stored = snapshot.context[stepId];
   const startedBy = stored?.metadata?.startedBy;
-  if (stored && !startedBy) throw new WorkflowStepConflictError('legacy', stored);
+  // Older workers do not stamp occurrences, so their rows retain unguarded behavior.
+  if (stored && !startedBy) return;
   const eventId = (startGuard ?? completionGuard)!.eventId;
   if (startedBy === eventId) {
     if (completionGuard?.pruneOnly) {
