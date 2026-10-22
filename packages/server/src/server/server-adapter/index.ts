@@ -59,6 +59,26 @@ export function getCustomHTTPExceptionResponse(error: unknown): Response | undef
   return error.getResponse();
 }
 
+/**
+ * Response for an HTTPException thrown from a `registerApiRoute` handler, or undefined for
+ * any other error (which callers keep behind a generic 500). Duck-typed so an HTTPException
+ * from `hono/http-exception`, possibly a separate Hono install, is recognised too.
+ */
+export function getCustomRouteHTTPExceptionResponse(error: unknown): Response | undefined {
+  if (!(error instanceof Error)) return undefined;
+  const httpError = error as Error & { status?: unknown; res?: unknown; getResponse?: unknown };
+  if (
+    typeof httpError.getResponse !== 'function' ||
+    typeof httpError.status !== 'number' ||
+    httpError.status < 400 ||
+    httpError.status > 599
+  ) {
+    return undefined;
+  }
+  if (httpError.res) return (httpError.getResponse as () => Response).call(httpError);
+  return Response.json({ error: httpError.message }, { status: httpError.status });
+}
+
 export interface HTTPErrorResponseBody {
   error: string;
   cause?: { failingItems: unknown[] };
@@ -1159,6 +1179,8 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       if (serverOnError) {
         return serverOnError(err, c as unknown as Parameters<typeof serverOnError>[1]);
       }
+      const httpExceptionResponse = getCustomRouteHTTPExceptionResponse(err);
+      if (httpExceptionResponse) return httpExceptionResponse;
       // Log before responding — otherwise the error is invisible on the server
       // and the client only ever sees an opaque 500.
       this.mastra.getLogger()?.error(`Custom route handler failed: ${c.req.method} ${c.req.path}`, {
