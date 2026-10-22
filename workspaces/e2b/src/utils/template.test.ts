@@ -27,6 +27,13 @@ describe('createDefaultMountableTemplate', () => {
     expect(createDefaultMountableTemplate({ nodeVersion: DEFAULT_NODE_VERSION }).id).toBe(plain.id);
   });
 
+  it('defaults to Node 24.22.1, the October 2026 security release, under a new template id', () => {
+    expect(DEFAULT_NODE_VERSION).toBe('24.22.1');
+    // The previous default's builds carry the unpatched runtime; reusing
+    // their id would keep serving them from cache.
+    expect(createDefaultMountableTemplate().id).not.toBe(createDefaultMountableTemplate({ nodeVersion: '24.20.0' }).id);
+  });
+
   it('rejects a node version that is not an exact MAJOR.MINOR.PATCH', () => {
     expect(() => createDefaultMountableTemplate({ nodeVersion: 'lts' })).toThrow(/expected an exact version/);
     expect(() => createDefaultMountableTemplate({ nodeVersion: '24.20.0; rm -rf /' })).toThrow(
