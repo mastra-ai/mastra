@@ -379,7 +379,7 @@ MCP events implement [SEP-3415](https://github.com/modelcontextprotocol/modelcon
 :::
 
 - **Subscription:** one client request for one event type with arguments, such as `{ project: 'web' }`. The server delivers only matching occurrences.
-- **Occurrence:** one delivered event with an `eventId`, `name`, `timestamp`, and `data`. Delivery is at least once, and the client drops duplicates by `eventId`. Handlers should still tolerate a repeat.
+- **Occurrence:** one delivered event with an `eventId`, `name`, `timestamp`, and `data`. Delivery is at least once, and the client drops duplicates by `eventId` within a `dedupWindow` of recent ids. Handlers should still tolerate a repeat.
 - **Cursor:** an opaque position in the event sequence. Save it to resume after a restart without missing occurrences.
 
 ### Publish events
@@ -436,11 +436,13 @@ for await (const event of subscription) {
 }
 ```
 
-`subscribe()` resolves once the server accepts the subscription. A new subscription starts from now, so pass `options.cursor` to resume from a saved position. The client prefers push delivery, then webhook, then poll, and reopens dropped streams on its own.
+`subscribe()` resolves once the server accepts the subscription. A new subscription starts from now, so pass `options.cursor` to resume from a saved position. The client picks the first mode the event offers, in the order `webhook` when the client has `webhook` settings, then `push`, then `poll`, and reopens dropped streams on its own.
 
 ### Start runs from events
 
-Subscribe in a loop that starts one agent run or workflow run per occurrence. The occurrence comes from the server, so pass `event.data` as data rather than as instructions, and save `subscription.cursor` after handling each one. Because the loop handles one occurrence at a time and a slow run delays the next, when order doesn't matter you can start runs without awaiting them and save the cursor only after every earlier run has finished, since a crash otherwise loses the occurrences whose runs were still going. Under push or webhook delivery the client buffers occurrences the loop hasn't read, and a loop that falls more than `maxBufferedEvents` behind loses the oldest ones and reports `MCP_EVENTS_BUFFER_OVERFLOW`. To deliver occurrences to agent threads as notifications instead of writing your own loop, use [`MCPEventsSignalProvider`](/reference/tools/mcp-client#events-in-agents-and-workflows-experimental).
+Subscribe in a loop that starts one agent run or workflow run per occurrence. The occurrence comes from the server, so pass `event.data` as data rather than as instructions, and save `subscription.cursor` after handling each one. Because the loop handles one occurrence at a time and a slow run delays the next, when order doesn't matter you can start runs without awaiting them and save the cursor only after every earlier run has finished, since a crash otherwise loses the occurrences whose runs were still going.
+
+Under push or webhook delivery the client buffers occurrences the loop hasn't read, and a loop that falls more than `maxBufferedEvents` behind loses the oldest ones and reports `MCP_EVENTS_BUFFER_OVERFLOW`. To deliver occurrences to agent threads as notifications instead of writing your own loop, use [`MCPEventsSignalProvider`](/reference/tools/mcp-client#events-in-agents-and-workflows-experimental).
 
 When the server is remote and your application already serves HTTP, use webhook delivery instead: enable `webhook` in `eventsOptions` on the server and `webhook` on the client, and each occurrence arrives as a POST to your endpoint. For delivery modes, error codes, buffers, retries, and the `poll` source example, visit the [`MCPServer` events reference](/reference/tools/mcp-server#events-experimental) and the [`MCPClient` events reference](/reference/tools/mcp-client#events-property-experimental). The [MCP events example](https://github.com/mastra-ai/mastra/tree/main/examples/mcp-events) runs the agent flow end to end against a local stdio server.
 
