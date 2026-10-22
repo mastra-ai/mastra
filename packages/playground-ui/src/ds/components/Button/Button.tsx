@@ -223,8 +223,17 @@ function ButtonLabel({ variant, children }: { variant: ButtonVariant; children: 
 
 // True when every child is an element (no label text). A text-sized button can still hold
 // only an icon when its size is forwarded from a wrapper, and it then needs a name too.
+// `<></>` fragments are expanded first: `<><svg />Save</>` has a label.
+function flattenChildren(children: React.ReactNode): React.ReactNode[] {
+  return React.Children.toArray(children).flatMap(child =>
+    React.isValidElement<{ children?: React.ReactNode }>(child) && child.type === React.Fragment
+      ? flattenChildren(child.props.children)
+      : [child],
+  );
+}
+
 function isIconOnly(children: React.ReactNode): boolean {
-  const flat = React.Children.toArray(children);
+  const flat = flattenChildren(children);
   return flat.length > 0 && flat.every(child => React.isValidElement(child));
 }
 
