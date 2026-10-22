@@ -9,57 +9,23 @@ packages:
 
 A signal provider connects an external system to your agents. It tracks which threads care about which external resources, watches those resources, and sends matching events into each thread as [notifications](/docs/signals/notifications).
 
-Use a provider when more than one thread can watch the same source and you don't want to wire that bookkeeping by hand. The [`SignalProvider`](/reference/signals/signal-provider) base class owns the subscription registry, polling loop, and notification delivery.
+Use a provider when several threads can watch the same source and you don't want to wire that bookkeeping by hand. The [`SignalProvider`](/reference/signals/signal-provider) base class owns the subscription registry, polling loop, and notification delivery.
 
-## When to use a provider
-
-Build or configure a provider when:
-
-- An external source produces events tied to resources that threads follow, such as a pull request, Slack channel, or build pipeline.
-- Several threads can watch the same resource, and your app needs one place to track those subscriptions.
-- You want one integration that supports polling, webhooks, or both.
-- The integration also needs to contribute processors or tools to the agent.
-
-### When a provider is overkill
-
-A provider adds a subscription registry and a long-running watcher. Skip it when:
-
-- **You have a single event:** call [`agent.sendNotificationSignal()`](/reference/agents/agent#sendnotificationsignalnotification-options) from your existing server code instead.
-- **The data is thread state, not an event:** use a [state signal](/docs/signals/state-signals) so the agent sees the latest value.
-- **The content is only needed for one model call:** use a transient reactive signal instead of a durable notification record.
+A provider fits a source that produces events tied to resources threads follow, such as a pull request, Slack channel, or build pipeline, especially when it also contributes processors or tools. For a single event, call [`agent.sendNotificationSignal()`](/reference/agents/agent#sendnotificationsignalnotification-options) from your existing server code instead. For thread state rather than an event, use a [state signal](/docs/signals/state-signals), and for context needed by one model call, use a transient reactive signal.
 
 ## How a provider works
 
-A provider combines three responsibilities:
-
-- **Subscription tracking:** the base class maps each `resourceId` and `threadId` pair to the external resources it watches.
-- **Ingestion:** you implement [`poll()`](/reference/signals/signal-provider#polling) for pull-based sources or [`handleWebhook()`](/reference/signals/signal-provider#webhooks) for push-based sources.
-- **Delivery:** when an event matches a subscription, call the protected [`notify()`](/reference/signals/signal-provider#notifications) helper. It forwards the event to [`Agent.sendNotificationSignal()`](/reference/agents/agent#sendnotificationsignalnotification-options). The record gets the same delivery policy, retries, and inbox behavior as any other notification.
-
-Pass the provider to an agent's `signals` array. The agent connects it, starts polling when `pollInterval` is set, and merges any processors or tools the provider returns.
+A provider tracks subscriptions by `resourceId` and `threadId`, ingests events through [`poll()`](/reference/signals/signal-provider#polling) for pull sources or [`handleWebhook()`](/reference/signals/signal-provider#webhooks) for push sources, and calls the protected [`notify()`](/reference/signals/signal-provider#notifications) when an event matches. `notify()` forwards to [`Agent.sendNotificationSignal()`](/reference/agents/agent#sendnotificationsignalnotification-options), which applies the usual delivery policy, retries, and inbox behavior. Pass the provider to an agent's `signals` array.
 
 ## Map external identities to threads
 
-A notification target has two ids:
+A notification target has two ids: `resourceId` identifies the thread's owner, such as a user, team, or tenant, and `threadId` identifies the conversation. The provider adds `externalResourceId` for the watched thing, in a stable format such as `github:acme/app#123` or `acme-app-main`.
 
-- `resourceId` identifies the owner of the thread, such as a user, team, or tenant.
-- `threadId` identifies the conversation that should receive the event.
-
-The provider adds a third id, `externalResourceId`, for the thing being watched in the source system. Use a stable, provider-specific format:
-
-- A pull request: `github:acme/app#123`
-- A Slack channel: `slack:C0B01RW7A4T`
-- A CI pipeline: `acme-app-main`
-
-A subscription is keyed by all three values. The same thread can watch several resources, and several threads can watch the same resource. Store extra provider data in the subscription's `metadata` argument rather than encoding it into the external resource id.
-
-For webhooks, match the incoming payload to `externalResourceId`, then use each subscription's `resourceId` and `threadId` as the notification target. That keeps source identity and Mastra thread identity separate.
+A subscription is keyed by all three values, so one thread can watch several resources and several threads can watch the same one. Store extra data in `metadata` rather than in the external id. For webhooks, match the payload to `externalResourceId`, then use the subscription's `resourceId` and `threadId` as the target.
 
 ## Quickstart
 
-This provider polls a CI system and notifies every thread subscribed to a failing pipeline.
-
-Notification storage must be configured on the `Mastra` instance, as described in [Notifications storage setup](/docs/signals/notifications#storage-and-dispatcher-setup). Without it, `notify()` can't create records.
+This provider polls a CI system and notifies every thread subscribed to a failing pipeline. It needs notification storage on the `Mastra` instance, as described in [Notifications storage setup](/docs/signals/notifications#storage-and-dispatcher-setup); without it, `notify()` can't create records.
 
 ```typescript title="src/mastra/signals/ci-signals.ts"
 import { SignalProvider } from '@mastra/core/signals'
@@ -131,7 +97,7 @@ export const supportAgent = new Agent({
 ciSignals.watch({ resourceId: 'user_123', threadId: 'thread_456' }, 'acme-app-main')
 ```
 
-The agent calls `connect()`, starts polling, and sends a notification when the pipeline fails.
+The agent connects it, polls, and sends a notification when the pipeline fails.
 
 ## Build a provider
 
@@ -142,25 +108,22 @@ Override [`connect()`](/reference/signals/signal-provider#connection) only when 
 Subscriptions live behind protected methods:
 
 - `subscribe(target, externalResourceId, metadata?)` adds a subscription or merges metadata into an existing one.
-- `unsubscribe(target, externalResourceId)` removes one subscription.
-- `unsubscribeAll(target)` removes every subscription for a thread.
-- `getSubscriptions()`, `getSubscriptionsForResource()`, and `getSubscriptionsForThread()` read the registry.
-- `hasSubscription()` and `subscriptionCount` support guards and diagnostics.
+- `unsubscribe(target, externalResourceId)` removes one, and `unsubscribeAll(target)` removes every subscription for a thread.
+- `getSubscriptions()`, `getSubscriptionsForResource()`, `getSubscriptionsForThread()`, `hasSubscription()`, and `subscriptionCount` read the registry for diagnostics and guards.
 
-Expose only the operations your application needs. The CI example wraps `subscribe()` and `unsubscribe()` in public `watch()` and `unwatch()` methods so application code doesn't reach into the provider's protected API.
+Expose only what your application needs. The CI example wraps `subscribe()` and `unsubscribe()` in public `watch()` and `unwatch()` methods.
 
 ### Polling
 
-Set `pollInterval` in milliseconds and implement `poll(subscriptions)` when the source doesn't push events to your app.
+Set `pollInterval` in milliseconds and implement `poll(subscriptions)` when the source can't push events.
 
 The base class handles the timer:
 
-- It skips a cycle when there are no subscriptions.
-- It doesn't overlap cycles, so a slow `poll()` doesn't run concurrently with itself.
-- It catches errors from `poll()`, logs them, and waits for the next cycle.
+- It skips a cycle when there are no subscriptions and never overlaps cycles, so a slow `poll()` doesn't run concurrently with itself.
+- It catches and logs errors from `poll()`, then waits for the next cycle.
 - It calls `unref()` on the timer so polling alone doesn't keep the process alive.
 
-The base class doesn't retry a failed poll immediately. If a source is temporarily unavailable, let the next interval retry, or add your own backoff inside `poll()`.
+The base class doesn't retry a failed poll immediately. Let the next interval retry, or add your own backoff inside `poll()`.
 
 ### Webhooks
 
@@ -195,17 +158,17 @@ export class CiSignals extends SignalProvider<'ci-signals'> {
 }
 ```
 
-`handleWebhook()` is a provider method, not an auto-mounted HTTP route. Call it from your own endpoint with the request body, headers, and route params. Verify the source's signature against the raw request body before parsing or notifying where the source requires it.
+`handleWebhook()` is a provider method. Call it from your own endpoint and verify the source's signature against the raw body before parsing where the source requires it.
 
 ### Durable subscriptions
 
-The base registry is in-memory and belongs to one provider instance in one process. It doesn't survive a restart and isn't shared across instances.
+The base registry is in-memory and belongs to one provider instance in one process. It doesn't survive a restart or cross instance boundaries.
 
-If subscriptions must survive a restart, persist them in your own storage and rehydrate them in [`start()`](/reference/signals/signal-provider#start). Call `subscribe()` for each persisted subscription before polling needs it. A second process has an empty registry until it rehydrates its own copy.
+If subscriptions must survive a restart, persist them in your own storage and rehydrate them in [`start()`](/reference/signals/signal-provider#start). A second process has an empty registry until it rehydrates its own copy.
 
 ### Lifecycle hooks
 
-The agent calls `connect()` when it's constructed and starts polling immediately after. It also invokes `start()` without awaiting it, so keep `start()` independent of the first poll cycle and handle its errors.
+The agent calls `connect()` when constructed, starts polling, then invokes `start()` without awaiting it. Keep `start()` independent of the first poll cycle and handle its errors.
 
 [`stop()`](/reference/signals/signal-provider#stop) is synchronous. The default implementation stops polling and clears every subscription index. Override it for cleanup, but call `super.stop()` so the registry is released:
 
@@ -216,7 +179,7 @@ override stop() {
 }
 ```
 
-Call `stop()` from your application's shutdown path. The agent doesn't call it for you. If closing an external client is asynchronous, expose a separate async shutdown method and await it before calling `stop()`.
+Call `stop()` from your shutdown path. The agent doesn't. If closing a client is asynchronous, expose an async shutdown method and await it before calling `stop()`.
 
 ### Processors and tools
 
@@ -225,15 +188,15 @@ Providers can contribute behavior to the connected agent:
 - Return input processors from `getInputProcessors()` and output processors from `getOutputProcessors()`.
 - Return agent-callable tools from `getTools()`.
 
-The agent resolves these once, after `connect()`, and registers the processors with the Mastra instance. This is how the built-in task provider wires its state processor and task tools together.
+The agent resolves these once after `connect()` and registers the processors with the Mastra instance.
 
 ### Send notifications
 
-[`notify()`](/reference/signals/signal-provider#notifications) is a thin wrapper around the connected agent's `sendNotificationSignal()`. Accepts the same notification fields: `source`, `kind`, `summary`, optional `priority`, `payload`, `dedupeKey`, `coalesceKey`, and `attributes`.
+[`notify()`](/reference/signals/signal-provider#notifications) wraps the connected agent's `sendNotificationSignal()` and accepts the same fields: `source`, `kind`, `summary`, optional `priority`, `payload`, `dedupeKey`, `coalesceKey`, and `attributes`.
 
-Use `dedupeKey` for one event that may arrive more than once, such as the same failing build detected on consecutive polls. Use `coalesceKey` when several related events should merge into one pending record. The [Notifications guide](/docs/signals/notifications#create-and-coalesce-records) covers the merge rules.
+Use `dedupeKey` for one event that may arrive twice, such as the same failing build on consecutive polls, and `coalesceKey` when related events should merge into one pending record. The [Notifications guide](/docs/signals/notifications#create-and-coalesce-records) covers the merge rules.
 
-`notify()` throws when the provider isn't connected to an agent. It also propagates storage errors from `sendNotificationSignal()`, so let those reach your poll or webhook error handling instead of swallowing them.
+`notify()` throws when the provider isn't connected. It also propagates storage errors, so let those reach your poll or webhook error handling.
 
 ### Shut down cleanly
 
@@ -245,7 +208,7 @@ During shutdown:
 1. Close or release external clients and connections.
 1. Let in-flight `notify()` calls finish where your runtime allows it.
 
-The base class clears the registry in `stop()`. It can't drain an in-flight webhook handler or close an async client for you, so coordinate those in your application's shutdown path.
+The base class clears the registry in `stop()`. It can't drain an in-flight webhook handler or close an async client, so coordinate those in your shutdown path.
 
 ## Built-in providers
 
@@ -263,11 +226,11 @@ const agent = new Agent({
 })
 ```
 
-The provider contributes `task_write`, `task_update`, `task_complete`, and `task_check`, plus the processor that projects the task list onto a state-signal lane. Task tracking requires a memory-backed thread and a Mastra `storage` instance; without memory, the tools report that tracking needs agent memory.
+It contributes `task_write`, `task_update`, `task_complete`, and `task_check`, plus the processor that projects the task list onto a state-signal lane. Task tracking requires a memory-backed thread and a `storage` instance. Without memory, the tools report that tracking needs agent memory.
 
 ### Webhook signal provider
 
-For generic webhook sources, use [`WebhookSignalProvider`](/reference/signals/webhook-signal-provider) instead of writing a subclass. Configure a function that extracts the resource id from the payload and an optional function that builds the notification:
+For generic webhook sources, use [`WebhookSignalProvider`](/reference/signals/webhook-signal-provider) instead of writing a subclass. Configure a function that extracts the resource id and an optional one that builds the notification:
 
 ```typescript title="src/mastra/index.ts"
 import { Agent } from '@mastra/core/agent'
@@ -294,18 +257,18 @@ export const supportAgent = new Agent({
 webhooks.subscribeThread({ resourceId: 'user_123', threadId: 'thread_456' }, 'acme/app')
 ```
 
-When a webhook arrives, call `webhooks.handleWebhook({ body, headers })` from your route. The provider matches the extracted resource id, which can be a string or an array of strings, against its subscriptions and notifies each matching thread.
+Call `webhooks.handleWebhook({ body, headers })` from your route. The provider matches the extracted resource id against its subscriptions and notifies each matching thread.
 
-Without `extractResourceId`, the provider reads `resource` or `externalResourceId` from the payload. Without `buildNotification`, it sends a `webhook-event` notification at `medium` priority.
+Without `extractResourceId`, it reads `resource` or `externalResourceId` from the payload. Without `buildNotification`, it sends a `webhook-event` notification at `medium` priority.
 
 ## Production checklist
 
-Before you deploy a provider:
+Before deploying:
 
-- **Deduplicate retries:** give every event a stable `dedupeKey` or `coalesceKey`. Webhook deliveries and poll cycles can repeat, and the provider doesn't deduplicate before calling `notify()`.
-- **Verify webhooks:** check signatures against the raw request body before parsing. Reject invalid requests at your HTTP endpoint, not inside `notify()`.
-- **Handle source outages:** Polling retries on the next interval. Add backoff inside `poll()` if the source needs it. Webhook sources usually retry from their side, so return a non-2xx status when you couldn't accept the event.
+- **Deduplicate retries:** give every event a stable `dedupeKey` or `coalesceKey`. Webhook deliveries and poll cycles repeat, and the provider doesn't deduplicate before `notify()`.
+- **Verify webhooks:** check signatures against the raw body before parsing and reject invalid requests at your HTTP endpoint.
+- **Handle source outages:** polling retries on the next interval, so add backoff inside `poll()` if needed. Webhook sources usually retry their side, so return a non-2xx status when you couldn't accept the event.
 - **Persist subscriptions if they matter:** the registry is in-memory. Rehydrate it in `start()` when a restart must preserve watches.
-- **Use shared storage:** notification records and delivery policy depend on the Mastra storage configured for the agent.
+- **Use shared storage:** notification records and delivery policy depend on the agent's Mastra storage.
 - **Plan shutdown:** stop accepting webhooks, stop polling, close clients, and let in-flight notifications settle.
-- **Watch the notification queue:** summaries and deferred deliveries rely on the [notification dispatcher](/docs/signals/notifications#dispatch), especially when several processes share the same storage.
+- **Watch the notification queue:** summaries and deferred deliveries rely on the [notification dispatcher](/docs/signals/notifications#dispatch), especially across shared storage.

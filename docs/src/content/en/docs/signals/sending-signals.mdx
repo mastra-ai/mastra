@@ -1,6 +1,6 @@
 ---
 title: 'Sending signals | Signals'
-description: 'Learn when to send a message, a typed signal, a notification, or a state update, and how Mastra decides whether to deliver it now or wake the thread.'
+description: 'Send input to an agent thread and let Mastra decide whether to deliver it or wake the thread.'
 packages:
   - '@mastra/core'
   - '@mastra/client-js'
@@ -8,11 +8,13 @@ packages:
 
 # Sending signals
 
-Signals are how input reaches a thread outside the original [`agent.stream()`](/reference/streaming/agents/stream) call. This page starts with [`sendMessage()`](/reference/agents/agent#sendmessagemessage-options), the method most applications need, then covers queued follow-ups, input from your system, and the durable notification and state paths. The examples call methods on an `Agent`; if your app talks to a running Mastra server, use the same methods through the [client SDK](/reference/client-js/agents) or the [server routes](/reference/server/routes#agent-message-routes). The [Agent reference](/reference/agents/agent#thread-signals) is canonical for signatures.
+Signals send input to a thread, and subscribing to its stream carries the output back. Use them for messages, queued follow-ups, system context, and the durable notification and state paths, while a one-off request that doesn't need a thread can use [`agent.stream()`](/reference/streaming/agents/stream) instead.
+
+The examples call an `Agent`; from a server, use the [client SDK](/reference/client-js/agents) or [server routes](/reference/server/routes#agent-message-routes). The [Agent reference](/reference/agents/agent#thread-signals) is canonical for signatures.
 
 ## Send a message
 
-Use `sendMessage()` for user-authored input. Pass the thread identifiers so Mastra knows where the input belongs:
+Pass the thread identifiers to `sendMessage()` for user-authored input:
 
 ```typescript title="src/mastra/signals.ts"
 await agent.sendMessage('Compare that with the previous option.', {
@@ -21,9 +23,9 @@ await agent.sendMessage('Compare that with the previous option.', {
 })
 ```
 
-Mastra checks the thread first. If it's idle, the message starts a new run. If a run is already active, the message joins it and the model sees it on the next request. When the agent has memory, the message is stored on the thread, so later runs and your UI see it too. [When the agent sees your input](#when-the-agent-sees-your-input) covers the interrupt and wait rules.
+Mastra checks the thread first. An idle thread starts a run. An active run takes the message, and the model sees it on the next request. With memory, it's stored for later runs and your UI. [When the agent sees your input](#when-the-agent-sees-your-input) covers interruption.
 
-When several people share a thread, add `attributes` so the model can tell their messages apart. Mastra renders them as XML attributes on the user message:
+Add `attributes` when several people share a thread:
 
 ```typescript
 await agent.sendMessage(
@@ -35,7 +37,7 @@ await agent.sendMessage(
 )
 ```
 
-The model receives `<user name="Jane" sentFrom="slack">Use the latest customer note too.</user>`. Messages without attributes arrive as plain user input.
+The model receives `<user name="Jane" sentFrom="slack">Use the latest customer note too.</user>`.
 
 ## Queue a follow-up
 
@@ -48,13 +50,13 @@ await agent.queueMessage('Also check whether the tests need updates.', {
 })
 ```
 
-Queued input always waits for the active run to finish, then starts a new run on the same thread. On an idle thread, it starts immediately. If you change your mind before the queued input runs, [`cancelQueuedMessages()`](/reference/agents/agent#cancelqueuedmessagesoptions) removes it without stopping the active run. Cancellation is best-effort across processes and doesn't revoke an input that has already been accepted for execution.
+Queued input waits for the active run to finish, then starts a new run. On an idle thread it starts immediately. [`cancelQueuedMessages()`](/reference/agents/agent#cancelqueuedmessagesoptions) removes queued input without stopping the active run. Cancellation is best-effort across processes and doesn't revoke accepted input.
 
-If the input is system context rather than a user message, use [`queueSignal()`](/reference/agents/agent#queuesignalsignal-options). It takes the same queue and cancellation behavior, but keeps the signal's own `type`, `tagName`, and attributes.
+[`queueSignal()`](/reference/agents/agent#queuesignalsignal-options) queues typed context with the same behavior but keeps the signal's `type`, `tagName`, and attributes.
 
 ## Send context from a system
 
-Use [`sendSignal()`](/reference/agents/agent#sendsignalsignal-options) when the input isn't a user message. A background job, a webhook handler, or another part of your application can attach context to the thread, and the model sees it as an XML element instead of a user message:
+[`sendSignal()`](/reference/agents/agent#sendsignalsignal-options) attaches context that isn't a user message. A background job or webhook can add it, and the model sees an XML element rather than a user message:
 
 ```typescript title="src/mastra/signals.ts"
 await agent.sendSignal(
@@ -67,17 +69,21 @@ await agent.sendSignal(
 )
 ```
 
-The `type` describes where the input came from. `reactive` is for context generated by your system or a processor, and `notification` is for an external event. The `tagName` controls the XML tag the model sees. The example renders as `<ci-result>CI failed on main: 3 tests failed.</ci-result>`. If you omit `tagName`, Mastra uses the type name, except `reactive` defaults to `system-reminder`.
+`type` describes the source: `reactive` for context from your system or a processor, `notification` for an external event. `tagName` sets the XML tag; without it Mastra uses the type name, except `reactive` defaults to `system-reminder`.
 
-When Mastra wraps a signal in its tag, it passes `contents` to the model as written and XML-escapes attribute values. A closing tag that matches the signal's own tag, such as `</skill>` inside a `skill` signal, is escaped to `&lt;/skill&gt;` so the contents can't end the tag early. This keeps the wrapper intact, but it isn't a prompt-injection defense: treat third-party text you forward in a signal as untrusted.
+Mastra passes `contents` as written and XML-escapes attribute values. A closing tag matching the signal's own tag is escaped so content can't end it early; this isn't a prompt-injection defense, so treat forwarded third-party text as untrusted. Use XML-safe `tagName` and attribute names with letters, numbers, periods, hyphens, or the underscore character, starting with a letter or underscore.
 
-Use XML-safe `tagName` and attribute names. They can contain letters, numbers, periods, hyphens, and the underscore character (`_`). They must start with a letter or underscore.
+Like `sendMessage()`, `sendSignal()` delivers by default. Set `transient: true` to apply context only to the current request; Mastra doesn't store it, and transient signals can't be state signals. The [Agent reference](/reference/agents/agent#sendsignalsignal-options) covers `attributes`, `metadata`, and `providerOptions`.
 
-By default, `sendSignal()` uses the same delivery rules as `sendMessage()`: deliver to an active run, wake an idle thread. If the context should apply only to the current request, set `transient: true` so Mastra doesn't store it. Transient signals can't be state signals. The [Agent reference](/reference/agents/agent#sendsignalsignal-options) covers `attributes`, `metadata`, and `providerOptions`.
+## Input that outlives the conversation
+
+Some input must outlive the run. A notification creates a durable inbox record and applies delivery policy. [`sendNotificationSignal()`](/reference/agents/agent#sendnotificationsignalnotification-options) records the event for later reading and coalesces related pending events. A notification-shaped [`sendSignal({ type: 'notification' })`](/reference/agents/agent#sendsignalsignal-options) only adds context and doesn't create that record.
+
+A state signal holds named current context for a thread and updates in place, while chat messages accumulate as conversation turns. [`sendStateSignal()`](/reference/agents/agent#sendstatesignalstate-options) stores a snapshot or delta that the model reads as context, such as browser state or a watcher result. [State signals](/docs/signals/state-signals) covers snapshots versus deltas.
 
 ## Control when input arrives
 
-Most applications can keep the defaults. An active thread receives the input, and an idle thread wakes. Override them only when you need a different result.
+Applications usually keep the defaults: active threads receive input and idle threads wake. Override them only for a different result.
 
 | Thread state | Default | Other options |
 | - | - | - |
@@ -101,67 +107,38 @@ const result = agent.sendSignal(
 await result.persisted
 ```
 
-Every send returns an `accepted` promise. It resolves once Mastra has decided what to do, not when a run finishes:
+Every send returns an `accepted` promise. It resolves when Mastra decides what to do, not when a run finishes:
 
 - `wake`: this process started a run.
-- `deliver`: the input joined an existing run, or another process acknowledged an idle wake and now owns it.
+- `deliver`: the input joined a run, or another process acknowledged an idle wake and now owns it.
 - `persist` and `discard`: nothing ran.
-- `blocked`: a suspended thread couldn't accept a new idle wake.
+- `blocked`: a suspended thread couldn't accept an idle wake.
 
-When the action is `wake`, the result also carries the run's `output` stream. A routing failure rejects `accepted`. A run that fails after starting reports the error on that output. Use [`persisted`](/reference/agents/agent#sendsignalsignal-options) to wait for a storage write.
+When the action is `wake`, the result carries the run's `output` stream. A run that fails after starting reports the error there. A routing failure rejects `accepted`. Use [`persisted`](/reference/agents/agent#sendsignalsignal-options) to wait for a storage write.
 
 ## When the agent sees your input
 
-The delivery decision above resolves when Mastra accepts the input. How soon the model sees it depends on what the active run has already produced.
+Mastra can replace a request that has produced only reasoning or metadata, including while it waits for the first token. The replacement retries in the same run and step with the new input and keeps the discarded response out of history. It adds nothing to `maxSteps` and leaves `stepNumber` unchanged. There's no separate interruption limit, so repeated input can restart reasoning until the request completes, the run is cancelled, or its timeout expires.
 
-Mastra can replace a request that has produced only reasoning or metadata, including while it waits for the first token. The replacement retries in the same run and step with the new input and keeps the discarded response out of history. An interrupted request adds nothing to `maxSteps` and leaves `stepNumber` unchanged, which means a single-step budget can still produce a replacement response. Mastra doesn't set a separate interruption limit, so repeated input can keep restarting reasoning until a request completes, the run is cancelled, or its timeout expires.
+The window closes once the request produces text, a tool call, or other content. Input then waits for the next loop boundary. Running tools aren't cancelled or repeated, and queued input never jumps ahead. If `maxSteps` is reached first, Mastra may save queued input without a response.
 
-The interrupt window closes as soon as the request produces text, a tool call, or other response content. From then on, input waits for the next loop boundary. Running tools are neither cancelled nor repeated, and queued input never jumps ahead of the active run. If the run reaches `maxSteps` before that boundary, Mastra may save queued input without producing a response.
+Reasoning already streamed may stay visible until the client reloads history. Input processors finish before the request is cancelled; output processors settle before the next request, and their side effects remain. Usage totals exclude interrupted requests, though providers may still bill.
 
-Reasoning that already streamed may remain visible until the client reloads history. Per-step input processors finish before Mastra cancels the request they prepared. Output processors settle before the next request, and their side effects aren't undone. Usage totals exclude interrupted requests, though providers may still bill for them.
-
-Signals reach the model as XML elements: user messages as `<user>`, reactive context as `<system-reminder>` by default, and external events as `<notification>`. Accepted signals are written into thread history, so later requests see them alongside the messages they followed. [State signals](/docs/signals/state-signals) and [Notifications](/docs/signals/notifications) have their own context shapes.
-
-## Input that outlives the conversation
-
-Some input shouldn't disappear when the current run ends. Mastra has two durable paths for that.
-
-### Notifications
-
-Use [`sendNotificationSignal()`](/reference/agents/agent#sendnotificationsignalnotification-options) when an external event should become a tracked notification rather than a one-off piece of context:
-
-```typescript title="src/mastra/signals.ts"
-await agent.sendNotificationSignal(
-  {
-    source: 'github',
-    kind: 'ci-status',
-    priority: 'high',
-    summary: 'CI failed on main: 3 tests failed.',
-    dedupeKey: 'github:acme/app:main:ci',
-  },
-  { resourceId: 'user_123', threadId: 'thread_456' },
-)
-```
-
-Mastra creates or coalesces a durable inbox record and applies the agent's delivery policy. `priority` controls how quickly it's delivered, and `dedupeKey` prevents duplicate pending records for the same event. Unlike `sendSignal({ type: 'notification' })`, this path stores the record for later reading. The [Notifications guide](/docs/signals/notifications) covers delivery and the inbox tool, and the [Notifications reference](/reference/signals/notifications) covers records, priorities, and policies.
-
-### State signals
-
-Use [`sendStateSignal()`](/reference/agents/agent#sendstatesignalstate-options) when the thread needs a named, durable lane of structured context, such as browser state or a background watcher result. State signals aren't chat messages. They're snapshots or deltas that the model sees as context. The [State signals guide](/docs/signals/state-signals) covers when to send a snapshot versus a delta and how to compute state in a processor.
+Signals reach the model as XML elements: `<user>`, `<system-reminder>` for reactive context, and `<notification>` for external events. Accepted signals are written into thread history. [State signals](/docs/signals/state-signals) and [Notifications](/docs/signals/notifications) have their own shapes.
 
 ## Stop a run or clear queued input
 
-Aborting a run preserves queued input by default. Pass `clearPendingSignals: true` to drop the queue as well:
+Aborting a run preserves queued input by default. Pass `clearPendingSignals: true` to drop the queue too:
 
 ```typescript
 subscription.abort({ clearPendingSignals: true })
 ```
 
-Without a subscription, call [`agent.abortThreadStream()`](/reference/agents/agent#abortthreadstreamoptions) with the same option. Listeners stay subscribed, and a later message can start a new run. With shared PubSub, the clear request is forwarded to the process that owns the run, but it only clears that process's local queue. Neither abort nor cancellation revokes an acceptance that already resolved. Continuation runs are separate from the run that was aborted, so aborting the original run doesn't cancel them.
+Without a subscription, call [`agent.abortThreadStream()`](/reference/agents/agent#abortthreadstreamoptions) with the same option. Listeners stay subscribed and a later message can start a run. With shared PubSub, the clear request reaches the owning process but clears only its local queue. Neither abort nor cancellation revokes an acceptance that already resolved. Continuations are separate, so aborting the original doesn't cancel them.
 
 ## AgentController and Session
 
-Most applications use the `Agent` methods directly. If you build on AgentController, its `Session` wraps the same methods and manages the thread subscription for you:
+Most applications use the `Agent` methods directly. AgentController's `Session` wraps them and manages the subscription:
 
 | Task | `Agent` | AgentController `Session` |
 | - | - | - |

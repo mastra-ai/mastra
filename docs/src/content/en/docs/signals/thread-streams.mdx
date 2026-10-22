@@ -8,7 +8,7 @@ packages:
 
 # Thread streams
 
-A thread stream is the ordered output and lifecycle of a [thread](/docs/memory/overview): model text, tool calls, approvals, errors, and run events, delivered as [chunks](/reference/streaming/ChunkType). You read it through a subscription, which can start with stored history as a [`thread-history` chunk](/reference/streaming/ChunkType#thread-history) before live output. Use [`Agent.subscribeToThread()`](/reference/agents/agent#subscribetothreadoptions) when your code owns the [Agent](/reference/agents/agent), or the [client SDK](/reference/client-js/agents#subscribetothread) when it calls a running server.
+A thread stream is the ordered output for a [thread](/docs/memory/message-history#threads-and-resources): model text, tool calls, approvals, errors, and run events, delivered as [chunks](/reference/streaming/ChunkType). You read it through a subscription, which can start with stored history as a [`thread-history` chunk](/reference/streaming/ChunkType#thread-history) before live output. Use [`Agent.subscribeToThread()`](/reference/agents/agent#subscribetothreadoptions) when your code owns the [Agent](/reference/agents/agent), or the [client SDK](/reference/client-js/agents#subscribetothread) when it calls a running server.
 
 ## Quickstart
 
@@ -45,19 +45,11 @@ The example creates a client with [`client.getAgent()`](/reference/client-js/mas
 
 ### Stored history and live parts
 
-:::note[Outline]
-
-Cover `withInitialHistory` and `perPage` (default 40). Describe the order subscribers receive data in: `thread-history`, retained newer parts, then live parts.
-
-:::
+Pass `withInitialHistory: true` to begin with a `thread-history` chunk, which carries the newest page of stored messages in oldest-first order. `perPage` defaults to 40. Subscribers then receive retained parts newer than that history, followed by live parts. History requires memory. Without it, or before the thread has messages, the chunk still arrives first with an empty `messages` array.
 
 ### Chunks and runs
 
-:::note[Outline]
-
-Describe the chunk families a subscriber sees: model output, tool calls and results, approvals, aborts, errors, and `thread-history`. Explain how to group chunks by `runId` and read the active run with `activeRunId()`.
-
-:::
+Subscribers receive model output, tool calls and results, approvals, aborts, errors, and `thread-history` chunks. [ChunkType](/reference/streaming/ChunkType) lists their shapes. Each chunk carries the `runId` of the run that produced it, so group output per run. The subscription's `activeRunId()` returns the active run or `null`.
 
 ### Approve tool calls
 
@@ -67,29 +59,17 @@ A suspended run holds the thread. Until it resumes or is aborted, a new idle wak
 
 ### Filter signals in a subscription
 
-:::note[Outline]
-
-Explain `hideSignals`: it filters signals for one subscriber only, doesn't change stored messages, and doesn't affect other subscribers. Note that the option is supported by the in-process core API, not by HTTP or `client-js` subscription requests.
-
-:::
+`hideSignals` filters signal chunks for one subscriber. Pass `true` to hide every recognized signal, `false` to show them, or an array of signal types. It doesn't change model context, stored messages, shared broadcasts, or other subscribers, and it isn't a security boundary. The option exists on the in-process core subscription. HTTP and `client-js` subscription requests don't support it.
 
 ## Stop a run or close a subscription
 
-:::note[Outline]
-
-Compare [`abort()`](/reference/client-js/agents#subscribetothread) with [`unsubscribe()`](/reference/client-js/agents#subscribetothread). Explain that pending signals survive an abort unless `clearPendingSignals` is true.
-
-:::
+[`abort()`](/reference/client-js/agents#subscribetothread) requests cancellation of the active run. `unsubscribe()` closes the subscription without aborting, so the run continues and you can subscribe again later. Pending signals survive an abort unless you pass `clearPendingSignals: true`.
 
 ## Reconnect
 
-Use `reconnect: true` for long-lived subscriptions. Visit [`client.getAgent().subscribeToThread()` reference](/reference/client-js/agents#subscribetothread) for reconnect options.
+Use `reconnect: true` for long-lived subscriptions. `processDataStream()` then resubscribes when the transport closes or a reconnect request fails, retrying indefinitely with a one-second delay by default. A 4xx other than `408` or `429`, or a `501`, stops reconnecting and rejects. See the [`subscribeToThread()` reference](/reference/client-js/agents#subscribetothread) for retry options.
 
-:::note[Outline]
-
-Cover resumable streams and retained PubSub history: what a reconnect resumes, when missed parts are still available, and how that differs from the stored messages in thread history. Link to the streaming reference.
-
-:::
+A reconnect continues from retained stream data when the shared PubSub backend still holds it. Events held only in another process's in-memory cache can't be recovered. Stored thread history remains the durable record, and `withInitialHistory` reloads its newest page.
 
 ### SSE heartbeats for custom endpoints
 
@@ -111,18 +91,8 @@ Use heartbeats together with client-side reconnect logic. Heartbeats reduce idle
 
 ## What's replayed and what isn't
 
-:::note[Outline]
-
-State that completed stored runs aren't replayed, while pending approvals and suspensions are. Explain that history is stored messages, not model deltas.
-
-:::
+Completed runs aren't replayed, even when stored history is loaded. Pending tool approvals and suspensions are emitted when you subscribe again. History is stored messages, not model deltas, so reconnecting doesn't reconstruct text that was never retained.
 
 ## Public chunks and internal events
 
-:::note[Outline]
-
-List the public surfaces: `AgentChunkType` plus `ThreadHistoryChunk`. Link to the [ChunkType reference](/reference/streaming/ChunkType#thread-history) for chunk shapes and the [Thread events reference](/reference/signals/thread-events) for `subscribeThreadEvents()`.
-
-State that the internal runtime event union isn't public and isn't documented.
-
-:::
+The public stream is typed as `AgentChunkType`, and `thread-history` is a `ThreadHistoryChunk`. The [ChunkType reference](/reference/streaming/ChunkType) documents both. `subscribeThreadEvents()` has its own [Thread events reference](/reference/signals/thread-events). The internal runtime event union isn't public and isn't documented.

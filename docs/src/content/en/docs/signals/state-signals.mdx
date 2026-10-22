@@ -1,51 +1,29 @@
 ---
 title: 'State signals | Signals'
-description: 'Keep durable, named state lanes on a Mastra thread and emit snapshots or deltas that the model sees as context.'
+description: 'Keep durable, named state on a Mastra thread and send snapshots or deltas that the model sees as context.'
 packages:
   - '@mastra/core'
 ---
 
 # State signals
 
-State signals expose named, thread-scoped context lanes. Use them for durable context that changes over time, such as browser state, editor state, or a background watcher result. They aren't chat messages. The model sees them as context alongside the conversation. State signals are one of the durable input paths covered in [Sending signals](/docs/signals/sending-signals).
+A state signal holds named current context on a thread, separate from chat messages. A producer sends a snapshot or delta for a state ID, and Mastra stores it durably and gives it to the model as context. The producer owns merge and diff logic. Mastra doesn't merge values for you.
 
-## When to use state signals
+Use one when the model needs a current view of something that changes across turns and isn't a user message, such as the active page, a watcher result, or task state. [Sending signals](/docs/signals/sending-signals) covers the durable input paths.
 
-Use a state signal when the model needs a current view of something that changes across turns and isn't a user message:
+## How state signals work
 
-- **Live application state:** the active browser page, open editor file, selected record, or another value your app already tracks.
-- **Background results:** a watcher, sync job, or integration updates context that should stay available on the thread.
-- **Long-running work:** the agent needs the latest snapshot after older context is truncated, without replaying every intermediate update.
+A state ID names a slot of current context, sometimes called a state lane. A **snapshot** is the full state of that slot. A **delta** describes only what changed since the last snapshot.
 
-State signals are durable, so they survive later turns and, with shared storage, process restarts.
+Send a snapshot when the producer first establishes the slot, when the model's context no longer contains one, or when a delta would be ambiguous. Send a delta when the model already has a snapshot and only part of it changed. If you can't tell, send a snapshot.
 
-### When not to use state signals
+When Mastra accepts a state signal, it stores compact tracking metadata. If a producer sends the same `cacheKey` and mode while that state is current, Mastra skips the duplicate and `sendStateSignal()` reports `{ skipped: true, reason: 'unchanged' }`.
 
-Use a different input path when the data has a different lifecycle:
-
-- **User input:** use [`sendMessage()`](/reference/agents/agent#sendmessagemessage-options), not a state lane.
-- **Prompt-only context for one call:** use a transient reactive signal with `transient: true`.
-- **Discrete external events:** use notifications so they get a durable inbox record and delivery policy.
-- When updates arrive frequently, batch or summarize changes before sending. Every accepted state signal becomes context, and snapshots are reinserted after older state messages leave the context window.
-
-## Snapshots and deltas
-
-A **snapshot** is the full state of a lane. A **delta** describes only what changed since the last snapshot. The producer owns the merge and diff logic: Mastra stores and tracks state signals, but it doesn't merge values on your behalf.
-
-Send a snapshot when the producer first establishes a lane, when the model's context no longer contains a snapshot, or when a delta would be ambiguous without the earlier state. Send a delta when the model already has a current snapshot and only a small part changed. If you can't tell whether the model still has the snapshot, send a snapshot.
-
-## Built-in uses
-
-Mastra uses state signals for its own long-lived context, and the same patterns apply to your application:
-
-- The [browser](/docs/browser) context processor keeps the active page and tabs under the `browser` id.
-- [Goals](/docs/harness/goals) keep the current objective under the `goal` id so the model always knows what it's working toward.
-- [Task tracking](/docs/agents/tools#task-tracking) stores task state through [`TaskStateProcessor`](/reference/signals/task-signal-provider).
-- [Working memory](/docs/memory/working-memory#opt-in-to-state-signals-experimental) can move out of the system prompt and into a `working-memory` state signal with `useStateSignals: true`.
+State signals are durable, so they survive later turns and, with shared storage, process restarts. Because every accepted update becomes context, batch or summarize frequent changes before sending.
 
 ## Send a state signal
 
-Use [`sendStateSignal()`](/reference/agents/agent#sendstatesignalstate-options) when an external producer detects a state change. Each state signal identifies a state lane with `id`, a producer-owned `cacheKey`, and whether the update is a snapshot or delta. The [Agent reference](/reference/agents/agent#sendstatesignalstate-options) covers every field and return value.
+Use [`sendStateSignal()`](/reference/agents/agent#sendstatesignalstate-options) when an external producer detects a change. `id` names the state lane, `mode` selects a snapshot or delta, `cacheKey` identifies the version for deduplication, `contents` is the text the model reads, and `value` carries structured data for processors and application code. The [Agent reference](/reference/agents/agent#sendstatesignalstate-options) covers every field and return value.
 
 ```typescript title="src/mastra/browser-watcher.ts"
 await agent.sendStateSignal(
@@ -69,7 +47,7 @@ await agent.sendStateSignal(
 
 ## Compute state in a processor
 
-Use [`computeStateSignal()`](/reference/processors/processor-interface#computestatesignal) when a processor owns a state lane. Mastra calls it once per model input step after [`processInputStep()`](/reference/processors/processor-interface#processinputstep) and before the model request is finalized. The processor reads the active state through `activeStateSignals`, the last snapshot, and `deltasSinceSnapshot`. Return `undefined` when nothing changed. The [Processors guide](/docs/agents/processors) covers where this hook sits in the execution order.
+Use [`computeStateSignal()`](/reference/processors/processor-interface#computestatesignal) when a processor owns a state lane. Mastra calls it once per model input step after [`processInputStep()`](/reference/processors/processor-interface#processinputstep) and before the model request is finalized. The processor reads `activeStateSignals`, the last snapshot, and `deltasSinceSnapshot`, and returns `undefined` when nothing changed. The [Processors guide](/docs/agents/processors) covers its place in the execution order.
 
 ```typescript title="src/mastra/processors/browser-state.ts"
 import type { ComputeStateSignalArgs, Processor } from '@mastra/core/processors'
@@ -100,16 +78,26 @@ export const browserStateProcessor: Processor = {
 }
 ```
 
-Mastra passes `lastSnapshot` and `deltasSinceSnapshot` into `computeStateSignal()`. It resolves them from message history when the current message list doesn't contain the latest snapshot. The processor still owns merge and diff logic.
+Mastra resolves `lastSnapshot` and `deltasSinceSnapshot` from message history when the current message list lacks the latest snapshot. The processor still owns merge and diff logic.
 
-## Deduplication and tracking
+## Built-in uses
 
-When Mastra accepts a state signal, it stores compact tracking metadata on the thread. If a producer sends the same `cacheKey` and mode again while that state is still current, Mastra skips the duplicate. Direct `sendStateSignal()` calls report that as `{ skipped: true, reason: 'unchanged' }` rather than creating another stored signal.
+Mastra uses state signals for long-lived context, and the same patterns apply to your application:
 
-## State after context truncation
+- The [browser](/docs/browser) context processor keeps the active page and tabs under `browser`.
+- [Goals](/docs/harness/goals) keep the current objective under the `goal` id.
+- [Task tracking](/docs/agents/tools#task-tracking) stores task state through [`TaskStateProcessor`](/reference/signals/task-signal-provider).
+- [Working memory](/docs/memory/working-memory#opt-in-to-state-signals-experimental) can move out of the system prompt and into a `working-memory` state signal with `useStateSignals: true`.
 
-`contextWindow.hasSnapshot` tells the processor whether the active message window already contains a snapshot for this state lane. If it's `false`, return a fresh `snapshot` so the model sees the current state even after older state messages are trimmed from the context window.
+## Choose another input path
 
-## Persistence rules
+- **User input:** use [`sendMessage()`](/reference/agents/agent#sendmessagemessage-options).
+- **Prompt-only context:** use a transient reactive signal.
+- **Discrete external events:** use a notification with a durable inbox record and delivery policy.
+- **Named current context:** use a state signal.
 
-State signals can't be transient. Mastra rebuilds the lane's tracking metadata from persisted history, so a delivery-only state signal would break deduplication. Persisted state signals and their tracking survive a process restart when the agent's storage is shared; without shared storage, a new process starts without the lane.
+## Persistence and truncation
+
+State signals can't be transient. Mastra rebuilds tracking metadata from persisted history, so a delivery-only signal would break deduplication. With shared storage, persisted state and its tracking survive a restart; without it, a new process starts without the lane.
+
+`contextWindow.hasSnapshot` tells the processor whether the active window already contains a snapshot for the lane. If it's `false`, return a fresh `snapshot` so the model sees current state after older state messages are trimmed.
