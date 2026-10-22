@@ -24,12 +24,7 @@ import { UI_EXPERIMENTS } from '@/domains/experimental-ui/experiments';
 import { useExperimentalUIEnabled } from '@/domains/experimental-ui/use-experimental-ui-enabled';
 import { SidebarShortcuts } from '@/domains/navigation/components/sidebar-shortcuts';
 import { NavigationCommand, useNavigationCommand } from '@/lib/command';
-import {
-  RouteSidePanelDrawer,
-  RouteSidePanelProvider,
-  RouteSidePanelSlot,
-  useRouteSidePanel,
-} from '@/lib/route-side-panel';
+import { RouteSidePanelProvider, RouteSidePanelSlot, useRouteSidePanel } from '@/lib/route-side-panel';
 import { cn } from '@/lib/utils';
 
 function MobileNavbar() {
@@ -76,8 +71,9 @@ const UNCLIPPED: CSSProperties = { overflow: 'visible' };
 
 /**
  * Hosts the page-registered side panel next to the Studio frame (outside the
- * rounded card). Desktop: resizable panel; mobile: edge drawer. The page always
- * renders under the same `Panel` so crossing the breakpoint never remounts it.
+ * rounded card), on desktop only: below the breakpoint each page shows its panel
+ * in its own drawer, opened from its header. The page always renders under the
+ * same `Panel` so crossing the breakpoint never remounts it.
  */
 export function StudioFrame({ children, className }: { children: React.ReactNode; className?: string }) {
   const isMobile = useIsMobile();
@@ -121,7 +117,6 @@ export function StudioFrame({ children, className }: { children: React.ReactNode
           </>
         )}
       </PanelGroup>
-      {hasPanel && isMobile && <RouteSidePanelDrawer label="Open details panel" />}
     </div>
   );
 }

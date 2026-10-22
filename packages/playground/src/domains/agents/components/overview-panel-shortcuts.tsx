@@ -7,7 +7,7 @@ export const OVERVIEW_PANEL_SHORTCUT = ']';
 /**
  * `]` toggles the agent overview side panel. Rendered inside the agent
  * `KeyboardScope`, so the binding only exists while an agent page is mounted.
- * On mobile it opens and closes the drawer instead.
+ * On mobile the panel is a drawer and the handle is null, so it's a no-op there.
  */
 export const OverviewPanelShortcuts = () => {
   const { toggle } = useRouteSidePanel();

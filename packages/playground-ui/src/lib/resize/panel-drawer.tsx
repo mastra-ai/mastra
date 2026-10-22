@@ -18,32 +18,22 @@ export interface PanelDrawerProps {
   /** Accessible name for the trigger button and the drawer. */
   label: string;
   children: ReactNode;
-  /**
-   * Controlled open state. When set, the drawer draws no edge trigger of its own:
-   * the caller opens it from a control in its own layout (e.g. a header button).
-   */
-  open?: boolean;
-  onOpenChange?: (open: boolean) => void;
 }
 
-export const PanelDrawer = ({ direction, label, children, open, onOpenChange }: PanelDrawerProps) => {
-  const isControlled = open !== undefined;
-
+export const PanelDrawer = ({ direction, label, children }: PanelDrawerProps) => {
   return (
-    <Drawer side={direction} open={open} onOpenChange={onOpenChange}>
-      {!isControlled && (
-        <DrawerTrigger asChild>
-          <button
-            type="button"
-            aria-label={label}
-            className={cn(panelIconButtonClass, 'absolute top-2 z-10', direction === 'left' ? 'left-2' : 'right-2')}
-          >
-            <Icon>
-              <PanelEdgeIcon side={direction} />
-            </Icon>
-          </button>
-        </DrawerTrigger>
-      )}
+    <Drawer side={direction}>
+      <DrawerTrigger asChild>
+        <button
+          type="button"
+          aria-label={label}
+          className={cn(panelIconButtonClass, 'absolute top-2 z-10', direction === 'left' ? 'left-2' : 'right-2')}
+        >
+          <Icon>
+            <PanelEdgeIcon side={direction} />
+          </Icon>
+        </button>
+      </DrawerTrigger>
 
       <DrawerPortal keepMounted>
         <DrawerBackdrop />

@@ -1,6 +1,5 @@
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
-import { PanelDrawer } from '@mastra/playground-ui/resize/panel-drawer';
 import type { ComponentProps, ReactNode } from 'react';
 import { use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -20,10 +19,9 @@ export function RouteSidePanelProvider({ children }: { children: ReactNode }) {
   const [el, setEl] = useState<HTMLElement | null>(null);
   const [owners, setOwners] = useState<PanelOwner[]>([]);
   const [panelCollapsed, setPanelCollapsed] = useState(true);
-  // The registration the mobile drawer was opened for. A page mounting again registers anew,
-  // so the drawer starts closed on the next page instead of covering it.
-  const [drawerOpenOrder, setDrawerOpenOrder] = useState<number>();
   const isMobile = useIsMobile();
+  // The mobile drawer owns its own open state, so the portal must not be gated on collapse there.
+  const isCollapsed = !isMobile && panelCollapsed;
   const panelHandle = useRef<CollapsiblePanelHandle | null>(null);
   const orderRef = useRef(0);
 
@@ -38,7 +36,7 @@ export function RouteSidePanelProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  const active = useMemo(() => {
+  const activeOwner = useMemo(() => {
     let active: PanelOwner | undefined;
     for (const owner of owners) {
       if (
@@ -50,41 +48,15 @@ export function RouteSidePanelProvider({ children }: { children: ReactNode }) {
       }
     }
 
-    return active;
+    return active?.owner ?? null;
   }, [owners]);
-  const activeOwner = active?.owner ?? null;
-  const activeOrder = active?.order;
 
-  const isDrawerOpen = activeOrder !== undefined && drawerOpenOrder === activeOrder;
-  // The mobile drawer owns its own open state, so the portal must not be gated on collapse there.
-  const isCollapsed = !isMobile && panelCollapsed;
-  const isOpen = isMobile ? isDrawerOpen : !panelCollapsed;
-
-  const onDrawerOpenChange = useCallback(
-    (open: boolean) => setDrawerOpenOrder(open ? activeOrder : undefined),
-    [activeOrder],
-  );
-  const toggle = useCallback(() => {
-    if (isMobile) onDrawerOpenChange(!isDrawerOpen);
-    else panelHandle.current?.toggle();
-  }, [isMobile, isDrawerOpen, onDrawerOpenChange]);
+  const toggle = useCallback(() => panelHandle.current?.toggle(), []);
   const onPanelResize = useCallback((sizeInPixels: number) => setPanelCollapsed(sizeInPixels <= 0), []);
 
   const value = useMemo(
-    () => ({
-      el,
-      setEl,
-      activeOwner,
-      register,
-      panelHandle,
-      isCollapsed,
-      isOpen,
-      onPanelResize,
-      isDrawerOpen,
-      onDrawerOpenChange,
-      toggle,
-    }),
-    [activeOwner, el, isCollapsed, isOpen, onPanelResize, isDrawerOpen, onDrawerOpenChange, register, toggle],
+    () => ({ el, setEl, activeOwner, register, panelHandle, isCollapsed, onPanelResize, toggle }),
+    [activeOwner, el, isCollapsed, onPanelResize, register, toggle],
   );
   return <SidePanelContext.Provider value={value}>{children}</SidePanelContext.Provider>;
 }
@@ -93,24 +65,6 @@ export function RouteSidePanelProvider({ children }: { children: ReactNode }) {
 export function RouteSidePanelSlot(props: Omit<ComponentProps<'div'>, 'ref'>) {
   const ctx = use(SidePanelContext);
   return <div ref={ctx?.setEl ?? undefined} {...props} />;
-}
-
-/**
- * Layout-side, mobile: the side panel slot inside an edge drawer. It has no edge trigger of its own,
- * which would sit on the page header's actions; pages open it from their header through `toggle()`.
- */
-export function RouteSidePanelDrawer({ label }: { label: string }) {
-  const ctx = use(SidePanelContext);
-  return (
-    <PanelDrawer
-      direction="right"
-      label={label}
-      open={ctx?.isDrawerOpen ?? false}
-      onOpenChange={ctx?.onDrawerOpenChange}
-    >
-      <RouteSidePanelSlot className="h-full min-h-0" />
-    </PanelDrawer>
-  );
 }
 
 /** Page-side: registers an owner and portals its content into the layout's side panel slot. */

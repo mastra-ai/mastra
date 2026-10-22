@@ -64,22 +64,14 @@ vi.mock('@mastra/playground-ui/resize/separator', () => ({
   PanelSeparator: () => <div data-testid="panel-separator" />,
 }));
 
-vi.mock('@mastra/playground-ui/resize/panel-drawer', () => ({
-  PanelDrawer: ({ label, children, open }: { label: string; children: ReactNode; open?: boolean }) => (
-    <aside data-testid="panel-drawer" aria-label={label} data-open={String(open)}>
-      {children}
-    </aside>
-  ),
-}));
-
 vi.mock('@mastra/playground-ui/hooks/use-is-mobile', () => ({
   useIsMobile: () => mobileState.value,
 }));
 
 function Toggle() {
-  const { toggle, isOpen } = useRouteSidePanel();
+  const { toggle, isCollapsed } = useRouteSidePanel();
   return (
-    <button type="button" aria-pressed={isOpen} onClick={toggle}>
+    <button type="button" aria-pressed={!isCollapsed} onClick={toggle}>
       toggle
     </button>
   );
@@ -148,58 +140,15 @@ describe('StudioFrame side panel', () => {
     expect(screen.getByTestId('collapsible-route-side-panel')).toBeTruthy();
   });
 
-  it('uses an edge drawer instead of a resizable panel on mobile', async () => {
+  it('shows no side panel next to the frame on mobile, where pages use their own drawer', () => {
     mobileState.value = true;
     renderFrame({ withPanel: true });
 
-    const drawer = await screen.findByTestId('panel-drawer');
-    await waitFor(() => expect(drawer.textContent).toContain('Panel content'));
     // The page stays under the same panel so crossing the breakpoint never remounts it.
     expect(screen.getByTestId('panel-studio-frame')).toBeTruthy();
     expect(screen.queryByTestId('collapsible-route-side-panel')).toBeNull();
     expect(screen.queryByTestId('panel-separator')).toBeNull();
-  });
-
-  it('opens and closes the mobile drawer from the shared toggle', async () => {
-    mobileState.value = true;
-    renderFrame({ withPanel: true });
-
-    const drawer = await screen.findByTestId('panel-drawer');
-    expect(drawer.getAttribute('data-open')).toBe('false');
-    expect(screen.getByText('toggle').getAttribute('aria-pressed')).toBe('false');
-
-    fireEvent.click(screen.getByText('toggle'));
-    expect(drawer.getAttribute('data-open')).toBe('true');
-    expect(screen.getByText('toggle').getAttribute('aria-pressed')).toBe('true');
-
-    fireEvent.click(screen.getByText('toggle'));
-    expect(drawer.getAttribute('data-open')).toBe('false');
-    expect(handleSpy.toggle).not.toHaveBeenCalled();
-  });
-
-  it('starts the mobile drawer closed on the next page that registers a side panel', async () => {
-    mobileState.value = true;
-    const frame = (withPanel: boolean) => (
-      <RouteSidePanelProvider>
-        <Toggle />
-        <StudioFrame>
-          <div data-testid="frame-content">page</div>
-        </StudioFrame>
-        {withPanel && <RouteSidePanel owner="agent-detail">Panel content</RouteSidePanel>}
-      </RouteSidePanelProvider>
-    );
-    const { rerender } = render(frame(true));
-    await screen.findByTestId('panel-drawer');
-    fireEvent.click(screen.getByText('toggle'));
-    expect(screen.getByTestId('panel-drawer').getAttribute('data-open')).toBe('true');
-
-    // Leave for a page without a side panel, then open another agent page.
-    rerender(frame(false));
-    await waitFor(() => expect(screen.queryByTestId('panel-drawer')).toBeNull());
-    rerender(frame(true));
-
-    expect((await screen.findByTestId('panel-drawer')).getAttribute('data-open')).toBe('false');
-    expect(screen.getByText('toggle').getAttribute('aria-pressed')).toBe('false');
+    expect(screen.queryByText('Panel content')).toBeNull();
   });
 
   it('keeps the page mounted when crossing the mobile breakpoint', async () => {
@@ -217,7 +166,7 @@ describe('StudioFrame side panel', () => {
       </RouteSidePanelProvider>,
     );
 
-    await screen.findByTestId('panel-drawer');
+    await waitFor(() => expect(screen.queryByTestId('collapsible-route-side-panel')).toBeNull());
     expect(screen.getByTestId('frame-content')).toBe(before);
   });
 });
