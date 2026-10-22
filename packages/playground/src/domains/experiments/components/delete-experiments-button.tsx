@@ -50,9 +50,7 @@ export function DeleteExperimentsButton({ experimentIds, onDeleted }: DeleteExpe
           <AlertDialog.Header>
             <AlertDialog.Title>Delete {pluralize(count)}</AlertDialog.Title>
             <AlertDialog.Description>
-              This will permanently delete the selected experiments, all their results, and the traces they produced,
-              including their spans and any scores, feedback, metrics and logs attached to those traces. This action
-              cannot be undone.
+              {count === 1 ? 'Its' : 'Their'} results and traces will be deleted too. This can't be undone.
             </AlertDialog.Description>
           </AlertDialog.Header>
           <AlertDialog.Footer>
