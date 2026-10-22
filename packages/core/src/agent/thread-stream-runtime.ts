@@ -123,16 +123,17 @@ const AGENT_THREAD_PEER_DISCOVERY_MAX_EXTRA_MS = 1_000;
  * Calls `close` once the caller has had `windowMs` in which it could read replies, or after
  * `windowMs + maxExtraMs` of wall time. Time the event loop spent busy doesn't count: replies that
  * arrived meanwhile are still unread when the loop frees up, so closing on a plain timer then
- * would drop every answer and report live peers as absent. Returns a cancel function.
+ * would drop every answer and report live peers as absent. Elapsed time is read from the monotonic
+ * clock, so a wall-clock step can't keep the window open. Returns a cancel function.
  */
 function startListeningWindow(windowMs: number, maxExtraMs: number, close: () => void): () => void {
   const tickMs = Math.max(1, Math.min(10, Math.floor(windowMs / 10)));
-  const startedAt = Date.now();
+  const startedAt = performance.now();
   let lastTickAt = startedAt;
   let listenedMs = 0;
   let timer: ReturnType<typeof setTimeout>;
   const tick = () => {
-    const now = Date.now();
+    const now = performance.now();
     // A tick far later than scheduled means the loop was busy; credit only a normal tick for it.
     listenedMs += Math.min(now - lastTickAt, tickMs * 2);
     lastTickAt = now;

@@ -235,9 +235,19 @@ async function runBusyPresence() {
       lastSeenAt: now,
     };
     const startedAt = Date.now();
+    // Start the busy block only once the discovery request is out, so the replies arrive while
+    // this process is blocked, which is what a busy sender meets.
+    const publish = pubsub.publish;
+    pubsub.publish = async (topic, event, options) => {
+      await publish.call(pubsub, topic, event, options);
+      if (topic === 'agent.thread-peer-discovery') {
+        pubsub.publish = publish;
+        busyFor(Number(busyMs));
+      }
+    };
     const peers = registry.connectedPeers(context, [saved]);
-    setTimeout(() => busyFor(Number(busyMs)), 0);
     const target = (await peers).find(peer => peer.id === saved.id);
+    pubsub.publish = publish;
     emit('probed', {
       threadId: targetThreadId,
       busyMs: Number(busyMs),
