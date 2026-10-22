@@ -61,6 +61,7 @@ export function resolveSlackAdapterConfig(channelConfig: SlackProviderConfig): S
     formatError,
     streaming: topLevelStreaming,
     textFormat,
+    textDisplay,
     typingStatus,
     toolDisplay: topLevelToolDisplay,
   } = channelConfig;
@@ -70,6 +71,7 @@ export function resolveSlackAdapterConfig(channelConfig: SlackProviderConfig): S
     formatError,
     streaming: topLevelStreaming,
     textFormat,
+    textDisplay,
     typingStatus,
     toolDisplay: topLevelToolDisplay,
   };
@@ -616,7 +618,8 @@ export class SlackProvider implements ChannelProvider {
 
   /**
    * Get the base URL for webhook callbacks.
-   * Prefers explicit config, then derives from Mastra server config.
+   * Prefers explicit config, then Mastra server public-URL overrides, then the
+   * `MASTRA_SERVER_URL` env var, then derives from the server bind config.
    */
   #getBaseUrl(): string | undefined {
     // Explicit config takes precedence
@@ -624,10 +627,22 @@ export class SlackProvider implements ChannelProvider {
       return stripTrailingSlash(this.#baseUrl);
     }
 
+    const server = this.#mastra?.getServer();
+
+    // MASTRA_SERVER_URL is the server's public URL (deployment platforms
+    // inject it). It beats bind-address derivation — a deployed server binds
+    // 0.0.0.0, which is never reachable for OAuth callbacks or webhooks — but
+    // explicit `server.studio*` overrides in user config still win.
+    const hasPublicOverride =
+      server?.studioHost != null || server?.studioPort != null || server?.studioProtocol != null;
+    const envUrl = process.env.MASTRA_SERVER_URL?.trim();
+    if (!hasPublicOverride && envUrl) {
+      return stripTrailingSlash(envUrl);
+    }
+
     // Derive from Mastra server config + environment
     // process.env.PORT is set by the CLI with the actual resolved port
     // (e.g. 4112 if 4111 was taken), so it's more reliable than server config
-    const server = this.#mastra?.getServer();
     const protocol = server?.studioProtocol ?? 'http';
     const host = server?.studioHost ?? server?.host ?? process.env.MASTRA_HOST ?? 'localhost';
     const port = server?.studioPort ?? server?.port ?? (Number(process.env.PORT) || 4111);

@@ -58,6 +58,12 @@ const Example = ({
 
 afterEach(cleanup);
 
+function disclosureChevron() {
+  const chevron = screen.getByTestId('disclosure').querySelector('[data-slot="disclosure-chevron"]');
+  if (!chevron) throw new Error('ActivityDisclosure rendered no chevron');
+  return chevron;
+}
+
 describe('Activity', () => {
   it('renders composed custom content and forwards semantic props', () => {
     render(<Example defaultOpen />);
@@ -93,7 +99,7 @@ describe('Activity', () => {
     const trigger = screen.getByRole('button');
     expect(trigger.getAttribute('aria-expanded')).toBe('false');
     expect(screen.queryByText('Command output')).toBeNull();
-    expect(screen.getByTestId('disclosure').firstElementChild?.className).not.toContain('rotate-90');
+    expect(disclosureChevron().classList.contains('rotate-90')).toBe(false);
   });
 
   it('manages uncontrolled expansion', () => {
@@ -103,7 +109,7 @@ describe('Activity', () => {
 
     expect(screen.getByRole('button').getAttribute('aria-expanded')).toBe('true');
     expect(screen.getByText('Command output')).toBeTruthy();
-    expect(screen.getByTestId('disclosure').firstElementChild?.className).toContain('rotate-90');
+    expect(disclosureChevron().classList.contains('rotate-90')).toBe(true);
   });
 
   it('uses a focusable native button for keyboard disclosure', () => {

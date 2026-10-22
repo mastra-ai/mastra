@@ -253,7 +253,7 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
                   +{hiddenTabs.length}
                   <ChevronDown aria-hidden="true" className="size-3" />
                 </DropdownMenu.Trigger>
-                <DropdownMenu.Content className="grid">
+                <DropdownMenu.Content>
                   {hiddenTabs.map((tab, index) => (
                     <Fragment key={tab.value}>
                       <DropdownMenu.Item

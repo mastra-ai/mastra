@@ -7,6 +7,7 @@ import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-c
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { frameSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
 import { cn } from '@mastra/playground-ui/utils/cn';
+import { toast } from '@mastra/playground-ui/utils/toast';
 import {
   useAgent,
   useReorderModelList,
@@ -43,10 +44,7 @@ export function AgentOverviewPanel({ agentId }: AgentOverviewPanelProps) {
   return (
     <div
       data-testid="agent-overview-panel"
-      className={cn(
-        'ml-2 grid h-full min-h-0 grid-rows-[auto_1fr] overflow-hidden rounded-studio-frame',
-        frameSurfaceStyle,
-      )}
+      className={cn('grid h-full min-h-0 grid-rows-[auto_1fr] overflow-hidden rounded-studio-frame', frameSurfaceStyle)}
     >
       {/* The header route action owns the close control (see AgentDetailHeaderActions). */}
       <div className="flex h-10 min-h-10 items-center border-b border-border px-4">
@@ -71,9 +69,31 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
     requestContext: useEntityRequestContext('agent', agentId)[0],
     queryOptions: { enabled: Boolean(agentId) },
   });
-  const { mutate: reorderModelList } = useReorderModelList({ agentId: agentId });
+  const { mutateAsync: reorderModelList } = useReorderModelList({ agentId: agentId });
   const { mutateAsync: updateModelInModelList } = useUpdateModelInModelList({ agentId: agentId });
   const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();
+
+  const reportModelListError = (error: Error & { body?: { error?: string } }) => {
+    toast.error(error.body?.error || error.message || 'Failed to update model list');
+  };
+
+  const handleReorderModelList = async (params: Parameters<typeof reorderModelList>[0]) => {
+    try {
+      return await reorderModelList(params);
+    } catch (error) {
+      reportModelListError(error as Error & { body?: { error?: string } });
+      throw error;
+    }
+  };
+
+  const handleUpdateModelInModelList = async (params: Parameters<typeof updateModelInModelList>[0]) => {
+    try {
+      return await updateModelInModelList(params);
+    } catch (error) {
+      reportModelListError(error as Error & { body?: { error?: string } });
+      throw error;
+    }
+  };
   const { data: channelPlatforms } = useChannelPlatforms();
 
   if (isLoading) {
@@ -114,8 +134,9 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
         <AgentMetadataSection title="Models" accent="blue" icon={<Boxes />}>
           <AgentMetadataModelList
             modelList={agent.modelList}
-            updateModelInModelList={updateModelInModelList}
-            reorderModelList={reorderModelList}
+            editable={agent.modelListEditable !== false}
+            updateModelInModelList={handleUpdateModelInModelList}
+            reorderModelList={handleReorderModelList}
           />
         </AgentMetadataSection>
       )}
@@ -142,7 +163,7 @@ function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
           title: 'Using Tools and MCP documentation',
         }}
       >
-        <AgentMetadataToolList tools={tools} agentId={agentId} />
+        <AgentMetadataToolList agentId={agentId} tools={tools} />
       </AgentMetadataSection>
 
       <AgentMetadataSection

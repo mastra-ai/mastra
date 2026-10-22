@@ -13,6 +13,8 @@
  * still reaches the Mastra server — same pattern as the shared API client.
  */
 
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+
 import { postRepositoryGitOp, postSourceControlRepositoryOp, readJsonOrThrow } from './http';
 import type { GitLabRepository } from '../../factory/services/gitlab';
 
@@ -206,9 +208,20 @@ export async function deleteGithubPat(baseUrl: string, kind: GithubPatKind = 'de
   if (!res.ok) throw new Error(`Failed to remove GitHub token (${res.status})`);
 }
 
-/** List repos across the user's installations, optionally filtered by query. */
-export async function listGithubRepos(baseUrl: string, query?: string): Promise<GithubRepo[]> {
-  const url = query ? `${baseUrl}/web/github/repos?q=${encodeURIComponent(query)}` : `${baseUrl}/web/github/repos`;
+/**
+ * List repos across the user's installations, optionally filtered by query.
+ * `refresh` bypasses the server's short-lived repository cache.
+ */
+export async function listGithubRepos(
+  baseUrl: string,
+  query?: string,
+  options?: { refresh?: boolean },
+): Promise<GithubRepo[]> {
+  const params = new URLSearchParams();
+  if (query) params.set('q', query);
+  if (options?.refresh) params.set('refresh', '1');
+  const search = params.toString();
+  const url = `${baseUrl}/web/github/repos${search ? `?${search}` : ''}`;
   const res = await fetch(url, { headers: { Accept: 'application/json' }, credentials: 'include' });
   if (!res.ok) throw new Error(`Failed to list repos (${res.status})`);
   const body = (await res.json()) as { repos: GithubRepo[] };
@@ -218,18 +231,31 @@ export async function listGithubRepos(baseUrl: string, query?: string): Promise<
 /** The GitHub source-control integration id registered on the server. */
 const GITHUB_INTEGRATION_ID = 'github';
 
+/**
+ * Where a Factory's sessions and runs get their model and credentials: `factory` uses the organization's for both,
+ * `user` the session owner's for both, and `hybrid` the owner's for interactive sessions and the organization's for
+ * work-item runs.
+ */
+export type FactoryModelScope = 'factory' | 'user' | 'hybrid';
+
 /** A Factory project row from `/web/factory/projects`. */
 export interface FactoryProjectPayload {
   id: string;
   name: string;
   /** Org-wide default model for factory runs; null when unset. */
   defaultModelId?: string | null;
-  /** Whether new Slack sessions create Work-board items for this Factory. */
-  slackWorkItemsEnabled?: boolean;
+  /** Where sessions and runs get their model and credentials. */
+  modelScope?: FactoryModelScope;
+  /** Thinking level every session and run uses until it picks its own. */
+  defaultThinkingLevel?: ThinkingLevelSetting;
   /** Whether Factory rules may start agent runs without someone asking for them. */
   autoRunEnabled?: boolean;
   /** Whether the Factory answers a run's plan itself instead of waiting for a person. */
   autoApprovePlans?: boolean;
+  /** Whether Review agents publish test results as a commit check. Defaults to off. */
+  reviewTestChecksEnabled?: boolean;
+  /** Whether Work items get an independent self-review before the change request opens. Defaults to off. */
+  selfReviewEnabled?: boolean;
 }
 
 /** `{...projectRepository, repository}` payload from the Factory project routes. */
@@ -237,7 +263,7 @@ interface ProjectRepositoryPayload {
   id: string;
   branch: string | null;
   sandboxWorkdir: string;
-  repository: { slug: string; defaultBranch: string } | null;
+  repository: { externalId: string; slug: string; defaultBranch: string } | null;
 }
 
 /** A source-control connection (with linked repos) from the Factory project routes. */
@@ -252,6 +278,8 @@ interface ProjectConnectionPayload {
 export interface LinkedRepositoryPayload {
   projectRepositoryId: string;
   provider?: 'github' | 'gitlab';
+  /** Provider repository/project id; stable across renames. */
+  externalId?: string;
   slug: string;
   gitBranch?: string;
   sandboxWorkdir?: string;
@@ -272,6 +300,7 @@ function toLinkedRepositoryPayload(
   return {
     projectRepositoryId: link.id,
     provider: integrationId === 'gitlab' ? 'gitlab' : 'github',
+    externalId: link.repository?.externalId,
     slug: link.repository?.slug ?? project.name,
     gitBranch: link.branch ?? link.repository?.defaultBranch,
     sandboxWorkdir: link.sandboxWorkdir,
@@ -321,12 +350,17 @@ export async function createFactoryProject(
   baseUrl: string,
   name: string,
   description?: string,
+  modelScope?: FactoryModelScope,
 ): Promise<FactoryProjectPayload> {
   const res = await fetch(`${baseUrl}/web/factory/projects`, {
     method: 'POST',
     credentials: 'include',
     headers: { 'content-type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify(description ? { name, description } : { name }),
+    body: JSON.stringify({
+      name,
+      ...(description ? { description } : {}),
+      ...(modelScope ? { modelScope } : {}),
+    }),
   });
   const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, 'Failed to create Factory');
   return project;
@@ -361,6 +395,59 @@ export async function updateFactoryDefaultModel(
   return project;
 }
 
+export async function renameFactoryProject(
+  baseUrl: string,
+  factoryProjectId: string,
+  name: string,
+): Promise<FactoryProjectPayload> {
+  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, 'Failed to update Factory name');
+  return project;
+}
+
+/** Set where the Factory's sessions and runs get their model and credentials. */
+export async function updateFactoryModelScope(
+  baseUrl: string,
+  factoryProjectId: string,
+  modelScope: FactoryModelScope,
+): Promise<FactoryProjectPayload> {
+  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ modelScope }),
+  });
+  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(
+    res,
+    'Failed to update Factory model scope',
+  );
+  return project;
+}
+
+/** Set the thinking level this Factory's sessions and runs use until they pick their own. Admin-only. */
+export async function updateFactoryThinkingDefault(
+  baseUrl: string,
+  factoryProjectId: string,
+  defaultThinkingLevel: ThinkingLevelSetting,
+): Promise<FactoryProjectPayload> {
+  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
+    method: 'PATCH',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ defaultThinkingLevel }),
+  });
+  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(
+    res,
+    'Failed to update Factory thinking level',
+  );
+  return project;
+}
+
 export interface ApplyFactoryDefaultModelResult {
   modelId: string;
   applied: string[];
@@ -390,7 +477,10 @@ export async function applyFactoryDefaultModelToSessions(
 export async function updateFactoryAutomation(
   baseUrl: string,
   factoryProjectId: string,
-  patch: { autoRunEnabled?: boolean; autoApprovePlans?: boolean },
+  patch: Pick<
+    FactoryProjectPayload,
+    'autoRunEnabled' | 'autoApprovePlans' | 'reviewTestChecksEnabled' | 'selfReviewEnabled'
+  >,
 ): Promise<FactoryProjectPayload> {
   const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
     method: 'PATCH',
@@ -399,25 +489,6 @@ export async function updateFactoryAutomation(
     body: JSON.stringify(patch),
   });
   const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(res, 'Failed to update automation');
-  return project;
-}
-
-/** Enable or disable Work-board item creation for new Slack sessions. */
-export async function updateFactorySlackWorkItems(
-  baseUrl: string,
-  factoryProjectId: string,
-  slackWorkItemsEnabled: boolean,
-): Promise<FactoryProjectPayload> {
-  const res = await fetch(`${baseUrl}/web/factory/projects/${encodeURIComponent(factoryProjectId)}`, {
-    method: 'PATCH',
-    credentials: 'include',
-    headers: { 'content-type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ slackWorkItemsEnabled }),
-  });
-  const { project } = await readJsonOrThrow<{ project: FactoryProjectPayload }>(
-    res,
-    'Failed to update Slack work-item setting',
-  );
   return project;
 }
 

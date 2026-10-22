@@ -20,6 +20,10 @@ type OMRequest = Extract<
     op:
       | 'omGetLatest'
       | 'omGetHistory'
+      | 'omInitialize'
+      | 'omCreateReflectionGeneration'
+      | 'omSetPendingMessageTokens'
+      | 'omSetBufferingObservationFlag'
       | 'omUpdateActive'
       | 'omAppendBufferedChunk'
       | 'omSwapBuffered'
@@ -140,6 +144,178 @@ export function mergeReflectionWithUnreflected(
   return unreflectedContent ? `${bufferedReflection}\n\n${unreflectedContent}` : bufferedReflection;
 }
 
+// ---------------------------------------------------------------------------
+// Lifecycle rules. These mirror @mastra/core's shared observational memory
+// lifecycle helpers (packages/core/src/storage/domains/memory/observational-memory-lifecycle.ts),
+// which this bundle cannot import at runtime. A parity test keeps them identical.
+// ---------------------------------------------------------------------------
+
+/**
+ * A buffered chunk stores `lastObservedAt = max message time + 1ms`; it is wholly covered by
+ * the cursor iff `cursor >= chunk.lastObservedAt - 1ms`.
+ */
+export function isChunkCoveredByCursor(chunkLastObservedAt: string, cursor: string | null | undefined): boolean {
+  if (!cursor) return false;
+  return Date.parse(cursor) >= Date.parse(chunkLastObservedAt) - 1;
+}
+
+/** The later of two ISO cursors (`null` only when both are absent). */
+export function maxCursor(a: string | null | undefined, b: string | null | undefined): string | null {
+  if (!a) return b ?? null;
+  if (!b) return a;
+  return Date.parse(b) > Date.parse(a) ? b : a;
+}
+
+/**
+ * New-generation text for a reflection built from `snapshot`: the reflection when the stored
+ * text equals the snapshot; the reflection plus the appended tail when the stored text only
+ * extends it; `null` (do not apply) after a non-append rewrite.
+ */
+export function planReflectionText(input: {
+  storedObservations: string;
+  storedObservationTokenCount: number;
+  snapshotObservations: string;
+  snapshotObservationTokenCount: number;
+  reflection: string;
+  tokenCount: number;
+}): { observations: string; tokenCount: number } | null {
+  const stored = input.storedObservations ?? '';
+  const snapshot = input.snapshotObservations ?? '';
+  if (stored === snapshot) return { observations: input.reflection, tokenCount: input.tokenCount };
+  if (!stored.startsWith(snapshot)) return null;
+  const tail = stored.slice(snapshot.length).trimStart();
+  if (!tail.trim()) return { observations: input.reflection, tokenCount: input.tokenCount };
+  return {
+    observations: input.reflection ? `${input.reflection}\n\n${tail}` : tail,
+    tokenCount:
+      input.tokenCount +
+      Math.max(0, (input.storedObservationTokenCount ?? 0) - (input.snapshotObservationTokenCount ?? 0)),
+  };
+}
+
+/** Whether the stored text equals or only extends the snapshot. */
+export function isAppendOnly(storedObservations: string, snapshotObservations: string): boolean {
+  const stored = storedObservations ?? '';
+  const snapshot = snapshotObservations ?? '';
+  return stored === snapshot || stored.startsWith(snapshot);
+}
+
+type OMDoc = Record<string, any> & { _id: any };
+
+/** Canonical head order: generationCount DESC, createdAt ASC, id ASC. */
+function sortsBeforeAsHead(a: OMDoc, b: OMDoc): boolean {
+  if (a.generationCount !== b.generationCount) return a.generationCount > b.generationCount;
+  if (a.createdAt !== b.createdAt) return Date.parse(a.createdAt) < Date.parse(b.createdAt);
+  return a.id < b.id;
+}
+
+/**
+ * The canonical head of a lookup key. `by_lookup_key` orders ties by `_creationTime`, so when
+ * the top two share a generation all tied rows are read and the canonical order picks one.
+ */
+async function getCanonicalHead(ctx: MutationCtx<any>, convexTable: string, lookupKey: string): Promise<OMDoc | null> {
+  const top = (await ctx.db
+    .query(convexTable)
+    .withIndex('by_lookup_key', (q: any) => q.eq('lookupKey', lookupKey))
+    .order('desc')
+    .take(2)) as OMDoc[];
+  if (top.length === 0) return null;
+  if (top.length === 1 || top[1]!.generationCount !== top[0]!.generationCount) return top[0]!;
+  const tied = (await ctx.db
+    .query(convexTable)
+    .withIndex('by_lookup_key', (q: any) => q.eq('lookupKey', lookupKey).eq('generationCount', top[0]!.generationCount))
+    .collect()) as OMDoc[];
+  return tied.reduce((best, doc) => (sortsBeforeAsHead(doc, best) ? doc : best));
+}
+
+type Target = { kind: 'missing' } | { kind: 'live'; doc: OMDoc } | { kind: 'retired'; doc: OMDoc; head: OMDoc | null };
+
+/**
+ * Liveness of the record a lifecycle write names. A record with `supersededBy` set is retired.
+ * A record that is unmarked but is not its key's canonical head (left by an older adapter
+ * version, which never set the marker) is marked superseded by the head here and treated as
+ * retired, so a write never lands on it.
+ */
+async function resolveTarget(ctx: MutationCtx<any>, convexTable: string, id: string, now: string): Promise<Target> {
+  const doc = (await findRecordById(ctx, convexTable, id)) as OMDoc | null;
+  if (!doc) return { kind: 'missing' };
+  const head = await getCanonicalHead(ctx, convexTable, doc.lookupKey);
+  if (doc.supersededBy) return { kind: 'retired', doc, head };
+  if (head && head.id !== doc.id) {
+    await ctx.db.patch(doc._id, { supersededBy: head.id, updatedAt: now });
+    return { kind: 'retired', doc, head };
+  }
+  return { kind: 'live', doc };
+}
+
+/** The live record a write aimed at `id` lands on (the head when `id` is retired). Throws when missing. */
+async function resolveWriteTarget(ctx: MutationCtx<any>, convexTable: string, id: string, now: string): Promise<OMDoc> {
+  const target = await resolveTarget(ctx, convexTable, id, now);
+  if (target.kind === 'missing') return requireRecord(null, id);
+  if (target.kind === 'live') return target.doc;
+  if (!target.head) throw new Error(`Observational memory record ${id} is superseded but no live head was found`);
+  return target.head;
+}
+
+/**
+ * Create the next generation from the stored (live) record and retire it in the same mutation.
+ * Buffered chunks move to the new generation; the cursor, buffering markers, flags, and
+ * counters carry over; buffered reflection state does not.
+ */
+async function rollOver(
+  ctx: MutationCtx<any>,
+  convexTable: string,
+  stored: OMDoc,
+  args: { newId: string; observations: string; tokenCount: number; now: string; clearBufferedReflection: boolean },
+): Promise<Record<string, unknown>> {
+  const newRecord = {
+    id: args.newId,
+    lookupKey: stored.lookupKey,
+    scope: stored.scope,
+    resourceId: stored.resourceId ?? null,
+    threadId: stored.threadId ?? null,
+    activeObservations: args.observations,
+    activeObservationsPendingUpdate: null,
+    originType: 'reflection',
+    config: stored.config,
+    generationCount: Number(stored.generationCount || 0) + 1,
+    lastObservedAt: stored.lastObservedAt ?? null,
+    lastReflectionAt: args.now,
+    pendingMessageTokens: Number(stored.pendingMessageTokens || 0),
+    totalTokensObserved: Number(stored.totalTokensObserved || 0),
+    observationTokenCount: args.tokenCount,
+    isObserving: false,
+    isReflecting: false,
+    bufferedObservationChunks: parseStoredChunks(stored.bufferedObservationChunks).length
+      ? stored.bufferedObservationChunks
+      : null,
+    isBufferingObservation: Boolean(stored.isBufferingObservation),
+    isBufferingReflection: false,
+    lastBufferedAtTokens: Number(stored.lastBufferedAtTokens || 0),
+    lastBufferedAtTime: stored.lastBufferedAtTime ?? null,
+    observedTimezone: stored.observedTimezone ?? null,
+    metadata: stored.metadata ?? null,
+    supersededBy: null,
+    createdAt: args.now,
+    updatedAt: args.now,
+  };
+  await ctx.db.insert(convexTable, newRecord);
+  await ctx.db.patch(stored._id, {
+    supersededBy: args.newId,
+    bufferedObservationChunks: null,
+    ...(args.clearBufferedReflection
+      ? {
+          bufferedReflection: null,
+          bufferedReflectionTokens: null,
+          bufferedReflectionInputTokens: null,
+          reflectedObservationLineCount: null,
+        }
+      : {}),
+    updatedAt: args.now,
+  });
+  return newRecord;
+}
+
 function isPlainObj(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
@@ -205,14 +381,59 @@ export async function handleObservationalMemoryOperation(
 ): Promise<StorageResponse> {
   switch (request.op) {
     case 'omGetLatest': {
-      // by_lookup_key is [lookupKey, generationCount]; after eq(lookupKey) the
-      // descending order sorts by generationCount, so first() is the latest generation.
-      const doc = await ctx.db
-        .query(convexTable)
-        .withIndex('by_lookup_key', (q: any) => q.eq('lookupKey', request.lookupKey))
-        .order('desc')
-        .first();
-      return { ok: true, result: doc ?? null };
+      return { ok: true, result: await getCanonicalHead(ctx, convexTable, request.lookupKey) };
+    }
+
+    case 'omInitialize': {
+      // One serializable mutation: concurrent initializations of a key create one record.
+      const existing = await getCanonicalHead(ctx, convexTable, request.record.lookupKey);
+      if (existing) return { ok: true, result: existing };
+      await ctx.db.insert(convexTable, { ...request.record, supersededBy: null });
+      return { ok: true, result: { ...request.record, supersededBy: null } };
+    }
+
+    case 'omCreateReflectionGeneration': {
+      const { currentRecord, newId, reflection, tokenCount, now } = request;
+      const target = await resolveTarget(ctx, convexTable, currentRecord.id, now);
+      // Missing target: create nothing (the client returns its snapshot).
+      if (target.kind === 'missing') return { ok: true, result: null };
+      // A retired snapshot creates nothing; the caller adopts the head.
+      if (target.kind === 'retired') return { ok: true, result: target.head };
+      const stored = target.doc;
+      const plan = planReflectionText({
+        storedObservations: (stored.activeObservations as string) || '',
+        storedObservationTokenCount: Number(stored.observationTokenCount || 0),
+        snapshotObservations: currentRecord.activeObservations ?? '',
+        snapshotObservationTokenCount: currentRecord.observationTokenCount ?? 0,
+        reflection,
+        tokenCount,
+      });
+      // The text was rewritten (not only appended to) since the snapshot: the reflection is stale.
+      if (!plan) return { ok: true, result: stored };
+      const newRecord = await rollOver(ctx, convexTable, stored, {
+        newId,
+        observations: plan.observations,
+        tokenCount: plan.tokenCount,
+        now,
+        clearBufferedReflection: false,
+      });
+      return { ok: true, result: newRecord };
+    }
+
+    case 'omSetPendingMessageTokens': {
+      const doc = await resolveWriteTarget(ctx, convexTable, request.id, request.updatedAt);
+      await ctx.db.patch(doc._id, { pendingMessageTokens: request.tokenCount, updatedAt: request.updatedAt });
+      return { ok: true };
+    }
+
+    case 'omSetBufferingObservationFlag': {
+      const doc = await resolveWriteTarget(ctx, convexTable, request.id, request.updatedAt);
+      await ctx.db.patch(doc._id, {
+        isBufferingObservation: request.isBuffering,
+        ...(request.lastBufferedAtTokens !== undefined ? { lastBufferedAtTokens: request.lastBufferedAtTokens } : {}),
+        updatedAt: request.updatedAt,
+      });
+      return { ok: true };
     }
 
     case 'omGetHistory': {
@@ -269,12 +490,22 @@ export async function handleObservationalMemoryOperation(
     }
 
     case 'omUpdateActive': {
-      const doc = requireRecord(await findRecordById(ctx, convexTable, request.id), request.id);
+      const target = await resolveTarget(ctx, convexTable, request.id, request.updatedAt);
+      if (target.kind === 'missing') requireRecord(null, request.id);
+      if (target.kind !== 'live') return { ok: true, result: { applied: false, reason: 'retired' } };
+      const doc = target.doc;
+      if (
+        request.expectedActiveObservations !== undefined &&
+        request.expectedActiveObservations !== ((doc.activeObservations as string) || '')
+      ) {
+        return { ok: true, result: { applied: false, reason: 'conflict' } };
+      }
       const safeTokenCount = Number.isFinite(request.tokenCount) && request.tokenCount >= 0 ? request.tokenCount : 0;
 
       await ctx.db.patch(doc._id, {
         activeObservations: request.observations,
-        lastObservedAt: request.lastObservedAt,
+        // The cursor never moves backward.
+        lastObservedAt: maxCursor(doc.lastObservedAt, request.lastObservedAt),
         // Reset pending tokens since we've now observed them
         pendingMessageTokens: 0,
         observationTokenCount: safeTokenCount,
@@ -282,37 +513,47 @@ export async function handleObservationalMemoryOperation(
         observedMessageIds: request.observedMessageIds,
         updatedAt: request.updatedAt,
       });
-      return { ok: true };
+      return { ok: true, result: { applied: true } };
     }
 
     case 'omAppendBufferedChunk': {
-      const doc = requireRecord(await findRecordById(ctx, convexTable, request.id), request.id);
+      // A retired id is redirected to the head.
+      const doc = await resolveWriteTarget(ctx, convexTable, request.id, request.updatedAt);
       const chunks = parseStoredChunks(doc.bufferedObservationChunks);
+      // Skip a retried append (same cycle) and a chunk the cursor already wholly covers.
+      if (
+        chunks.some(chunk => chunk.cycleId === request.chunk.cycleId) ||
+        isChunkCoveredByCursor(request.chunk.lastObservedAt, doc.lastObservedAt)
+      ) {
+        return { ok: true, result: { persisted: false, recordId: doc.id } };
+      }
       chunks.push(request.chunk);
 
-      const patch: Record<string, unknown> = {
+      await ctx.db.patch(doc._id, {
         bufferedObservationChunks: JSON.stringify(chunks),
+        // lastBufferedAtTime never moves backward.
+        lastBufferedAtTime: maxCursor(doc.lastBufferedAtTime, request.lastBufferedAtTime),
         updatedAt: request.updatedAt,
-      };
-      if (request.lastBufferedAtTime) {
-        patch.lastBufferedAtTime = request.lastBufferedAtTime;
-      }
-      await ctx.db.patch(doc._id, patch);
-      return { ok: true };
+      });
+      return { ok: true, result: { persisted: true, recordId: doc.id } };
     }
 
     case 'omSwapBuffered': {
-      const doc = requireRecord(await findRecordById(ctx, convexTable, request.id), request.id);
+      const target = await resolveTarget(ctx, convexTable, request.id, request.now);
+      if (target.kind === 'missing') requireRecord(null, request.id);
+      // A retired record is frozen: activation reports it and writes nothing.
+      if (target.kind !== 'live') return { ok: true, result: { ...EMPTY_SWAP_RESULT, retired: true } };
+      const doc = target.doc;
 
-      const persistedChunks = parseStoredChunks(doc.bufferedObservationChunks);
+      // Activation always works on the stored list, so a chunk appended after the caller read
+      // the record is never dropped. Caller-provided chunks only override token weights.
+      const refreshedWeights = new Map((request.bufferedChunks ?? []).map(chunk => [chunk.id, chunk.messageTokens]));
+      const storedChunks = parseStoredChunks(doc.bufferedObservationChunks);
+      const chunks = storedChunks.map(chunk => {
+        const weight = refreshedWeights.get(chunk.id);
+        return weight === undefined ? chunk : { ...chunk, messageTokens: weight };
+      });
       // Nothing buffered (or already swapped) — report zero activation.
-      if (persistedChunks.length === 0) {
-        return { ok: true, result: EMPTY_SWAP_RESULT };
-      }
-
-      // Use caller-provided refreshed chunks (with up-to-date token weights)
-      // for activation math when present, falling back to persisted chunks.
-      const chunks = Array.isArray(request.bufferedChunks) ? request.bufferedChunks : persistedChunks;
       if (chunks.length === 0) {
         return { ok: true, result: EMPTY_SWAP_RESULT };
       }
@@ -324,7 +565,7 @@ export async function handleObservationalMemoryOperation(
         forceMaxActivation: request.forceMaxActivation,
       });
       const activatedChunks = chunks.slice(0, chunksToActivate);
-      const remainingChunks = chunks.slice(chunksToActivate);
+      const remainingChunks = storedChunks.slice(chunksToActivate);
 
       // Combine activated chunks into content
       const activatedContent = activatedChunks.map(c => c.observations).join('\n\n');
@@ -355,7 +596,8 @@ export async function handleObservationalMemoryOperation(
         // Decrement pending message tokens (clamped to zero)
         pendingMessageTokens: Math.max(0, Number(doc.pendingMessageTokens || 0) - activatedMessageTokens),
         bufferedObservationChunks: remainingChunks.length > 0 ? JSON.stringify(remainingChunks) : null,
-        lastObservedAt,
+        // The stored cursor never moves backward (a sync observation may already be past this chunk).
+        lastObservedAt: maxCursor(doc.lastObservedAt, lastObservedAt),
         updatedAt: request.now,
       });
 
@@ -401,58 +643,41 @@ export async function handleObservationalMemoryOperation(
 
     case 'omSwapBufferedReflection': {
       const { currentRecord, newId, tokenCount, now } = request;
-      const doc = requireRecord(await findRecordById(ctx, convexTable, currentRecord.id), currentRecord.id);
+      const target = await resolveTarget(ctx, convexTable, currentRecord.id, now);
+      // Missing target: create nothing (the client returns its snapshot).
+      if (target.kind === 'missing') return { ok: true, result: null };
+      // A retired snapshot creates nothing; the caller adopts the head.
+      if (target.kind === 'retired') return { ok: true, result: target.head };
+      const stored = target.doc;
 
-      const bufferedReflection = (doc.bufferedReflection as string) || '';
+      const bufferedReflection = (stored.bufferedReflection as string) || '';
       if (!bufferedReflection) {
         throw new Error('No buffered reflection to swap');
       }
+      const storedObservations = (stored.activeObservations as string) || '';
+      // Only appends may have happened since the caller's snapshot; a rewrite invalidates the
+      // reflected line count.
+      if (!isAppendOnly(storedObservations, currentRecord.activeObservations ?? '')) {
+        return { ok: true, result: stored };
+      }
 
       const newObservations = mergeReflectionWithUnreflected(
-        (doc.activeObservations as string) || '',
+        storedObservations,
         bufferedReflection,
-        Number(doc.reflectedObservationLineCount || 0),
+        Number(stored.reflectedObservationLineCount || 0),
       );
+      // tokenCount is computed by the processor from its snapshot; add tokens appended since.
+      const carriedTokenCount =
+        tokenCount +
+        Math.max(0, Number(stored.observationTokenCount || 0) - (currentRecord.observationTokenCount ?? 0));
 
-      // Create the new generation record
-      const newRecord = {
-        id: newId,
-        lookupKey: currentRecord.lookupKey,
-        scope: currentRecord.scope,
-        resourceId: currentRecord.resourceId,
-        threadId: currentRecord.threadId,
-        activeObservations: newObservations,
-        activeObservationsPendingUpdate: null,
-        originType: 'reflection',
-        config: currentRecord.config,
-        generationCount: currentRecord.generationCount + 1,
-        lastObservedAt: currentRecord.lastObservedAt,
-        lastReflectionAt: now,
-        pendingMessageTokens: 0,
-        totalTokensObserved: currentRecord.totalTokensObserved,
-        observationTokenCount: tokenCount,
-        isObserving: false,
-        isReflecting: false,
-        isBufferingObservation: false,
-        isBufferingReflection: false,
-        lastBufferedAtTokens: 0,
-        lastBufferedAtTime: null,
-        observedTimezone: currentRecord.observedTimezone,
-        metadata: currentRecord.metadata,
-        createdAt: now,
-        updatedAt: now,
-      };
-      await ctx.db.insert(convexTable, newRecord);
-
-      // Clear buffered state on the old record
-      await ctx.db.patch(doc._id, {
-        bufferedReflection: null,
-        bufferedReflectionTokens: null,
-        bufferedReflectionInputTokens: null,
-        reflectedObservationLineCount: null,
-        updatedAt: now,
+      const newRecord = await rollOver(ctx, convexTable, stored, {
+        newId,
+        observations: newObservations,
+        tokenCount: carriedTokenCount,
+        now,
+        clearBufferedReflection: true,
       });
-
       return { ok: true, result: newRecord };
     }
 

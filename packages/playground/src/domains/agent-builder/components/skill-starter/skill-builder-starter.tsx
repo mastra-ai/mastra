@@ -64,9 +64,7 @@ export const SkillBuilderStarter = () => {
   );
 
   const builderDefaultWorkspaceId = useMemo(() => {
-    const ws = (builderSettings?.configuration?.agent as Record<string, unknown> | undefined)?.workspace as
-      | { type: string; workspaceId?: string }
-      | undefined;
+    const ws = builderSettings?.configuration?.agent?.workspace as { type: string; workspaceId?: string } | undefined;
     return ws?.type === 'id' ? ws.workspaceId : undefined;
   }, [builderSettings]);
 
@@ -145,7 +143,6 @@ export const SkillBuilderStarter = () => {
                 tooltip="Start building"
                 disabled={trimmed.length === 0 || isCreating}
                 data-testid="skill-builder-starter-submit"
-                className="rounded-full"
               >
                 {isCreating ? (
                   <span data-testid="skill-builder-starter-submit-spinner">

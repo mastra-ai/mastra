@@ -155,6 +155,56 @@ describe('HttpTransport', () => {
   });
 
   describe('error handling and retries', () => {
+    describe('serialization', () => {
+      afterEach(() => {
+        (transport as any).logBuffer = [];
+      });
+
+      it('rejects a throwing toJSON immediately without retrying or fetching', async () => {
+        const serializationError = new Error('serializer exploded');
+        const toJSON = vi.fn(() => {
+          throw serializationError;
+        });
+        transport._transform({ msg: 'bad', toJSON } as any, 'utf8', () => {});
+
+        await expect(transport._flush()).rejects.toBe(serializationError);
+        expect(toJSON).toHaveBeenCalledTimes(1);
+        expect(fetchMock).not.toHaveBeenCalled();
+        expect(vi.getTimerCount()).toBe(1); // only the flush interval, no retry delay pending
+      });
+
+      it('rejects circular values immediately without fetching', async () => {
+        const circular: any = { msg: 'circular' };
+        circular.self = circular;
+        transport._transform(circular, 'utf8', () => {});
+
+        await expect(transport._flush()).rejects.toThrow(TypeError);
+        expect(fetchMock).not.toHaveBeenCalled();
+      });
+
+      it('rejects BigInt values immediately without fetching', async () => {
+        transport._transform({ msg: 'big', n: 10n } as any, 'utf8', () => {});
+
+        await expect(transport._flush()).rejects.toThrow(TypeError);
+        expect(fetchMock).not.toHaveBeenCalled();
+      });
+
+      it('sends the identical body on every retry after a network failure', async () => {
+        let calls = 0;
+        const toJSON = vi.fn(() => ({ msg: 'stateful', call: ++calls }));
+        transport._transform({ toJSON } as any, 'utf8', () => {});
+        fetchMock.mockRejectedValueOnce(new Error('network down')).mockResolvedValueOnce({ ok: true });
+
+        const flushPromise = transport._flush();
+        await vi.advanceTimersByTimeAsync(defaultOptions.retryOptions.retryDelay);
+        await flushPromise;
+
+        expect(toJSON).toHaveBeenCalledTimes(1);
+        expect(fetchMock).toHaveBeenCalledTimes(2);
+        expect(fetchMock.mock.calls[1][1].body).toBe(fetchMock.mock.calls[0][1].body);
+      });
+    });
+
     it('should retry on HTTP errors', async () => {
       fetchMock
         .mockImplementationOnce(() =>
@@ -822,6 +872,46 @@ describe('HttpTransport', () => {
 
       consoleSpy.mockRestore();
     });
+
+    it('should normalize page 0 to page 1 for listLogs', async () => {
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      expect(await transport.listLogs({ page: 0 })).toEqual({
+        logs: [],
+        total: 0,
+        page: 1,
+        perPage: 100,
+        hasMore: false,
+      });
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should normalize page 0 to page 1 for listLogsByRunId', async () => {
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      expect(await transport.listLogsByRunId({ runId: 'test-run-id', page: 0 })).toEqual({
+        logs: [],
+        total: 0,
+        page: 1,
+        perPage: 100,
+        hasMore: false,
+      });
+
+      consoleSpy.mockRestore();
+    });
+
+    it('should preserve positive page and perPage values', async () => {
+      const consoleSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      expect(await transport.listLogs({ page: 3, perPage: 10 })).toMatchObject({ page: 3, perPage: 10 });
+      expect(await transport.listLogsByRunId({ runId: 'test-run-id', page: 3, perPage: 10 })).toMatchObject({
+        page: 3,
+        perPage: 10,
+      });
+
+      consoleSpy.mockRestore();
+    });
   });
 
   describe('_transform error handling', () => {
@@ -844,6 +934,72 @@ describe('HttpTransport', () => {
         ...testLog,
         time: expect.any(Number),
       });
+    });
+  });
+
+  describe('timestamp handling', () => {
+    const now = 1_700_000_000_000;
+
+    const getSentLog = () => JSON.parse(fetchMock.mock.calls[0][1].body).logs[0];
+
+    beforeEach(() => {
+      vi.setSystemTime(now);
+    });
+
+    it('should preserve a zero timestamp from object input', async () => {
+      transport.write({ msg: 'epoch record', time: 0 } as any);
+      await transport._flush();
+
+      expect(getSentLog().time).toBe(0);
+    });
+
+    it('should preserve a zero timestamp from JSON string input', async () => {
+      transport.write(JSON.stringify({ msg: 'epoch record', time: 0 }));
+      await transport._flush();
+
+      expect(getSentLog().time).toBe(0);
+    });
+
+    it('should add the current time when time is null', async () => {
+      transport.write(JSON.stringify({ msg: 'null time', time: null }));
+      await transport._flush();
+
+      expect(getSentLog().time).toBe(now);
+    });
+
+    it('should add the current time when time is missing', async () => {
+      transport.write(JSON.stringify({ msg: 'no time' }));
+      await transport._flush();
+
+      expect(getSentLog().time).toBe(now);
+    });
+
+    it('should not mutate object input when adding a timestamp', async () => {
+      const record = { msg: 'caller-owned' };
+      transport.write(record as any);
+      await transport._flush();
+
+      expect(record).toEqual({ msg: 'caller-owned' });
+      expect(getSentLog()).toEqual({ msg: 'caller-owned', time: now });
+    });
+
+    it('should not mutate object input with a null timestamp', async () => {
+      const record = { msg: 'null time', time: null };
+      transport.write(record as any);
+      await transport._flush();
+
+      expect(record.time).toBeNull();
+      expect(getSentLog().time).toBe(now);
+    });
+
+    it('should send frozen records and pass the original chunk through', async () => {
+      const record = Object.freeze({ msg: 'frozen' });
+      const callback = vi.fn();
+      transport._transform(record as any, 'utf8', callback);
+      await transport._flush();
+
+      expect(callback).toHaveBeenCalledWith(null, record);
+      expect(getSentLog()).toEqual({ msg: 'frozen', time: now });
     });
   });
 });

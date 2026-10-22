@@ -23,10 +23,7 @@ async function buildController(storage: InMemoryStore, id: string) {
     id,
     storage,
     stateSchema: undefined,
-    modes: [
-      { id: 'build', name: 'Build', default: true, defaultModelId: 'openai/gpt-5.5', agent: testAgent() },
-      { id: 'plan', name: 'Plan', defaultModelId: 'openai/gpt-5.2-codex', agent: testAgent() },
-    ],
+    modes: [{ id: 'build', name: 'Build', default: true, defaultModelId: 'openai/gpt-5.5', agent: testAgent() }],
   });
   await controller.init();
   return controller;
@@ -126,12 +123,10 @@ describe('scenario: apply-default-model reaches a live run', () => {
     const controller = await buildController(storage, 'code');
     const session = await controller.createSession({ resourceId: 'resource-1', ownerId: 'user-1' });
 
-    await session.mode.switch({ modeId: 'plan' });
     const boundThread = await session.thread.create();
     await session.model.switch('openai/gpt-5.2-codex');
 
     const siblingThread = await session.thread.create();
-    await session.mode.switch({ modeId: 'build' });
     await session.model.switch('openai/gpt-5.5');
 
     await bindRun({

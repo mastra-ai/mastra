@@ -129,6 +129,21 @@ export const mastra = new Mastra({
     defaultValue: 'false',
   },
   {
+    name: 'includeSubAgentMetadata',
+    type: 'boolean',
+    description:
+      'Whether to stream sub-agent progress as `data-tool-agent` and `data-tool-agent-step` parts when the agent delegates to sub-agents. These parts can include sub-agent reasoning and tool calls and results. Set to `false` if your clients should not receive them.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'messageMetadata',
+    type: '(options: { part: UIMessageStreamPart; traceId?: string }) => Record<string, unknown> | undefined',
+    description:
+      "A function that receives the current stream part and returns metadata to attach to start and finish chunks. Also receives the run's `traceId` (undefined when tracing is disabled), so you can return it as metadata, for example `({ part, traceId }) => (part.type === 'start' ? { traceId } : undefined)`. See the [AI SDK message metadata docs](https://ai-sdk.dev/docs/ai-sdk-ui/message-metadata) for details.",
+    isOptional: true,
+  },
+  {
     name: 'heartbeatMs',
     type: 'number',
     description:

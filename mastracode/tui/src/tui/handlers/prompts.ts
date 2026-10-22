@@ -486,9 +486,6 @@ export async function handlePlanApproval(
             ctx.showError(`Failed to set goal: ${error instanceof Error ? error.message : String(error)}`);
             return null;
           });
-        if (goal) {
-          state.planStartedGoalId = goal.id;
-        }
         const approvalRecorded = goal ? waitForToolEnd(state.session, toolCallId) : undefined;
 
         const resumed = resumeApprovedPlan(ctx, toolCallId, resolvedTitle, plan, snapshotKey);

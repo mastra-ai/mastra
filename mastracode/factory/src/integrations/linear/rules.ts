@@ -1,5 +1,13 @@
-import { boardForWorkItem, isTerminalWorkItem } from '../../boards/index.js';
+import {
+  boardEventHandlers,
+  boardForWorkItem,
+  eventBoardId,
+  isTerminalWorkItem,
+  rulePhaseField,
+  withBoardClosure,
+} from '../../boards/index.js';
 import type { BoardRegistry } from '../../boards/index.js';
+import { selectEventRule } from '../../rules/event-rules.js';
 import type { FactoryLinearRuleContext, FactoryRuleDecision } from '../../rules/types.js';
 import { assertFactoryDecisionTarget, validateFactoryRuleDecisions } from '../../rules/validation.js';
 import type { FactoryProjectsStorage } from '../../storage/domains/projects/base.js';
@@ -23,6 +31,8 @@ async function withRuleTimeout<T>(promise: Promise<T>): Promise<T> {
     if (timeout) clearTimeout(timeout);
   }
 }
+
+const MAX_STALE_RULE_ATTEMPTS = 3;
 
 export interface LinearIssueIngress {
   id: string;
@@ -115,6 +125,7 @@ export class LinearRules {
     input: LinearRulesIngress,
     issue: LinearIssueIngress,
     relatedItem: WorkItemRow | undefined,
+    attempt = 1,
   ): Promise<IngressStatus> {
     const ingressId = `linear:${issue.id}:${issue.updatedAt}`;
     const actor = { type: 'human' as const, id: input.userId };
@@ -150,6 +161,8 @@ export class LinearRules {
             },
             board: boardForWorkItem(relatedItem),
             itemRevision: relatedItem.revision,
+            ...withBoardClosure(this.options.boards, relatedItem),
+            ...rulePhaseField(this.options.boards, relatedItem),
           }
         : {}),
       ...(boundBoard ? { intake: { board: boundBoard.id, initialPhase: boundBoard.initialPhase } } : {}),
@@ -157,7 +170,11 @@ export class LinearRules {
       issue,
     };
 
-    const rule = this.options.linearRules[context.event];
+    const rule = selectEventRule(
+      this.options.linearRules,
+      boardEventHandlers(this.options.boards, eventBoardId(context), 'linear'),
+      context.event,
+    );
     let decision: FactoryRuleDecision | void;
     let decisions: Record<string, unknown>[] = [];
     let outcome: { status: 'accepted' | 'rejected'; code?: string; reason?: string } = { status: 'accepted' };
@@ -201,6 +218,15 @@ export class LinearRules {
       causalChain: [],
       now: new Date(),
     });
+    if (committed.status === 'stale') {
+      // Nothing was persisted: re-read the item and evaluate again at its fresh revision.
+      if (attempt >= MAX_STALE_RULE_ATTEMPTS) {
+        throw new Error(`Factory Linear rule evaluation for ${ingressId} kept losing revision races.`);
+      }
+      const fresh = relatedItem ? await this.options.storage.get({ orgId: input.orgId, id: relatedItem.id }) : null;
+      if (relatedItem && !fresh) return 'missing';
+      return this.#ingestIssue(input, issue, fresh ?? undefined, attempt + 1);
+    }
     return committed.status;
   }
 }

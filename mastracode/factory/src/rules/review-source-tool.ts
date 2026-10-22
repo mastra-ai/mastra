@@ -19,9 +19,11 @@ export interface ReviewSourceOutput {
   /**
    * PR/MR author recorded on the review card at intake — for GitHub this is
    * `pullRequest.user.login`, for GitLab it is the GitLab username. The skill
-   * cross-checks it against `gh pr view --json author` (`.author.login`) or
-   * the equivalent MR fetch; a mismatch means the session is bound to a
-   * different PR/MR than the one being reviewed.
+   * cross-checks it against the same REST field of the reviewed PR
+   * (`gh api repos/<owner>/<repo>/pulls/<number> --jq .user.login`; `gh pr view`
+   * formats App authors as `app/<slug>` instead of `<slug>[bot]`) or the
+   * equivalent MR fetch; a mismatch means the session is bound to a different
+   * PR/MR than the one being reviewed.
    */
   triggeredBy: string | null;
   /**

@@ -82,6 +82,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 5
   },
   {
+    "model": "crossmodel/anthropic/claude-haiku-5-5",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 128000,
+    "inputCost": 0.1,
+    "outputCost": 0.5
+  },
+  {
     "model": "crossmodel/anthropic/claude-opus-4-7",
     "imageInput": true,
     "audioInput": false,
@@ -164,30 +176,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 2,
     "outputCost": 10
-  },
-  {
-    "model": "crossmodel/deepseek/deepseek-v4-flash",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 384000,
-    "inputCost": 0.3,
-    "outputCost": 1.2
-  },
-  {
-    "model": "crossmodel/deepseek/deepseek-v4-flash-vision-exp",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 384000,
-    "inputCost": 0.3,
-    "outputCost": 1.2
   },
   {
     "model": "crossmodel/deepseek/deepseek-v4-pro",
@@ -332,6 +320,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 65536,
     "inputCost": 0.75,
     "outputCost": 3.75
+  },
+  {
+    "model": "crossmodel/gemini/gemini-4-argon",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 65536,
+    "inputCost": 2,
+    "outputCost": 10
   },
   {
     "model": "crossmodel/minimax/minimax-m2.7",
@@ -728,30 +728,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 256000,
     "inputCost": 1,
     "outputCost": 2
-  },
-  {
-    "model": "crossmodel/xiaomi/mimo-v2.5",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 128000,
-    "inputCost": 0.16,
-    "outputCost": 0.32
-  },
-  {
-    "model": "crossmodel/xiaomi/mimo-v2.5-pro",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 128000,
-    "inputCost": 0.47,
-    "outputCost": 0.94
   },
   {
     "model": "crossmodel/xiaomi/mimo-v2.6-flash",

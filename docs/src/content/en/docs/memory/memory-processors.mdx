@@ -35,13 +35,15 @@ Retrieves message history and persists new messages.
 
 ```typescript
 memory: new Memory({
-  lastMessages: 10,
+  options: {
+    lastMessages: 10,
+  },
 })
 ```
 
 **Mastra internally:**
 
-1. Creates a `MessageHistory` processor with `limit: 10`
+1. Creates a `MessageHistory` processor with `lastMessages: 10`
 1. Adds it to the agent's input processors (runs before the LLM)
 1. Adds it to the agent's output processors (runs after the LLM)
 
@@ -68,7 +70,9 @@ const agent = new Agent({
       id: 'memory-store',
       url: 'file:memory.db',
     }),
-    lastMessages: 10, // MessageHistory processor automatically added
+    options: {
+      lastMessages: 10, // MessageHistory processor automatically added
+    },
   }),
 })
 ```
@@ -92,7 +96,7 @@ memory: new Memory({
 1. Creates a `SemanticRecall` processor
 1. Adds it to the agent's input processors (runs before the LLM)
 1. Adds it to the agent's output processors (runs after the LLM)
-1. Requires both a vector store and embedder to be configured
+1. Requires a vector store, plus an embedder unless the vector store generates embeddings itself
 
 **What it does:**
 
@@ -106,7 +110,7 @@ import { Agent } from '@mastra/core/agent'
 import { Memory } from '@mastra/memory'
 import { LibSQLStore } from '@mastra/libsql'
 import { PineconeVector } from '@mastra/pinecone'
-import { OpenAIEmbedder } from '@mastra/openai'
+import { ModelRouterEmbeddingModel } from '@mastra/core/llm'
 import { openai } from '@ai-sdk/openai'
 
 const agent = new Agent({
@@ -122,10 +126,7 @@ const agent = new Agent({
       id: 'memory-vector',
       apiKey: process.env.PINECONE_API_KEY!,
     }),
-    embedder: new OpenAIEmbedder({
-      model: 'text-embedding-3-small',
-      apiKey: process.env.OPENAI_API_KEY!,
-    }),
+    embedder: new ModelRouterEmbeddingModel('openai/text-embedding-3-small'),
     semanticRecall: { enabled: true }, // SemanticRecall processor automatically added
   }),
 })
@@ -200,7 +201,9 @@ const agent = new Agent({
   model: '__GATEWAY_OPENAI_MODEL__',
   memory: new Memory({
     storage: new LibSQLStore({ id: 'memory-store', url: 'file:memory.db' }),
-    lastMessages: 10, // This would normally add MessageHistory(10)
+    options: {
+      lastMessages: 10, // This would normally add MessageHistory(10)
+    },
   }),
   inputProcessors: [
     customMessageHistory, // Your custom one is used instead
@@ -269,7 +272,7 @@ const agent = new Agent({
   name: 'safe-agent',
   instructions: 'You are a helpful assistant',
   model: '__GATEWAY_OPENAI_MODEL__',
-  memory: new Memory({ lastMessages: 10 }),
+  memory: new Memory({ options: { lastMessages: 10 } }),
   // Your guardrail runs BEFORE memory saves
   outputProcessors: [contentBlocker],
 })
@@ -309,7 +312,7 @@ const agent = new Agent({
   name: 'validated-agent',
   instructions: 'You are a helpful assistant',
   model: '__GATEWAY_OPENAI_MODEL__',
-  memory: new Memory({ lastMessages: 10 }),
+  memory: new Memory({ options: { lastMessages: 10 } }),
   // Your guardrail runs AFTER memory loads history
   inputProcessors: [inputValidator],
 })
@@ -386,7 +389,7 @@ export const supportAgent = new Agent({
   name: 'Support agent',
   instructions: 'Answer customer support questions.',
   model: '__GATEWAY_OPENAI_MODEL__',
-  memory: new Memory({ lastMessages: 10 }),
+  memory: new Memory({ options: { lastMessages: 10 } }),
   inputProcessors: [new AttachmentUploader()],
 })
 ```

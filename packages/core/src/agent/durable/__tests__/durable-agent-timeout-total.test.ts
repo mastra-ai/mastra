@@ -12,9 +12,8 @@
  * - a caller abort with an armed budget follows the normal abort path and is
  *   not misreported as a timeout.
  *
- * Deliberate divergence from main: durable's fatal path emits both an error
- * chunk and a step-finish/finish with reason 'error' (main emits no finish),
- * because the durable finalization block owns stream closure.
+ * Like the main loop, a total deadline emits an error and closes the stream
+ * independently of the workflow's finalization, without a synthetic finish.
  */
 
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
@@ -23,11 +22,13 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
+import { MockMemory } from '../../../memory/mock';
 import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
-import { DurableStepIds } from '../constants';
+import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
+import { __resetExecutionFencesForTests } from '../execution-fence';
 import { globalRunRegistry } from '../run-registry';
 
 function hangingModel() {
@@ -113,7 +114,11 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     await pubsub.close();
   });
 
-  function setup(model: LanguageModelV2 | Array<{ model: LanguageModelV2; maxRetries: number }>, tools?: any) {
+  function setup(
+    model: LanguageModelV2 | Array<{ model: LanguageModelV2; maxRetries: number }>,
+    tools?: any,
+    storage = new InMemoryStore(),
+  ) {
     const baseAgent = new Agent({
       id: 'timeout-agent',
       name: 'Timeout Agent',
@@ -125,18 +130,19 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     new Mastra({
       agents: { 'timeout-agent': durableAgent as any },
       logger: false,
-      storage: new InMemoryStore(),
+      storage,
       pubsub,
     });
     return durableAgent;
   }
 
-  it('terminates a hanging run as a failure with a total-timeout error chunk', async () => {
+  it.each(['stream', 'resume'] as const)('%s releases a timed-out run’s cached topic after cleanup', async method => {
     const durableAgent = setup(hangingModel() as LanguageModelV2);
-
-    const result = await durableAgent.stream('hello', {
-      modelSettings: { timeout: { totalMs: 150 } },
-    });
+    const options = { modelSettings: { timeout: { totalMs: 150 } } };
+    const result =
+      method === 'stream'
+        ? await durableAgent.stream('hello', options)
+        : await durableAgent.resume((await durableAgent.prepare('hello', options)).runId, { approved: true });
     const chunks = await drain(result.fullStream);
 
     const errorChunk = findTimeoutErrorChunk(chunks);
@@ -144,9 +150,94 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     expect(errorChunk.payload.error.message).toContain('totalMs');
     // Fails through the error path — not a clean stop, and not masked as a
     // caller abort.
-    const finish = chunks.find((c: any) => c.type === 'finish');
-    expect(finish?.payload?.stepResult?.reason).toBe('error');
+    expect(chunks.some((c: any) => c.type === 'finish')).toBe(false);
+    expect(await durableAgent.pubsub.getHistory(AGENT_STREAM_TOPIC(result.runId))).not.toHaveLength(0);
     result.cleanup();
+    await vi.waitFor(async () => {
+      expect(await durableAgent.pubsub.getHistory(AGENT_STREAM_TOPIC(result.runId))).toHaveLength(0);
+    });
+  });
+
+  it('delivers an expired deadline once the pubsub subscription becomes ready', async () => {
+    const durableAgent = setup(hangingModel());
+    const runId = crypto.randomUUID();
+    const subscribing = Promise.withResolvers<void>();
+    const releaseSubscription = Promise.withResolvers<void>();
+    const originalSubscribe = pubsub.subscribe.bind(pubsub);
+    const subscribeSpy = vi.spyOn(pubsub, 'subscribe').mockImplementation(async (topic, callback, options) => {
+      if (topic === AGENT_STREAM_TOPIC(runId)) {
+        subscribing.resolve();
+        await releaseSubscription.promise;
+      }
+      return originalSubscribe(topic, callback, options);
+    });
+    const onError = vi.fn();
+    const pending = durableAgent.stream('hello', { runId, modelSettings: { timeout: { totalMs: 150 } }, onError });
+    try {
+      await subscribing.promise;
+      const entry = globalRunRegistry.get(runId);
+      const signal = entry?.abortSignal;
+      if (!signal) throw new Error('Missing timeout signal');
+      if (!signal.aborted) {
+        await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
+      }
+      // Settlement must complete without waiting for the reader to subscribe.
+      await vi.waitFor(() =>
+        expect(entry?.executionFence?.deadlineError).toMatchObject({ name: 'MastraTimeoutError' }),
+      );
+      await entry?.executionFence?.whenSettled;
+      releaseSubscription.resolve();
+      const result = await pending;
+      const chunks = await drain(result.fullStream);
+      expect(chunks.filter(chunk => chunk.type === 'error')).toHaveLength(1);
+      expect(findTimeoutErrorChunk(chunks)).toBeDefined();
+      await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+      result.cleanup();
+    } finally {
+      releaseSubscription.resolve();
+      subscribeSpy.mockRestore();
+    }
+  });
+
+  it('does not publish a timeout after successful settlement has already started', async () => {
+    const storage = new InMemoryStore();
+    const durableAgent = setup(textModel('done'), undefined, storage);
+    const workflowsStore = await storage.getStore('workflows');
+    if (!workflowsStore) throw new Error('Missing workflows store');
+    const deleting = Promise.withResolvers<void>();
+    const releaseDeletion = Promise.withResolvers<void>();
+    const originalDelete = workflowsStore.deleteWorkflowRunById.bind(workflowsStore);
+    const deleteSpy = vi.spyOn(workflowsStore, 'deleteWorkflowRunById').mockImplementation(async input => {
+      deleting.resolve();
+      await releaseDeletion.promise;
+      return originalDelete(input);
+    });
+    const published = vi.spyOn(pubsub, 'publish');
+    const result = await durableAgent.stream('hello', { modelSettings: { timeout: { totalMs: 500 } } });
+    const entry = globalRunRegistry.get(result.runId);
+    if (!entry?.abortSignal) throw new Error('Missing timeout signal');
+    const signal = entry.abortSignal;
+    const deadline = signal.aborted
+      ? Promise.resolve()
+      : new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
+    try {
+      const chunks = await drain(result.fullStream);
+      await deleting.promise;
+      // Keep successful terminal writes in flight until the deadline contends
+      // for the same settlement. The loser must not emit a second terminal event.
+      await deadline;
+      releaseDeletion.resolve();
+      await entry.workflowExecution;
+      await pubsub.flush();
+      expect(chunks.some(chunk => chunk.type === 'finish')).toBe(true);
+      expect(entry.executionFence?.deadlineError).toBeUndefined();
+      expect(published.mock.calls.filter(([, event]) => event.type === AgentStreamEventTypes.ERROR)).toHaveLength(0);
+    } finally {
+      releaseDeletion.resolve();
+      deleteSpy.mockRestore();
+      published.mockRestore();
+      result.cleanup();
+    }
   });
 
   it('does not fall back to the next model when the total budget is exhausted', async () => {
@@ -238,66 +329,212 @@ describe('DurableAgent modelSettings.timeout.totalMs (#21724)', () => {
     result.cleanup();
   });
 
-  it('re-arms the persisted run-level budget after a cold restart (recover)', async () => {
+  it.each([true, false])('persists completed steps only when savePerStep is enabled (%s)', async savePerStep => {
     const storage = new InMemoryStore();
-    const build = () => {
-      const baseAgent = new Agent({
-        id: 'timeout-restart-agent',
-        name: 'Timeout Restart Agent',
-        instructions: 'You are a helpful agent.',
-        model: hangingModel() as LanguageModelV2,
-      });
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-      // `running` checkpoints — the rows recover() reads — are only persisted
-      // under the auto-recovery policy (#23915).
-      new Mastra({
-        agents: { 'timeout-restart-agent': durableAgent as any },
-        logger: false,
-        storage,
-        pubsub,
-        recovery: { durableAgents: 'auto' },
-      });
-      return durableAgent;
-    };
-
-    // ---- Process 1: start a budgeted run against a hanging model. ----
-    const firstDurable = build();
-    const started = await firstDurable.stream('hello', {
-      modelSettings: { timeout: { totalMs: 2000 } },
+    const memory = new MockMemory({ storage });
+    const firstStep = toolCallingModel('lookup');
+    let calls = 0;
+    const agent = createDurableAgent({
+      agent: new Agent({
+        id: 'timeout-memory-parity',
+        name: 'Timeout memory parity',
+        instructions: 'Look up the city.',
+        memory,
+        model: new MockLanguageModelV2({
+          doStream: async options => {
+            if (++calls === 1) return firstStep.doStream(options);
+            return new Promise<never>(() => {});
+          },
+        }),
+        tools: {
+          lookup: createTool({
+            id: 'lookup',
+            description: 'Looks up the city',
+            inputSchema: z.object({ city: z.string() }),
+            execute: async () => 'Found NYC',
+          }),
+        },
+      }),
+      pubsub,
     });
-    const runId = (started as unknown as { runId: string }).runId;
-
-    // Write side of the regression: the run-level budget must survive
-    // serializeModelSettings into the persisted workflow input — this is the
-    // field cold recovery reads back.
-    const workflows = (await storage.getStore('workflows'))!;
-    await vi.waitFor(async () => {
-      const persisted = await workflows.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_LOOP });
-      const snapshot = typeof persisted?.snapshot === 'string' ? JSON.parse(persisted.snapshot) : persisted?.snapshot;
-      expect(snapshot?.context?.input?.options?.modelSettings?.timeout?.totalMs).toBe(2000);
+    new Mastra({ agents: { agent }, storage, pubsub, logger: false });
+    const result = await agent.stream('hello', {
+      memory: { thread: 'timeout-memory-parity-thread', resource: 'timeout-resource' },
+      savePerStep,
+      modelSettings: { timeout: { totalMs: 1000 } },
     });
+    try {
+      const chunks = await drain(result.fullStream);
+      expect(chunks.some(chunk => chunk.type === 'tool-result')).toBe(true);
+      expect(findTimeoutErrorChunk(chunks)).toBeDefined();
+      await vi.waitFor(async () => {
+        const { messages } = await memory.recall({ threadId: 'timeout-memory-parity-thread' });
+        expect(JSON.stringify(messages).includes('Found NYC')).toBe(savePerStep);
+      });
+    } finally {
+      result.cleanup();
+    }
+  });
 
-    // ---- The restart: nothing of process 1 survives but its storage.
-    // clear() runs each entry's cleanup, which also disarms process 1's
-    // in-memory budget timer — exactly what a real crash does.
+  it.each([
+    [false, false],
+    [true, false],
+    [false, true],
+  ])(
+    're-arms the persisted budget after a cold restart (memory: %s, late reader: %s)',
+    async (withMemory, lateReader) => {
+      const storage = new InMemoryStore();
+      const memory = new MockMemory({ storage });
+      let secondStepEntered = false;
+      const build = () => {
+        const firstStepModel = toolCallingModel('hold');
+        let calls = 0;
+        const model = new MockLanguageModelV2({
+          doStream: async options => {
+            if (++calls === 1) return firstStepModel.doStream(options);
+            secondStepEntered = true;
+            return new Promise<never>(() => {});
+          },
+        });
+        const baseAgent = new Agent({
+          id: 'timeout-restart-agent',
+          name: 'Timeout Restart Agent',
+          instructions: 'You are a helpful agent.',
+          model: withMemory ? model : hangingModel(),
+          memory: withMemory ? memory : undefined,
+          tools: withMemory
+            ? {
+                hold: createTool({
+                  id: 'hold',
+                  description: 'Looks up the city',
+                  inputSchema: z.object({ city: z.string() }),
+                  execute: async () => 'Found NYC',
+                }),
+              }
+            : undefined,
+        });
+        const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+        // `running` checkpoints — the rows recover() reads — are only persisted
+        // under the auto-recovery policy (#23915).
+        new Mastra({
+          agents: { 'timeout-restart-agent': durableAgent as any },
+          logger: false,
+          storage,
+          pubsub,
+          recovery: { durableAgents: 'auto' },
+        });
+        return durableAgent;
+      };
+
+      // ---- Process 1: start a budgeted run against a hanging model. ----
+      const firstDurable = build();
+      const started = await firstDurable.stream('hello', {
+        modelSettings: { timeout: { totalMs: 2000 } },
+        savePerStep: false,
+        memory: withMemory ? { thread: 'timeout-thread', resource: 'timeout-resource' } : undefined,
+      });
+      const runId = (started as unknown as { runId: string }).runId;
+
+      // Write side of the regression: the run-level budget must survive
+      // serializeModelSettings into the persisted workflow input — this is the
+      // field cold recovery reads back.
+      const workflows = (await storage.getStore('workflows'))!;
+      await vi.waitFor(async () => {
+        const persisted = await workflows.getWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_LOOP });
+        const snapshot = typeof persisted?.snapshot === 'string' ? JSON.parse(persisted.snapshot) : persisted?.snapshot;
+        expect(snapshot?.context?.input?.options?.modelSettings?.timeout?.totalMs).toBe(2000);
+      });
+
+      if (withMemory) await vi.waitFor(() => expect(secondStepEntered).toBe(true));
+
+      // ---- The restart: nothing of process 1 survives but its storage.
+      // clear() runs each entry's cleanup, which also disarms process 1's
+      // in-memory budget timer — exactly what a real crash does. Process 1's
+      // hanging execution is still running here, so its local execution
+      // fence must be forgotten too.
+      globalRunRegistry.clear();
+      __resetExecutionFencesForTests();
+      await pubsub.close();
+      pubsub = new EventEmitterPubSub();
+
+      // ---- Process 2: recover the run; the model hangs again. Process 1's
+      // claim is still within its lease, so recovering right away takes it over.
+      const secondDurable = build();
+      const subscribe = pubsub.subscribe.bind(pubsub);
+      vi.spyOn(pubsub, 'subscribe').mockImplementation(async (topic, callback, options) => {
+        if (lateReader && topic === AGENT_STREAM_TOPIC(runId)) {
+          await globalRunRegistry.get(runId)?.executionFence?.whenSettled;
+        }
+        return subscribe(topic, callback, options);
+      });
+      const onError = vi.fn();
+      const recovered = await secondDurable.recover(runId, { force: true, onError });
+
+      // Read side: the rebuilt registry entry restored the budget from the
+      // persisted snapshot.
+      expect(globalRunRegistry.get(runId)?.timeoutTotalMs).toBe(2000);
+
+      // Behavioral proof: the recovered session is bounded — the restored
+      // budget fails the hanging run instead of letting it run unbounded.
+      const chunks = await drain(recovered.fullStream);
+      const errorChunk = findTimeoutErrorChunk(chunks);
+      expect(errorChunk, JSON.stringify(chunks)).toBeDefined();
+      expect(errorChunk.payload.error.message).toContain('totalMs');
+      expect(chunks.filter(chunk => chunk.type === 'error')).toHaveLength(1);
+      await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+      if (withMemory) {
+        await vi.waitFor(async () => {
+          const { messages } = await memory.recall({ threadId: 'timeout-thread', resourceId: 'timeout-resource' });
+          expect(
+            messages.some(message => message.role === 'assistant' && JSON.stringify(message).includes('tc-1')),
+          ).toBe(false);
+        });
+      }
+      recovered.cleanup();
+      await vi.waitFor(async () => {
+        expect(await secondDurable.pubsub.getHistory(AGENT_STREAM_TOPIC(runId))).toHaveLength(0);
+      });
+    },
+    30000,
+  );
+
+  it('keeps abort() reaching an in-flight tool after the run registry entry is evicted (#26126)', async () => {
+    let toolSignal: AbortSignal | undefined;
+    let markEntered!: () => void;
+    const entered = new Promise<void>(resolve => (markEntered = resolve));
+    const hold = createTool({
+      id: 'hold',
+      description: 'Holds until aborted or timed out',
+      inputSchema: z.object({ city: z.string() }),
+      execute: async (_input, context) => {
+        toolSignal = context?.abortSignal;
+        markEntered();
+        await new Promise(resolve => setTimeout(resolve, 500));
+        return { ok: true };
+      },
+    });
+    const durableAgent = setup(toolCallingModel('hold') as LanguageModelV2, { hold });
+
+    const result = await durableAgent.stream('hello', {
+      maxSteps: 2,
+      modelSettings: { timeout: { totalMs: 60_000 } },
+    });
+    const drained = drain(result.fullStream);
+    await entered;
+
+    // Fill the registry past capacity so the live run entry is evicted (and disposed).
+    for (let i = 0; i < 1000; i++) {
+      globalRunRegistry.set(`filler-${i}-${Math.random()}`, {} as any);
+    }
+    expect(globalRunRegistry.has(result.runId)).toBe(false);
+
+    await result.abort();
+
+    expect(toolSignal).toBeDefined();
+    expect(toolSignal?.aborted).toBe(true);
+
+    await drained;
     globalRunRegistry.clear();
-    await pubsub.close();
-    pubsub = new EventEmitterPubSub();
-
-    // ---- Process 2: recover the run; the model hangs again. ----
-    const secondDurable = build();
-    const recovered = await secondDurable.recover(runId);
-
-    // Read side: the rebuilt registry entry restored the budget from the
-    // persisted snapshot.
-    expect(globalRunRegistry.get(runId)?.timeoutTotalMs).toBe(2000);
-
-    // Behavioral proof: the recovered session is bounded — the restored
-    // budget fails the hanging run instead of letting it run unbounded.
-    const chunks = await drain(recovered.fullStream);
-    const errorChunk = findTimeoutErrorChunk(chunks);
-    expect(errorChunk).toBeDefined();
-    expect(errorChunk.payload.error.message).toContain('totalMs');
-    recovered.cleanup();
-  }, 30000);
+    result.cleanup();
+  });
 });

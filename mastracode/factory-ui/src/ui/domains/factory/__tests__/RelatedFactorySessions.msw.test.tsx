@@ -78,7 +78,7 @@ function stubHeader(item: ReturnType<typeof workItem> | ReturnType<typeof linear
     http.get(`${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}`, () =>
       HttpResponse.json({ session: workspaceSession }),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPOSITORY_ID}/sessions`, () =>
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
       HttpResponse.json({ sessions: [workspaceSession] }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
@@ -107,6 +107,51 @@ function renderHeader() {
 }
 
 describe('FactorySessionPage', () => {
+  describe('when a related work item has a session', () => {
+    it.each([true, false])('links to the session when live=%s, or its board otherwise', async live => {
+      const currentItem = workItem(undefined);
+      const relatedSession = {
+        ...workspaceSession,
+        id: 'related-row',
+        sessionId: 'related-session',
+        branch: 'factory/issue-8',
+      };
+      const relatedItem = {
+        ...workItem(undefined),
+        id: 'related-item',
+        parentWorkItemId: currentItem.id,
+        title: 'Follow-up work',
+        metadata: { number: 8 },
+        sessions: {
+          execute: {
+            sessionId: relatedSession.sessionId,
+            branch: relatedSession.branch,
+            threadId: 'related-thread',
+            startedBy: 'user-1',
+          },
+        },
+      };
+      stubHeader(currentItem);
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+          HttpResponse.json({ workItems: [currentItem, relatedItem] }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
+          HttpResponse.json({ sessions: live ? [workspaceSession, relatedSession] : [workspaceSession] }),
+        ),
+      );
+      renderHeader();
+
+      const link = await screen.findByRole('link', { name: /Open .*Follow-up work/ });
+      expect(link).toHaveAttribute(
+        'href',
+        live
+          ? `/factories/${FACTORY_ID}/workspaces/related-session/threads/related-thread`
+          : `/factories/${FACTORY_ID}/work`,
+      );
+    });
+  });
+
   describe('when the active work item has an external issue URL', () => {
     it('renders an issue pill that opens the external issue in a new tab', async () => {
       const issueUrl = 'https://github.com/acme/app/issues/7';

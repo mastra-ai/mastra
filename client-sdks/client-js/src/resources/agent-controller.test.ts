@@ -2,6 +2,7 @@ import { RequestContext } from '@mastra/core/request-context';
 import { describe, expect, beforeEach, it, vi } from 'vitest';
 
 import { MastraClient } from '../client';
+import { MastraClientError } from '../types';
 import { agentControllerMessageText, isKnownAgentControllerEvent } from './agent-controller';
 import type { AgentControllerEvent, KnownAgentControllerEvent } from './agent-controller';
 
@@ -60,23 +61,36 @@ describe('AgentController Resource', () => {
   });
 
   it('creates (or resumes) a session via the canonical agent-controller route', async () => {
-    mockJson({ controllerId: 'code', resourceId: 'user-1', threadId: 't-123' });
+    mockJson({ controllerId: 'code', sessionId: 'user-1', resourceId: 'user-1', threadId: 't-123' });
     const res = await client.getAgentController('code').session('user-1').create();
-    expect(res).toEqual({ controllerId: 'code', resourceId: 'user-1', threadId: 't-123' });
+    expect(res).toEqual({ controllerId: 'code', sessionId: 'user-1', resourceId: 'user-1', threadId: 't-123' });
     const [url, init] = lastCall();
     expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions');
     expect(init.method).toBe('POST');
-    expect(JSON.parse(init.body as string)).toEqual({ resourceId: 'user-1' });
+    // Without a resourceId the server resumes the session on the resource it already has.
+    expect(JSON.parse(init.body as string)).toEqual({ sessionId: 'user-1' });
   });
 
-  it('requests an exact thread binding when creating a session', async () => {
-    mockJson({ controllerId: 'code', resourceId: 'factory-session-1', threadId: 'factory-session-1' });
-    await client.getAgentController('code').session('factory-session-1').create({ threadId: 'factory-session-1' });
+  it('creates a session on a shared resource and binds an exact thread', async () => {
+    mockJson({ controllerId: 'code', sessionId: 'run-1', resourceId: 'factory-1', threadId: 'run-1' });
+    await client.getAgentController('code').session('run-1').create({ resourceId: 'factory-1', threadId: 'run-1' });
     const [, init] = lastCall();
     expect(JSON.parse(init.body as string)).toEqual({
-      resourceId: 'factory-session-1',
-      threadId: 'factory-session-1',
+      resourceId: 'factory-1',
+      sessionId: 'run-1',
+      threadId: 'run-1',
     });
+  });
+
+  it('addresses every session request by sessionId, with no query params', async () => {
+    const session = client.getAgentController('code').session('run-1');
+    mockJson({ ok: true });
+    await session.abort();
+    expect(lastCall()[0]).toBe('http://localhost:4111/api/agent-controller/code/sessions/run-1/abort');
+    mockJson({ controllerId: 'code', sessionId: 'run-1', resourceId: 'factory-1', modeId: 'build', modelId: 'm' });
+    await session.state();
+    expect(lastCall()[0]).toBe('http://localhost:4111/api/agent-controller/code/sessions/run-1');
+    for (const [url] of (global.fetch as any).mock.calls) expect(new URL(url).search).toBe('');
   });
 
   it('sends a message to the resource-scoped session', async () => {
@@ -95,6 +109,35 @@ describe('AgentController Resource', () => {
     const [url, init] = lastCall();
     expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/messages');
     expect(JSON.parse(init.body as string)).toEqual({ message: 'see attached', files });
+  });
+
+  it('steers and follows up with file attachments', async () => {
+    const session = client.getAgentController('code').session('user-1');
+    const files = [{ data: 'aGVsbG8=', mediaType: 'image/png', filename: 'shot.png' }];
+
+    mockJson({ ok: true });
+    await session.steer({ content: 'look at this instead', files });
+    let [url, init] = lastCall();
+    expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/steer');
+    expect(JSON.parse(init.body as string)).toEqual({ message: 'look at this instead', files });
+
+    mockJson({ ok: true });
+    await session.followUp({ content: 'also this', files });
+    [url, init] = lastCall();
+    expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1/follow-up');
+    expect(JSON.parse(init.body as string)).toEqual({ message: 'also this', files });
+  });
+
+  it('omits empty file lists from steer and follow-up bodies', async () => {
+    const session = client.getAgentController('code').session('user-1');
+
+    mockJson({ ok: true });
+    await session.steer({ content: 'focus', files: [] });
+    expect(JSON.parse(lastCall()[1].body as string)).toEqual({ message: 'focus' });
+
+    mockJson({ ok: true });
+    await session.followUp({ content: 'later', files: [] });
+    expect(JSON.parse(lastCall()[1].body as string)).toEqual({ message: 'later' });
   });
 
   it('sends requestContext in the body for run-triggering methods', async () => {
@@ -207,12 +250,10 @@ describe('AgentController Resource', () => {
   it('requests session state for a specific thread', async () => {
     mockJson({ controllerId: 'code', resourceId: 'user-1', threadId: 't/1', modeId: 'build', modelId: 'm' });
 
-    await client.getAgentController('code').session('user-1', '/repo').state({ threadId: 't/1' });
+    await client.getAgentController('code').session('user-1').state({ threadId: 't/1' });
 
     const [url] = lastCall();
-    expect(url).toBe(
-      'http://localhost:4111/api/agent-controller/code/sessions/user-1?threadId=t%2F1&sessionScope=%2Frepo',
-    );
+    expect(url).toBe('http://localhost:4111/api/agent-controller/code/sessions/user-1?threadId=t%2F1');
   });
 
   it('switches mode and model', async () => {
@@ -359,6 +400,26 @@ describe('AgentController Resource', () => {
     expect(lastCall()[0]).toBe(
       'http://localhost:4111/api/agent-controller/code/sessions/user-1/threads/t-1/messages?limit=1',
     );
+  });
+
+  it('recognizes thread owner changes as typed controller events', () => {
+    const event: AgentControllerEvent = {
+      type: 'thread_owner_changed',
+      threadId: 'thread-1',
+      fromOwnerId: 'owner-a',
+      toOwnerId: 'owner-b',
+    };
+
+    expect(isKnownAgentControllerEvent(event)).toBe(true);
+    if (!isKnownAgentControllerEvent(event) || event.type !== 'thread_owner_changed') {
+      throw new Error('missing thread_owner_changed');
+    }
+    expect(event).toEqual({
+      type: 'thread_owner_changed',
+      threadId: 'thread-1',
+      fromOwnerId: 'owner-a',
+      toOwnerId: 'owner-b',
+    });
   });
 
   it('hydrates message-start timestamps while preserving compact SSE lifecycle payloads', async () => {
@@ -572,6 +633,82 @@ describe('AgentController Resource', () => {
 
     expect((global.fetch as any).mock.calls).toHaveLength(3);
     expect(received).toEqual([firstEvent, secondEvent]);
+  });
+
+  it.each([401, 403])('stops reconnecting and reports the original %s error', async status => {
+    const firstEvent = { type: 'agent_start' };
+    (global.fetch as any)
+      .mockResolvedValueOnce(sseResponse([`data: ${JSON.stringify(firstEvent)}\n\n`]))
+      .mockResolvedValue(new Response(JSON.stringify({ error: 'denied' }), { status, statusText: 'Denied' }));
+
+    const onError = vi.fn();
+    const reported = new Promise<unknown>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('timeout')), 2000);
+      onError.mockImplementation(error => {
+        clearTimeout(timer);
+        resolve(error);
+      });
+    });
+
+    const sub = await client
+      .getAgentController('code')
+      .session('user-1')
+      .subscribe({ onEvent: () => {}, onError, reconnect: { maxRetries: Infinity, delayMs: 0 } });
+
+    const error = await reported;
+    await new Promise(r => setTimeout(r, 20));
+    sub.unsubscribe();
+
+    expect(error).toBeInstanceOf(MastraClientError);
+    expect((error as MastraClientError).status).toBe(status);
+    expect(onError).toHaveBeenCalledTimes(1);
+    expect((global.fetch as any).mock.calls).toHaveLength(2);
+  });
+
+  it.each([408, 429])('keeps reconnecting after a %s resubscribe response', async status => {
+    const firstEvent = { type: 'agent_start' };
+    const secondEvent = { type: 'agent_end' };
+    const openStream = new Response(
+      new ReadableStream({
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(secondEvent)}\n\n`));
+        },
+      }),
+      { status: 200, headers: new Headers({ 'Content-Type': 'text/event-stream' }) },
+    );
+    (global.fetch as any)
+      .mockResolvedValueOnce(sseResponse([`data: ${JSON.stringify(firstEvent)}\n\n`]))
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ error: 'retry later' }), { status, statusText: 'Retry later' }),
+      )
+      .mockResolvedValueOnce(openStream);
+
+    const onError = vi.fn();
+    const events: unknown[] = [];
+    const received = new Promise<void>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error('timeout')), 2000);
+      const sub = client
+        .getAgentController('code')
+        .session('user-1')
+        .subscribe({
+          onEvent: event => {
+            events.push(event);
+            if (events.length === 2) {
+              clearTimeout(timer);
+              void sub.then(s => s.unsubscribe());
+              resolve();
+            }
+          },
+          onError,
+          reconnect: { maxRetries: 5, delayMs: 0 },
+        });
+    });
+
+    await received;
+
+    expect(events).toEqual([firstEvent, secondEvent]);
+    expect(onError).not.toHaveBeenCalled();
+    expect((global.fetch as any).mock.calls).toHaveLength(3);
   });
 
   it('does not reconnect after unsubscribe', async () => {
@@ -940,6 +1077,198 @@ describe('AgentController Resource', () => {
     await new Promise(r => setTimeout(r, 10));
 
     expect(onError).not.toHaveBeenCalled();
+  });
+
+  describe('idleTimeoutMs', () => {
+    // An established stream that never sends a byte and never closes — the
+    // shape of a half-open connection after laptop sleep or a proxy timeout.
+    const silentSseResponse = () =>
+      new Response(new ReadableStream({ start() {} }), {
+        status: 200,
+        headers: new Headers({ 'Content-Type': 'text/event-stream' }),
+      });
+
+    // A stream that only ever sends heartbeat comments, like an idle healthy session.
+    const heartbeatSseResponse = (intervalMs: number) => {
+      let timer: ReturnType<typeof setInterval>;
+      return new Response(
+        new ReadableStream({
+          start(controller) {
+            timer = setInterval(() => controller.enqueue(new TextEncoder().encode(': heartbeat\n\n')), intervalMs);
+          },
+          cancel() {
+            clearInterval(timer);
+          },
+        }),
+        { status: 200, headers: new Headers({ 'Content-Type': 'text/event-stream' }) },
+      );
+    };
+
+    // A stream open that never gets response headers; settles only on abort.
+    const hangingFetch = (_url: string, init: RequestInit) =>
+      new Promise((_resolve, reject) => {
+        init.signal?.addEventListener('abort', () => reject(init.signal!.reason), { once: true });
+      });
+
+    const session = () => noRetryClient().getAgentController('code').session('user-1');
+
+    it('reconnects when an established stream goes silent', async () => {
+      const endEvent = { type: 'agent_end', reason: 'complete' };
+      (global.fetch as any)
+        .mockResolvedValueOnce(silentSseResponse())
+        .mockResolvedValueOnce(openSseResponse([`data: ${JSON.stringify(endEvent)}\n\n`]));
+
+      const order: string[] = [];
+      const onError = vi.fn();
+      const sub = await session().subscribe({
+        onEvent: event => order.push(`event:${event.type}`),
+        onReconnect: () => order.push('reconnect'),
+        onError,
+        reconnect: { maxRetries: 1, delayMs: 0 },
+        idleTimeoutMs: 50,
+      });
+
+      await vi.waitFor(() => expect(order).toContain('event:agent_end'), { timeout: 1000, interval: 5 });
+      sub.unsubscribe();
+
+      expect(order).toEqual(['reconnect', 'event:agent_end']);
+      expect(onError).not.toHaveBeenCalled();
+      expect((global.fetch as any).mock.calls).toHaveLength(2);
+    });
+
+    it('calls onError when a stream goes silent and reconnect is off', async () => {
+      (global.fetch as any).mockResolvedValueOnce(silentSseResponse());
+
+      const onError = vi.fn();
+      await session().subscribe({ onEvent: () => {}, onError, idleTimeoutMs: 50 });
+
+      await new Promise(r => setTimeout(r, 100));
+
+      expect(onError).toHaveBeenCalledTimes(1);
+      expect(onError.mock.calls[0]![0]).toMatchObject({ name: 'AgentControllerStreamIdleError' });
+      expect((global.fetch as any).mock.calls).toHaveLength(1);
+    });
+
+    it('keeps a stream that only receives heartbeats alive', async () => {
+      (global.fetch as any).mockResolvedValueOnce(heartbeatSseResponse(15));
+
+      const onError = vi.fn();
+      const onReconnect = vi.fn();
+      const sub = await session().subscribe({
+        onEvent: () => {},
+        onError,
+        onReconnect,
+        reconnect: { maxRetries: 1, delayMs: 0 },
+        idleTimeoutMs: 50,
+      });
+
+      await new Promise(r => setTimeout(r, 200));
+      sub.unsubscribe();
+
+      expect(onError).not.toHaveBeenCalled();
+      expect(onReconnect).not.toHaveBeenCalled();
+      expect((global.fetch as any).mock.calls).toHaveLength(1);
+    });
+
+    it('never times out when idleTimeoutMs is 0', async () => {
+      (global.fetch as any).mockResolvedValueOnce(silentSseResponse());
+
+      const onError = vi.fn();
+      const sub = await session().subscribe({
+        onEvent: () => {},
+        onError,
+        reconnect: { maxRetries: 1, delayMs: 0 },
+        idleTimeoutMs: 0,
+      });
+
+      await new Promise(r => setTimeout(r, 150));
+      sub.unsubscribe();
+
+      expect(onError).not.toHaveBeenCalled();
+      expect((global.fetch as any).mock.calls).toHaveLength(1);
+    });
+
+    it('does not call onError when unsubscribed before the idle timer fires', async () => {
+      (global.fetch as any).mockResolvedValueOnce(silentSseResponse());
+
+      const onError = vi.fn();
+      const sub = await session().subscribe({ onEvent: () => {}, onError, idleTimeoutMs: 50 });
+      sub.unsubscribe();
+
+      await new Promise(r => setTimeout(r, 100));
+
+      expect(onError).not.toHaveBeenCalled();
+      expect((global.fetch as any).mock.calls).toHaveLength(1);
+    });
+
+    it('rejects subscribe when opening the stream gets no response in time', async () => {
+      (global.fetch as any).mockImplementationOnce(hangingFetch);
+
+      const started = Date.now();
+      await expect(session().subscribe({ onEvent: () => {}, idleTimeoutMs: 50 })).rejects.toMatchObject({
+        name: 'AgentControllerStreamIdleError',
+      });
+      expect(Date.now() - started).toBeLessThan(1000);
+      expect((global.fetch as any).mock.calls).toHaveLength(1);
+    });
+
+    it('rejects subscribe on a hung open even when fetch ignores the abort signal', async () => {
+      (global.fetch as any).mockImplementationOnce(() => new Promise(() => {}));
+
+      await expect(session().subscribe({ onEvent: () => {}, idleTimeoutMs: 50 })).rejects.toMatchObject({
+        name: 'AgentControllerStreamIdleError',
+      });
+    });
+
+    it('cancels the body of a response that arrives after the open timed out', async () => {
+      const cancel = vi.fn();
+      let resolveLate!: (response: Response) => void;
+      (global.fetch as any).mockImplementationOnce(
+        () =>
+          new Promise<Response>(resolve => {
+            resolveLate = resolve;
+          }),
+      );
+
+      await expect(session().subscribe({ onEvent: () => {}, idleTimeoutMs: 50 })).rejects.toMatchObject({
+        name: 'AgentControllerStreamIdleError',
+      });
+
+      resolveLate(
+        new Response(new ReadableStream({ start() {}, cancel }), {
+          status: 200,
+          headers: { 'Content-Type': 'text/event-stream' },
+        }),
+      );
+      await vi.waitFor(() => expect(cancel).toHaveBeenCalled(), { timeout: 1000, interval: 5 });
+    });
+
+    it('counts a hung reconnect open as a failed attempt and retries', async () => {
+      const endEvent = { type: 'agent_end', reason: 'complete' };
+      (global.fetch as any)
+        .mockResolvedValueOnce(sseResponse([]))
+        .mockImplementationOnce(hangingFetch)
+        .mockResolvedValueOnce(openSseResponse([`data: ${JSON.stringify(endEvent)}\n\n`]));
+
+      const onEvent = vi.fn();
+      const onReconnect = vi.fn();
+      const onError = vi.fn();
+      const sub = await session().subscribe({
+        onEvent,
+        onReconnect,
+        onError,
+        reconnect: { maxRetries: 2, delayMs: 0 },
+        idleTimeoutMs: 50,
+      });
+
+      await vi.waitFor(() => expect(onEvent).toHaveBeenCalledWith(endEvent), { timeout: 1000, interval: 5 });
+      sub.unsubscribe();
+
+      expect((global.fetch as any).mock.calls).toHaveLength(3);
+      expect(onReconnect).toHaveBeenCalledTimes(1);
+      expect(onEvent).toHaveBeenCalledWith(endEvent);
+      expect(onError).not.toHaveBeenCalled();
+    });
   });
 
   it('sends a notification signal', async () => {

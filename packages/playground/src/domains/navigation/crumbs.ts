@@ -1,10 +1,14 @@
 import type { ComponentType, ReactNode, SVGProps } from 'react';
 import { AgentCrumb, AgentSwitcher } from '@/domains/agents/agent-crumb';
-import { DatasetCrumb, DatasetSwitcher } from '@/domains/datasets/dataset-crumb';
+import {
+  DatasetCrumb,
+  DatasetSwitcher,
+  DatasetVersionCrumb,
+  DatasetVersionSwitcher,
+} from '@/domains/datasets/dataset-crumb';
 import { McpServerCrumb, McpServerSwitcher } from '@/domains/mcps/mcp-crumbs';
 import { ProcessorCrumb, ProcessorSwitcher } from '@/domains/processors/processor-crumb';
 import { ScorerCrumb, ScorerSwitcher } from '@/domains/scores/scorer-crumb';
-import { ToolCrumb, ToolSwitcher } from '@/domains/tools/tool-crumb';
 import { WorkflowCrumb, WorkflowSwitcher } from '@/domains/workflows/workflow-crumbs';
 import { findNavItem } from '@/lib/nav/nav-items';
 
@@ -60,11 +64,6 @@ export const scorerCrumb = {
   Component: ScorerCrumb,
   Switcher: ScorerSwitcher,
 } satisfies CrumbDef;
-export const toolCrumb = {
-  id: 'tool',
-  Component: ToolCrumb,
-  Switcher: ToolSwitcher,
-} satisfies CrumbDef;
 export const processorCrumb = {
   id: 'processor',
   Component: ProcessorCrumb,
@@ -84,4 +83,9 @@ export const datasetCrumb = {
   id: 'dataset',
   Component: DatasetCrumb,
   Switcher: DatasetSwitcher,
+} satisfies CrumbDef;
+export const datasetVersionCrumb = {
+  id: 'dataset-version',
+  Component: DatasetVersionCrumb,
+  Switcher: DatasetVersionSwitcher,
 } satisfies CrumbDef;

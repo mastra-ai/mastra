@@ -35,7 +35,7 @@ export const PROVIDER_DEFAULT_MODELS: Record<OAuthProviderId, string> = {
   // adapter handles); Anthropic-shaped Copilot models (Claude on `/v1/messages`)
   // are not yet wired up, so picking one as the post-login default would error.
   'github-copilot': 'github-copilot/gpt-4.1',
-  'kimi-for-coding': 'kimi-for-coding/kimi-for-coding',
+  'kimi-for-coding': 'kimi-code-plan-cn/kimi-for-coding',
   xai: 'xai/grok-4.5',
 };
 

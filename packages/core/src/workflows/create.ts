@@ -17,7 +17,7 @@ import { ConsoleLogger } from '../logger';
 import type { InferPublicSchema, PublicSchema } from '../schema';
 import { createWorkflow as createEventedWorkflowImpl } from './evented/workflow';
 import type { Step } from './step';
-import type { CreateWorkflowParams, DefaultEngineType, InferSchemaOutput } from './types';
+import type { CreateWorkflowParams, DefaultEngineType, InferSchemaOutput, InferWorkflowRequestContext } from './types';
 import { Workflow } from './workflow';
 
 /**
@@ -72,7 +72,7 @@ export function createWorkflow<
     InferPublicSchema<TInputSchema>,
     InferPublicSchema<TOutputSchema>,
     InferPublicSchema<TInputSchema>,
-    InferSchemaOutput<TRequestContextSchema>
+    InferWorkflowRequestContext<TRequestContextSchema>
   >(params as any);
 }
 
@@ -98,7 +98,7 @@ export function createEventedWorkflow<
     InferPublicSchema<TInputSchema>,
     InferPublicSchema<TOutputSchema>,
     InferPublicSchema<TInputSchema>,
-    InferSchemaOutput<TRequestContextSchema>
+    InferWorkflowRequestContext<TRequestContextSchema>
   >;
 }
 

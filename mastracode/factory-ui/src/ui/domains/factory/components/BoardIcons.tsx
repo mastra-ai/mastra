@@ -54,20 +54,35 @@ export function actionIcon(label: string) {
   return <Icon aria-hidden />;
 }
 
-const PHASE_KIND_TONES: Record<BoardPhaseKind, StageTone> = {
+type BoardTone = StageTone | 'success';
+
+const PHASE_KIND_TONES: Record<BoardPhaseKind, BoardTone> = {
   resting: 'neutral',
   working: 'info',
   terminal: 'success',
 };
 
-const TONE_CLASSES: Record<StageTone, { icon: string; tint: string }> = {
-  neutral: { icon: 'text-muted-foreground', tint: 'bg-fill-subtle' },
-  orange: { icon: 'text-(--orange-500) dark:text-(--orange-400)', tint: 'bg-badge-orange-subtle' },
-  cyan: { icon: 'text-(--cyan-500) dark:text-(--cyan-400)', tint: 'bg-badge-cyan-subtle' },
-  info: { icon: 'text-info-indicator', tint: 'bg-info-subtle' },
-  purple: { icon: 'text-(--purple-500) dark:text-(--purple-400)', tint: 'bg-badge-purple-subtle' },
-  success: { icon: 'text-(--green-500) dark:text-(--green-400)', tint: 'bg-success-subtle' },
-  destructive: { icon: 'text-destructive-indicator', tint: 'bg-destructive-subtle' },
+const TONE_CLASSES: Record<BoardTone, { icon: string; tint: string; strongTint: string }> = {
+  neutral: { icon: 'text-muted-foreground', tint: 'bg-fill-subtle', strongTint: 'bg-fill-strong' },
+  orange: {
+    icon: 'text-(--orange-500) dark:text-(--orange-400)',
+    tint: 'bg-badge-orange-subtle',
+    strongTint: 'bg-badge-orange-strong',
+  },
+  cyan: {
+    icon: 'text-(--cyan-500) dark:text-(--cyan-400)',
+    tint: 'bg-badge-cyan-subtle',
+    strongTint: 'bg-badge-cyan-strong',
+  },
+  info: { icon: 'text-info-indicator', tint: 'bg-info-subtle', strongTint: 'bg-badge-blue-strong' },
+  green: { icon: 'text-badge-green-indicator', tint: 'bg-badge-green-subtle', strongTint: 'bg-badge-green-strong' },
+  purple: { icon: 'text-badge-purple-indicator', tint: 'bg-badge-purple-subtle', strongTint: 'bg-badge-purple-strong' },
+  success: {
+    icon: 'text-(--green-500) dark:text-(--green-400)',
+    tint: 'bg-success-subtle',
+    strongTint: 'bg-badge-green-strong',
+  },
+  destructive: { icon: 'text-destructive-indicator', tint: 'bg-destructive-subtle', strongTint: 'bg-badge-red-strong' },
 };
 
 function MaskedArt({ source, className }: { source: string; className: string }) {
@@ -105,7 +120,7 @@ function builtinStageFor(stage: string, kind?: BoardPhaseKind): BuiltinStageId |
   return kind ? undefined : boardStage(stage);
 }
 
-function stageToneFor(stage: string, kind?: BoardPhaseKind): StageTone {
+function stageToneFor(stage: string, kind?: BoardPhaseKind): BoardTone {
   const builtin = builtinStageFor(stage, kind);
   return builtin ? stageTone(builtin) : PHASE_KIND_TONES[kind ?? 'resting'];
 }
@@ -136,6 +151,10 @@ function StageArt({ stage, kind, className }: { stage: string; kind?: BoardPhase
 
 export function stageTintClass(stage: string, kind?: BoardPhaseKind): string {
   return TONE_CLASSES[stageToneFor(stage, kind)].tint;
+}
+
+export function stageStrongTintClass(stage: string, kind?: BoardPhaseKind): string {
+  return TONE_CLASSES[stageToneFor(stage, kind)].strongTint;
 }
 
 export function BoardStageIcon({

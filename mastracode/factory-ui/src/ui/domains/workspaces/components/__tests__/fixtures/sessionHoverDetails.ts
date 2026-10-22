@@ -9,6 +9,12 @@ export const reviewSessionId = 'session-review';
 export const workName = 'Investigate the authentication regression across long-running sessions';
 export const reviewName = 'Review the authentication refresh fix before release';
 
+const HOUR = 3_600_000;
+
+function hoursBefore(iso: string, hours: number): string {
+  return new Date(Date.parse(iso) - hours * HOUR).toISOString();
+}
+
 function createWorkspace({
   id,
   branch,
@@ -34,7 +40,7 @@ function createWorkspace({
     sandboxId: null,
     sandboxWorkdir: null,
     materializedAt: updatedAt,
-    createdAt: updatedAt,
+    createdAt: hoursBefore(updatedAt, 4),
     updatedAt,
   };
 }
@@ -84,7 +90,10 @@ export function createSessionHoverDetailsFixtures(updatedAt: string) {
       title: 'Authentication fails after token refresh',
       url: 'https://github.com/mastra-ai/mastra/issues/42',
       stages: ['execute'],
-      stageHistory: [],
+      stageHistory: [
+        { stage: 'triage', enteredAt: hoursBefore(updatedAt, 6), exitedAt: hoursBefore(updatedAt, 3), by: 'user-1' },
+        { stage: 'execute', enteredAt: hoursBefore(updatedAt, 3), by: 'user-grace' },
+      ],
       sessions: {
         implementation: {
           sessionId: workSessionId,
@@ -154,5 +163,39 @@ export function createSessionHoverDetailsFixtures(updatedAt: string) {
     currentSessionResponse: { session: workWorkspace },
     workItemsResponse: { workItems: workItems.map(toWireWorkItem) },
     activeRunsResponse: { runs: [{ runId: 'run-work', resourceId: workSessionId, threadId: workSessionId }] },
+    rosterResponse: {
+      members: [
+        { id: 'user-1', name: 'Ada Lovelace', avatarUrl: 'https://example.com/ada.png' },
+        { id: 'user-grace', name: 'Grace Hopper' },
+      ],
+    },
+    workRunsResponse: {
+      events: [
+        {
+          id: 'run-ended-1',
+          actorId: `agent:${workSessionId}`,
+          actorType: 'agent' as const,
+          action: 'factory.run.ended',
+          targets: [{ type: 'work_item', id: 'issue-42' }],
+          metadata: { startedAt: Date.parse(hoursBefore(updatedAt, 3)), reason: 'complete' },
+          occurredAt: hoursBefore(updatedAt, 2),
+        },
+      ],
+      actors: {},
+    },
+    transfersResponse: {
+      events: [
+        {
+          id: 'transfer-1',
+          actorId: 'user-1',
+          actorType: 'human' as const,
+          action: 'factory.session.owner_transferred',
+          targets: [{ type: 'session', id: workWorkspace.id, name: workName }],
+          metadata: { fromOwnerId: 'user-grace', toOwnerId: 'user-1' },
+          occurredAt: hoursBefore(updatedAt, 1),
+        },
+      ],
+      actors: {},
+    },
   };
 }

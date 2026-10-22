@@ -97,7 +97,8 @@ export function StudioFrame({ children, className }: { children: React.ReactNode
         </Panel>
         {hasPanel && !isMobile && (
           <>
-            <PanelSeparator />
+            {/* The separator is the gap between the two cards, so its handle sits between them. */}
+            <PanelSeparator className="w-2" />
             <CollapsiblePanel
               id="route-side-panel"
               ref={panelHandle}
@@ -105,9 +106,9 @@ export function StudioFrame({ children, className }: { children: React.ReactNode
               collapsible
               collapsedSize={0}
               hideExpandButton
-              minSize={320}
+              minSize={480}
               maxSize="50%"
-              defaultSize={380}
+              defaultSize={560}
               className="min-w-0"
               onResize={size => onPanelResize(size.inPixels)}
             >

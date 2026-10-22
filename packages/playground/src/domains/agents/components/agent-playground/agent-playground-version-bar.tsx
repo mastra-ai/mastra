@@ -18,15 +18,12 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { InfoTooltip } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
-import { controlStateColorTransition, focusRing } from '@mastra/playground-ui/primitives/transitions';
-import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { useAgentVersions } from '@mastra/react/hooks/agents';
-import { Check, ChevronDown, Download, GitPullRequest, Info, MessageSquare, Save } from 'lucide-react';
+import { Check, ChevronDown, Download, GitPullRequest, MessageSquare, Save } from 'lucide-react';
 import { useMemo, useState, useCallback } from 'react';
 
 interface AgentPlaygroundVersionBarProps {
@@ -141,21 +138,11 @@ export function AgentPlaygroundVersionBar({
           </Txt>
         )}
 
-        {currentValue && <CopyButton content={currentValue} tooltip="Copy version ID" size="sm" />}
+        {currentValue && <CopyButton content={currentValue} tooltip="Copy version ID" />}
 
-        <Tooltip>
-          <TooltipTrigger
-            aria-label="Version information"
-            className={cn('shrink-0 rounded-sm', focusRing, quietTextHover, controlStateColorTransition)}
-          >
-            <Icon size="xs">
-              <Info />
-            </Icon>
-          </TooltipTrigger>
-          <TooltipContent side="bottom" align="start" className="max-w-56">
-            {versionInfoText}
-          </TooltipContent>
-        </Tooltip>
+        <InfoTooltip aria-label="Version information" side="bottom" align="start" contentClassName="max-w-56">
+          {versionInfoText}
+        </InfoTooltip>
 
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {readOnly && <Badge variant="warning">Read-only</Badge>}
@@ -218,8 +205,8 @@ export function AgentPlaygroundVersionBar({
               </Button>
               <DropdownMenu>
                 <DropdownMenu.Trigger asChild>
-                  <Button variant="default" disabled={saveDisabled} aria-label="More save options">
-                    <ChevronDown className="size-3.5" />
+                  <Button size="icon-md" variant="default" disabled={saveDisabled} aria-label="More save options">
+                    <ChevronDown />
                   </Button>
                 </DropdownMenu.Trigger>
                 <DropdownMenu.Content align="end">

@@ -87,6 +87,27 @@ describe('PageHeader', () => {
     expect(tallActionTitleClass).toEqual(noActionTitleClass);
   });
 
+  it('renders the same header and title row classes with or without an action', () => {
+    const withAction = renderToStaticMarkup(
+      <PageHeader>
+        <PageHeader.Title>Usage</PageHeader.Title>
+        <PageHeader.Action>Upgrade</PageHeader.Action>
+      </PageHeader>,
+    );
+    const withoutAction = renderToStaticMarkup(
+      <PageHeader>
+        <PageHeader.Title>Usage</PageHeader.Title>
+      </PageHeader>,
+    );
+
+    const headerClass = (markup: string) => markup.match(/<header[^>]*class="([^"]*)"/)?.[1];
+    const titleRowClass = (markup: string) => markup.match(/<div class="([^"]*)"><h1/)?.[1];
+
+    expect(titleRowClass(withoutAction)).toBeDefined();
+    expect(titleRowClass(withAction)).toEqual(titleRowClass(withoutAction));
+    expect(headerClass(withAction)).toEqual(headerClass(withoutAction));
+  });
+
   it('renders the eyebrow above the title row, outside the title column', () => {
     const markup = renderToStaticMarkup(
       <PageHeader>

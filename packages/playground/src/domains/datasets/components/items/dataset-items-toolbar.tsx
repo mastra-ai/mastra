@@ -16,10 +16,6 @@ export type DatasetItemsToolbarProps = {
   onImportClick: () => void;
   onImportJsonClick: () => void;
   hasItems: boolean;
-  /** Page-level content rendered before the list actions (e.g. created date). */
-  leftSlot?: React.ReactNode;
-  /** Page-level actions rendered after the list actions, on the same row. */
-  rightSlot?: React.ReactNode;
 
   // Search props
   searchQuery?: string;
@@ -37,6 +33,9 @@ export type DatasetItemsToolbarProps = {
   isViewingOldVersion?: boolean;
   activeDatasetVersion?: number | null;
   onReturnToLatestVersion?: () => void;
+
+  /** Extra actions rendered before the "New item" action. */
+  actionsSlot?: React.ReactNode;
 };
 
 export function DatasetItemsToolbar({
@@ -44,8 +43,6 @@ export function DatasetItemsToolbar({
   onImportClick,
   onImportJsonClick,
   hasItems,
-  leftSlot,
-  rightSlot,
   searchQuery,
   onSearchChange,
   selectedCount,
@@ -58,6 +55,7 @@ export function DatasetItemsToolbar({
   isViewingOldVersion,
   activeDatasetVersion,
   onReturnToLatestVersion,
+  actionsSlot,
 }: DatasetItemsToolbarProps) {
   const oldVersionNotice = isViewingOldVersion && activeDatasetVersion != null && (
     <div className="flex min-w-0 items-center gap-3 text-warning-foreground">
@@ -148,8 +146,8 @@ export function DatasetItemsToolbar({
       </div>
 
       <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
-        {leftSlot}
         {selectionDropdown}
+        {actionsSlot}
         {showItemActions && !isItemPanelOpen && !isViewingOldVersion && (
           <ButtonsGroup>
             <CreateButton onClick={onAddClick} tooltip="Add an item">
@@ -157,7 +155,7 @@ export function DatasetItemsToolbar({
             </CreateButton>
             <DropdownMenu>
               <DropdownMenu.Trigger asChild>
-                <Button aria-label="Dataset actions menu">
+                <Button size="icon-md" aria-label="Dataset actions menu">
                   <ChevronDown />
                 </Button>
               </DropdownMenu.Trigger>
@@ -172,7 +170,6 @@ export function DatasetItemsToolbar({
             </DropdownMenu>
           </ButtonsGroup>
         )}
-        {rightSlot}
       </div>
     </div>
   );

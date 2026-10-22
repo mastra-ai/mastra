@@ -2,10 +2,13 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { describe, expect, it, vi } from 'vitest';
 
 import { Agent } from '../../agent';
+import type { AgentConfig } from '../../agent';
 import { AgentController } from '../../agent-controller/agent-controller';
 import { createMockWorkspace } from '../../agent-controller/test-utils';
+import { MockMemory } from '../../memory/mock';
+import type { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage/mock';
-import type { AgentControllerChannels } from '../agent-controller-channels';
+import type { AgentControllerChannels, ChannelSessionResolve } from '../agent-controller-channels';
 import { getChatModule } from '../chat-lazy';
 import type { ChannelHandler } from '../types';
 
@@ -53,7 +56,14 @@ function createSlackMockAdapter() {
  * capture the wrapper the Chat SDK is handed so the test can drive a message
  * through the real handler boundary — the seam a host writes the tenant on.
  */
-async function createSetup(onDirectMessage: ChannelHandler) {
+async function createSetup(
+  onDirectMessage: ChannelHandler,
+  options: {
+    memory?: (storage: InMemoryStore) => AgentConfig['memory'];
+    initialState?: Record<string, unknown>;
+    resolveSession?: ChannelSessionResolve;
+  } = {},
+) {
   const chatMod = await getChatModule();
   let registeredDMWrapper: ((thread: any, message: any) => unknown) | undefined;
   const spy = vi.spyOn(chatMod.Chat.prototype as any, 'onDirectMessage').mockImplementation((handler: any) => {
@@ -61,20 +71,27 @@ async function createSetup(onDirectMessage: ChannelHandler) {
   });
 
   const adapter = createSlackMockAdapter();
+  const storage = new InMemoryStore();
   const agent = new Agent({
     id: 'mode-agent',
     name: 'mode-agent',
     model: createTextStreamModel('Hello from the controller!'),
     instructions: 'You are a test agent.',
+    ...(options.memory ? { memory: options.memory(storage) } : {}),
   });
   const controller = new AgentController({
     workspace: createMockWorkspace(),
     id: 'ctrl-1',
-    storage: new InMemoryStore(),
+    storage,
     resourceId: 'ctrl-resource',
     modes: [{ id: 'build', agent, defaultModelId: 'anthropic/claude-opus-4-7' }],
     defaultModeId: 'build',
-    channels: { adapters: { slack: adapter }, handlers: { onDirectMessage } },
+    ...(options.initialState ? { initialState: options.initialState as any } : {}),
+    channels: {
+      adapters: { slack: adapter },
+      handlers: { onDirectMessage },
+      ...(options.resolveSession ? { resolveSession: options.resolveSession } : {}),
+    },
   });
   await controller.init();
   const mastra = controller.getMastra()!;
@@ -162,7 +179,7 @@ describe('AgentControllerChannels tenant context', () => {
     // repo-backed session workspace fails its owner check on the first message.
     expect(createSessionUser).toEqual({ id: 'tenant-user-9', organizationId: 'org-9' });
 
-    const session = await controller.getSessionByResource('channel:C-1:t-1');
+    const session = await controller.getSession('channel:C-1:t-1');
     expect(session).toBeDefined();
 
     restore();
@@ -182,6 +199,90 @@ describe('AgentControllerChannels tenant context', () => {
 
     expect(createSpy).not.toHaveBeenCalled();
     expect(chatThread.post.mock.calls.length).toBe(0);
+
+    restore();
+  }, 30_000);
+});
+
+describe('AgentControllerChannels binds the mapped thread with the tenant context', () => {
+  const tenant = { id: 'tenant-user-9', organizationId: 'org-9' };
+  const stampTenant: ChannelHandler = async (thread, message, defaultHandler, ctx) => {
+    ctx.requestContext.set('user', tenant);
+    await defaultHandler(thread, message);
+  };
+
+  // Mirrors Mastra Code's tenant-wrapped memory: resolving memory without the
+  // authenticated principal fails closed.
+  function tenantMemory(seen: unknown[]) {
+    return (storage: InMemoryStore) => {
+      const memory = new MockMemory({ storage });
+      return ({ requestContext }: { requestContext: RequestContext }) => {
+        const user = requestContext.get('user');
+        seen.push(user);
+        if (!user) throw new Error('Tenant model credential policy could not be resolved.');
+        return memory;
+      };
+    };
+  }
+
+  it('binds a new channel thread at session creation, with no orphan thread or context-free memory read', async () => {
+    const seen: unknown[] = [];
+    const { adapter, controller, mastra, dispatch, restore } = await createSetup(stampTenant, {
+      memory: tenantMemory(seen),
+      // A scoped session never auto-selects the channel-created thread, which
+      // carries only channel metadata — the production shape.
+      initialState: { projectPath: '/repo' },
+    });
+    const chatThread = createSlackChatThread(adapter, 'C-3:t-3');
+
+    await dispatch(chatThread, createSlackMessage('m-1', 'hi'));
+    await waitFor(() => chatThread.post.mock.calls.length >= 1, { what: 'agent reply posted' });
+    expect(JSON.stringify(chatThread.post.mock.calls)).toContain('Hello from the controller!');
+
+    const resourceId = 'channel:C-3:t-3';
+    const store = await mastra.getStorage()!.getStore('memory');
+    const { threads } = await store!.listThreads({ filter: { resourceId }, perPage: 10 });
+    expect(threads).toHaveLength(1);
+    const session = (await controller.getSession(resourceId))!;
+    expect(session.thread.getId()).toBe(threads[0]!.id);
+
+    expect(seen.length).toBeGreaterThan(0);
+    for (const user of seen) expect(user).toEqual(tenant);
+
+    restore();
+  }, 30_000);
+
+  it('keeps the tenant when a resolveSession host returns a session bound elsewhere', async () => {
+    const seen: unknown[] = [];
+    const { adapter, controller, mastra, dispatch, restore } = await createSetup(stampTenant, {
+      memory: tenantMemory(seen),
+      // No exact thread: the session lands on its own scoped thread, and the
+      // channel binding has to switch it onto the mapped one.
+      resolveSession: ({ controller, thread, requestContext }) =>
+        controller.createSession({
+          id: thread.resourceId,
+          resourceId: thread.resourceId,
+          ownerId: controller.id,
+          requestContext,
+          tags: { factoryProjectId: 'fp-1' },
+        }),
+    });
+    const chatThread = createSlackChatThread(adapter, 'C-4:t-4');
+
+    await dispatch(chatThread, createSlackMessage('m-1', 'hi'));
+    await waitFor(() => chatThread.post.mock.calls.length >= 1, { what: 'agent reply posted' });
+    expect(JSON.stringify(chatThread.post.mock.calls)).toContain('Hello from the controller!');
+
+    const session = (await controller.getSession('channel:C-4:t-4'))!;
+    const channelThread = await session.thread.getById({ threadId: session.thread.getId()! });
+    expect((channelThread?.metadata as Record<string, unknown>)?.channel_externalThreadId).toBe('C-4:t-4');
+    // The session's own scoped thread plus the channel thread it switched onto.
+    const store = await mastra.getStorage()!.getStore('memory');
+    const { threads } = await store!.listThreads({ filter: { resourceId: 'channel:C-4:t-4' }, perPage: 10 });
+    expect(threads).toHaveLength(2);
+
+    expect(seen.length).toBeGreaterThan(0);
+    for (const user of seen) expect(user).toEqual(tenant);
 
     restore();
   }, 30_000);

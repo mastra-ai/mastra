@@ -1,5 +1,5 @@
 import type { AgentControllerSessionState } from '@mastra/client-js';
-import type { DefaultModelResponse, OMConfigInfo, ProvidersResponse, ThinkingConfigInfo } from '../../../api/types';
+import type { DefaultModelResponse, OMConfigInfo, ProvidersResponse } from '../../../api/types';
 import type { FactoryProjectPayload } from '../../domains/workspaces/services/github';
 
 export const settingsFactory: FactoryProjectPayload = {
@@ -10,6 +10,7 @@ export const settingsFactory: FactoryProjectPayload = {
 
 export const settingsSession: AgentControllerSessionState = {
   controllerId: 'code',
+  sessionId: 'fp-1',
   resourceId: 'fp-1',
   modeId: 'build',
   modelId: 'openai/gpt-4o-mini',
@@ -27,17 +28,21 @@ export const settingsDefaultModel: DefaultModelResponse = {
 };
 
 export const settingsMemory: OMConfigInfo = {
+  observer: {
+    model: 'openai/gpt-4o-mini',
+    effectiveModelId: 'openai/gpt-4o-mini',
+    effectiveModelSource: 'explicit',
+    providerStatus: 'available',
+  },
+  reflector: {
+    model: 'openai/gpt-4o-mini',
+    effectiveModelId: 'openai/gpt-4o-mini',
+    effectiveModelSource: 'explicit',
+    providerStatus: 'available',
+  },
   observerModelId: 'openai/gpt-4o-mini',
   reflectorModelId: 'openai/gpt-4o-mini',
   observationThreshold: 1000,
   reflectionThreshold: 2000,
   observeAttachments: 'auto',
-};
-
-export const settingsThinking: ThinkingConfigInfo = {
-  globalDefault: 'off',
-  modeDefaults: {},
-  modes: [],
-  levels: ['off', 'low', 'medium', 'high'],
-  editable: false,
 };

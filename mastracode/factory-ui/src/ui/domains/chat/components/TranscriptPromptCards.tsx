@@ -1,12 +1,13 @@
 import type { PlanResume } from '@mastra/client-js';
+import * as AskUser from '@mastra/playground-ui/components/ai/ask-user';
+import type { AskUserAnswer, AskUserPayload } from '@mastra/playground-ui/components/ai/ask-user';
 import { ToolApproval } from '@mastra/playground-ui/components/ai/tool-approval';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
-import { Input } from '@mastra/playground-ui/components/Input';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useState } from 'react';
 
 import type { ApprovalPrompt, SubagentEntry, SuspensionPrompt } from '../services/transcript';
+import { AskUserPromptAnswers } from './AskUserPromptAnswers';
 import { SubmitPlanCard } from './SubmitPlanCard';
 
 const promptCardSuspension =
@@ -51,7 +52,8 @@ export function ApprovalCard({
 
 interface SuspendPayloadShape {
   question?: string;
-  options?: { label: string; description?: string }[];
+  options?: AskUserPayload['options'];
+  selectionMode?: AskUserPayload['selectionMode'];
   requestedPath?: string;
   reason?: string;
   plan?: { title?: string; summary?: string };
@@ -81,6 +83,7 @@ function suspensionPayloadShape(payload: unknown): SuspendPayloadShape {
   return {
     question: stringProperty(payload, 'question'),
     options,
+    selectionMode: stringProperty(payload, 'selectionMode') === 'multi_select' ? 'multi_select' : 'single_select',
     requestedPath: stringProperty(payload, 'requestedPath') ?? stringProperty(payload, 'path'),
     reason: stringProperty(payload, 'reason'),
     title: stringProperty(payload, 'title'),
@@ -157,54 +160,29 @@ function AskUserCard({
   prompt: SuspensionPrompt;
   payload: SuspendPayloadShape;
   isSubmitting: boolean;
-  onRespond: (toolCallId: string, resumeData: string | string[], promptId: string) => void;
+  onRespond: (toolCallId: string, resumeData: AskUserAnswer, promptId: string) => void;
 }) {
-  const [draft, setDraft] = useState('');
   const options = payload.options ?? [];
-  const question = payload.question ?? 'The agent has a question';
+  const selectionMode = options.length > 0 ? payload.selectionMode : 'single_select';
+
+  const handleAnswerSubmit = (answer: AskUserAnswer) => {
+    onRespond(prompt.toolCallId, answer, prompt.id);
+  };
+
   return (
-    <div className={promptCardSuspension} role="group" aria-label="Question from the agent">
-      <Txt as="p" variant="subheading" tone="ink" className={promptTitle}>
-        {question}
-      </Txt>
-      {options.length > 0 ? (
-        <div className="mt-2 flex flex-col gap-1.5" role="group" aria-label="Answer options">
-          {options.map(opt => (
-            <Button
-              key={opt.label}
-              size="sm"
-              className="justify-start"
-              aria-label={opt.description ? `${opt.label}: ${opt.description}` : opt.label}
-              disabled={isSubmitting}
-              onClick={() => onRespond(prompt.toolCallId, opt.label, prompt.id)}
-            >
-              <strong>{opt.label}</strong>
-              {opt.description && <span className="text-muted-foreground"> — {opt.description}</span>}
-            </Button>
-          ))}
-        </div>
-      ) : (
-        <form
-          className="mt-2 flex gap-2"
-          onSubmit={e => {
-            e.preventDefault();
-            if (draft.trim()) onRespond(prompt.toolCallId, draft.trim(), prompt.id);
-          }}
-        >
-          <Input
-            value={draft}
-            onChange={e => setDraft(e.target.value)}
-            placeholder="Your answer…"
-            aria-label={question}
-            disabled={isSubmitting}
-            autoFocus
-          />
-          <Button variant="primary" size="sm" type="submit" disabled={isSubmitting}>
-            Reply
-          </Button>
-        </form>
-      )}
-    </div>
+    <AskUser.Root
+      key={prompt.id}
+      className="my-2"
+      selectionMode={selectionMode}
+      disabled={isSubmitting}
+      onSubmit={handleAnswerSubmit}
+    >
+      <AskUser.Body>
+        <AskUser.Question>{payload.question ?? 'The agent has a question'}</AskUser.Question>
+        <AskUserPromptAnswers options={options} selectionMode={selectionMode} />
+        {isSubmitting ? <AskUser.Pending className="mt-3 block" /> : null}
+      </AskUser.Body>
+    </AskUser.Root>
   );
 }
 

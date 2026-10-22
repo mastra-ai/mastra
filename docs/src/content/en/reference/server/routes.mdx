@@ -19,6 +19,7 @@ Server adapters register these routes when you call `server.init()`. All routes 
 | `POST` | `/api/agents/:agentId/stream` | Stream agent response |
 | `POST` | `/api/agents/:agentId/send-message` | Send a user message to an active or idle thread |
 | `POST` | `/api/agents/:agentId/queue-message` | Queue a user message for the next thread turn |
+| `POST` | `/api/agents/:agentId/queue-signal` | Queue a typed signal for the next thread turn |
 | `POST` | `/api/agents/:agentId/signals` | Send a lower-level signal to an active or idle thread |
 | `POST` | `/api/agents/:agentId/threads/subscribe` | Subscribe to a thread stream |
 | `POST` | `/api/agents/:agentId/threads/abort` | Abort a thread, optionally clearing pending signals |
@@ -85,6 +86,8 @@ GET /api/agents/my-agent?versionId=abc123
 ### Agent message routes
 
 Use `POST /api/agents/:agentId/send-message` to send a user message to the active agent loop or wake an idle thread. Use `POST /api/agents/:agentId/queue-message` when the active run should finish before Mastra starts a follow-up run.
+
+To queue a typed signal with the same ordering, use `POST /api/agents/:agentId/queue-signal` with a `signal` field in place of `message`. The `signal` field takes the same shape as `POST /api/agents/:agentId/signals`.
 
 Both routes accept the same request body:
 
@@ -263,6 +266,85 @@ On authenticated servers, the read routes require the `stored-workflows:read` pe
 }
 ```
 
+### Run result
+
+`POST /api/workflows/:workflowId/start-async` awaits `run.start()` and returns its execution result, rather than returning immediately after starting the run. The `status` distinguishes success, failure, tripwire, suspension, and pause. The `steps` record is keyed by step ID, and each step has its own status and an `output` when one is available. The workflow's output is the top-level `result` on success.
+
+The execution result includes the following fields. Status-specific fields are only present for the corresponding outcome:
+
+```typescript oxfmt:false
+{
+  status: 'success' | 'failed' | 'tripwire' | 'suspended' | 'paused';
+  input: unknown;                      // The inputData the run started with
+  state?: unknown;                     // Workflow state
+  result?: unknown;                    // Workflow output on success
+  error?: unknown;                     // Error on failure
+  tripwire?: unknown;                  // Tripwire details
+  suspendPayload?: unknown;           // Payload returned on suspension
+  suspended?: string[][];              // Suspended step paths
+  steps: {
+    [stepId: string]: {
+      status: string;
+      output?: unknown;
+      error?: unknown;
+      startedAt: number;               // Unix time in milliseconds
+      endedAt?: number;
+    };
+  };
+}
+```
+
+`GET /api/workflows/:workflowId/runs/:runId` returns run metadata and execution state, using a persisted snapshot when available and falling back to an in-memory run. Unlike the execution result above, it exposes the run's input as `payload` and state as `initialState`. `workflowName` is the workflow's `id`, which can differ from the registry key used in the path:
+
+```typescript oxfmt:false
+{
+  runId: string;
+  workflowName: string;
+  resourceId?: string | null;
+  createdAt: string;                   // ISO date string
+  updatedAt: string;                   // ISO date string
+  status: string;                      // Includes active states such as 'running' and 'waiting'
+  initialState?: Record<string, unknown>;
+  result?: unknown;
+  error?: unknown;
+  payload?: unknown;                   // The inputData the run started with
+  steps?: {
+    [stepId: string]: {
+      payload?: unknown;               // This step's input
+      status: string;
+      output?: unknown;
+      error?: unknown;                 // Present when the step failed
+      startedAt: number;
+      endedAt?: number;
+    } | {
+      payload?: unknown;
+      status: string;
+      output?: unknown;
+      error?: unknown;
+      startedAt: number;
+      endedAt?: number;
+    }[];                              // forEach iteration results
+  };
+  activeStepsPath?: Record<string, number[]>;
+  serializedStepGraph?: unknown[];
+  suspendedPaths?: Record<string, number[]>;
+  resumeLabels?: Record<string, unknown>;
+  waitingPaths?: Record<string, number[]>;
+}
+```
+
+For persisted runs, use the `fields` query parameter to trim the response. It accepts a comma-separated subset of `result`, `error`, `payload`, `steps`, `activeStepsPath`, and `serializedStepGraph`. Any other name is rejected with a 400. The metadata fields and `status` remain, along with `initialState` when nonempty:
+
+```bash
+curl 'http://localhost:4111/api/workflows/my-workflow/runs/1faf6f91-b9ac-4db0-9fb3-326687ba1972?fields=result'
+```
+
+A `steps` entry can be a single step result or an array of iteration results for a `forEach` step. Check whether the entry is an array before reading its `status` or `output`.
+
+Pass `withNestedWorkflows=false` to skip expanding nested workflow executions inside `steps`. This doesn't remove the workflow's own step entries.
+
+The in-memory fallback is identified by `isFromInMemory: true`. It returns run metadata, `status`, and empty `steps`, but omits `result`, `payload`, and `error`. Its `createdAt` and `updatedAt` timestamps use the current time, not the run's actual timestamps. It doesn't apply field filtering or nested-workflow expansion.
+
 ### Stream workflow request body
 
 ```typescript oxfmt:false
@@ -410,6 +492,7 @@ On authenticated servers, the read routes require the `stored-workflows:read` pe
 | `POST` | `/api/datasets/:datasetId/items` | Add a dataset item |
 | `DELETE` | `/api/datasets/:datasetId/items/:itemId/purge` | Permanently scrub an item's content from every dataset version and linked experiment result |
 | `GET` | `/api/experiments` | List experiments across datasets |
+| `GET` | `/api/experiments/:experimentId` | Get an experiment by ID without knowing its dataset |
 | `DELETE` | `/api/experiments/:experimentId` | Delete an experiment, including one orphaned by dataset deletion |
 | `GET` | `/api/datasets/:datasetId/experiments` | List experiments for a dataset |
 | `POST` | `/api/datasets/:datasetId/experiments` | Trigger an experiment, or create one without starting it (`start: false`) |
@@ -420,7 +503,7 @@ On authenticated servers, the read routes require the `stored-workflows:read` pe
 | `PATCH` | `/api/datasets/:datasetId/experiments/:experimentId` | Update an experiment's name, description or metadata |
 | `DELETE` | `/api/datasets/:datasetId/experiments/:experimentId` | Delete an experiment that belongs to the dataset |
 | `GET` | `/api/datasets/:datasetId/experiments/:experimentId/results` | List experiment results |
-| `POST` | `/api/datasets/:datasetId/compare` | Compare two experiments |
+| `POST` | `/api/datasets/:datasetId/compare` | Compare two to ten experiments |
 
 ### Delete an experiment
 
@@ -544,14 +627,102 @@ Returns the persisted experiment result row.
 | `404` | Dataset, experiment, dataset item, or target not found (`EXPERIMENT_TARGET_NOT_FOUND`) |
 | `409` | Caller-supplied experiment `id` already exists for a different dataset or target (`EXPERIMENT_ID_CONFLICT`), or a call arrived after finalization (`EXPERIMENT_ALREADY_FINALIZED`) |
 
+## Scores
+
+| Method | Path | Description |
+| - | - | - |
+| `GET` | `/api/scores/scorers` | List scorers with the agents and workflows that use them |
+| `GET` | `/api/scores/scorers/:scorerId` | Get scorer by ID |
+| `GET` | `/api/scores/run/:runId` | List scores for a run |
+| `GET` | `/api/scores/scorer/:scorerId` | List scores produced by a scorer |
+| `GET` | `/api/scores/entity/:entityType/:entityId` | List scores for an agent or workflow |
+| `POST` | `/api/scores` | Save a score record |
+
+### List scorers response
+
+The response is a record combining the scorers registered through the `scorers` option of the [`Mastra` class](/reference/core/mastra-class) with the scorers attached to agents and workflows. Agent and registered entries are keyed by scorer ID. Workflow entries currently use the scorer's name. Use the returned record key for `/api/scores/scorers/:scorerId`, and `scorer.config.id` when querying saved scores by scorer ID:
+
+```typescript oxfmt:false
+{
+  [scorerId: string]: {
+    scorer: {
+      config: {
+        id: string;
+        name?: string;
+        description: string;
+        type?: unknown;
+        judge?: unknown;
+      };
+    };
+    sampling?: object;
+    agentIds: string[];
+    agentNames: string[];
+    workflowIds: string[];
+    isRegistered: boolean;             // True when the scorer is in the Mastra `scorers` option
+    source: 'code' | 'stored' | 'fs';
+  };
+}
+```
+
+Only `scorer.config` is part of the supported contract. The `scorer` object also carries implementation fields such as `steps`, which can change between releases.
+
+`GET /api/scores/scorers/:scorerId` returns a single entry of the same shape. An unknown ID returns `null` with status 200 rather than a 404.
+
+### Score list query parameters
+
+```typescript oxfmt:false
+{
+  page?: number;        // Page number (0-indexed)
+  perPage?: number;     // Items per page (default: 10)
+  entityId?: string;    // `/api/scores/scorer/:scorerId` only
+  entityType?: string;  // `/api/scores/scorer/:scorerId` only
+}
+```
+
+For `/api/scores/entity/:entityType/:entityId`, use `AGENT` or `WORKFLOW` as `entityType` and the agent or workflow registry key as `entityId`. The server resolves the key to the entity's own `id` before querying storage. Other `entityType` values are passed to storage as-is.
+
+### Score list response
+
+```typescript oxfmt:false
+{
+  pagination: {
+    total: number;
+    page: number;
+    perPage: number;
+    hasMore: boolean;
+  };
+  scores: ScoreRowData[];
+}
+```
+
+Each record has the shape written by [score persistence](/docs/evals/overview#score-persistence). The fields you will read most often are `id`, `scorerId`, `runId`, `entityId`, `score`, `output`, `scorer`, `entity`, `source` (`LIVE` or `TEST`), the optional `entityType`, `input`, `reason`, `traceId`, `spanId`, `resourceId` and `threadId`, and the `createdAt` and `updatedAt` timestamps. Records also carry the scorer's intermediate step results and prompts. Without a `scores` store configured the list routes return an empty page instead of an error.
+
+### Save score request body
+
+```typescript oxfmt:false
+{
+  score: Omit<ScoreRowData, 'id' | 'createdAt' | 'updatedAt'> & { id?: string };
+}
+```
+
+How a supplied `id` is treated depends on the storage adapter. Some adapters upsert by it, others always generate a new ID, so retried submissions can create duplicate rows there. The response is `{ score: ScoreRowData }` with the stored record. Saving requires storage. Without it the route responds with a 500.
+
 ## MCP
 
 | Method | Path | Description |
 | - | - | - |
-| `GET` | `/api/mcp/servers` | List MCP servers |
-| `GET` | `/api/mcp/servers/:serverId/tools` | List server tools |
-| `POST` | `/api/mcp/:serverId` | MCP HTTP transport |
-| `GET` | `/api/mcp/:serverId/sse` | MCP SSE transport |
+| `GET` | `/api/mcp/v0/servers` | List MCP servers |
+| `GET` | `/api/mcp/v0/servers/:id` | Get server details |
+| `GET` | `/api/mcp/:serverId/tools` | List server tools |
+| `GET` | `/api/mcp/:serverId/tools/:toolId` | Get tool details |
+| `POST` | `/api/mcp/:serverId/tools/:toolId/execute` | Execute a tool |
+| `GET` | `/api/mcp/:serverId/resources` | List server resources |
+| `POST` | `/api/mcp/:serverId/resources/read` | Read a resource |
+| `ALL` | `/api/mcp/:serverId/mcp` | MCP HTTP transport |
+| `ALL` | `/api/mcp/:serverId/sse` | Legacy MCP SSE transport |
+| `POST` | `/api/mcp/:serverId/messages` | Legacy MCP SSE messages |
+
+All MCP routes declare `requiresAuth: true`. Authentication is enforced only when `server.auth` is configured. Paths use the default `/api` prefix. The legacy SSE routes return `404` for MCP v2 servers.
 
 ## Responses API
 

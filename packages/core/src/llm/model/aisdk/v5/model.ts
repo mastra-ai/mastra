@@ -1,6 +1,7 @@
 import type { LanguageModelV2, LanguageModelV2CallOptions } from '@ai-sdk/provider-v5';
 import type { MastraLanguageModelV2 } from '../../shared.types';
 import { createStreamFromGenerateResult } from '../generate-to-stream';
+import { toSingleSystemMessage } from '../single-system-message';
 
 type StreamResult = Awaited<ReturnType<LanguageModelV2['doStream']>>;
 
@@ -65,7 +66,7 @@ export class AISDKV5LanguageModel implements MastraLanguageModelV2 {
   /**
    * The language model must specify which language model interface version it implements.
    */
-  readonly specificationVersion: 'v2' = 'v2';
+  readonly specificationVersion = 'v2' as const;
   /**
    * Name of the provider for logging purposes.
    */
@@ -74,6 +75,8 @@ export class AISDKV5LanguageModel implements MastraLanguageModelV2 {
    * Provider-specific model ID for logging purposes.
    */
   readonly modelId: string;
+  /** Full `provider/model` ID this model was resolved from, when known. */
+  id?: string;
   readonly gatewayId?: string;
   /**
    * Supported URL patterns by media type for the provider.
@@ -106,7 +109,7 @@ export class AISDKV5LanguageModel implements MastraLanguageModelV2 {
   }
 
   async doGenerate(options: LanguageModelV2CallOptions) {
-    const result = await this.#model.doGenerate(applyStrictForV2(options));
+    const result = await this.#model.doGenerate(applyStrictForV2(this.#withSingleSystemMessage(options)));
 
     return {
       ...result,
@@ -117,7 +120,12 @@ export class AISDKV5LanguageModel implements MastraLanguageModelV2 {
   }
 
   async doStream(options: LanguageModelV2CallOptions) {
-    return await this.#model.doStream(applyStrictForV2(options));
+    return await this.#model.doStream(applyStrictForV2(this.#withSingleSystemMessage(options)));
+  }
+
+  #withSingleSystemMessage(options: LanguageModelV2CallOptions): LanguageModelV2CallOptions {
+    const prompt = toSingleSystemMessage(this.provider, options.prompt);
+    return prompt === options.prompt ? options : { ...options, prompt };
   }
 
   /**

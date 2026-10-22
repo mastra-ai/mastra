@@ -8,7 +8,7 @@ export function ComposerAttachmentList({ className, ...props }: ComponentProps<t
     <ScrollArea orientation="horizontal" mask={false} data-slot="composer-attachment-scroll-area">
       <ComposerAttachments
         aria-label="Draft attachments"
-        className={cn('flex max-w-none items-center gap-3 px-2 pt-2 pb-1', className)}
+        className={cn('flex max-w-none items-center gap-3 p-2', className)}
         {...props}
       />
     </ScrollArea>

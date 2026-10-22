@@ -5,6 +5,7 @@ import { createSignal } from '../agent/signals';
 import type { AgentThreadEvent } from '../agent/types';
 import { MASTRA_MESSAGE_AUTHOR_KEY, RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
+import { ChunkFrom } from '../stream/types';
 import { AgentController } from './agent-controller';
 import { createMockWorkspace } from './test-utils';
 import type { AgentControllerEvent } from './types';
@@ -694,7 +695,6 @@ describe('AgentController signal messages', () => {
     const second = await controller.createSession({
       id: 'collaborator',
       ownerId: 'second-owner',
-      scope: 'collaborator',
     });
     expect(second).not.toBe(first);
     const threadId = first.thread.getId()!;
@@ -795,6 +795,37 @@ describe('AgentController signal messages', () => {
     expect(sendSignal).not.toHaveBeenCalled();
     expect(session.displayState.get().queuedFollowUps).toBe(1);
     expect(events).toContainEqual({ type: 'follow_up_queued', count: 1 });
+  });
+
+  it('does not tie a message queued behind an active run to that run abort signal', async () => {
+    const agent = new Agent({
+      id: 'queue-abort-agent',
+      name: 'queue-abort-agent',
+      instructions: 'You are a test agent.',
+      model: createTextStreamModel('Hello'),
+    });
+    const { session } = await createController(new InMemoryStore(), agent);
+    vi.spyOn(agent, 'subscribeToThread').mockResolvedValue({
+      stream: (async function* () {})(),
+      unsubscribe: vi.fn(),
+      abort: vi.fn(),
+      activeRunId: () => 'run-1',
+    });
+    const queueMessage = vi.spyOn(agent, 'queueMessage').mockReturnValue({
+      accepted: Promise.resolve({ action: 'deliver', runId: 'queued-run-id' }),
+      signal: createSignal({ type: 'user', contents: 'queued' }),
+    } as any);
+    await session.thread.create();
+    const activeSignal = session.run.ensureAbortController().signal;
+
+    await session.queueMessage({ content: 'queued' });
+    session.abort();
+
+    expect(activeSignal.aborted).toBe(true);
+    const queuedSignal = (queueMessage.mock.calls[0]?.[1] as any)?.ifIdle?.streamOptions?.abortSignal as AbortSignal;
+    expect(queuedSignal).toBeDefined();
+    expect(queuedSignal).not.toBe(activeSignal);
+    expect(queuedSignal.aborted).toBe(false);
   });
 
   it('updates queued display state from Agent snapshots before queue acceptance resolves', async () => {
@@ -991,14 +1022,20 @@ describe('AgentController signal messages', () => {
     });
     const { session } = await createController(storage, agent);
     const abort = vi.fn(() => true);
-    const unsubscribe = vi.fn();
+    const detached = Promise.withResolvers<void>();
+    const unsubscribe = vi.fn(() => detached.resolve());
+    const origin = await session.machinery.buildRequestContext();
 
     vi.spyOn(agent, 'subscribeToThread')
       .mockResolvedValueOnce({
-        stream: (async function* () {})(),
+        stream: (async function* () {
+          yield { type: 'start' as const, runId: 'active-run-id', from: ChunkFrom.AGENT, payload: {} };
+          await detached.promise;
+        })(),
         unsubscribe,
         abort,
         activeRunId: () => 'active-run-id',
+        __getCurrentRunRequestContext: () => origin,
       })
       .mockResolvedValue({
         stream: (async function* () {})(),
@@ -1015,6 +1052,9 @@ describe('AgentController signal messages', () => {
     const signal = session.sendSignal({ content: 'active hello' });
     await signal.accepted;
     expect(session.getCurrentRunId()).toBe('active-run-id');
+    expect(origin.get('controller')).toMatchObject({ session: { id: session.identity.getId() } });
+    await vi.waitFor(() => expect(session.run.getRunId()).toBe('active-run-id'));
+    expect(session.stream.activeRunId()).toBe('active-run-id');
 
     await session.thread.create();
 
@@ -1641,6 +1681,60 @@ describe('AgentController signal messages', () => {
       event: { type: 'text-delta', delta: 'Fact 2' },
     });
     expect(messageUpdateEvents.at(-1)?.id).not.toBe(messageEndEvents[0]?.id);
+  });
+
+  it('forwards is-task-complete chunks as task_complete_evaluation and closes the current message', async () => {
+    const { session } = await createController(new InMemoryStore());
+    const events: AgentControllerEvent[] = [];
+    session.subscribe(event => {
+      events.push(event);
+    });
+    const state = session.runEngine.createStreamState();
+    const requestContext = new RequestContext();
+    const payload = {
+      iteration: 1,
+      passed: false,
+      results: [],
+      duration: 5,
+      timedOut: false,
+      reason: 'tests still failing',
+      maxIterationReached: false,
+      suppressFeedback: false,
+    };
+
+    await session.runEngine.processStreamChunk(
+      state,
+      { type: 'text-start', payload: { id: 'text-1' } },
+      requestContext,
+    );
+    await session.runEngine.processStreamChunk(
+      state,
+      { type: 'text-delta', payload: { id: 'text-1', text: 'Attempt 1' } },
+      requestContext,
+    );
+    await session.runEngine.processStreamChunk(state, { type: 'is-task-complete', payload } as any, requestContext);
+    await session.runEngine.processStreamChunk(
+      state,
+      { type: 'text-start', payload: { id: 'text-2' } },
+      requestContext,
+    );
+    await session.runEngine.processStreamChunk(
+      state,
+      { type: 'text-delta', payload: { id: 'text-2', text: 'Attempt 2' } },
+      requestContext,
+    );
+
+    expect(events.filter(event => event.type === 'task_complete_evaluation')).toEqual([
+      { type: 'task_complete_evaluation', payload },
+    ]);
+    const messageEnds = events.filter(
+      (event): event is Extract<AgentControllerEvent, { type: 'message_end' }> => event.type === 'message_end',
+    );
+    const messageUpdates = events.filter(
+      (event): event is Extract<AgentControllerEvent, { type: 'message_update' }> => event.type === 'message_update',
+    );
+    expect(messageEnds).toHaveLength(1);
+    expect(messageUpdates.at(-1)?.id).not.toBe(messageEnds[0]?.id);
   });
 
   it('opens a new reasoning part when a later step reuses a block id after reasoning-end', async () => {

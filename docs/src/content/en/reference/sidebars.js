@@ -64,7 +64,6 @@ const sidebars = {
         { type: 'doc', id: 'agents/getMetadata', label: '.getMetadata()' },
         { type: 'doc', id: 'agents/getModel', label: '.getModel()' },
         { type: 'doc', id: 'agents/getSkill', label: '.getSkill()' },
-        { type: 'doc', id: 'agents/getTools', label: '.getTools()' },
         { type: 'doc', id: 'agents/getVoice', label: '.getVoice()' },
         { type: 'doc', id: 'agents/listAgents', label: '.listAgents()' },
         { type: 'doc', id: 'agents/listScorers', label: '.listScorers()' },
@@ -171,7 +170,6 @@ const sidebars = {
         { type: 'doc', id: 'client-js/memory', label: 'Memory API' },
         { type: 'doc', id: 'client-js/observability', label: 'Observability API' },
         { type: 'doc', id: 'client-js/responses', label: 'Responses API' },
-
         { type: 'doc', id: 'client-js/tools', label: 'Tools API' },
         { type: 'doc', id: 'client-js/vectors', label: 'Vectors API' },
         { type: 'doc', id: 'client-js/workflows', label: 'Workflows API' },
@@ -201,6 +199,17 @@ const sidebars = {
     },
     {
       type: 'category',
+      label: 'Connect',
+      collapsed: true,
+      items: [
+        { type: 'doc', id: 'connect/channels', label: 'channels()' },
+        { type: 'doc', id: 'connect/credential', label: 'credential()' },
+        { type: 'doc', id: 'connect/providers', label: 'Provider toolsets' },
+        { type: 'doc', id: 'connect/tools', label: 'tools()' },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Core',
       collapsed: true,
       items: [
@@ -225,7 +234,6 @@ const sidebars = {
         { type: 'doc', id: 'core/getScorerById', label: '.getScorerById()' },
         { type: 'doc', id: 'core/getServer', label: '.getServer()' },
         { type: 'doc', id: 'core/getStorage', label: '.getStorage()' },
-
         { type: 'doc', id: 'core/getTool', label: '.getTool()' },
         { type: 'doc', id: 'core/getToolById', label: '.getToolById()' },
         { type: 'doc', id: 'core/getVector', label: '.getVector()' },
@@ -494,7 +502,7 @@ const sidebars = {
             { type: 'doc', id: 'observability/tracing/configuration', label: 'Configuration' },
             {
               type: 'doc',
-              id: 'observability/tracing/trace-query',
+              id: 'observability/tracing/advanced-queries',
               label: 'Advanced trace queries',
             },
             { type: 'doc', id: 'observability/tracing/instances', label: 'Instances' },
@@ -591,6 +599,7 @@ const sidebars = {
         { type: 'doc', id: 'processors/batch-parts-processor', label: 'BatchPartsProcessor' },
         { type: 'doc', id: 'processors/classifier-processor', label: 'ClassifierProcessor' },
         { type: 'doc', id: 'processors/cyber-refusal-handler', label: 'CyberRefusalHandler' },
+        { type: 'doc', id: 'processors/file-upload-processor', label: 'FileUploadProcessor' },
         { type: 'doc', id: 'processors/language-detector', label: 'LanguageDetector' },
         { type: 'doc', id: 'processors/memory-input-filter', label: 'MemoryInputFilter' },
         { type: 'doc', id: 'processors/message-history-processor', label: 'MessageHistory' },
@@ -624,6 +633,7 @@ const sidebars = {
         { type: 'doc', id: 'processors/tool-call-filter', label: 'ToolCallFilter' },
         { type: 'doc', id: 'processors/tool-search-processor', label: 'ToolSearchProcessor' },
         { type: 'doc', id: 'processors/unicode-normalizer', label: 'UnicodeNormalizer' },
+        { type: 'doc', id: 'processors/unsupported-file-handler', label: 'UnsupportedFileHandler' },
         { type: 'doc', id: 'processors/working-memory-processor', label: 'WorkingMemory' },
       ],
     },
@@ -699,8 +709,10 @@ const sidebars = {
           id: 'signals/create-notification-inbox-tool',
           label: 'createNotificationInboxTool()',
         },
+        { type: 'doc', id: 'signals/notifications', label: 'Notifications' },
         { type: 'doc', id: 'signals/signal-provider', label: 'SignalProvider' },
         { type: 'doc', id: 'signals/task-signal-provider', label: 'TaskSignalProvider' },
+        { type: 'doc', id: 'signals/thread-events', label: 'Thread events' },
         { type: 'doc', id: 'signals/webhook-signal-provider', label: 'WebhookSignalProvider' },
       ],
     },
@@ -886,6 +898,7 @@ const sidebars = {
       label: 'Workspaces',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'workspace/factory-sandbox', label: 'FactorySandbox' },
         { type: 'doc', id: 'workspace/local-filesystem', label: 'LocalFilesystem' },
         { type: 'doc', id: 'workspace/local-sandbox', label: 'LocalSandbox' },
         { type: 'doc', id: 'workspace/platform-filesystem', label: 'PlatformFilesystem' },

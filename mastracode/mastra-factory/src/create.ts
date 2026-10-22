@@ -273,7 +273,7 @@ async function runPlatformProvisioning({
       }
     }
     p.log.info('Signing in to Mastra…');
-    const token = await getToken(undefined, { skipOnInput: true });
+    const token = await getToken(undefined, { skipOnInput: true, source: 'create-factory' });
 
     // 2. Org — `--org <id-or-name>` skips the picker; otherwise prompt every
     //    time so the user consciously chooses which org owns the new factory

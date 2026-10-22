@@ -6,12 +6,14 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../e2e/ui/msw-server';
+import { releaseBoard } from '../../../../../e2e/ui/board-catalog';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../e2e/ui/render';
 import { queryKeys } from '../../../../api/keys';
 import { workspacesQueryOptions } from '../../../../hooks/useWorkspaces';
 import { createQueryClient } from '../../../../query-client';
 import { listWorkItems } from '../../factory/services/workItems';
 import type { WorkItem } from '../../factory/services/workItems';
+import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
 import { createAppRoutes } from '../../../router';
 import {
   ACTIVE_FACTORY_ID,
@@ -37,6 +39,7 @@ const AGENT_CONTROLLER_API = `${TEST_BASE_URL}/api/agent-controller/code`;
 interface SearchRequestState {
   abortRequests: number;
   createSessionRequests: number;
+  sessionsCreatedFor: string[];
   created: Record<string, unknown>[];
   transitions: Array<{ itemId: string; body: Record<string, unknown> }>;
   intakeRequests: number;
@@ -45,13 +48,14 @@ interface SearchRequestState {
 }
 
 interface StubSearchOptions {
+  activeRepositories?: LinkedRepositoryPayload[];
   activeFactoryHasRepositories?: boolean;
-  failRepositories?: string[];
-  failRepositoryAttempts?: Record<string, number>;
+  /** The Factory sessions request fails this many times before succeeding. */
+  failSessionAttempts?: number;
   failIntake?: boolean;
   failWorkItems?: boolean;
-  secondRepositoryGate?: Promise<void>;
-  onSecondRepositoryAbort?: () => void;
+  sessionsGate?: Promise<void>;
+  onSessionsAbort?: () => void;
   running?: boolean;
   workItems?: WorkItem[];
 }
@@ -66,13 +70,13 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
   const state: SearchRequestState = {
     abortRequests: 0,
     createSessionRequests: 0,
+    sessionsCreatedFor: [],
     created: [],
     transitions: [],
     intakeRequests: 0,
     sessionRequests: {},
     workItemRequests: 0,
   };
-  const failRepositories = new Set(options.failRepositories ?? []);
 
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
@@ -92,8 +96,22 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/source-control-connections`, ({ params }) => {
       const factoryProjectId = String(params.factoryProjectId);
       if (factoryProjectId === ACTIVE_FACTORY_ID) {
+        const connections =
+          options.activeRepositories?.map(repository => ({
+            id: `connection-${repository.projectRepositoryId}`,
+            installationId: `installation-${repository.projectRepositoryId}`,
+            integrationId: repository.provider ?? 'github',
+            repositories: [
+              {
+                id: repository.projectRepositoryId,
+                branch: 'main',
+                sandboxWorkdir: '/repo',
+                repository: { externalId: repository.externalId, slug: repository.slug, defaultBranch: 'main' },
+              },
+            ],
+          })) ?? factoryConnections[ACTIVE_FACTORY_ID];
         return HttpResponse.json({
-          connections: options.activeFactoryHasRepositories === false ? [] : factoryConnections[ACTIVE_FACTORY_ID],
+          connections: options.activeFactoryHasRepositories === false ? [] : connections,
         });
       }
       return HttpResponse.json({ connections: factoryConnections[OTHER_FACTORY_ID] });
@@ -133,32 +151,34 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
       const serveFixtures = String(params.projectRepositoryId) === FIRST_REPOSITORY_ID;
       return HttpResponse.json({ pullRequests: serveFixtures ? intakePullRequests : [], nextPage: null });
     }),
-    http.get(
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/sessions`, async ({ params, request }) => {
+      const factoryProjectId = String(params.factoryProjectId);
+      state.sessionRequests[factoryProjectId] = (state.sessionRequests[factoryProjectId] ?? 0) + 1;
+      if (options.sessionsGate) {
+        request.signal.addEventListener('abort', () => options.onSessionsAbort?.(), { once: true });
+        await options.sessionsGate;
+      }
+      if (state.sessionRequests[factoryProjectId] <= (options.failSessionAttempts ?? 0)) {
+        return HttpResponse.json({ error: 'sessions unavailable' }, { status: 500 });
+      }
+      const repositoryIds =
+        factoryProjectId === ACTIVE_FACTORY_ID ? [FIRST_REPOSITORY_ID, SECOND_REPOSITORY_ID] : [OTHER_REPOSITORY_ID];
+      return HttpResponse.json({ sessions: repositoryIds.flatMap(id => sessionsByRepository[id] ?? []) });
+    }),
+    http.post(
       `${TEST_BASE_URL}/web/source-control/projects/:projectRepositoryId/sessions`,
-      async ({ params, request }) => {
-        const repositoryId = String(params.projectRepositoryId);
-        state.sessionRequests[repositoryId] = (state.sessionRequests[repositoryId] ?? 0) + 1;
-        if (repositoryId === SECOND_REPOSITORY_ID && options.secondRepositoryGate) {
-          request.signal.addEventListener('abort', () => options.onSecondRepositoryAbort?.(), { once: true });
-          await options.secondRepositoryGate;
-        }
-        const failedAttempts = options.failRepositoryAttempts?.[repositoryId] ?? 1;
-        if (failRepositories.has(repositoryId) && state.sessionRequests[repositoryId] <= failedAttempts) {
-          return HttpResponse.json({ error: 'sessions unavailable' }, { status: 500 });
-        }
-        return HttpResponse.json({ sessions: sessionsByRepository[repositoryId] ?? [] });
+      async ({ request, params }) => {
+        state.createSessionRequests += 1;
+        state.sessionsCreatedFor.push(String(params.projectRepositoryId));
+        const body = (await request.json()) as { branch?: string };
+        return HttpResponse.json({
+          session: {
+            sessionId: 'session-search',
+            branch: body.branch ?? 'factory/search',
+          },
+        });
       },
     ),
-    http.post(`${TEST_BASE_URL}/web/source-control/projects/:projectRepositoryId/sessions`, async ({ request }) => {
-      state.createSessionRequests += 1;
-      const body = (await request.json()) as { branch?: string };
-      return HttpResponse.json({
-        session: {
-          sessionId: 'session-search',
-          branch: body.branch ?? 'factory/search',
-        },
-      });
-    }),
     http.get(`${TEST_BASE_URL}/web/user-sessions/:sessionId`, ({ params }) => {
       const sessionId = String(params.sessionId);
       const session = Object.values(sessionsByRepository)
@@ -207,7 +227,6 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
         settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
       }),
     ),
-    http.get(`${AGENT_CONTROLLER_API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', label: 'Build' }] })),
     http.get(`${AGENT_CONTROLLER_API}/models`, () =>
       HttpResponse.json({
         models: [
@@ -279,9 +298,9 @@ function renderSearchRoute(initialEntry = `/factories/${ACTIVE_FACTORY_ID}/setti
   return { router, client };
 }
 
-async function warmFirstRepositoryAndWorkItems(client: ReturnType<typeof createQueryClient>) {
+async function warmSessionsAndWorkItems(client: ReturnType<typeof createQueryClient>) {
   await Promise.all([
-    client.prefetchQuery(workspacesQueryOptions(TEST_BASE_URL, FIRST_REPOSITORY_ID)),
+    client.prefetchQuery(workspacesQueryOptions(TEST_BASE_URL, ACTIVE_FACTORY_ID)),
     client.prefetchQuery({
       queryKey: queryKeys.workItems(ACTIVE_FACTORY_ID),
       queryFn: ({ signal }) => listWorkItems(TEST_BASE_URL, ACTIVE_FACTORY_ID, signal),
@@ -313,6 +332,87 @@ afterEach(() => {
 });
 
 describe('Global search', () => {
+  describe.each(['board', 'search'] as const)('%s entry point', entryPoint => {
+    describe.each(['github', 'gitlab'] as const)('%s source-provider repository choices', provider => {
+      it.each([0, 1, 2])('offers usable choices with %s matching repositories', async count => {
+        const sourceRepositories: LinkedRepositoryPayload[] = Array.from({ length: count }, (_, index) => ({
+          projectRepositoryId: `${provider}-repo-${index}`,
+          provider,
+          externalId: String(index),
+          slug: `${provider}-org/repo-${index}`,
+        }));
+        const otherProvider = provider === 'github' ? 'gitlab' : 'github';
+        const otherRepository: LinkedRepositoryPayload = {
+          projectRepositoryId: 'other-provider-repo',
+          provider: otherProvider,
+          slug: 'other-provider/repo',
+        };
+        const item: WorkItem = {
+          ...workItems[3],
+          source: provider === 'github' ? 'github-issue' : 'gitlab-issue',
+          board: 'release',
+          stages: ['shipped'],
+          metadata: {},
+        };
+        const requests = stubSearchApi({
+          workItems: [item],
+          activeRepositories: [otherRepository, ...sourceRepositories],
+        });
+        const patches: unknown[] = [];
+        const starts: unknown[] = [];
+        server.use(
+          http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
+          http.get(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/boards`, () =>
+            HttpResponse.json({ boards: [releaseBoard] }),
+          ),
+          http.get(`${TEST_BASE_URL}/web/gitlab/issues`, () => HttpResponse.json({ issues: [], nextCursor: null })),
+          http.get(`${TEST_BASE_URL}/web/gitlab/projects/:projectRepositoryId/prs`, () =>
+            HttpResponse.json({ pullRequests: [], nextPage: null }),
+          ),
+          http.patch(`${TEST_BASE_URL}/web/factory/work-items/${item.id}`, async ({ request }) => {
+            patches.push(await request.json());
+            return HttpResponse.json({ workItem: toWireWorkItem(item) });
+          }),
+          http.post(`${TEST_BASE_URL}/web/factory/projects/${ACTIVE_FACTORY_ID}/runs/start`, async ({ request }) => {
+            starts.push(await request.json());
+            return HttpResponse.json({ prepared: { threadId: 'thread-search' } });
+          }),
+        );
+        const user = userEvent.setup();
+        renderSearchRoute(entryPoint === 'board' ? `/factories/${ACTIVE_FACTORY_ID}/boards/release` : undefined);
+        const search = entryPoint === 'search' ? await openFromSidebar() : undefined;
+        const results = search ? within(search) : screen;
+        if (search) await user.click(await results.findByText(item.title));
+        else await user.click(await screen.findByRole('button', { name: 'Start session' }));
+
+        if (count === 0) {
+          expect(
+            await screen.findByText("No repository matching this card's provider is linked to this Factory."),
+          ).toBeInTheDocument();
+          expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
+          expect(requests.createSessionRequests).toBe(0);
+          expect(patches).toEqual([]);
+          expect(starts).toEqual([]);
+          return;
+        }
+        if (count > 1) {
+          const picker = await screen.findByRole('dialog', { name: 'Choose a repository' });
+          expect(within(picker).queryByRole('button', { name: /other-provider\/repo/ })).not.toBeInTheDocument();
+          expect(within(picker).getAllByRole('button', { name: new RegExp(`${provider}-org/repo-`) })).toHaveLength(
+            count,
+          );
+          expect(requests.createSessionRequests).toBe(0);
+          await user.click(within(picker).getByRole('button', { name: new RegExp(`${provider}-org/repo-0`) }));
+        }
+        await waitFor(() => expect(starts).toHaveLength(1));
+        expect(requests.sessionsCreatedFor).toEqual([`${provider}-repo-0`]);
+        expect(patches).toEqual([{ metadata: { repository: `${provider}-org/repo-0` } }]);
+        expect(screen.queryByRole('dialog', { name: 'Choose a repository' })).not.toBeInTheDocument();
+        if (search) await waitFor(() => expect(search).not.toBeInTheDocument());
+      });
+    });
+  });
+
   it('opens from the sidebar and Mod+K with the labeled, focused command input', async () => {
     stubSearchApi();
     const user = userEvent.setup();
@@ -331,7 +431,7 @@ describe('Global search', () => {
     expect(screen.queryByRole('dialog', { name: 'Global search' })).not.toBeInTheDocument();
     await waitFor(() => expect(trigger).toHaveFocus());
 
-    await user.keyboard('{Meta>}k{/Meta}');
+    await user.keyboard('{Control>}k{/Control}');
     expect(await screen.findByRole('dialog', { name: 'Global search' })).toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Search MastraCode' })).toHaveFocus();
   });
@@ -341,7 +441,7 @@ describe('Global search', () => {
     const user = userEvent.setup();
     renderSearchRoute(`/factories/${ACTIVE_FACTORY_ID}/work`);
 
-    await screen.findByLabelText('Board columns');
+    await screen.findByLabelText('Board stages');
     await user.keyboard('{Control>}k{/Control}');
 
     expect(await screen.findByRole('dialog', { name: 'Global search' })).toBeInTheDocument();
@@ -364,9 +464,9 @@ describe('Global search', () => {
     expect(screen.getByText('Mastra Factory')).toBeInTheDocument();
     expect(screen.getByText('Docs Factory')).toBeInTheDocument();
     for (const label of [
-      'Overview',
       'Work',
       'Review',
+      'Activity',
       'Rules',
       'Audit log',
       'Preferences',
@@ -374,17 +474,13 @@ describe('Global search', () => {
       'Connections',
       'Repositories',
       'Work Intake',
-      'Factory models',
-      'Your models',
-      'Factory memory',
-      'Your memory',
+      'Models',
+      'Memory',
       'Behavior',
     ]) {
       expect(within(dialog).getByText(label)).toBeInTheDocument();
     }
-    expect(requests.sessionRequests[FIRST_REPOSITORY_ID]).toBe(1);
-    expect(requests.sessionRequests[SECOND_REPOSITORY_ID]).toBe(1);
-    expect(requests.sessionRequests[OTHER_REPOSITORY_ID]).toBeUndefined();
+    expect(requests.sessionRequests).toEqual({ [ACTIVE_FACTORY_ID]: 1 });
   });
 
   it('uses the Playground-style category rail to scope visible results', async () => {
@@ -445,26 +541,24 @@ describe('Global search', () => {
     expect(requests.workItemRequests).toBe(workItemRequestCount);
   });
 
-  it('reuses warm first-repository and work-item caches while fetching the missing repository once', async () => {
+  it('reuses warm session and work-item caches without refetching', async () => {
     const requests = stubSearchApi();
     const { client } = renderSearchRoute();
 
-    await warmFirstRepositoryAndWorkItems(client);
-    expect(requests.sessionRequests[FIRST_REPOSITORY_ID]).toBe(1);
+    await warmSessionsAndWorkItems(client);
+    expect(requests.sessionRequests).toEqual({ [ACTIVE_FACTORY_ID]: 1 });
     expect(requests.workItemRequests).toBe(1);
-    expect(requests.sessionRequests[SECOND_REPOSITORY_ID]).toBeUndefined();
 
     await openFromSidebar();
     await screen.findByText('Review command palette PR');
 
-    expect(requests.sessionRequests[FIRST_REPOSITORY_ID]).toBe(1);
-    expect(requests.sessionRequests[SECOND_REPOSITORY_ID]).toBe(1);
+    expect(requests.sessionRequests).toEqual({ [ACTIVE_FACTORY_ID]: 1 });
     expect(requests.workItemRequests).toBe(1);
   });
 
   it('keeps search open while choosing a repository for an unattributed work item', async () => {
     const item = {
-      ...workItems[3]!,
+      ...workItems[3],
       board: 'custom',
       metadata: { number: 777 },
     };
@@ -496,35 +590,20 @@ describe('Global search', () => {
     await waitFor(() => expect(search).not.toBeInTheDocument());
   });
 
-  it('keeps successful results when one repository fails and retries only the failed source', async () => {
-    const requests = stubSearchApi({
-      failRepositories: [SECOND_REPOSITORY_ID],
-      failRepositoryAttempts: { [SECOND_REPOSITORY_ID]: 2 },
-    });
+  it('reports a session failure while retaining navigation and Factories, then recovers on retry', async () => {
+    const requests = stubSearchApi({ failSessionAttempts: 2 });
     const user = userEvent.setup();
     renderSearchRoute();
     await openFromSidebar();
 
-    expect(await screen.findByText('Add universal command search')).toBeInTheDocument();
-    expect(await screen.findByText('Some linked repositories could not be searched.')).toBeInTheDocument();
-    expect(requests.sessionRequests[SECOND_REPOSITORY_ID]).toBe(2);
+    expect(await screen.findByText('Sessions could not be loaded.')).toBeInTheDocument();
+    expect(screen.getByText('Mastra Factory')).toBeInTheDocument();
+    expect(requests.sessionRequests[ACTIVE_FACTORY_ID]).toBe(2);
 
     await user.click(screen.getByRole('button', { name: /Retry/ }));
-    await waitFor(() => expect(requests.sessionRequests[SECOND_REPOSITORY_ID]).toBe(3));
-    expect(screen.getByText('Add universal command search')).toBeInTheDocument();
+    await waitFor(() => expect(requests.sessionRequests[ACTIVE_FACTORY_ID]).toBe(3));
     expect(await screen.findByText('Review command palette PR')).toBeInTheDocument();
-  });
-
-  it('shows destructive all-repository failure while retaining navigation and Factories', async () => {
-    stubSearchApi({
-      failRepositories: [FIRST_REPOSITORY_ID, SECOND_REPOSITORY_ID],
-      failRepositoryAttempts: { [FIRST_REPOSITORY_ID]: 2, [SECOND_REPOSITORY_ID]: 2 },
-    });
-    renderSearchRoute();
-    await openFromSidebar();
-
-    expect(await screen.findByText('Sessions could not be loaded from any linked repository.')).toBeInTheDocument();
-    expect(screen.getByText('Mastra Factory')).toBeInTheDocument();
+    expect(screen.queryByText('Sessions could not be loaded.')).not.toBeInTheDocument();
   });
 
   it('keeps branch-based review results when work-item enrichment fails', async () => {
@@ -663,7 +742,7 @@ describe('Global search', () => {
     await screen.findByText('Review command palette PR');
 
     const rail = screen.getByRole('complementary', { name: 'Search categories' });
-    expect(within(rail).getByRole('button', { name: 'Work Items 4' })).toBeInTheDocument();
+    expect(await within(rail).findByRole('button', { name: /^Work Items\s*4$/ })).toBeInTheDocument();
 
     await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#4242');
     const card = await screen.findByText('Bump the command palette dependencies');
@@ -744,7 +823,7 @@ describe('Global search', () => {
   });
 
   it('refuses to open a session on a custom-board card while automation is already starting a run on it', async () => {
-    const item = { ...workItems[3]!, board: 'custom', metadata: { number: 777 } };
+    const item = { ...workItems[3], board: 'custom', metadata: { number: 777 } };
     const requests = stubSearchApi({ workItems: [item] });
     stubAutomationStartingRunOn(item.id);
     const user = userEvent.setup();
@@ -796,7 +875,7 @@ describe('Global search', () => {
   });
 
   it('refuses to open a second session while the session chosen through the repository picker is still starting', async () => {
-    const item = { ...workItems[3]!, board: 'custom', metadata: { number: 777 } };
+    const item = { ...workItems[3], board: 'custom', metadata: { number: 777 } };
     stubSearchApi({ workItems: [item] });
     const starts: unknown[] = [];
     let releaseStart = () => {};
@@ -912,24 +991,33 @@ describe('Global search', () => {
     expect(requests.intakeRequests).toBe(0);
   });
 
-  it('keeps a repository request alive when the notification observer also consumes it', async () => {
-    let releaseSecondRepository = () => {};
-    const secondRepositoryGate = new Promise<void>(resolve => {
-      releaseSecondRepository = resolve;
+  it('keeps the sessions request alive when the notification observer also consumes it', async () => {
+    let releaseSessions = () => {};
+    const sessionsGate = new Promise<void>(resolve => {
+      releaseSessions = resolve;
     });
     const onAbort = vi.fn();
-    const requests = stubSearchApi({ secondRepositoryGate, onSecondRepositoryAbort: onAbort });
+    const requests = stubSearchApi({ sessionsGate, onSessionsAbort: onAbort });
     const user = userEvent.setup();
-    const { client } = renderSearchRoute();
+    renderSearchRoute();
 
-    await warmFirstRepositoryAndWorkItems(client);
-    expect(requests.sessionRequests[FIRST_REPOSITORY_ID]).toBe(1);
     await openFromSidebar();
-    await waitFor(() => expect(requests.sessionRequests[SECOND_REPOSITORY_ID]).toBe(1));
+    await waitFor(() => expect(requests.sessionRequests[ACTIVE_FACTORY_ID]).toBe(1));
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(onAbort).not.toHaveBeenCalled();
-    releaseSecondRepository();
+    releaseSessions();
+  });
+
+  it('finds Memory settings by the former page name "personal memory"', async () => {
+    stubSearchApi();
+    const user = userEvent.setup();
+    renderSearchRoute();
+    const dialog = await openFromSidebar();
+
+    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), 'personal memory');
+
+    expect(await within(dialog).findByText('Memory')).toBeInTheDocument();
   });
 
   it('selects Settings with origin state and closes without creating a session', async () => {
@@ -1011,5 +1099,30 @@ describe('Global search', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Global search' })).not.toBeInTheDocument());
     await waitFor(() => expect(trigger).toHaveFocus());
     expect(requests.abortRequests).toBe(0);
+  });
+
+  it('aborts a busy run when Escape is pressed while typing in the composer', async () => {
+    const requests = stubSearchApi({ running: true });
+    const user = userEvent.setup();
+    renderSearchRoute(`/factories/${ACTIVE_FACTORY_ID}/workspaces/session-work/threads/thread-work-linked`);
+    await screen.findByRole('button', { name: 'Abort' }, { timeout: 5_000 });
+
+    await user.click(screen.getByRole('textbox', { name: 'Message' }));
+    await user.keyboard('{Escape}');
+
+    await waitFor(() => expect(requests.abortRequests).toBe(1));
+  });
+
+  it('types "?" in the composer instead of opening the shortcuts help', async () => {
+    stubSearchApi();
+    const user = userEvent.setup();
+    renderSearchRoute(`/factories/${ACTIVE_FACTORY_ID}/workspaces/session-work/threads/thread-work-linked`);
+    const composer = await screen.findByRole('textbox', { name: 'Message' }, { timeout: 5_000 });
+
+    await user.click(composer);
+    await user.keyboard('?');
+
+    expect(composer).toHaveValue('?');
+    expect(screen.queryByRole('dialog', { name: 'Keyboard shortcuts' })).not.toBeInTheDocument();
   });
 });

@@ -43,6 +43,8 @@ export const server = setupServer(
   http.get('*/web/integrations/platform/:provider/connections', () =>
     HttpResponse.json({ error: 'not_found' }, { status: 404 }),
   ),
+  // Board filters read connection status even when no provider is configured.
+  http.get('*/web/github/status', () => HttpResponse.json({ enabled: false, connected: false, installations: [] })),
   // Ambient GitHub label routing (read by every board's intake feed); label-routing
   // tests override it with `server.use(...)`.
   http.get('*/web/intake/label-routes', () => HttpResponse.json({ routes: [] })),

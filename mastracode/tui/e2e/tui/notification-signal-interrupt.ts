@@ -225,8 +225,8 @@ export const notificationSignalInterruptScenario = {
     await runtime.sleep(500);
 
     await runtime.waitForScreenText(/notification from agent-connection/i, terminal, 10_000);
-    await runtime.waitForScreenText(/high · peer-signal · delivered/i, terminal, 10_000);
     await runtime.waitForScreenText(new RegExp(replySummary, 'i'), terminal, 10_000);
+    expect(terminal.serialize().view).not.toMatch(/peer-signal · delivered/i);
     runtime.printScreen('after peer reply during originating-run abort', terminal);
   },
   verifyAimockRequests(requests) {

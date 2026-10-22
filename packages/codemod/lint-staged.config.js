@@ -1,9 +1,5 @@
 export default {
-  '*.{ts,tsx}': [
-    'oxlint --fix --deny-warnings',
-    'eslint --fix --no-warn-ignored --max-warnings=0',
-    'oxfmt --no-error-on-unmatched-pattern',
-  ],
-  '*.{js,jsx}': ['oxlint --fix', 'eslint --fix --no-warn-ignored', 'oxfmt --no-error-on-unmatched-pattern'],
+  '*.{ts,tsx}': ['oxlint --type-aware --fix --deny-warnings', 'oxfmt --no-error-on-unmatched-pattern'],
+  '*.{js,jsx}': ['oxlint --type-aware --fix', 'oxfmt --no-error-on-unmatched-pattern'],
   '*.{json,md,yml,yaml}': ['oxfmt --no-error-on-unmatched-pattern'],
 };

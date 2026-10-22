@@ -5,9 +5,11 @@ export {
   type DockerTemplateBuildResult,
   type DockerTemplateSecrets,
 } from './template';
+export { type DockerTemplateBuildEvent, type DockerTemplateBuildStep } from './build-progress';
 export {
   createDockerRepoTemplate,
   type DockerRepoTemplateOptions,
+  type DockerRepoTemplateRepository,
   type DockerRepoTemplateResolveOptions,
   type DockerRepoTemplateResolver,
   type RepositoryAccess,

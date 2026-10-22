@@ -7,6 +7,7 @@ import type {
 } from '../../../observability/index.js';
 import type { CorrelationContext } from '../../../observability/types/core.js';
 import { EntityType } from '../../../observability/types/tracing.js';
+import { getTimeToFirstChunkMs } from '../../../observability/utils.js';
 import type { CreateFeedbackRecord } from './feedback.js';
 import type { CreateLogRecord } from './logs.js';
 import type { CreateMetricRecord } from './metrics.js';
@@ -205,11 +206,15 @@ export function buildCreateSpanRecord(span: AnyExportedSpan): CreateSpanRecord {
     attributes: serializeSpanAttributes(span),
     metadata: span.metadata ?? null,
     tags: span.tags ?? null,
-    links: null,
+    links: span.links ?? null,
     input: span.input ?? null,
+    inputPreview: span.inputPreview,
+    outputPreview: span.outputPreview,
+    errorPreview: span.errorPreview,
     output: span.output ?? null,
     error: span.errorInfo ?? null,
     isEvent: span.isEvent,
+    timeToFirstChunkMs: getTimeToFirstChunkMs(span) ?? null,
 
     // Request context
     requestContext: span.requestContext ?? null,
@@ -222,16 +227,22 @@ export function buildCreateSpanRecord(span: AnyExportedSpan): CreateSpanRecord {
 
 /** Convert an exported span to a partial UpdateSpanRecord */
 export function buildUpdateSpanRecord(span: AnyExportedSpan): Partial<UpdateSpanRecord> {
+  const timeToFirstChunkMs = getTimeToFirstChunkMs(span);
   return {
     name: span.name,
     scope: null,
     attributes: serializeSpanAttributes(span),
     metadata: span.metadata ?? null,
-    links: null,
+    links: span.links ?? null,
     endedAt: span.endTime ?? null,
     input: span.input,
+    inputPreview: span.inputPreview,
+    outputPreview: span.outputPreview,
+    errorPreview: span.errorPreview,
     output: span.output,
     error: span.errorInfo ?? null,
+    // Set only once the first chunk arrived, so an earlier update never clears it.
+    ...(timeToFirstChunkMs !== undefined && { timeToFirstChunkMs }),
   };
 }
 

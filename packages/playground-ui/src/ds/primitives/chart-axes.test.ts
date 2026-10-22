@@ -1,0 +1,192 @@
+import { describe, expect, it } from 'vitest';
+import { chartYTickCount, labelWidth, niceYTicks, pickTimeTicks } from './chart-axes';
+
+const HOUR = 3_600_000;
+const start = new Date(2026, 9, 5, 14).getTime();
+const ts = Array.from({ length: 24 }, (_, i) => start + i * HOUR);
+const labels = ts.map(t => {
+  const h = new Date(t).getHours();
+  return `${h % 12 || 12} ${h < 12 ? 'AM' : 'PM'}`;
+});
+
+describe('pickTimeTicks', () => {
+  it('labels round clock hours that fit the width', () => {
+    const picked = [...pickTimeTicks(ts, labels, 1400)].map(i => labels[i]);
+    expect(picked).toEqual([
+      '2 PM',
+      '4 PM',
+      '6 PM',
+      '8 PM',
+      '10 PM',
+      '12 AM',
+      '2 AM',
+      '4 AM',
+      '6 AM',
+      '8 AM',
+      '10 AM',
+      '12 PM',
+    ]);
+  });
+
+  it('takes a bigger step when narrow, still on the clock', () => {
+    expect([...pickTimeTicks(ts, labels, 500)].map(i => labels[i])).toEqual([
+      '4 PM',
+      '8 PM',
+      '12 AM',
+      '4 AM',
+      '8 AM',
+      '12 PM',
+    ]);
+    expect([...pickTimeTicks(ts, labels, 400)].map(i => labels[i])).toEqual(['6 PM', '12 AM', '6 AM', '12 PM']);
+  });
+
+  it('falls back to the ends for edges or tiny plots', () => {
+    expect([...pickTimeTicks(ts, labels, 1400, 'edges')]).toEqual([0, 23]);
+    expect([...pickTimeTicks(ts, labels, 120)]).toEqual([0, 23]);
+  });
+
+  it('spaces labels evenly without timestamps, ending on the last bucket', () => {
+    const picked = [
+      ...pickTimeTicks(
+        ts.map(() => undefined),
+        labels,
+        500,
+      ),
+    ];
+    expect(picked).toContain(0);
+    expect(picked).toContain(23);
+    expect(picked.length).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe('pickTimeTicks edge cases', () => {
+  const series = (count: number, step: number, from = start) =>
+    Array.from({ length: count }, (_, i) => from + i * step);
+  const clock = (t: number) => {
+    const d = new Date(t);
+    return `${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`;
+  };
+
+  it('labels sub-hour buckets on round minutes', () => {
+    const minutes = series(60, 60_000);
+    const picked = [...pickTimeTicks(minutes, minutes.map(clock), 900)].map(i => clock(minutes[i] ?? 0));
+    expect(picked.length).toBeGreaterThanOrEqual(3);
+    for (const label of picked) expect(Number(label.split(':')[1]) % 5).toBe(0);
+  });
+
+  it('puts daily buckets on midnights, a week apart when a month is narrow', () => {
+    const days = series(30, 24 * HOUR, new Date(2026, 8, 6).getTime());
+    const dayLabels = days.map(t => new Date(t).toDateString());
+    const picked = [...pickTimeTicks(days, dayLabels, 500)];
+    expect(picked.length).toBeGreaterThanOrEqual(3);
+    for (const i of picked) expect(new Date(days[i] ?? 0).getHours()).toBe(0);
+  });
+
+  it('labels daily buckets cut off local midnight (UTC days), one per date when they fit', () => {
+    const days = series(7, 24 * HOUR, new Date(2026, 8, 29, 2).getTime());
+    expect([
+      ...pickTimeTicks(
+        days,
+        days.map(t => new Date(t).toDateString()),
+        1100,
+      ),
+    ]).toEqual([0, 1, 2, 3, 4, 5, 6]);
+    const three = days.slice(0, 3);
+    expect([
+      ...pickTimeTicks(
+        three,
+        three.map(t => new Date(t).toDateString()),
+        1100,
+      ),
+    ]).toEqual([0, 1, 2]);
+  });
+
+  it('spaces buckets longer than a week evenly instead of guessing a grid', () => {
+    const months = series(12, 30 * 24 * HOUR);
+    const picked = [
+      ...pickTimeTicks(
+        months,
+        months.map(t => new Date(t).toDateString()),
+        1400,
+      ),
+    ];
+    expect(picked[0]).toBe(0);
+    expect(picked).toContain(11);
+  });
+
+  it('handles empty, single and two-bucket series', () => {
+    expect([...pickTimeTicks([], [], 800)]).toEqual([]);
+    expect([...pickTimeTicks([start], ['2 PM'], 800)]).toEqual([0]);
+    expect([...pickTimeTicks([start, start + HOUR], ['2 PM', '3 PM'], 800)]).toEqual([0, 1]);
+  });
+
+  it('sizes the step from the full range when buckets are missing', () => {
+    // One hourly gap, then a point every 6 hours: the first gap alone suggests a 30-hour span.
+    const day = new Date(2026, 9, 5).getTime();
+    const gappy = [day, day + HOUR, ...Array.from({ length: 28 }, (_, i) => day + (i + 2) * 6 * HOUR)];
+    const gappyLabels = gappy.map(clock);
+    const picked = [...pickTimeTicks(gappy, gappyLabels, 600)];
+    // Labels sit at their bucket's index, so neighbours must be a label width apart.
+    const px = 600 / (gappy.length - 1);
+    const widest = Math.max(...gappyLabels.map(labelWidth));
+    for (let i = 1; i < picked.length; i++) {
+      expect(((picked[i] ?? 0) - (picked[i - 1] ?? 0)) * px).toBeGreaterThan(widest);
+    }
+  });
+
+  it('ignores non-finite timestamps and falls back to even spacing', () => {
+    const broken = [...ts.slice(0, 10), Number.NaN, ...ts.slice(11)];
+    const picked = [...pickTimeTicks(broken, labels, 800)];
+    expect(picked).toContain(0);
+    expect(picked).toContain(23);
+  });
+});
+
+describe('chartYTickCount', () => {
+  it('stays between 3 and 5', () => {
+    expect(chartYTickCount(0)).toBe(3);
+    expect(chartYTickCount(120)).toBe(3);
+    expect(chartYTickCount(260)).toBe(5);
+    expect(chartYTickCount(1000)).toBe(5);
+  });
+});
+
+describe('niceYTicks', () => {
+  it('rounds up just above the data instead of doubling the step', () => {
+    // Recharts gave a $4.40 peak 0, 2, 4, 6, 8.
+    expect(niceYTicks(4.4, 5)).toEqual([0, 2.5, 5]);
+    expect(niceYTicks(12, 5)).toEqual([0, 5, 10, 15]);
+    expect(niceYTicks(100, 5)).toEqual([0, 25, 50, 75, 100]);
+  });
+
+  it('takes the finer step when two reach the same top', () => {
+    expect(niceYTicks(4, 5)).toEqual([0, 1, 2, 3, 4]);
+    expect(niceYTicks(1, 5)).toEqual([0, 0.25, 0.5, 0.75, 1]);
+  });
+
+  it('fits the tick count the height allows', () => {
+    expect(niceYTicks(4.4, 3)).toEqual([0, 2.5, 5]);
+    expect(niceYTicks(7, 3)).toEqual([0, 5, 10]);
+  });
+
+  it('keeps counts on whole ticks', () => {
+    // 0, 2.5, 5, 7.5 would print as 0, 3, 5, 8.
+    expect(niceYTicks(7.2, 5, true)).toEqual([0, 2, 4, 6, 8]);
+    expect(niceYTicks(40, 5, true)).toEqual([0, 10, 20, 30, 40]);
+    expect(niceYTicks(140, 5, true)).toEqual([0, 50, 100, 150]);
+  });
+
+  it('never puts the top tick under the data', () => {
+    expect(niceYTicks(4.0000000001, 5)).toEqual([0, 2.5, 5]);
+  });
+
+  it('keeps small values free of float noise', () => {
+    expect(niceYTicks(0.3, 5)).toEqual([0, 0.1, 0.2, 0.3]);
+  });
+
+  it('leaves the axis to Recharts when there is nothing to scale', () => {
+    expect(niceYTicks(0, 5)).toBeUndefined();
+    expect(niceYTicks(-3, 5)).toBeUndefined();
+    expect(niceYTicks(Number.NaN, 5)).toBeUndefined();
+  });
+});

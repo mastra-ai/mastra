@@ -102,7 +102,12 @@ export function stubPreparingSession({
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}`, () =>
       HttpResponse.json({
-        project: { id: FACTORY_ID, name: 'Preparing', defaultModelId: 'openai/gpt-4o-mini' },
+        project: {
+          id: FACTORY_ID,
+          name: 'Preparing',
+          defaultModelId: 'openai/gpt-4o-mini',
+          defaultThinkingLevel: 'medium',
+        },
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
@@ -155,9 +160,7 @@ export function stubPreparingSession({
         },
       });
     }),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/:projectRepositoryId/sessions`, () =>
-      HttpResponse.json({ sessions: [] }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () => HttpResponse.json({ sessions: [] })),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/work-items`, () =>
       HttpResponse.json({ workItems: [] }),
     ),
@@ -168,7 +171,6 @@ export function stubPreparingSession({
       if (failWorkspace) return HttpResponse.json({ message: 'Clone failed' }, { status: 500 });
       return HttpResponse.json({ controllerId: 'code', resourceId: SESSION_ID, threadId: SESSION_ID });
     }),
-    http.get(`${API}/modes`, () => HttpResponse.json({ modes: [{ id: 'build', label: 'Build' }] })),
     http.get(`${API}/models`, () =>
       HttpResponse.json({
         models: [

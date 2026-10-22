@@ -103,6 +103,18 @@ const browser = new StagehandBrowser({
 })
 ```
 
+### Browser Use Cloud (AgentBrowser CDP)
+
+Connect AgentBrowser to a [Browser Use Cloud browser](https://github.com/browser-use/browser-use/blob/main/skills/cloud/references/browser-api.md) using your Browser Use API key:
+
+```typescript
+import { AgentBrowser } from '@mastra/agent-browser'
+
+const browser = new AgentBrowser({
+  cdpUrl: `wss://connect.browser-use.com?apiKey=${process.env.BROWSER_USE_API_KEY}`,
+})
+```
+
 ### CDP URL (any provider)
 
 Connect to any browser exposing a Chrome DevTools Protocol (CDP) endpoint:
@@ -148,12 +160,6 @@ const browser = new AgentBrowser({
 ```
 
 ## Record browser sessions
-
-:::beta
-
-Breaking changes may occur without a major version bump until the API is stable.
-
-:::
 
 AgentBrowser and StagehandBrowser can opt into recording for reviewing, sharing, or debugging browser runs. Configure `outputDir` to add the recording tools:
 

@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { Info, SaveIcon } from 'lucide-react';
 import { Button } from '../Button';
+import { InfoTooltip } from './info-tooltip';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './tooltip';
 
 const meta: Meta<typeof Tooltip> = {
@@ -64,6 +65,26 @@ export const WithIcon: Story = {
       </TooltipTrigger>
       <TooltipContent>More information</TooltipContent>
     </Tooltip>
+  ),
+};
+
+export const InfoTooltipDefault: Story = {
+  render: () => (
+    <div className="flex items-center gap-1">
+      <span className="text-label text-foreground">Version</span>
+      <InfoTooltip aria-label="Version information" side="bottom" align="start">
+        Each save creates a version you can switch back to.
+      </InfoTooltip>
+    </div>
+  ),
+};
+
+export const InfoTooltipRichContent: Story = {
+  render: () => (
+    <InfoTooltip aria-label="What is trace intelligence?" contentClassName="max-w-sm space-y-3 p-4">
+      <p>Every trace is analyzed for signals, and similar traces are clustered into themes.</p>
+      <p className="text-muted-foreground">Snapshots show how themes appear, grow, and fade.</p>
+    </InfoTooltip>
   ),
 };
 

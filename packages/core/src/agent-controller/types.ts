@@ -13,7 +13,7 @@ import type { ObservabilityEntrypoint } from '../observability/types/core';
 import type { RequestContext } from '../request-context';
 import type { PublicSchema } from '../schema';
 import type { MastraCompositeStore } from '../storage/base';
-import type { GoalEvaluationPayload } from '../stream/types';
+import type { GoalEvaluationPayload, IsTaskCompletePayload } from '../stream/types';
 import type { DynamicArgument } from '../types';
 import type { Workspace, WorkspaceStatus } from '../workspace';
 import type { Session } from './session';
@@ -407,16 +407,32 @@ export interface AgentControllerConfig<TState = {}> {
   observability?: ObservabilityEntrypoint;
 }
 
+/** An observational-memory role model. `auto` follows the active main model. */
+export type OMModel = 'auto' | (string & {});
+
+/** Arguments supplied when resolving an automatic observational-memory model. */
+export interface ResolveAutoOMModelArgs {
+  role: 'observer' | 'reflector';
+  currentModelId?: string;
+  state: Readonly<Record<string, unknown>>;
+}
+
 /**
  * Default configuration for Observational Memory.
  * These values are used when controller state doesn't have explicit OM values
  * (e.g., fresh thread with no persisted OM settings).
  */
 export interface AgentControllerOMConfig {
-  /** Default model ID for the observer agent */
+  /** Default observer model. Use `auto` to follow the active main model. */
+  observerModel?: OMModel;
+  /** Concrete observer model used when `observerModel` is unset or auto cannot resolve. */
   defaultObserverModelId?: string;
-  /** Default model ID for the reflector agent */
+  /** Default reflector model. Use `auto` to follow the active main model. */
+  reflectorModel?: OMModel;
+  /** Concrete reflector model used when `reflectorModel` is unset or auto cannot resolve. */
   defaultReflectorModelId?: string;
+  /** Resolve an automatic selection to a concrete model ID. */
+  resolveAutoModelId?: (args: ResolveAutoOMModelArgs) => string | undefined;
   /** Default observation threshold in tokens */
   defaultObservationThreshold?: number;
   /** Default reflection threshold in tokens */
@@ -691,9 +707,10 @@ export interface AgentControllerDisplayState {
 
   // ── Tool suspension ─────────────────────────────────────────────────
   /**
-   * Tools awaiting resume data after calling suspend(), keyed by toolCallId.
-   * Multiple tools can be parked at once (e.g. parallel `ask_user` prompts), so
-   * resuming one leaves the others intact for the UI to keep rendering.
+   * Tools awaiting resume data after calling suspend(). Controller-produced
+   * entries are keyed by `getSuspensionAddressKey(address)` so separate runs may
+   * reuse a tool-call id; legacy events without an address remain keyed by
+   * `toolCallId`. Iterate values when the address is not already known.
    */
   pendingSuspensions: Map<
     string,
@@ -703,6 +720,10 @@ export interface AgentControllerDisplayState {
       args: unknown;
       suspendPayload: unknown;
       resumeSchema?: string;
+      /** Immutable address fields are present for controller-produced suspensions. */
+      resourceId?: string;
+      threadId?: string;
+      runId?: string;
     }
   >;
 
@@ -821,6 +842,7 @@ export type AgentControllerEvent =
   | { type: 'thread_changed'; threadId: string; previousThreadId: string | null }
   | { type: 'thread_created'; thread: AgentControllerThread }
   | { type: 'thread_deleted'; threadId: string }
+  | { type: 'thread_owner_changed'; threadId: string; fromOwnerId: string | undefined; toOwnerId: string }
   | { type: 'state_changed'; state: Record<string, unknown>; changedKeys: string[] }
   | { type: 'agent_start' }
   | { type: 'agent_end'; reason?: 'complete' | 'aborted' | 'error' | 'suspended' }
@@ -844,8 +866,17 @@ export type AgentControllerEvent =
           args: unknown;
           suspendPayload: unknown;
           resumeSchema?: string;
+          resourceId?: string;
+          runId?: string;
         }
-      | { type: 'tool_suspension_cancelled'; toolCallId: string; toolName: string; reason: string }
+      | {
+          type: 'tool_suspension_cancelled';
+          toolCallId: string;
+          toolName: string;
+          reason: string;
+          resourceId?: string;
+          runId?: string;
+        }
       | { type: 'tool_update'; toolCallId: string; partialResult: unknown }
       | {
           type: 'tool_end';
@@ -1030,6 +1061,10 @@ export type AgentControllerEvent =
       type: 'goal_evaluation';
       payload: GoalEvaluationPayload;
     }
+  | {
+      type: 'task_complete_evaluation';
+      payload: IsTaskCompletePayload;
+    }
   | { type: 'display_state_changed'; displayState: AgentControllerDisplayState };
 
 /**
@@ -1073,7 +1108,7 @@ export interface AgentControllerRequestState<TState = unknown> {
 export interface AgentControllerRequestSession<TState = unknown> {
   /** Stable session identifier (mirrors SessionRecord.id in storage). */
   id: string;
-  /** Stable session owner (mirrors SessionRecord.ownerId in storage). */
+  /** Stable identity of the process-local session host. Use `threadOwnerId` for thread ownership and billing. */
   ownerId: string;
   /** Currently-selected mode ID */
   modeId: string;
@@ -1124,11 +1159,14 @@ export interface AgentControllerRequestContext<TState = unknown> {
   /** Thread ID captured for this request. */
   threadId: string | null;
 
-  /** Current resource ID */
+  /** Thread owner captured once when this run starts. */
+  threadOwnerId?: string;
+
+  /** Current resource ID: whose threads and memory this session uses. Several sessions may share it. */
   resourceId: string;
 
-  /** Optional isolation scope used to identify this session within its resource. */
-  scope?: string;
+  /** ID of the session handling this request. Look the session up with `AgentController.getSession(sessionId)`. */
+  sessionId: string;
 
   /**
    * Snapshot of the relevant session-owned values for this request.

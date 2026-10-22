@@ -347,6 +347,131 @@ describe('MastraAuthStudio', () => {
 
       expect(user?.name).toBeUndefined();
     });
+
+    // ---------------------------------------------------------------------
+    // Rotated Set-Cookie propagation
+    //
+    // Platform's `sessionAuth` middleware transparently refreshes an expired
+    // access token and returns a rotated sealed `wos-session` cookie via
+    // `Set-Cookie` on `/auth/me`. The provider must forward it to the
+    // browser, otherwise the browser never gets the rotated cookie and the
+    // next refresh hits `invalid_grant`.
+    // ---------------------------------------------------------------------
+    describe('Set-Cookie forwarding from /auth/me', () => {
+      it('exposes a rotated wos-session Set-Cookie via consumePendingResponseHeaders', async () => {
+        const rotated = 'wos-session=sealed-v2; Domain=.mastra.ai; HttpOnly; SameSite=Lax; Path=/';
+        fetchSpy.mockResolvedValueOnce(
+          new Response(JSON.stringify(mockMeResponse), {
+            status: 200,
+            headers: { 'Set-Cookie': rotated },
+          }),
+        );
+
+        const req = mockRequest({ cookie: 'wos-session=sealed-v1' });
+        const user = await auth.authenticateToken('', req);
+
+        expect(user?.id).toBe('user-1');
+        expect(auth.consumePendingResponseHeaders(req)).toEqual({
+          'Set-Cookie': 'wos-session=sealed-v2; HttpOnly; SameSite=Lax; Path=/; Max-Age=1209600',
+        });
+        // Second consume clears state so middleware doesn't double-emit.
+        expect(auth.consumePendingResponseHeaders(req)).toBeUndefined();
+      });
+
+      it('warns when a rotated cookie cannot be keyed to a web Request', async () => {
+        fetchSpy.mockResolvedValueOnce(
+          new Response(JSON.stringify(mockMeResponse), {
+            status: 200,
+            headers: { 'Set-Cookie': 'wos-session=sealed-v2; Path=/' },
+          }),
+        );
+        const warn = vi.spyOn((auth as any).logger, 'warn');
+        // Hono-like shape without a `raw` web Request
+        const req = { header: (n: string) => (n.toLowerCase() === 'cookie' ? 'wos-session=sealed-v1' : undefined) };
+
+        await auth.authenticateToken('', req as any);
+
+        expect(warn).toHaveBeenCalledWith(expect.stringContaining('cannot be forwarded'));
+      });
+
+      it('does not expose a Set-Cookie when platform did not rotate the cookie', async () => {
+        fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
+
+        const req = mockRequest({ cookie: 'wos-session=sealed-v1' });
+        await auth.authenticateToken('', req);
+
+        expect(auth.consumePendingResponseHeaders(req)).toBeUndefined();
+      });
+
+      it('ignores a Set-Cookie that re-emits the same sealed value', async () => {
+        const same = 'wos-session=sealed-v1; Path=/';
+        fetchSpy.mockResolvedValueOnce(
+          new Response(JSON.stringify(mockMeResponse), {
+            status: 200,
+            headers: { 'Set-Cookie': same },
+          }),
+        );
+
+        const req = mockRequest({ cookie: 'wos-session=sealed-v1' });
+        await auth.authenticateToken('', req);
+
+        expect(auth.consumePendingResponseHeaders(req)).toBeUndefined();
+      });
+
+      it('invalidates the verification cache for the old sealed cookie on rotation', async () => {
+        // First call rotates sealed-v1 → sealed-v2.
+        fetchSpy.mockResolvedValueOnce(
+          new Response(JSON.stringify(mockMeResponse), {
+            status: 200,
+            headers: { 'Set-Cookie': 'wos-session=sealed-v2; Path=/' },
+          }),
+        );
+        const first = await auth.authenticateToken('', mockRequest({ cookie: 'wos-session=sealed-v1' }));
+        expect(first?.id).toBe('user-1');
+
+        // A later request still carrying sealed-v1 must re-verify against the
+        // shared API rather than returning the stale cached user: the old
+        // refresh token has been invalidated by WorkOS.
+        fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
+        await auth.authenticateToken('', mockRequest({ cookie: 'wos-session=sealed-v1' }));
+
+        expect(fetchSpy).toHaveBeenCalledTimes(2);
+      });
+
+      it("re-issues the rotated cookie under this deployment's domain, not the shared API's", async () => {
+        const factoryAuth = new MastraAuthStudio({ sharedApiUrl: SHARED_API_PROD, cookieDomain: '.mastra.cloud' });
+        fetchSpy.mockResolvedValueOnce(
+          new Response(JSON.stringify(mockMeResponse), {
+            status: 200,
+            headers: {
+              'Set-Cookie': 'wos-session=sealed-v2; Max-Age=2592000; Domain=mastra.ai; Path=/; HttpOnly; Secure',
+            },
+          }),
+        );
+
+        const req = mockRequest({ cookie: 'wos-session=sealed-v1' });
+        await factoryAuth.authenticateToken('', req);
+
+        const header = factoryAuth.consumePendingResponseHeaders(req)?.['Set-Cookie'];
+        expect(header).toBe(
+          'wos-session=sealed-v2; HttpOnly; SameSite=Lax; Path=/; Max-Age=1209600; Secure; Domain=.mastra.cloud',
+        );
+      });
+
+      it('ignores non-wos-session Set-Cookie headers', async () => {
+        fetchSpy.mockResolvedValueOnce(
+          new Response(JSON.stringify(mockMeResponse), {
+            status: 200,
+            headers: { 'Set-Cookie': 'analytics=xyz; Path=/' },
+          }),
+        );
+
+        const req = mockRequest({ cookie: 'wos-session=sealed-v1' });
+        await auth.authenticateToken('', req);
+
+        expect(auth.consumePendingResponseHeaders(req)).toBeUndefined();
+      });
+    });
   });
 
   // -------------------------------------------------------------------------
@@ -681,7 +806,7 @@ describe('MastraAuthStudio', () => {
       expect(session.id).toBeDefined();
       expect(session.createdAt.getTime()).toBeGreaterThanOrEqual(before);
       expect(session.createdAt.getTime()).toBeLessThanOrEqual(after);
-      expect(session.expiresAt.getTime() - session.createdAt.getTime()).toBe(24 * 60 * 60 * 1000);
+      expect(session.expiresAt.getTime() - session.createdAt.getTime()).toBe(14 * 24 * 60 * 60 * 1000);
     });
 
     it('should use accessToken from metadata as session id', async () => {
@@ -710,7 +835,7 @@ describe('MastraAuthStudio', () => {
       expect(session).not.toBeNull();
       expect(session!.id).toBe('sealed-token');
       expect(session!.userId).toBe('user-1');
-      expect(session!.expiresAt.getTime() - session!.createdAt.getTime()).toBe(24 * 60 * 60 * 1000);
+      expect(session!.expiresAt.getTime() - session!.createdAt.getTime()).toBe(14 * 24 * 60 * 60 * 1000);
     });
 
     it('should return null when session is invalid', async () => {
@@ -817,6 +942,32 @@ describe('MastraAuthStudio', () => {
   });
 
   describe('getSessionHeaders', () => {
+    describe('session max age', () => {
+      afterEach(() => {
+        delete process.env.MASTRA_SESSION_MAX_AGE;
+      });
+
+      const maxAgeOf = (p: MastraAuthStudio) =>
+        p.getSessionHeaders({ id: 't', userId: 'u', expiresAt: new Date(), createdAt: new Date() })['Set-Cookie'];
+
+      it('uses sessionMaxAgeSeconds option for Max-Age and expiresAt', async () => {
+        const p = new MastraAuthStudio({ sharedApiUrl: SHARED_API, sessionMaxAgeSeconds: 3600 });
+        expect(maxAgeOf(p)).toContain('Max-Age=3600');
+        const session = await p.createSession('user-1');
+        expect(session.expiresAt.getTime() - session.createdAt.getTime()).toBe(3600 * 1000);
+      });
+
+      it('falls back to MASTRA_SESSION_MAX_AGE env var', () => {
+        process.env.MASTRA_SESSION_MAX_AGE = '7200';
+        expect(maxAgeOf(new MastraAuthStudio({ sharedApiUrl: SHARED_API }))).toContain('Max-Age=7200');
+      });
+
+      it('ignores an invalid env value and uses the 14-day default', () => {
+        process.env.MASTRA_SESSION_MAX_AGE = 'nope';
+        expect(maxAgeOf(new MastraAuthStudio({ sharedApiUrl: SHARED_API }))).toContain('Max-Age=1209600');
+      });
+    });
+
     it('should return Set-Cookie header without Secure/Domain for localhost', () => {
       const headers = auth.getSessionHeaders({
         id: 'token-123',
@@ -825,12 +976,12 @@ describe('MastraAuthStudio', () => {
         createdAt: new Date(),
       });
 
-      expect(headers['Set-Cookie']).toBe('wos-session=token-123; HttpOnly; SameSite=Lax; Path=/; Max-Age=86400');
+      expect(headers['Set-Cookie']).toBe('wos-session=token-123; HttpOnly; SameSite=Lax; Path=/; Max-Age=1209600');
       expect(headers['Set-Cookie']).not.toContain('Secure');
       expect(headers['Set-Cookie']).not.toContain('Domain');
     });
 
-    it('should include Secure and Domain when sharedApiUrl is on .mastra.ai', () => {
+    it('should issue a host-only __Host- cookie when sharedApiUrl is on .mastra.ai', () => {
       const prodAuth = new MastraAuthStudio({ sharedApiUrl: SHARED_API_PROD });
 
       const headers = prodAuth.getSessionHeaders({
@@ -840,8 +991,9 @@ describe('MastraAuthStudio', () => {
         createdAt: new Date(),
       });
 
-      expect(headers['Set-Cookie']).toContain('Secure');
-      expect(headers['Set-Cookie']).toContain('Domain=.mastra.ai');
+      expect(headers['Set-Cookie']).toBe(
+        '__Host-wos-session=token-123; HttpOnly; SameSite=Lax; Path=/; Max-Age=1209600; Secure',
+      );
     });
 
     it('should use custom cookieDomain when provided', () => {
@@ -862,7 +1014,7 @@ describe('MastraAuthStudio', () => {
       expect(headers['Set-Cookie']).not.toContain('.mastra.ai');
     });
 
-    it('should use MASTRA_COOKIE_DOMAIN env var when no explicit option', () => {
+    it('never uses MASTRA_COOKIE_DOMAIN as the cookie Domain', () => {
       process.env.MASTRA_COOKIE_DOMAIN = '.env-domain.io';
       const envAuth = new MastraAuthStudio({ sharedApiUrl: SHARED_API });
 
@@ -873,8 +1025,9 @@ describe('MastraAuthStudio', () => {
         createdAt: new Date(),
       });
 
+      expect(headers['Set-Cookie']).toMatch(/^__Host-wos-session=token-123;/);
       expect(headers['Set-Cookie']).toContain('Secure');
-      expect(headers['Set-Cookie']).toContain('Domain=.env-domain.io');
+      expect(headers['Set-Cookie']).not.toContain('Domain=');
       delete process.env.MASTRA_COOKIE_DOMAIN;
     });
 
@@ -922,14 +1075,12 @@ describe('MastraAuthStudio', () => {
       expect(headers['Set-Cookie']).toBe('wos-session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0');
     });
 
-    it('should include Secure and Domain when sharedApiUrl is on .mastra.ai', () => {
+    it('should clear the host-only __Host- cookie when sharedApiUrl is on .mastra.ai', () => {
       const prodAuth = new MastraAuthStudio({ sharedApiUrl: SHARED_API_PROD });
 
       const headers = prodAuth.getClearSessionHeaders();
 
-      expect(headers['Set-Cookie']).toContain('Secure');
-      expect(headers['Set-Cookie']).toContain('Domain=.mastra.ai');
-      expect(headers['Set-Cookie']).toContain('Max-Age=0');
+      expect(headers['Set-Cookie']).toBe('__Host-wos-session=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0; Secure');
     });
 
     it('should use custom cookieDomain when provided', () => {
@@ -945,15 +1096,14 @@ describe('MastraAuthStudio', () => {
       expect(headers['Set-Cookie']).toContain('Max-Age=0');
     });
 
-    it('should use MASTRA_COOKIE_DOMAIN env var when no explicit option', () => {
+    it('never uses MASTRA_COOKIE_DOMAIN as the cleared cookie Domain', () => {
       process.env.MASTRA_COOKIE_DOMAIN = '.env-domain.io';
       const envAuth = new MastraAuthStudio({ sharedApiUrl: SHARED_API });
 
       const headers = envAuth.getClearSessionHeaders();
 
-      expect(headers['Set-Cookie']).toContain('Secure');
-      expect(headers['Set-Cookie']).toContain('Domain=.env-domain.io');
-      expect(headers['Set-Cookie']).toContain('Max-Age=0');
+      expect(headers['Set-Cookie']).toMatch(/^__Host-wos-session=;/);
+      expect(headers['Set-Cookie']).not.toContain('Domain=');
       delete process.env.MASTRA_COOKIE_DOMAIN;
     });
 
@@ -986,6 +1136,20 @@ describe('MastraAuthStudio', () => {
 
       expect(user?.id).toBe('user-1');
       expect(user?.email).toBe('alice@example.com');
+    });
+
+    it('exposes a rotated session cookie for the caller to forward', async () => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(JSON.stringify(mockMeResponse), {
+          status: 200,
+          headers: { 'Set-Cookie': 'wos-session=token-2; Domain=.mastra.ai; Path=/' },
+        }),
+      );
+
+      const req = mockRequest({ cookie: 'wos-session=token' });
+      await auth.getCurrentUser(req);
+
+      expect(auth.consumePendingResponseHeaders(req)?.['Set-Cookie']).toMatch(/^wos-session=token-2;/);
     });
 
     it('should fall back to Bearer token', async () => {
@@ -1051,6 +1215,27 @@ describe('MastraAuthStudio IOrganizationsProvider', () => {
   }
 
   describe('ensureOrganization', () => {
+    it('acts with the rotated cookie after /auth/me rotates the session', async () => {
+      fetchSpy.mockResolvedValueOnce(
+        new Response(JSON.stringify(mockMeResponse), {
+          status: 200,
+          headers: { 'Set-Cookie': 'wos-session=sealed-2; Domain=.mastra.ai; Path=/' },
+        }),
+      );
+      await auth.authenticateToken('', mockRequest({ cookie: 'wos-session=sealed-1' }));
+      fetchSpy.mockClear();
+
+      fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify(mockMeResponse), { status: 200 }));
+      await auth.ensureOrganization('user-1');
+
+      expect(fetchSpy).toHaveBeenCalledWith(
+        `${SHARED_API}/auth/me`,
+        expect.objectContaining({
+          headers: expect.objectContaining({ Cookie: 'wos-session=sealed-2' }),
+        }),
+      );
+    });
+
     it('returns undefined when no cached cookie exists for the user', async () => {
       const orgId = await auth.ensureOrganization('never-seen-user');
       expect(orgId).toBeUndefined();

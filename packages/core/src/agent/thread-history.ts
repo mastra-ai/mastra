@@ -27,13 +27,29 @@ function toEpoch(value: unknown): number | undefined {
 type ThreadHistoryIndex = {
   /** Latest stored change per message id. */
   stamps: Map<string, number>;
-  /** Tool calls still waiting on the user (approval or suspension). */
+  /**
+   * Tool calls still waiting on the user (approval or suspension). Only the
+   * latest assistant message can still be owed an answer: a suspended run
+   * writes nothing after it. Resuming removes the entry, but calls that were
+   * never answered (a stopped run, or a run abandoned when a later message
+   * started a new run) stay in older metadata and must not be replayed.
+   */
   pendingToolCallIds: Set<string>;
 };
 
 export function indexThreadHistory(messages: MastraDBMessage[]): ThreadHistoryIndex {
   const stamps = new Map<string, number>();
   const pendingToolCallIds = new Set<string>();
+  // Pick by createdAt: recall order is not guaranteed to be chronological.
+  let lastAssistant: MastraDBMessage | undefined;
+  for (const message of messages) {
+    if (
+      message.role === 'assistant' &&
+      (!lastAssistant || (toEpoch(message.createdAt) ?? 0) >= (toEpoch(lastAssistant.createdAt) ?? 0))
+    ) {
+      lastAssistant = message;
+    }
+  }
   for (const message of messages) {
     let stamp = toEpoch(message.createdAt) ?? 0;
     for (const part of message.content?.parts ?? []) {
@@ -41,6 +57,7 @@ export function indexThreadHistory(messages: MastraDBMessage[]): ThreadHistoryIn
       stamp = Math.max(stamp, toEpoch(timed.createdAt) ?? 0, toEpoch(timed.updatedAt) ?? 0);
     }
     stamps.set(message.id, stamp);
+    if (message !== lastAssistant) continue;
     const metadata = message.content?.metadata as Record<string, unknown> | undefined;
     for (const key of ['pendingToolApprovals', 'suspendedTools']) {
       const entries = metadata?.[key];
@@ -59,7 +76,8 @@ export function indexThreadHistory(messages: MastraDBMessage[]): ThreadHistoryIn
  * are attributed to the assistant message announced by the latest `start` /
  * `step-start` of their run; a part no later than that message's newest
  * stored change is dropped, including parts saved while history was being
- * read. Pending approval and suspension chunks always pass: controllers build
+ * read. Approval and suspension chunks pending on the latest assistant message
+ * always pass: controllers build
  * their prompts from them.
  */
 export function createThreadHistoryFilter(messages: MastraDBMessage[]) {

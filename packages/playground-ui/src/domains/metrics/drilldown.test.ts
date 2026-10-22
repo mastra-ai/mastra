@@ -1,7 +1,7 @@
 import { EntityType } from '@mastra/core/observability';
 import { describe, it, expect } from 'vitest';
 
-import { buildLogsDrilldownUrl, buildTracesDrilldownUrl, narrowWindowToBucket } from './drilldown';
+import { buildLogsDrilldownUrl, buildTracesDrilldownUrl } from './drilldown';
 
 function parseUrl(url: string) {
   const [path, qs = ''] = url.split('?');
@@ -346,22 +346,5 @@ describe('buildLogsDrilldownUrl', () => {
     expect(params.get('datePreset')).toBe('custom');
     expect(params.get('dateFrom')).toBe(from.toISOString());
     expect(params.get('dateTo')).toBe(to.toISOString());
-  });
-});
-
-describe('narrowWindowToBucket', () => {
-  it('narrows to the surrounding UTC hour for 1h interval', () => {
-    const ts = Date.UTC(2024, 0, 1, 14, 37, 12);
-    const { from, to } = narrowWindowToBucket(ts, '1h');
-    expect(from.toISOString()).toBe('2024-01-01T14:00:00.000Z');
-    expect(to.toISOString()).toBe('2024-01-01T15:00:00.000Z');
-    expect(to.getTime() - from.getTime()).toBe(60 * 60 * 1000);
-  });
-
-  it('narrows to the surrounding UTC day for 1d interval', () => {
-    const ts = Date.UTC(2024, 0, 1, 14, 37, 12);
-    const { from, to } = narrowWindowToBucket(ts, '1d');
-    expect(from.toISOString()).toBe('2024-01-01T00:00:00.000Z');
-    expect(to.toISOString()).toBe('2024-01-02T00:00:00.000Z');
   });
 });

@@ -191,7 +191,6 @@ function createPlanApprovalCtx(projectPath?: string) {
     ui: { requestRender: vi.fn(), setFocus: vi.fn(), hasOverlay: vi.fn(() => false) },
     editor: {},
     pendingSubmitPlanComponents: new Map(),
-    planStartedGoalId: undefined,
   } as any;
   const ctx = {
     state,
@@ -257,7 +256,6 @@ describe('handlePlanApproval goal mode', () => {
     // The goal handler does not send the "begin executing" reminder — the
     // goal judge keeps the agent driving toward the goal.
     expect(state.session.sendSignal).not.toHaveBeenCalled();
-    expect(state.planStartedGoalId).toBe('goal-123');
   });
 
   it('delivers the goal reminder into the resumed run once the approval result is recorded', async () => {
@@ -294,7 +292,6 @@ describe('handlePlanApproval goal mode', () => {
 
     expect(ctx.sendGoalReminder).toHaveBeenCalledTimes(1);
     expect(ctx.setGoal).toHaveBeenCalledTimes(1);
-    expect(state.planStartedGoalId).toBe('goal-123');
   });
 
   it('does not send the goal reminder when the resumed run ends without recording the approval', async () => {
@@ -340,7 +337,6 @@ describe('handlePlanApproval goal mode', () => {
     expect(state.session.subscribe).not.toHaveBeenCalled();
     expect(listeners.size).toBe(0);
     expect(ctx.sendGoalReminder).not.toHaveBeenCalled();
-    expect(state.planStartedGoalId).toBeUndefined();
   });
 
   it('still resumes the approved plan when setting the goal throws', async () => {
@@ -357,7 +353,6 @@ describe('handlePlanApproval goal mode', () => {
     expect(state.session.subscribe).not.toHaveBeenCalled();
     expect(listeners.size).toBe(0);
     expect(ctx.sendGoalReminder).not.toHaveBeenCalled();
-    expect(state.planStartedGoalId).toBeUndefined();
   });
 
   it('stops waiting for the approval result when the resume rejects', async () => {
@@ -487,7 +482,6 @@ describe('handlePlanApproval regular approval', () => {
     // Regular approval should not enter goal mode or set the return flag.
     expect(ctx.setGoal).not.toHaveBeenCalled();
     expect(ctx.sendGoalReminder).not.toHaveBeenCalled();
-    expect(state.planStartedGoalId).toBeUndefined();
   });
 
   it('rejects the plan by resuming with a rejection then aborting the run host-side', async () => {

@@ -19,16 +19,17 @@ function createCtx(maintenance?: Partial<StorageMaintenance> | null) {
           closeStorage: vi.fn().mockResolvedValue(undefined),
           ...maintenance,
         } as StorageMaintenance);
+  const controller = {
+    getMastra: vi.fn().mockReturnValue({ stopWorkers: vi.fn().mockResolvedValue(undefined) }),
+    stopIntervals: vi.fn(),
+  };
   return {
-    state: { options: { storageMaintenance } },
+    state: { options: { storageMaintenance }, local: { controller } },
     showInfo: vi.fn(),
     showError: vi.fn(),
     stop: vi.fn(),
     mcpManager: { disconnect: vi.fn().mockResolvedValue(undefined) },
-    controller: {
-      getMastra: vi.fn().mockReturnValue({ stopWorkers: vi.fn().mockResolvedValue(undefined) }),
-      stopIntervals: vi.fn(),
-    },
+    controller,
   } as any;
 }
 

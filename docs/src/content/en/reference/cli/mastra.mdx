@@ -937,11 +937,13 @@ mastra auth tokens revoke <token-id>
 
 Manages provider connections for the linked platform project, so agents using `@mastra/connect` pick up provider toolsets without leaving the terminal.
 
+Commands use the organization you're signed in to with `mastra auth login`. Switch organizations with `mastra auth orgs switch`.
+
 The target project resolves from the `--project` flag, the `MASTRA_PROJECT_ID` environment variable, or the `.mastra-project.json` written by `mastra deploy`, in that order. All subcommands accept `--project <name|slug|id>`.
 
 ### `mastra connect list`
 
-Lists the available providers. Providers already connected to the project are shown in green, and unconnected providers are shown in grey.
+Lists providers with connected providers first. Active connections are shown in green, connections needing reauthorization in yellow, and unconnected providers in grey. Providers that aren't available yet are marked as coming soon.
 
 ```bash
 mastra connect list
@@ -951,9 +953,11 @@ mastra connect list
 
 Connects a provider to the project. When the organization already has connections for the provider that aren't attached to the project, the command lists them and lets you attach an existing connection or create a new one. With no existing connections it goes straight to the provider's auth flow.
 
-OAuth providers open the provider's consent screen in your browser, while API key and Basic auth providers prompt for credentials in the terminal. Providers with other auth types open a hosted connect page. The command waits until the connection becomes active before exiting.
+OAuth providers open the provider's consent screen in your browser and print its URL if you need to open it manually. API key and Basic auth providers prompt for credentials in the terminal and verify them before completing the connection. Providers with other auth types open a hosted connect page. The command waits until the connection becomes active before exiting.
 
-Once a new connection is active, the command offers to set a display name so you can tell connections to the same provider apart. It lists the provider's existing connections, suggests a name that doesn't collide with them, and asks for confirmation if the chosen name duplicates another connection's name. Leave the field blank to skip naming.
+Credential prompts require an interactive terminal, even with `--yes`. Run the command outside CI or connect through the platform UI. See [provider setup](/docs/mastra-platform/connect/providers) for API keys and required permissions.
+
+Once a new connection is active, the command offers to set a display name so you can tell connections to the same provider apart. It lists the provider's existing connections, suggests a name that doesn't collide with them, and asks for confirmation if the chosen name duplicates another connection's name. Leave the field blank to skip naming. Setting a display name requires the organization admin role; if naming fails, the connection remains active.
 
 ```bash
 mastra connect add <provider>
@@ -970,6 +974,19 @@ mastra connect remove <provider>
 ```
 
 When a provider has multiple connections, the command prompts for which one to remove. Pass `--yes` to skip confirmation. Without a terminal, or with `--yes`, removing several connections at once requires `--all`, and `--connection <id>` removes a single one.
+
+### Replace a connection that needs reauthorization
+
+`mastra connect list` marks connections that need reauthorization, for example after a provider API key is revoked. Connect tool resolution skips these connections with a warning.
+
+Unlink the affected connection, then add a new one:
+
+```bash
+mastra connect remove posthog
+mastra connect add posthog
+```
+
+If the project has multiple connections, select the affected one when removing it. When `add` offers to reuse an organization connection, choose **Create a new connection** and authorize it with valid credentials.
 
 ## `mastra lint`
 
@@ -1136,19 +1153,19 @@ See [Import existing traces](/docs/mastra-platform/observability#import-existing
 
 ### Options
 
-#### `--project <name|slug|id>`
+#### `--target-project <name|slug|id>`
 
-Selects the destination Mastra Platform project. Takes precedence over `MASTRA_PROJECT_ID`. Without either value, the command uses the project linked in `.mastra-project.json`.
+Selects the destination Mastra Platform project that receives the traces. Takes precedence over `MASTRA_PROJECT_ID`. Without either value, the command uses the project linked in `.mastra-project.json`. The source project comes from the provider credentials, such as `LANGFUSE_PUBLIC_KEY` and `LANGFUSE_SECRET_KEY`.
 
-#### `--from <date>`
+#### `--since <date>`
 
-Sets the inclusive start of the import window as an ISO 8601 date or timestamp. It defaults to 30 days before `--to`, clamped to the current 30-day Platform retention boundary.
+Sets the inclusive start of the import window as an ISO 8601 date or timestamp. It defaults to 30 days before `--until`, clamped to the current 30-day Platform retention boundary. `--from` is accepted as an alias.
 
-#### `--to <date>`
+#### `--until <date>`
 
-Sets the exclusive end of the import window as an ISO 8601 date or timestamp. It defaults to the time when the import starts and can't be in the future.
+Sets the exclusive end of the import window as an ISO 8601 date or timestamp. It defaults to the time when the import starts and can't be in the future. `--to` is accepted as an alias.
 
-The complete window must fall within the current 30-day Platform retention period, `--from` must be earlier than `--to`, and the window can't exceed 30 days.
+The complete window must fall within the current 30-day Platform retention period, `--since` must be earlier than `--until`, and the window can't exceed 30 days.
 
 #### `--dry-run`
 
@@ -1156,7 +1173,7 @@ Reads the source and prepares valid traces locally without uploading them. The c
 
 #### `--resume <import-id>`
 
-Resumes a prepared import using its saved provider, destination project, date window, and acknowledged progress. Use the same destination project shown in the generated resume command. This option can't be combined with `--from`, `--to`, or `--dry-run`.
+Resumes a prepared import using its saved provider, destination project, date window, and acknowledged progress. Use the same destination project shown in the generated resume command. This option can't be combined with `--since`, `--until`, or `--dry-run`.
 
 #### `-y, --yes`
 
@@ -1168,29 +1185,29 @@ The command loads `.env` and `.env.local` from the current directory.
 
 | Variable | Required | Description |
 | - | - | - |
-| `LANGFUSE_PUBLIC_KEY` | For new Langfuse imports | Public project API key. |
+| `LANGFUSE_PUBLIC_KEY` | For new Langfuse imports | Public project API key. Together with the secret key, it selects the source Langfuse project. |
 | `LANGFUSE_SECRET_KEY` | For new Langfuse imports | Secret project API key. |
 | `LANGFUSE_BASE_URL` | No | Langfuse host. Defaults to `https://cloud.langfuse.com`. |
 | `MASTRA_API_TOKEN` | For headless authentication | Mastra Platform API token. Without it, the command uses credentials from `mastra auth login`. |
 | `MASTRA_ORG_ID` | With `MASTRA_API_TOKEN` | Organization that owns the destination project. |
 | `MASTRA_PLATFORM_ACCESS_TOKEN` | For upload and read-back with interactive login | Mastra Platform access token for the destination. Not required for `--dry-run` or when `MASTRA_API_TOKEN` is set. |
-| `MASTRA_PROJECT_ID` | When no project is otherwise linked | Destination project ID. The `--project` flag takes precedence over it. |
+| `MASTRA_PROJECT_ID` | When no project is otherwise linked | Destination project ID. The `--target-project` flag takes precedence over it. |
 
 ### Examples
 
 Preview the default 30-day window without uploading:
 
 ```bash
-mastra traces import langfuse --project my-project --dry-run
+mastra traces import langfuse --target-project my-mastra-project --dry-run
 ```
 
 Import a smaller date window without a confirmation prompt:
 
 ```bash
 mastra traces import langfuse \
-  --project my-project \
-  --from "$FROM" \
-  --to "$TO" \
+  --target-project my-mastra-project \
+  --since "$SINCE" \
+  --until "$UNTIL" \
   --yes
 ```
 
@@ -1199,7 +1216,7 @@ Resume an existing import:
 ```bash
 mastra traces import langfuse \
   --resume 00000000-0000-0000-0000-000000000000 \
-  --project my-project
+  --target-project my-mastra-project
 ```
 
 ## `mastra api`
@@ -1270,7 +1287,7 @@ Use `--url` and `--header` when you need to override another target or its crede
 
 ### Factory commands
 
-Use `mastra api factory` to manage Factory projects, work items, decisions, attention items, queue health, and supervisor sessions. These commands use the same JSON input, output, authentication, headers, timeout, and target resolution as other `mastra api` commands.
+Use `mastra api factory` to manage Factory projects, work items, decisions, attention items, and queue health. These commands use the same JSON input, output, authentication, headers, timeout, and target resolution as other `mastra api` commands.
 
 List the Factory projects available to the current organization:
 
@@ -1631,18 +1648,26 @@ mastra api trace list '{"page":0,"perPage":20}' --verbose
 
 #### `mastra api trace query`
 
-Queries completed observability traces with recursive predicates over trace and related span or score fields. The inline JSON input is required. Like other observability commands, it targets `https://observability.mastra.ai` by default.
+Queries completed observability traces with recursive predicates over trace fields and related spans. The inline JSON input is required and uses the same query structure as the SDK and HTTP API. Like other observability commands, it targets `https://observability.mastra.ai` by default. Pass `--url http://localhost:4111` to query a local server.
 
 ```bash
 mastra api trace query <input>
 mastra api trace query '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"}}'
 ```
 
-Inspect the target server's exact request contract before constructing a query:
+Inspect the command with:
 
 ```bash
-mastra api trace query --schema
+mastra api trace query --help
 ```
+
+For supported fields, operators, and request options, see [Query traces](/reference/observability/tracing/advanced-queries#query-traces). For a local Mastra server, you can also inspect its request and response schemas:
+
+```bash
+mastra api --url http://localhost:4111 trace query --schema
+```
+
+Mastra Platform doesn't currently expose the schema endpoint used by `--schema`. To find fields and values recorded in your project, use [field and value discovery](/reference/observability/tracing/advanced-queries#discover-fields-and-values).
 
 The response remains nested under `data` to preserve cursor pagination:
 
@@ -1655,7 +1680,7 @@ The response remains nested under `data` to preserve cursor pagination:
 }
 ```
 
-Pass a non-null `page.next` value back as `page.after` in the next query. See [Advanced trace queries](/reference/observability/tracing/trace-query) for supported fields and operators, recursive predicates, limits, pagination, and errors.
+Each invocation makes one query. Pass a non-null `data.page.next` value back as `page.after` in the next query. See [Pagination and errors](/reference/observability/tracing/advanced-queries#pagination-and-errors) for pagination modes, cursor handling, and errors.
 
 To load a numbered page and then poll, keep the same time range and predicate in both requests:
 
@@ -1666,7 +1691,42 @@ mastra api trace query '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"20
 
 Replace `CURSOR_FROM_NUMBERED_RESPONSE` with `data.deltaCursor` from the first response. Delta results remain under `data`, with `traces`, `delta: { limit, hasMore }`, and `deltaCursor`. Merge traces by `traceId`, retain each returned cursor, and continue immediately while `data.delta.hasMore` is `true`. Don't combine delta mode with `page`, `pagination`, or `orderBy`.
 
-Omitting `after` establishes a cursor and returns no historical traces. Changing the time range or predicate requires a fresh numbered request. See [Delta polling limitations](/reference/observability/tracing/trace-query#poll-after-loading-a-numbered-page) before using this workflow to maintain a local trace list.
+Omitting `after` establishes a cursor and returns no historical traces. Changing the time range or predicate requires a fresh numbered request. See [Delta polling limitations](/reference/observability/tracing/advanced-queries#poll-after-loading-a-numbered-page) before using this workflow to maintain a local trace list.
+
+#### `mastra api trace aggregate`
+
+Groups the traces selected by a time range and optional `where` predicate, and returns one row of measures per group. The inline JSON input is required and accepts the same predicates as `trace query`. Like other observability commands, it targets `https://observability.mastra.ai` by default.
+
+```bash
+mastra api trace aggregate <input>
+mastra api trace aggregate '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"groupBy":["entityName"],"measures":["count","errorRate"]}'
+```
+
+Set `interval` to `1m`, `5m`, `15m`, `1h`, or `1d` to split each group into time buckets:
+
+```bash
+mastra api trace aggregate '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"where":{"op":"eq","left":{"path":"entityName"},"right":{"literal":"weather-agent"}},"interval":"1d","measures":["count","duration.p95"]}'
+```
+
+For dimensions, measures, and request options, see [Aggregate traces](/reference/client-js/observability#aggregate-traces). Run `mastra api trace aggregate --help` for more examples.
+
+The response stays nested under `data` so `truncated` is preserved. `truncated` is `true` when more groups matched than `limit`:
+
+```json
+{
+  "data": {
+    "rows": [
+      {
+        "dimensions": { "entityName": "weather-agent" },
+        "measures": { "count": 42, "errorRate": 0.05 }
+      }
+    ],
+    "truncated": false
+  }
+}
+```
+
+Servers whose observability store doesn't support trace aggregation return `501`. The CLI prints it like other request failures, as an `HTTP_ERROR` with the server response in `error.details.body`.
 
 #### `mastra api trace get`
 
@@ -1989,15 +2049,26 @@ Prints help message and exits.
 
 ## Telemetry
 
-By default, Mastra collects anonymous information about your project like your OS, Mastra version or Node.js version. You can read the [source code](https://github.com/mastra-ai/mastra/blob/main/packages/cli/src/analytics/index.ts) to check what's collected.
+By default, Mastra collects telemetry about your project, including your OS, Mastra version, and Node.js version. Server events also include the project identifiers described below. You can read the [CLI telemetry source code](https://github.com/mastra-ai/mastra/blob/main/packages/cli/src/analytics/index.ts) to check what's collected by the CLI.
 
-When a server started with `mastra dev` or `mastra start` has observability metrics enabled, Mastra also sends anonymous, aggregated model usage at startup: input and output token counts per provider and model, plus the command (`dev` or `start`) and `NODE_ENV`. No prompts, responses, or other message content is ever sent. You can read the [source code](https://github.com/mastra-ai/mastra/blob/main/packages/core/src/telemetry/usage-telemetry.ts) to check what's collected.
+When a server started with `mastra dev`, `mastra start`, or a `mastra build` output has observability configured, Mastra counts the input and output tokens each model call uses in that server process. Every 15 minutes, and once more when the server shuts down, it sends a `mastra_model_token_usage_v2` event per provider and model used since the previous report. If no model calls finished since then, nothing is sent. Each event contains the tokens used since the previous report, the report window's start and end times, the reason for the report (`interval` or `shutdown`), the command (`dev`, `start`, or `server` when the build output runs directly), and `NODE_ENV`. No prompts, responses, or other message content is sent. You can read the [model usage telemetry source code](https://github.com/mastra-ai/mastra/blob/main/packages/core/src/telemetry/model-usage-telemetry.ts) to check what's collected.
 
-At server startup, Mastra also sends an anonymous project-surface snapshot: counts of registered agents, agent controllers, workflows, tools, processors, vector stores, scorers, workspaces, MCP servers, gateways, and channels, plus booleans for memory, voice, editor, and observability usage and the coarse storage backend category. It doesn't send names or identifiers. You can read the [source code](https://github.com/mastra-ai/mastra/blob/main/packages/core/src/telemetry/feature-telemetry.ts) to check what's collected.
+For compatibility with older analysis, servers also send the earlier `mastra_model_token_usage` event at startup. It reads token totals from observability storage and sends the usage added since a cursor saved in `~/.mastra/usage-telemetry.json`. You can read the [startup usage telemetry source code](https://github.com/mastra-ai/mastra/blob/main/packages/core/src/telemetry/usage-telemetry.ts) to check what's collected.
+
+At server startup, Mastra sends a project-surface snapshot with component counts, feature flags, and the coarse storage backend category, but no component names or component identifiers. You can read the [feature telemetry source code](https://github.com/mastra-ai/mastra/blob/main/packages/core/src/telemetry/feature-telemetry.ts) to check what's collected.
+
+The server events `mastra_feature_usage`, `mastra_model_token_usage`, and `mastra_model_token_usage_v2` include:
+
+- `project_id`: The first 16 hexadecimal characters of the SHA-256 hash of `MASTRA_PROJECT_ROOT`, or the current working directory when unset. This identifier also keys the local model-usage cursor.
+- `project_id2`: An optional identifier for correlation across machines and deployments. If the trimmed `MASTRA_PROJECT_ID` value has UUID format, the value is sent **unhashed**, prefixed with `mp_`. Search for `mp_<platform-project-id>` to find that project's telemetry. Names, slugs, and other non-UUID values aren't sent as Platform identifiers.
+
+When no UUID-shaped Platform ID is available, `project_id2` uses the first 16 hexadecimal characters of the SHA-256 hash of the normalized Git `origin` remote. Normalization keeps the lowercase host and repository path, excluding the scheme, credentials, port, query, fragment, trailing slashes, and `.git` suffix. Equivalent SSH and HTTPS remotes produce the same identifier. Remotes with the same host and path share an identifier even if different ports or SSH users refer to different repositories. Local filesystem remotes aren't used. Git discovery runs asynchronously and is cached for the process, including when unavailable. If neither source is available, `project_id2` is omitted.
+
+These server events aren't anonymous: a Platform ID links them to that project, and a known repository URL can be normalized and hashed to match Git-derived events. Hashing the Git identity avoids sending the raw repository URL or credentials, but doesn't prevent correlation with public or otherwise known repositories.
 
 The Studio UI also collects anonymous browser-side usage analytics, such as page views and UI interactions. You can read the [source code](https://github.com/mastra-ai/mastra/blob/main/packages/playground/src/lib/analytics.tsx) to check what's collected. Setting `MASTRA_TELEMETRY_DISABLED` disables this too: the value is injected into the served page, so it applies to `mastra dev` and self-hosted builds alike.
 
-You can opt out of all CLI and usage analytics by setting an environment variable:
+You can opt out of CLI, server, and Studio usage analytics by setting this environment variable before starting Mastra. When disabled, server telemetry doesn't look up the Git remote or send either project identifier:
 
 ```bash
 MASTRA_TELEMETRY_DISABLED=1

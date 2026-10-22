@@ -16,6 +16,24 @@ export const v2Agent: GetAgentResponse = {
   defaultStreamOptionsLegacy: {},
 };
 
+export const dynamicFallbackAgent: GetAgentResponse = {
+  ...v2Agent,
+  modelList: [
+    {
+      id: 'primary',
+      model: { provider: 'openai', modelId: 'gpt-5.4-mini', modelVersion: 'v2' },
+      enabled: true,
+      maxRetries: 0,
+    },
+    {
+      id: 'fallback',
+      model: { provider: 'openai', modelId: 'gpt-5.5', modelVersion: 'v2' },
+      enabled: true,
+      maxRetries: 2,
+    },
+  ],
+};
+
 export const agentsResponse: Record<string, GetAgentResponse> = { 'agent-1': v2Agent };
 
 export const memoryDisabled: GetMemoryStatusResponse = {

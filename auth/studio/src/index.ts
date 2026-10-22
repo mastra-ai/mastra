@@ -10,7 +10,7 @@ import type {
   SSOCallbackResult,
   SSOLoginConfig,
 } from '@internal/auth';
-import { getRequestHeader } from '@internal/auth';
+import { getRequestHeader, getWebRequest } from '@internal/auth';
 import type { EEUser, IRBACProvider, RoleMapping } from '@internal/auth/ee';
 import { resolvePermissionsFromMapping, matchesPermission } from '@internal/auth/ee';
 import { MastraAuthProvider } from '@internal/auth/provider';
@@ -41,15 +41,70 @@ export interface MastraAuthStudioOptions extends MastraAuthProviderOptions<Studi
    */
   organizationId?: string;
   /**
-   * Cookie domain for session cookies (e.g., '.example.com').
-   * When set, cookies will include Secure and Domain attributes.
-   * Defaults to auto-detecting from sharedApiUrl (uses '.mastra.ai' when sharedApiUrl contains '.mastra.ai').
-   * Can also be set via MASTRA_COOKIE_DOMAIN environment variable.
+   * Explicit cookie domain for the session cookie (e.g. '.example.com').
+   *
+   * Unset by default, and you almost certainly want it unset: the session
+   * cookie is then **host-only** — `__Host-wos-session` (`Secure`, `Path=/`, no
+   * `Domain`) on secure deployments — so the browser never presents it to any
+   * other host. A `Domain` shares the account-scoped session with every host
+   * under that domain; only set it when every such host is trusted. A domain
+   * cookie cannot use the `__Host-` prefix, so it is issued as `wos-session`.
+   *
+   * The `MASTRA_COOKIE_DOMAIN` environment variable is **not** used as a
+   * `Domain`: older releases did, and the platform injected a shared parent
+   * domain through it. It now only marks the deployment as secure (unless it is
+   * a `localhost` host) and names a domain whose legacy cookie is expired.
    */
   cookieDomain?: string;
+  /**
+   * Extra domains whose legacy `wos-session` cookie is expired whenever this
+   * provider writes or clears the session cookie (sign-in, refresh, sign-out).
+   * Merged with the comma-separated `MASTRA_LEGACY_COOKIE_DOMAINS` env var.
+   */
+  legacyCookieDomains?: string[];
+  /**
+   * Force the secure (`__Host-`) cookie on or off. Defaults to on when the
+   * deployment looks like a production one (`MASTRA_COOKIE_DOMAIN` set to a
+   * non-localhost host, or an explicit `sharedApiUrl` on `mastra.ai`) and off
+   * otherwise, so plain-http `localhost` dev keeps an unprefixed, host-only
+   * `wos-session` cookie that browsers accept without HTTPS.
+   */
+  secureCookies?: boolean;
+  /**
+   * Lifetime of the session cookie (and Session.expiresAt) in seconds.
+   * Should match the identity provider's maximum session length.
+   * Can also be set via MASTRA_SESSION_MAX_AGE environment variable.
+   * Defaults to 14 days.
+   */
+  sessionMaxAgeSeconds?: number;
 }
 
+const DEFAULT_SESSION_MAX_AGE_SECONDS = 14 * 24 * 60 * 60;
+
+/**
+ * Name of the sealed session cookie on the shared API. Used for server-to-server
+ * calls to the shared API, and as the unprefixed (legacy / insecure-dev /
+ * explicit-domain) browser cookie name.
+ */
 const COOKIE_NAME = 'wos-session';
+
+/** Host-only browser session cookie used on secure deployments. */
+export const HOST_SESSION_COOKIE_NAME = '__Host-wos-session';
+/** Unprefixed session cookie name earlier releases issued (often with a shared parent `Domain`). */
+export const LEGACY_SESSION_COOKIE_NAME = COOKIE_NAME;
+
+/** A `Domain` attribute value we are willing to emit in a clearing cookie. */
+function normalizeCookieDomain(value: string | undefined | null): string | undefined {
+  const domain = value?.trim().toLowerCase();
+  if (!domain) return undefined;
+  if (!/^\.?[a-z0-9-]+(\.[a-z0-9-]+)*$/.test(domain)) return undefined;
+  return domain;
+}
+
+function isLocalhostDomain(domain: string): boolean {
+  const bare = domain.replace(/^\./, '');
+  return bare === 'localhost' || bare.endsWith('.localhost') || /^[\d.]+$/.test(bare);
+}
 
 const PROJECT_CONFIG_FILE = '.mastra-project.json';
 
@@ -113,6 +168,11 @@ export class MastraAuthStudio
   private organizationId: string | undefined;
   private useProductionCookies: boolean;
   private cookieDomain: string | undefined;
+  /** Browser cookie name this provider issues. */
+  private sessionCookieName: string;
+  /** `Set-Cookie` values expiring legacy copies of the session cookie. */
+  private legacyClearCookies: string[];
+  private sessionMaxAgeSeconds: number;
   /**
    * `userId → sealed session cookie` cache. The `IOrganizationsProvider`
    * interface only hands us a `userId`, but the shared API's org endpoints are
@@ -142,6 +202,20 @@ export class MastraAuthStudio
    */
   private organizationBootstrapInFlight = new Map<string, Promise<string | undefined>>();
 
+  /**
+   * Per-request response headers to forward to the browser — specifically a
+   * rotated `wos-session` `Set-Cookie` returned by the shared API when the
+   * platform `sessionAuth` middleware transparently refreshes an expired
+   * access token. Without this, the browser's sealed cookie would never
+   * rotate: platform would succeed server-to-server by refreshing on every
+   * request, but the next refresh would hit `invalid_grant` once WorkOS
+   * invalidated the previous refresh token.
+   *
+   * Keyed by the underlying `Request` (via `getWebRequest`) so we don't retain
+   * requests after the response is written.
+   */
+  private pendingResponseHeaders = new WeakMap<Request, Record<string, string>>();
+
   constructor(options?: MastraAuthStudioOptions) {
     super({ name: 'mastra-studio', ...options });
     const explicitSharedApiUrl = options?.sharedApiUrl || process.env.MASTRA_SHARED_API_URL;
@@ -157,16 +231,20 @@ export class MastraAuthStudio
       this.sharedApiUrl = this.sharedApiUrl.slice(0, -1);
     }
 
-    // Cookie domain can be explicitly configured, read from env, or auto-detected from sharedApiUrl
-    this.cookieDomain = options?.cookieDomain || process.env.MASTRA_COOKIE_DOMAIN;
+    // Only an explicit option scopes the cookie to a Domain. MASTRA_COOKIE_DOMAIN
+    // used to, and the platform injected a shared parent domain through it,
+    // which sent every user's session to every tenant deployment on that domain.
+    this.cookieDomain = normalizeCookieDomain(options?.cookieDomain);
+    const envCookieDomain = normalizeCookieDomain(process.env.MASTRA_COOKIE_DOMAIN);
 
-    // Use production cookie settings (Secure + Domain) when:
-    // 1. An explicit cookieDomain is configured, OR
-    // 2. The shared API is *explicitly* configured on .mastra.ai (auto-detect
-    //    default domain). The built-in platform.mastra.ai fallback doesn't
-    //    count — a localhost studio using the default would otherwise mint
-    //    Domain=.mastra.ai cookies the browser rejects.
-    // Use hostname-based detection to avoid false positives (e.g., api.mastra.ai.evil.com)
+    const envMaxAge = Number(process.env.MASTRA_SESSION_MAX_AGE);
+    const maxAge = options?.sessionMaxAgeSeconds ?? (envMaxAge > 0 ? envMaxAge : undefined);
+    this.sessionMaxAgeSeconds =
+      maxAge && Number.isFinite(maxAge) && maxAge > 0 ? Math.floor(maxAge) : DEFAULT_SESSION_MAX_AGE_SECONDS;
+
+    // Hostname-based detection avoids false positives (e.g. api.mastra.ai.evil.com).
+    // The built-in platform.mastra.ai fallback doesn't count — a localhost
+    // studio using the default must keep working over plain http.
     let autoDetectMastraAi = false;
     if (explicitSharedApiUrl) {
       try {
@@ -176,11 +254,40 @@ export class MastraAuthStudio
         autoDetectMastraAi = false;
       }
     }
-    this.useProductionCookies = !!this.cookieDomain || autoDetectMastraAi;
+    this.useProductionCookies =
+      options?.secureCookies ??
+      (!!(this.cookieDomain && !isLocalhostDomain(this.cookieDomain)) ||
+        !!(envCookieDomain && !isLocalhostDomain(envCookieDomain)) ||
+        autoDetectMastraAi);
 
-    // If no explicit domain but we're on .mastra.ai, use the default domain
-    if (!this.cookieDomain && autoDetectMastraAi) {
-      this.cookieDomain = '.mastra.ai';
+    // `__Host-` requires Secure, Path=/ and no Domain; browsers reject it otherwise.
+    this.sessionCookieName =
+      this.useProductionCookies && !this.cookieDomain ? HOST_SESSION_COOKIE_NAME : LEGACY_SESSION_COOKIE_NAME;
+
+    // Legacy copies to expire: every domain an earlier release could have
+    // stamped on `wos-session` here (MASTRA_COOKIE_DOMAIN, the old `.mastra.ai`
+    // auto-detect default, and the platform-supplied list), plus the host-only
+    // `wos-session` when the live cookie is now `__Host-wos-session`. A browser
+    // only deletes a cookie whose (name, Domain, Path) all match.
+    const legacyDomains = new Set<string>();
+    const addLegacyDomain = (value: string | undefined | null) => {
+      const domain = normalizeCookieDomain(value);
+      if (domain && domain !== this.cookieDomain) legacyDomains.add(domain);
+    };
+    addLegacyDomain(envCookieDomain);
+    if (autoDetectMastraAi) addLegacyDomain('.mastra.ai');
+    for (const value of (process.env.MASTRA_LEGACY_COOKIE_DOMAINS ?? '').split(',')) addLegacyDomain(value);
+    for (const value of options?.legacyCookieDomains ?? []) addLegacyDomain(value);
+    const clearAttributes = ['HttpOnly', 'SameSite=Lax', 'Path=/', 'Max-Age=0'];
+    if (this.useProductionCookies) clearAttributes.push('Secure');
+    this.legacyClearCookies = [];
+    if (this.sessionCookieName !== LEGACY_SESSION_COOKIE_NAME || this.cookieDomain) {
+      this.legacyClearCookies.push([`${LEGACY_SESSION_COOKIE_NAME}=`, ...clearAttributes].join('; '));
+    }
+    for (const domain of legacyDomains) {
+      this.legacyClearCookies.push(
+        [`${LEGACY_SESSION_COOKIE_NAME}=`, ...clearAttributes, `Domain=${domain}`].join('; '),
+      );
     }
 
     if (options) {
@@ -201,10 +308,11 @@ export class MastraAuthStudio
 
     // Try sealed session cookie first (browser flow)
     const cookieHeader = getRequestHeader(request, 'Cookie');
-    const sessionCookie = parseCookie(cookieHeader, COOKIE_NAME);
+    const sessionCookie = this.readSessionCookie(cookieHeader);
 
     if (sessionCookie) {
-      user = await this.verifySessionCookie(sessionCookie);
+      user = await this.verifySessionCookie(sessionCookie.value, request);
+      if (user && sessionCookie.legacy) this.queueSessionCookieMigration(request, sessionCookie.value);
     }
 
     // Fall back to Bearer token (CLI / API token flow)
@@ -304,8 +412,7 @@ export class MastraAuthStudio
   }
 
   async getLogoutUrl(_redirectUri: string, request?: Request): Promise<string | null> {
-    const cookieHeader = request?.headers.get('Cookie');
-    const sessionCookie = parseCookie(cookieHeader, COOKIE_NAME);
+    const sessionCookie = this.readSessionCookie(request?.headers.get('Cookie'))?.value;
 
     if (!sessionCookie) return null;
 
@@ -338,7 +445,7 @@ export class MastraAuthStudio
     return {
       id: (metadata?.accessToken as string) || crypto.randomUUID(),
       userId,
-      expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000), // 24 hours
+      expiresAt: new Date(now.getTime() + this.sessionMaxAgeSeconds * 1000),
       createdAt: now,
       metadata,
     };
@@ -352,7 +459,7 @@ export class MastraAuthStudio
     return {
       id: sessionId,
       userId: user.id,
-      expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+      expiresAt: new Date(now.getTime() + this.sessionMaxAgeSeconds * 1000),
       createdAt: now,
     };
   }
@@ -407,7 +514,7 @@ export class MastraAuthStudio
       return {
         id: newSessionId,
         userId: user.id,
-        expiresAt: new Date(now.getTime() + 24 * 60 * 60 * 1000),
+        expiresAt: new Date(now.getTime() + this.sessionMaxAgeSeconds * 1000),
         createdAt: now,
       };
     } catch (error) {
@@ -421,26 +528,67 @@ export class MastraAuthStudio
   }
 
   getSessionIdFromRequest(request: Request): string | null {
-    const cookieHeader = request.headers.get('Cookie');
-    return parseCookie(cookieHeader, COOKIE_NAME);
+    return this.readSessionCookie(request.headers.get('Cookie'))?.value ?? null;
+  }
+
+  /**
+   * The browser session cookie on a request: this provider's cookie
+   * (`__Host-wos-session` on secure deployments) first, then — only to migrate
+   * sessions issued by earlier releases — the unprefixed `wos-session`.
+   */
+  private readSessionCookie(cookieHeader: string | null | undefined): { value: string; legacy: boolean } | null {
+    const current = parseCookie(cookieHeader, this.sessionCookieName);
+    if (current) return { value: current, legacy: false };
+    if (this.sessionCookieName === LEGACY_SESSION_COOKIE_NAME) return null;
+    const legacy = parseCookie(cookieHeader, LEGACY_SESSION_COOKIE_NAME);
+    return legacy ? { value: legacy, legacy: true } : null;
+  }
+
+  /**
+   * A request authenticated with a legacy `wos-session` cookie: re-issue the
+   * session under this provider's cookie so the browser stops depending on the
+   * legacy (possibly shared-domain) copy. The legacy copy itself is expired on
+   * the next sign-in, refresh or sign-out (see `getLegacySessionClearCookies`).
+   */
+  private queueSessionCookieMigration(request: MastraAuthRequest, sessionId: string): void {
+    const rawRequest = getWebRequest(request);
+    if (!rawRequest || this.pendingResponseHeaders.has(rawRequest)) return;
+    this.pendingResponseHeaders.set(
+      rawRequest,
+      this.getSessionHeaders({ id: sessionId, userId: '', expiresAt: new Date(), createdAt: new Date() }),
+    );
   }
 
   getSessionHeaders(session: Session): Record<string, string> {
-    const parts = [`${COOKIE_NAME}=${session.id}`, 'HttpOnly', 'SameSite=Lax', 'Path=/', 'Max-Age=86400'];
-    if (this.useProductionCookies && this.cookieDomain) {
-      parts.push('Secure');
-      parts.push(`Domain=${this.cookieDomain}`);
-    }
-    return { 'Set-Cookie': parts.join('; ') };
+    return {
+      'Set-Cookie': this.buildSessionCookie(`${this.sessionCookieName}=${session.id}`, [
+        `Max-Age=${this.sessionMaxAgeSeconds}`,
+      ]),
+    };
   }
 
   getClearSessionHeaders(): Record<string, string> {
-    const parts = [`${COOKIE_NAME}=`, 'HttpOnly', 'SameSite=Lax', 'Path=/', 'Max-Age=0'];
-    if (this.useProductionCookies && this.cookieDomain) {
-      parts.push('Secure');
+    return { 'Set-Cookie': this.buildSessionCookie(`${this.sessionCookieName}=`, ['Max-Age=0']) };
+  }
+
+  /**
+   * `Set-Cookie` values expiring legacy copies of the session cookie: the
+   * unprefixed `wos-session` on this host and on every domain an earlier
+   * release (or the platform) scoped it to. Servers send these with every
+   * response that sets or clears the session cookie.
+   */
+  getLegacySessionClearCookies(): string[] {
+    return [...this.legacyClearCookies];
+  }
+
+  private buildSessionCookie(nameValue: string, extra: string[]): string {
+    const parts = [nameValue, 'HttpOnly', 'SameSite=Lax', 'Path=/', ...extra];
+    if (this.useProductionCookies) parts.push('Secure');
+    // Never on `__Host-` cookies: browsers reject a `__Host-` cookie with a Domain.
+    if (this.cookieDomain && this.sessionCookieName !== HOST_SESSION_COOKIE_NAME) {
       parts.push(`Domain=${this.cookieDomain}`);
     }
-    return { 'Set-Cookie': parts.join('; ') };
+    return parts.join('; ');
   }
 
   // ---------------------------------------------------------------------------
@@ -448,11 +596,12 @@ export class MastraAuthStudio
   // ---------------------------------------------------------------------------
 
   async getCurrentUser(request: Request): Promise<StudioUser | null> {
-    const cookieHeader = request.headers.get('Cookie');
-    const sessionCookie = parseCookie(cookieHeader, COOKIE_NAME);
+    const sessionCookie = this.readSessionCookie(request.headers.get('Cookie'));
 
     if (sessionCookie) {
-      return this.verifySessionCookie(sessionCookie);
+      const user = await this.verifySessionCookie(sessionCookie.value, request);
+      if (user && sessionCookie.legacy) this.queueSessionCookieMigration(request, sessionCookie.value);
+      return user;
     }
 
     // Try bearer token
@@ -645,6 +794,83 @@ export class MastraAuthStudio
   }
 
   /**
+   * Read every `Set-Cookie` header from a response, falling back to the
+   * single-value accessor on runtimes without `Headers.getSetCookie()`.
+   */
+  private readSetCookieHeaders(res: Response): string[] {
+    const headers = res.headers as Headers & { getSetCookie?: () => string[] };
+    if (typeof headers.getSetCookie === 'function') {
+      return headers.getSetCookie();
+    }
+    const single = res.headers.get('Set-Cookie');
+    return single ? [single] : [];
+  }
+
+  /**
+   * If the shared API rotated the sealed `wos-session` cookie on this
+   * response, stash the `Set-Cookie` header against the inbound request so
+   * the server middleware can forward it to the browser, and invalidate the
+   * short-TTL verification cache entry for the old cookie value. Returns the
+   * rotated sealed value, or null when the cookie was not rotated.
+   */
+  private captureRotatedCookie(
+    res: Response,
+    oldSessionCookie: string,
+    oldCacheKey: string,
+    request: MastraAuthRequest | undefined,
+  ): string | null {
+    const setCookies = this.readSetCookieHeaders(res);
+    if (setCookies.length === 0) return null;
+
+    const rotatedCookieHeader = setCookies.find(h => parseCookieFromHeader(h, COOKIE_NAME) !== null);
+    if (!rotatedCookieHeader) return null;
+
+    const rotatedValue = parseCookieFromHeader(rotatedCookieHeader, COOKIE_NAME);
+    if (!rotatedValue || rotatedValue === oldSessionCookie) return null;
+
+    // Re-issue under this deployment's cookie attributes: the shared API
+    // scopes its cookie to its own domain, which browsers on other parent
+    // domains (e.g. *.mastra.cloud) would reject.
+    const reissued = this.getSessionHeaders({
+      id: rotatedValue,
+      userId: '',
+      expiresAt: new Date(),
+      createdAt: new Date(),
+    });
+
+    // The old sealed cookie's refresh token is now invalidated at WorkOS,
+    // so caching the StudioUser against it would hand back a user that the
+    // next refresh will reject.
+    this.verifiedCredentials.delete(oldCacheKey);
+
+    if (request) {
+      const rawRequest = getWebRequest(request);
+      if (rawRequest) {
+        this.pendingResponseHeaders.set(rawRequest, reissued);
+      } else {
+        // The browser keeps the old cookie, whose refresh token this rotation
+        // used up, so the user will be signed out on a later request.
+        this.logger.warn('captureRotatedCookie: renewed session cookie cannot be forwarded (no web Request)');
+      }
+    }
+    return rotatedValue;
+  }
+
+  /**
+   * Server middleware hook: emit any response headers the provider
+   * accumulated for this request (currently a rotated `Set-Cookie`) and
+   * clear them from the provider's per-request state.
+   */
+  consumePendingResponseHeaders(request: MastraAuthRequest): Record<string, string> | undefined {
+    const rawRequest = getWebRequest(request);
+    if (!rawRequest) return undefined;
+    const headers = this.pendingResponseHeaders.get(rawRequest);
+    if (!headers) return undefined;
+    this.pendingResponseHeaders.delete(rawRequest);
+    return headers;
+  }
+
+  /**
    * Fetch the shared API's `/auth/me` and return the raw response body, or
    * `null` on any non-OK / network error. Split out so `ensureOrganization`
    * and `isOrganizationAdmin` can reuse it without duplicating the shape.
@@ -676,7 +902,7 @@ export class MastraAuthStudio
    * Forward a sealed session cookie to the shared API's /auth/me endpoint
    * to validate it and get user info.
    */
-  private async verifySessionCookie(sessionCookie: string): Promise<StudioUser | null> {
+  private async verifySessionCookie(sessionCookie: string, request?: MastraAuthRequest): Promise<StudioUser | null> {
     const cacheKey = await this.verificationKey('cookie', sessionCookie);
     const cached = this.getCachedVerification(cacheKey);
     if (cached) {
@@ -692,6 +918,13 @@ export class MastraAuthStudio
         },
         signal: AbortSignal.timeout(VERIFY_FETCH_TIMEOUT_MS),
       });
+
+      // The shared API's `sessionAuth` middleware may have transparently
+      // refreshed the sealed cookie — forward the rotated `Set-Cookie` to
+      // the browser so its session actually rotates. Without this the
+      // sealed cookie would stay frozen at its original value, and the
+      // next refresh would hit `invalid_grant`.
+      const rotated = this.captureRotatedCookie(res, sessionCookie, cacheKey, request);
 
       if (!res.ok) {
         this.logger.warn('verifySessionCookie: shared API returned non-OK status', {
@@ -718,7 +951,7 @@ export class MastraAuthStudio
 
       // Remember the sealed cookie for this user so IOrganizationsProvider
       // methods (invoked with only a userId) can act on the user's behalf.
-      this.rememberUserSession(data.user.id, sessionCookie);
+      this.rememberUserSession(data.user.id, rotated ?? sessionCookie);
 
       const sessionUser: StudioUser = {
         id: data.user.id,
@@ -733,7 +966,9 @@ export class MastraAuthStudio
       const user = await this.asPinnedOrganizationMember(sessionUser, sessionCookie);
       // Don't pin brand-new users in the no-org state: org bootstrap runs on
       // the next request, which must re-read /auth/me to see the new org.
-      if (user.organizationId) this.cacheVerification(cacheKey, user);
+      // Also skip caching when the sealed cookie just rotated — the key here
+      // is the OLD cookie, whose refresh token WorkOS has now invalidated.
+      if (user.organizationId && !rotated) this.cacheVerification(cacheKey, user);
       return user;
     } catch (error) {
       this.logger.error('verifySessionCookie: fetch to shared API failed', {
@@ -809,8 +1044,14 @@ export class MastraAuthStudio
 
 function parseCookie(cookieHeader: string | null | undefined, name: string): string | null {
   if (!cookieHeader) return null;
-  const match = cookieHeader.match(new RegExp(`${name}=([^;]+)`));
-  return match?.[1] ?? null;
+  // Exact name match: `wos-session` must not match inside `__Host-wos-session`.
+  for (const pair of cookieHeader.split(';')) {
+    const eq = pair.indexOf('=');
+    if (eq === -1 || pair.slice(0, eq).trim() !== name) continue;
+    const value = pair.slice(eq + 1).trim();
+    if (value) return value;
+  }
+  return null;
 }
 
 /**
@@ -824,7 +1065,7 @@ function isAdminRole(role: string | undefined): boolean {
 
 /**
  * Parse a cookie value from a Set-Cookie header.
- * Set-Cookie format: "name=value; HttpOnly; SameSite=Lax; Path=/; Max-Age=86400"
+ * Set-Cookie format: "name=value; HttpOnly; SameSite=Lax; Path=/; Max-Age=1209600"
  */
 function parseCookieFromHeader(setCookieHeader: string, name: string): string | null {
   // Set-Cookie header starts with "name=value" followed by optional attributes

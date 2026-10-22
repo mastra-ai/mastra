@@ -494,7 +494,7 @@ export class OtelExporter extends BaseExporter {
     const signals: string[] = [];
 
     if (this.processor) {
-      flushPromises.push(this.processor.forceFlush());
+      flushPromises.push(this.flushTraces());
       signals.push('traces');
     }
     if (this.loggerProvider) {
@@ -508,6 +508,21 @@ export class OtelExporter extends BaseExporter {
       this.debugLog('Flushed all pending data');
     } else {
       this.debugLog('Flush called but no active exporters');
+    }
+  }
+
+  /**
+   * The BatchSpanProcessor removes a batch from its queue before the export
+   * completes and its forceFlush() only exports what is still queued, so a
+   * timer- or size-triggered batch can still be in flight when it resolves.
+   * OTLP exporters wait for in-flight sends in forceFlush(); call it even when
+   * the processor flush rejects, so a failed batch doesn't skip the wait.
+   */
+  private async flushTraces(): Promise<void> {
+    try {
+      await this.processor!.forceFlush();
+    } finally {
+      await this.exporter?.forceFlush?.();
     }
   }
 

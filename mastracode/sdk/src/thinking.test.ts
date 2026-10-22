@@ -4,8 +4,12 @@ import {
   getAvailableThinkingLevelsForModel,
   parseThinkCommand,
   resolveDefaultThinkingLevel,
+  runThinkingLevel,
   supportsMaxReasoningEffort,
+  THINKING_LEVEL_VALUES,
 } from './thinking.js';
+
+const effort = (...values: string[]) => [{ type: 'effort' as const, values }];
 
 describe('parseThinkCommand', () => {
   it.each(['', 'status'])('parses %j as a status request', input => {
@@ -38,8 +42,116 @@ describe('thinking model capabilities', () => {
     expect(supportsMaxReasoningEffort('openai/gpt-5.5')).toBe(false);
   });
 
-  it('keeps max for non-OpenAI models', () => {
-    expect(getAvailableThinkingLevelsForModel('anthropic/claude-opus-4-6')).toContain('max');
+  it.each([
+    [
+      'budget-era Claude drops max, which sends the xhigh budget',
+      'anthropic/claude-haiku-4-5',
+      undefined,
+      ['off', 'low', 'medium', 'high', 'xhigh'],
+    ],
+    [
+      'gateway-prefixed ids follow the routed provider',
+      'mastra/anthropic/claude-haiku-4-5',
+      undefined,
+      ['off', 'low', 'medium', 'high', 'xhigh'],
+    ],
+    [
+      'adaptive Claude offers the efforts the model publishes',
+      'anthropic/claude-sonnet-4-6',
+      effort('low', 'medium', 'high', 'max'),
+      ['off', 'low', 'medium', 'high', 'max'],
+    ],
+    [
+      'adaptive Claude without data drops xhigh before Opus 4.7',
+      'anthropic/claude-opus-4-6',
+      undefined,
+      ['off', 'low', 'medium', 'high', 'max'],
+    ],
+    [
+      'OpenAI offers the efforts the model publishes',
+      'openai/gpt-5',
+      effort('minimal', 'low', 'medium', 'high'),
+      ['off', 'low', 'medium', 'high'],
+    ],
+    [
+      'OpenAI without data drops max before GPT-5.6',
+      'openai/gpt-5.5',
+      undefined,
+      ['off', 'low', 'medium', 'high', 'xhigh'],
+    ],
+    [
+      'OpenAI without data keeps max from GPT-5.6',
+      'openai/gpt-5.6-sol',
+      undefined,
+      ['off', 'low', 'medium', 'high', 'xhigh', 'max'],
+    ],
+    [
+      'Gemini 3 Pro has no medium whatever the data says',
+      'google/gemini-3-pro-preview',
+      effort('low', 'medium', 'high'),
+      ['off', 'low', 'high'],
+    ],
+    ['Claude without extended thinking offers only off', 'anthropic/claude-3-5-haiku-20241022', undefined, ['off']],
+    ['Gemini without a thinking config offers only off', 'google/gemini-2.0-flash', undefined, ['off']],
+    ['providers whose request cannot carry the level offer only off', 'zai/glm-5', effort('low', 'high'), ['off']],
+    ['GitHub Copilot offers only off without catalog data', 'github-copilot/claude-opus-4.7', undefined, ['off']],
+    ['Kimi for Coding offers only off without catalog data', 'kimi-for-coding/kimi-k2.6', undefined, ['off']],
+    ['models missing from the catalog keep every level', 'my-local/local-model', undefined, THINKING_LEVEL_VALUES],
+    [
+      'xAI offers only the efforts its package accepts',
+      'xai/grok-4.6',
+      effort('low', 'medium', 'high', 'xhigh', 'max'),
+      ['off', 'low', 'medium', 'high', 'xhigh'],
+    ],
+    [
+      'Alibaba offers its thinking switch, not efforts its request cannot send',
+      'alibaba/qwen-plus',
+      [{ type: 'toggle' }, ...effort('low', 'high')],
+      ['off', 'high'],
+    ],
+    [
+      'a model whose thinking controls the request cannot send offers only off',
+      'mistral/magistral-x',
+      [{ type: 'toggle' }, ...effort('low')],
+      ['off'],
+    ],
+    ['OpenAI models listed without reasoning controls offer only off', 'openai/gpt-4o', [], ['off']],
+    ['other providers listed without reasoning controls offer only off', 'xai/grok-4.20-0309-reasoning', [], ['off']],
+    [
+      'models that only toggle thinking offer off and one on level',
+      'togetherai/Qwen/Qwen3.5-9B',
+      [{ type: 'toggle' }],
+      ['off', 'high'],
+    ],
+    [
+      'Claude keeps the levels its thinking budget sends when listed without controls',
+      'anthropic/claude-haiku-4-5',
+      [],
+      ['off', 'low', 'medium', 'high', 'xhigh'],
+    ],
+    [
+      'other providers without data keep every level',
+      'xai/grok-3-mini',
+      undefined,
+      ['off', 'low', 'medium', 'high', 'xhigh', 'max'],
+    ],
+  ])('%s', (_, modelId, reasoningOptions, levels) => {
+    expect(getAvailableThinkingLevelsForModel(modelId, reasoningOptions)).toEqual(levels);
+  });
+
+  it.each([
+    ['max on budget-era Claude', 'anthropic/claude-haiku-4-5', 'max', undefined, 'xhigh'],
+    [
+      'xhigh on a model topping out at high',
+      'anthropic/claude-sonnet-4-6',
+      'xhigh',
+      effort('low', 'medium', 'high', 'max'),
+      'high',
+    ],
+    ['low on a model with only high', 'openai/gpt-5-pro', 'low', effort('high'), 'high'],
+    ['off anywhere', 'openai/gpt-5-pro', 'off', effort('high'), 'off'],
+  ] as const)('runs %s as the closest level the request sends', (_, modelId, level, reasoningOptions, runLevel) => {
+    expect(runThinkingLevel(modelId, level, reasoningOptions)).toBe(runLevel);
   });
 });
 

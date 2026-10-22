@@ -11,15 +11,24 @@ export async function getDynamicInstructions({
   coAuthor,
   hasSubconscious,
   hasSubagents,
+  disabledBuiltinTools,
 }: {
   requestContext: { get(key: string): unknown };
   hostInstructions?: string;
   coAuthor?: { name?: string; email?: string };
   hasSubconscious?: boolean | ((state: MastraCodeState | undefined) => boolean);
   hasSubagents?: boolean;
+  disabledBuiltinTools?: readonly string[];
 }): Promise<string> {
   return joinPromptSections(
-    await getDynamicInstructionSections({ requestContext, hostInstructions, coAuthor, hasSubconscious, hasSubagents }),
+    await getDynamicInstructionSections({
+      requestContext,
+      hostInstructions,
+      coAuthor,
+      hasSubconscious,
+      hasSubagents,
+      disabledBuiltinTools,
+    }),
   );
 }
 
@@ -34,6 +43,7 @@ export async function getDynamicInstructionSections({
   coAuthor,
   hasSubconscious,
   hasSubagents,
+  disabledBuiltinTools,
 }: {
   requestContext: { get(key: string): unknown };
   hostInstructions?: string;
@@ -45,6 +55,8 @@ export async function getDynamicInstructionSections({
    */
   hasSubconscious?: boolean | ((state: MastraCodeState | undefined) => boolean);
   hasSubagents?: boolean;
+  /** Controller built-in tools removed via `disableBuiltinTools`; their prompt guidance is omitted. */
+  disabledBuiltinTools?: readonly string[];
 }): Promise<PromptSection[]> {
   const agentControllerContext = requestContext.get('controller') as
     | AgentControllerRequestContext<MastraCodeComposedState>
@@ -75,6 +87,7 @@ export async function getDynamicInstructionSections({
     hostInstructions,
     hasSubagents,
     hasSubconscious: typeof hasSubconscious === 'function' ? hasSubconscious(state) : hasSubconscious,
+    disabledBuiltinTools,
   };
 
   const promptSections = buildFullPromptSections(promptCtx);

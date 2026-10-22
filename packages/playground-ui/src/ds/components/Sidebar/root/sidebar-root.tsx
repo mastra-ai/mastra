@@ -26,7 +26,7 @@ export function SidebarRoot({
           <div
             data-slot="sidebar-surface"
             className={cn(
-              'my-2 -mr-2 -ml-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-r-xl py-1.5',
+              '-mr-2 -ml-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-r-xl py-1.5',
               sidebar?.state === 'collapsed' ? 'pr-2 pl-4' : 'pr-3.5 pl-5.5',
               frameSurfaceStyle,
             )}

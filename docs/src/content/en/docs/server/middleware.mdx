@@ -107,6 +107,10 @@ Generated servers pass `server.apiPrefix` to the Hono adapter's [`prefix` constr
 
 This approach can't block routes declared public with `requiresAuth: false`, because Mastra skips user middleware for those routes. With a non-Hono server adapter, register equivalent middleware through the server framework instead.
 
+During `mastra dev`, inspect the full built-in route list, including MCP routes, in the [OpenAPI specification](http://localhost:4111/api/openapi.json). See the [server overview](/docs/server/overview#rest-api) for API exploration and production settings.
+
+If you use middleware for authentication without `server.auth`, prefer default-deny middleware that authenticates requests before allowing access, rather than enumerating protected paths. Include the full API prefix so REST routes alongside MCP transports are covered.
+
 ### Using `RequestContext`
 
 You can populate `RequestContext` in a runtime server middleware by extracting information from the request. In this example, the `temperature-unit` is set based on the Cloudflare `CF-IPCountry` header to ensure responses match the user's locale.

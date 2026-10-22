@@ -115,7 +115,20 @@ const result = await sandbox.executeCommand('cat', ['/workspace/state.json'])
 
 When `sandboxId` is set, `environmentId` isn't required because the sandbox already exists.
 
+Read the platform's id for the running sandbox from the `sandboxId` property after `start()` and persist it for the next reattach. The property is `undefined` until the sandbox has started in the current process. The option passed to the constructor is a hint for `start()`. Before `start()` runs, `getInfo()` answers from local state and doesn't ask the platform about the hint. Under the default `reattach: 'best-effort'`, if the platform no longer knows the id, `start()` falls through to a fresh provision keyed by the sandbox's logical `id`. That fallback needs `environmentId` (or `MASTRA_ENVIRONMENT_ID`), so pass it whenever a hint might be stale; without it, `start()` throws `environmentId is required`.
+
 `start()` reports `{ outcome: 'connected' }` on reattach and `{ outcome: 'created' }` on a fresh provision (including a checkpoint-recovered boot, which is a new VM even when its filesystem was restored). See [`start()`](/reference/workspace/sandbox#start) for the shared contract.
+
+When a fresh sandbox would silently lose state your app depends on, set `reattach: 'required'`:
+
+```typescript
+const sandbox = new PlatformSandbox({
+  sandboxId: 'sbx_abc123',
+  reattach: 'required',
+})
+```
+
+With `reattach: 'required'`, a reattach target the platform reports as missing (404), gone (410), or destroyed rejects `start()` with a `SandboxError` whose `code` is `SANDBOX_REATTACH_FAILED`, and no sandbox is provisioned. The error's `details` include `provider`, `sandboxId`, `logicalId` (the sandbox's logical `id`), and `reason`. Other errors propagate unchanged. To start fresh, clear your persisted `sandboxId` and construct the sandbox without it. Clones inherit the `reattach` setting.
 
 ### Reusable templates
 
@@ -171,7 +184,39 @@ await sandbox.start()
 
 `getRepositoryAccess` mirrors the resolver a Factory sandbox context carries, so a host can pass its context straight through; when it's absent, `createRepoTemplate()` returns `undefined` and the sandbox boots the provider default. The resolver skips reattachment to an existing `sandboxId`; on a fresh start, it resolves the repository's default-branch head before Platform starts or reuses the corresponding template build. If the repository head can't be resolved or the provider build fails, sandbox creation continues with the provider's default template so runtime setup can perform a cold checkout. For private repositories, the short-lived authorization token is sent as an ephemeral build environment value that stays out of the serialized definition and the persisted template record. It has no effect on content identity.
 
-`createRepoTemplate()` also attaches a commit-independent `family` key (`repo:<cloneUrl>:<workingDirectory>/<repo>`) to the definition. `family` groups successive builds of the "same thing", so every commit of the same repository belongs to the same family. Platform uses it to find a prior ready build in the same family and boot the new commit on that warm filesystem while the exact commit template builds in the background. For E2B, stale lookup is also partitioned by the effective CPU and memory settings so a fallback can't silently change the requested machine size. Callers using the raw `Template()` builder can attach their own family key with `.withFamily(key)` (any non-empty string up to 200 characters). Omit it to opt out of family fallback. The family key never influences the content-addressed template identity: two definitions that differ only in `family` share the same cache slot.
+#### Several repositories in one template
+
+Pass `repos` instead of `getRepositoryAccess` to clone several repositories into one sandbox, each with its own access resolver and `setupCommand` (a string or an array, each entry its own build step):
+
+```typescript
+const template = createRepoTemplate({
+  repos: [
+    {
+      getRepositoryAccess: async () => ({ cloneUrl: 'https://github.com/mastra-ai/mastra' }),
+      setupCommand: 'pnpm install --frozen-lockfile',
+    },
+    {
+      getRepositoryAccess: async () => ({
+        cloneUrl: 'https://github.com/mastra-ai/template-docs-expert',
+      }),
+      setupCommand: 'npm install',
+    },
+  ],
+  workspaceSetupCommand: 'npm install --global @mastra/mcp-docs-server',
+  continueOnSetupFailure: true,
+  workingDirectory: '/home/user/repos',
+})
+```
+
+Every repository is cloned to `<workingDirectory>/<repo>`. Public repositories are built before private ones, keeping the caller's order within each group. Private credentials are ephemeral build envs visible to every build step, so any repository's setup command can read every other repository's token: only list repositories whose setup commands you trust together.
+
+`workspaceSetupCommand` runs at the working directory after every repository is set up. `continueOnSetupFailure` (default `false`) lets a failing setup command record its repository in `.mastra-sandbox/setup-failed` and continue instead of failing the build.
+
+Markers tell a session what the image already ran: `.mastra-sandbox/repos/<repo>` per repository and `.mastra-sandbox/workspace-setup` after the workspace commands, all under the working directory. With `continueOnSetupFailure`, check `.mastra-sandbox/setup-failed` first.
+
+The working directory and the ordered repository list form the family key, so changing either starts a new family that boots cold until its first build is ready, while edits to setup commands or credentials stay in the warm one. If any entry's access can't be resolved the template degrades to resources-only until the next resolve. A repository whose head can't be resolved is cloned unpinned while the others keep their pins.
+
+`createRepoTemplate()` also attaches a commit-independent `family` key to the definition (`repo:<cloneUrl>:<workingDirectory>/<repo>` for one repository, `repos:<hash>` over the working directory and the ordered clone URLs for a list). `family` groups successive builds of the "same thing", so every commit of the same repository belongs to the same family. Platform uses it to find a prior ready build in the same family and boot the new commit on that warm filesystem while the exact commit template builds in the background. For E2B, stale lookup is also partitioned by the effective CPU and memory settings so a fallback can't silently change the requested machine size. Callers using the raw `Template()` builder can attach their own family key with `.withFamily(key)` (any non-empty string up to 200 characters). Omit it to opt out of family fallback. The family key never influences the content-addressed template identity: two definitions that differ only in `family` share the same cache slot.
 
 Platform stores build state under the definition's server-derived content hash within the selected environment and provider.
 
@@ -269,6 +314,25 @@ The `command` argument is a shell string and is concatenated verbatim into the r
 
 :::
 
+### Background processes
+
+`sandbox.processes` runs commands in the background. Output streams while they run, and you can list, attach to and stop them:
+
+```typescript
+const handle = await sandbox.processes.spawn('pnpm dev', {
+  onStdout: data => console.log(data),
+})
+
+// Everything running in the sandbox, plus exited processes not read yet
+const running = await sandbox.processes.list()
+
+await handle.kill()
+```
+
+A process has no time limit unless you pass `timeout` to `spawn()` or the constructor. Call `get(pid)` to attach to a process this manager didn't start, for example after your app restarts. Output written before attaching isn't available.
+
+A long-running process's output stream reconnects periodically, and the process keeps running through it. Output written during a reconnect is lost, and a process that exits while its stream reconnects reports exit code `1` from `wait()` instead of its real exit code.
+
 ## Constructor parameters
 
 <PropertiesTable
@@ -304,6 +368,14 @@ The `command` argument is a shell string and is concatenated verbatim into the r
     description:
       'Existing sandbox ID to reattach to instead of creating a new sandbox. When set, environmentId is not required.',
     isOptional: true,
+  },
+  {
+    name: 'reattach',
+    type: "'best-effort' | 'required'",
+    description:
+      "What start() does when sandboxId is set but the platform reports that sandbox as missing, gone, or destroyed. 'best-effort' provisions a fresh sandbox. 'required' throws a SandboxError with code SANDBOX_REATTACH_FAILED instead of provisioning.",
+    isOptional: true,
+    defaultValue: "'best-effort'",
   },
   {
     name: 'seedCheckpointName',
@@ -404,9 +476,15 @@ The `command` argument is a shell string and is concatenated verbatim into the r
   },
   {
     name: 'processes',
-    type: 'PlatformProcessManager',
+    type: 'SandboxProcessManager',
     description:
-      'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
+      "Background process manager. `spawn()` streams output while the process runs, `kill()` stops it, `list()` shows what is running in the sandbox, and `get(pid)` attaches to a process this manager didn't start. See [Background processes](#background-processes) and the [SandboxProcessManager reference](/reference/workspace/process-manager).",
+  },
+  {
+    name: 'filesystem',
+    type: 'PlatformSandboxFilesystem | undefined',
+    description:
+      "The sandbox's disk through E2B's files API, sent straight to the VM with the same lease `executeCommand()` uses. `undefined` when the sandbox isn't E2B-backed; use `executeCommand()` then. Paths are absolute and not confined to a root. Copies, appends, and no-overwrite writes run as one command in the VM. See [Native filesystem](/reference/workspace/sandbox#native-filesystem).",
   },
   {
     name: 'templatePending',
@@ -425,7 +503,7 @@ The `command` argument is a shell string and is concatenated verbatim into the r
     name: 'start',
     type: '() => Promise<SandboxStartResult>',
     description:
-      'Provision the remote sandbox, or reattach when sandboxId was passed to the constructor. Idempotent once the sandbox is running. A destroyed reattach target falls through to a fresh provision.',
+      "Provision the remote sandbox, or reattach when sandboxId was passed to the constructor. Idempotent once the sandbox is running. A destroyed reattach target falls through to a fresh provision under the default reattach: 'best-effort', and throws SANDBOX_REATTACH_FAILED under reattach: 'required'.",
   },
   {
     name: 'destroy',
@@ -436,7 +514,8 @@ The `command` argument is a shell string and is concatenated verbatim into the r
   {
     name: 'stop',
     type: '() => Promise<void>',
-    description: 'Alias for destroy().',
+    description:
+      "Release this process's lease on the sandbox without touching the remote one. The sandbox keeps running under the environment's idle policy and sandboxId is kept, so a later start() reattaches. Only destroy() releases the sandbox.",
   },
   {
     name: 'executeCommand',

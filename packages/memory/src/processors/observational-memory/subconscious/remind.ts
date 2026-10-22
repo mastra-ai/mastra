@@ -2,7 +2,7 @@ import type { KnowledgeScope, KnowledgeStorage, SearchKnowledgeResult } from '@m
 import { canonicalizeKnowledgeScope } from '@mastra/core/storage';
 
 import { Extractor } from '../extractor';
-import { withOmInternalThreadId } from '../internal-request-context';
+import { withOwnThreadIds } from '../internal-request-context';
 import type { ObservationalMemoryModel } from '../types';
 import { publishSubconsciousActivity } from './activity';
 import { resolveSubconsciousAgentModel } from './model';
@@ -112,8 +112,7 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
           // The knowledgeResourceId override moves only the knowledge scope; the sidekick thread stays owned by the agent resource.
           const resourceId = context.resourceId;
           if (!resourceId) throw new Error('Subconscious remind requires a resourceId.');
-          store = await context.memory.storage.getStore('knowledge');
-          if (!store) throw new Error('Subconscious remind requires a configured knowledge storage domain.');
+          store = await context.memory.getKnowledgeStore();
           const sources = await dropFreshOwnRecords(
             store,
             await findReminderSources(store, scope, context.rawObservations),
@@ -179,7 +178,7 @@ export class SubconsciousRemindExtractor extends Extractor<string> {
                 behavior: 'wake',
                 streamOptions: {
                   memory: { thread: remindThread.id, resource: resourceId },
-                  requestContext: withOmInternalThreadId(context.requestContext, agent.id),
+                  requestContext: withOwnThreadIds(context.requestContext, remindThread.id, resourceId),
                   abortSignal: context.abortSignal,
                   maxSteps: config.maxSteps,
                 },

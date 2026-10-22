@@ -1,4 +1,5 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import type { ReactNode } from 'react';
 
 import type { BoardLayout } from '../boardLayout';
 import type { BoardKind } from '../boardStages';
@@ -10,24 +11,30 @@ interface BoardColumnEmptyCopy {
   description: string;
 }
 
-function boardColumnEmptyCopy(stage: BoardStageId, kind: BoardKind, hasIntakeSource: boolean): BoardColumnEmptyCopy {
-  switch (stage) {
-    case 'intake':
-      if (!hasIntakeSource) {
-        return {
-          title: 'No intake sources',
-          description: 'Choose GitHub, GitLab, Linear, or Jira in Settings to feed this column.',
-        };
-      }
-      if (kind === 'review')
-        return {
-          title: 'No change requests waiting',
-          description: 'Open change requests from connected repositories appear here.',
-        };
+function boardColumnEmptyCopy(
+  stage: BoardStageId,
+  kind: BoardKind,
+  hasIntakeSource: boolean,
+  isInitialPhase: boolean,
+): BoardColumnEmptyCopy {
+  if (isInitialPhase) {
+    if (kind === 'review')
       return {
-        title: 'Intake is clear',
-        description: 'New issues from your connected sources appear here.',
+        title: 'No change requests waiting',
+        description: 'Open change requests from connected repositories appear here.',
       };
+    if (!hasIntakeSource) {
+      return {
+        title: 'No intake sources',
+        description: 'Create a card or connect an issue source in Work Intake settings.',
+      };
+    }
+    return {
+      title: 'Intake is clear',
+      description: 'New issues from your connected sources appear here.',
+    };
+  }
+  switch (stage) {
     case 'triage':
       return {
         title: 'Nothing to triage',
@@ -82,14 +89,15 @@ function boardEmptyCopy(
   hasIntakeSource: boolean,
   filtersExcludeAll: boolean,
   alreadyMaterialized: number,
+  isInitialPhase: boolean,
 ): BoardColumnEmptyCopy {
   if (filtersExcludeAll) {
     return {
       title: kind === 'review' ? 'No change requests match filters' : 'No work items match filters',
-      description: 'Try another teammate or relevance type.',
+      description: 'Try adjusting or clearing your filters.',
     };
   }
-  const copy = boardColumnEmptyCopy(stage, kind, hasIntakeSource);
+  const copy = boardColumnEmptyCopy(stage, kind, hasIntakeSource, isInitialPhase);
   if (alreadyMaterialized <= 0) return copy;
   const itemsLabel =
     alreadyMaterialized === 1 ? 'item from this source already has' : 'items from this source already have';
@@ -101,27 +109,34 @@ function boardEmptyCopy(
 
 export function BoardColumnEmptyState({
   stage,
+  isInitialPhase,
   kind,
   hasIntakeSource,
   filtersExcludeAll = false,
   alreadyMaterialized = 0,
   layout,
+  actionSlot,
 }: {
   stage: BoardStageId;
+  isInitialPhase: boolean;
   kind: BoardKind;
   hasIntakeSource: boolean;
   filtersExcludeAll?: boolean;
   /** Feed items withheld because their card sits on another board in this Factory. */
   alreadyMaterialized?: number;
   layout: BoardLayout;
+  actionSlot?: ReactNode;
 }) {
-  const copy = boardEmptyCopy(stage, kind, hasIntakeSource, filtersExcludeAll, alreadyMaterialized);
+  const copy = boardEmptyCopy(stage, kind, hasIntakeSource, filtersExcludeAll, alreadyMaterialized, isInitialPhase);
   if (layout === 'list') {
     return (
-      <Txt as="p" variant="meta" tone="muted" className="m-0 truncate px-3 py-2 max-sm:whitespace-normal">
-        {copy.title}
-        <Txt as="span" variant="meta" tone="faint">{` · ${copy.description}`}</Txt>
-      </Txt>
+      <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2">
+        <Txt as="p" variant="meta" tone="muted" className="m-0">
+          {copy.title}
+          <Txt as="span" variant="meta" tone="faint">{` · ${copy.description}`}</Txt>
+        </Txt>
+        {actionSlot && <div className="flex flex-wrap gap-2">{actionSlot}</div>}
+      </div>
     );
   }
   return (
@@ -132,6 +147,7 @@ export function BoardColumnEmptyState({
       <Txt tone="muted" as="p" variant="meta" className="mt-1 mb-0 max-w-60">
         {copy.description}
       </Txt>
+      {actionSlot && <div className="mt-3 flex flex-wrap gap-2">{actionSlot}</div>}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { planMode } from './plan.js';
+import { createPlanMode, planMode } from './plan.js';
 
 describe('planMode', () => {
   it('delivers workflow designs through the normal plan contract', () => {
@@ -9,5 +9,11 @@ describe('planMode', () => {
     );
     expect(planMode.instructions).toContain('call `submit_plan({ path })`');
     expect(planMode.instructions).not.toContain('sketch it in chat');
+  });
+
+  it('never mentions submit_plan when the tool is unavailable', () => {
+    const instructions = createPlanMode(false).instructions!;
+    expect(instructions).not.toContain('submit_plan');
+    expect(instructions).toContain('hand off the plan file as described in your system prompt');
   });
 });

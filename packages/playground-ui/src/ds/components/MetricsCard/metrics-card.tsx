@@ -6,20 +6,29 @@ import { MetricsCardLoading } from './metrics-card-loading';
 import { MetricsCardNoData } from './metrics-card-no-data';
 import { MetricsCardRoot } from './metrics-card-root';
 import { MetricsCardSummary } from './metrics-card-summary';
+import { MetricsCardTab, MetricsCardTabs } from './metrics-card-tabs';
 import { MetricsCardTitle } from './metrics-card-title';
 import { MetricsCardTitleAndDescription } from './metrics-card-title-and-description';
+import { MetricsCardTitleMenu } from './metrics-card-title-menu';
+import { MetricsCardToolbar } from './metrics-card-toolbar';
 import { MetricsCardTopBar } from './metrics-card-top-bar';
+import { MetricsCardTotal } from './metrics-card-total';
 import { MetricsKpiCard } from '@/ds/components/MetricsKpiCard';
 
 export const MetricsCard = Object.assign(MetricsCardRoot, {
   Root: MetricsCardRoot,
   Kpi: MetricsKpiCard,
   TopBar: MetricsCardTopBar,
+  Toolbar: MetricsCardToolbar,
+  Tabs: MetricsCardTabs,
+  Tab: MetricsCardTab,
   Actions: MetricsCardActions,
   TitleAndDescription: MetricsCardTitleAndDescription,
   Title: MetricsCardTitle,
+  TitleMenu: MetricsCardTitleMenu,
   Description: MetricsCardDescription,
   Summary: MetricsCardSummary,
+  Total: MetricsCardTotal,
   Loading: MetricsCardLoading,
   Error: MetricsCardError,
   Content: MetricsCardContent,

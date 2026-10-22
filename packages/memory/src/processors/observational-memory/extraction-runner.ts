@@ -6,7 +6,8 @@ import { z } from 'zod';
 
 import type { Extractor, ExtractorSource } from './extractor';
 import { buildExtractorPriorLines } from './extractor';
-import { hasAbortInChain, isTransientLLMError, withRetry } from './retry';
+import { hasAbortInChain, isTransientLLMError, RETRY_CONFIG, withRetry } from './retry';
+import type { OnAttemptActivity } from './retry';
 
 export interface StructuredExtractionResult {
   values: Record<string, unknown>;
@@ -19,12 +20,19 @@ function isAbortError(error: unknown, abortSignal?: AbortSignal): boolean {
   return abortSignal?.aborted === true || hasAbortInChain(error);
 }
 
+function hasEmptyObjectValue(object: Record<string, unknown>, extractor: Extractor<any>): boolean {
+  const value = object[extractor.slug];
+  return typeof value === 'object' && value !== null && !Array.isArray(value) && Object.keys(value).length === 0;
+}
+
 function shouldRetryEmptyStructuredObject(
   object: Record<string, unknown>,
   extractors: readonly Extractor<any>[],
 ): boolean {
-  return (
-    Object.keys(object).length === 0 && extractors.some(extractor => extractor.retryStructuredExtractionOnEmptyObject)
+  return extractors.some(
+    extractor =>
+      extractor.retryStructuredExtractionOnEmptyObject &&
+      (Object.keys(object).length === 0 || hasEmptyObjectValue(object, extractor)),
   );
 }
 
@@ -71,17 +79,23 @@ ${extractorInstructions}${priorLines.length > 0 ? `\n\n## Prior Extracted Values
     // OM agents pin model-level `maxRetries: 0`. Extraction failures are tolerated
     // (returned as `failures`), so use a small fixed budget rather than the
     // Observer/Reflector `maxRetries`, which only governs the stage's model call.
-    withRetry(() => streamOnce(jsonPromptInjection), {
+    withRetry((attemptSignal, onActivity) => streamOnce(jsonPromptInjection, attemptSignal, onActivity), {
       label: `om-${opts.source}-structured-extraction`,
       abortSignal: opts.abortSignal,
       maxRetries: 1,
+      idleTimeoutMs: RETRY_CONFIG.modelCallIdleTimeoutMs,
     });
 
-  const streamOnce = async (jsonPromptInjection?: boolean | 'system' | 'inline') => {
+  const streamOnce = async (
+    jsonPromptInjection: boolean | 'system' | 'inline' | undefined,
+    abortSignal: AbortSignal,
+    onActivity: OnAttemptActivity,
+  ) => {
     const output = await opts.agent.stream(prompt, {
       structuredOutput: { schema, ...(jsonPromptInjection ? { jsonPromptInjection } : {}) },
       ...(opts.memory ? { memory: opts.memory } : {}),
-      ...(opts.abortSignal ? { abortSignal: opts.abortSignal } : {}),
+      abortSignal,
+      onChunk: onActivity,
       ...(opts.requestContext ? { requestContext: opts.requestContext } : {}),
       ...opts.observabilityContext,
     });
@@ -133,17 +147,28 @@ ${extractorInstructions}${priorLines.length > 0 ? `\n\n## Prior Extracted Values
   if (retryEmptyObject) {
     try {
       const fallbackJsonPromptInjection = coreFeatures.has('json-prompt-injection:inline') ? 'inline' : true;
-      object = await streamWithStructuredOutput(fallbackJsonPromptInjection);
+      // Retry values win, but keep first-response values the retry omitted.
+      object = { ...object, ...(await streamWithStructuredOutput(fallbackJsonPromptInjection)) };
     } catch (fallbackError) {
       if (isAbortError(fallbackError, opts.abortSignal)) {
         throw fallbackError;
       }
 
       const message = fallbackError instanceof Error ? fallbackError.message : String(fallbackError);
-      return {
-        values,
-        failures: structuredExtractors.map(extractor => ({ slug: extractor.slug, error: message })),
-      };
+      if (Object.keys(object).length === 0) {
+        return {
+          values,
+          failures: structuredExtractors.map(extractor => ({ slug: extractor.slug, error: message })),
+        };
+      }
+
+      // Keep the first response's other values; only the extractors that came back empty failed.
+      for (const extractor of structuredExtractors) {
+        if (extractor.retryStructuredExtractionOnEmptyObject && hasEmptyObjectValue(object, extractor)) {
+          failures.push({ slug: extractor.slug, error: message });
+          delete object[extractor.slug];
+        }
+      }
     }
   }
 

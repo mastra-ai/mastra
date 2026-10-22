@@ -58,6 +58,13 @@ export async function createAcpSession(
       resolveDefaultThinkingLevel(settings, result.session.mode.get()).level,
     cleanup: () =>
       (cleanupPromise ??= (async () => {
+        // Release thread claims before the slow teardown, so a restarted
+        // process can claim the thread (and peers can reach it) right away.
+        try {
+          result.releaseThreadClaims();
+        } catch {
+          // Best-effort — cleanup continues regardless.
+        }
         await Promise.allSettled([
           Promise.resolve().then(() => result.session.abort()),
           Promise.resolve().then(() => result.session.thread.detachFromCurrent()),

@@ -178,6 +178,7 @@ export const useDatasetMutations = ({ queryOptions }: { queryOptions?: DatasetMu
     mutationFn: (experimentId: string) => client.deleteExperiment(experimentId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ['experiments'] });
+      void queryClient.invalidateQueries({ queryKey: ['experiment'] });
       void queryClient.invalidateQueries({ queryKey: ['dataset-experiments'] });
       void queryClient.invalidateQueries({ queryKey: ['dataset-experiment'] });
       void queryClient.invalidateQueries({ queryKey: ['dataset-experiment-results'] });
@@ -192,6 +193,7 @@ export const useDatasetMutations = ({ queryOptions }: { queryOptions?: DatasetMu
     mutationFn: (params: UpdateDatasetExperimentParams) => client.updateDatasetExperiment(params),
     onSuccess: (_, variables) => {
       void queryClient.invalidateQueries({ queryKey: ['experiments'] });
+      void queryClient.invalidateQueries({ queryKey: ['experiment', variables.experimentId] });
       void queryClient.invalidateQueries({ queryKey: ['dataset-experiments', variables.datasetId] });
       void queryClient.invalidateQueries({
         queryKey: ['dataset-experiment', variables.datasetId, variables.experimentId],

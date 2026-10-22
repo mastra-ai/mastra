@@ -21,6 +21,30 @@ export interface ModelProviderOverride {
   npm?: string; // SDK package to use for this model
 }
 
+/** Prices in USD per 1 million tokens, one per token kind. */
+export interface ModelPricingRates {
+  input?: number;
+  output?: number;
+  cache_read?: number;
+  cache_write?: number;
+  reasoning?: number;
+  input_audio?: number;
+  output_audio?: number;
+}
+
+/** Rates that apply once the input reaches `tier.size` tokens (long-context pricing). */
+export interface ModelPricingTier extends ModelPricingRates {
+  tier: { type?: 'context'; size: number };
+}
+
+/**
+ * What one model costs. Same shape as a models.dev model's `cost`, so prices can be copied
+ * from models.dev or a provider's price page as they are.
+ */
+export interface ModelPricing extends ModelPricingRates {
+  tiers?: ModelPricingTier[];
+}
+
 export interface ProviderConfig {
   url?: string;
   apiKeyHeader?: string;
@@ -37,6 +61,9 @@ export interface ProviderConfig {
   // so existing configs keep type-checking and keep their capability/override data;
   // surfaces that offer models for *new* selection should de-emphasize or hide them.
   deprecatedModels?: string[];
+  // Prices keyed by model id, for models that models.dev does not list (private deployments,
+  // resellers). `@mastra/observability` uses them for cost metrics before models.dev prices.
+  pricing?: Record<string, ModelPricing>;
 }
 
 /**
@@ -46,6 +73,15 @@ export interface ProviderConfig {
 export type AttachmentCapabilities = Record<string, string[]>;
 export type TemperatureCapabilities = Record<string, string[]>;
 export type StructuredOutputCapabilities = Record<string, string[]>;
+
+/** A reasoning control a model accepts, as published by models.dev `reasoning_options`. */
+export type ModelReasoningOption =
+  | { type: 'effort'; values: string[] }
+  | { type: 'budget_tokens'; min?: number; max?: number }
+  | { type: 'toggle' };
+
+/** Provider ID → model ID → the reasoning controls that model accepts. */
+export type ReasoningCapabilities = Record<string, Record<string, ModelReasoningOption[]>>;
 
 /**
  * Union type for language models that can be returned by gateways.

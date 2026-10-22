@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   formatSignalValue,
+  getMcpEventSignalInfo,
   getNotificationMetadata,
   getSignalType,
   isRecord,
@@ -12,15 +13,14 @@ import {
   toReactiveSignalData,
 } from './signal-data';
 
-const buildSignalMessage = (overrides: Partial<MastraDBMessage> = {}): MastraDBMessage =>
-  ({
-    id: 'msg-1',
-    role: 'signal',
-    type: 'top-level-type',
-    createdAt: new Date('2026-01-01'),
-    content: { format: 2, parts: [{ type: 'text', text: 'hello' }] },
-    ...overrides,
-  }) as MastraDBMessage;
+const buildSignalMessage = (overrides: Partial<MastraDBMessage> = {}): MastraDBMessage => ({
+  id: 'msg-1',
+  role: 'signal',
+  type: 'top-level-type',
+  createdAt: new Date('2026-01-01'),
+  content: { format: 2, parts: [{ type: 'text', text: 'hello' }] },
+  ...overrides,
+});
 
 describe('isRecord', () => {
   it('accepts plain objects only', () => {
@@ -85,7 +85,7 @@ describe('getSignalType', () => {
   it('prefers content.metadata.signal.type', () => {
     const message = buildSignalMessage({
       content: { format: 2, parts: [], metadata: { signal: { type: 'reactive' } } },
-    } as Partial<MastraDBMessage>);
+    });
     expect(getSignalType(message)).toBe('reactive');
   });
 
@@ -93,7 +93,7 @@ describe('getSignalType', () => {
     expect(getSignalType(buildSignalMessage())).toBe('top-level-type');
     const nonString = buildSignalMessage({
       content: { format: 2, parts: [], metadata: { signal: { type: 1 } } },
-    } as Partial<MastraDBMessage>);
+    });
     expect(getSignalType(nonString)).toBe('top-level-type');
   });
 });
@@ -159,7 +159,7 @@ describe('toReactiveSignalData', () => {
     it('omits attributes and metadata when they are not records', () => {
       const message = buildSignalMessage({
         content: { format: 2, parts: [], metadata: { signal: { attributes: 'x', metadata: [] } } },
-      } as Partial<MastraDBMessage>);
+      });
 
       const data = toReactiveSignalData(message);
       expect('attributes' in data).toBe(false);
@@ -214,6 +214,37 @@ describe('getNotificationMetadata', () => {
       priority: undefined,
       status: undefined,
       pending: undefined,
+    });
+  });
+});
+
+describe('getMcpEventSignalInfo', () => {
+  describe('when the signal is an MCP event notification', () => {
+    it('returns the server, event and gap flag from the attributes', () => {
+      expect(
+        getMcpEventSignalInfo({
+          type: 'notification',
+          attributes: { kind: 'mcp-event', server: 'tickets', event: 'ticket.created', truncated: true },
+        }),
+      ).toEqual({ kind: 'mcp-event', server: 'tickets', event: 'ticket.created', truncated: true });
+    });
+  });
+
+  describe('when the kind comes from notification metadata', () => {
+    it('recognizes an ended subscription', () => {
+      expect(
+        getMcpEventSignalInfo({
+          type: 'notification',
+          metadata: { notification: { kind: 'mcp-event-subscription-ended' } },
+          attributes: { server: 'tickets', event: 'ticket.created' },
+        }),
+      ).toEqual({ kind: 'mcp-event-subscription-ended', server: 'tickets', event: 'ticket.created', truncated: false });
+    });
+  });
+
+  describe('when the signal is another notification', () => {
+    it('returns undefined', () => {
+      expect(getMcpEventSignalInfo({ type: 'notification', attributes: { kind: 'issue-opened' } })).toBeUndefined();
     });
   });
 });

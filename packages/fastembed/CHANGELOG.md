@@ -1,5 +1,57 @@
 # @mastra/fastembed
 
+## 1.3.4
+
+### Patch Changes
+
+- FastEmbed embedding models now throw an error when the model returns a different number of embeddings than input texts, instead of returning a result where embeddings can't be matched to their inputs. The error reports the expected and received counts. ([#27767](https://github.com/mastra-ai/mastra/pull/27767))
+
+- Fixed model downloads contaminating standard output, including Hugging Face download messages for dense and sparse models. Download notices use standard error, and quiet downloads remain silent. ([#26882](https://github.com/mastra-ai/mastra/pull/26882))
+
+- Added a truncation warning to the FastEmbed AI SDK v3 models. ([#27315](https://github.com/mastra-ai/mastra/pull/27315))
+
+  The models now warn when an input exceeds the 512-token window. Before, FastEmbed dropped the extra text without notice. Split long text into smaller chunks to embed all of it.
+
+- Fixed FastEmbed accepting invalid batch sizes. `embed`, `passageEmbed`, and `countTruncated` now reject a `batchSize` that is not a positive whole number with a clear `RangeError` before any text is processed. Previously `batchSize: 0` caused an unrelated `TypeError` while embedding and could make `countTruncated` loop forever. ([#27766](https://github.com/mastra-ai/mastra/pull/27766))
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+## 1.3.4-alpha.2
+
+### Patch Changes
+
+- FastEmbed embedding models now throw an error when the model returns a different number of embeddings than input texts, instead of returning a result where embeddings can't be matched to their inputs. The error reports the expected and received counts. ([#27767](https://github.com/mastra-ai/mastra/pull/27767))
+
+- Fixed FastEmbed accepting invalid batch sizes. `embed`, `passageEmbed`, and `countTruncated` now reject a `batchSize` that is not a positive whole number with a clear `RangeError` before any text is processed. Previously `batchSize: 0` caused an unrelated `TypeError` while embedding and could make `countTruncated` loop forever. ([#27766](https://github.com/mastra-ai/mastra/pull/27766))
+
+## 1.3.4-alpha.1
+
+### Patch Changes
+
+- Fixed model downloads contaminating standard output, including Hugging Face download messages for dense and sparse models. Download notices use standard error, and quiet downloads remain silent. ([#26882](https://github.com/mastra-ai/mastra/pull/26882))
+
+- Added a truncation warning to the FastEmbed AI SDK v3 models. ([#27315](https://github.com/mastra-ai/mastra/pull/27315))
+
+  The models now warn when an input exceeds the 512-token window. Before, FastEmbed dropped the extra text without notice. Split long text into smaller chunks to embed all of it.
+
+## 1.3.4-alpha.0
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+## 1.3.3
+
+### Patch Changes
+
+- Fixed embeddings failing with "Config file not found" when the model cache folder is removed, or the home directory changes, while a process is running. The cache folder is now looked up each time a model loads instead of once per process. ([#22078](https://github.com/mastra-ai/mastra/pull/22078))
+
+## 1.3.3-alpha.0
+
+### Patch Changes
+
+- Fixed embeddings failing with "Config file not found" when the model cache folder is removed, or the home directory changes, while a process is running. The cache folder is now looked up each time a model loads instead of once per process. ([#22078](https://github.com/mastra-ai/mastra/pull/22078))
+
 ## 1.3.2
 
 ### Patch Changes

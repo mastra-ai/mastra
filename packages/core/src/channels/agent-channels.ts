@@ -23,7 +23,7 @@ import type { ApiRoute } from '../server/types';
 import type { AgentChunkType } from '../stream/types';
 import { createTool } from '../tools/tool';
 
-import { chatModule, getChatModule } from './chat-lazy';
+import { getChatModule } from './chat-lazy';
 import { resolveSlackTopLevelThreadId } from './compat/slack';
 import { ChannelSessionRejectedError } from './errors';
 
@@ -77,6 +77,11 @@ export interface ChannelLogContext {
   [key: string]: unknown;
 }
 
+type ChannelAgent = Pick<
+  Agent<any, any, any, any>,
+  'id' | 'getMastraInstance' | 'sendMessage' | 'approveToolCall' | 'declineToolCall' | 'getMemory'
+>;
+
 /** Platforms whose chat-SDK adapters render interactive approval buttons. */
 const APPROVAL_BUTTON_PLATFORMS = new Set(['slack', 'discord', 'teams', 'gchat', 'google-chat', 'telegram']);
 
@@ -93,7 +98,8 @@ export class AgentChannels {
   private chat: Chat | null = null;
   /** Stored initialization promise so webhook handlers can await readiness on serverless cold starts. */
   private initPromise: Promise<void> | null = null;
-  private agent!: Agent<any, any, any, any>;
+  private agent!: ChannelAgent;
+  private dispatchAgent?: ChannelAgent;
   private logger?: IMastraLogger;
   private customState: StateAdapter | undefined;
   private stateAdapter!: StateAdapter;
@@ -188,11 +194,23 @@ export class AgentChannels {
   }
 
   /**
-   * Bind this AgentChannels to its owning agent. Called by Agent constructor.
+   * Bind the owning agent used for webhook paths and stored-thread ownership.
+   * Called by Agent construction and setChannels; changing the owner resets dispatch.
+   * Durable wrappers set a separate dispatch target without changing ownership.
    * @internal
    */
-  __setAgent(agent: Agent<any, any, any, any>): void {
+  __setAgent(agent: ChannelAgent): void {
+    if (this.agent !== agent) this.dispatchAgent = undefined;
     this.agent = agent;
+  }
+
+  /** Set the execution target without changing channel ownership. @internal */
+  __setDispatchAgent(agent: ChannelAgent): void {
+    this.dispatchAgent = agent;
+  }
+
+  private getDispatchAgent(): ChannelAgent {
+    return this.dispatchAgent ?? this.agent;
   }
 
   /**
@@ -268,10 +286,11 @@ export class AgentChannels {
     chatThread: Thread;
     message: Message;
     defaultResourceId: string;
+    requestContext: RequestContext;
   }): string | (() => string | Promise<string>) {
-    const { platform, chatThread, message, defaultResourceId } = args;
+    const { platform, chatThread, message, defaultResourceId, requestContext } = args;
     return this.resolveResourceId
-      ? () => this.resolveResourceId!({ platform, thread: chatThread, message, defaultResourceId })
+      ? () => this.resolveResourceId!({ platform, thread: chatThread, message, defaultResourceId, requestContext })
       : defaultResourceId;
   }
 
@@ -302,7 +321,7 @@ export class AgentChannels {
       autoResumeSuspendedTools,
     } = args;
 
-    const result = this.agent.sendMessage(
+    const result = this.getDispatchAgent().sendMessage(
       {
         contents: signalContents,
         attributes,
@@ -366,7 +385,7 @@ export class AgentChannels {
     requestContext: RequestContext;
     memory: { thread: string; resource: string };
   }): Promise<void> {
-    const resumed = await this.agent.approveToolCall({
+    const resumed = await this.getDispatchAgent().approveToolCall({
       runId: args.runId,
       toolCallId: args.toolCallId,
       requestContext: args.requestContext,
@@ -388,7 +407,7 @@ export class AgentChannels {
     requestContext: RequestContext;
     memory: { thread: string; resource: string };
   }): Promise<void> {
-    const resumed = await this.agent.declineToolCall({
+    const resumed = await this.getDispatchAgent().declineToolCall({
       runId: args.runId,
       toolCallId: args.toolCallId,
       requestContext: args.requestContext,
@@ -414,7 +433,7 @@ export class AgentChannels {
    *
    * @example
    * ```ts
-   * agent.channels.sdk.onReaction((thread, reaction) => {
+   * agent.getChannels()?.sdk?.onReaction((thread, reaction) => {
    *   console.log('Reaction received:', reaction);
    * });
    * ```
@@ -752,11 +771,14 @@ export class AgentChannels {
                 adapterConfig?.formatToolCall,
               );
               const useCards = toolDisplay === 'cards';
+              // Name of the user who clicked, shown on the resolved card. Omitted in
+              // DMs, where the only possible clicker is obvious.
+              const byUser = chatThread.isDM ? undefined : event.user.fullName || event.user.userName || 'User';
               // Let a function-form `toolDisplay` own the resolved card. Only
               // non-blank `post` results are honored; anything else (or a
               // throwing renderer) falls back to the default formatter.
               const renderResolved = (
-                decision: { kind: 'approved' } | { kind: 'denied'; byUser?: string },
+                decision: { kind: 'approved'; byUser?: string } | { kind: 'denied'; byUser?: string },
               ): PostableMessage | undefined => {
                 if (!toolDisplayFn) return undefined;
                 try {
@@ -788,7 +810,6 @@ export class AgentChannels {
               };
 
               if (!approved) {
-                const byUser = chatThread.isDM ? undefined : event.user.fullName || event.user.userName || 'User';
                 try {
                   await adapter.editMessage(
                     chatThread.id,
@@ -847,7 +868,8 @@ export class AgentChannels {
                 await adapter.editMessage(
                   chatThread.id,
                   messageId,
-                  renderResolved({ kind: 'approved' }) ?? formatToolApproved(displayName, argsSummary, useCards),
+                  renderResolved({ kind: 'approved', byUser }) ??
+                    formatToolApproved(displayName, argsSummary, useCards, byUser),
                 );
               } catch (err) {
                 this.log('debug', 'Failed to edit approved card', { ...actionEventContext, error: err });
@@ -1063,7 +1085,7 @@ export class AgentChannels {
     if (this.channelConfig.threadContext?.addSystemMessage === false) return [];
     const hasProcessor = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'chat-channel-context');
     if (hasProcessor) return [];
-    return [new ChatChannelProcessor()];
+    return [new ChatChannelProcessor(this)];
   }
 
   /**
@@ -1234,9 +1256,10 @@ export class AgentChannels {
     };
 
     // Attributes: short, flat, strings only — they're rendered as XML attrs on the signal.
-    // In DMs the author is stable for the whole conversation (already in the system message),
-    // so we keep this minimal to avoid noise on every turn.
-    const attributes: Record<string, string | undefined> = { messageId };
+    // `platform` tells the model this message came in over the channel, not from another
+    // client on the same thread. In DMs the author is stable for the whole conversation
+    // (already in the system message), so we keep the rest minimal to avoid noise on every turn.
+    const attributes: Record<string, string | undefined> = { platform, messageId };
     if (!chatThread.isDM) {
       attributes.authorName = actorName;
       attributes.authorId = actor.userId;
@@ -1380,12 +1403,19 @@ export class AgentChannels {
       platform,
       // Lazily resolved: the hook only runs when we're actually creating a new
       // thread, never when reusing an existing one (which keeps its stored owner).
-      resourceId: this.resolveChannelResourceId({ platform, chatThread, message, defaultResourceId }),
+      resourceId: this.resolveChannelResourceId({ platform, chatThread, message, defaultResourceId, requestContext }),
       // Same laziness for the thread id hook; it runs after the resourceId
       // resolves so hosts can align the two (e.g. thread id = session id).
       threadId: this.resolveThreadId
         ? (resourceId: string, defaultThreadId: string) =>
-            this.resolveThreadId!({ platform, thread: chatThread, message, resourceId, defaultThreadId })
+            this.resolveThreadId!({
+              platform,
+              thread: chatThread,
+              message,
+              resourceId,
+              defaultThreadId,
+              requestContext,
+            })
         : undefined,
       mastra,
     });
@@ -1394,6 +1424,12 @@ export class AgentChannels {
     // In multi-user threads (e.g. Slack channels), the thread is owned by whoever
     // started it. Other participants' messages are still part of that thread's history.
     const threadResourceId = mastraThread.resourceId;
+
+    if (!message.author.isMe) {
+      await this.rememberThreadFacts(mastraThread, chatThread, message, mastra).catch(error =>
+        this.log('warn', `Could not record channel facts on thread ${mastraThread.id}: ${String(error)}`),
+      );
+    }
 
     // On a non-DM first mention (not yet subscribed), persist the platform
     // thread's prior messages into the Mastra thread as individual attributed
@@ -1565,8 +1601,7 @@ export class AgentChannels {
   private isContentlessMessage(message: Message): boolean {
     if (message.attachments?.length) return false;
     if (message.text?.trim()) return false;
-    const richText = message.formatted ? chatModule().stringifyMarkdown(message.formatted).trim() : '';
-    return !richText;
+    return !messageText(message)?.trim();
   }
 
   /**
@@ -1699,7 +1734,7 @@ export class AgentChannels {
           type: 'user',
           tagName: 'user',
           contents: formatOmittedMarker(platform, omitted),
-          attributes: { source: 'thread-history', kind: 'gap', omitted },
+          attributes: { platform, source: 'thread-history', kind: 'gap', omitted },
           // Channel context without an author: clients render the platform
           // badge on the marker without attributing it to anyone.
           providerOptions: { mastra: { channels: { [platform]: {} } } },
@@ -1740,7 +1775,7 @@ export class AgentChannels {
     /** Platform and message identifiers for log lines. */
     logContext: ThreadHistoryLogContext;
   }): Promise<boolean> {
-    const memory = await this.agent.getMemory({ requestContext: args.requestContext });
+    const memory = await this.getDispatchAgent().getMemory({ requestContext: args.requestContext });
     if (!memory) return false;
     return this.saveThreadHistorySignals({ ...args, memory, target: args.memory });
   }
@@ -1845,6 +1880,7 @@ export class AgentChannels {
       typingGate,
       formatError: adapterConfig?.formatError,
       textFormat: adapterConfig?.textFormat,
+      textDisplay: adapterConfig?.textDisplay,
       onAbort: adapterConfig?.onAbort,
       approvalContext,
     };
@@ -1885,6 +1921,35 @@ export class AgentChannels {
    * via `chat.thread(externalThreadId)`.
    */
   async buildRenderContextForThread(threadId: string): Promise<ChatChannelRenderContext | null> {
+    return (await this.loadChannelThread(threadId))?.render ?? null;
+  }
+
+  /**
+   * The channel context and render context for a run on a channel-backed
+   * thread that did not start from a platform message. The channel context is
+   * built exactly as an inbound message's would be, around the thread's last
+   * sender, so `ChatChannelProcessor` gives both kinds of run the same system
+   * prompt and a host switching between them keeps its prompt cache.
+   */
+  async buildChannelContextForThread(
+    threadId: string,
+  ): Promise<{ channel: ChannelContext; render: ChatChannelRenderContext } | null> {
+    const loaded = await this.loadChannelThread(threadId);
+    if (!loaded) return null;
+    const { render, sender } = loaded;
+    const { channelContext } = await this.buildEventContext({
+      chatThread: render.chatThread,
+      platform: render.platform,
+      eventType: 'thread',
+      messageId: undefined,
+      actor: sender?.author ?? { userId: '' },
+    });
+    return { channel: channelContext, render };
+  }
+
+  private async loadChannelThread(
+    threadId: string,
+  ): Promise<{ render: ChatChannelRenderContext; sender: LastSender | undefined } | null> {
     const mastra = this.getMastra();
     const storage = mastra?.getStorage();
     if (!storage) return null;
@@ -1905,7 +1970,69 @@ export class AgentChannels {
     if (!chat) return null;
 
     const chatThread = chat.thread(externalThreadId);
-    return this._buildRenderContext(chatThread, platform);
+    const sender = parseLastSender(thread.metadata?.[LAST_SENDER_KEY]);
+    const storedIsDM = thread.metadata?.[IS_DM_KEY];
+    const isDM = typeof storedIsDM === 'boolean' ? storedIsDM : chatThread.isDM;
+    if (!sender && isDM === chatThread.isDM) return { render: this._buildRenderContext(chatThread, platform), sender };
+
+    // Rebuild the thread the way an inbound message would: around the last
+    // person who wrote in it, and with the DM flag the platform event carried
+    // (not every adapter can tell from the id). Some adapters key behavior off
+    // the current message: Slack only streams natively when it knows who the
+    // reply is for, and otherwise posts and then edits in coarse chunks.
+    const { Message: ChatMessage, ThreadImpl } = await getChatModule();
+    const currentMessage =
+      sender &&
+      new ChatMessage({
+        attachments: [],
+        author: sender.author,
+        formatted: { type: 'root', children: [] },
+        id: '',
+        metadata: { dateSent: new Date(), edited: false },
+        raw: sender.raw,
+        text: '',
+        threadId: externalThreadId,
+      });
+    const rebuilt = new ThreadImpl({
+      adapter: chatThread.adapter,
+      channelId: chatThread.channelId,
+      channelVisibility: chatThread.channelVisibility,
+      ...(currentMessage ? { currentMessage } : {}),
+      id: externalThreadId,
+      isDM,
+      stateAdapter: this.stateAdapter,
+    });
+    return { render: this._buildRenderContext(rebuilt, platform), sender };
+  }
+
+  /**
+   * Remembers who last wrote in a channel-backed thread and whether it is a
+   * DM, so a run on it that didn't start from a message gets the same prompt
+   * and replies the same way an inbound one would (see
+   * {@link buildChannelContextForThread}). Writes only when either changes.
+   */
+  private async rememberThreadFacts(
+    thread: StorageThreadType,
+    chatThread: Thread,
+    message: Message,
+    mastra: Mastra,
+  ): Promise<void> {
+    const sender = lastSenderOf(message);
+    const metadata = (thread.metadata ?? {}) as Record<string, unknown>;
+    if (
+      JSON.stringify(metadata[LAST_SENDER_KEY]) === JSON.stringify(sender) &&
+      metadata[IS_DM_KEY] === chatThread.isDM
+    ) {
+      return;
+    }
+    const memoryStore = await mastra.getStorage()?.getStore('memory');
+    if (!memoryStore) return;
+    // Re-read so keys other writers set since `thread` was loaded survive.
+    const current = (await memoryStore.getThreadById({ threadId: thread.id }))?.metadata ?? metadata;
+    await memoryStore.patchThread({
+      id: thread.id,
+      metadata: { ...current, [LAST_SENDER_KEY]: sender, [IS_DM_KEY]: chatThread.isDM },
+    });
   }
 
   /**
@@ -2156,7 +2283,7 @@ export class AgentChannels {
     return memoryStore.saveThread({
       thread: {
         id: resolvedThreadId || defaultThreadId,
-        title: `${platform} conversation`,
+        title: '',
         resourceId: resolvedResourceId,
         createdAt: new Date(),
         updatedAt: new Date(),
@@ -2346,4 +2473,33 @@ export class AgentChannels {
     const payload = fields.error instanceof Error ? { ...fields, error: getErrorFromUnknown(fields.error) } : fields;
     this.logger[level](prefixed, payload);
   }
+}
+
+const LAST_SENDER_KEY = 'channel_lastSender';
+const IS_DM_KEY = 'channel_isDM';
+
+interface LastSender {
+  author: Message['author'];
+  /** Only the workspace/team ids from the platform event; adapters read the recipient's team from these. */
+  raw: Record<string, unknown>;
+}
+
+function lastSenderOf(message: Message): LastSender {
+  const raw = (message.raw ?? {}) as Record<string, unknown>;
+  const user = raw.user as Record<string, unknown> | undefined;
+  const team = raw.team as Record<string, unknown> | string | undefined;
+  const kept: Record<string, unknown> = {};
+  if (typeof raw.team_id === 'string') kept.team_id = raw.team_id;
+  if (typeof team === 'string') kept.team = team;
+  else if (team && typeof team.id === 'string') kept.team = { id: team.id };
+  if (user && typeof user.team_id === 'string') kept.user = { team_id: user.team_id };
+  const { userId, userName, fullName, isBot, isMe } = message.author;
+  return { author: { userId, userName, fullName, isBot, isMe }, raw: kept };
+}
+
+function parseLastSender(value: unknown): LastSender | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+  const { author, raw } = value as Partial<LastSender>;
+  if (!author || typeof author.userId !== 'string') return undefined;
+  return { author, raw: raw && typeof raw === 'object' ? raw : {} };
 }

@@ -85,7 +85,6 @@ beforeEach(() => {
         ],
       }),
     ),
-    http.post(`${TEST_BASE_URL}/web/config/om/provider-defaults`, () => HttpResponse.json({ ok: true, config: {} })),
   );
 });
 

@@ -30,7 +30,7 @@ function row(overrides: Partial<WorkItemCommentRow> & { body: string; occurredAt
 
 function readerOf(rows: WorkItemCommentRow[]) {
   // listRecent returns newest-first; the reader reverses for display order.
-  return new FactoryFeedReader({ listRecent: async () => rows });
+  return new FactoryFeedReader({ listRecent: async ({ limit }) => rows.slice(0, limit) });
 }
 
 describe('FactoryFeedReader', () => {
@@ -77,6 +77,49 @@ describe('FactoryFeedReader', () => {
     expect(inner).toContain('&lt;/work-item-feed&gt;');
     expect(inner).not.toContain('x'.repeat(2000));
     expect(inner).toContain('…');
+    expect(inner).toContain('[truncated: 2,000 of 3,017 characters; comment comment-2026-08-01T10:00:00.000Z]');
+  });
+
+  it('marks a truncated reply quote with its comment id', async () => {
+    const block = await readerOf([
+      row({
+        id: 'c-9',
+        body: 'short',
+        occurredAt: new Date('2026-08-01T10:00:00.000Z'),
+        replyTo: { commentId: 'c-1', quote: 'q'.repeat(2_500) },
+      }),
+    ]).readRunContext(scope);
+    expect(block).toContain('> [quote truncated: 2,000 of 2,500 characters; comment c-9]');
+    expect(block).not.toContain('[truncated:');
+  });
+
+  it('adds no marker to a body of exactly the limit', async () => {
+    const block = await readerOf([
+      row({ body: 'x'.repeat(2_000), occurredAt: new Date('2026-08-01T10:00:00.000Z') }),
+    ]).readRunContext(scope);
+    expect(block).not.toContain('truncated');
+    expect(block).not.toContain('…');
+    expect(block).not.toContain('omitted');
+  });
+
+  it('counts characters in code points in the truncation marker', async () => {
+    const block = await readerOf([
+      row({ body: '🚀'.repeat(2_100), occurredAt: new Date('2026-08-01T10:00:00.000Z') }),
+    ]).readRunContext(scope);
+    expect(block).toContain('[truncated: 2,000 of 2,100 characters;');
+  });
+
+  it('marks comments beyond the 20-row cap as omitted', async () => {
+    const rows = [];
+    for (let i = 24; i >= 0; i--) {
+      rows.push(
+        row({ body: `note ${i}`, occurredAt: new Date(`2026-08-01T10:${String(i).padStart(2, '0')}:00.000Z`) }),
+      );
+    }
+    const block = await readerOf(rows).readRunContext(scope);
+    expect(block).toContain('[1+ older comments omitted]');
+    expect(block).toContain('note 24');
+    expect(block).not.toContain('note 4\n');
   });
 
   it('keeps the newest entries when the block would overflow', async () => {
@@ -96,6 +139,7 @@ describe('FactoryFeedReader', () => {
     expect(block).not.toContain('entry 0');
     const kept = [...block!.matchAll(/entry (\d)/g)].map(match => Number(match[1]));
     expect(kept).toEqual([...kept].sort((a, b) => a - b));
+    expect(block).toContain(`[${10 - kept.length} older comments omitted]`);
   });
 
   it('escapes the boundary tag in reply quotes and author names, not only bodies', async () => {
@@ -148,6 +192,31 @@ describe('FactoryFeedReader', () => {
     }
     const block = await readerOf(rows).readRunContext(scope);
     expect(block!.length).toBeLessThanOrEqual(12_000);
+    expect(block).toMatch(/\[\d+ older comments omitted\]/);
+  });
+
+  it('stays within the 12k budget with truncation and overflow markers', async () => {
+    const rows = [];
+    for (let i = 0; i < 30; i++) {
+      rows.push(
+        row({ body: 'z'.repeat(5_000), occurredAt: new Date(`2026-08-01T10:${String(i).padStart(2, '0')}:00.000Z`) }),
+      );
+    }
+    const block = await readerOf(rows).readRunContext(scope);
+    expect(block!.length).toBeLessThanOrEqual(12_000);
+    expect(block).toContain('[16+ older comments omitted]');
+  });
+
+  it('adds no omission marker for exactly 20 short comments', async () => {
+    const rows = [];
+    for (let i = 0; i < 20; i++) {
+      rows.push(
+        row({ body: `note ${i}`, occurredAt: new Date(`2026-08-01T10:${String(i).padStart(2, '0')}:00.000Z`) }),
+      );
+    }
+    const block = await readerOf(rows).readRunContext(scope);
+    for (let i = 0; i < 20; i++) expect(block).toContain(`note ${i}`);
+    expect(block).not.toContain('omitted');
   });
 
   it('returns null for an empty feed', async () => {

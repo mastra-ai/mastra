@@ -13,6 +13,7 @@ import type { JiraIssue } from '../domains/factory/services/jira';
 import type { LinearIssue } from '../domains/factory/services/linear';
 import { useStartFactoryRun } from '../../hooks/useStartFactoryRun';
 import { createAppRoutes } from '../router';
+import { saveKanbanView } from './boardLayoutQueries';
 
 const FACTORY_ID = 'fp-1';
 const REPO_ID = 'repo-1';
@@ -204,7 +205,7 @@ function stubBoardEndpoints() {
     http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/issues`, () =>
       HttpResponse.json({ issues: [], nextPage: null }),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${REPO_ID}/sessions`, () =>
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
       HttpResponse.json({
         sessions: [
           {
@@ -305,7 +306,7 @@ function stubIncidentioCandidate() {
 }
 
 describe('Board card pending states', () => {
-  it('shows only Linear candidates after switching Work intake from Issues to Linear', async () => {
+  it('shows GitHub and Linear candidates alongside persisted and manual issues in Work intake', async () => {
     const githubIssue: GithubIssue = {
       number: 42,
       title: 'Investigate GitHub intake failure',
@@ -389,23 +390,15 @@ describe('Board card pending states', () => {
       ),
     );
 
-    const user = userEvent.setup();
     const { client } = renderWorkBoard();
 
     await waitForMutationsIdle(client);
+    expect(await screen.findByText('Fix Linear intake sync')).toBeVisible();
     expect(screen.getByText('Investigate GitHub intake failure')).toBeVisible();
     expect(screen.getByText('Persisted GitHub intake item')).toBeVisible();
-    expect(screen.queryByText('Persisted Linear intake item')).not.toBeInTheDocument();
-    expect(screen.getByText('Plan onboarding')).toBeVisible();
-
-    await user.click(screen.getByRole('button', { name: 'Linear' }));
-
-    await waitForMutationsIdle(client);
-    expect(screen.getByText('Fix Linear intake sync')).toBeVisible();
     expect(screen.getByText('Persisted Linear intake item')).toBeVisible();
-    expect(screen.queryByText('Persisted GitHub intake item')).not.toBeInTheDocument();
     expect(screen.getByText('Plan onboarding')).toBeVisible();
-    await waitFor(() => expect(screen.queryByText('Investigate GitHub intake failure')).not.toBeInTheDocument());
+    expect(screen.queryByRole('button', { name: 'Linear' })).not.toBeInTheDocument();
   });
 
   it('shows "Moving to …" on the card while a menu move is in flight, then clears it', async () => {
@@ -681,7 +674,7 @@ describe('Board card pending states', () => {
         }),
       ),
 
-      http.get(`${TEST_BASE_URL}/web/source-control/projects/repo-2/sessions`, () =>
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
         HttpResponse.json({ sessions: [] }),
       ),
       http.patch(`${TEST_BASE_URL}/web/factory/work-items/${ITEM_ID}`, async ({ request }) => {
@@ -891,7 +884,6 @@ describe('Board card pending states', () => {
     expect(githubLink).toHaveAttribute('target', '_blank');
     await user.keyboard('{Escape}');
 
-    await user.click(screen.getByRole('button', { name: 'Linear' }));
     await user.click(await screen.findByRole('button', { name: 'Actions for Linear intake issue' }));
     const linearLink = await screen.findByRole('menuitem', { name: 'Open in Linear' });
     expect(linearLink).toHaveAttribute('href', 'https://linear.app/acme/issue/ENG-42/linear-intake-issue');
@@ -976,7 +968,7 @@ describe('Board card pending states', () => {
     const user = userEvent.setup();
     const { client } = renderWorkBoard();
 
-    expect(await screen.findByText('ENG-42 · To Do · ada')).toBeVisible();
+    expect(await screen.findByText('ENG-42')).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Actions for Fix Jira intake sync' }));
     await user.click(await screen.findByRole('menuitem', { name: action }));
 
@@ -1041,13 +1033,12 @@ describe('Board card pending states', () => {
     // Exactly one card: the filed work item; the live candidate is deduped, not the card.
     const actions = await screen.findAllByRole('button', { name: 'Actions for Fix Jira intake sync' });
     expect(actions).toHaveLength(1);
-    await user.click(actions[0]!);
+    await user.click(actions[0]);
 
     // The filed Jira card carries the same menu a filed Linear card does.
     expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Build' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Open in Jira' })).toHaveAttribute('href', jiraIssue.url);
-    expect(screen.getByRole('menuitem', { name: 'Ask supervisor' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Move to Planning' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Remove' })).toBeVisible();
   });
@@ -1129,7 +1120,7 @@ describe('Board card pending states', () => {
     const user = userEvent.setup();
     const { client } = renderWorkBoard();
 
-    expect(await screen.findByText('FU-42 · Outstanding · ada')).toBeVisible();
+    expect(await screen.findByText('FU-42')).toBeVisible();
     await user.click(screen.getByRole('button', { name: 'Actions for Add retry to incident pager' }));
     await user.click(await screen.findByRole('menuitem', { name: action }));
 
@@ -1194,13 +1185,12 @@ describe('Board card pending states', () => {
     // Exactly one card: the filed work item; the live candidate is deduped, not the card.
     const actions = await screen.findAllByRole('button', { name: 'Actions for Add retry to incident pager' });
     expect(actions).toHaveLength(1);
-    await user.click(actions[0]!);
+    await user.click(actions[0]);
 
     // The filed incident.io card carries the same menu a filed Linear card does.
     expect(await screen.findByRole('menuitem', { name: 'Investigate' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Build' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Open in incident.io' })).toHaveAttribute('href', incidentioIssue.url);
-    expect(screen.getByRole('menuitem', { name: 'Ask supervisor' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Move to Planning' })).toBeVisible();
     expect(screen.getByRole('menuitem', { name: 'Remove' })).toBeVisible();
   });
@@ -1266,8 +1256,8 @@ describe('Board card pending states', () => {
     const title = await screen.findByText('Slack request');
     const card = title.closest<HTMLElement>('[data-testid="work-item-card"]');
     if (!card) throw new Error('Expected the title inside its work item card');
-    expect(within(card).getByText(/^Slack · /)).toBeInTheDocument();
-    expect(within(card).queryByText(/^Manual · /)).not.toBeInTheDocument();
+    expect(within(card).getByText('Slack:')).toBeInTheDocument();
+    expect(within(card).queryByText('Manual:')).not.toBeInTheDocument();
   });
 
   it('ignores a card dropped back into its current column', async () => {
@@ -1289,13 +1279,14 @@ describe('Board card pending states', () => {
     expect(currentColumn).toContainElement(card);
   });
 
-  it('moves a card when it is dropped into a collapsed empty column', async () => {
+  it('moves a card when it is dropped into a collapsed empty Kanban column', async () => {
     const { transitionGate, transitionRequests } = stubBoardEndpoints();
     renderWorkBoard();
+    await saveKanbanView(userEvent.setup());
 
     const card = await screen.findByTestId('work-item-card');
     const planningColumn = screen.getByTestId('board-column-planning');
-    expect(planningColumn).toHaveAccessibleName('Planning, empty');
+    await waitFor(() => expect(planningColumn).toHaveAccessibleName('Planning, empty'));
     const dataTransfer = createDataTransfer();
 
     fireEvent.dragStart(card, { dataTransfer });
@@ -1391,7 +1382,7 @@ describe('Board card pending states', () => {
         }),
       ),
       http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings: [] })),
-      http.get(`${TEST_BASE_URL}/web/source-control/projects/repo-2/sessions`, () =>
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
         HttpResponse.json({ sessions: [] }),
       ),
       http.get(`${TEST_BASE_URL}/web/intake/config`, async () => {
@@ -1465,7 +1456,7 @@ describe('Board card pending states', () => {
     renderWorkBoard();
 
     const planningColumn = await screen.findByTestId('board-column-planning');
-    await waitFor(() => expect(planningColumn).toHaveAccessibleName('Planning, empty'));
+    await waitFor(() => expect(within(planningColumn).queryByRole('status')).not.toBeInTheDocument());
 
     for (const label of ['Intake', 'Triage', 'Planning', 'Building', 'Review']) {
       expect(screen.getByRole('button', { name: `Create work item in ${label}` })).toBeInTheDocument();
@@ -1581,7 +1572,7 @@ describe('Board card pending states', () => {
     renderWorkBoard();
 
     const planningColumn = await screen.findByTestId('board-column-planning');
-    await waitFor(() => expect(planningColumn).toHaveAccessibleName('Planning, empty'));
+    await waitFor(() => expect(within(planningColumn).queryByRole('status')).not.toBeInTheDocument());
     await user.click(screen.getByRole('button', { name: 'Create work item in Planning' }));
     const composer = await within(planningColumn).findByRole('form', { name: 'New work item in Planning' });
     const titleInput = within(composer).getByRole('textbox', { name: 'Work item title' });

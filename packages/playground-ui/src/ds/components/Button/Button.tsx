@@ -4,27 +4,43 @@ import type { VariantProps } from 'class-variance-authority';
 import React from 'react';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Icon } from '@/ds/icons/Icon';
-import { iconSizeClasses, type IconSize } from '@/ds/icons/icon-size-classes';
+import { iconSizeClasses } from '@/ds/icons/icon-size-classes';
+import type { IconSize } from '@/ds/icons/icon-size-classes';
 import { controlHeight, controlSizeClasses } from '@/ds/primitives/control-size';
 import {
   controlFocusBorderVisible,
   raisedControlSurfaceStyle,
   sharedFormElementDisabledStyle,
 } from '@/ds/primitives/form-element';
-import { controlStateColorTransition, focusRingOffset } from '@/ds/primitives/transitions';
+import { controlStateColorTransition, focusRing, focusRingOffset } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
-// Adornments for text-mode buttons: gap between icon+label and larger radius.
-// - `[data-slot=button-icon]` styles the `<Icon>` wrapper rendered by the `icon` prop — the only
-//   supported way to pair an icon with a label (always on the left, fixed gap).
-// - `[&>svg]` only remains for label-less text-mode buttons (e.g. CopyButton) that pass a bare
-//   SVG as children.
-// Excluded from icon-mode because icon-mode wraps children in `<Icon>` and uses its own
-// `rounded-full` (circle).
+// Text-mode buttons are pills. Each size sets `--button-px`, the label's side padding. The
+// icon side gets 2px less, because a glyph draws inside its box: the icon then reads as far
+// from the edge as the label does (shadcn's Button uses the same 2px step).
+// - `[data-slot=button-icon(-end)]`: the `<Icon>` wrappers the `icon` / `iconEnd` props render.
+// - `>svg`: a bare SVG passed as a leading child, before the label.
+// A button with no label takes an icon-mode size instead: a fixed square with its own
+// `rounded-full`, so it reads as a circle rather than a padded pill (lint rule
+// `mastra/icon-button-size`).
 const TEXT_MODE_ADORNMENTS = cn(
-  'gap-[.75em] rounded-full',
-  '[&>[data-slot=button-icon]]:-ml-[.3em]',
-  '[&>svg]:mx-[-.3em]',
+  'rounded-full px-(--button-px)',
+  'has-[>[data-slot=button-icon]]:pl-[calc(var(--button-px)-2px)] has-[>svg]:pl-[calc(var(--button-px)-2px)]',
+  'has-[>[data-slot=button-icon-end]]:pr-[calc(var(--button-px)-2px)]',
+);
+
+const LINK_LAYOUT = cn(
+  'relative size-auto gap-1 rounded-xs px-0 text-label',
+  'before:absolute before:-inset-x-2',
+  'has-[>[data-slot=button-icon-end]]:pr-0 has-[>[data-slot=button-icon]]:pl-0 has-[>svg]:pl-0',
+);
+
+const LINK_LABEL = cn(
+  'relative inline-flex items-center gap-1',
+  iconSizeClasses.sm,
+  '[&>svg]:shrink-0',
+  'after:absolute after:inset-x-0 after:bottom-0 after:h-px after:origin-left after:scale-x-0 after:bg-current',
+  'after:transition-transform after:duration-fast after:ease-out-custom motion-reduce:after:transition-none',
 );
 
 // An icon is secondary to the label beside it, and on a neutral surface it says so with
@@ -81,11 +97,24 @@ export const buttonVariants = cva(
           'border border-transparent bg-transparent text-muted-foreground not-disabled:hover:bg-fill-subtle not-disabled:hover:text-foreground not-disabled:active:bg-fill',
           'disabled:bg-transparent aria-disabled:bg-transparent',
         ),
+        // A persistent neutral fill for selected controls. Match default's borderless
+        // box so switching between the raised and subtle surfaces keeps labels in place.
+        subtle: cn(
+          'border-0 bg-fill-hover text-foreground not-disabled:hover:bg-fill-hover not-disabled:active:bg-fill',
+          focusRing,
+          'disabled:bg-transparent aria-disabled:bg-transparent',
+        ),
+        link: cn(
+          'border-0 bg-transparent text-muted-foreground not-disabled:hover:text-foreground',
+          'not-disabled:hover:[&>[data-slot=button-label]]:after:scale-x-100 not-disabled:hover:[&>[data-slot=button-label]]:after:duration-normal',
+          focusRingOffset,
+          'disabled:text-placeholder aria-disabled:text-placeholder',
+        ),
       },
       size: {
-        sm: cn(controlSizeClasses.sm, iconSizeClasses.sm, 'px-[.9em]', TEXT_MODE_ADORNMENTS),
-        md: cn(controlSizeClasses.md, iconSizeClasses.md, 'px-[.9em]', TEXT_MODE_ADORNMENTS),
-        lg: cn(controlSizeClasses.lg, iconSizeClasses.lg, 'px-[1em]', TEXT_MODE_ADORNMENTS),
+        sm: cn(controlSizeClasses.sm, iconSizeClasses.sm, 'gap-1 [--button-px:.9em]', TEXT_MODE_ADORNMENTS),
+        md: cn(controlSizeClasses.md, iconSizeClasses.md, 'gap-1.5 [--button-px:.9em]', TEXT_MODE_ADORNMENTS),
+        lg: cn(controlSizeClasses.lg, iconSizeClasses.lg, 'gap-1.5 [--button-px:1em]', TEXT_MODE_ADORNMENTS),
         // Icon sizes: square dimensions, fully rounded → circle. Active state inherits from variant
         // so icon-mode and text-mode use the same press feedback. The glyph is sized by the `Icon`
         // wrapper the component puts around an icon-mode child, keyed off the same scale.
@@ -94,6 +123,11 @@ export const buttonVariants = cva(
         'icon-lg': cn(controlHeight.lg, 'w-control-lg rounded-full'),
       },
     },
+    compoundVariants: [
+      { variant: 'link', className: LINK_LAYOUT },
+      { variant: 'link', size: ['sm', 'md', 'icon-sm', 'icon-md'], className: 'before:-inset-y-1' },
+      { variant: 'link', size: ['lg', 'icon-lg'], className: 'before:-inset-y-1.5' },
+    ],
     defaultVariants: {
       variant: 'default',
       size: 'md',
@@ -116,7 +150,10 @@ export interface ButtonProps
   children: React.ReactNode;
   /** Leading icon, always rendered on the left of the label inside `<Icon>`. Ignored in icon-mode sizes. */
   icon?: React.ReactNode;
+  iconEnd?: React.ReactNode;
   tooltip?: React.ReactNode;
+  /** Side of the trigger the tooltip opens on. Defaults to `top`. */
+  tooltipPosition?: 'top' | 'right' | 'bottom' | 'left';
   /** @deprecated Pass the element through `render` instead: `render={<Link href="/x" />}`. */
   as?: React.ElementType;
   /** @deprecated Set it on the element passed to `render`. */
@@ -147,6 +184,8 @@ function preventLinkActivation(event: React.SyntheticEvent): void {
   event.stopPropagation();
 }
 
+type LinkRenderProps = { href?: string; to?: string; target?: string; className?: string };
+
 // One icon step per control step: a glyph is sized by the rung it sits in, so the
 // same nominal size renders the same icon whether it arrives as an icon-mode child,
 // the `icon` prop, or a bare SVG.
@@ -159,22 +198,40 @@ const iconSizeMap: Record<ButtonSize, IconSize> = {
   'icon-lg': 'lg',
 };
 
-// Walks React children, expanding `<></>` fragments so `isIconOnly` can inspect the real
-// elements inside. `<Button><><Icon/></></Button>` should still count as icon-only.
-function flattenChildren(children: React.ReactNode): React.ReactNode[] {
-  const result: React.ReactNode[] = [];
-  React.Children.forEach(children, child => {
-    if (React.isValidElement<{ children?: React.ReactNode }>(child) && child.type === React.Fragment) {
-      result.push(...flattenChildren(child.props.children));
-    } else {
-      result.push(child);
-    }
-  });
-  return result;
+function adornmentIconSize(variant: ButtonVariant, size: ButtonSize): IconSize {
+  if (variant === 'link') return 'sm';
+  return iconSizeMap[size];
 }
 
-// True when every child is a React element (no text/label). Used in text-mode to brighten the
-// SVG of label-less buttons so the glyph reads stronger.
+function ButtonAdornment({ slot, size, children }: { slot: string; size: IconSize; children: React.ReactNode }) {
+  if (!children) return undefined;
+  return (
+    <Icon data-slot={slot} size={size}>
+      {children}
+    </Icon>
+  );
+}
+
+function ButtonLabel({ variant, children }: { variant: ButtonVariant; children: React.ReactNode }) {
+  if (variant !== 'link') return children;
+  return (
+    <span data-slot="button-label" className={LINK_LABEL}>
+      {children}
+    </span>
+  );
+}
+
+// True when every child is an element (no label text). A text-sized button can still hold
+// only an icon when its size is forwarded from a wrapper, and it then needs a name too.
+// `<></>` fragments are expanded first: `<><svg />Save</>` has a label.
+function flattenChildren(children: React.ReactNode): React.ReactNode[] {
+  return React.Children.toArray(children).flatMap(child =>
+    React.isValidElement<{ children?: React.ReactNode }>(child) && child.type === React.Fragment
+      ? flattenChildren(child.props.children)
+      : [child],
+  );
+}
+
 function isIconOnly(children: React.ReactNode): boolean {
   const flat = flattenChildren(children);
   return flat.length > 0 && flat.every(child => React.isValidElement(child));
@@ -202,30 +259,35 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
       disabled,
       children,
       icon,
+      iconEnd,
       tooltip,
+      tooltipPosition,
       'aria-label': ariaLabelProp,
       type,
       ...props
     },
     ref,
   ) => {
-    const iconMode = isIconButtonSize(size);
+    const iconMode = variant !== 'link' && isIconButtonSize(size);
     const resolvedSize: ButtonSize = size ?? 'md';
-    const isLabelless = !iconMode && isIconOnly(children);
+    const resolvedVariant: ButtonVariant = variant ?? 'default';
+    const adornmentSize = adornmentIconSize(resolvedVariant, resolvedSize);
 
     // Icon-only buttons need an a11y label. If a string tooltip is provided, reuse it.
-    const ariaLabel = ariaLabelProp ?? ((iconMode || isLabelless) && typeof tooltip === 'string' ? tooltip : undefined);
+    const ariaLabel =
+      ariaLabelProp ?? ((iconMode || isIconOnly(children)) && typeof tooltip === 'string' ? tooltip : undefined);
 
     const content = iconMode ? (
       <Icon size={iconSizeMap[resolvedSize]}>{children}</Icon>
     ) : (
       <>
-        {icon ? (
-          <Icon data-slot="button-icon" size={iconSizeMap[resolvedSize]}>
-            {icon}
-          </Icon>
-        ) : null}
-        {children}
+        <ButtonAdornment slot="button-icon" size={adornmentSize}>
+          {icon}
+        </ButtonAdornment>
+        <ButtonLabel variant={resolvedVariant}>{children}</ButtonLabel>
+        <ButtonAdornment slot="button-icon-end" size={adornmentSize}>
+          {iconEnd}
+        </ButtonAdornment>
       </>
     );
 
@@ -263,14 +325,25 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
       ...(prefetch === undefined ? null : { prefetch }),
     };
 
-    const renderedLink = React.isValidElement(render) && isLinkElement(render) ? render : undefined;
+    const isLinkVariant = resolvedVariant === 'link';
+    const linkHref = href ?? to;
+    const linkRenderProps: LinkRenderProps = {
+      ...(linkHref === undefined ? null : { href: linkHref }),
+      ...(target === undefined ? null : { target }),
+    };
+    const renderedLink =
+      React.isValidElement(render) && isLinkElement(render)
+        ? render
+        : isLinkVariant
+          ? React.createElement('a', linkRenderProps)
+          : undefined;
     const renderedLinkProps = renderedLink?.props;
     const disabledHref = renderedLink?.type !== 'a' && renderedLinkProps?.href !== undefined ? '' : undefined;
     const disabledTo = renderedLinkProps?.to !== undefined ? '' : undefined;
     const disabledLinkProps = disabled
       ? {
-          href: disabledHref,
-          to: disabledTo,
+          ...(isLinkVariant ? null : { href: disabledHref }),
+          ...(isLinkVariant ? null : { to: disabledTo }),
           'aria-disabled': true,
           onClick: preventLinkActivation,
           onAuxClick: preventLinkActivation,
@@ -303,7 +376,7 @@ export const Button = React.forwardRef<HTMLElement, ButtonProps>(
       return (
         <Tooltip>
           <TooltipTrigger asChild>{button}</TooltipTrigger>
-          <TooltipContent>{tooltip}</TooltipContent>
+          <TooltipContent side={tooltipPosition}>{tooltip}</TooltipContent>
         </Tooltip>
       );
     }

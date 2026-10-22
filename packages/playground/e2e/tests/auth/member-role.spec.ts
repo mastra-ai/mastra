@@ -84,11 +84,12 @@ test.describe('Member Role', () => {
       await expect(page.getByRole('heading', { name: /^Tools/ })).toBeVisible({ timeout: 10000 });
       await expect(page.getByRole('link', { name: 'weatherInfo' })).toHaveAttribute(
         'href',
-        /\/agents\/weather-agent\/tools\/weatherInfo$/,
+        // The chip opens the tool drawer over the agent page you're on.
+        /\/agents\/weather-agent\/threads\/[^/?]+\?tool=weatherInfo$/,
       );
       await expect(page.getByRole('link', { name: 'simpleMcpTool' })).toHaveAttribute(
         'href',
-        /\/agents\/weather-agent\/tools\/simpleMcpTool$/,
+        /\/agents\/weather-agent\/threads\/[^/?]+\?tool=simpleMcpTool$/,
       );
     });
 
@@ -202,20 +203,21 @@ test.describe('Member Role', () => {
         .click();
 
       // Should be on tool details page
-      await expect(page).toHaveURL(/\/tools\/weatherInfo/);
+      await expect(page).toHaveURL(/\/tools\?tool=weatherInfo/);
     });
 
     test('member can see tool execution panel', async ({ page }) => {
       await setupMemberAuth(page);
-      await page.goto('/tools/weatherInfo');
+      await page.goto('/tools?tool=weatherInfo');
 
-      // Should see the tool execution form/panel
+      // The execution form lives on the Playground tab
+      await page.getByRole('tab', { name: 'Playground' }).click();
       await expect(page.locator('[name="location"]')).toBeVisible();
     });
 
     test('member does not see permission denied for tool execution', async ({ page }) => {
       await setupMemberAuth(page);
-      await page.goto('/tools/weatherInfo');
+      await page.goto('/tools?tool=weatherInfo');
 
       // Member has tools:execute permission
       const permissionDenied = page.getByText(/permission denied|not authorized|don't have permission/i);
@@ -319,9 +321,10 @@ test.describe('Member Role', () => {
     test('member has more permissions than viewer for tools', async ({ page }) => {
       // Member can execute tools
       await setupMemberAuth(page);
-      await page.goto('/tools/weatherInfo');
+      await page.goto('/tools?tool=weatherInfo');
 
-      // Member should see tool execution panel
+      // Member should see tool execution panel on the Playground tab
+      await page.getByRole('tab', { name: 'Playground' }).click();
       await expect(page.locator('[name="location"]')).toBeVisible();
 
       // Now check as viewer
@@ -334,7 +337,7 @@ test.describe('Member Role', () => {
 
       // Viewer has no tools:read permission, so might see restricted access
       // The exact behavior depends on implementation
-      await expect(page).toHaveURL(/\/tools\/weatherInfo/);
+      await expect(page).toHaveURL(/\/tools\?tool=weatherInfo/);
     });
   });
 

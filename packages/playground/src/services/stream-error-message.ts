@@ -74,7 +74,7 @@ export const buildStreamErrorMessage = (chunk: StreamErrorChunk): MastraDBMessag
       parts: [{ type: 'text', text }],
       metadata: { status: 'error' },
     },
-  } as MastraDBMessage;
+  };
 };
 
 export const buildMaxStepsStreamErrorMessage = (chunk: FinishChunkLike, maxSteps?: number) =>

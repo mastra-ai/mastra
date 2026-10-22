@@ -61,30 +61,6 @@ describe.concurrent('MastraLLMVNext', () => {
     expect(res.text).toBeDefined();
     expect(res.text).toBeTypeOf('string');
   }, 20000);
-
-  it('should generate text - aisdk', async () => {
-    const result = model.stream({
-      messageList: new MessageList().add(
-        [
-          {
-            role: 'user',
-            content: 'Hello, how are you?',
-          },
-        ],
-        'input',
-      ),
-      requestContext: new RequestContext(),
-      tracingContext: {},
-      agentId: 'test-agent',
-      methodType: 'stream',
-    });
-
-    const res = await result.getFullOutput();
-    expect(res).toBeDefined();
-    expect(res.text).toBeDefined();
-    expect(res.text).toBeTypeOf('string');
-  }, 20000);
-
   it('should stream text - mastra', async () => {
     const result = model.stream({
       messageList: new MessageList().add(
@@ -106,29 +82,6 @@ describe.concurrent('MastraLLMVNext', () => {
     expect(chunks).toBeDefined();
     expect(chunks.length).toBeGreaterThan(0);
   }, 20000);
-
-  it('should stream text - aisdk', async () => {
-    const result = model.stream({
-      messageList: new MessageList().add(
-        [
-          {
-            role: 'user',
-            content: 'Hello, how are you?',
-          },
-        ],
-        'input',
-      ),
-      requestContext: new RequestContext(),
-      tracingContext: {},
-      agentId: 'test-agent',
-      methodType: 'stream',
-    });
-
-    const chunks = await convertAsyncIterableToArray(result.fullStream);
-    expect(chunks).toBeDefined();
-    expect(chunks.length).toBeGreaterThan(0);
-  }, 20000);
-
   it('should stream object - mastra/aisdk', async () => {
     const result = model.stream({
       messageList: new MessageList().add(
@@ -226,77 +179,7 @@ describe.concurrent('MastraLLMVNext', () => {
     expect(res.object.age).toBeDefined();
     expect(res.object.age).toBeTypeOf('number');
   }, 20000);
-
-  it('should generate object - aisdk', async () => {
-    const result = model.stream({
-      messageList: new MessageList().add(
-        [
-          {
-            role: 'user',
-            content: 'Hello, how are you? My name is John Doe and I am 30 years old.',
-          },
-        ],
-        'input',
-      ),
-      requestContext: new RequestContext(),
-      tracingContext: {},
-      structuredOutput: {
-        schema: z.object({
-          name: z.string(),
-          age: z.number(),
-        }),
-      },
-      agentId: 'test-agent',
-      methodType: 'stream',
-    });
-
-    const res = await result.getFullOutput();
-
-    expect(res.object).toBeDefined();
-    expect(res.object?.name).toBeDefined();
-    expect(res.object?.name).toBeTypeOf('string');
-    expect(res.object?.age).toBeDefined();
-    expect(res.object?.age).toBeTypeOf('number');
-  }, 20000);
-
   it('full stream object - mastra', async () => {
-    const result = model.stream({
-      messageList: new MessageList().add(
-        [
-          {
-            role: 'user',
-            content: 'Hello, how are you? My name is John Doe and I am 30 years old.',
-          },
-        ],
-        'input',
-      ),
-      requestContext: new RequestContext(),
-      tracingContext: {},
-      structuredOutput: {
-        schema: z.object({
-          name: z.string(),
-          age: z.number(),
-        }),
-      },
-      agentId: 'test-agent',
-      methodType: 'stream',
-    });
-
-    for await (const chunk of result.fullStream) {
-      if (chunk.type === 'object') {
-        expect(chunk.object).toBeDefined();
-      }
-    }
-
-    const object = await result.object;
-    expect(object).toBeDefined();
-    expect(object.name).toBeDefined();
-    expect(object.name).toBeTypeOf('string');
-    expect(object.age).toBeDefined();
-    expect(object.age).toBeTypeOf('number');
-  }, 20000);
-
-  it('full stream object - aisdk', async () => {
     const result = model.stream({
       messageList: new MessageList().add(
         [

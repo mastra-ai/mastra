@@ -8,6 +8,7 @@ import type { MetricsQueryFilters } from './metrics-query-filters';
 
 export interface ModelUsageRow {
   model: string;
+  provider?: string;
   input: string;
   output: string;
   cacheRead: string;
@@ -36,7 +37,7 @@ export function useModelUsageCostMetrics<TData = ModelUsageRow[]>(
         ).map(name =>
           client.getMetricBreakdown({
             name: [name],
-            groupBy: ['model'],
+            groupBy: ['model', 'provider'],
             aggregation: 'sum',
             orderDirection: 'DESC',
             filters,
@@ -47,6 +48,8 @@ export function useModelUsageCostMetrics<TData = ModelUsageRow[]>(
       if (!inputRes || !outputRes || !cacheReadRes || !cacheWriteRes) return [];
 
       type ModelEntry = {
+        model: string;
+        provider: string | undefined;
         input: number;
         output: number;
         cacheRead: number;
@@ -57,8 +60,12 @@ export function useModelUsageCostMetrics<TData = ModelUsageRow[]>(
 
       const modelMap = new Map<string, ModelEntry>();
 
-      const ensureModel = (model: string): ModelEntry =>
-        getOrCreate(modelMap, model, () => ({
+      const ensureModel = (dimensions: { model?: string | null; provider?: string | null }): ModelEntry => {
+        const model = dimensions.model ?? 'unknown';
+        const provider = dimensions.provider ?? undefined;
+        return getOrCreate(modelMap, `${model}\u0000${provider ?? ''}`, () => ({
+          model,
+          provider,
           input: 0,
           output: 0,
           cacheRead: 0,
@@ -66,6 +73,7 @@ export function useModelUsageCostMetrics<TData = ModelUsageRow[]>(
           cost: null,
           costUnit: null,
         }));
+      };
 
       // total_input/total_output estimatedCost already rolls up cache + other detail
       // costs. The cache breakdowns are kept for their token counts only.
@@ -77,31 +85,28 @@ export function useModelUsageCostMetrics<TData = ModelUsageRow[]>(
       };
 
       for (const group of inputRes.groups) {
-        const m = group.dimensions.model ?? 'unknown';
-        const entry = ensureModel(m);
+        const entry = ensureModel(group.dimensions);
         entry.input = group.value;
         addCost(entry, group);
       }
       for (const group of outputRes.groups) {
-        const m = group.dimensions.model ?? 'unknown';
-        const entry = ensureModel(m);
+        const entry = ensureModel(group.dimensions);
         entry.output = group.value;
         addCost(entry, group);
       }
       for (const group of cacheReadRes.groups) {
-        const m = group.dimensions.model ?? 'unknown';
-        const entry = ensureModel(m);
+        const entry = ensureModel(group.dimensions);
         entry.cacheRead = group.value;
       }
       for (const group of cacheWriteRes.groups) {
-        const m = group.dimensions.model ?? 'unknown';
-        const entry = ensureModel(m);
+        const entry = ensureModel(group.dimensions);
         entry.cacheWrite = group.value;
       }
 
-      return Array.from(modelMap.entries())
-        .map(([model, vals]) => ({
-          model,
+      return Array.from(modelMap.values())
+        .map(vals => ({
+          model: vals.model,
+          ...(vals.provider ? { provider: vals.provider } : {}),
           input: formatCompactNumber(vals.input),
           output: formatCompactNumber(vals.output),
           cacheRead: formatCompactNumber(vals.cacheRead),
@@ -109,7 +114,7 @@ export function useModelUsageCostMetrics<TData = ModelUsageRow[]>(
           cost: vals.cost,
           costUnit: vals.costUnit,
         }))
-        .sort((a, b) => a.model.localeCompare(b.model));
+        .sort((a, b) => a.model.localeCompare(b.model) || (a.provider ?? '').localeCompare(b.provider ?? ''));
     },
     ...queryOptions,
   });

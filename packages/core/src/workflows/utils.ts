@@ -218,13 +218,10 @@ export function getResumeLabelsByStepId(
 ) {
   return Object.entries(resumeLabels)
     .filter(([_, value]) => value.stepId === stepId)
-    .reduce(
-      (acc, [key, value]) => {
-        acc[key] = value;
-        return acc;
-      },
-      {} as Record<string, { stepId: string; foreachIndex?: number }>,
-    );
+    .reduce<Record<string, { stepId: string; foreachIndex?: number }>>((acc, [key, value]) => {
+      acc[key] = value;
+      return acc;
+    }, {});
 }
 
 export function abortableSleep(duration: number, signal?: AbortSignal): Promise<void> {
@@ -290,6 +287,23 @@ export function createDeprecationProxy<T extends Record<string, any>>(
       return Reflect.get(target, prop, receiver);
     },
   });
+}
+
+/**
+ * Defines `writer` on execute params as a memoized getter so the stream is only
+ * allocated when step code actually reads it. The property stays enumerable so
+ * spreading the params still carries `writer` along.
+ */
+export function defineLazyWriter<T extends object, W>(
+  params: T,
+  createWriter: () => W,
+): NoInfer<T> & { writer: NoInfer<W> } {
+  let writer: W | undefined;
+  return Object.defineProperty(params, 'writer', {
+    enumerable: true,
+    configurable: true,
+    get: () => (writer ??= createWriter()),
+  }) as T & { writer: W };
 }
 
 const SINGLE_STEP_TYPES = ['step', 'agent', 'tool', 'classifier', 'mapping'] as const;
@@ -462,13 +476,10 @@ export const createTimeTravelExecutionParams = (params: {
         if (prevStepIds.length === 1) {
           stepPayload = (stepResults?.[prevStepIds[0]!] as any)?.output ?? {};
         } else {
-          stepPayload = prevStepIds.reduce(
-            (acc, stepId) => {
-              acc[stepId] = (stepResults?.[stepId] as any)?.output ?? {};
-              return acc;
-            },
-            {} as Record<string, any>,
-          );
+          stepPayload = prevStepIds.reduce<Record<string, any>>((acc, stepId) => {
+            acc[stepId] = (stepResults?.[stepId] as any)?.output ?? {};
+            return acc;
+          }, {});
         }
       }
     }
@@ -612,13 +623,10 @@ export const createRestartExecutionParams = ({
       [firstEntry.id]: [0],
     };
   } else if (firstEntry.type === 'conditional' || firstEntry.type === 'parallel') {
-    firstEntryActiveStepsPath = firstEntry.steps.reduce(
-      (acc, step) => {
-        acc[getSingleStepEntryId(step)] = [0];
-        return acc;
-      },
-      {} as Record<string, number[]>,
-    );
+    firstEntryActiveStepsPath = firstEntry.steps.reduce<Record<string, number[]>>((acc, step) => {
+      acc[getSingleStepEntryId(step)] = [0];
+      return acc;
+    }, {});
   }
 
   const hasFirstEntryResult = getStepIds(firstEntry).some(stepId =>
@@ -629,7 +637,9 @@ export const createRestartExecutionParams = ({
     activePaths: isPreFirstStepRestart ? [0] : snapshot.activePaths,
     activeStepsPath: isPreFirstStepRestart ? firstEntryActiveStepsPath : snapshot.activeStepsPath,
     stepResults: snapshot.context,
-    state: snapshot.value,
+    // The evented engine records mid-run state as `context.__state` alongside step results;
+    // `value` only holds the state from the run's start or last suspension.
+    state: (snapshot.context as Record<string, any>)?.__state ?? snapshot.value,
     stepExecutionPath: snapshot?.stepExecutionPath,
     isPreFirstStepRestart,
   };
@@ -701,9 +711,13 @@ export function hydrateSerializedStepErrors(steps: WorkflowRunState['context']) 
 function cleanSingleResult(result: Record<string, unknown>): Record<string, unknown> {
   const { __state: _state, __stateDelta: _stateDelta, metadata, ...rest } = result;
 
-  // Strip nestedRunId from metadata but keep other user-defined fields
+  // Strip nested run identities from metadata but keep other user-defined fields
   if (metadata && typeof metadata === 'object' && !Array.isArray(metadata)) {
-    const { nestedRunId: _nestedRunId, ...userMetadata } = metadata as Record<string, unknown>;
+    const {
+      nestedRunId: _nestedRunId,
+      foreachNestedRunIds: _foreachNestedRunIds,
+      ...userMetadata
+    } = metadata as Record<string, unknown>;
     if (Object.keys(userMetadata).length > 0) {
       return { ...rest, metadata: userMetadata };
     }
@@ -759,6 +773,14 @@ export function cleanStepResult(stepResult: unknown): unknown {
 
   const result = stepResult as Record<string, unknown>;
   const cleaned = cleanSingleResult(result);
+
+  // The evented engine persists a running forEach with null slots for unfinished iterations
+  // (they drive storage merges and completion checks). Those are bookkeeping, not output:
+  // like the default engine, a running step exposes no output until it finishes.
+  if (cleaned.status === 'running' && Array.isArray(cleaned.output)) {
+    delete cleaned.output;
+    return cleaned;
+  }
 
   // If output is an array (forEach results), clean each iteration result
   // Iteration results can have __state (for suspended) or metadata.nestedRunId (for nested workflows)
@@ -850,7 +872,13 @@ export async function waitForSuspendedSnapshot(
   {
     timeoutMs = RESUME_SNAPSHOT_POLL_TIMEOUT_MS,
     missingSnapshotGraceReads = 1,
-  }: { timeoutMs?: number; missingSnapshotGraceReads?: number } = {},
+    onClaimedRunFinished,
+  }: {
+    timeoutMs?: number;
+    missingSnapshotGraceReads?: number;
+    /** Called when a `running`/`pending` row is seen and then disappears (its run finished and was cleaned up). */
+    onClaimedRunFinished?: () => void;
+  } = {},
 ): Promise<WorkflowRunState | null> {
   if (!workflowsStore) return null;
 
@@ -865,7 +893,12 @@ export async function waitForSuspendedSnapshot(
     if (snapshot) {
       if (!RESUME_SNAPSHOT_WAIT_STATUSES.has(snapshot.status)) return snapshot;
       observedTransitionableSnapshot = true;
-    } else if (!observedTransitionableSnapshot && ++missingReads >= missingSnapshotGraceReads) {
+    } else if (observedTransitionableSnapshot) {
+      if (onClaimedRunFinished) {
+        onClaimedRunFinished();
+        return null;
+      }
+    } else if (++missingReads >= missingSnapshotGraceReads) {
       return null;
     }
 

@@ -15,6 +15,10 @@ export interface TraceImportSpan {
   parentSpanId: string | null;
   name: string;
   spanType: TraceImportSpanType;
+  /** Mastra primitive that owns the span (`agent`, `tool`, `scorer`, ...). Platform lists and filters traces by it. */
+  entityType?: string;
+  entityId?: string;
+  entityName?: string;
   startedAt: string;
   endedAt: string;
   isEvent: boolean;
@@ -65,6 +69,8 @@ export interface TraceImportSourceIdentity {
   provider: string;
   baseUrl: string;
   projectId: string;
+  /** Display name only; not part of resume compatibility because providers allow renames. */
+  projectName?: string | null;
   idAlgorithmVersion: string;
 }
 

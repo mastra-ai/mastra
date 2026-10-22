@@ -5,7 +5,6 @@ import { Input } from '@mastra/playground-ui/components/Input';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useSSOLogin, useAuthCapabilities, useCredentialsLogin, useCredentialsSignUp } from '@mastra/react/hooks/auth';
-import type { SSOConfig } from '@mastra/react/hooks/auth';
 import { Lock, LogIn } from 'lucide-react';
 import { useState } from 'react';
 import { LoginLayout } from './login-layout';
@@ -66,7 +65,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
   const { login } = capabilities;
   const hasSSO = login.type === 'sso' || login.type === 'both';
   const hasCredentials = login.type === 'credentials' || login.type === 'both';
-  const sso = login.sso as SSOConfig | undefined;
+  const sso = login.sso;
   const signUpEnabled = login.signUpEnabled !== false; // defaults to true
 
   const isSignIn = mode === 'signin' || !signUpEnabled; // force signin mode if signup disabled
@@ -135,6 +134,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
               <Input
                 name="name"
                 type="text"
+                autoComplete="name"
                 value={name}
                 onChange={e => setName(e.target.value)}
                 placeholder="Your name"
@@ -149,6 +149,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
             <Input
               name="email"
               type="email"
+              autoComplete="email"
               value={email}
               onChange={e => setEmail(e.target.value)}
               placeholder="you@example.com"
@@ -164,6 +165,7 @@ export function LoginPage({ redirectUri, onSuccess, initialMode = 'signin', erro
             <Input
               name="password"
               type="password"
+              autoComplete={isSignIn ? 'current-password' : 'new-password'}
               value={password}
               onChange={e => setPassword(e.target.value)}
               placeholder={isSignIn ? 'Enter your password' : 'Create a password'}

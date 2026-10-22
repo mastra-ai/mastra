@@ -49,6 +49,7 @@ type ConsumedDuringPreparation =
   // Memory is resolved during preparation; thread/resource/memoryConfig are
   // extracted and stored in workflow state + registry
   | 'memory'
+  | 'scopes'
   // savePerStep is extracted and stored in workflow state during preparation
   | 'savePerStep'
   // RunId is generated/used during preparation, not forwarded as an "option"
@@ -142,6 +143,7 @@ type PhantomSerializedKeys = Exclude<
   | 'transform' // shadow of transform policy (targets only)
   | 'isTaskComplete' // shadow of isTaskComplete (scorer names only)
   | 'structuredOutput' // serialized form of structuredOutput
+  | 'toolsetToolNames' // names of call-time toolsets tools (cross-process detection)
 >;
 
 describe('DurableAgent ↔ Agent parity gate', () => {

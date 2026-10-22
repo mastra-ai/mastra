@@ -268,6 +268,189 @@ describe('runMC', () => {
     expect(modelIdAtSend).toBe(alternateModel!.id);
   });
 
+  it('applies a pack to the session: mode model, thread metadata, subagent models, and route', async () => {
+    const { controller, session } = await makeHarness({
+      doStream: async () => ({ stream: textStream('Packed answer.') }),
+    });
+    const [packModel] = await controller.listAvailableModels();
+    expect(packModel).toBeDefined();
+    vi.spyOn(controller, 'listAvailableModels').mockResolvedValue([{ ...packModel!, hasApiKey: true }]);
+    let modelIdAtSend: string | undefined;
+    const originalSendMessage = session.sendMessage.bind(session);
+    vi.spyOn(session, 'sendMessage').mockImplementation(async input => {
+      modelIdAtSend = session.model.get();
+      return originalSendMessage(input);
+    });
+
+    const selection = {
+      modelId: packModel!.id,
+      subagentModels: {
+        explore: 'test/explore-model',
+        plan: 'test/plan-model',
+        execute: 'test/execute-model',
+      },
+      modelRoute: {
+        entries: [{ id: 'custom:Test', label: 'Test', modelId: packModel!.id, memoryModelId: 'test/memory-model' }],
+      },
+    };
+    const onApplied = vi.fn();
+
+    const result = await runMC({
+      controller,
+      session,
+      prompt: 'Use the pack',
+      pack: {
+        id: 'custom:Test',
+        resolve: () => selection,
+        onApplied,
+      },
+    }).result;
+
+    expect(result.status).toBe('completed');
+    expect(modelIdAtSend).toBe(packModel!.id);
+    expect(onApplied).toHaveBeenCalledTimes(1);
+    const threads = await session.thread.list();
+    const thread = threads.find(t => t.id === result.threadId);
+    expect((thread?.metadata as Record<string, unknown> | undefined)?.activeModelPackId).toBe('custom:Test');
+    expect(session.subagents.model.get({ agentType: 'explore' })).toBe('test/explore-model');
+    expect(session.subagents.model.get({ agentType: 'plan' })).toBe('test/plan-model');
+    expect(session.subagents.model.get({ agentType: 'execute' })).toBe('test/execute-model');
+    const state = session.state.get() as Record<string, unknown>;
+    expect(state.modelRoute).toEqual({
+      entries: [{ id: 'custom:Test', label: 'Test', modelId: packModel!.id, memoryModelId: 'test/memory-model' }],
+    });
+  });
+
+  it('lets an explicit model override the pack model while the pack still applies', async () => {
+    const { controller, session } = await makeHarness({
+      doStream: async () => ({ stream: textStream('Overridden answer.') }),
+    });
+    const [packModel] = await controller.listAvailableModels();
+    expect(packModel).toBeDefined();
+    const explicitModel = { ...packModel!, id: 'test/explicit-model', hasApiKey: true };
+    vi.spyOn(controller, 'listAvailableModels').mockResolvedValue([{ ...packModel!, hasApiKey: true }, explicitModel]);
+    let modelIdAtSend: string | undefined;
+    const originalSendMessage = session.sendMessage.bind(session);
+    vi.spyOn(session, 'sendMessage').mockImplementation(async input => {
+      modelIdAtSend = session.model.get();
+      return originalSendMessage(input);
+    });
+
+    const result = await runMC({
+      controller,
+      session,
+      prompt: 'Override the pack model',
+      model: explicitModel.id,
+      pack: {
+        id: 'custom:Test',
+        resolve: () => ({ modelId: packModel!.id, subagentModels: {}, modelRoute: { entries: [] } }),
+      },
+    }).result;
+
+    expect(result.status).toBe('completed');
+    expect(modelIdAtSend).toBe(explicitModel.id);
+    const threads = await session.thread.list();
+    const thread = threads.find(t => t.id === result.threadId);
+    expect((thread?.metadata as Record<string, unknown> | undefined)?.activeModelPackId).toBe('custom:Test');
+  });
+
+  it('lets a pack override a restored thread model', async () => {
+    const { controller, session } = await makeHarness({
+      doStream: async () => ({ stream: textStream('Pack overrides restore.') }),
+    });
+    const restoredThreadId = session.thread.getId()!;
+    await session.model.switch('anthropic/restored-model');
+    await session.thread.create();
+
+    const [packModel] = await controller.listAvailableModels();
+    expect(packModel).toBeDefined();
+    vi.spyOn(controller, 'listAvailableModels').mockResolvedValue([{ ...packModel!, hasApiKey: true }]);
+    let modelIdAtSend: string | undefined;
+    const originalSendMessage = session.sendMessage.bind(session);
+    vi.spyOn(session, 'sendMessage').mockImplementation(async input => {
+      modelIdAtSend = session.model.get();
+      return originalSendMessage(input);
+    });
+
+    const result = await runMC({
+      controller,
+      session,
+      prompt: 'Use the pack on the restored thread',
+      thread: { id: restoredThreadId },
+      pack: {
+        id: 'custom:Test',
+        resolve: () => ({ modelId: packModel!.id, subagentModels: {}, modelRoute: { entries: [] } }),
+      },
+    }).result;
+
+    expect(result.status).toBe('completed');
+    expect(result.threadId).toBe(restoredThreadId);
+    expect(modelIdAtSend).toBe(packModel!.id);
+    const threads = await session.thread.list();
+    const thread = threads.find(t => t.id === restoredThreadId);
+    expect((thread?.metadata as Record<string, unknown> | undefined)?.activeModelPackId).toBe('custom:Test');
+  });
+
+  it('resolves the pack against the mode a resumed thread restores', async () => {
+    const { controller, session } = await makeHarness({
+      doStream: async () => ({ stream: textStream('Resumed mode answer.') }),
+    });
+    const restoredThreadId = session.thread.getId()!;
+    // Pin the thread to a non-startup mode, then move on so the resume
+    // restores that mode during the run. Modes persist across thread.create,
+    // so switch the fresh thread back explicitly.
+    await session.mode.switch({ modeId: 'build' });
+    await session.thread.create();
+    await session.mode.switch({ modeId: 'default' });
+    expect(session.mode.get()).toBe('default');
+
+    const [packModel] = await controller.listAvailableModels();
+    expect(packModel).toBeDefined();
+    vi.spyOn(controller, 'listAvailableModels').mockResolvedValue([{ ...packModel!, hasApiKey: true }]);
+    let modeSeenByResolve: string | undefined;
+
+    const result = await runMC({
+      controller,
+      session,
+      prompt: 'Pack on a resumed build thread',
+      thread: { id: restoredThreadId },
+      pack: {
+        id: 'custom:Test',
+        resolve: modeId => {
+          modeSeenByResolve = modeId;
+          return { modelId: packModel!.id, subagentModels: {}, modelRoute: { entries: [] } };
+        },
+      },
+    }).result;
+
+    expect(result.status).toBe('completed');
+    expect(modeSeenByResolve).toBe('build');
+  });
+
+  it('fails without sending when the pack has no model for the selected mode', async () => {
+    const { controller, session } = await makeHarness({
+      doStream: async () => ({ stream: textStream('Should never be sent.') }),
+    });
+    const sendMessage = vi.spyOn(session, 'sendMessage');
+    const onApplied = vi.fn();
+
+    const result = await runMC({
+      controller,
+      session,
+      prompt: 'Pack missing this mode',
+      pack: {
+        id: 'custom:Test',
+        resolve: () => undefined,
+        onApplied,
+      },
+    }).result;
+
+    expect(result.status).toBe('error');
+    expect(result.error?.message).toContain('custom:Test');
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect(onApplied).not.toHaveBeenCalled();
+  });
+
   it('yields controller events while iterating, then resolves', async () => {
     const { controller, session } = await makeHarness({ doStream: async () => ({ stream: textStream('Hi there') }) });
 

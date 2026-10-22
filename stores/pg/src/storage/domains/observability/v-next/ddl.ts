@@ -378,6 +378,18 @@ export function additiveColumns(schema: string): { table: string; column: string
       column: 'isPending',
       ddl: `ALTER TABLE ${qualifiedTable(schema, TABLE_SPAN_EVENTS)} ADD COLUMN IF NOT EXISTS "isPending" boolean NOT NULL DEFAULT false`,
     },
+    // Stored previews. Nullable with no default, so the ALTER is a catalog-only change; rows
+    // written before it read NULL and readers fall back to the payload for them.
+    ...(['inputPreview', 'outputPreview', 'errorPreview'] as const).map(column => ({
+      table: TABLE_SPAN_EVENTS,
+      column,
+      ddl: `ALTER TABLE ${qualifiedTable(schema, TABLE_SPAN_EVENTS)} ADD COLUMN IF NOT EXISTS "${column}" text`,
+    })),
+    {
+      table: TABLE_SPAN_EVENTS,
+      column: 'timeToFirstChunkMs',
+      ddl: `ALTER TABLE ${qualifiedTable(schema, TABLE_SPAN_EVENTS)} ADD COLUMN IF NOT EXISTS "timeToFirstChunkMs" double precision`,
+    },
     {
       table: TABLE_FEEDBACK_EVENTS,
       column: 'reviewStatus',

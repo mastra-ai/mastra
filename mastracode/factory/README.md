@@ -115,9 +115,29 @@ const intakeRule = context =>
     : undefined;
 ```
 
-**Migration:** Remove former global `rules.work` and `rules.review` configuration. Built-in customization is deferred; there is no built-in override or replacement API. Define custom-board handlers on their phases instead. Deployments that relied on automatic issue triage or review proposals on arrival should add an appropriate custom-board handler.
+**Migration:** Remove former global `rules.work` and `rules.review` configuration. To customize Work or Review, set `includeDefaultBoards: false` and install a same-ID replacement, following the compatibility guidance above. Define lifecycle handlers on the replacement board's phases. Deployments that relied on automatic issue triage or review proposals on arrival should add an appropriate handler to the installed board.
 
-There is no global rules object. Every rule has one owner: boards own lifecycle handlers, transition policy, phase semantics, and tool-result rules; integrations own their event handlers. The runtime only executes rules.
+There is no global rules object. Every rule has one owner: boards own lifecycle handlers, transition policy, phase semantics, tool-result rules, and how their cards react to integration events; integrations own their default event handlers. The runtime only executes rules.
+
+### Closing cards when their source closes
+
+When a tracked GitHub, GitLab, Linear, or Jira issue or incident.io follow-up is closed, the stock integration rules move its card to a terminal phase of the board the card is on. The board declares which phases with `sourceClosed`: `completed` receives sources that were completed, and `canceled` receives sources that were canceled, not planned, or closed as duplicates. GitLab reports no close reason, so its closures always use `completed`. Both entries must name terminal phases.
+
+```typescript
+const releaseBoard = defineBoard({
+  id: 'release',
+  title: 'Release',
+  initialPhase: 'queued',
+  sourceClosed: { completed: 'shipped', canceled: 'dropped' },
+  phases: {
+    queued: { title: 'Queued', kind: 'resting', outcomes: { ship: 'shipped', drop: 'dropped' } },
+    shipped: { title: 'Shipped', kind: 'terminal' },
+    dropped: { title: 'Dropped', kind: 'terminal' },
+  },
+});
+```
+
+Work declares `{ completed: 'done', canceled: 'canceled' }`. A board without `sourceClosed` leaves its cards where they are, and cards already in a terminal phase are never moved. The move is an ordinary transition, so the board must allow it from the card's current phase. Integration rule overrides receive the same targets as `context.boardClosure`.
 
 ### Board tool-result rules
 
@@ -146,7 +166,58 @@ const releaseBoard = defineBoard({
 
 The handler receives the bound item, actor, board, tool name, normalized result, and `configVersion`, and returns one decision or `undefined`. Tool names follow the identifier rules for decision roles; `onResult` must be a function and the leaf may contain nothing else. Violations are `BoardDefinitionError`s at definition time.
 
-Work declares one rule: `submit_plan`. When a `plan`-seated agent on a Planning card reports a result starting with `Plan approved.`, the card transitions to Execute. Review declares none. Resolution is fail-closed: a tool result on a card whose board is not installed, or whose board does not declare that tool, fires no rule — a custom board inherits nothing from Work even if it reuses Work's phase names.
+The default Work board declares one rule: `submit_plan`. In an interactive session, a successful result whose content starts with `Plan approved.` transitions a Planning card to Execute when the actor is an agent in the `plan` role. Review declares none. Rules resolve from the installed board, so a replacement `work` board can declare its own `tools.submit_plan.onResult`. Resolution is fail-closed: a tool result on a card whose board is not installed, or whose board does not declare that tool, fires no rule. Other boards inherit nothing from Work even if they reuse its phase names.
+
+### Board event rules
+
+A board can declare how its own cards react to GitHub, GitLab, Linear, Jira, and incident.io events. Declare handlers under `events`, keyed by integration and then by event name:
+
+```ts
+import { defineBoard } from '@mastra/factory';
+
+const deliveryBoard = defineBoard({
+  id: 'delivery',
+  title: 'Delivery',
+  initialPhase: 'triage',
+  phases: {/* ... */},
+  events: {
+    github: {
+      pullRequestMerged: context => ({
+        type: 'sendMessage',
+        idempotencyKey: `${context.ingress.id}:verify-merge`,
+        role: 'work',
+        message: `Pull request #${context.pullRequest?.number} merged. Verify the work is complete.`,
+      }),
+      pullRequestCommentCreated: null,
+    },
+    linear: {
+      issueClosed: context =>
+        context.issue.stateType === 'canceled' && context.phase?.outcomes.includes('canceled')
+          ? {
+              type: 'transition',
+              idempotencyKey: `${context.ingress.id}:canceled`,
+              board: 'delivery',
+              stage: 'canceled',
+            }
+          : undefined,
+    },
+  },
+});
+```
+
+A board handler runs only for events bound to a card on that board. Events without a card yet — issue intake and filing a pull request's own Review card — always use the integration's handlers.
+
+For each event, Factory picks the handler in this order:
+
+1. A handler the deployment set explicitly in the integration's `rules` (for example `new PlatformGithubIntegration({ rules })`). Existing integration-level handlers keep working unchanged.
+2. The card's board handler. `null` switches the event off for cards on that board only; cards on other boards are unaffected.
+3. The integration default.
+
+A board handler that returns a decision replaces the default for that card. One that returns nothing lets the default run, so card-independent defaults such as dismissing stale Factory reviews still apply. The stock Work and Review behavior stays in the integration defaults and never acts on cards on other boards, so a custom board needs no board guards and no delegation to stock handlers.
+
+Every integration rule context bound to a card carries `phase`: `{ id, kind, role?, outcomes }`, describing what the card's current phase means on its board. `outcomes` lists the outcome names the phase declares. `phase` is absent when the card sits in more than one stage or its board does not declare the phase.
+
+Unknown integrations, unknown event names, and handler values other than a function or `null` are rejected by `defineBoard` with a `BoardDefinitionError`.
 
 ### Config version
 
@@ -165,7 +236,7 @@ new MastraFactory({ storage, rules: defaultFactoryRules({ version: 'v2', overrid
 new MastraFactory({ storage, configVersion: 'v2', boards: [defineBoard({ ..., tools: { my_tool: { onResult } } })] });
 ```
 
-Contexts that carried `ruleSetVersion` now carry `configVersion`. Work's `submit_plan` rule cannot be replaced from config; built-in customization remains deferred.
+Contexts that carried `ruleSetVersion` now carry `configVersion`. To customize Work's `submit_plan` rule, declare `tools.submit_plan.onResult` on the installed replacement `work` board.
 
 ### Board transition policy
 
@@ -204,8 +275,6 @@ Policies must be side-effect-free. They run on initial entry, reentry, and same-
 
 A policy cannot bypass topology, ingress authorization, board ownership, external-author safety, revision checks, decision validation, replay handling, or atomic persistence. Returning `allow` is not an authorization override.
 
-**Remaining limitations:** Built-in board replacement and customization remain unsupported.
-
 ### Board phase semantics
 
 Every phase declares what it _is_ with a required `kind`; `defineBoard()` rejects a phase without one.
@@ -229,9 +298,9 @@ const releaseBoard = defineBoard({
 
 Work declares `intake` resting; `triage`, `planning`, `execute`, and `review` working with roles `triage`, `plan`, `work`, and `work`; `done` and `canceled` terminal. Review declares `intake` resting, `review` working with role `review`, and `done`/`canceled` terminal. The definition exposes the derived helpers `phaseKind`, `isWorking`, `isTerminal`, `roleForPhase`, and `phaseForRole`.
 
-Consent, the external-author guard, kickoff seating, run-start lanes, terminal cleanup, the closed-PR and issue sweeps, and supervisor findings all read the installed board's declarations; nothing name-matches phases. A board that reuses Work's phase names gets exactly what it declared. Persisted `board` is authoritative; rows without one are read as Review for pull requests and Work otherwise.
+Consent, the external-author guard, kickoff seating, run-start lanes, terminal cleanup, and the closed-PR and issue sweeps all read the installed board's declarations; nothing name-matches phases. A board that reuses Work's phase names gets exactly what it declared. Persisted `board` is authoritative; rows without one are read as Review for pull requests and Work otherwise.
 
-Unknown semantics fail closed. When the board is not installed or the phase is not declared: external-event transitions ask for consent, no sweep or cleanup treats the card as finished, the supervisor neither revokes nor starts a seat for it, and a rule-started run from rest with no lane for its role is rejected.
+Unknown semantics fail closed. When the board is not installed or the phase is not declared: external-event transitions ask for consent, no sweep or cleanup treats the card as finished, and a rule-started run from rest with no lane for its role is rejected.
 
 **Migration:** Existing `defineBoard()` calls must add `kind` to every phase and `role` to working phases.
 
@@ -245,7 +314,7 @@ phases: {
 }
 ```
 
-**Remaining limitations:** The `held-waiting` supervisor finding stays Work-specific. Throughput and lead-time metrics still count completions by Work's `done` phase. `factory-ui` still renders the built-in stage and role pipeline. Built-in board replacement and customization remain unsupported.
+**Remaining limitations:** Throughput and lead-time metrics still count completions by Work's `done` phase. `factory-ui` still renders the built-in stage and role pipeline.
 
 ### Execute a custom board
 
@@ -504,10 +573,10 @@ const gitlab = new PlatformGitLabIntegration(); // Optionally { connectionId: 'c
 
 In Platform mode, issue, note, merge request and push events reach Factory by polling the Platform's event log for each connection, the same way Platform GitHub deployments do. Point the GitLab project webhook at the Platform's Nango forwarding URL, not at Factory; Platform mode needs neither `MASTRA_GITLAB_CONNECTION_ID` nor `MASTRA_GITLAB_WEBHOOK_SECRET`. The direct `/web/gitlab/webhook` route stays available when `MASTRA_GITLAB_WEBHOOK_SECRET` is set; do not point a project webhook at both Factory and the Platform, or each event is processed twice.
 
-| Variable                                     | Default | Purpose                                                               |
-| -------------------------------------------- | ------- | --------------------------------------------------------------------- |
-| `MASTRA_PLATFORM_GITLAB_POLLING_ENABLED`     | `true`  | Set `false` to stop polling the Platform event log for GitLab events. |
-| `MASTRA_PLATFORM_GITLAB_POLLING_INTERVAL_MS` | `20000` | Positive polling interval in milliseconds.                            |
+| Variable | Default | Purpose |
+| -------------------------------------------- | ------- |
+| `MASTRA_PLATFORM_GITLAB_POLLING_ENABLED` | `true` | Set `false` to stop polling the Platform event log for GitLab events. |
+| `MASTRA_PLATFORM_GITLAB_POLLING_INTERVAL_MS` | `20000` | Positive polling interval in milliseconds. |
 
 These sit next to `MASTRA_PLATFORM_GITHUB_POLLING_ENABLED` and `MASTRA_PLATFORM_GITHUB_POLLING_INTERVAL_MS` and follow the same rules. One replica polls at a time; the cursor for each connection is stored in the integration settings table and only advances once a page of events has been processed. `diagnostics()` reports `pollingEnabled` and `pollingIntervalMs`.
 
@@ -576,6 +645,137 @@ A repository maintainer with write or admin access can start a Factory review fr
 ```
 
 `@<factory-app> re-review` is also accepted. Factory resolves `<factory-app>` from its observed or configured GitHub App login (without the `[bot]` suffix), so commands are ignored until that identity is known. The command creates and starts a first Review pass for a missing or Intake card, restarts a completed card with `factory-rereview`, and is a no-op while the card is already Reviewing. Other prose, quoted mentions, edited comments, and comments from untrusted users do not trigger a run.
+
+### Factory tools in user sessions
+
+A person's own Factory session (a user session) gets tools to find, file and manage the Factory's work items through its agent. Factory scopes the tools from the stored session row, never from the thread's `factoryProjectId` tag: the session must belong to a Factory in the caller's organization, and a private session only works for its owner. With authentication disabled, the shared `local` tenant applies. Sessions doing work for someone else, either bound to a work item's run or started as a side session, only get `factory_message_origin`, so they can report back and answer messages.
+
+| Tool                            | Input                                                                                                                                           |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `factory_list_work_items`       | Optional `query` (title text or `#number`), `stage`, `board`, `role`, `active`, `requestedBy: 'me'`, `subscribed`, `limit` (default 25, max 50) |
+| `factory_inspect_work_item`     | `workItem` (id or `#number`)                                                                                                                    |
+| `factory_list_attention`        | Optional `limit` (max 50)                                                                                                                       |
+| `factory_create_work_item`      | `title`, `brief`, optional `repository` (`owner/name`, one this Factory links)                                                                  |
+| `factory_update_work_item`      | `workItem` plus any of `title`, `repository`, `parentWorkItem` (or `null` to detach), `plansPreapproved: true`                                  |
+| `factory_subscribe_work_item`   | `workItem`                                                                                                                                      |
+| `factory_unsubscribe_work_item` | `workItem`                                                                                                                                      |
+| `factory_transition_work_item`  | `workItem`, `stage`                                                                                                                             |
+| `factory_retry_decision`        | `decisionId`                                                                                                                                    |
+| `factory_dismiss_decision`      | `decisionId`                                                                                                                                    |
+| `factory_resolve_proposal`      | `decisionId`, `action` (`approve` or `dismiss`)                                                                                                 |
+| `factory_start_session`         | `prompt` (up to 8000 characters), optional `title`, optional `model`; for a work-item role, `workItem` and `role`                               |
+| `factory_answer_approval`       | `sessionId`, `toolCallId`, `decision` (approve or decline), optional `reason`                                                                   |
+| `factory_switch_session_model`  | `sessionId`, `modelId`                                                                                                                          |
+| `factory_signal_session`        | `sessionId`, `message` (up to 4000 characters), optional `priority` (`low`, `medium`, `high`, `urgent`; default `medium`)                       |
+| `factory_message_origin`        | `message`, optional `inReplyTo` (the message's notification id), optional `status` (`progress`, `blocked`, `done`, `failed`)                    |
+
+Read tools and `factory_message_origin` are available on every turn. The other tools only appear on turns a signed-in person started, so text arriving from a notification, webhook or channel can't drive them. The one exception is `factory_signal_session`: on those turns it can still message the side sessions this session started and the active sessions of work items it follows, so the session can answer the sessions it is waiting on. None of them asks for approval: they are allowed on the session when it's created, unless the person has set their own policy for the tool or for the `mcp` category.
+
+`factory_switch_session_model` changes the model of a side, work item or review session you own in the same Factory, without recreating it. It refuses a model this server can't run. A running session switches right away; a stopped one uses the model on its next run.
+
+`factory_create_work_item` files the card as the caller in its board's first phase, exactly like **New card**, posts the brief as its first comment, and subscribes the session. Name the `repository` when the Factory links more than one: a run can't start on a card that doesn't say which. `factory_update_work_item` sets it afterwards, like choosing a repository on the card, and also edits the title, the parent item and plan pre-approval. Both refuse a repository the Factory doesn't link, and a card synced from an issue keeps the issue's repository. Stages, the board and role sessions aren't fields it edits; stages move with `factory_transition_work_item`. Subscriptions are stored per work item and session in the `factory_work_item_subscriptions` collection and are removed with the item, so any number of sessions can follow one item.
+
+#### Messaging between sessions
+
+`factory_signal_session` messages any other session in the same Factory that the caller can see: a work item's role session, or a teammate's session that isn't private. The message arrives as a `factory-session` notification on that session's own thread. Factory brings an offline session back online first, and the turn it wakes runs as that session's owner, with the owner's credentials, never as the sender.
+
+How a message is delivered depends on its priority. `urgent` always delivers, even into a running turn. `high` and `medium` wake an idle session; while it is busy, `high` arrives as a summary and then in full, and `medium` waits for the current step. `low` arrives as a summary. Agents can read the full text of any notification with `notification_inbox`. A session can have at most 10 messages, replies and reports, together, delivered to the same session thread in 10 minutes. Past that, the tools queue the message and say when it will be delivered, so the sender does not send it again; it goes out, oldest first, once the window has a slot. `progress` reports don't count, since they replace each other.
+
+`factory_message_origin` with `inReplyTo` answers a message. `inReplyTo` must name a `factory-session` message that reached the answering session's own thread, and the reply goes to the session and thread that sent it, never to an address the agent supplies. Each message can be answered once, and replies, reports and other notifications can't be answered, so two agents can't ping-pong. Replies arrive at `high` priority and carry an `in-reply-to` attribute. Messages and replies are recorded in the audit trail as `factory.agent.signaled`.
+
+#### Sub-sessions
+
+`factory_start_session` starts another session for the caller and sends `prompt` as its first message. It has two modes:
+
+- **Side session** (no `workItem`): a standalone session with no work item, for a one-off job. It uses the same repository as the session that started it. Factory stores that session on the new session's row (`origin_session_id`, `origin_thread_id`) and copies the parent's visibility. It runs on the model of the session that started it, or on `model` when one is passed. That model has to be one the session's credentials can run; an unknown or unrunnable model is refused before anything is created. When the parent has no model set, the side session keeps the Factory's default worker model.
+- **Work-item role** (`workItem` and `role`): starts a role the item's board seats, the same way **Start** does in the Factory UI. The card does not move and no autonomy is armed. The tool refuses when the role already has a session, naming it so the agent can message it instead, and refuses an item linked to several repositories. The caller is subscribed to the item, and the run is recorded as `factory.run.started` with the caller as the person who started it.
+
+Both modes attribute the new session to the caller, so it runs with the caller's credentials (the caller's own keys under the `user` model scope, the organization's under `factory`). A work-item role keeps the Factory's default worker model. The first message runs with only the caller as its user, never the rest of the parent turn's context. The tool needs no approval but, like the other management tools, only appears on turns a signed-in person started.
+
+#### Reports
+
+A spawned session reports back with `factory_message_origin` without `inReplyTo`. A side session's report goes to the session that started it; a work-item session's report goes to every session subscribed to the item except itself. The `status` sets how the report is delivered:
+
+| `status`   | Notification kind | Priority |
+| ---------- | ----------------- | -------- |
+| `failed`   | `failed`          | `urgent` |
+| `blocked`  | `blocked`         | `urgent` |
+| `done`     | `done`            | `high`   |
+| `progress` | `progress`        | `low`    |
+| none       | `report`          | `high`   |
+
+Progress reports from one session replace each other while unread. `done`, `failed` and `blocked` reports are never replaced, so a final report can't be overwritten by a later progress update.
+
+Every run of a work session or side session ends with exactly one final report, however the run started: the board, a person typing into the session, a wake from another session's message, or a run after a server restart. Each Factory session gets a listener when it is created. A session with an active run binding reports to everyone following its work item, including for the run that moved the item to a finished stage and so ended its own binding; a side session reports to the session that started it; a person's own session reports to nobody. When a run ends, Factory checks each recipient's thread for a final report the agent sent since the run started, and sends one itself to the recipients that lack it: `done` when the run completed, `failed` when it ended in error (quoting the error), and `blocked`, naming the tool, when the run stopped waiting for an answer or for someone to approve a tool call. A reply with a final `status` counts as the final report, and any reply counts for a completed run. A run that completes after the agent reported `blocked` is waiting for an answer, so it gets no `done`; a run someone stopped gets no report. A board run that fails before it ever runs (no session, a configuration the run can't succeed with) reports `failed` once no retry remains. These backstop reports carry a `backstop` attribute.
+
+A run that holds a tool call for approval stays open, so the same listener tells those sessions right away: an urgent `approval` notification names the session, the tool, its arguments and the `toolCallId`, once per call. A session that follows the work item, or started the side session, can answer it with `factory_answer_approval`, as the person signed in to it; the answer is audited as `factory.run.approved` or `factory.run.dismissed`. Other people's private sessions can't be answered, and an approval whose run already ended can't be either: the tool says so, and the session can be messaged to try again.
+
+When a followed work item changes stage, subscribers whose session is running get a `low` priority `stage` notice. A stage change never wakes an offline session; it sees the current stage in its state signal instead.
+
+#### The `<factory-sessions>` state signal
+
+A user session sees what it is waiting on without calling a tool. Once it has started a side session or follows a work item, each step carries a `<factory-sessions>` state signal listing:
+
+- side sessions it started: title, session id, whether it is running, parked or idle, and the last report with its time;
+- work items it follows: number, title, stage, the session working on it and whether that session is `running`, `idle` or `parked`, and the last report with its time. Following doesn't end when an item finishes; a session can unsubscribe when it's done with an item.
+
+Running entries come first, and the list shows at most 20 rows with a "+N more" line. Side sessions idle for more than 24 hours, and items in a finished stage for more than 24 hours, drop out. Sessions the caller only messaged never appear. When the last entry goes, the signal sends "No sub-sessions or followed work items." once and then stays silent. The signal is only resent when its content changes.
+
+Spawned sessions get a one-line signal instead: a side session sees which session started it, and a work-item session sees the item, its role, and how many sessions follow it (nothing when nobody does).
+
+The tools take their scope as an argument rather than reading the request, so the same tool set can later be mounted elsewhere, such as an MCP server.
+
+### MCP server (Claude, ChatGPT and other MCP clients)
+
+A Factory with an auth provider and an OAuth authorization server serves an MCP endpoint over Streamable HTTP:
+
+```
+https://<your-factory>/web/factory/projects/<projectId>/mcp
+```
+
+Copy it from **Settings → Connections → MCP clients** in the Factory UI. The card only appears when the endpoint is served (`/web/config/features` reports `mcp: true`).
+
+It exposes the Factory tools a signed-in web session has (list, inspect, create, update and transition work items, start and signal sessions, decisions, approvals), plus `search` and `fetch` over work items for ChatGPT. Each tool carries MCP annotations (read-only, destructive, idempotent) so clients can ask before changes.
+
+Callers must sign in. Requests without a valid bearer token get `401` with a `WWW-Authenticate` header pointing to the RFC 9728 metadata at `/.well-known/oauth-protected-resource/web/factory/projects/<projectId>/mcp`. Tokens go through the same auth provider and org checks as the web UI. When the Factory has a linked repository, each user gets one private connector session per Factory that the session tools act from.
+
+To connect a client:
+
+- **Claude** (claude.ai and Claude Desktop): open **Settings → Connectors → Add custom connector**, paste the endpoint URL, then sign in when asked. Claude connects from Anthropic's servers, so the Factory must be reachable over public HTTPS.
+- **ChatGPT**: open **Plugins**, select **+ → Add custom MCP server**, paste the endpoint URL, and choose OAuth. ChatGPT also connects from its own servers and speaks MCP `2026-07-28`.
+
+The endpoint speaks MCP `2026-07-28` (clients open with `server/discover`). Clients that still open with a 2025-era `initialize` request, such as VS Code and Cursor, are served too, statelessly: they sign in the same way and get the same tools, but no session id, no `GET` event stream and no activity events. CORS allows the `Mcp-Protocol-Version`, `Mcp-Method` and `Mcp-Name` request headers and exposes `WWW-Authenticate`, so browser-based clients can connect too, from any origin the server's CORS settings accept.
+
+Factories on Mastra Platform auth advertise Platform's AuthKit (`https://auth-kit.mastra.ai`) automatically. With other auth providers, set the authorization server the metadata advertises, or the endpoint isn't served:
+
+```ts
+new MastraFactory({
+  // ...
+  mcp: { authorizationServers: ['https://your-tenant.authkit.app'] },
+});
+```
+
+or set `MASTRA_FACTORY_MCP_AUTHORIZATION_SERVER`. Pass `mcp: false` to turn the endpoint off.
+
+#### Activity events (experimental)
+
+The endpoint serves one MCP event type (SEP-3415, experimental in `@mastra/mcp`), `factory.activity`, so clients can notice changes without re-reading work items. It is poll-only: call `events/poll`; `events/stream` and webhooks aren't offered.
+
+Claude and ChatGPT don't consume these events yet: Claude connectors have no events support, and ChatGPT only uses webhook delivery. Today they're for clients that call `events/poll` themselves.
+
+```json
+{
+  "method": "events/poll",
+  "params": { "name": "factory.activity", "arguments": { "workItemId": "<id>" }, "cursor": null }
+}
+```
+
+- `arguments` are optional: `workItemId` narrows to one work item, `actions` to specific audit actions (for example `factory.work_item.updated`).
+- A `null` or missing cursor starts from now and returns no events. Pass back the returned `cursor` on each poll. Any other cursor the Factory can't read, including `""`, restarts from now and marks the result `truncated`.
+- An event is delivered once it is 5 seconds old, so events written while a poll runs aren't skipped.
+- With `maxAgeMs`, older events are skipped and the result is marked `truncated`.
+- Each event's `eventId` is its audit row id, and the payload has `action`, `occurredAt`, `actor`, a one-line `summary`, and `workItemId` and `sessionId` when the event is about a work item or session.
+- Work item and session activity is served: item changes, runs, approvals, signals, and agents' commits, pushes and pull requests. Sessions follow the same rule as everywhere else in the Factory: you see your own sessions and shared ones, never another member's private session. Work item activity always shows up: when it happened in a session you can't see, the event says `privateSession: true` and the summary ends with "(in a private session)", but it doesn't say which session. Activity on such a session alone is left out.
 
 ### Development
 

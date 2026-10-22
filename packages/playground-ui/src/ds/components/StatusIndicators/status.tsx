@@ -1,5 +1,6 @@
 import type { ComponentPropsWithoutRef } from 'react';
-import { statusDotClass, type StatusPresentation } from './status-dot-styles';
+import { statusDotClass } from './status-dot-styles';
+import type { StatusPresentation } from './status-dot-styles';
 import { cn } from '@/lib/utils';
 
 export type StatusProps = Omit<ComponentPropsWithoutRef<'span'>, 'children'> & {

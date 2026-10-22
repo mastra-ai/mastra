@@ -2,12 +2,8 @@ import { access, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import {
-  runTraceImport,
-  resolveTraceImportWindow,
-  traceImportAction,
-  type TraceImportActionDependencies,
-} from './action.js';
+import { runTraceImport, resolveTraceImportWindow, traceImportAction } from './action.js';
+import type { TraceImportActionDependencies } from './action.js';
 import type { TraceImportProvider } from './provider.js';
 import type { PreparedTraceBatch, TraceImportSpan, TraceImportTrace } from './types.js';
 import { uploadTraceImport } from './upload.js';
@@ -50,6 +46,7 @@ function provider(values = [trace(1)]): TraceImportProvider {
       provider: 'langfuse',
       baseUrl: 'https://cloud.langfuse.com',
       projectId: 'source-project',
+      projectName: 'Source project',
       idAlgorithmVersion: '1',
     }),
     read: async function* () {
@@ -124,28 +121,34 @@ describe('resolveTraceImportWindow', () => {
       cutoffAt: '2026-08-12T12:00:00.000Z',
       snapshotAt: '2026-09-11T12:00:00.000Z',
     });
-    expect(resolveTraceImportWindow({ from: '2026-09-01', to: '2026-09-10' }, NOW)).toEqual({
+    expect(resolveTraceImportWindow({ since: '2026-09-01', until: '2026-09-10' }, NOW)).toEqual({
       cutoffAt: '2026-09-01T00:00:00.000Z',
       snapshotAt: '2026-09-10T00:00:00.000Z',
     });
   });
 
-  it('clamps an implicit start to the Platform retention window when --to is in the past', () => {
-    expect(resolveTraceImportWindow({ to: '2026-09-10T12:00:00Z' }, NOW)).toEqual({
+  it('clamps an implicit start to the Platform retention window when --until is in the past', () => {
+    expect(resolveTraceImportWindow({ until: '2026-09-10T12:00:00Z' }, NOW)).toEqual({
       cutoffAt: '2026-08-12T12:00:00.000Z',
       snapshotAt: '2026-09-10T12:00:00.000Z',
     });
   });
 
-  it('rejects invalid, future, reversed, older, and wider windows', () => {
-    expect(() => resolveTraceImportWindow({ from: 'not-a-date' }, NOW)).toThrow('--from');
-    expect(() => resolveTraceImportWindow({ to: '2026-09-12' }, NOW)).toThrow('future');
-    expect(() => resolveTraceImportWindow({ from: '2026-09-10', to: '2026-09-01' }, NOW)).toThrow('earlier');
-    expect(() => resolveTraceImportWindow({ from: '2026-08-01', to: '2026-08-20' }, NOW)).toThrow('last 30 days');
-    expect(() => resolveTraceImportWindow({ to: '2026-08-12T12:00:00Z' }, NOW)).toThrow('last 30 days');
-    expect(() => resolveTraceImportWindow({ from: '2026-08-12T11:59:59Z', to: '2026-09-11T12:00:00Z' }, NOW)).toThrow(
-      'cannot exceed',
+  it('accepts the hidden --from and --to aliases', () => {
+    expect(resolveTraceImportWindow({ from: '2026-09-01', to: '2026-09-10' }, NOW)).toEqual(
+      resolveTraceImportWindow({ since: '2026-09-01', until: '2026-09-10' }, NOW),
     );
+  });
+
+  it('rejects invalid, future, reversed, older, and wider windows', () => {
+    expect(() => resolveTraceImportWindow({ since: 'not-a-date' }, NOW)).toThrow('--since');
+    expect(() => resolveTraceImportWindow({ until: '2026-09-12' }, NOW)).toThrow('future');
+    expect(() => resolveTraceImportWindow({ since: '2026-09-10', until: '2026-09-01' }, NOW)).toThrow('earlier');
+    expect(() => resolveTraceImportWindow({ since: '2026-08-01', until: '2026-08-20' }, NOW)).toThrow('last 30 days');
+    expect(() => resolveTraceImportWindow({ until: '2026-08-12T12:00:00Z' }, NOW)).toThrow('last 30 days');
+    expect(() =>
+      resolveTraceImportWindow({ since: '2026-08-12T11:59:59Z', until: '2026-09-11T12:00:00Z' }, NOW),
+    ).toThrow('cannot exceed');
   });
 });
 
@@ -267,6 +270,23 @@ describe('runTraceImport', () => {
       acknowledgedTraces: 0,
     });
     expect(createTarget).not.toHaveBeenCalled();
+    expect(deps.ui?.note).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'Source:          Langfuse project "Source project" (source-project) at https://cloud.langfuse.com\n' +
+          'Target:          Mastra Platform project "Target project" (target-project)',
+      ),
+      'Prepared trace import',
+    );
+    expect(deps.ui?.outro).toHaveBeenCalledWith(expect.stringContaining('--target-project target-project'));
+  });
+
+  it('prints the resume command with the project exactly as the user named it', async () => {
+    const deps = await dependencies();
+    await runTraceImport({ provider: 'langfuse', targetProject: 'support', dryRun: true }, deps);
+    expect(deps.ui?.outro).toHaveBeenCalledWith(expect.stringMatching(/--resume [0-9a-f-]+ --target-project support$/));
+    const resolveDestination = vi.fn(async () => destination());
+    await runTraceImport({ provider: 'langfuse', project: 'legacy', dryRun: true }, { ...deps, resolveDestination });
+    expect(resolveDestination).toHaveBeenCalledWith('legacy', expect.anything());
   });
 
   it('completes an empty import without creating a Platform target', async () => {
@@ -437,7 +457,7 @@ describe('runTraceImport', () => {
   });
 
   it('rejects date and dry-run options that would change resume behavior', async () => {
-    await expect(runTraceImport({ provider: 'langfuse', resume: 'id', from: '2026-09-01' })).rejects.toThrow(
+    await expect(runTraceImport({ provider: 'langfuse', resume: 'id', since: '2026-09-01' })).rejects.toThrow(
       'cannot be changed',
     );
     await expect(runTraceImport({ provider: 'langfuse', resume: 'id', dryRun: true })).rejects.toThrow(

@@ -69,22 +69,13 @@ export class PricingModel {
   readonly id: string;
   readonly provider: string;
   readonly model: string;
-  readonly schema: string;
   readonly currency: string;
   readonly tiers: PricingTier[];
 
-  constructor(args: {
-    id: string;
-    provider: string;
-    model: string;
-    schema: string;
-    currency: string;
-    tiers: PricingTier[];
-  }) {
+  constructor(args: { id: string; provider: string; model: string; currency: string; tiers: PricingTier[] }) {
     this.id = args.id;
     this.provider = args.provider;
     this.model = args.model;
-    this.schema = args.schema;
     this.currency = args.currency;
     this.tiers = args.tiers;
   }
