@@ -1622,8 +1622,9 @@ describe('Traces page sorting', () => {
     setTracePageHandlers(metricsUnavailableCapabilities);
     server.use(
       http.post(`${TEST_BASE_URL}/api/observability/traces/query`, async ({ request }) => {
-        const body = (await request.json()) as { orderBy?: unknown };
-        orderBys.push(body.orderBy);
+        const body = (await request.json()) as { orderBy?: unknown; mode?: string };
+        // Delta polls share this endpoint but never sort; only the list request carries the order.
+        if (body.mode !== 'delta') orderBys.push(body.orderBy);
         return HttpResponse.json(traceQueryPage);
       }),
     );
