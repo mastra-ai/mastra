@@ -63,6 +63,12 @@ async function stopWorker(worker: ChildProcess | undefined) {
   await new Promise(resolve => setTimeout(resolve, 500));
 }
 
+it('does not mask a failed run when its detached worker has already exited', async () => {
+  const worker = spawn(process.execPath, ['-e', ''], { detached: true, stdio: 'ignore' });
+  await new Promise<void>(resolve => worker.once('exit', () => resolve()));
+  await expect(stopWorker(worker)).resolves.toBeUndefined();
+});
+
 describe('Inngest: replacement worker resumes an OM delegation (#27971)', () => {
   beforeAll(async () => {
     mock = new LLMock({ port: 0 });
