@@ -193,9 +193,9 @@ async function observedAgent() {
   });
   const transport = new EventEmitterPubSub();
   const durable = createDurableAgent({ agent, pubsub: transport });
-  const mastra = new Mastra({ agents: { 'observed-agent': durable as any }, logger: false, storage });
+  new Mastra({ agents: { 'observed-agent': durable as any }, logger: false, storage });
   const workflows = (await storage.getStore('workflows'))!;
-  return { durable, pubsub: durable.pubsub, transport, workflows, mastra };
+  return { durable, pubsub: durable.pubsub, transport, workflows };
 }
 
 /** Claims the run for an execution that then loses it to a successor; returns both claim generations. */
@@ -421,28 +421,10 @@ describe('__subscribeToRunStream() lifecycle', () => {
     }
   });
 
-  it('checks the Mastra transport for a quiet remote lease, not the agent-level pubsub', async () => {
-    const { durable, transport, mastra } = await observedAgent();
-
-    // Run frames live on the Mastra bus, so a lease held on the agent-level
-    // bus no longer keeps a quiet run open.
-    const ignoredRunId = 'quiet-agent-lease';
-    await transport.acquireLease(executionLeaseKey(durable.id, ignoredRunId), 'remote', 30_000);
-    const ignoredComplete = vi.fn();
-    const unsubscribeIgnored = await durable.__subscribeToRunStream(
-      ignoredRunId,
-      { onComplete: ignoredComplete },
-      vi.fn(),
-    );
-    try {
-      expect(ignoredComplete).toHaveBeenCalled();
-    } finally {
-      await unsubscribeIgnored();
-    }
-
-    // A lease on the Mastra bus does keep the run open.
+  it('checks the agent transport for a quiet remote lease, not the separate Mastra bus', async () => {
+    const { durable, transport } = await observedAgent();
     const runId = 'quiet-remote-lease';
-    await mastra.pubsub.acquireLease(executionLeaseKey(durable.id, runId), 'remote', 30_000);
+    await transport.acquireLease(executionLeaseKey(durable.id, runId), 'remote', 30_000);
     const onComplete = vi.fn();
     const unsubscribe = await durable.__subscribeToRunStream(runId, { onComplete }, vi.fn());
     try {

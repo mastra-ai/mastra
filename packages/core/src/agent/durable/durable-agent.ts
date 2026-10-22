@@ -1687,8 +1687,8 @@ export class DurableAgent<
     }
 
     // Which wrapper we may reuse depends on the run bus, not on the agent's own
-    // pubsub: as soon as the agent is registered, run frames live on the Mastra
-    // bus, so an agent-level CachingPubSub is no longer the wrapper in play.
+    // pubsub: on the evented engine run frames live on the Mastra bus, so an
+    // agent-level CachingPubSub is no longer the wrapper in play there.
     const runStreamBus = this.#runStreamBus();
 
     if (runStreamBus instanceof CachingPubSub) {
@@ -1745,21 +1745,20 @@ export class DurableAgent<
   /**
    * The bus a run's frames live on.
    *
-   * A durable run's frames must be on the Mastra-level bus: the evented engine
-   * executes each step on whichever worker claims it and publishes there, so an
+   * On the evented engine a run's frames must be on the Mastra-level bus: each
+   * step executes on whichever worker claims it and publishes there, so an
    * observer on the agent's own bus would never see them. Using one bus also
    * means one cache log per run — the property offset replay depends on.
    *
-   * An agent that configured its own pubsub keeps it for its non-run traffic,
-   * but durable frames (and therefore this wrapper) move to the shared bus. A
-   * standalone agent with no Mastra stays on its own bus.
+   * The default engine runs every step in this process and publishes through
+   * this wrapper, so an agent-level pubsub keeps carrying its run frames.
    */
   #runStreamBus(): PubSub {
     const shared = this.#mastra?.pubsub;
-    if (!shared) return this.#innerPubsub;
+    if (!shared || this.resolveWorkflowEngine() !== 'evented') return this.#innerPubsub;
     if (this.#hasCustomPubsub && shared.__rawBus() !== this.#innerPubsub.__rawBus()) {
       this.logger.warn(
-        `[DurableAgent:${this.id}] Durable run frames use the Mastra pubsub, not the agent-level 'pubsub'. An agent pubsub on a different transport cannot be observed from other processes.`,
+        `[DurableAgent:${this.id}] Evented run frames use the Mastra pubsub, not the agent-level 'pubsub', because evented steps publish there.`,
       );
     }
     return shared;
