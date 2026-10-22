@@ -353,6 +353,7 @@ function factoryRequestContext(input: {
   requestContext.set('controller', {
     state: session.state.get(),
     getState: () => session.state.get(),
+    sessionId: binding.sessionId,
     threadId: binding.threadId,
     resourceId: binding.resourceId,
     session: {
@@ -1081,7 +1082,7 @@ export class FactoryDecisionDispatcher {
           // as a typed `skill` signal so the model sees `<skill name="…">` and traces
           // record the skill name. Plain-prompt kickoffs stay user messages.
           const kickoffSignal =
-            'skillName' in resolved
+            resolved.skillName !== undefined
               ? {
                   type: 'reactive' as const,
                   tagName: 'skill',
