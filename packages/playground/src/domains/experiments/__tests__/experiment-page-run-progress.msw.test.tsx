@@ -19,7 +19,7 @@ import {
   resultsResponse,
 } from './fixtures/experiment-item-route';
 import { newerExperimentsPage } from './fixtures/experiment-lookup';
-import { queuedExperiment, runningExperiment } from './fixtures/experiment-run-progress';
+import { queuedExperiment, runningExperiment, runningExperimentWithoutStart } from './fixtures/experiment-run-progress';
 import { renamedPostgresWithMetrics } from '@/domains/configuration/hooks/__tests__/fixtures/observability-storage-capabilities';
 import { emptyUsageBreakdown } from '@/domains/experiments/components/__tests__/fixtures/experiment-usage';
 import ExperimentPage from '@/pages/experiments/experiment';
@@ -48,6 +48,8 @@ let metricRequests = 0;
 
 beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: true });
+  // 1m 5s after the fixture's startedAt, so the elapsed timer is deterministic.
+  vi.setSystemTime(new Date('2026-07-21T00:01:05.000Z'));
   liveExperiment = runningExperiment;
   resultRequests = 0;
   metricRequests = 0;
@@ -94,8 +96,33 @@ describe('Experiment page — run progress', () => {
     it('shows how many items finished out of the total', async () => {
       renderExperimentRoute();
 
-      expect(await screen.findByRole('heading', { name: 'Run in progress' })).toBeTruthy();
+      expect(await screen.findByRole('heading', { name: 'Experiment in progress' })).toBeTruthy();
       expect(screen.getByText('2 / 3 items finished')).toBeTruthy();
+    });
+
+    it('shows how long the experiment has been running', async () => {
+      renderExperimentRoute();
+
+      expect(await screen.findByText('1m 5s elapsed')).toBeTruthy();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000);
+      });
+
+      expect(screen.getByText('1m 7s elapsed')).toBeTruthy();
+    });
+
+    it('rotates through what the run is busy with', async () => {
+      renderExperimentRoute();
+
+      expect(await screen.findByText('Calling your target…')).toBeTruthy();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000);
+      });
+
+      expect(screen.queryByText('Calling your target…')).toBeNull();
+      expect(screen.getByText('Working through the items…')).toBeTruthy();
     });
 
     it('holds back the partial KPIs and results', async () => {
@@ -116,8 +143,26 @@ describe('Experiment page — run progress', () => {
       liveExperiment = queuedExperiment;
       renderExperimentRoute();
 
-      expect(await screen.findByRole('heading', { name: 'Run queued' })).toBeTruthy();
+      expect(await screen.findByRole('heading', { name: 'Experiment queued' })).toBeTruthy();
       expect(screen.getByText('0 / 3 items finished')).toBeTruthy();
+    });
+
+    it('says it is waiting to start', async () => {
+      liveExperiment = queuedExperiment;
+      renderExperimentRoute();
+
+      expect(await screen.findByText('Waiting to start…')).toBeTruthy();
+    });
+  });
+
+  describe('when the start time is unknown', () => {
+    it('leaves the elapsed timer out', async () => {
+      liveExperiment = runningExperimentWithoutStart;
+      renderExperimentRoute();
+
+      await screen.findByText('2 / 3 items finished');
+
+      expect(screen.queryByText(/elapsed$/)).toBeNull();
     });
   });
 
