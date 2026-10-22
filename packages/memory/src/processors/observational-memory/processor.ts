@@ -326,9 +326,9 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           // The durable snapshot retains the run's inputs, but a background result may have
           // landed in storage after the snapshot was saved. Reconcile those response messages
           // before the unread-part scan; the snapshot's part keys represent what was seen.
-          this.turn.inputMessageIds = messageList.serialize().newUserMessagesPersisted;
+          this.turn.inputMessageIds = messageList.getPersisted.input.db().map(message => message.id);
           if (this.memory?.getPersistedMessages) {
-            const responseIds = messageList.serialize().newResponseMessagesPersisted;
+            const responseIds = messageList.getPersisted.response.db().map(message => message.id);
             const snapshotMessages = new Map(messageList.get.all.db().map(message => [message.id, message]));
             const storedMessages = await this.memory.getPersistedMessages(threadId, responseIds);
             for (const stored of storedMessages) {

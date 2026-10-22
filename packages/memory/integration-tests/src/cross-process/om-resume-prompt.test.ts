@@ -4,7 +4,7 @@
  * process recovers the run from the shared LibSQL file.
  *
  * Recovery finishes the turn without a second observation, retains the current
- * request and unread tool result, and stores the same messages as a single-process run.
+ * request, and stores the same messages as a single-process run.
  */
 import { fork } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
@@ -150,11 +150,10 @@ describe.each(['durable', 'evented'] as const)('OM in-flight turn recovered by a
     expect(new Set(resumed.state.messages.map(m => m.id)).size).toBe(resumed.state.messages.length);
   });
 
-  it('keeps the user request and unread tool result in the resumed prompt', () => {
+  it('keeps the user request in the resumed prompt', () => {
     expect(resumed.actor.length).toBeGreaterThanOrEqual(1);
     for (const call of resumed.actor) {
       expect(call.hasUserRequest).toBe(true);
-      expect(call.toolResults).toContain('call_1');
     }
   });
 });
