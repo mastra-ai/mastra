@@ -44,6 +44,11 @@ export const noRootDurationCapabilities: GetObservabilityCapabilitiesResponse = 
   capabilities: { ...traceQueryCapabilities.capabilities, traceQueryRootDuration: false },
 };
 
+export const noSpanQueryCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...traceQueryCapabilities,
+  capabilities: { ...traceQueryCapabilities.capabilities, spanQuery: false },
+};
+
 export const noDeltaPollingCapabilities: GetObservabilityCapabilitiesResponse = {
   ...traceQueryCapabilities,
   capabilities: { ...traceQueryCapabilities.capabilities, deltaPolling: false },

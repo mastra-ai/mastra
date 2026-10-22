@@ -11,7 +11,7 @@ import {
 } from '../../../hooks/use-traces-list-source';
 import { TRACE_FILTER_BAR_OPERATORS } from '../../../trace-filters';
 import { serializeTraceColumnPreferences } from '../../../trace-list-columns';
-import { TracesExplorer, useTracesFilterBar, useTracesFilterBarFields } from '../index';
+import { TracesExplorer, useTracesConfig, useTracesFilterBar, useTracesFilterBarFields } from '../index';
 import type { TracesExplorerLayoutProps, TracesExplorerPanelProps } from '../index';
 import { DEFAULT_TRACES_FILTERS, EMPTY_TRACES_SELECTION } from '../traces-explorer-actions';
 import type {
@@ -34,6 +34,7 @@ import {
   idleDeltaBatch,
   noDeltaPollingCapabilities,
   noRootDurationCapabilities,
+  noSpanQueryCapabilities,
   traceQueryCapabilities,
   twoTracesPage,
   weatherRootSpan,
@@ -147,6 +148,12 @@ type HarnessProps = {
   panelProps?: Partial<TracesExplorerPanelProps>;
 };
 
+// Stands in for the host's Traces/Spans switch, which offers the spans view only when span queries are on.
+function SpansViewLink() {
+  const { withSpanQuery } = useTracesConfig();
+  return withSpanQuery ? <a href="/spans">Spans view</a> : null;
+}
+
 // Plain React state stands in for the host: no router, no search params.
 function Harness({
   initialSelection = EMPTY_TRACES_SELECTION,
@@ -183,6 +190,7 @@ function Harness({
     >
       <TracesExplorer.Layout
         renderError={renderError}
+        tabs={<SpansViewLink />}
         actionRow={
           <div>
             {filterBar}
@@ -672,6 +680,50 @@ describe('TracesExplorer', () => {
       await screen.findByRole('dialog', { name: 'Trace details' });
 
       expect(onFeedbackRequest).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when the server supports span queries and the host turns them on', () => {
+    it('lets the host offer the spans view', async () => {
+      setExplorerHandlers();
+
+      const { queryClient } = renderExplorer({ features: { spanQuery: true } });
+      await settle(queryClient);
+
+      expect(screen.getByRole('link', { name: 'Spans view' })).toBeTruthy();
+    });
+  });
+
+  describe('when the server does not support span queries', () => {
+    it('keeps the spans view hidden', async () => {
+      setExplorerHandlers(noSpanQueryCapabilities);
+
+      const { queryClient } = renderExplorer({ features: { spanQuery: true } });
+      await settle(queryClient);
+
+      expect(screen.queryByRole('link', { name: 'Spans view' })).toBeNull();
+    });
+  });
+
+  describe('when the host does not turn span queries on', () => {
+    it('keeps the spans view hidden', async () => {
+      setExplorerHandlers();
+
+      const { queryClient } = renderExplorer();
+      await settle(queryClient);
+
+      expect(screen.queryByRole('link', { name: 'Spans view' })).toBeNull();
+    });
+  });
+
+  describe('when the host turns the span query API off', () => {
+    it('keeps the spans view hidden', async () => {
+      setExplorerHandlers();
+
+      const { queryClient } = renderExplorer({ features: { spanQuery: false } });
+      await settle(queryClient);
+
+      expect(screen.queryByRole('link', { name: 'Spans view' })).toBeNull();
     });
   });
 

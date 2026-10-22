@@ -28,3 +28,13 @@ Re-exported `useSpanQueryAvailable` from `@mastra/playground-ui/domains/capabili
 ```
 
 `FilterBar` chips that are already there when the bar mounts no longer play their entrance animation; only chips added afterwards animate in. The traces loading skeleton now matches the toolbar's pill-shaped controls and spacing, so the page no longer jumps when it finishes loading.
+
+`NoTracesInfo` and `TracesListView` take an optional `resource` prop (`'traces'` by default). Pass `'spans'` to show span lists' empty messages with "spans" instead of "traces", for example "No spans for the last 7 days".
+
+`TracesExplorer`'s `features` prop takes a `spanQuery` switch, next to `traceQuery` and `feedback`. Unlike them, it is opt-in: span queries are on only when the host sets `spanQuery: true` and the server supports them. Read the result from `useTracesConfig().withSpanQuery`, for example to decide whether to show a link to a spans view.
+
+```tsx
+<TracesExplorer features={{ spanQuery: flags.spans }} {...props}>
+  <TracesPageContent />
+</TracesExplorer>
+```

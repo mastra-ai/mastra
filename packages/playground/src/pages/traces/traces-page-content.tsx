@@ -1,6 +1,5 @@
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
-import { useSpanQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
-import { TracesExplorer } from '@mastra/playground-ui/domains/traces/components/traces-explorer';
+import { TracesExplorer, useTracesConfig } from '@mastra/playground-ui/domains/traces/components/traces-explorer';
 import { memo } from 'react';
 import { useNavigate } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
@@ -16,13 +15,13 @@ const crumbs = [navCrumb('/traces')];
 // context slice changed, not the whole tree.
 export const TracesPageContent = memo(function TracesPageContent({ isScoped }: { isScoped: boolean }) {
   const navigate = useNavigate();
-  const { enabled: spanQueryEnabled, isLoading: spanQueryLoading } = useSpanQueryAvailable();
+  const { withSpanQuery, isCapabilitiesLoading } = useTracesConfig();
 
   // Scoped instances render inside another page (e.g. the agent Traces tab) that already owns the header.
   let tabs;
   if (!isScoped) {
-    if (spanQueryLoading) tabs = <TracesSpansSwitchSkeleton />;
-    else if (spanQueryEnabled) tabs = <TracesSpansSwitch current="traces" />;
+    if (isCapabilitiesLoading) tabs = <TracesSpansSwitchSkeleton />;
+    else if (withSpanQuery) tabs = <TracesSpansSwitch current="traces" />;
   }
 
   return (
