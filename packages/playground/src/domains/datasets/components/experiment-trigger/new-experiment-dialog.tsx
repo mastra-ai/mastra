@@ -118,16 +118,16 @@ export function NewExperimentDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} onOpenChangeComplete={onOpenChangeComplete} pending={isRunning}>
-      <DialogContent ref={contentRef} size="md" onKeyDown={handleKeyDown}>
-        <DialogHeader>
+      <DialogContent ref={contentRef} size="lg" onKeyDown={handleKeyDown}>
+        <DialogHeader className="px-6 pt-3 pb-4">
           <DialogTitle>New experiment</DialogTitle>
           <DialogDescription>Run every item in a dataset through an agent, workflow or scorer.</DialogDescription>
         </DialogHeader>
 
-        <DialogBody>
+        <DialogBody className="px-6 py-3">
           {/* A plain block, so the closed Advanced panel adds no gap below the toggle. */}
           <Collapsible open={advancedOpen} onOpenChange={setAdvancedOpen}>
-            <div className="space-y-5">
+            <div className="space-y-6">
               <TargetField
                 options={targetChoice.options}
                 isLoading={targetChoice.isLoading}
@@ -150,11 +150,11 @@ export function NewExperimentDialog({
               />
             </div>
 
-            <div className="mt-4">
+            <div className="mt-6">
               <AdvancedToggle />
             </div>
 
-            <CollapsibleContent className="space-y-4 pt-3">
+            <CollapsibleContent className="space-y-6 pt-4">
               {datasetId && (
                 <DatasetVersionField
                   datasetId={datasetId}
@@ -185,7 +185,7 @@ export function NewExperimentDialog({
           </Collapsible>
         </DialogBody>
 
-        <DialogFooter>
+        <DialogFooter className="px-6 pt-5 pb-3">
           <DialogCancel>Cancel</DialogCancel>
           <RunExperimentAction onRun={run} canRun={canRun} isRunning={isRunning} />
         </DialogFooter>
