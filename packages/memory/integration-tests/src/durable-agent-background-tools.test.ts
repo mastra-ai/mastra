@@ -36,7 +36,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { getLLMTestMode } from '@internal/llm-recorder';
-import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
+import { setupDummyApiKeys } from '@internal/test-utils';
 import { Agent } from '@mastra/core/agent';
 import { createDurableAgent, createEventedAgent } from '@mastra/core/agent/durable';
 import { Mastra } from '@mastra/core/mastra';
@@ -55,6 +55,7 @@ import {
   prefillRepairs,
   recordProviderRequests,
   streamTurn,
+  useRecordedMock,
 } from './durable-harness-helpers';
 import type { Engine } from './durable-harness-helpers';
 import { transformRequest } from './transform-request';
@@ -100,26 +101,21 @@ function fetchRecordTool() {
 
 describe.each(Object.entries(PROVIDERS))('T4 background tools · %s', (provider, model) => {
   describe.each(ENGINES)('%s engine', engine => {
-    let mock: ReturnType<typeof createGatewayMock>;
+    // One recording file per provider × engine, covering the foreground/deferred/awaited variants.
+    useRecordedMock(`${RECORDING_NAME}-${provider}-${engine}`, { transformRequest: transformT4Request });
     let recorder: ReturnType<typeof recordProviderRequests>;
 
-    beforeEach(() => {});
+    beforeEach(() => {
+      recorder = recordProviderRequests();
+    });
 
-    afterEach(async () => {
+    afterEach(() => {
       recorder.restore();
-      await mock.saveAndStop();
     });
 
     it.each(VARIANTS)(
       '%s',
       async variant => {
-        mock = createGatewayMock({
-          name: `${RECORDING_NAME}-${provider}-${engine}-${variant}`,
-          exactMatch: true,
-          transformRequest: transformT4Request,
-        });
-        mock.start();
-        recorder = recordProviderRequests();
         const { storage, memory, cleanup } = await createCellMemory(`t4-${provider}-${engine}-${variant}`);
         const thread = `t4-thread-${provider}-${engine}-${variant}`;
         const resource = `t4-resource-${provider}-${engine}-${variant}`;

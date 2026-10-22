@@ -22,7 +22,7 @@
  *   LLM_TEST_MODE=record pnpm vitest run src/durable-agent-structured-output.test.ts
  */
 import { getLLMTestMode } from '@internal/llm-recorder';
-import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
+import { setupDummyApiKeys } from '@internal/test-utils';
 import { Agent } from '@mastra/core/agent';
 import { createDurableAgent, createEventedAgent } from '@mastra/core/agent/durable';
 import { createScorer } from '@mastra/core/evals';
@@ -39,6 +39,7 @@ import {
   prefillRepairs,
   recordProviderRequests,
   streamTurn,
+  useRecordedMock,
 } from './durable-harness-helpers';
 import { transformRequest } from './transform-request';
 
@@ -61,25 +62,20 @@ function createScorerThatFailsOnce(scores: number[]) {
 
 describe.each(Object.entries(PROVIDERS))('T15 structured output — %s', (provider, model) => {
   describe.each(ENGINES)('%s engine', engine => {
-    let mock: ReturnType<typeof createGatewayMock>;
+    // One recording file per provider × engine, covering the pass/failonce variants.
+    useRecordedMock(`${RECORDING_NAME}-${provider}-${engine}`, { transformRequest });
     let recorder: ReturnType<typeof recordProviderRequests>;
 
-    beforeEach(() => {});
+    beforeEach(() => {
+      recorder = recordProviderRequests();
+    });
 
-    afterEach(async () => {
+    afterEach(() => {
       recorder.restore();
-      await mock.saveAndStop();
     });
 
     async function runCell(withFailingScorer: boolean) {
       const variant = withFailingScorer ? 'failonce' : 'pass';
-      mock = createGatewayMock({
-        name: `${RECORDING_NAME}-${provider}-${engine}-${variant}`,
-        exactMatch: true,
-        transformRequest,
-      });
-      mock.start();
-      recorder = recordProviderRequests();
       const scores: number[] = [];
       const cell = await createCellMemory(`t15-${provider}-${engine}-${variant}`);
       const agent = new Agent({

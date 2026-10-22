@@ -17,8 +17,10 @@ import { randomUUID } from 'node:crypto';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createGatewayMock } from '@internal/test-utils';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
+import { afterAll, afterEach, beforeAll } from 'vitest';
 
 export const PREFILL_REPAIR_MARKER = 'anthropic-prefill-processor-retry';
 
@@ -32,6 +34,40 @@ export type Engine = 'plain' | 'durable' | 'evented';
 export const ENGINES: Engine[] = ['plain', 'durable', 'evented'];
 
 export type ModelRequest = { endpoint: string; body: any; status: number; responseText?: string };
+
+/**
+ * One recorder fixture per provider × engine, covering every variant of that cell.
+ *
+ * Recording layout: a file is the unit of "recordings only from all-pass runs", so a run that
+ * fails any variant in the block must not write the file at all — otherwise a red cell's entries
+ * sit alongside green ones and the file no longer means anything. `afterAll` therefore stops the
+ * recorder without saving when a test in the block failed in record mode.
+ *
+ * Re-record per provider, never per test: `-t <variant>` in record mode would write a file
+ * containing only the variants that actually ran and drop the rest.
+ */
+export function useRecordedMock(
+  name: string,
+  options: { transformRequest?: (input: { url: string; body: any }) => { url: string; body: any } } = {},
+) {
+  const mock = createGatewayMock({ name, exactMatch: true, ...options });
+  let failed = false;
+  beforeAll(() => {
+    mock.start();
+  });
+  afterEach((ctx: any) => {
+    if (ctx?.task?.result?.state === 'fail') failed = true;
+  });
+  afterAll(async () => {
+    if (failed && mock.mode === 'record') {
+      console.warn(`[durable-harness] ${name}: a cell failed, keeping the existing recording files`);
+      mock.recorder.stop();
+      return;
+    }
+    await mock.saveAndStop();
+  });
+  return mock;
+}
 
 /** Wrap `globalThis.fetch` so every provider request is recorded with its status. */
 export function recordProviderRequests() {

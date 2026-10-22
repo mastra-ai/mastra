@@ -22,7 +22,7 @@
  */
 import { randomUUID } from 'node:crypto';
 import { getLLMTestMode } from '@internal/llm-recorder';
-import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
+import { setupDummyApiKeys } from '@internal/test-utils';
 import { Agent } from '@mastra/core/agent';
 import { createDurableAgent, createEventedAgent } from '@mastra/core/agent/durable';
 import { Mastra } from '@mastra/core/mastra';
@@ -38,6 +38,7 @@ import {
   prefillRepairs,
   recordProviderRequests,
   streamTurn,
+  useRecordedMock,
 } from './durable-harness-helpers';
 import type { Engine } from './durable-harness-helpers';
 import { transformRequest } from './transform-request';
@@ -61,22 +62,15 @@ function stepTool() {
 
 describe.each(Object.entries(PROVIDERS))('T21 goal recovery · %s', (provider, model) => {
   describe.each(ENGINES)('%s engine', engine => {
-    let mock: ReturnType<typeof createGatewayMock>;
+    useRecordedMock(`${RECORDING_NAME}-${provider}-${engine}`, { transformRequest });
     let recorder: ReturnType<typeof recordProviderRequests>;
 
     beforeEach(() => {
-      mock = createGatewayMock({
-        name: `${RECORDING_NAME}-${provider}-${engine}`,
-        exactMatch: true,
-        transformRequest,
-      });
-      mock.start();
       recorder = recordProviderRequests();
     });
 
-    afterEach(async () => {
+    afterEach(() => {
       recorder.restore();
-      await mock.saveAndStop();
     });
 
     it('judges the reply against the thread objective', async () => {

@@ -16,7 +16,7 @@
  *   LLM_TEST_MODE=record pnpm vitest run src/durable-agent-is-task-complete.test.ts
  */
 import { getLLMTestMode } from '@internal/llm-recorder';
-import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
+import { setupDummyApiKeys } from '@internal/test-utils';
 import { Agent } from '@mastra/core/agent';
 import { createDurableAgent, createEventedAgent } from '@mastra/core/agent/durable';
 import { createScorer } from '@mastra/core/evals';
@@ -33,6 +33,7 @@ import {
   prefillRepairs,
   recordProviderRequests,
   streamTurn,
+  useRecordedMock,
 } from './durable-harness-helpers';
 import type { ModelRequest } from './durable-harness-helpers';
 import { transformRequest } from './transform-request';
@@ -65,24 +66,19 @@ function createAlwaysPassingScorer(scores: number[]) {
 
 describe.each(Object.entries(PROVIDERS))('T3 is-task-complete — %s', (provider, model) => {
   describe.each(ENGINES)('%s engine', engine => {
-    let mock: ReturnType<typeof createGatewayMock>;
+    // One recording file per provider × engine, covering every variant below.
+    useRecordedMock(`${RECORDING_NAME}-${provider}-${engine}`, { transformRequest });
     let recorder: ReturnType<typeof recordProviderRequests>;
 
-    beforeEach(() => {});
+    beforeEach(() => {
+      recorder = recordProviderRequests();
+    });
 
-    afterEach(async () => {
+    afterEach(() => {
       recorder.restore();
-      await mock.saveAndStop();
     });
 
     async function runCell(scorer: (scores: number[]) => ReturnType<typeof createScorer>, variant: string) {
-      mock = createGatewayMock({
-        name: `${RECORDING_NAME}-${provider}-${engine}-${variant}`,
-        exactMatch: true,
-        transformRequest,
-      });
-      mock.start();
-      recorder = recordProviderRequests();
       const scores: number[] = [];
       const onComplete: boolean[] = [];
       const cell = await createCellMemory(`t3-${provider}-${engine}-${variant}`);

@@ -30,7 +30,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { getLLMTestMode } from '@internal/llm-recorder';
-import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
+import { setupDummyApiKeys } from '@internal/test-utils';
 import { Agent } from '@mastra/core/agent';
 import { createDurableAgent, createEventedAgent } from '@mastra/core/agent/durable';
 import { Mastra } from '@mastra/core/mastra';
@@ -47,6 +47,7 @@ import {
   persistedMessages,
   recordProviderRequests,
   streamTurn,
+  useRecordedMock,
 } from './durable-harness-helpers';
 import { transformRequest } from './transform-request';
 
@@ -94,21 +95,24 @@ const getForecast = createTool({
 
 describe.each(Object.entries(PROVIDERS))('T86 om-final-text — %s', (provider, model) => {
   describe.each(ENGINES)('%s engine', engine => {
+    // One recording file per provider × engine, covering the default/buffering variants.
+    useRecordedMock(`${RECORDING_NAME}-${provider}-${engine}`, { transformRequest });
+    let recorder: ReturnType<typeof recordProviderRequests>;
+
+    beforeEach(() => {
+      recorder = recordProviderRequests();
+    });
+
+    afterEach(() => {
+      recorder.restore();
+    });
+
     describe.each(Object.entries(VARIANTS))('%s variant', (variant, omConfig) => {
-      let mock: ReturnType<typeof createGatewayMock>;
-      let recorder: ReturnType<typeof recordProviderRequests>;
       let dbDir: string;
       let storage: LibSQLStore;
       let memory: Memory;
 
       beforeEach(async () => {
-        mock = createGatewayMock({
-          name: `${RECORDING_NAME}-${provider}-${engine}-${variant}`,
-          exactMatch: true,
-          transformRequest,
-        });
-        mock.start();
-        recorder = recordProviderRequests();
         dbDir = await mkdtemp(join(tmpdir(), `t86-${provider}-${engine}-${variant}-`));
         storage = new LibSQLStore({ id: randomUUID(), url: `file:${join(dbDir, 'memory.db')}` });
         memory = new Memory({
@@ -124,8 +128,6 @@ describe.each(Object.entries(PROVIDERS))('T86 om-final-text — %s', (provider, 
       });
 
       afterEach(async () => {
-        recorder.restore();
-        await mock.saveAndStop();
         await rm(dbDir, { recursive: true, force: true });
       });
 

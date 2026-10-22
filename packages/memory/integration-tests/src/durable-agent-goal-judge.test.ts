@@ -18,7 +18,7 @@
  *   LLM_TEST_MODE=record pnpm vitest run src/durable-agent-goal-judge.test.ts
  */
 import { getLLMTestMode } from '@internal/llm-recorder';
-import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
+import { setupDummyApiKeys } from '@internal/test-utils';
 import { Agent } from '@mastra/core/agent';
 import { createDurableAgent, createEventedAgent } from '@mastra/core/agent/durable';
 import { Mastra } from '@mastra/core/mastra';
@@ -31,6 +31,7 @@ import {
   errorChunks,
   recordProviderRequests,
   streamTurn,
+  useRecordedMock,
 } from './durable-harness-helpers';
 import { transformRequest } from './transform-request';
 
@@ -44,24 +45,19 @@ const BAD_JUDGE = 'openai/cor-1252-no-such-model';
 
 describe.each(Object.entries(PROVIDERS))('T8 goal judge — %s', (provider, model) => {
   describe.each(ENGINES)('%s engine', engine => {
-    let mock: ReturnType<typeof createGatewayMock>;
+    // One recording file per provider × engine, covering the judged/judgefail variants.
+    useRecordedMock(`${RECORDING_NAME}-${provider}-${engine}`, { transformRequest });
     let recorder: ReturnType<typeof recordProviderRequests>;
 
-    beforeEach(() => {});
+    beforeEach(() => {
+      recorder = recordProviderRequests();
+    });
 
-    afterEach(async () => {
+    afterEach(() => {
       recorder.restore();
-      await mock.saveAndStop();
     });
 
     async function runCell(judge: string, variant: string) {
-      mock = createGatewayMock({
-        name: `${RECORDING_NAME}-${provider}-${engine}-${variant}`,
-        exactMatch: true,
-        transformRequest,
-      });
-      mock.start();
-      recorder = recordProviderRequests();
       const cell = await createCellMemory(`t8-${provider}-${engine}-${variant}`);
       const agent = new Agent({
         id: `t8-agent-${provider}-${engine}-${variant}`,
