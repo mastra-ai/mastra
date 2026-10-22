@@ -7,11 +7,11 @@ import type { ChunkType } from '@mastra/core/stream';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import type { IntegrationTools } from '../integrations/base.js';
-import { readFactorySessionScope } from '../rules/binding-context.js';
+import { readFactorySessionScope } from '../../rules/binding-context.js';
+import type { IntegrationTools } from '../base.js';
 import { SESSION_LINK_LABEL, sessionLink } from './channel-reply-processor.js';
 import { NEW_CHANNEL_SESSION_KEY } from './channel-session-link-processor.js';
-import { resolveRenderContext } from './share-file-tool.js';
+import { postTarget, resolveRenderContext } from './share-file-tool.js';
 import type { ShareFileToolDeps } from './share-file-tool.js';
 
 export const REPLY_TOOL_NAME = 'reply_in_thread';
@@ -29,15 +29,11 @@ const replyInput = z
  * The only way a channel run speaks when the adapter hides reply text
  * (`textDisplay: 'hidden'`). Posting becomes a choice the agent makes, so it
  * stops narrating each step into the thread and can say nothing on purpose.
- * Offered only on runs whose chat thread hides text; elsewhere the reply
- * stream still posts and this tool would double every message.
+ * Offered only when the Slack adapter hides reply text and the run's thread is
+ * linked to Slack; with text shown the reply stream already posts and this
+ * tool would double every message.
  */
-export async function createReplyTool(
-  requestContext: RequestContext,
-  deps: ShareFileToolDeps = {},
-): Promise<IntegrationTools> {
-  const render = await resolveRenderContext(requestContext, deps);
-  if (render?.textDisplay !== 'hidden') return {};
+export function createReplyTool(requestContext: RequestContext, deps: ShareFileToolDeps = {}): IntegrationTools {
   return {
     [REPLY_TOOL_NAME]: createTool({
       id: REPLY_TOOL_NAME,
@@ -53,6 +49,7 @@ export async function createReplyTool(
         const streamed = toolCallId ? replyStreams(requestContext).get(toolCallId) : undefined;
         if (toolCallId) replyStreams(requestContext).delete(toolCallId);
         if (!streamed || !(await streamed.finish(input.text, suffix))) {
+          const render = await postTarget(requestContext, deps);
           await render.chatThread.post({ markdown: `${input.text}${suffix}` });
         }
         // Marked only once posted, so a failed first post still gets the link on the retry.

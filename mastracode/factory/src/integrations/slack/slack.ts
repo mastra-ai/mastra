@@ -19,7 +19,6 @@ import {
   primeTenantCredentialsForRequestContext,
   primeTenantCredentialsForTenant,
 } from '../../routes/tenant-credentials.js';
-import { markNewChannelSession } from '../../session/channel-session-link-processor.js';
 import {
   createSourceControlSessionLookup,
   FactorySourceControlConflictError,
@@ -46,6 +45,7 @@ import type { ExternalWorkItemSource, WorkItemRow, WorkItemsStorage } from '../.
 import { FACTORY_SLACK_SENDER_KEY } from '../../tools/scope.js';
 import type { FactoryChannelsConfig } from '../base.js';
 import { prepareSessionRunContext } from '../subscription-session.js';
+import { markNewChannelSession } from './channel-session-link-processor.js';
 
 import { resolveEmojiShortcodes } from './emoji.js';
 import { slackCommentSource } from './feed-publisher.js';

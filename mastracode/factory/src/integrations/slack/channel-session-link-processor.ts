@@ -5,7 +5,7 @@ import type { Processor, ProcessOutputStepArgs, ProcessOutputStreamArgs } from '
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ChunkType } from '@mastra/core/stream';
 
-import { readFactorySessionScope } from '../rules/binding-context.js';
+import { readFactorySessionScope } from '../../rules/binding-context.js';
 import { SESSION_LINK_LABEL, sessionLink } from './channel-reply-processor.js';
 
 /**

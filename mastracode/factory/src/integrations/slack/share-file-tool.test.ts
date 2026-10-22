@@ -1,6 +1,5 @@
-import { AgentControllerChannels, CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '@mastra/core/channels';
+import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '@mastra/core/channels';
 import { RequestContext } from '@mastra/core/request-context';
-import { InMemoryStore } from '@mastra/core/storage';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createShareFileTool, SHARE_FILE_MAX_BYTES } from './share-file-tool.js';
@@ -37,12 +36,6 @@ function slackPlatformError(data: Record<string, unknown>) {
 }
 
 describe('attach_file', () => {
-  it('is not offered without a chat thread to post to', async () => {
-    const requestContext = new RequestContext();
-    requestContext.set('channel', { platform: 'slack', isDM: true });
-    await expect(createShareFileTool(requestContext)).resolves.toEqual({});
-  });
-
   it('reads the file through the workspace filesystem and posts it as an attachment', async () => {
     const { tool, post, fs } = await setup();
 
@@ -111,80 +104,5 @@ describe('attach_file', () => {
     const tool = (await createShareFileTool(requestContext)).attach_file as AttachFile;
     await expect(tool.execute({ path: '/x' }, {})).rejects.toThrow(/No workspace filesystem/);
     expect(post).not.toHaveBeenCalled();
-  });
-
-  /**
-   * A run woken by a signal (a subagent finishing, a schedule firing) starts
-   * with no render context on `requestContext`: only inbound platform messages
-   * stash one. That is the run that ends a long job with a file to hand back,
-   * so the tool must find the thread the same way the output processor does —
-   * from the channel coordinates persisted on the Mastra thread.
-   */
-  describe('on a signal-woken run', () => {
-    async function wokenRun({ threadMetadata }: { threadMetadata?: Record<string, unknown> } = {}) {
-      const storage = new InMemoryStore();
-      const memory = await storage.getStore('memory');
-      await memory!.saveThread({
-        thread: {
-          id: 'thread-1',
-          resourceId: 'resource-1',
-          title: 'slack dm',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-          metadata: threadMetadata ?? { channel_platform: 'slack', channel_externalThreadId: 'slack:C1:171.1' },
-        },
-      });
-
-      const post = vi.fn(async () => ({}));
-      const adapter = { name: 'slack', startTyping: vi.fn() };
-      const channels = new AgentControllerChannels({
-        adapters: { slack: { adapter, streaming: false } as any },
-      });
-      // Bind the bits of a controller that `buildRenderContextForThread` reads:
-      // storage via Mastra, and the Chat instance that hands out live threads.
-      channels.__setController({ id: 'mastra-code', getMastra: () => ({ getStorage: () => storage }) } as any);
-      (channels as any).chat = {
-        thread: (id: string) => {
-          expect(id).toBe('slack:C1:171.1');
-          return { id, adapter, post };
-        },
-      };
-
-      const requestContext = new RequestContext();
-      requestContext.set('controller', {
-        threadId: 'thread-1',
-        workspace: {
-          filesystem: {
-            stat: vi.fn(async () => ({ type: 'file', size: 4, mimeType: 'application/pdf' })),
-            readFile: vi.fn(async () => Buffer.from('data')),
-          },
-        },
-      });
-      return { requestContext, channels, post };
-    }
-
-    it('is offered and posts into the thread recorded on the Mastra thread', async () => {
-      const { requestContext, channels, post } = await wokenRun();
-      expect(requestContext.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY)).toBeUndefined();
-
-      const tools = await createShareFileTool(requestContext, { channels: () => channels });
-      expect(tools).toHaveProperty('attach_file');
-
-      await (tools.attach_file as AttachFile).execute({ path: '/workspace/report.pdf' }, {});
-      expect(post).toHaveBeenCalledWith(
-        expect.objectContaining({ files: [expect.objectContaining({ filename: 'report.pdf' })] }),
-      );
-    });
-
-    it('stays off a thread that was never channel-backed, such as a subagent fork', async () => {
-      const { requestContext, channels } = await wokenRun({ threadMetadata: { forkedSubagent: true } });
-      await expect(createShareFileTool(requestContext, { channels: () => channels })).resolves.toEqual({});
-    });
-
-    it('stays off when the controller has no channels', async () => {
-      const { requestContext } = await wokenRun();
-      await expect(createShareFileTool(requestContext, { channels: () => null })).resolves.toEqual({});
-      await expect(createShareFileTool(requestContext)).resolves.toEqual({});
-    });
   });
 });

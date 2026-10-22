@@ -49,12 +49,6 @@ describe('reply_in_thread', () => {
     else process.env.MASTRACODE_PUBLIC_URL = originalPublicUrl;
   });
 
-  it('is offered only when the thread hides reply text, so a shown reply is never posted twice', async () => {
-    await expect(createReplyTool(channelRun({ textDisplay: 'show' }).requestContext)).resolves.toEqual({});
-    await expect(createReplyTool(channelRun({ textDisplay: null }).requestContext)).resolves.toEqual({});
-    await expect(createReplyTool(new RequestContext())).resolves.toEqual({});
-  });
-
   it('posts the text into the thread the run came from', async () => {
     const { requestContext, post } = channelRun();
     const tool = await replyTool(requestContext);
