@@ -150,7 +150,7 @@ describe('Settings ownership', () => {
     expect(screen.getByRole('link', { name: 'Memory' })).toHaveAttribute('aria-current', 'page');
   });
 
-  it('lets a Personal-routed Factory with no Factory default finish setup from the new-chat guard', async () => {
+  it('lets a Personal-routed Factory with no Factory default finish setup from the new-chat guard when the user holds their own key', async () => {
     let project: FactoryProjectPayload = { ...settingsFactory, modelScope: 'user', defaultModelId: null };
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1`, () => HttpResponse.json({ project })),
@@ -162,6 +162,12 @@ describe('Settings ownership', () => {
         },
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items`, () => HttpResponse.json({ workItems: [] })),
+      http.get(PROVIDERS_URL, () =>
+        HttpResponse.json({
+          ...settingsProviders,
+          providers: [{ provider: 'openai', source: 'stored-user', userCredential: 'api_key' }],
+        }),
+      ),
       http.get(`${TEST_BASE_URL}/web/config/models`, () =>
         HttpResponse.json({
           models: [{ id: 'openai/gpt-5', provider: 'openai', modelName: 'gpt-5', hasApiKey: true }],
