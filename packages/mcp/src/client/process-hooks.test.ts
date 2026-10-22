@@ -15,14 +15,15 @@ async function signalHost({
   disconnectFirst?: boolean;
   signal?: NodeJS.Signals;
 }) {
-  const host = spawn(
-    process.execPath,
-    ['--import', 'tsx', hostScript, hooks, String(disconnectFirst), signal],
-    { cwd: packageRoot, stdio: ['ignore', 'pipe', 'pipe'] },
-  );
+  const host = spawn(process.execPath, ['--import', 'tsx', hostScript, hooks, String(disconnectFirst), signal], {
+    cwd: packageRoot,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
   let stdout = '';
   let stderr = '';
-  host.stderr.on('data', chunk => { stderr += String(chunk); });
+  host.stderr.on('data', chunk => {
+    stderr += String(chunk);
+  });
   const exited = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve, reject) => {
     host.once('error', reject);
     host.once('close', (code, signal) => resolve({ code, signal }));
@@ -73,11 +74,15 @@ describe.skipIf(process.platform === 'win32')('MCPClient process hooks and host 
     expect(result.code).toBe(0);
   }, 20000);
 
-  it.each(['default', 'true'] as const)('preserves %s SIGTERM exit behavior', async hooks => {
-    const result = await signalHost({ hooks });
-    expect(result.stdout).toContain('host: starting cleanup');
-    expect(result.stdout).not.toContain('host: cleanup finished');
-    expect(result.code).toBe(143);
-    expect(result.signal).toBeNull();
-  }, 20000);
+  it.each(['default', 'true'] as const)(
+    'preserves %s SIGTERM exit behavior',
+    async hooks => {
+      const result = await signalHost({ hooks });
+      expect(result.stdout).toContain('host: starting cleanup');
+      expect(result.stdout).not.toContain('host: cleanup finished');
+      expect(result.code).toBe(143);
+      expect(result.signal).toBeNull();
+    },
+    20000,
+  );
 });
