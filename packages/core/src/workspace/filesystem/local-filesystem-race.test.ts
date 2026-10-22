@@ -10,6 +10,7 @@ const race = vi.hoisted(() => ({
   root: '',
   onRootRealpath: undefined as undefined | (() => Promise<void>),
   afterOpen: undefined as undefined | (() => Promise<void>),
+  denyOpen: false,
 }));
 
 vi.mock('node:fs/promises', async importOriginal => {
@@ -17,6 +18,9 @@ vi.mock('node:fs/promises', async importOriginal => {
   return {
     ...actual,
     open: async (...args: Parameters<typeof actual.open>) => {
+      if (race.denyOpen && args[0] === path.join(race.root, 'a.txt') && args[1] === 'r') {
+        throw Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' });
+      }
       const handle = await actual.open(...args);
       if (race.afterOpen && args[0] === path.join(race.root, 'a.txt')) {
         const swap = race.afterOpen;
@@ -58,6 +62,7 @@ describe('LocalFilesystem contained reads during symlink replacement (#27892)', 
   afterEach(async () => {
     race.onRootRealpath = undefined;
     race.afterOpen = undefined;
+    race.denyOpen = false;
     race.root = '';
     await fs.rm(temp, { recursive: true, force: true });
   });
@@ -130,6 +135,24 @@ describe('LocalFilesystem contained reads during symlink replacement (#27892)', 
     swapLeaf(target);
     await expect(local.readFile('a.txt', { encoding: 'utf-8' })).resolves.toBe('still safe');
     expect(race.onRootRealpath).toBeUndefined();
+  });
+
+  it('rejects a configured root replaced between containment check and open', async () => {
+    race.onRootRealpath = async () => {
+      await fs.rename(root, path.join(temp, 'old-workspace'));
+      await fs.symlink(outside, root);
+    };
+    await expect(local.readFile('a.txt', { encoding: 'utf-8' })).rejects.toThrow(PermissionError);
+    expect(race.onRootRealpath).toBeUndefined();
+  });
+
+  it('preserves stat and exists on files that cannot be opened for reading', async () => {
+    race.denyOpen = true;
+    const file = path.join(root, 'a.txt');
+    expect((await fs.stat(file)).isFile()).toBe(true);
+    expect(await fs.access(file).then(() => true)).toBe(true);
+    await expect(local.exists('a.txt')).resolves.toBe(true);
+    await expect(local.stat('a.txt')).resolves.toMatchObject({ type: 'file', size: 4 });
   });
 
   it('keeps contained:false access to outside symlinks', async () => {

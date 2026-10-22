@@ -6,6 +6,7 @@
  */
 
 import { constants as fsConstants, realpathSync } from 'node:fs';
+import type { Stats } from 'node:fs';
 import * as fs from 'node:fs/promises';
 import type { FileHandle } from 'node:fs/promises';
 import * as nodePath from 'node:path';
@@ -394,15 +395,51 @@ export class LocalFilesystem extends MastraFilesystem {
     }
   }
 
-  private async openContainedPath(absolutePath: string): Promise<{ handle: FileHandle; canonicalPath: string }> {
-    await this.assertPathContained(absolutePath);
-    const handle = await fs.open(absolutePath, 'r');
+  private async containedRoots(): Promise<string[]> {
+    const roots: string[] = [];
+    for (const root of [this._basePath, ...this._allowedPaths]) {
+      try {
+        roots.push(await fs.realpath(root));
+      } catch (error) {
+        if (!isEnoentError(error)) throw error;
+      }
+    }
+    return roots;
+  }
+
+  private assertCanonicalPathContained(canonicalPath: string, absolutePath: string, roots: string[]): void {
+    if (!roots.some(root => this._isWithinRoot(canonicalPath, root))) {
+      throw new PermissionError(absolutePath, 'access');
+    }
+  }
+
+  private async openContainedPath(
+    absolutePath: string,
+    metadataOnly = false,
+  ): Promise<{ handle: FileHandle; canonicalPath: string }> {
+    const roots = await this.containedRoots();
+    const checkedPath = await fs.realpath(absolutePath);
+    this.assertCanonicalPathContained(checkedPath, absolutePath, roots);
+    // O_PATH opens a metadata-only descriptor without requiring file read permission on Linux.
+    const flags = metadataOnly
+      ? process.platform === 'linux'
+        ? 0o10000000 // O_PATH, not exposed by Node's fs.constants
+        : fsConstants.O_RDONLY | fsConstants.O_NONBLOCK
+      : 'r';
+    const handle = await fs.open(absolutePath, flags);
     try {
-      const opened = await handle.stat();
+      const opened = await handle.stat({ bigint: true });
       const canonicalPath = await fs.realpath(absolutePath);
-      await this.assertPathContained(canonicalPath);
-      const current = await fs.stat(canonicalPath);
-      if (opened.dev !== current.dev || opened.ino !== current.ino) {
+      this.assertCanonicalPathContained(canonicalPath, absolutePath, roots);
+      const current = await fs.stat(canonicalPath, { bigint: true });
+      if (
+        opened.dev === 0n ||
+        opened.ino === 0n ||
+        current.dev === 0n ||
+        current.ino === 0n ||
+        opened.dev !== current.dev ||
+        opened.ino !== current.ino
+      ) {
         throw new PermissionError(absolutePath, 'access');
       }
       return { handle, canonicalPath };
@@ -715,20 +752,17 @@ export class LocalFilesystem extends MastraFilesystem {
       if (this._contained) {
         directoryHandle = (await this.openContainedPath(absolutePath)).handle;
       }
-      const stats = directoryHandle ? await directoryHandle.stat() : await fs.stat(absolutePath);
+      const stats = directoryHandle
+        ? await directoryHandle.stat({ bigint: true })
+        : await fs.stat(absolutePath, { bigint: true });
       if (!stats.isDirectory()) {
         throw new NotDirectoryError(inputPath);
       }
 
-      // Anchor directory enumeration and entry metadata to the verified descriptor.
-      // Windows has no fd-backed pathname; revalidate there before returning.
-      const directoryPath = directoryHandle
-        ? process.platform === 'linux'
-          ? `/proc/self/fd/${directoryHandle.fd}`
-          : process.platform === 'darwin'
-            ? `/dev/fd/${directoryHandle.fd}`
-            : absolutePath
-        : absolutePath;
+      // Linux supports fd-backed child paths. Other platforms use the original
+      // path and revalidate the directory before returning.
+      const directoryPath =
+        directoryHandle && process.platform === 'linux' ? `/proc/self/fd/${directoryHandle.fd}` : absolutePath;
       const entries = await fs.readdir(directoryPath, { withFileTypes: true });
       const result: FileEntry[] = [];
 
@@ -803,8 +837,15 @@ export class LocalFilesystem extends MastraFilesystem {
       if (directoryHandle && directoryPath === absolutePath) {
         const current = await this.openContainedPath(absolutePath);
         try {
-          const currentStat = await current.handle.stat();
-          if (stats.dev !== currentStat.dev || stats.ino !== currentStat.ino) {
+          const currentStat = await current.handle.stat({ bigint: true });
+          if (
+            stats.dev === 0n ||
+            stats.ino === 0n ||
+            currentStat.dev === 0n ||
+            currentStat.ino === 0n ||
+            stats.dev !== currentStat.dev ||
+            stats.ino !== currentStat.ino
+          ) {
             throw new PermissionError(absolutePath, 'access');
           }
         } finally {
@@ -823,13 +864,55 @@ export class LocalFilesystem extends MastraFilesystem {
     }
   }
 
+  private async containedMetadata(absolutePath: string): Promise<Stats> {
+    if (process.platform === 'linux') {
+      const { handle } = await this.openContainedPath(absolutePath, true);
+      try {
+        return await handle.stat();
+      } finally {
+        await handle.close();
+      }
+    }
+
+    // Node does not expose a portable metadata-only open on other platforms.
+    // Recheck canonical path and identity around stat when read access is denied.
+    try {
+      const { handle } = await this.openContainedPath(absolutePath, true);
+      try {
+        return await handle.stat();
+      } finally {
+        await handle.close();
+      }
+    } catch (error) {
+      if (!(error instanceof Error) || !('code' in error) || error.code !== 'EACCES') throw error;
+      const roots = await this.containedRoots();
+      const before = await fs.realpath(absolutePath);
+      this.assertCanonicalPathContained(before, absolutePath, roots);
+      const stats = await fs.stat(absolutePath);
+      const after = await fs.realpath(absolutePath);
+      this.assertCanonicalPathContained(after, absolutePath, roots);
+      const current = await fs.stat(after, { bigint: true });
+      if (
+        before !== after ||
+        !Number.isSafeInteger(stats.dev) ||
+        !Number.isSafeInteger(stats.ino) ||
+        current.dev === 0n ||
+        current.ino === 0n ||
+        BigInt(stats.dev) !== current.dev ||
+        BigInt(stats.ino) !== current.ino
+      ) {
+        throw new PermissionError(absolutePath, 'access');
+      }
+      return stats;
+    }
+  }
+
   async exists(inputPath: string): Promise<boolean> {
     await this.ensureReady();
     const absolutePath = this.resolvePath(inputPath);
     if (!this._contained) return fsExists(absolutePath);
     try {
-      const { handle } = await this.openContainedPath(absolutePath);
-      await handle.close();
+      await this.containedMetadata(absolutePath);
       return true;
     } catch (error) {
       if (isEnoentError(error)) return false;
@@ -845,21 +928,16 @@ export class LocalFilesystem extends MastraFilesystem {
       return { ...result, path: this.toRelativePath(absolutePath) };
     }
     try {
-      const { handle } = await this.openContainedPath(absolutePath);
-      try {
-        const stats = await handle.stat();
-        return {
-          name: nodePath.basename(absolutePath),
-          path: this.toRelativePath(absolutePath),
-          type: stats.isDirectory() ? 'directory' : 'file',
-          size: stats.size,
-          createdAt: stats.birthtime,
-          modifiedAt: stats.mtime,
-          mimeType: stats.isFile() ? getMimeType(absolutePath) : undefined,
-        };
-      } finally {
-        await handle.close();
-      }
+      const stats = await this.containedMetadata(absolutePath);
+      return {
+        name: nodePath.basename(absolutePath),
+        path: this.toRelativePath(absolutePath),
+        type: stats.isDirectory() ? 'directory' : 'file',
+        size: stats.size,
+        createdAt: stats.birthtime,
+        modifiedAt: stats.mtime,
+        mimeType: stats.isFile() ? getMimeType(absolutePath) : undefined,
+      };
     } catch (error) {
       if (isEnoentError(error)) throw new FileNotFoundError(inputPath);
       throw error;
@@ -870,7 +948,7 @@ export class LocalFilesystem extends MastraFilesystem {
     await this.ensureReady();
     const absolutePath = this.resolvePath(inputPath);
     if (!this._contained) return this.toRelativePath(await fs.realpath(absolutePath));
-    const { handle, canonicalPath } = await this.openContainedPath(absolutePath);
+    const { handle, canonicalPath } = await this.openContainedPath(absolutePath, true);
     await handle.close();
     return this.toRelativePath(canonicalPath);
   }

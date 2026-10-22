@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Verify contained local filesystem reads against opened file descriptors so symlink replacement cannot redirect readFile, stat, exists, realpath, or directory listing outside the configured roots.
+Reject contained local filesystem reads and directory listings when a symlink swap is detected outside configured roots; preserve metadata access to unreadable files.
