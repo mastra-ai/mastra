@@ -22,6 +22,7 @@ import type {
   LanguageModelUsage,
   StepStartPayload,
   ToolCallChunk,
+  ToolResultChunk,
 } from '../../stream/types';
 import type { AgentExecutionOptionsBase } from '../agent.types';
 import { MessageList } from '../message-list';
@@ -33,6 +34,7 @@ import type {
   AgentChunkEventData,
   AgentStepFinishEventData,
   DurableAgentStepFinishResult,
+  DurableToolCallOutput,
   AgentFinishEventData,
   AgentErrorEventData,
   AgentSuspendedEventData,
@@ -630,7 +632,28 @@ export function createDurableAgentStream<OUTPUT = undefined>(
             }
           } else if (onFinish) {
             try {
-              const steps = (await withBufferedStepResponses(data.output?.steps, output)) as any[];
+              const steps = ((await withBufferedStepResponses(data.output?.steps, output)) as any[]).map(step => ({
+                ...step,
+                // Persisted step records store raw results; only the public callback exposes chunks.
+                toolResults: (step?.toolResults ?? []).map(
+                  (toolResult: DurableToolCallOutput | ToolResultChunk): ToolResultChunk =>
+                    'payload' in toolResult
+                      ? toolResult
+                      : {
+                          type: 'tool-result',
+                          runId,
+                          from: ChunkFrom.AGENT,
+                          payload: {
+                            toolCallId: toolResult.toolCallId,
+                            toolName: toolResult.toolName,
+                            args: toolResult.args,
+                            result: toolResult.result,
+                            providerExecuted: toolResult.providerExecuted,
+                            providerMetadata: toolResult.providerMetadata,
+                          },
+                        },
+                ),
+              }));
               const allToolResults = steps.flatMap((s: any) => s?.toolResults ?? []);
               const allToolCalls = steps.flatMap((s: any) => s?.toolCalls ?? []);
               // The structured object is parsed while the output drains the (now closed) chunk

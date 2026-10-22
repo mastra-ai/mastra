@@ -11,6 +11,7 @@ function createArgs(opts: {
   channel?: ChannelContext;
   messageList?: MessageList;
   systemMessages?: CoreMessageV4[];
+  tools?: Record<string, unknown>;
 }): ProcessInputStepArgs {
   const requestContext = new RequestContext();
   if (opts.channel) {
@@ -26,6 +27,7 @@ function createArgs(opts: {
     stepNumber: 0,
     steps: [],
     systemMessages: opts.systemMessages ?? [],
+    tools: opts.tools,
     state: {},
     retryCount: 0,
     model: {} as any,
@@ -117,6 +119,24 @@ describe('ChatChannelProcessor', () => {
       expect(identityLine({ botDisplayName: 'helper', botMention: '<@UBOT>' })).toBe(
         'Your identity on this platform is "helper" / <@UBOT>. Messages containing these references are directed at you.',
       );
+    });
+  });
+
+  describe('reaction guidance', () => {
+    function channelPrompt(tools?: Record<string, unknown>): string {
+      const args = createArgs({ channel: { platform: 'slack', isDM: false } as ChannelContext, tools });
+      new ChatChannelProcessor().processInputStep(args);
+      return String(args.messageList.getSystemMessages('chat-channel-context')[0]!.content);
+    }
+
+    it('points at add_reaction when the agent has it', () => {
+      expect(channelPrompt({ add_reaction: {} })).toContain('use the `add_reaction` tool');
+    });
+
+    it('does not mention add_reaction when the agent lacks it', () => {
+      expect(channelPrompt({ other_tool: {} })).not.toContain('add_reaction');
+      expect(channelPrompt()).not.toContain('add_reaction');
+      expect(channelPrompt()).toContain('To stay silent, respond with an empty message.');
     });
   });
 });

@@ -1,6 +1,7 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Code } from '@mastra/playground-ui/components/Code';
+import { CodeEditor } from '@mastra/playground-ui/components/CodeEditor';
 import { Textarea } from '@mastra/playground-ui/components/Textarea';
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
@@ -13,12 +14,31 @@ import { TagPicker } from './tag-picker';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
 
 function formatUnknown(value: unknown): string {
-  if (typeof value === 'string') return value;
   try {
     return JSON.stringify(value, null, 2);
   } catch {
     return String(value);
   }
+}
+
+/** Strings stay plain text; anything else is shown as foldable JSON. */
+function ReviewPayload({ value, label, className }: { value: unknown; label: string; className: string }) {
+  const frame = 'overflow-auto rounded bg-background p-2';
+  if (typeof value === 'string') {
+    return <Code className={cn(frame, 'text-caption whitespace-pre-wrap', className)} code={value} />;
+  }
+  return (
+    <CodeEditor
+      value={formatUnknown(value)}
+      language="json"
+      editable={false}
+      lineNumbers={false}
+      showCopyButton={false}
+      variant="embedded"
+      aria-label={label}
+      className={cn(frame, className)}
+    />
+  );
 }
 
 function getScoreBadgeVariant(score: number) {
@@ -110,7 +130,7 @@ export function ReviewItemCard({
             <Button
               tooltip="Good — this result is acceptable"
               variant={item.rating === 'positive' ? 'default' : 'ghost'}
-              size="sm"
+              size="icon-sm"
               onClick={() => onRate(item.rating === 'positive' ? undefined : 'positive')}
               disabled={isCompleted}
             >
@@ -122,7 +142,7 @@ export function ReviewItemCard({
             <Button
               tooltip="Bad — this result needs fixing"
               variant={item.rating === 'negative' ? 'default' : 'ghost'}
-              size="sm"
+              size="icon-sm"
               onClick={() => onRate(item.rating === 'negative' ? undefined : 'negative')}
               disabled={isCompleted}
             >
@@ -168,13 +188,13 @@ export function ReviewItemCard({
           {!isCompleted && (
             <div className="flex items-center gap-0.5">
               {onComplete && (
-                <Button tooltip="Mark as complete" variant="ghost" size="sm" onClick={onComplete}>
+                <Button tooltip="Mark as complete" variant="ghost" size="icon-sm" onClick={onComplete}>
                   <Icon size="xs" className="text-success-indicator">
                     <CheckCircle />
                   </Icon>
                 </Button>
               )}
-              <Button tooltip="Remove from review" variant="ghost" size="sm" onClick={onRemove}>
+              <Button tooltip="Remove from review" variant="ghost" size="icon-sm" onClick={onRemove}>
                 <Icon size="xs" className="text-placeholder hover:text-destructive-foreground">
                   <Trash2 />
                 </Icon>
@@ -201,20 +221,14 @@ export function ReviewItemCard({
             <Txt variant="meta" tone="muted" className="mb-1 block">
               Input
             </Txt>
-            <Code
-              className="max-h-40 overflow-auto rounded bg-background p-2 text-caption whitespace-pre-wrap text-foreground"
-              code={formatUnknown(item.input)}
-            />
+            <ReviewPayload value={item.input} label="Input" className="max-h-40 text-foreground" />
           </div>
           {item.output !== undefined && item.output !== null && (
             <div>
               <Txt variant="meta" tone="muted" className="mb-1 block">
                 Output
               </Txt>
-              <Code
-                className="max-h-40 overflow-auto rounded bg-background p-2 text-caption whitespace-pre-wrap text-foreground"
-                code={formatUnknown(item.output)}
-              />
+              <ReviewPayload value={item.output} label="Output" className="max-h-40 text-foreground" />
             </div>
           )}
           {Boolean(item.error) && (
@@ -222,10 +236,7 @@ export function ReviewItemCard({
               <Txt variant="meta" tone="muted" className="mb-1 block">
                 Error
               </Txt>
-              <Code
-                className="max-h-20 overflow-auto rounded bg-background p-2 text-caption whitespace-pre-wrap text-destructive-foreground"
-                code={formatUnknown(item.error)}
-              />
+              <ReviewPayload value={item.error} label="Error" className="max-h-20 text-destructive-foreground" />
             </div>
           )}
           {/* Comment */}

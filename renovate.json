@@ -429,6 +429,11 @@
       "enabled": false
     },
     {
+      "description": "Keep agent-browser below 0.20.0. From 0.20.0 it ships only a native CLI with no JavaScript entry point, so @mastra/agent-browser and @mastra/browser-firecrawl can no longer import BrowserManager from it.",
+      "matchPackageNames": ["agent-browser"],
+      "allowedVersions": "<0.20.0"
+    },
+    {
       "groupName": "OpenCode",
       "commitMessageTopic": "OpenCode",
       "matchFileNames": ["+(package.json)", "**/package.json"],

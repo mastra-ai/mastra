@@ -259,7 +259,7 @@ tokenCostControl.onViolation = ({ processorId, message, detail }) => {
 
 // Log moderation violations
 const moderation = new ModerationProcessor({
-  model: '__GATEWAY_OPENAI_MODEL_NANO__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   strategy: 'block',
 })
 
@@ -341,13 +341,13 @@ export const outputGuardrails = createWorkflow({
   .parallel([
     createStep(
       new PIIDetector({
-        model: '__GATEWAY_OPENAI_MODEL_NANO__',
+        model: '__GATEWAY_OPENAI_MODEL_LUNA__',
         strategy: 'redact',
       }),
     ),
     createStep(
       new ModerationProcessor({
-        model: '__GATEWAY_OPENAI_MODEL_NANO__',
+        model: '__GATEWAY_OPENAI_MODEL_LUNA__',
         strategy: 'block',
       }),
     ),
@@ -360,7 +360,7 @@ export const outputGuardrails = createWorkflow({
   .then(
     createStep(
       new SystemPromptScrubber({
-        model: '__GATEWAY_OPENAI_MODEL_NANO__',
+        model: '__GATEWAY_OPENAI_MODEL_LUNA__',
         strategy: 'redact',
         placeholderText: '[REDACTED]',
       }),
@@ -376,7 +376,7 @@ See [workflows as processors](/docs/agents/processors#use-workflows-as-processor
 Guardrail processors don't need your primary model. Use a small, fast model for classification tasks:
 
 ```typescript
-const GUARDRAIL_MODEL = '__GATEWAY_OPENAI_MODEL_NANO__'
+const GUARDRAIL_MODEL = '__GATEWAY_OPENAI_MODEL_LUNA__'
 
 new ModerationProcessor({ model: GUARDRAIL_MODEL })
 new PIIDetector({ model: GUARDRAIL_MODEL })

@@ -23,6 +23,18 @@ describe('NoTracesInfo', () => {
     expect(container.querySelector('svg.lucide-circle-slash')).toBeTruthy();
   });
 
+  it('names spans when it stands for a span list', () => {
+    const { rerender } = render(<NoTracesInfo resource="spans" datePreset="all" />);
+
+    expect(screen.getByRole('heading', { name: 'No spans yet' })).toBeTruthy();
+    expect(screen.getByText('Spans will appear here once agents, workflows, or tools are executed.')).toBeTruthy();
+
+    rerender(<NoTracesInfo resource="spans" datePreset="last-7d" />);
+
+    expect(screen.getByRole('heading', { name: 'No spans for the last 7 days' })).toBeTruthy();
+    expect(screen.getByText('Pick a wider time range — older spans may fall outside the current window.')).toBeTruthy();
+  });
+
   it('preserves explicit dates in the custom-range empty state', () => {
     render(
       <NoTracesInfo datePreset="custom" dateFrom={new Date(2026, 8, 1, 9, 0)} dateTo={new Date(2026, 8, 7, 18, 0)} />,

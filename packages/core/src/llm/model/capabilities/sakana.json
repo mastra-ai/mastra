@@ -8,7 +8,7 @@
         "type": "toggle"
       }
     ],
-    "fugu-ultra": [
+    "fugu": [
       {
         "type": "effort",
         "values": ["high", "xhigh"]
@@ -20,7 +20,7 @@
         "values": ["high", "xhigh"]
       }
     ],
-    "fugu": [
+    "fugu-ultra": [
       {
         "type": "effort",
         "values": ["high", "xhigh"]
