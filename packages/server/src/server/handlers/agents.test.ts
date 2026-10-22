@@ -2295,12 +2295,14 @@ describe('Agent Routes Authorization', () => {
       status = 'running',
       inputCheckpointed = true,
       workflowName = 'durable-agentic-loop',
+      threadId,
     }: {
       runId: string;
       resourceId?: string;
       status?: 'running' | 'suspended' | 'pending';
       inputCheckpointed?: boolean;
       workflowName?: string;
+      threadId?: string;
     }) {
       const workflowsStore = await storage.getStore('workflows');
       await workflowsStore?.persistWorkflowSnapshot({
@@ -2316,6 +2318,7 @@ describe('Agent Routes Authorization', () => {
                 input: {
                   agentId: 'test-durable-agent',
                   __workflowKind: 'durable-agent',
+                  state: { threadId },
                 },
               }
             : {}) as any,
@@ -2329,6 +2332,24 @@ describe('Agent Routes Authorization', () => {
         },
       });
     }
+
+    it.each(['user-a', 'user-b'])('checks thread ownership for an ownerless run called by %s', async caller => {
+      await mockMemory.createThread({ threadId: 'abort-thread', resourceId: 'user-a', title: 'Protected thread' });
+      const abort = vi.spyOn(mockDurableAgent, 'abortRunStream').mockResolvedValue(true);
+      await persistDurableAgenticLoopRun({ runId: 'ownerless-thread-run', threadId: 'abort-thread' });
+      const cancellation = ABORT_AGENT_RUN_ROUTE.handler({
+        mastra,
+        agentId: 'test-durable-agent',
+        runId: 'ownerless-thread-run',
+        requestContext: createContextWithReservedKeys({ resourceId: caller }),
+      });
+      if (caller === 'user-a') {
+        await expect(cancellation).resolves.toEqual({ aborted: true });
+      } else {
+        await expect(cancellation).rejects.toMatchObject({ status: 403 });
+        expect(abort).not.toHaveBeenCalled();
+      }
+    });
 
     it.each(['', 'inngest:'])('aborts an active run using its %s execution checkpoint', async prefix => {
       Object.defineProperty(mockDurableAgent, 'durableLoopWorkflowName', { value: `${prefix}durable-agentic-loop` });

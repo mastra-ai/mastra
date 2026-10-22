@@ -2308,7 +2308,7 @@ export const ABORT_AGENT_RUN_ROUTE = createRoute({
   requiresPermission: MastraFGAPermissions.AGENTS_EXECUTE,
   handler: async ({ mastra, agentId, runId, requestContext }) => {
     try {
-      const agent = await getAgentFromSystem({ mastra, agentId });
+      const agent = await getAgentFromSystem({ mastra, agentId, requestContext });
       if (!isDurableAgentLike(agent)) {
         throw new HTTPException(501, { message: 'Run-scoped cancellation requires a durable agent' });
       }
@@ -2348,13 +2348,14 @@ export const ABORT_AGENT_RUN_ROUTE = createRoute({
       }
       const threadId = parsed.data.context.input.state?.threadId;
       if (threadId) {
-        const memory = await agent.getMemory();
+        const memory = await agent.getMemory({ requestContext });
         const thread = await memory?.getThreadById({ threadId });
         await enforceThreadAccess({
           mastra,
           requestContext,
           threadId,
           thread,
+          effectiveResourceId: getContextResourceId(requestContext),
           permission: MastraFGAPermissions.MEMORY_WRITE,
         });
       }
