@@ -39,6 +39,7 @@ import {
   weatherRootSpan,
   weatherTraceSpans,
   weatherTraceUsage,
+  workflowTracesPage,
 } from './fixtures/traces-explorer';
 import { FilterBar } from '@/ds/components/FilterBar';
 import type { FilterBarExpression, FilterBarField } from '@/ds/components/FilterBar';
@@ -395,6 +396,27 @@ describe('TracesExplorer', () => {
       fireEvent.click(traceRow('What is the weather in Paris'));
 
       expect(await screen.findByRole('dialog', { name: 'Trace details' })).toBeTruthy();
+    });
+  });
+
+  describe('when a trace opens, the drawer width follows its entity', () => {
+    const openDrawerSize = async (tracesPage: typeof twoTracesPage) => {
+      setExplorerHandlers(traceQueryCapabilities, tracesPage);
+      const { queryClient } = renderExplorer();
+      await settle(queryClient);
+
+      fireEvent.click(traceRow('What is the weather in Paris'));
+
+      const dialog = await screen.findByRole('dialog', { name: 'Trace details' });
+      return dialog.closest('[data-slot="data-panel-popup"]')?.getAttribute('data-size');
+    };
+
+    it('opens an agent trace wide, to fit the Messages column', async () => {
+      expect(await openDrawerSize(twoTracesPage)).toBe('wide');
+    });
+
+    it('opens a workflow trace at half width', async () => {
+      expect(await openDrawerSize(workflowTracesPage)).toBe('half');
     });
   });
 

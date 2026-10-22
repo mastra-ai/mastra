@@ -658,6 +658,10 @@ function TracePanelColumns({
     storage: safeLayoutStorage,
   });
 
+  // Only agent traces have messages worth reading side by side with the spans; for every other
+  // entity the side column starts narrow so the span tree gets the room.
+  const sideDefaultSize = layoutKey === 'agent' ? '40%' : '20%';
+
   return (
     <div ref={highlightRef} data-trace-columns className="flex min-h-0 flex-1">
       <PanelGroup
@@ -670,7 +674,7 @@ function TracePanelColumns({
       >
         {sideColumnSlot && (
           <>
-            <Panel id="trace-side" minSize={280} defaultSize="40%">
+            <Panel id="trace-side" minSize={280} defaultSize={sideDefaultSize}>
               <div className="flex h-full min-h-0 flex-col border-r border-surface-rim">{sideColumnSlot}</div>
             </Panel>
             <PanelSeparator variant="pill" />

@@ -47,6 +47,25 @@ const defaultSidePanelFlexGrow = () => {
 const sidePanelFlexGrow = () =>
   (document.body.querySelector('[data-panel][id="trace-side"]') as HTMLElement | null)?.style.flexGrow;
 
+describe('TraceDataPanelView — default side column width', () => {
+  // jsdom lays nothing out; give the panel group a real width so percentage defaults resolve.
+  beforeEach(() => {
+    vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(1200);
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(800);
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 1200, 800));
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('starts the side column narrower for non-agent traces than for agent traces', () => {
+    const agent = defaultSidePanelFlexGrow();
+    render(<TraceDataPanelView {...props('workflow_run')} />);
+
+    expect(Number(sidePanelFlexGrow())).toBeLessThan(Number(agent));
+  });
+});
+
 describe('TraceDataPanelView — persisted layout', () => {
   it('restores the column sizes stored for the trace entity type', () => {
     localStorage.setItem(storageKey('agent'), JSON.stringify({ 'trace-side': 25, 'trace-main': 75 }));

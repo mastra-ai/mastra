@@ -1,3 +1,4 @@
+import { EntityType } from '@mastra/core/observability';
 import { useTraceSpanScores } from '@mastra/react/hooks/scores';
 import { useSpanFeedback, useTraceFeedback, useTraceOrBranchSpans, useTraceUsage } from '@mastra/react/hooks/traces';
 import { useState } from 'react';
@@ -90,11 +91,16 @@ export function TracesExplorerPanel({
   const isFullThreadOpen = !!traceId && fullThreadTraceId === traceId;
   const depth = isFullThreadOpen ? 3 : 2;
 
+  // Only agent traces carry the Messages column, so only they need the wide drawer. The listed
+  // row knows the entity on click; the root span covers deep-linked traces outside the list.
+  const entityType = rows.find(row => row.traceId === traceId)?.entityType ?? anchorSpan?.entityType;
+  const panelSize = spanId ? 'full' : entityType === EntityType.AGENT ? 'wide' : 'half';
+
   return (
     <>
       <TraceSpanPanel
         title="Trace details"
-        size={spanId ? 'full' : 'wide'}
+        size={panelSize}
         traceId={traceId}
         spans={spans}
         anchorSpanId={anchorSpanId}
@@ -119,9 +125,7 @@ export function TracesExplorerPanel({
         featuredSpanIds={selection.highlightSpanIds}
         onHighlightSpans={highlightSpans}
         feedbackTabBadge={withFeedback ? (traceFeedbackData?.pagination?.total ?? undefined) : undefined}
-        feedbackTabSlot={
-          withFeedback ? ({ traceId: tid }) => <TraceFeedbackTab traceId={tid} variant="embed" /> : undefined
-        }
+        feedbackTabSlot={withFeedback ? ({ traceId: tid }) => <TraceFeedbackTab traceId={tid} /> : undefined}
         scoresTabBadge={spanScoresData?.pagination?.total ?? undefined}
         scoresTabSlot={({ traceId: tid, rootSpanId }) =>
           rootSpanId ? <TraceScoresList traceId={tid} spanId={rootSpanId} onScoreSelect={selectScore} /> : null

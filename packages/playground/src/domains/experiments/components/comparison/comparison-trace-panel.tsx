@@ -67,9 +67,7 @@ export function ComparisonTracePanel({ traceId, onClose, withQueryTrace, withFee
       withFeedback={withFeedback}
       onOpenScore={(id, scoreId) => navigate(traceScoreLink(id, scoreId))}
       feedbackTabBadge={withFeedback ? (traceFeedback?.pagination?.total ?? undefined) : undefined}
-      feedbackTabSlot={
-        withFeedback ? ({ traceId: id }) => <TraceFeedbackTab traceId={id} variant="embed" /> : undefined
-      }
+      feedbackTabSlot={withFeedback ? ({ traceId: id }) => <TraceFeedbackTab traceId={id} /> : undefined}
       scoresTabBadge={anchorSpanScores?.pagination?.total ?? undefined}
       scoresTabSlot={({ traceId: id, rootSpanId }) =>
         rootSpanId ? (

@@ -148,9 +148,7 @@ export function ExperimentResultDetail({
         withFeedback={withFeedback}
         onOpenScore={(traceId, scoreId) => navigate(traceScoreLink(traceId, scoreId))}
         feedbackTabBadge={withFeedback ? (traceFeedback?.pagination?.total ?? undefined) : undefined}
-        feedbackTabSlot={
-          withFeedback ? ({ traceId }) => <TraceFeedbackTab traceId={traceId} variant="embed" /> : undefined
-        }
+        feedbackTabSlot={withFeedback ? ({ traceId }) => <TraceFeedbackTab traceId={traceId} /> : undefined}
         scoresTabBadge={anchorSpanScores?.pagination?.total ?? undefined}
         scoresTabSlot={({ traceId, rootSpanId }) =>
           rootSpanId ? (
