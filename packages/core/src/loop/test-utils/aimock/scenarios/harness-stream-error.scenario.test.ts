@@ -20,7 +20,8 @@ class BrokenStreamPubSub extends EventEmitterPubSub {
   }
 }
 
-// Only the durable engines read the stream through PubSub.
+// Only the durable engines read the stream through PubSub. Inngest runs on the
+// host's Mastra, which never sees this test's PubSub.
 describeForAllEngines(
   'AIMock loop scenario: harness surfaces transport failures',
   engine => {
@@ -38,7 +39,7 @@ describeForAllEngines(
         fixtures,
       });
 
-      await expect(run).rejects.toThrow(/fullStream threw while draining/);
+      await expect(run).rejects.toThrow(/stream failed while draining/);
       await expect(run).rejects.toMatchObject({ cause: transportError });
     });
 
@@ -57,5 +58,43 @@ describeForAllEngines(
       expect(chunks).toEqual([]);
     });
   },
-  { skip: ['normal', 'fs'] },
+  { skip: ['normal', 'fs', 'inngest'] },
+);
+
+// The non-durable drain uses consumeStream(), which resolves on a failed base
+// stream and only reports it through onError.
+describeForAllEngines(
+  'AIMock loop scenario: harness surfaces base stream failures',
+  engine => {
+    const getMock = useLoopScenarioAimock();
+    const fixtures = (llm: ReturnType<typeof getMock>) => {
+      llm.on({ endpoint: 'chat' }, { content: 'Hello' });
+    };
+    const defaultOptions = {
+      onFinish: () => {
+        throw new Error('onFinish exploded');
+      },
+    };
+
+    it('throws when the base stream fails and no error was expected', async () => {
+      const run = runLoopScenario({ engine, llm: getMock(), prompt: 'Say hello', defaultOptions, fixtures });
+
+      await expect(run).rejects.toThrow(/stream failed while draining/);
+      await expect(run).rejects.toMatchObject({ cause: { message: 'onFinish exploded' } });
+    });
+
+    it('returns the base stream error on streamError when the scenario expects it', async () => {
+      const { streamError } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Say hello',
+        defaultOptions,
+        expectStreamError: true,
+        fixtures,
+      });
+
+      expect(streamError).toMatchObject({ message: 'onFinish exploded' });
+    });
+  },
+  { skip: ['durable', 'evented', 'inngest'] },
 );

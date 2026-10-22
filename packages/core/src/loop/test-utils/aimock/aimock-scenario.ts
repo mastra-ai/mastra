@@ -534,7 +534,13 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
       streamErrored = true;
     }
   } else {
-    await output.consumeStream();
+    // consumeStream resolves on a failed drain and only reports it through onError.
+    await output.consumeStream({
+      onError: error => {
+        streamError = error;
+        streamErrored = true;
+      },
+    });
   }
 
   // Clean up durable resources — but NOT when the stream was suspended or
@@ -546,7 +552,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
 
   if (streamErrored && !expectStreamError) {
     throw new Error(
-      `runLoopScenario: fullStream threw while draining (set expectStreamError if the scenario triggers this on purpose): ${String(streamError)}`,
+      `runLoopScenario: stream failed while draining (set expectStreamError if the scenario triggers this on purpose): ${String(streamError)}`,
       { cause: streamError },
     );
   }
