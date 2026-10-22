@@ -30,7 +30,8 @@ export interface UseTracesListSourceArgs {
   query: (now: Date) => TraceQueryArgs;
   orderBy?: TraceQueryArgs['orderBy'];
   rolling?: boolean;
-  initialAutoRefetch?: boolean;
+  /** Poll for new traces and refetch on window focus. */
+  autoRefetch?: boolean;
   withQueryTrace?: boolean;
   /** The server supports delta polling: auto-refresh merges new traces instead of reloading the pages. */
   withDeltaPolling?: boolean;
@@ -44,7 +45,7 @@ export function useTracesListSource({
   query: buildQuery,
   orderBy,
   rolling = true,
-  initialAutoRefetch = true,
+  autoRefetch = true,
   withQueryTrace,
   withDeltaPolling = false,
   legacyFilters,
@@ -52,7 +53,6 @@ export function useTracesListSource({
   enabled = true,
 }: UseTracesListSourceArgs) {
   const [tickNow, setTickNow] = useState(() => new Date());
-  const [autoRefetch, setAutoRefetch] = useState(initialAutoRefetch);
   const delta = withDeltaPolling && withQueryTrace !== false;
   // A fixed window polls in place. Transient failures keep polling (a blip must not silence the
   // list), but a request the server refuses ends it: each retry would only clear the error, flash
@@ -122,6 +122,5 @@ export function useTracesListSource({
     ...result,
     rows,
     autoRefetch,
-    setAutoRefetch,
   };
 }
