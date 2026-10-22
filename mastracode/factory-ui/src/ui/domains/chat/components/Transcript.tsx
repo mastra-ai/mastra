@@ -143,8 +143,6 @@ export function TranscriptEntries({
         // ending, so no stamp lands mid-turn.
         const steps = replySteps(group);
         const replyEnd = steps.at(-1);
-        // Posts to a chat thread carry their own footer, so this one is only
-        // the agent's own text.
         const reply = runningTurn
           ? undefined
           : steps
