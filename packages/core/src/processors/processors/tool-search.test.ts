@@ -163,6 +163,14 @@ describe('ToolSearchProcessor', () => {
       expect(names.every((name: string) => query.split(' ').includes(name))).toBe(true);
     });
 
+    it('finds a complete short ID even when BM25 has no matching tokens', async () => {
+      const processor = new ToolSearchProcessor({
+        tools: { x: createMockTool('x', 'Execute operation') },
+        search: { topK: 1, minScore: 0 },
+      });
+      expect(await search(processor, '"x"')).toEqual(['x']);
+    });
+
     it('keeps the minimum-score threshold for exact names', async () => {
       const processor = new ToolSearchProcessor({ tools, search: { topK: 5, minScore: 1000 } });
       expect(await search(processor, query)).toEqual([]);
