@@ -3656,225 +3656,243 @@ ${formattedMessages}
       BufferingCoordinator.setObservationBoundary(bufferKey, currentTokens, boundaryOwner);
     }
 
-    // Set persistent flag and register op. Unregister under the same id: `record` is replaced by the
-    // fresh head below, which a rollover may have given a new id.
-    const operation = new BackgroundOperation(lockKey, opts.abortSignal);
-    const abortSignal = operation.signal;
-    const opRecordId = record.id;
-    registerOp(opRecordId, 'bufferingObservation');
-    const releaseChunkWrite = BufferingCoordinator.trackChunkWrite(bufferKey);
-    // Waiting for the previous op may have let an activation reset the boundary (or a later op
-    // take it); then this op no longer persists its starting boundary.
-    const ownsStartBoundary = BufferingCoordinator.ownsObservationBoundary(bufferKey, boundaryOwner);
-    inMemoryRecord.isBufferingObservation = true;
-    if (ownsStartBoundary) inMemoryRecord.lastBufferedAtTokens = currentTokens;
-    runOMCommit(lockKey, () =>
-      this.storage.setBufferingObservationFlag(record.id, true, ownsStartBoundary ? currentTokens : undefined),
-    ).catch(err => {
-      omError('[OM] Failed to set buffering observation flag', err);
-    });
+    const work = (async () => {
+      // Set persistent flag and register op. Unregister under the same id: `record` is replaced by the
+      // fresh head below, which a rollover may have given a new id.
+      const operation = new BackgroundOperation(lockKey, opts.abortSignal);
+      const abortSignal = operation.signal;
+      const opRecordId = record.id;
+      registerOp(opRecordId, 'bufferingObservation');
+      const releaseChunkWrite = BufferingCoordinator.trackChunkWrite(bufferKey);
+      // Waiting for the previous op may have let an activation reset the boundary (or a later op
+      // take it); then this op no longer persists its starting boundary.
+      const ownsStartBoundary = BufferingCoordinator.ownsObservationBoundary(bufferKey, boundaryOwner);
+      inMemoryRecord.isBufferingObservation = true;
+      if (ownsStartBoundary) inMemoryRecord.lastBufferedAtTokens = currentTokens;
+      runOMCommit(lockKey, () =>
+        this.storage.setBufferingObservationFlag(record.id, true, ownsStartBoundary ? currentTokens : undefined),
+      ).catch(err => {
+        omError('[OM] Failed to set buffering observation flag', err);
+      });
 
-    const setBufferingState = (isBufferingObservation: boolean, lastBufferedAtTokens?: number) => {
-      inMemoryRecord.isBufferingObservation = isBufferingObservation;
-      record.isBufferingObservation = isBufferingObservation;
-      if (lastBufferedAtTokens !== undefined) {
-        inMemoryRecord.lastBufferedAtTokens = lastBufferedAtTokens;
-        record.lastBufferedAtTokens = lastBufferedAtTokens;
-      }
-    };
+      const setBufferingState = (isBufferingObservation: boolean, lastBufferedAtTokens?: number) => {
+        inMemoryRecord.isBufferingObservation = isBufferingObservation;
+        record.isBufferingObservation = isBufferingObservation;
+        if (lastBufferedAtTokens !== undefined) {
+          inMemoryRecord.lastBufferedAtTokens = lastBufferedAtTokens;
+          record.lastBufferedAtTokens = lastBufferedAtTokens;
+        }
+      };
 
-    let flagCleared = false;
+      let flagCleared = false;
 
-    try {
-      // Keep the caller's turn-scoped record current while using a fresh storage snapshot
-      // for the asynchronous write path.
-      record = (await this.storage.getObservationalMemory(record.threadId, record.resourceId)) ?? record;
+      try {
+        // Keep the caller's turn-scoped record current while using a fresh storage snapshot
+        // for the asynchronous write path.
+        record = (await this.storage.getObservationalMemory(record.threadId, record.resourceId)) ?? record;
 
-      // Load messages: use provided or load from storage
-      let candidateMessages: MastraDBMessage[];
-      if (opts.messages) {
-        candidateMessages = this.getUnobservedMessages(opts.messages, record, { excludeBuffered: true });
-      } else {
-        const rawMessages = await this.loadMessagesFromStorage(
-          threadId,
-          resourceId,
-          record.lastObservedAt ? new Date(record.lastObservedAt) : undefined,
-        );
-        candidateMessages = this.getUnobservedMessages(rawMessages, record, { excludeBuffered: true });
-      }
+        // Load messages: use provided or load from storage
+        let candidateMessages: MastraDBMessage[];
+        if (opts.messages) {
+          candidateMessages = this.getUnobservedMessages(opts.messages, record, { excludeBuffered: true });
+        } else {
+          const rawMessages = await this.loadMessagesFromStorage(
+            threadId,
+            resourceId,
+            record.lastObservedAt ? new Date(record.lastObservedAt) : undefined,
+          );
+          candidateMessages = this.getUnobservedMessages(rawMessages, record, { excludeBuffered: true });
+        }
 
-      // Apply cursor filtering only for storage-loaded messages.
-      // When messages are provided directly, they're fresh and shouldn't be filtered by cursor.
-      if (!opts.messages) {
-        let bufferCursor = BufferingCoordinator.lastBufferedAtTime.get(bufferKey) ?? record.lastBufferedAtTime ?? null;
-        if (record.lastObservedAt) {
-          const lastObserved = new Date(record.lastObservedAt);
-          if (!bufferCursor || lastObserved > bufferCursor) {
-            bufferCursor = lastObserved;
+        // Apply cursor filtering only for storage-loaded messages.
+        // When messages are provided directly, they're fresh and shouldn't be filtered by cursor.
+        if (!opts.messages) {
+          let bufferCursor =
+            BufferingCoordinator.lastBufferedAtTime.get(bufferKey) ?? record.lastBufferedAtTime ?? null;
+          if (record.lastObservedAt) {
+            const lastObserved = new Date(record.lastObservedAt);
+            if (!bufferCursor || lastObserved > bufferCursor) {
+              bufferCursor = lastObserved;
+            }
+          }
+
+          if (bufferCursor) {
+            candidateMessages = candidateMessages.filter(msg => {
+              if (!msg.createdAt) return true;
+              return new Date(msg.createdAt) > bufferCursor;
+            });
           }
         }
 
-        if (bufferCursor) {
-          candidateMessages = candidateMessages.filter(msg => {
-            if (!msg.createdAt) return true;
-            return new Date(msg.createdAt) > bufferCursor;
-          });
+        // Check minimum token threshold
+        const bufferTokens = this.observationConfig.bufferTokens ?? 5000;
+        const minNewTokens = bufferTokens / 2;
+        const newTokens = await this.tokenCounter.countMessagesAsync(candidateMessages);
+
+        if (candidateMessages.length === 0 || (!opts.skipMinimumTokenCheck && newTokens < minNewTokens)) {
+          setBufferingState(false);
+          return { buffered: false, record };
         }
-      }
 
-      // Check minimum token threshold
-      const bufferTokens = this.observationConfig.bufferTokens ?? 5000;
-      const minNewTokens = bufferTokens / 2;
-      const newTokens = await this.tokenCounter.countMessagesAsync(candidateMessages);
+        abortSignal.throwIfAborted();
+        // Seal candidates before the observer runs.
+        // If a beforeBuffer callback is provided (processor path), it handles sealing + persistence.
+        // Otherwise, seal automatically so external consumers don't need to deal with it.
+        if (opts.beforeBuffer) {
+          await opts.beforeBuffer(candidateMessages);
+        } else if (opts.messages) {
+          this.sealMessagesForBuffering(candidateMessages);
+        }
 
-      if (candidateMessages.length === 0 || (!opts.skipMinimumTokenCheck && newTokens < minNewTokens)) {
-        setBufferingState(false);
-        return { buffered: false, record };
-      }
+        // Generate cycle ID
+        const cycleId = `buffer-obs-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
+        const startedAt = new Date().toISOString();
 
-      abortSignal.throwIfAborted();
-      // Seal candidates before the observer runs.
-      // If a beforeBuffer callback is provided (processor path), it handles sealing + persistence.
-      // Otherwise, seal automatically so external consumers don't need to deal with it.
-      if (opts.beforeBuffer) {
-        await opts.beforeBuffer(candidateMessages);
-      } else if (opts.messages) {
-        this.sealMessagesForBuffering(candidateMessages);
-      }
+        const startMarker = createBufferingStartMarker({
+          cycleId,
+          operationType: 'observation',
+          tokensToBuffer: newTokens,
+          recordId: record.id,
+          threadId,
+          threadIds: [threadId],
+          config: this.getObservationMarkerConfig(),
+        });
+        await this.persistMarkerToStorage(startMarker, threadId, record.resourceId ?? undefined, {
+          notAfter: new Date(startedAt),
+          preferMessages: candidateMessages,
+          abortSignal,
+        });
 
-      // Generate cycle ID
-      const cycleId = `buffer-obs-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`;
-      const startedAt = new Date().toISOString();
+        // Emit buffering start marker without letting the stream writer create a separate data-only DB message.
+        const writer = opts.writer;
+        if (writer) {
+          // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
+          void writer.custom({ ...startMarker, transient: true }).catch(() => {});
+        }
 
-      const startMarker = createBufferingStartMarker({
-        cycleId,
-        operationType: 'observation',
-        tokensToBuffer: newTokens,
-        recordId: record.id,
-        threadId,
-        threadIds: [threadId],
-        config: this.getObservationMarkerConfig(),
-      });
-      await this.persistMarkerToStorage(startMarker, threadId, record.resourceId ?? undefined, {
-        notAfter: new Date(startedAt),
-        preferMessages: candidateMessages,
-        abortSignal,
-      });
+        // Record the chunk as soon as it's persisted, before the op's post-persist work
+        // (indexing, thread title). Activation doesn't wait for this op in the async band, so
+        // it may already have reset the token boundary (or a later op taken it). Only the op that
+        // still owns the boundary moves it, here and at its start; otherwise its pre-activation
+        // token count would stall the next buffer trigger. The check and the in-memory write run
+        // before any await, so an activation reset can't slip between them, and its queued
+        // storage reset lands after this op's queued write.
+        let chunkRecorded = false;
+        const recordBufferedChunk = async () => {
+          if (chunkRecorded) return;
+          chunkRecorded = true;
+          const bookkeeping = this.trackBackgroundWork(
+            runOMCommit(lockKey, () => {
+              const ownsBoundary = BufferingCoordinator.ownsObservationBoundary(bufferKey, boundaryOwner);
+              const tokens = abortSignal.aborted ? 0 : newTokens;
+              if (ownsBoundary) {
+                BufferingCoordinator.setObservationBoundary(
+                  bufferKey,
+                  tokens,
+                  abortSignal.aborted ? undefined : boundaryOwner,
+                );
+                setBufferingState(false, tokens);
+              }
+              return this.storage.setBufferingObservationFlag(record.id, false, ownsBoundary ? tokens : undefined);
+            }).catch(() => {}),
+            lockKey,
+          );
+          flagCleared = true;
+          setBufferingState(false);
+          await waitWithAbort(bookkeeping, abortSignal);
+          abortSignal.throwIfAborted();
 
-      // Emit buffering start marker without letting the stream writer create a separate data-only DB message.
-      const writer = opts.writer;
-      if (writer) {
-        // Stream OM lifecycle markers as transient so the OutputWriter does not persist standalone data-only messages; OM persists the durable marker explicitly.
-        void writer.custom({ ...startMarker, transient: true }).catch(() => {});
-      }
+          // Update lastBufferedAtTime in-memory cache so subsequent buffer() calls filter correctly
+          const maxTimestamp = this.getMaxMessageTimestamp(candidateMessages);
+          BufferingCoordinator.lastBufferedAtTime.set(bufferKey, new Date(maxTimestamp.getTime() + 1));
+          releaseChunkWrite();
+        };
 
-      // Record the chunk as soon as it's persisted, before the op's post-persist work
-      // (indexing, thread title). Activation doesn't wait for this op in the async band, so
-      // it may already have reset the token boundary (or a later op taken it). Only the op that
-      // still owns the boundary moves it, here and at its start; otherwise its pre-activation
-      // token count would stall the next buffer trigger. The check and the in-memory write run
-      // before any await, so an activation reset can't slip between them, and its queued
-      // storage reset lands after this op's queued write.
-      let chunkRecorded = false;
-      const recordBufferedChunk = async () => {
-        if (chunkRecorded) return;
-        chunkRecorded = true;
-        const ownsBoundary = BufferingCoordinator.ownsObservationBoundary(bufferKey, boundaryOwner);
-        if (ownsBoundary) BufferingCoordinator.setObservationBoundary(bufferKey, newTokens, boundaryOwner);
-        await runOMCommit(lockKey, () =>
-          this.storage.setBufferingObservationFlag(record.id, false, ownsBoundary ? newTokens : undefined),
-        ).catch(() => {});
-        flagCleared = true;
-        const stillOwnsBoundary =
-          ownsBoundary && BufferingCoordinator.ownsObservationBoundary(bufferKey, boundaryOwner);
-        setBufferingState(false, stillOwnsBoundary ? newTokens : undefined);
+        // Call the observer via strategy pattern, firing config-level hooks
+        // around the cycle — fire-and-forget callers never see this result.
+        const result = await this.runBufferedObservationCycle(
+          { threadId, resourceId: record.resourceId ?? resourceId, trigger: 'async-buffer' },
+          () =>
+            ObservationStrategy.create(this, {
+              record,
+              threadId,
+              resourceId: record.resourceId ?? undefined,
+              messages: candidateMessages,
+              cycleId,
+              startedAt,
+              abortSignal,
+              writer,
+              agent: opts.agent,
+              sendSignal: opts.sendSignal,
+              sendStateSignal: opts.sendStateSignal,
+              requestContext,
+              currentModel: opts.currentModel,
+              observabilityContext,
+              trigger: 'async-buffer',
+              onBufferedChunkPersisted: recordBufferedChunk,
+            }).run(),
+        );
 
-        // Update lastBufferedAtTime in-memory cache so subsequent buffer() calls filter correctly
-        const maxTimestamp = this.getMaxMessageTimestamp(candidateMessages);
-        BufferingCoordinator.lastBufferedAtTime.set(bufferKey, new Date(maxTimestamp.getTime() + 1));
-        releaseChunkWrite();
-      };
+        if (!result?.observed) {
+          return { buffered: false, record };
+        }
 
-      // Call the observer via strategy pattern, firing config-level hooks
-      // around the cycle — fire-and-forget callers never see this result.
-      const result = await this.runBufferedObservationCycle(
-        { threadId, resourceId: record.resourceId ?? resourceId, trigger: 'async-buffer' },
-        () =>
-          ObservationStrategy.create(this, {
-            record,
+        if (isOmReproCaptureEnabled()) {
+          writeObserverExchangeReproCapture({
             threadId,
             resourceId: record.resourceId ?? undefined,
-            messages: candidateMessages,
-            cycleId,
-            startedAt,
-            abortSignal,
-            writer,
-            agent: opts.agent,
-            sendSignal: opts.sendSignal,
-            sendStateSignal: opts.sendStateSignal,
-            requestContext,
-            currentModel: opts.currentModel,
-            observabilityContext,
-            trigger: 'async-buffer',
-            onBufferedChunkPersisted: recordBufferedChunk,
-          }).run(),
-      );
+            label: `buffer-${cycleId}`,
+            observerExchange: this.observer.lastExchange,
+            details: {
+              cycleId,
+              startedAt,
+              buffered: true,
+              candidateMessageIds: candidateMessages.map(message => message.id),
+              candidateMessageCount: candidateMessages.length,
+              pendingTokens: currentTokens,
+              newTokens,
+            },
+          });
+        }
 
-      if (!result?.observed) {
+        await recordBufferedChunk();
+
+        const updatedRecord = (await this.storage.getObservationalMemory(record.threadId, record.resourceId)) ?? record;
+        return { buffered: true, record: updatedRecord };
+      } catch (error) {
+        omError('[OM] buffer() failed', error);
         return { buffered: false, record };
+      } finally {
+        operation.dispose();
+        releaseChunkWrite();
+        unregisterOp(opRecordId, 'bufferingObservation');
+        // A later call may already have registered itself behind this op; keep its entry.
+        if (BufferingCoordinator.asyncBufferingOps.get(bufferKey) === opPromise) {
+          BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
+        }
+        resolveOp!();
+        // Only clear the flag if the success path didn't already clear it (with token count)
+        if (!flagCleared) {
+          setBufferingState(false);
+          const flagCleanup = this.trackBackgroundWork(
+            runOMCommit(lockKey, () => {
+              const newerOp = BufferingCoordinator.asyncBufferingOps.get(bufferKey);
+              if (newerOp && newerOp !== opPromise) return Promise.resolve();
+              const resetBoundary =
+                abortSignal.aborted && BufferingCoordinator.ownsObservationBoundary(bufferKey, boundaryOwner);
+              if (resetBoundary) BufferingCoordinator.setObservationBoundary(bufferKey, 0);
+              return this.storage.setBufferingObservationFlag(record.id, false, resetBoundary ? 0 : undefined);
+            }).catch(() => {}),
+            lockKey,
+          );
+          await waitWithAbort(flagCleanup, abortSignal).catch(() => {});
+        }
       }
-
-      if (isOmReproCaptureEnabled()) {
-        writeObserverExchangeReproCapture({
-          threadId,
-          resourceId: record.resourceId ?? undefined,
-          label: `buffer-${cycleId}`,
-          observerExchange: this.observer.lastExchange,
-          details: {
-            cycleId,
-            startedAt,
-            buffered: true,
-            candidateMessageIds: candidateMessages.map(message => message.id),
-            candidateMessageCount: candidateMessages.length,
-            pendingTokens: currentTokens,
-            newTokens,
-          },
-        });
-      }
-
-      await recordBufferedChunk();
-
-      const updatedRecord = (await this.storage.getObservationalMemory(record.threadId, record.resourceId)) ?? record;
-      return { buffered: true, record: updatedRecord };
-    } catch (error) {
-      omError('[OM] buffer() failed', error);
-      return { buffered: false, record };
-    } finally {
-      operation.dispose();
-      releaseChunkWrite();
-      unregisterOp(opRecordId, 'bufferingObservation');
-      // A later call may already have registered itself behind this op; keep its entry.
-      if (BufferingCoordinator.asyncBufferingOps.get(bufferKey) === opPromise) {
-        BufferingCoordinator.asyncBufferingOps.delete(bufferKey);
-      }
-      resolveOp!();
-      // Only clear the flag if the success path didn't already clear it (with token count)
-      if (!flagCleared) {
-        setBufferingState(false);
-        const flagCleanup = this.trackBackgroundWork(
-          runOMCommit(lockKey, () => {
-            const newerOp = BufferingCoordinator.asyncBufferingOps.get(bufferKey);
-            if (newerOp && newerOp !== opPromise) return Promise.resolve();
-            const resetBoundary =
-              abortSignal.aborted && BufferingCoordinator.ownsObservationBoundary(bufferKey, boundaryOwner);
-            if (resetBoundary) BufferingCoordinator.setObservationBoundary(bufferKey, 0);
-            return this.storage.setBufferingObservationFlag(record.id, false, resetBoundary ? 0 : undefined);
-          }).catch(() => {}),
-          lockKey,
-        );
-        await waitWithAbort(flagCleanup, abortSignal).catch(() => {});
-      }
-    }
+    })();
+    return waitWithAbort(this.trackBackgroundWork(work, lockKey), opts.abortSignal).catch(error => {
+      if (opts.abortSignal?.aborted) return { buffered: false, record };
+      throw error;
+    });
   }
 
   /**

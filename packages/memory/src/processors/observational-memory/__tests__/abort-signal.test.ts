@@ -1075,3 +1075,111 @@ it.each(['shared buffer', 'queued activation'] as const)('cancels context-overfl
   expect(after?.activeObservations ?? '').toBe('');
   expect((await storage.listMessagesById({ messageIds: [message.id] })).messages).toHaveLength(1);
 });
+
+class PausedAppendStorage extends InMemoryMemory {
+  private paused = false;
+  readonly entered = Promise.withResolvers<void>();
+  readonly releaseRead = Promise.withResolvers<void>();
+  override async getObservationalMemory(...args: Parameters<InMemoryMemory['getObservationalMemory']>) {
+    const result = await super.getObservationalMemory(...args);
+    if (!this.paused && result?.bufferedObservationChunks?.length) {
+      this.paused = true;
+      this.entered.resolve();
+      await this.releaseRead.promise;
+    }
+    return result;
+  }
+}
+
+it.each(['shared provider', 'post-append commit'] as const)(
+  'detaches a cancelled buffer caller during %s while tracking remaining work',
+  async mode => {
+    const provider = createLatchedModel(
+      '<observations>\n- Kept observation\n</observations>',
+      mode === 'shared provider',
+    );
+    const store = new InMemoryStore();
+    const storage = new PausedAppendStorage({ db: new InMemoryDB() });
+    store.stores.memory = storage;
+    if (mode === 'shared provider') storage.releaseRead.resolve();
+    const memory = new Memory({
+      storage: store,
+      options: {
+        generateTitle: false,
+        observationalMemory: {
+          enabled: true,
+          observation: { model: provider.model, messageTokens: 1000, bufferTokens: 1 },
+          reflection: { model: provider.model, observationTokens: 100_000 },
+        },
+      },
+    });
+    const engine = (await memory.omEngine)!;
+    const threadId = `detach-${mode}`;
+    const resourceId = 'detach-resource';
+    const message: MastraDBMessage = {
+      id: `request-${mode}`,
+      threadId,
+      resourceId,
+      role: 'user',
+      createdAt: new Date(),
+      content: { format: 2, parts: [{ type: 'text', text: 'Keep this accepted request.' }] },
+    };
+    await engine.persistMessages([message], threadId, resourceId);
+    const other = new AbortController();
+    const turn = engine.beginTurn({
+      threadId,
+      resourceId,
+      messageList: new MessageList({ threadId, resourceId }),
+      abortSignal: other.signal,
+    });
+    if (mode === 'shared provider') await turn.start();
+    else other.abort();
+    const controller = new AbortController();
+    let settled = false;
+    const operation = engine
+      .buffer({
+        threadId,
+        resourceId,
+        messages: [message],
+        skipMinimumTokenCheck: true,
+        abortSignal: controller.signal,
+      })
+      .then(() => {
+        settled = true;
+      });
+    const release = Promise.withResolvers<void>();
+    let blocker = Promise.resolve();
+    try {
+      await provider.started;
+      if (mode === 'post-append commit') {
+        await storage.entered.promise;
+        const entered = Promise.withResolvers<void>();
+        const key = engine.buffering.getLockKey(threadId, resourceId);
+        blocker = runOMCommit(key, async () => {
+          entered.resolve();
+          await release.promise;
+        });
+        await entered.promise;
+        storage.releaseRead.resolve();
+        await new Promise<void>(resolve => setImmediate(resolve));
+        expect(waitingOMCommits(key).normal).toBeGreaterThan(0);
+      }
+      controller.abort();
+      await new Promise<void>(resolve => setImmediate(resolve));
+      expect(settled).toBe(true);
+      if (mode === 'shared provider') expect(provider.cancelled).toBe(false);
+    } finally {
+      controller.abort();
+      storage.releaseRead.resolve();
+      release.resolve();
+      provider.release();
+      await Promise.allSettled([blocker, operation]);
+      if (!turn.ended && mode === 'shared provider') await turn.end();
+      await engine.settled();
+    }
+    const record = await engine.getRecord(threadId, resourceId);
+    expect(record?.bufferedObservationChunks).toHaveLength(1);
+    expect(record?.isBufferingObservation).toBe(false);
+    if (mode === 'post-append commit') expect(record?.lastBufferedAtTokens).toBe(0);
+  },
+);
