@@ -3,6 +3,8 @@ title: 'Signals'
 description: 'Send asynchronous input into a Mastra agent thread while Mastra manages whether the agent is active or idle.'
 packages:
   - '@mastra/core'
+  - '@mastra/libsql'
+  - '@mastra/memory'
 ---
 
 # Signals
@@ -27,16 +29,24 @@ Create an agent, subscribe to a thread, then send input to that thread. Subscrib
 
 ### Use an Agent
 
-This example uses a new thread ID and no memory, so it demonstrates input routing but doesn't persist history between runs or process restarts. Configure [Memory](/docs/memory/overview) if you want stored thread history.
+This example stores thread history with [Memory](/docs/memory/overview), using a local libSQL database, so the same conversation is available across runs and process restarts. Memory accepts any supported storage adapter, and the thread is created on the first run.
 
 ```typescript title="src/mastra/signals.ts"
 import { Agent } from '@mastra/core/agent'
+import { Memory } from '@mastra/memory'
+import { LibSQLStore } from '@mastra/libsql'
 
 const agent = new Agent({
   id: 'support-agent',
   name: 'Support Agent',
   instructions: 'Help the user compare options.',
   model: '__GATEWAY_OPENAI_MODEL__',
+  memory: new Memory({
+    storage: new LibSQLStore({
+      id: 'signals-storage',
+      url: 'file:./signals.db',
+    }),
+  }),
 })
 
 const thread = {
