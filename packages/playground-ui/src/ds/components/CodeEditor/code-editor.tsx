@@ -12,6 +12,7 @@ import { Braces } from 'lucide-react';
 import { forwardRef, useMemo } from 'react';
 import type { HTMLAttributes } from 'react';
 import { codeLanguages } from './code-languages';
+import { codeFoldGutter } from './fold-gutter-extension';
 import { syntaxHighlighter } from './highlight';
 import { createVariableAutocomplete } from './variable-autocomplete-extension';
 import { variableHighlight } from './variable-highlight-extension';
@@ -246,7 +247,11 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
       if (ariaDescribedBy) contentAttributes['aria-describedby'] = ariaDescribedBy;
       if (ariaInvalid !== undefined) contentAttributes['aria-invalid'] = String(ariaInvalid);
 
-      const exts: Extension[] = [...editorFocusExtensions, EditorView.contentAttributes.of(contentAttributes)];
+      const exts: Extension[] = [
+        ...editorFocusExtensions,
+        EditorView.contentAttributes.of(contentAttributes),
+        codeFoldGutter,
+      ];
 
       if (lineWrapping) {
         exts.push(EditorView.lineWrapping);
@@ -308,7 +313,7 @@ export const CodeEditor = forwardRef<ReactCodeMirrorRef, CodeEditorProps>(
           height="100%"
           style={{ height: '100%' }}
           autoFocus={autoFocus}
-          basicSetup={{ lineNumbers }}
+          basicSetup={{ lineNumbers, foldGutter: false }}
         />
       </div>
     );
