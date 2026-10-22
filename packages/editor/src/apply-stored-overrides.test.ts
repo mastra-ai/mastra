@@ -631,16 +631,20 @@ describe('file-based agents (source: fs)', () => {
     expect(await fsAgent.getInstructions()).toBe('You are a file-based agent.');
   });
 
-  it('reloads the saved draft on top of the file definition', async () => {
-    const { editor, fsAgent } = await setupFsAgent();
+  it('reloads the saved draft on top of the file definition after the cache is cleared', async () => {
+    const { editor, mastra, fsAgent } = await setupFsAgent();
     await editor.agent.create(studioSave);
     await editor.agent.update({ id: 'fs-agent', instructions: 'Unpublished draft.' });
+    editor.agent.clearCache('fs-agent');
 
-    const fetched = await editor.agent.getById('fs-agent');
-    expect(await fetched?.getInstructions()).toBe('Unpublished draft.');
-    expect(fetched?.model).toBe('openai/gpt-4o-mini');
+    // Studio reloads through the registry (`GET /agents/:id`), which layers the requested
+    // version onto the registered agent.
+    const registered = mastra.getAgentById('fs-agent');
+    expect(registered).toBe(fsAgent);
 
-    const draft = await editor.agent.applyStoredOverrides(fsAgent, { status: 'draft' });
+    const draft = await editor.agent.applyStoredOverrides(registered, { status: 'draft' });
     expect(await draft.getInstructions()).toBe('Unpublished draft.');
+    expect(draft.model).toBe('openai/gpt-4o-mini');
+    expect(Object.keys(await draft.listTools())).toContain('fs-tool');
   });
 });
