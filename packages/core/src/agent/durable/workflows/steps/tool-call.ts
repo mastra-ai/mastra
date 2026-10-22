@@ -686,6 +686,23 @@ export function createDurableToolCallStep() {
         else await clearAndPublish();
       };
       let resumeMessageList = messageList;
+      const authorizationRequestContext =
+        registryEntry?.requestContext ?? restoreRequestContext(initData.requestContextEntries, requestContext);
+      const authorizeMemory = (
+        permission: Parameters<typeof authorizeDurableMemory>[1]['permission'],
+        threadId: string,
+        resourceId: string,
+      ) =>
+        authorizeDurableMemory(getDurableMemoryAuthorizationChecks(registryEntry), {
+          mastra: mastra as Mastra | undefined,
+          user: authorizationRequestContext.get('user'),
+          threadId,
+          resourceId,
+          agentId: initData.agentId,
+          requestContext: authorizationRequestContext,
+          permission,
+          actor: agentOptions.actor,
+        });
       // Observational memory loads history in the LLM step, which a cold resume skips.
       // Recover the persisted invocation before clearing or replacing its metadata.
       const hasInvocation = (msg: MastraDBMessage) =>
@@ -699,6 +716,9 @@ export function createDurableToolCallStep() {
         state?.threadId &&
         !messageList?.get.all.db().some(hasInvocation)
       ) {
+        if (state.resourceId) {
+          await authorizeMemory(MastraFGAPermissions.MEMORY_READ, state.threadId, state.resourceId);
+        }
         const { messages } = await memory.recall({
           threadId: state.threadId,
           resourceId: state.resourceId,
@@ -749,21 +769,10 @@ export function createDurableToolCallStep() {
           state.resourceId &&
           !state.memoryConfig?.readOnly
         ) {
-          const authorizationRequestContext =
-            registryEntry?.requestContext ?? restoreRequestContext(initData.requestContextEntries, requestContext);
-          const authorizeMemory = (permission: Parameters<typeof authorizeDurableMemory>[1]['permission']) =>
-            authorizeDurableMemory(getDurableMemoryAuthorizationChecks(registryEntry), {
-              mastra: mastra as Mastra | undefined,
-              user: authorizationRequestContext.get('user'),
-              threadId: state.threadId!,
-              resourceId: state.resourceId!,
-              agentId: initData.agentId,
-              requestContext: authorizationRequestContext,
-              permission,
-              actor: agentOptions.actor,
-            });
-          await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE);
-          if (!threadExists) await authorizeMemory(MastraFGAPermissions.MEMORY_READ);
+          await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, state.threadId, state.resourceId);
+          if (!threadExists) {
+            await authorizeMemory(MastraFGAPermissions.MEMORY_READ, state.threadId, state.resourceId);
+          }
         }
         await flushMessagesBeforeSuspension({
           saveQueueManager,
