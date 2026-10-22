@@ -242,6 +242,20 @@ describe('Button', () => {
       );
       expect(screen.getByRole('button', { name: 'Close panel' })).toBeTruthy();
     });
+
+    it('keeps the visible label as the name when the label sits inside a fragment', () => {
+      render(
+        <TooltipProvider>
+          <Button tooltip="More options">
+            <>
+              <svg />
+              Save
+            </>
+          </Button>
+        </TooltipProvider>,
+      );
+      expect(screen.getByRole('button', { name: 'Save' })).toBeTruthy();
+    });
   });
 
   // Stand-in for react-router's Link: navigates from `to`, not `href`.
