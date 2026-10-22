@@ -20,7 +20,7 @@
     "zod": "^4.6.7"
   },
   "devDependencies": {
-    "@types/node": "22.19.15",
+    "@types/node": "22.20.5",
     "mastra": "link:../../../packages/cli",
     "turbo": "^2.9.12",
     "typescript": "^6.0.3"

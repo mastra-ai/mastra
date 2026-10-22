@@ -6,7 +6,7 @@
     "@changesets/cli": "^2.31.1",
     "@clack/core": "^1.1.0",
     "@clack/prompts": "^1.8.1",
-    "@types/node": "22.20.1",
+    "@types/node": "22.20.5",
     "@types/semver": "^7.7.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
