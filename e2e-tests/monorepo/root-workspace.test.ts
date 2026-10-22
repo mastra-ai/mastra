@@ -34,70 +34,71 @@ allowBuilds:
 describe('workspace root as the Mastra app', () => {
   let fixturePath: string | undefined;
 
-  beforeAll(async () => {
-    process.env.pnpm_config_registry = inject('registry');
+  beforeAll(
+    async () => {
+      process.env.pnpm_config_registry = inject('registry');
 
-    fixturePath = await mkdtemp(join(tmpdir(), 'mastra-root-workspace-test-'));
+      fixturePath = await mkdtemp(join(tmpdir(), 'mastra-root-workspace-test-'));
 
-    // Reuse the monorepo packages (published workspace fixtures) but drop the
-    // apps directory: the app itself is the workspace root here.
-    await cp(join(templateDir, 'packages'), join(fixturePath, 'packages'), { recursive: true });
-    await writeFile(
-      join(fixturePath, 'tsconfig.json'),
-      JSON.stringify(
-        {
-          compilerOptions: {
-            target: 'ES2022',
-            module: 'ESNext',
-            moduleResolution: 'Bundler',
-            esModuleInterop: true,
-            skipLibCheck: true,
-            strict: true,
-            baseUrl: '.',
-            paths: { '@/*': ['./src/mastra/*'] },
+      // Reuse the monorepo packages (published workspace fixtures) but drop the
+      // apps directory: the app itself is the workspace root here.
+      await cp(join(templateDir, 'packages'), join(fixturePath, 'packages'), { recursive: true });
+      await writeFile(
+        join(fixturePath, 'tsconfig.json'),
+        JSON.stringify(
+          {
+            compilerOptions: {
+              target: 'ES2022',
+              module: 'ESNext',
+              moduleResolution: 'Bundler',
+              esModuleInterop: true,
+              skipLibCheck: true,
+              strict: true,
+              baseUrl: '.',
+              paths: { '@/*': ['./src/mastra/*'] },
+            },
           },
-        },
-        null,
-        2,
-      ),
-    );
+          null,
+          2,
+        ),
+      );
 
-    const packageJsonPath = join(fixturePath, 'package.json');
-    await writeFile(
-      packageJsonPath,
-      JSON.stringify(
-        {
-          name: '@inner/root-app',
-          version: '1.0.0',
-          private: true,
-          type: 'module',
-          scripts: {
-            dev: 'mastra dev',
-            build: 'mastra build',
-            start: 'mastra start',
+      const packageJsonPath = join(fixturePath, 'package.json');
+      await writeFile(
+        packageJsonPath,
+        JSON.stringify(
+          {
+            name: '@inner/root-app',
+            version: '1.0.0',
+            private: true,
+            type: 'module',
+            scripts: {
+              dev: 'mastra dev',
+              build: 'mastra build',
+              start: 'mastra start',
+            },
+            dependencies: {
+              '@mastra/core': 'monorepo-test',
+              '@mastra/deployer': 'monorepo-test',
+              '@inner/subpath-only': 'workspace:*',
+            },
+            devDependencies: {
+              mastra: 'monorepo-test',
+              typescript: '7.0.2',
+            },
           },
-          dependencies: {
-            '@mastra/core': 'monorepo-test',
-            '@mastra/deployer': 'monorepo-test',
-            '@inner/subpath-only': 'workspace:*',
-          },
-          devDependencies: {
-            mastra: 'monorepo-test',
-            typescript: '7.0.2',
-          },
-        },
-        null,
-        2,
-      ),
-    );
+          null,
+          2,
+        ),
+      );
 
-    await writeFile(join(fixturePath, '.npmrc'), 'minimum-release-age=0\n');
-    await writeFile(join(fixturePath, 'pnpm-workspace.yaml'), WORKSPACE_PACKAGES);
+      await writeFile(join(fixturePath, '.npmrc'), 'minimum-release-age=0\n');
+      await writeFile(join(fixturePath, 'pnpm-workspace.yaml'), WORKSPACE_PACKAGES);
 
-    await mkdir(join(fixturePath, 'src', 'mastra'), { recursive: true });
-    await writeFile(
-      join(fixturePath, 'src', 'mastra', 'index.ts'),
-      `import { Mastra } from '@mastra/core/mastra';
+      await mkdir(join(fixturePath, 'src', 'mastra'), { recursive: true });
+      await writeFile(
+        join(fixturePath, 'src', 'mastra', 'index.ts'),
+        `import { Mastra } from '@mastra/core/mastra';
 import { registerApiRoute } from '@mastra/core/server';
 import { rootValue } from '@inner/subpath-only';
 
@@ -111,13 +112,15 @@ export const mastra = new Mastra({
   bundler: { externals: ['@inner/subpath-only'] },
 });
 `,
-    );
+      );
 
-    installWithRetry('pnpm', ['install', '--config.minimum-release-age=0'], {
-      cwd: fixturePath,
-      env: process.env,
-    });
-  }, 15 * 60 * 1000);
+      installWithRetry('pnpm', ['install', '--config.minimum-release-age=0'], {
+        cwd: fixturePath,
+        env: process.env,
+      });
+    },
+    15 * 60 * 1000,
+  );
 
   afterAll(async () => {
     if (fixturePath) {
