@@ -20,8 +20,14 @@
     "./components.css": "./components.css",
     "./sources.css": "./sources.css",
     "./oxlint": {
-      "types": "./oxlint/index.d.ts",
-      "default": "./oxlint/index.js"
+      "import": {
+        "types": "./oxlint/index.d.ts",
+        "default": "./oxlint/index.js"
+      },
+      "require": {
+        "types": "./oxlint/index.d.ts",
+        "default": "./oxlint/index.js"
+      }
     },
     "./tokens": {
       "import": {
