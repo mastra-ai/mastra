@@ -12,7 +12,7 @@ import { AddApiKeyDialog } from '../../AddApiKeyDialog';
 import { ProviderOAuthDialog } from '../../ProviderOAuthDialog';
 import { CREDENTIAL_LABEL, credentialAt } from '../../provider-credential';
 import type { CredentialScope, ProviderCredential } from '../../provider-credential';
-import { AddProviderDialog } from './AddProviderDialog';
+import { AddProviderDrawer } from './AddProviderDrawer';
 import { ConnectedProviderRow } from './ConnectedProviderRow';
 import type { ProviderConnection } from './ConnectedProviderRow';
 
@@ -133,16 +133,15 @@ export function ProviderList({ credentialScope }: { credentialScope: CredentialS
         </Txt>
       )}
 
-      {addOpen && (
-        <AddProviderDialog
-          providers={providers}
-          credentialScope={scope}
-          requestScope={requestScope}
-          onOAuthStarted={openOAuth}
-          onAddKey={openKeyDialog}
-          onClose={() => setAddOpen(false)}
-        />
-      )}
+      <AddProviderDrawer
+        open={addOpen}
+        providers={providers}
+        credentialScope={scope}
+        requestScope={requestScope}
+        onOAuthStarted={openOAuth}
+        onAddKey={openKeyDialog}
+        onClose={() => setAddOpen(false)}
+      />
       {keyDialogProvider && (
         <AddApiKeyDialog
           provider={keyDialogProvider}

@@ -199,7 +199,7 @@ describe('OMSection', () => {
     const user = userEvent.setup();
     renderWithProviders(<OMSection models={models} />);
 
-    const input = await screen.findByRole('textbox', { name: 'Messages before observation' });
+    const input = await screen.findByRole('textbox', { name: 'Observe after' });
     expect(input).toHaveValue('1,000');
     await user.clear(input);
     await user.type(input, '5000');
@@ -223,7 +223,7 @@ describe('OMSection', () => {
     const user = userEvent.setup();
     renderWithProviders(<OMSection models={models} />);
 
-    const input = await screen.findByRole('textbox', { name: 'Observations before reflection' });
+    const input = await screen.findByRole('textbox', { name: 'Reflect after' });
     expect(input).toHaveValue('2,000');
     const row = input.closest<HTMLElement>('[data-slot=input-number-group]');
     if (!row) throw new Error('Expected the threshold stepper group');
@@ -252,7 +252,7 @@ describe('OMSection', () => {
     const user = userEvent.setup();
     renderWithProviders(<OMSection models={models} />);
 
-    const input = await screen.findByRole('textbox', { name: 'Messages before observation' });
+    const input = await screen.findByRole('textbox', { name: 'Observe after' });
     await user.clear(input);
     await user.type(input, '2000');
     await user.tab();
@@ -285,7 +285,7 @@ describe('OMSection', () => {
     const user = userEvent.setup();
     renderWithProviders(<OMSection models={models} />);
 
-    const input = await screen.findByRole('textbox', { name: 'Messages before observation' });
+    const input = await screen.findByRole('textbox', { name: 'Observe after' });
     await user.clear(input);
     await user.tab();
 

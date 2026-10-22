@@ -10,7 +10,6 @@ import {
 } from '@mastra/playground-ui/components/InputNumber';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ChevronRight, MessageSquare } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
@@ -40,15 +39,7 @@ function choiceToAttachment(choice: AttachmentChoice): 'auto' | boolean {
 }
 
 // Stays editable while saving: disabling would drop focus mid-edit.
-function TokenThresholdInput({
-  label,
-  value,
-  onCommit,
-}: {
-  label: string;
-  value: number;
-  onCommit: (value: number) => void;
-}) {
+function TokenThresholdInput({ value, onCommit }: { value: number; onCommit: (value: number) => void }) {
   const [draft, setDraft] = useState<number | null>(value);
   // Compared with what was sent, not a saved value whose response may still be in flight.
   const [sent, setSent] = useState(value);
@@ -87,7 +78,7 @@ function TokenThresholdInput({
         // Typing and arrow-key stepping save once on blur; a stepper press saves when released.
         if (details.reason === 'increment-press' || details.reason === 'decrement-press') commit(next);
       }}
-      className="shrink-0 @min-[46rem]:w-40"
+      className="w-full"
     >
       <InputNumberGroup
         size="sm"
@@ -96,7 +87,7 @@ function TokenThresholdInput({
           if (!event.currentTarget.contains(event.relatedTarget)) setEditing(false);
         }}
       >
-        <InputNumberInput aria-label={label} onBlur={() => commit(draft)} />
+        <InputNumberInput onBlur={() => commit(draft)} />
         <InputGroupAddon align="inline-end" variant="flush">
           <InputGroupText className="mr-2">tokens</InputGroupText>
           <InputNumberDecrement />
@@ -177,103 +168,106 @@ export function OMSection({
         </div>
       )}
 
-      <div className="@container">
-        <ol className="flex flex-col items-stretch gap-1 @min-[46rem]:flex-row @min-[46rem]:items-center">
-          <PipelineStep>
-            <span className="bg-fill-subtle text-muted-foreground h-control-sm inline-flex items-center gap-1.5 rounded-full px-3">
-              <MessageSquare className="size-3.5" aria-hidden="true" />
-              <Txt as="span" variant="caption">
-                Messages
-              </Txt>
-            </span>
-          </PipelineStep>
-          <PipelineStep>
+      <div className="@container flex flex-col gap-3">
+        <ol className="flex flex-col">
+          <OMRow as="li" rail="node" label="Messages" />
+          <OMRow as="li" rail="edge" label="Observe after">
             <TokenThresholdInput
-              label="Messages before observation"
               value={config.observationThreshold}
               onCommit={observationThreshold => thresholdsMutation.mutate({ observationThreshold })}
             />
-          </PipelineStep>
-          <PipelineStep>
-            <ModelStage label="Observer">
-              <ModelCombobox
-                models={models}
-                value={config.observer.model}
-                auto={{ effectiveModelId: config.observer.effectiveModelId }}
-                placeholder="Select observer model…"
-                aria-label="Observer model"
-                size="sm"
-                disabled={busy}
-                onValueChange={modelId => switchModel('observer', modelId)}
-              />
-            </ModelStage>
-          </PipelineStep>
-          <PipelineStep>
+          </OMRow>
+          <OMRow as="li" rail="node" label="Observer">
+            <ModelCombobox
+              models={models}
+              value={config.observer.model}
+              auto={{ effectiveModelId: config.observer.effectiveModelId }}
+              placeholder="Select observer model…"
+              aria-label="Observer model"
+              size="sm"
+              disabled={busy}
+              onValueChange={modelId => switchModel('observer', modelId)}
+            />
+          </OMRow>
+          <OMRow as="li" rail="edge" label="Reflect after">
             <TokenThresholdInput
-              label="Observations before reflection"
               value={config.reflectionThreshold}
               onCommit={reflectionThreshold => thresholdsMutation.mutate({ reflectionThreshold })}
             />
-          </PipelineStep>
-          <PipelineStep>
-            <ModelStage label="Reflector">
-              <ModelCombobox
-                models={models}
-                value={config.reflector.model}
-                auto={{ effectiveModelId: config.reflector.effectiveModelId }}
-                placeholder="Select reflector model…"
-                aria-label="Reflector model"
-                size="sm"
-                disabled={busy}
-                onValueChange={modelId => switchModel('reflector', modelId)}
-              />
-            </ModelStage>
-          </PipelineStep>
+          </OMRow>
+          <OMRow as="li" rail="node" label="Reflector">
+            <ModelCombobox
+              models={models}
+              value={config.reflector.model}
+              auto={{ effectiveModelId: config.reflector.effectiveModelId }}
+              placeholder="Select reflector model…"
+              aria-label="Reflector model"
+              size="sm"
+              disabled={busy}
+              onValueChange={modelId => switchModel('reflector', modelId)}
+            />
+          </OMRow>
         </ol>
-      </div>
-
-      <div className="border-border flex flex-wrap items-center justify-between gap-3 border-t pt-4">
-        <Txt as="span" variant="caption" tone="muted">
-          Observe attachments
-        </Txt>
-        <SegmentedControl
-          aria-label="Observe attachments"
-          size="sm"
-          value={attachmentChoice}
-          disabled={busy}
-          onValueChange={choice => attachmentsMutation.mutate({ value: choiceToAttachment(choice) })}
-        >
-          <SegmentedControlItem value="auto">Auto</SegmentedControlItem>
-          <SegmentedControlItem value="on">On</SegmentedControlItem>
-          <SegmentedControlItem value="off">Off</SegmentedControlItem>
-        </SegmentedControl>
+        <OMRow rail="none" label="Attachments">
+          <SegmentedControl
+            aria-label="Observe attachments"
+            size="sm"
+            value={attachmentChoice}
+            disabled={busy}
+            onValueChange={choice => attachmentsMutation.mutate({ value: choiceToAttachment(choice) })}
+          >
+            <SegmentedControlItem value="auto">Auto</SegmentedControlItem>
+            <SegmentedControlItem value="on">On</SegmentedControlItem>
+            <SegmentedControlItem value="off">Off</SegmentedControlItem>
+          </SegmentedControl>
+        </OMRow>
       </div>
     </div>
   );
 }
 
-function PipelineStep({ children }: { children: ReactNode }) {
-  return (
-    <li className="group/step flex flex-col items-stretch gap-1 @min-[46rem]:flex-auto @min-[46rem]:flex-row @min-[46rem]:items-center @min-[46rem]:gap-0 @min-[46rem]:last:flex-none">
-      {children}
-      <span
-        aria-hidden="true"
-        className="text-placeholder flex items-center justify-center group-last/step:hidden @min-[46rem]:min-w-6 @min-[46rem]:flex-1"
-      >
-        <span className="bg-border hidden h-px flex-1 @min-[46rem]:block" />
-        <ChevronRight className="size-3 rotate-90 @min-[46rem]:-ml-1 @min-[46rem]:rotate-0" />
-      </span>
-    </li>
-  );
-}
+type RailMark = 'node' | 'edge' | 'none';
 
-function ModelStage({ label, children }: { label: string; children: ReactNode }) {
+const RAIL_MARKS: Record<RailMark, ReactNode> = {
+  node: (
+    <>
+      <span className="bg-border-strong h-1.5 w-px shrink-0 group-first/row:invisible @min-[30rem]:h-auto @min-[30rem]:flex-1" />
+      <span className="bg-muted-foreground size-2 shrink-0 rounded-full" />
+      <span className="bg-border-strong w-px flex-1 group-last/row:invisible" />
+    </>
+  ),
+  edge: <span className="bg-border-strong w-px flex-1" />,
+  none: null,
+};
+
+function OMRow({
+  as: Row = 'div',
+  rail,
+  label,
+  children,
+}: {
+  as?: 'li' | 'div';
+  rail: RailMark;
+  label: string;
+  children?: ReactNode;
+}) {
   return (
-    <Field className="border-border gap-1.5 rounded-lg border p-3 @min-[46rem]:w-52">
-      <FieldLabel size="smaller" className="text-muted-foreground">
-        {label}
-      </FieldLabel>
-      {children}
-    </Field>
+    <Row className="group/row grid min-h-10 grid-cols-[2rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1 @min-[30rem]:grid-cols-[2rem_6.5rem_minmax(0,20rem)]">
+      <span aria-hidden="true" className="row-span-2 flex flex-col items-center self-stretch @min-[30rem]:row-span-1">
+        {RAIL_MARKS[rail]}
+      </span>
+      {children ? (
+        <Field className="contents">
+          <FieldLabel size="smaller" className={rail === 'node' ? undefined : 'text-muted-foreground'}>
+            {label}
+          </FieldLabel>
+          <div className="col-start-2 pb-2 @min-[30rem]:col-start-auto @min-[30rem]:pb-0">{children}</div>
+        </Field>
+      ) : (
+        <Txt as="span" variant="column">
+          {label}
+        </Txt>
+      )}
+    </Row>
   );
 }

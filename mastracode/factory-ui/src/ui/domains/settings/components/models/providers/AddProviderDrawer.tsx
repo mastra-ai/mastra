@@ -1,14 +1,15 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@mastra/playground-ui/components/Dialog';
+  Drawer,
+  DrawerBody,
+  DrawerContent,
+  DrawerDescription,
+  DrawerHeader,
+  DrawerTitle,
+} from '@mastra/playground-ui/components/Drawer';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import { Box } from 'lucide-react';
 import { useState } from 'react';
@@ -36,7 +37,8 @@ function soleOAuthMode(provider: ProviderInfo): string | undefined {
   return modes.length === 1 ? modes[0] : undefined;
 }
 
-export function AddProviderDialog({
+export function AddProviderDrawer({
+  open,
   providers,
   credentialScope,
   requestScope,
@@ -44,6 +46,7 @@ export function AddProviderDialog({
   onAddKey,
   onClose,
 }: {
+  open: boolean;
   providers: ProviderInfo[];
   credentialScope: CredentialScope;
   requestScope: CredentialScope | undefined;
@@ -51,6 +54,7 @@ export function AddProviderDialog({
   onAddKey: (provider: ProviderInfo) => void;
   onClose: () => void;
 }) {
+  const isMobile = useIsMobile();
   const startOAuthMutation = useStartProviderOAuth();
   const [search, setSearch] = useState('');
   const query = search.trim().toLowerCase();
@@ -67,16 +71,33 @@ export function AddProviderDialog({
     );
   };
 
+  const closeUnlessStarting = (nextOpen: boolean) => {
+    if (!nextOpen && startingProvider === undefined) onClose();
+  };
+
+  const resetOnceHidden = (nextOpen: boolean) => {
+    if (nextOpen) return;
+    setSearch('');
+    startOAuthMutation.reset();
+  };
+
   return (
-    <Dialog open onOpenChange={open => !open && onClose()} pending={startingProvider !== undefined}>
-      <DialogContent>
-        <DialogHeader>
-          <DialogTitle>Add provider</DialogTitle>
-          <DialogDescription>
+    <Drawer
+      side={isMobile ? 'bottom' : 'right'}
+      variant={isMobile ? 'default' : 'floating'}
+      overlay="visible"
+      open={open}
+      onOpenChange={closeUnlessStarting}
+      onOpenChangeComplete={resetOnceHidden}
+    >
+      <DrawerContent aria-busy={startingProvider !== undefined || undefined}>
+        <DrawerHeader>
+          <DrawerTitle>Add provider</DrawerTitle>
+          <DrawerDescription>
             Sign in with a subscription or paste an API key. {AUDIENCE[credentialScope]}
-          </DialogDescription>
-        </DialogHeader>
-        <DialogBody>
+          </DrawerDescription>
+        </DrawerHeader>
+        <DrawerBody className="flex min-h-0 flex-col gap-3">
           <SearchInput
             label="Search providers"
             placeholder={`Search ${providers.length} providers…`}
@@ -91,7 +112,7 @@ export function AddProviderDialog({
               No providers match “{search.trim()}”.
             </Txt>
           ) : (
-            <ul className="border-border divide-border max-h-80 divide-y overflow-y-auto rounded-lg border">
+            <ul className="border-border divide-border min-h-0 divide-y overflow-y-auto rounded-lg border">
               {shown.map(provider => (
                 <AddProviderRow
                   key={provider.provider}
@@ -114,9 +135,9 @@ export function AddProviderDialog({
               {startOAuthMutation.error.message}
             </Txt>
           )}
-        </DialogBody>
-      </DialogContent>
-    </Dialog>
+        </DrawerBody>
+      </DrawerContent>
+    </Drawer>
   );
 }
 

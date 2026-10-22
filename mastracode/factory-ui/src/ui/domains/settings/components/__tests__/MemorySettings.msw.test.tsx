@@ -66,7 +66,7 @@ describe('MemorySettings', () => {
     const personal = screen.getByRole('region', { name: 'Personal memory' });
     const factory = screen.getByRole('region', { name: 'Factory memory' });
     expect(await within(personal).findByDisplayValue('10,000')).toBeInTheDocument();
-    const factoryThreshold = await within(factory).findByRole('textbox', { name: 'Messages before observation' });
+    const factoryThreshold = await within(factory).findByRole('textbox', { name: 'Observe after' });
     expect(factoryThreshold).toHaveValue('50,000');
 
     await user.clear(factoryThreshold);

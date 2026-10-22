@@ -110,7 +110,7 @@ describe('Settings ownership', () => {
       ['Factory memory', '4000'],
     ]) {
       const card = await screen.findByRole('region', { name: memory });
-      const input = await within(card).findByRole('textbox', { name: 'Messages before observation' });
+      const input = await within(card).findByRole('textbox', { name: 'Observe after' });
       await user.clear(input);
       await user.type(input, threshold);
       await user.tab();
