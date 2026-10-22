@@ -19,6 +19,8 @@ export type { ChannelProviderRegistration, ChannelInstance, ChannelRuntime } fro
 export { credential } from './credential.js';
 export { userConnectRoutes } from './user-connect-routes.js';
 export type { UserConnectRoutesOptions, UserConnectIdentityContext } from './user-connect-routes.js';
+export { CONNECT_PROMPT_TOOL_KEY } from './connect-prompt-tool.js';
+export type { ConnectPromptPayload, ConnectPromptProvider } from './connect-prompt-tool.js';
 export { MastraConnectError } from './errors.js';
 export type { MastraConnectErrorCode } from './errors.js';
 export type { ConnectClientOptions, ConnectionCredential, ProjectConnection } from './client.js';

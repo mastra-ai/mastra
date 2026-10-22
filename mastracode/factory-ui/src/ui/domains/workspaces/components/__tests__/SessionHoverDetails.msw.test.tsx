@@ -92,8 +92,8 @@ async function setupSessionRows() {
 
   return {
     user,
-    workRow: await screen.findByRole('button', { name: workName }),
-    reviewRow: await screen.findByRole('button', { name: reviewName }),
+    workRow: await screen.findByRole('link', { name: workName }),
+    reviewRow: await screen.findByRole('link', { name: reviewName }),
   };
 }
 
@@ -103,7 +103,7 @@ describe('Workspace session hover details', () => {
 
     renderSection();
 
-    expect(await screen.findByRole('button', { name: 'Authentication fails after token refresh' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Authentication fails after token refresh' })).toBeInTheDocument();
   });
 
   describe('when a work session is hovered', () => {
@@ -194,7 +194,7 @@ describe('Workspace session hover details', () => {
         <SidebarProvider storageKey="session-hover-test">{section}</SidebarProvider>
       ));
 
-      const workRow = await screen.findByRole('button', { name: workName });
+      const workRow = await screen.findByRole('link', { name: workName });
       await waitForMutationsIdle(client);
       await user.hover(workRow);
       await user.tab();
@@ -204,13 +204,16 @@ describe('Workspace session hover details', () => {
   });
 
   describe('when session actions are used', () => {
-    it('opens the delete menu independently from the details trigger', async () => {
-      const { user } = await setupSessionRows();
-      const actions = screen.getByRole('button', { name: `Session actions for ${reviewName}` });
+    it.each(['context', 'dropdown'])('dismisses the preview when opening the %s menu', async entry => {
+      const { user, reviewRow } = await setupSessionRows();
+      await user.hover(reviewRow);
+      expect(await screen.findByLabelText(`${reviewName} session details`)).toBeInTheDocument();
 
-      await user.click(actions);
+      if (entry === 'context') await user.pointer({ target: reviewRow, keys: '[MouseRight]' });
+      else await user.click(screen.getByRole('button', { name: `Session actions for ${reviewName}` }));
 
       expect(await screen.findByRole('menuitem', { name: 'Delete' })).toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByLabelText(`${reviewName} session details`)).not.toBeInTheDocument());
     });
   });
 });

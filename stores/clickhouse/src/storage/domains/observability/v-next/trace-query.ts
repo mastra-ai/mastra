@@ -1353,8 +1353,10 @@ export async function queryThreads(
 }
 
 /** Compile a direct span-query filter using its dedicated field mapping. */
-export function compileSpanQueryPredicate(predicate: TrustedTraceQueryScalarPredicate): SqlFragment {
-  const parameters = new ParameterBuilder();
+export function compileSpanQueryPredicate(
+  predicate: TrustedTraceQueryScalarPredicate,
+  parameters = new ParameterBuilder(),
+): SqlFragment {
   const sql = compileScalarPredicate(predicate, SPAN_QUERY_FIELDS, parameters);
   return { sql, params: parameters.params };
 }

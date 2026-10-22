@@ -1,5 +1,5 @@
 import { toast } from '@mastra/playground-ui/components/Toaster';
-import { useLocation, useNavigate } from 'react-router';
+import { useLocation } from 'react-router';
 
 import { setSessionPinned } from '../hooks/usePinnedSessions';
 import { useRegenerateSessionTitle } from '../hooks/useRegenerateSessionTitle';
@@ -22,7 +22,6 @@ export function SessionListItem({
   merged: boolean | undefined;
   onDelete: (row: SessionListRow) => void;
 }) {
-  const navigate = useNavigate();
   const location = useLocation();
   const { regenerate, regenerating } = useRegenerateSessionTitle(factoryId, row.session.sessionId);
   const { changeVisibility, changing } = useSessionVisibility(factoryId, row.session.sessionId);
@@ -40,7 +39,8 @@ export function SessionListItem({
   return (
     <SessionNavRow
       name={row.name}
-      url={row.url}
+      url={row.openPath}
+      from={row.origin === 'factory' ? location : undefined}
       source={row.source}
       active={row.active}
       disabled={disabled}
@@ -49,7 +49,6 @@ export function SessionListItem({
       status={STATUS_MARKER_BY_ACTIVITY[row.status]}
       pinned={row.pinned}
       preview={{ factoryId, session: row.session, owner: row.owner, item: row.item, threadId: row.threadId }}
-      onSelect={() => void navigate(row.openPath, row.origin === 'factory' ? { state: { from: location } } : undefined)}
       onPinChange={pinned => setSessionPinned(row.session.sessionId, pinned)}
       onDelete={row.ownedByViewer ? () => onDelete(row) : undefined}
       onRegenerateTitle={row.canRegenerateTitle ? regenerate : undefined}

@@ -434,7 +434,7 @@ export interface DurableToolCallInput {
   /** Arguments for the tool */
   args: Record<string, unknown>;
   /** Provider-specific metadata */
-  providerMetadata?: Record<string, unknown>;
+  providerMetadata?: SharedV2ProviderMetadata;
   /** Whether the tool was already executed by the provider */
   providerExecuted?: boolean;
   /** Output if provider-executed */
