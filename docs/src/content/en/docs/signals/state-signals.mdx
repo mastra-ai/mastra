@@ -7,25 +7,31 @@ packages:
 
 # State signals
 
-A state signal holds named current context on a thread, separate from chat messages. Each state ID is a labeled slot the model can consult: the page a user is looking at, a result a background job produced, or the state of a long-running task.
+A state signal keeps the model informed about something that changes over time, such as the user's browser page or a background task's progress. It has a stable name on a thread, such as `browser`, so updates describe the same piece of context across turns. Those updates provide context rather than chat messages.
 
-Something on your side has to notice when that slot changes. That's the producer, which is your application code, a background job, or an integration watching an external system. The producer sends a snapshot or delta for the slot, and Mastra stores the value durably and gives it to the model as context. The producer also owns merge and diff logic, since Mastra doesn't merge values for you.
-
-Use state signals when the model needs a current view of something that changes across turns and isn't a user message. [Sending signals](/docs/signals/sending-signals) covers the durable input paths.
+Your application code, background job, or integration supplies the updates. This code is called the **producer**. It sends either a full description of the current state, called a **snapshot**, or a description of what changed, called a **delta**. Mastra stores the update and includes its text in the model's context. Your producer is responsible for comparing and combining values.
 
 ## How state signals work
 
-A state ID names a slot of current context, sometimes called a state lane. A **snapshot** is the full state of that slot. A **delta** describes only what changed since the last snapshot.
+The named slot identified by a state `id` is also called a **state lane**. Start it with a snapshot. After that, send deltas while the model still has the snapshot it needs to understand them. Send a fresh snapshot if the old one has left the model's context, or if you're unsure a delta is sufficient.
 
-Send a snapshot when the producer first establishes the slot, when the model's context no longer contains one, or when a delta would be ambiguous. Send a delta when the model already has a snapshot and only part of it changed. If you can't tell, send a snapshot.
-
-When Mastra accepts a state signal, it stores compact tracking metadata. If a producer sends the same `cacheKey` and mode while that state is current, Mastra skips the duplicate and `sendStateSignal()` reports `{ skipped: true, reason: 'unchanged' }`.
+Mastra tracks the current `cacheKey` and mode for each state ID. If both match an incoming update, [`sendStateSignal()`](/reference/agents/agent#sendstatesignalstate-options) skips it and returns `{ skipped: true, reason: 'unchanged' }`. Change the cache key when the state changes.
 
 State signals are durable, so they survive later turns and, with shared storage, process restarts. Because every accepted update becomes context, batch or summarize frequent changes before sending.
 
 ## Send a state signal
 
-Use [`sendStateSignal()`](/reference/agents/agent#sendstatesignalstate-options) when the producer detects a change. `id` names the state lane, `mode` selects a snapshot or delta, `cacheKey` identifies the version for deduplication, `contents` is the text the model reads, and `value` carries structured data for processors and application code. The [Agent reference](/reference/agents/agent#sendstatesignalstate-options) covers every field and return value.
+Before calling `sendStateSignal()`, configure [Memory](/docs/memory/overview) on the agent and ensure the target thread exists. Unlike a user message, this call can't create a missing thread.
+
+When the producer detects a change, send these fields:
+
+- `id`: the name of the state, such as `browser`.
+- `mode`: `snapshot` for the full state or `delta` for changes.
+- `cacheKey`: a version identifier used to skip duplicate updates.
+- `contents`: the text the model reads.
+- `value`: optional structured data for your application and processors. It isn't automatically shown to the model.
+
+The [Agent reference](/reference/agents/agent#sendstatesignalstate-options) lists all fields and return values.
 
 ```typescript title="src/mastra/browser-watcher.ts"
 await agent.sendStateSignal(
@@ -80,7 +86,7 @@ export const browserStateProcessor: Processor = {
 }
 ```
 
-Mastra resolves `lastSnapshot` and `deltasSinceSnapshot` from message history when the current message list lacks the latest snapshot. The processor still owns merge and diff logic.
+The browser-reading, comparison, cache-key, and description helpers in this example are application code you supply. Mastra provides `lastSnapshot` and `deltasSinceSnapshot`, loading them from message history if needed. Your processor uses them to decide what changed and what text to send.
 
 ## Built-in uses
 
@@ -94,8 +100,8 @@ Mastra uses state signals for long-lived context, and the same patterns apply to
 ## Choose another input path
 
 - **User input:** use [`sendMessage()`](/reference/agents/agent#sendmessagemessage-options).
-- **Prompt-only context:** use a transient reactive signal.
-- **Discrete external events:** use a notification with a durable inbox record and delivery policy.
+- **Context for one model request:** use a [transient reactive signal](/docs/signals/sending-signals#send-context-from-a-system).
+- **External events to act on later:** use a [notification](/docs/signals/notifications) with a durable inbox record and delivery policy.
 - **Named current context:** use a state signal.
 
 ## Persistence and truncation

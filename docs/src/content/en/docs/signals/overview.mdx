@@ -11,11 +11,11 @@ packages:
 
 **Added in:** `@mastra/core@1.39.0`
 
-Signals are typed asynchronous input to a thread. A [thread](/docs/memory/message-history#threads-and-resources) is the durable, addressable conversation an agent works on. You subscribe to the thread's stream to receive output, then send input whenever you have it. Mastra decides whether that input joins an active run or starts a run on an idle thread, so you don't manage active or idle state.
+Signals let you send input to an agent's [thread](/docs/memory/message-history#threads-and-resources) at any time, including while the agent is working. That input might be a user message, an update from a background job, or an external event. Each signal has a type that tells Mastra what kind of input it carries.
 
-For a thread-based agent, signals are the default input path: input goes to the thread instead of starting a new stream for each request. Send a message when a user replies, a signal when a background job adds context, and a notification when an external event should reach the agent later.
+For an ongoing conversation, use signals to send input and a [thread stream](/docs/signals/thread-streams) to receive output. Subscribe to the stream first, then send input whenever it becomes available. By default, Mastra delivers it to the active run or starts a run when the thread is idle. You don't need to check whether the agent is running before sending.
 
-When a request never becomes an ongoing conversation, there's no thread for input to arrive on. For that case, [`agent.stream()`](/reference/streaming/agents/stream) runs one request and returns the answer without leaving anything behind that you'd address later.
+For a one-off request, use [`agent.stream()`](/reference/streaming/agents/stream) to start a run and read its response directly. It can also use Memory, but it doesn't give you a subscription that follows later runs on the same thread.
 
 :::tip[📹 Watch]
 
@@ -63,7 +63,7 @@ for await (const chunk of subscription.stream) {
 }
 ```
 
-When the thread has a running agent stream, [`sendMessage()`](/reference/agents/agent#sendmessagemessage-options) becomes new input inside that agent loop. When the thread is idle, Mastra starts a stream with the message as the first input. [Sending signals](/docs/signals/sending-signals) covers the other input paths and their delivery behavior.
+The loop prints output chunks as the agent responds. It stays subscribed after the run finishes, ready for output from later messages to the same thread. Call `subscription.unsubscribe()` when you no longer need output. [Sending signals](/docs/signals/sending-signals) explains how to send further messages and other kinds of input.
 
 ### Use the client SDK
 
@@ -71,7 +71,9 @@ The same order applies through [`client.getAgent()`](/reference/client-js/mastra
 
 ## How signals reach a thread
 
-You send input to the thread, not to a specific request. If a run is active, Mastra delivers the input into that run when the loop can accept it. Otherwise the input waits or starts a new run on the idle thread. A queued follow-up waits for the active run to finish. Delivery policy can also persist input without running it or discard it. Only one process owns a thread at a time, so input sent elsewhere routes to that owner. [Sending signals](/docs/signals/sending-signals#when-the-agent-sees-your-input) covers delivery choices and accepted results, and [Running across processes](/docs/signals/running-across-processes) covers leases.
+Sending input to an active run doesn't always interrupt the model immediately. Mastra waits until the run can accept it. If the current answer needs to finish first, queue a follow-up instead. You can also store input for later without starting a run, or discard it based on the thread's state.
+
+[Sending signals](/docs/signals/sending-signals#when-the-agent-sees-your-input) explains these delivery choices and how to check whether input was accepted. When your app runs on several processes, [configure a shared backend](/docs/signals/running-across-processes) so signals reach the process running the thread.
 
 ## Choose an API surface
 
@@ -81,7 +83,7 @@ You send input to the thread, not to a specific request. If a run is active, Mas
 | HTTP or the JavaScript client SDK | Applications that call a running Mastra server | [Server agent routes](/reference/server/routes#agent-message-routes), [`client.getAgent()`](/reference/client-js/agents) |
 | AgentController `Session` | Long-running assistants and coding agents built on AgentController | [Agent Controller](/docs/harness/agent-controller) |
 
-The `Agent` methods are the canonical Signals API. `Session` is a higher-level convenience surface that manages a thread and subscription for you. It's not the recommended starting point for most applications. See [Agent Controller](/docs/harness/agent-controller) for how it manages threads.
+Start with `Agent` methods when your code runs alongside the agent, or the client SDK when it calls a server. If you're already using [Agent Controller](/docs/harness/agent-controller), its `Session` manages the thread and subscription for you.
 
 ## Next steps
 

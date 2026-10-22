@@ -7,25 +7,32 @@ packages:
 
 # Signal providers
 
-A signal provider connects an external system to your agents. It tracks which threads care about which external resources, watches those resources, and sends matching events into each thread as [notifications](/docs/signals/notifications). It's the piece that answers "who wants to hear about this pull request?" so your application doesn't have to.
+A signal provider watches an external system and sends [notifications](/docs/signals/notifications) to subscribed agent threads. For example, a provider can watch a build pipeline and notify each thread that has subscribed to that pipeline when a build fails.
 
-Use a provider when several threads can watch the same source and you don't want to wire that bookkeeping by hand. The [`SignalProvider`](/reference/signals/signal-provider) base class owns the subscription registry, polling loop, and notification delivery.
+Use a provider when your application needs to manage which threads receive events from which sources. The [`SignalProvider`](/reference/signals/signal-provider) base class tracks those subscriptions, runs polling, and forwards notifications to the agent. Your provider supplies the code that reads the external system and matches events to subscriptions. It can also supply tools and processors to the agent.
 
-A provider fits a source that produces events tied to resources threads follow, such as a pull request, Slack channel, or build pipeline, especially when it also contributes processors or tools. For a single event, call [`agent.sendNotificationSignal()`](/reference/agents/agent#sendnotificationsignalnotification-options) from your existing server code instead. For thread state rather than an event, use a [state signal](/docs/signals/state-signals), and for context needed by one model call, use a transient reactive signal.
+If your server already receives an event and knows its target thread, call [`agent.sendNotificationSignal()`](/reference/agents/agent#sendnotificationsignalnotification-options) directly. For changing application context, use a [state signal](/docs/signals/state-signals). For context needed by one model request, use a [transient reactive signal](/docs/signals/sending-signals#send-context-from-a-system).
 
 ## How a provider works
 
-A provider tracks subscriptions by `resourceId` and `threadId`, ingests events through [`poll()`](/reference/signals/signal-provider#polling) for pull sources or [`handleWebhook()`](/reference/signals/signal-provider#webhooks) for push sources, and calls the protected [`notify()`](/reference/signals/signal-provider#notifications) when an event matches. `notify()` forwards to [`Agent.sendNotificationSignal()`](/reference/agents/agent#sendnotificationsignalnotification-options), which applies the usual delivery policy, retries, and inbox behavior. Pass the provider to an agent's `signals` array.
+Register a provider in the agent's `signals` array. It receives events in one of two ways:
+
+- **Polling:** [`poll()`](/reference/signals/signal-provider#polling) checks the external system at regular intervals.
+- **Webhooks:** your server passes incoming events to [`handleWebhook()`](/reference/signals/signal-provider#webhooks).
+
+For each matching subscription, your provider calls the protected [`notify()`](/reference/signals/signal-provider#notifications) method. This forwards the event to `Agent.sendNotificationSignal()`, using the notification delivery policy, retries, and inbox.
 
 ## Map external identities to threads
 
-A notification target has two ids: `resourceId` identifies the thread's owner, such as a user, team, or tenant, and `threadId` identifies the conversation. The provider adds `externalResourceId` for the watched thing, in a stable format such as `github:acme/app#123` or `acme-app-main`.
+Use the target thread's [`resourceId` and `threadId`](/docs/memory/message-history#threads-and-resources) to route notifications. The provider also needs an `externalResourceId` to identify what the thread watches, such as the pipeline `acme-app-main`. Choose a stable value that you can match to incoming events.
 
 A subscription is keyed by all three values, so one thread can watch several resources and several threads can watch the same one. Store extra data in `metadata` rather than in the external id. For webhooks, match the payload to `externalResourceId`, then use the subscription's `resourceId` and `threadId` as the target.
 
 ## Quickstart
 
-This provider polls a CI system and notifies every thread subscribed to a failing pipeline. It needs notification storage on the `Mastra` instance, as described in [Notifications storage setup](/docs/signals/notifications#storage-and-dispatcher-setup); without it, `notify()` can't create records.
+This example checks a pipeline's build status and notifies subscribed threads when it fails. The `builds` map stands in for your CI service. Replace `fetchBuildStatus()` with a call to that service.
+
+Configure [notification storage on your `Mastra` instance](/docs/signals/notifications#storage-and-dispatcher-setup) before using the provider. Without it, `notify()` can't create records.
 
 ```typescript title="src/mastra/signals/ci-signals.ts"
 import { SignalProvider } from '@mastra/core/signals'

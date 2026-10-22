@@ -8,17 +8,15 @@ packages:
 
 # Notifications
 
-A notification is an external event that should reach an agent, held until the agent can act on it. A build fails, a reviewer comments on a pull request, or a background job finishes on its own schedule, whether or not the agent is mid-answer.
+A notification records an event for an agent to act on, such as a failed build, a pull request comment, or a completed background job. Mastra stores it in a durable inbox, separate from the conversation's messages. The event remains available even if the agent is busy when it arrives.
 
-That's what separates a notification from a chat message. A message is input, and it joins the conversation in order. A notification is an event that happened somewhere else: it becomes a durable inbox record with its own lifecycle, so it can be coalesced, summarized, deferred, retried, read, dismissed, or archived without depending on the agent being free. The [Notifications reference](/reference/signals/notifications) documents the record and policy types.
+A delivery policy decides whether to send the event immediately, summarize it with other events, or leave it for later. The agent uses the inbox to read, dismiss, or archive records. Delivery can fail, and policies can discard events, so storing a record doesn't guarantee that the agent will act on it. The [Notifications reference](/reference/signals/notifications) describes the record lifecycle and policy options.
 
-Use a notification when that event must survive until the agent acts on it, as with an email or Slack mention, an incident, or a job that only needs a summary. A durable record lets the agent triage it later, keeps an active run from losing it, and gives Mastra a place to deduplicate and retry.
-
-For other lifecycles, use a different path. User input belongs in [`sendMessage()`](/reference/agents/agent#sendmessagemessage-options) so it becomes part of the conversation. Changing application context belongs in a [state signal](/docs/signals/state-signals), and context for one model call belongs in a transient reactive signal. Notification-shaped context that needs no inbox, policy, or retries can use [`sendSignal({ type: 'notification' })`](/reference/agents/agent#sendsignalsignal-options) directly.
+Use notifications for events that need this inbox and delivery behavior. Use [`sendMessage()`](/reference/agents/agent#sendmessagemessage-options) for user input, a [state signal](/docs/signals/state-signals) for changing application context, or a [transient reactive signal](/docs/signals/sending-signals#send-context-from-a-system) for context needed by one model request. [`sendSignal({ type: 'notification' })`](/reference/agents/agent#sendsignalsignal-options) sends event context without creating an inbox record or providing its retries.
 
 ## Quickstart
 
-Call [`agent.sendNotificationSignal()`](/reference/agents/agent#sendnotificationsignalnotification-options) to create the record. It applies the delivery policy and either delivers the notification or defers it. The agent reads pending records through [`createNotificationInboxTool()`](/reference/signals/create-notification-inbox-tool).
+Call [`agent.sendNotificationSignal()`](/reference/agents/agent#sendnotificationsignalnotification-options) to create the record and apply its delivery policy. To let the agent read pending records, add [`createNotificationInboxTool()`](/reference/signals/create-notification-inbox-tool) as shown in [Work with the inbox](#work-with-the-inbox).
 
 Records need a storage adapter with the `notifications` domain. This example uses libSQL, subscribes to the thread first, then sends a high-priority CI failure:
 
@@ -83,17 +81,17 @@ On an idle thread, a high-priority notification delivers immediately and starts 
 
 ## Notification records
 
-Ingress and dispatch are separate phases. `sendNotificationSignal()` creates or coalesces a record and resolves the delivery policy. Dispatch consumes due records and emits full notifications or summaries.
+When a notification arrives, `sendNotificationSignal()` creates a record or merges it into a matching pending record. It then checks the delivery policy. If delivery is scheduled for later, the dispatcher reads the record when it's due and sends the notification or a summary.
 
-The record and signal differ. The record stores routing, priority, status, delivery attempts, and the original payload. The model sees an XML element built from `summary` and attributes. `payload` stays out of model context.
+The stored record includes routing, priority, status, delivery attempts, and the original `payload`. The model receives an XML element built from `summary` and attributes. It doesn't receive `payload` automatically.
 
-Records move through `pending`, `delivered`, `seen`, `dismissed`, `archived`, `discarded`, and `failed`. A summarized record stays `pending`, because a summary tells the model that records exist without marking them delivered. The reference lists every [record field](/reference/signals/notifications#notification-records) and [status](/reference/signals/notifications#priorities-and-statuses).
+A record's status can be `pending`, `delivered`, `seen`, `dismissed`, `archived`, `discarded`, or `failed`. A summarized record stays `pending`, because a summary tells the model that records exist without marking them delivered. The reference lists every [record field](/reference/signals/notifications#notification-records) and [status](/reference/signals/notifications#priorities-and-statuses).
 
 ## Create and coalesce records
 
 `sendNotificationSignal()` accepts one notification or an array. Each item is created independently, then storage decides whether it can merge into an existing pending record.
 
-The `dedupeKey` identifies the same event, while `coalesceKey` groups related events. Both use the same matching rules. A dedupe key represents one event that may arrive twice, and a coalesce key represents a set of related events.
+Use `dedupeKey` to identify one event that may arrive more than once. Use `coalesceKey` to group related events into one pending record, a process called coalescing. Both keys use the same matching rules.
 
 Merging only considers records on the same thread, source, kind, agent, and resource that are still pending. The [Notifications reference](/reference/signals/notifications#coalescing-pending-records) documents the fields that merge and their precedence.
 
@@ -173,7 +171,15 @@ Mastra evaluates the policy in this order:
 
 The dispatcher reads due records, groups summaries by `agentId`, `resourceId`, and `threadId`, and emits signals through the thread runtime.
 
-`deliver` emits a full notification immediately. `summarize` emits a summary now or at `summaryAt`. `defer` leaves the record pending until `deliverAt`. `persist` stores it without a signal, and `discard` marks it discarded. `hold` leaves the record for another process's dispatcher without counting an attempt.
+| Decision | Result |
+| - | - |
+| `deliver` | Send the full notification immediately |
+| `summarize` | Send a summary now or at `summaryAt` |
+| `defer` | Keep the record pending until `deliverAt` |
+| `persist` | Store the record without sending a signal |
+| `discard` | Mark the record discarded |
+
+A decision with `hold` leaves the record for another process's dispatcher without counting a delivery attempt.
 
 ### Summaries
 
@@ -199,7 +205,7 @@ A failed attempt increments `deliveryAttempts` and records `lastDeliveryAttemptA
 
 After five failed attempts, the record moves to `failed` and stops being due. The cap is exported as `MAX_NOTIFICATION_DELIVERY_ATTEMPTS`. A `hold` leaves it pending without counting an attempt, so another dispatcher can pick it up.
 
-If a custom policy throws during ingress, the record stays pending with an immediate `deliverAt` and a failed attempt, so the dispatcher can retry it.
+If a custom policy throws when the notification first arrives, the record stays pending with an immediate `deliverAt` and a failed attempt, so the dispatcher can retry it.
 
 ## Work with the inbox
 

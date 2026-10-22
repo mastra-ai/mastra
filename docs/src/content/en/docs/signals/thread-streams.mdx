@@ -8,11 +8,15 @@ packages:
 
 # Thread streams
 
-A thread stream is the ordered output for a [thread](/docs/memory/message-history#threads-and-resources). Signals carry input into the thread. This stream carries the output back: model text, tool calls, approvals, errors, and run events, all delivered as [chunks](/reference/streaming/ChunkType). You read it through a subscription, which can start with stored history as a [`thread-history` chunk](/reference/streaming/ChunkType#thread-history) before switching to live output. Use [`Agent.subscribeToThread()`](/reference/agents/agent#subscribetothreadoptions) when your code owns the [Agent](/reference/agents/agent), or the [client SDK](/reference/client-js/agents#subscribetothread) when it calls a running server.
+A thread stream carries an agent's output across runs on the same [thread](/docs/memory/message-history#threads-and-resources). You subscribe once to receive model text, tool calls and results, approval requests, and errors as [chunks](/reference/streaming/ChunkType). The subscription stays open between runs, so you don't need to create a new response stream each time you send input.
+
+You can also request stored messages at the start of a subscription. This lets your application show the conversation so far before displaying new output.
 
 ## Quickstart
 
-Subscribe before you send input. A run starts in response to a signal, so a subscription created afterward misses the beginning of the stream. If an existing subscription's connection drops, reconnect can resume output that's still retained. See [Reconnect](#reconnect). This example uses the JavaScript client SDK against a running Mastra server, so the [Memory](/docs/memory/overview) that stores thread history belongs to the server's agent. If your code owns the `Agent` instance, see the [Agent example](/docs/signals/overview#use-an-agent), which configures Memory alongside the agent.
+Subscribe before you send input so you can receive output from the start of the run. This example uses [`subscribeToThread()`](/reference/client-js/agents#subscribetothread) from the JavaScript client SDK. It needs a running Mastra server with a `support-agent` agent. Configure [Memory](/docs/memory/overview) on that agent if you want to store history.
+
+For server-side code that uses the `Agent` instance directly, follow the [Agent quickstart](/docs/signals/overview#use-an-agent) instead.
 
 ```typescript title="src/app/chat.ts"
 import { MastraClient } from '@mastra/client-js'
@@ -39,7 +43,7 @@ await subscription.processDataStream({
 })
 ```
 
-The example creates a client with [`client.getAgent()`](/reference/client-js/mastra-client#methods), subscribes to the thread, sends a message, and reads the chunks with [`processDataStream()`](/reference/client-js/agents#subscribetothread). [`sendMessage()`](/reference/agents/agent#sendmessagemessage-options) returns when Mastra accepts the input. The output arrives through `onChunk`.
+[`client.getAgent()`](/reference/client-js/mastra-client#methods) selects the server's agent. [`sendMessage()`](/reference/client-js/agents#sendmessage) returns when Mastra accepts the input. [`processDataStream()`](/reference/client-js/agents#subscribetothread) passes output to `onChunk`, which prints each chunk here. It continues listening after the answer finishes.
 
 ## Read the stream
 
@@ -49,15 +53,15 @@ Pass `withInitialHistory: true` to begin with a `thread-history` chunk, which ca
 
 ### Chunks and runs
 
-Subscribers receive model output, tool calls and results, approvals, aborts, errors, and `thread-history` chunks. [ChunkType](/reference/streaming/ChunkType) lists their shapes. Each chunk carries the `runId` of the run that produced it, so group output per run. The subscription's `activeRunId()` returns the active run or `null`.
+Use `runId` to group chunks from the same run. The exception is [`thread-history`](/reference/streaming/ChunkType#thread-history), which has an empty `runId` because its messages can span several runs. The subscription's [`activeRunId()`](/reference/agents/agent#subscribetothreadoptions) returns the active run's ID or `null`.
 
-The public stream is typed as `AgentChunkType`, and `thread-history` is a `ThreadHistoryChunk`. Thread lifecycle events such as queue counts come from [`subscribeThreadEvents()`](/reference/signals/thread-events) instead. The internal runtime event union isn't public and isn't documented.
+The public stream uses `AgentChunkType`, with `ThreadHistoryChunk` for stored history. The [ChunkType reference](/reference/streaming/ChunkType) lists the fields for model output, tool calls and results, approvals, aborts, and errors. To observe queue counts, use [`subscribeThreadEvents()`](/reference/signals/thread-events) separately. Internal runtime events aren't part of these public APIs.
 
 ### Approve tool calls
 
-When a subscribed run pauses for tool approval, approve or decline the tool call with the subscription-native methods. The resumed chunks arrive through the existing thread subscription. Visit [`client.getAgent().sendToolApproval()` reference](/reference/client-js/agents#sendtoolapproval) and [server agent routes](/reference/server/routes#subscription-tool-approval-routes) for request and response shapes.
+When a run pauses for tool approval, send your decision with [`client.getAgent().sendToolApproval()`](/reference/client-js/agents#sendtoolapproval) or the [server approval route](/reference/server/routes#subscription-tool-approval-routes). The existing subscription receives output when the run resumes.
 
-A suspended run holds the thread. Until it resumes or is aborted, a new idle wake resolves `accepted` to `blocked`. Pending approvals and suspensions are replayed when you subscribe again. Completed runs aren't. [When the agent sees your input](/docs/signals/sending-signals#when-the-agent-sees-your-input) covers the interrupt and wait rules for input that arrives during a run.
+A paused run keeps ownership of the thread. Signals that try to start a new run receive an `accepted` action of `blocked` until the paused run resumes or is aborted. Pending approvals and suspensions are replayed when you subscribe again. Completed runs aren't. [When the agent sees your input](/docs/signals/sending-signals#when-the-agent-sees-your-input) covers the interrupt and wait rules for input that arrives during a run.
 
 ### Filter signals in a subscription
 
@@ -71,9 +75,9 @@ A suspended run holds the thread. Until it resumes or is aborted, a new idle wak
 
 Use `reconnect: true` for long-lived subscriptions. `processDataStream()` then resubscribes when the transport closes or a reconnect request fails, retrying indefinitely with a one-second delay by default. A 4xx other than `408` or `429`, or a `501`, stops reconnecting and rejects. See the [`subscribeToThread()` reference](/reference/client-js/agents#subscribetothread) for retry options.
 
-A reconnect continues from retained stream data when the shared PubSub backend still holds it. Events held only in another process's in-memory cache can't be recovered. Stored thread history remains the durable record, and `withInitialHistory` reloads its newest page.
+A reconnect can resume output that the shared [PubSub backend](/docs/server/pubsub) still retains. It can't recover events held only in another process's in-memory cache. Use `withInitialHistory` to reload the newest page of stored messages when you need conversation history.
 
-History is stored messages rather than model deltas, so reconnecting can't reconstruct text that was never retained.
+Stored messages aren't a recording of every streamed text fragment. Reconnecting doesn't replay completed stored runs or reconstruct fragments that weren't retained.
 
 ### SSE heartbeats for custom endpoints
 

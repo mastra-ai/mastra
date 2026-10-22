@@ -10,9 +10,9 @@ packages:
 
 # Running across processes
 
-A single Mastra process can keep every [thread](/docs/memory/message-history#threads-and-resources) in memory. That works right up until you run a second instance. Once more than one process can receive a signal, the one that receives it may not be the one running the agent, so the signal has to reach the process that owns the thread. Only one process should run it at a time.
+When you run more than one Mastra process, a signal may arrive at a different process from the one running the agent. The processes need to pass input to each other and agree on which one may run a [thread](/docs/memory/message-history#threads-and-resources).
 
-Mastra uses a [PubSub](/docs/server/pubsub) backend to move signals between processes and a [lease](/reference/pubsub/lease-provider) to elect one owner per thread.
+Mastra uses a shared [PubSub](/docs/server/pubsub) backend to carry signals between processes. A [lease](/reference/pubsub/lease-provider), a time-limited ownership claim, gives one process responsibility for the thread. Shared storage holds the conversation history. You need all three when several processes can handle the same thread.
 
 ## Why you need a shared backend
 
@@ -26,7 +26,7 @@ Every instance that can handle the same thread needs the same PubSub backend and
 
 ## Choose a topology
 
-Choose a backend based on where the processes run, not how many agents you have. A lease is a time-limited ownership claim that makes one process responsible for a thread.
+Choose a backend based on where the processes run.
 
 | Deployment | Backend | What it provides |
 | - | - | - |
@@ -43,7 +43,7 @@ Choose a backend based on where the processes run, not how many agents you have.
 
 Mastra acquires a lease before starting a run. Only the holder may run that thread, and other processes route signals to it.
 
-The default lease lasts 15 seconds (`MASTRA_AGENT_THREAD_LEASE_TTL_MS`), renewed every third of that TTL, so every 5 seconds by default (`MASTRA_AGENT_THREAD_LEASE_RENEW_INTERVAL_MS`). The gap allows a missed renewal or two before another process takes over.
+By default, a lease lasts 15 seconds and the owner renews it every 5 seconds. The renewal interval is one-third of the lease's time to live (TTL). This gives the owner time to recover from a missed renewal before its claim expires. See [Configuration](#configuration) to change these values.
 
 If renewal fails and the local deadline passes, the owner stops the run. It can no longer prove another process hasn't claimed the thread, and continuing would mean two owners writing to one conversation. A new owner then starts the next run from storage.
 
@@ -61,7 +61,7 @@ Set `ifIdle.requireClaimedOwner: true` when an idle wake must not start a run on
 
 PubSub backends can redeliver an event after a timeout, failed acknowledgement, or crash. The runtime therefore assumes at-least-once delivery. A redelivered signal doesn't start a second run for the same logical message while the owner keeps its bookkeeping.
 
-That doesn't make every event exactly-once. If you consume PubSub events directly or build side effects around signals, make those handlers idempotent.
+This doesn't guarantee exactly-once delivery for every event. If your handlers write to a database or trigger other actions, make them idempotent: processing the same event twice should have the same effect as processing it once.
 
 ## Signals and process crashes
 
@@ -78,9 +78,9 @@ If a signal must survive the process that accepted it, persist it or record it i
 
 ## Serverless
 
-Serverless functions can freeze as soon as they return a response. If the function accepted a wake and then returns without draining the run, the run can stop mid-flight.
+Serverless functions can freeze as soon as they return a response. If your function starts a run, keep it alive until the run finishes by consuming its output stream.
 
-Don't fire-and-forget the accepted result. Pass it to your platform's `waitUntil` so the task stays alive after the response:
+Pass this work to your platform's `waitUntil` so it can continue after the HTTP response:
 
 ```typescript title="src/routes/signal.ts"
 const result = agent.sendSignal(signal, { resourceId, threadId })
