@@ -178,3 +178,22 @@ describe('NewPage credential guard', () => {
     expect(await screen.findByLabelText('Message')).toBeInTheDocument();
   });
 });
+
+describe('NewPage on a server without auth', () => {
+  it('shows the auth setup screen instead of the Factory-routed credential guard, so its org-admin message never reaches a single-user server', async () => {
+    stubFactory({ id: 'fp-1', name: 'Mastra', modelScope: 'factory', defaultModelId: 'anthropic/claude-sonnet-4-5' });
+    server.use(
+      http.get(`${TEST_BASE_URL}/auth/me`, () => HttpResponse.json(null, { status: 404 })),
+      http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+        HttpResponse.json({ providers: [{ provider: 'anthropic', source: 'none' }] }),
+      ),
+    );
+
+    renderNewPage();
+
+    expect(
+      await screen.findByRole('heading', { name: 'This MastraCode server has no authentication provider configured' }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: "You don't have access to Anthropic" })).not.toBeInTheDocument();
+  });
+});
