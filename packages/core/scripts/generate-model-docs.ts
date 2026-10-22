@@ -976,7 +976,7 @@ const agent = new Agent({
       maxRetries: 2,
     },
     {
-      model: "__GATEWAY_GOOGLE_MODEL__",
+      model: "__GATEWAY_GOOGLE_MODEL_FLASH__",
       maxRetries: 2,
     },
   ],
