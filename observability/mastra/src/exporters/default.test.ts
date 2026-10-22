@@ -162,6 +162,7 @@ describe('DefaultExporter', () => {
           preferred: 'batch-with-updates',
           supported: ['realtime', 'batch-with-updates', 'insert-only'],
         },
+        getSpan: vi.fn().mockResolvedValue(null),
         batchCreateSpans: vi.fn().mockResolvedValue(undefined),
         batchUpdateSpans: vi.fn().mockResolvedValue(undefined),
         createSpan: vi.fn().mockResolvedValue(undefined),
