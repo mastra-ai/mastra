@@ -936,6 +936,7 @@ Mastra automatically creates spans for:
 ### Agent operations
 
 - **Agent runs**: Complete execution with instructions and tools
+- **Signal-triggered runs**: The `AGENT_RUN` span records a starting signal's `id`, `type`, `tagName`, and `attributes` under `attributes.signal`
 - **LLM calls**: Model interactions with tokens and parameters
 - **Tool executions**: Function calls with inputs and outputs
 - **Memory operations**: Thread and semantic recall

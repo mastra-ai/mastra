@@ -33,10 +33,20 @@ class HostCommands implements CommandsApi {
   >();
   readonly calls: string[] = [];
   readonly connectTimeouts: Array<number | undefined> = [];
+  /**
+   * Hold `run`/`connect` back until the first output has been delivered, the
+   * way the SDK does when output arrives with the start event: its handle
+   * reads events from construction, before `run()` returns.
+   */
+  outputBeforeStart = false;
 
   async run(command: string, opts: Listener & { stdin?: boolean; cwd?: string; envs?: Record<string, string> }) {
     this.calls.push('run');
+    // Own process group, so kill() takes down what `sh -c` forked too. Killing
+    // only `sh` leaves e.g. dash's forked `sleep` holding the pipes open, and
+    // `close` (which `done` waits on) never fires.
     const child = spawn('sh', ['-c', command], {
+      detached: true,
       cwd: opts.cwd,
       env: { ...process.env, ...opts.envs },
       stdio: [opts.stdin === false ? 'ignore' : 'pipe', 'pipe', 'pipe'],
@@ -56,6 +66,7 @@ class HostCommands implements CommandsApi {
       child.on('close', (code, signal) => resolve(code ?? (signal ? 137 : 1))),
     );
     this.children.set(child.pid!, { child, cmd: command, listeners, done });
+    if (this.outputBeforeStart) await this.firstOutput(child);
     return this.handle(child.pid!, done, () => ({ stdout, stderr }));
   }
 
@@ -65,6 +76,7 @@ class HostCommands implements CommandsApi {
     const entry = this.children.get(pid);
     if (!entry || entry.child.exitCode !== null) throw new Error(`process ${pid} not found`);
     entry.listeners.push(opts);
+    if (this.outputBeforeStart) await this.firstOutput(entry.child);
     return this.handle(pid, entry.done, () => ({ stdout: '', stderr: '' }));
   }
 
@@ -77,12 +89,24 @@ class HostCommands implements CommandsApi {
 
   async kill(pid: number) {
     this.calls.push('kill');
-    return this.children.get(pid)?.child.kill('SIGKILL') ?? false;
+    return this.children.has(pid) ? killGroup(pid) : false;
   }
 
   async sendStdin(pid: number, data: string) {
     this.calls.push('sendStdin');
     this.children.get(pid)!.child.stdin!.write(data);
+  }
+
+  private firstOutput(child: ChildProcess): Promise<void> {
+    return new Promise(resolve => {
+      let remaining = 2;
+      // Registered after the streaming listeners, so they have run by now.
+      const arrived = () => {
+        if (--remaining === 0) resolve();
+      };
+      child.stdout!.once('data', arrived);
+      child.stderr!.once('data', arrived);
+    });
   }
 
   private handle(pid: number, done: Promise<number>, output: () => { stdout: string; stderr: string }) {
@@ -102,7 +126,16 @@ class HostCommands implements CommandsApi {
   }
 
   stopAll() {
-    for (const { child } of this.children.values()) child.kill('SIGKILL');
+    for (const pid of this.children.keys()) killGroup(pid);
+  }
+}
+
+function killGroup(pid: number): boolean {
+  try {
+    process.kill(-pid, 'SIGKILL');
+    return true;
+  } catch {
+    return false;
   }
 }
 
@@ -205,6 +238,27 @@ describe('CommandsApiProcessManager', () => {
 
     expect(await processes.get('not-a-pid')).toBeUndefined();
     expect(await processes.get('999999')).toBeUndefined();
+  });
+
+  it('keeps output that arrives before the start resolves', async () => {
+    const processes = setup();
+    commands.outputBeforeStart = true;
+    const handle = await processes.spawn('echo early; echo warn >&2; sleep 0.2; echo late');
+    const result = await handle.wait();
+    expect(result).toMatchObject({ success: true, exitCode: 0 });
+    expect(result.stdout).toBe('early\nlate\n');
+    expect(result.stderr).toBe('warn\n');
+  });
+
+  it('keeps output that arrives before an attach resolves', async () => {
+    const processes = setup();
+    const other = await commands.run('sleep 0.2; echo attached; echo warn >&2; sleep 0.2', {});
+    commands.outputBeforeStart = true;
+    const handle = await processes.get(String(other.pid));
+    expect(handle).toBeDefined();
+    await handle!.wait();
+    expect(handle!.stdout).toBe('attached\n');
+    expect(handle!.stderr).toBe('warn\n');
   });
 
   it('lists exited processes it still holds until they are released', async () => {

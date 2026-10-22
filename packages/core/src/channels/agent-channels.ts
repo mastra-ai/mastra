@@ -433,7 +433,7 @@ export class AgentChannels {
    *
    * @example
    * ```ts
-   * agent.channels.sdk.onReaction((thread, reaction) => {
+   * agent.getChannels()?.sdk?.onReaction((thread, reaction) => {
    *   console.log('Reaction received:', reaction);
    * });
    * ```
@@ -1873,6 +1873,7 @@ export class AgentChannels {
       typingGate,
       formatError: adapterConfig?.formatError,
       textFormat: adapterConfig?.textFormat,
+      textDisplay: adapterConfig?.textDisplay,
       onAbort: adapterConfig?.onAbort,
       approvalContext,
     };

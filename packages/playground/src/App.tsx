@@ -57,6 +57,7 @@ import CmsPromptBlocksCreatePage from './pages/cms/prompt-blocks/create';
 import CmsPromptBlocksEditPage from './pages/cms/prompt-blocks/edit';
 import CmsScorersCreatePage from './pages/cms/scorers/create';
 import CmsScorersEditPage from './pages/cms/scorers/edit';
+import ConnectionsPage from './pages/connections';
 import Datasets from './pages/datasets';
 import DatasetPage from './pages/datasets/dataset';
 import EditDatasetPage from './pages/datasets/dataset/edit';
@@ -78,6 +79,7 @@ import Scorers from './pages/scorers';
 import Scorer from './pages/scorers/scorer';
 import { StudioSettingsPage } from './pages/settings';
 import { SignUp } from './pages/signup';
+import Spans from './pages/spans';
 import Templates from './pages/templates';
 import Template from './pages/templates/template';
 import Traces from './pages/traces';
@@ -313,6 +315,7 @@ export const routes: RouteObject[] = [
         element: <SignalsEntityDetailPage />,
       },
       { path: '/traces', element: <Traces /> },
+      { path: '/spans', element: <Spans /> },
       {
         path: '/traces/:traceId',
         loader: ({ params, request }: LoaderFunctionArgs) => {
@@ -388,6 +391,11 @@ export const routes: RouteObject[] = [
       {
         path: '/integrations',
         element: <IntegrationsPage />,
+      },
+
+      {
+        path: '/connections',
+        element: <ConnectionsPage />,
       },
 
       { path: '/processors', element: <Processors /> },

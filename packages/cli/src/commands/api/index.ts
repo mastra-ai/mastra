@@ -802,7 +802,10 @@ function addAction(
   for (const positional of descriptor.positionals) {
     // Keep identity args optional at Commander level so `--schema` can run without real IDs.
     // Actual requests still validate IDs before making an HTTP request.
-    command.argument(`[${positional}]`);
+    command.argument(
+      `[${positional}]`,
+      `${positional} (required for real requests; optional here to inspect the request schema without IDs)`,
+    );
   }
   if (descriptor.acceptsInput) {
     // Keep JSON input optional at Commander level so `--schema` can run without sample input;

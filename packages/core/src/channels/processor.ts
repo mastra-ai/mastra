@@ -16,7 +16,11 @@ import type { ChannelContext } from './types';
 export class ChatChannelProcessor {
   readonly id = 'chat-channel-context';
 
-  processInputStep({ messageList, requestContext }: ProcessInputStepArgs): { messageList: MessageList } | undefined {
+  processInputStep({
+    messageList,
+    requestContext,
+    tools,
+  }: ProcessInputStepArgs): { messageList: MessageList } | undefined {
     const ctx = requestContext?.get('channel') as ChannelContext | undefined;
     if (!ctx) return undefined;
 
@@ -51,8 +55,14 @@ export class ChatChannelProcessor {
         'Only respond with text when you are explicitly mentioned, replied to, or your input is clearly needed (e.g. a direct question to you, or a task you were asked to do).',
         'If users appear to be talking to each other, showing your previous output to a third party, reacting to your output, or having a side conversation, stay silent. Staying silent is the correct and preferred action — it is not rude or unhelpful.',
         'To stay silent, respond with an empty message. Do NOT narrate the situation. Do NOT write bracketed status notes like "[no response needed]" or "[empty message — user is showing the report to someone else]". Do NOT acknowledge with text like "Got it" or "Noted". Do NOT apologize for staying quiet. An empty response is a first-class action, not a fallback.',
-        'If you want to acknowledge a message without speaking, use the `add_reaction` tool to react with an emoji instead of replying with text.',
       );
+      // Only point at the reaction tool when the agent actually has it;
+      // otherwise models call a tool that doesn't exist.
+      if (tools && 'add_reaction' in tools) {
+        lines.push(
+          'If you want to acknowledge a message without speaking, use the `add_reaction` tool to react with an emoji instead of replying with text.',
+        );
+      }
     }
 
     const systemMessage: CoreMessageV4 = { role: 'system', content: lines.join('\n') };

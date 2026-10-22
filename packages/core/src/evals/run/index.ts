@@ -1635,8 +1635,10 @@ async function saveSingleScore({
   turn?: { index: number; traceId?: string; spanId?: string; threadId?: string };
 }): Promise<void> {
   try {
-    // Get scorer information
-    let scorer = mastra?.getScorerById?.(scorerId);
+    // A runEvals scorer may not be registered on the Mastra instance.
+    let scorer: RunEvalsScorer | undefined = (Object.values(mastra?.listScorers?.() ?? {}) as RunEvalsScorer[]).find(
+      entry => entry.id === scorerId,
+    );
 
     if (!scorer) {
       // Try to get from target's scorers

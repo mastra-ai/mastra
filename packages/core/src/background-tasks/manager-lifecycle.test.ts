@@ -3,9 +3,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { Event, EventCallback, SubscribeOptions } from '../events/types';
 import { Mastra } from '../mastra';
-import { MockStore } from '../storage';
+import { InMemoryStore, MockStore } from '../storage';
+import { BackgroundTasksInMemory } from '../storage/domains/background-tasks/inmemory';
+import { InMemoryDB } from '../storage/domains/inmemory-db';
 import { BackgroundTaskManager } from './manager';
-import type { BackgroundTask } from './types';
+import type { BackgroundTask, UpdateBackgroundTask, UpdateBackgroundTaskOptions } from './types';
 import { BACKGROUND_TASK_WORKFLOW_ID } from './workflow-id';
 
 function deferred<T = void>() {
@@ -1011,5 +1013,195 @@ describe('BackgroundTaskManager lifecycle', () => {
     expect(controller.signal.aborted).toBe(true);
     expect(manager.activeAbortControllers.has('task-1')).toBe(false);
     await shutdownPromise;
+  });
+});
+
+class FailOnceOnCompleteBackgroundTasks extends BackgroundTasksInMemory {
+  completedWriteFailures = 0;
+
+  override async updateTask(
+    taskId: string,
+    update: UpdateBackgroundTask,
+    options?: UpdateBackgroundTaskOptions,
+  ): Promise<boolean> {
+    if (update.status === 'completed' && this.completedWriteFailures === 0) {
+      this.completedWriteFailures++;
+      throw new Error('storage unavailable while completing task');
+    }
+    return super.updateTask(taskId, update, options);
+  }
+}
+
+class FailOnceOnCompleteStore extends InMemoryStore {
+  readonly backgroundTasks = new FailOnceOnCompleteBackgroundTasks({ db: new InMemoryDB() });
+
+  constructor() {
+    super();
+    this.stores.backgroundTasks = this.backgroundTasks;
+  }
+}
+
+describe('BackgroundTaskManager workflow run settlement', () => {
+  async function setup(storage: InMemoryStore) {
+    const mastra = new Mastra({ logger: false, storage });
+    await mastra.startWorkers();
+    const pubsub = new EventEmitterPubSub();
+    const onTaskFailed = vi.fn();
+    const onTaskComplete = vi.fn();
+    const manager = new BackgroundTaskManager({ enabled: true, onTaskFailed, onTaskComplete });
+    manager.__registerMastra(mastra);
+    await manager.init(pubsub);
+    const publish = vi.spyOn(pubsub, 'publish');
+    return {
+      manager,
+      onTaskFailed,
+      onTaskComplete,
+      completedEvents: () => publish.mock.calls.filter(([, event]) => event.type === 'task.completed'),
+      failedEvents: () => publish.mock.calls.filter(([, event]) => event.type === 'task.failed'),
+      cleanup: async () => {
+        await manager.shutdown();
+        await pubsub.close();
+        await mastra.stopWorkers();
+      },
+    };
+  }
+
+  it('marks the task failed when the workflow run fails before a terminal status is persisted', async () => {
+    const storage = new FailOnceOnCompleteStore();
+    const { manager, onTaskFailed, failedEvents, cleanup } = await setup(storage);
+    const onFailed = vi.fn();
+
+    try {
+      const { task } = await manager.enqueue(
+        { toolName: 'my-tool', toolCallId: 'call-1', args: {}, agentId: 'agent-1', runId: 'run-1' },
+        { executor: { execute: async () => 'done' }, onFailed },
+      );
+
+      await vi.waitFor(async () => expect((await manager.getTask(task.id))?.status).toBe('failed'));
+      await vi.waitFor(() => expect(onTaskFailed).toHaveBeenCalledTimes(1));
+
+      expect(storage.backgroundTasks.completedWriteFailures).toBe(1);
+      const failed = await manager.getTask(task.id);
+      expect(failed?.error?.message).toBe('storage unavailable while completing task');
+      expect(failed?.completedAt).toBeInstanceOf(Date);
+      expect(onFailed).toHaveBeenCalledTimes(1);
+      expect(failedEvents()).toHaveLength(1);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('still publishes task.failed when a per-task failure hook throws during settlement', async () => {
+    const storage = new FailOnceOnCompleteStore();
+    const { manager, onTaskFailed, failedEvents, cleanup } = await setup(storage);
+    const onFailed = vi.fn(async () => {
+      throw new Error('onFailed hook exploded');
+    });
+
+    try {
+      const { task } = await manager.enqueue(
+        { toolName: 'my-tool', toolCallId: 'call-1', args: {}, agentId: 'agent-1', runId: 'run-1' },
+        { executor: { execute: async () => 'done' }, onFailed },
+      );
+
+      await vi.waitFor(async () => expect((await manager.getTask(task.id))?.status).toBe('failed'));
+      await vi.waitFor(() => expect(onTaskFailed).toHaveBeenCalledTimes(1));
+
+      expect(onFailed).toHaveBeenCalledTimes(1);
+      expect(failedEvents()).toHaveLength(1);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('fires failure hooks and events once when the task itself fails', async () => {
+    const { manager, onTaskFailed, failedEvents, cleanup } = await setup(new InMemoryStore());
+    const onFailed = vi.fn();
+
+    try {
+      const { task } = await manager.enqueue(
+        { toolName: 'my-tool', toolCallId: 'call-1', args: {}, agentId: 'agent-1', runId: 'run-1', maxRetries: 0 },
+        {
+          executor: {
+            execute: async () => {
+              throw new Error('tool exploded');
+            },
+          },
+          onFailed,
+        },
+      );
+
+      await vi.waitFor(async () => expect((await manager.getTask(task.id))?.status).toBe('failed'));
+      await vi.waitFor(() => expect(onTaskFailed).toHaveBeenCalledTimes(1));
+      // Let the workflow run settle so a duplicate settle-path publish would land.
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect((await manager.getTask(task.id))?.error?.message).toBe('tool exploded');
+      expect(onTaskFailed).toHaveBeenCalledTimes(1);
+      expect(onFailed).toHaveBeenCalledTimes(1);
+      expect(failedEvents()).toHaveLength(1);
+    } finally {
+      await cleanup();
+    }
+  });
+  it('still publishes task.failed when onFailed throws after an ordinary step failure', async () => {
+    const { manager, onTaskFailed, failedEvents, cleanup } = await setup(new InMemoryStore());
+    const onFailed = vi.fn(async () => {
+      throw new Error('onFailed hook exploded');
+    });
+
+    try {
+      const { task } = await manager.enqueue(
+        { toolName: 'my-tool', toolCallId: 'call-1', args: {}, agentId: 'agent-1', runId: 'run-1', maxRetries: 0 },
+        {
+          executor: {
+            execute: async () => {
+              throw new Error('tool exploded');
+            },
+          },
+          onFailed,
+        },
+      );
+
+      await vi.waitFor(async () => expect((await manager.getTask(task.id))?.status).toBe('failed'));
+      await vi.waitFor(() => expect(onTaskFailed).toHaveBeenCalledTimes(1));
+      // Let the workflow run settle so a duplicate settle-path publish would land.
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect((await manager.getTask(task.id))?.error?.message).toBe('tool exploded');
+      expect(onFailed).toHaveBeenCalledTimes(1);
+      expect(onTaskFailed).toHaveBeenCalledTimes(1);
+      expect(failedEvents()).toHaveLength(1);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('still publishes task.completed when onComplete throws after a successful run', async () => {
+    const { manager, onTaskComplete, onTaskFailed, completedEvents, failedEvents, cleanup } = await setup(
+      new InMemoryStore(),
+    );
+    const onComplete = vi.fn(async () => {
+      throw new Error('onComplete hook exploded');
+    });
+
+    try {
+      const { task } = await manager.enqueue(
+        { toolName: 'my-tool', toolCallId: 'call-1', args: {}, agentId: 'agent-1', runId: 'run-1' },
+        { executor: { execute: async () => 'done' }, onComplete },
+      );
+
+      await vi.waitFor(async () => expect((await manager.getTask(task.id))?.status).toBe('completed'));
+      await vi.waitFor(() => expect(onTaskComplete).toHaveBeenCalledTimes(1));
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect((await manager.getTask(task.id))?.status).toBe('completed');
+      expect(onComplete).toHaveBeenCalledTimes(1);
+      expect(completedEvents()).toHaveLength(1);
+      expect(onTaskFailed).not.toHaveBeenCalled();
+      expect(failedEvents()).toHaveLength(0);
+    } finally {
+      await cleanup();
+    }
   });
 });
