@@ -2356,7 +2356,7 @@ describe('Slack aside ingest', () => {
 });
 
 describe('@bot mute / unmute', () => {
-  async function fixture() {
+  async function fixture({ linked = true } = {}) {
     const storage = new InMemoryStore();
     const memory = (await storage.getStore('memory'))!;
     await memory.saveThread({
@@ -2377,10 +2377,14 @@ describe('@bot mute / unmute', () => {
     const thread = makeThread();
     thread.id = 'slack:C-1:1700.42';
     thread.adapter.addReaction = vi.fn().mockResolvedValue(undefined);
-    // Gate reached = the sender's link was looked up; unlinked stops the run there.
-    const accountLinks = { getAccountLink: vi.fn().mockResolvedValue(null) };
+    // Gate reached = the sender's link was looked up.
+    const accountLinks = {
+      getAccountLink: vi
+        .fn()
+        .mockResolvedValue(linked ? { orgId: 'org-1', userId: 'user-1', defaultFactoryProjectId: 'fp-1' } : null),
+    };
     const defaultHandler = vi.fn().mockResolvedValue(undefined);
-    const handlers = createHandlers({ accountLinks: accountLinks as any, projects: makeProjects([]) });
+    const handlers = createHandlers({ accountLinks: accountLinks as any, projects: makeProjects([{ id: 'fp-1' }]) });
     const ctx = handlerCtx({ getStorage: () => storage, getLogger: () => ({ error: vi.fn() }) });
     let n = 0;
     const send = (
@@ -2406,9 +2410,18 @@ describe('@bot mute / unmute', () => {
 
     expect(await f.muted()).toBe('true');
     expect(f.thread.adapter.addReaction).toHaveBeenCalledWith('slack:C-1:1700.42', message.id, 'mute');
-    expect(f.accountLinks.getAccountLink).not.toHaveBeenCalled();
     expect(f.defaultHandler).not.toHaveBeenCalled();
     expect(f.thread.post).not.toHaveBeenCalled();
+  });
+
+  it('lets only a sender who passes the link gate mute the thread', async () => {
+    const f = await fixture({ linked: false });
+    await f.send('@shipyard mute', { isMention: true });
+
+    expect(f.accountLinks.getAccountLink).toHaveBeenCalledTimes(1);
+    expect(await f.muted()).toBeUndefined();
+    expect(f.thread.adapter.addReaction).not.toHaveBeenCalled();
+    expect(f.defaultHandler).not.toHaveBeenCalled();
   });
 
   it('ignores untagged messages while muted, but still answers a tag', async () => {
@@ -2416,10 +2429,10 @@ describe('@bot mute / unmute', () => {
     await f.send('<@U-BOT> mute', { isMention: true });
 
     await f.send('just chatting among ourselves');
-    expect(f.accountLinks.getAccountLink).not.toHaveBeenCalled();
+    expect(f.defaultHandler).not.toHaveBeenCalled();
 
     await f.send('@shipyard can you check the build?', { isMention: true });
-    expect(f.accountLinks.getAccountLink).toHaveBeenCalledTimes(1);
+    expect(f.defaultHandler).toHaveBeenCalledTimes(1);
   });
 
   it('recognizes `mute` after a bot display name with spaces and punctuation', async () => {
@@ -2439,14 +2452,14 @@ describe('@bot mute / unmute', () => {
     expect(await f.muted()).toBe('false');
     expect(f.thread.adapter.addReaction).toHaveBeenLastCalledWith('slack:C-1:1700.42', unmute.id, 'loud_sound');
     await f.send('back to you');
-    expect(f.accountLinks.getAccountLink).toHaveBeenCalledTimes(1);
+    expect(f.defaultHandler).toHaveBeenCalledTimes(1);
   });
 
   it('treats a message that only contains the word as a normal message', async () => {
     const f = await fixture();
     await f.send('@shipyard mute the flaky alerts', { isMention: true });
     expect(await f.muted()).toBeUndefined();
-    expect(f.accountLinks.getAccountLink).toHaveBeenCalledTimes(1);
+    expect(f.defaultHandler).toHaveBeenCalledTimes(1);
 
     await f.send('mute');
     expect(await f.muted()).toBeUndefined();
