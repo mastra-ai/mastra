@@ -141,6 +141,7 @@ export default defineConfig({
     'e2e/tests/__utils__/**',
   ],
   rules: {
+    'mastra/icon-button-size': 'error',
     'typescript/no-unnecessary-type-assertion': 'error',
     'typescript/no-unnecessary-template-expression': 'error',
     'typescript/no-unnecessary-type-arguments': 'error',
