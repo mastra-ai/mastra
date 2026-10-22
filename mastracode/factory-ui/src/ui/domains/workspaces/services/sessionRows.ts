@@ -3,10 +3,8 @@ import type { WorkspacePullRequestTarget } from '../../../../hooks/useWorkspaceP
 import { changeRequestNumberForItem, externalLinkLabel, pullRequestStatusForItem } from '../../factory/boardItems';
 import { itemBoard } from '../../factory/boardStages';
 import type { ChangeRequestProvider } from '../../factory/services/githubSubscriptions';
-import { relationshipLabel } from '../../factory/services/relationships';
 import type { WorkItem, WorkItemSource } from '../../factory/services/workItems';
 import { isTerminalStage } from '../../factory/stages';
-import type { SessionPreviewDetails } from '../components/SessionPreviewCard';
 import {
   getFactorySessionKind,
   getFactorySessionSource,
@@ -64,7 +62,6 @@ export interface SessionListRow {
   session: FactoryUserSession;
   origin: 'factory' | 'user';
   board: string | undefined;
-  kind: SessionPreviewDetails['kind'];
   source: SessionSource;
   name: string;
   url: string;
@@ -75,8 +72,7 @@ export interface SessionListRow {
   owner: SessionOwnerDetails;
   ownedByViewer: boolean;
   canRegenerateTitle: boolean;
-  itemLabel?: string;
-  itemTitle?: string;
+  item?: WorkItem;
   threadId?: string;
   pullRequest?: SessionPullRequest;
   pinned: boolean;
@@ -192,7 +188,6 @@ export function buildFactorySessionRow({
     session,
     origin: 'factory',
     board: sessionBoard(session, item),
-    kind: getFactorySessionKind(session, item) === 'review' ? 'Review session' : 'Work session',
     source: getFactorySessionSource(session, item),
     name: factorySessionName(session, item),
     url,
@@ -208,8 +203,7 @@ export function buildFactorySessionRow({
     owner: getSessionOwnerDetails(session, viewer),
     ownedByViewer,
     canRegenerateTitle: ownedByViewer && session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX),
-    itemLabel: item && item.source !== 'manual' ? relationshipLabel(item) : undefined,
-    itemTitle: item?.title,
+    item,
     threadId,
     pullRequest: sessionPullRequest(pullRequest),
     pinned,
@@ -247,7 +241,6 @@ export function buildUserSessionRow({
     session,
     origin: 'user',
     board: undefined,
-    kind: 'User session',
     source: fromSlack ? 'slack-thread' : 'user',
     name: (fromSlack && !session.title?.trim() && item?.title.trim()) || getUserSessionLabel(session),
     url,
@@ -263,6 +256,7 @@ export function buildUserSessionRow({
     owner: getSessionOwnerDetails(session, viewer),
     ownedByViewer,
     canRegenerateTitle: ownedByViewer,
+    item,
     pinned,
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,

@@ -60,7 +60,7 @@
     "@temporalio/plugin": "^1.22.0",
     "@temporalio/worker": "^1.22.0",
     "@temporalio/workflow": "^1.22.0",
-    "rollup": "^4.61.1"
+    "rollup": "^4.64.10"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.58.0-0 <2.0.0-0",
