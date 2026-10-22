@@ -1,8 +1,12 @@
+import { Agent } from '@mastra/core/agent';
+import { AgentController } from '@mastra/core/agent-controller';
 import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '@mastra/core/request-context';
+import { InMemoryStore } from '@mastra/core/storage';
 import { Hono } from 'hono';
 import type { Context } from 'hono';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
+import { observeSessionThreadStamp } from '../session/thread-session-stamp.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
 import { canViewSourceControlSession, createSessionAccessGuard } from './session-access.js';
 import type { SessionResourceLookup } from './session-access.js';
@@ -51,7 +55,10 @@ const projects = new Map([
   [OTHER_FACTORY_ID, 'org-2'],
 ]);
 
-function buildApp(user?: { workosId: string; organizationId: string }, options: { authEnabled?: boolean } = {}) {
+function buildApp(
+  user?: { workosId: string; organizationId: string },
+  options: { authEnabled?: boolean; controller?: SessionResourceLookup } = {},
+) {
   const app = new Hono();
   app.use('*', async (c, next) => {
     if (user) c.set('factoryAuthUser' as never, user as never);
@@ -66,7 +73,7 @@ function buildApp(user?: { workosId: string; organizationId: string }, options: 
       projects: {
         get: async ({ orgId, id }) => (projects.get(id) === orgId ? ({ id, orgId } as never) : null),
       },
-      controller: () => controller,
+      controller: () => options.controller ?? controller,
     }),
   );
   // Downstream handlers echo the body the way the Mastra server adapter reads
@@ -112,7 +119,6 @@ const post = (app: Hono, path: string, body: unknown) =>
   app.request(path, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
 const put = (app: Hono, path: string, body: unknown) =>
   app.request(path, { method: 'PUT', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
-
 /** A form body: the server adapter JSON-parses each field that parses, so structured values travel as JSON text. */
 const multipart = (app: Hono, method: 'POST' | 'PUT', path: string, fields: Record<string, unknown>) => {
   const form = new FormData();
@@ -121,6 +127,26 @@ const multipart = (app: Hono, method: 'POST' | 'PUT', path: string, fields: Reco
   }
   return app.request(path, { method, body: form });
 };
+
+async function liveController() {
+  const live = new AgentController({
+    id: 'code',
+    storage: new InMemoryStore({ id: 'session-access' }),
+    stateSchema: undefined,
+    modes: [
+      {
+        id: 'build',
+        name: 'Build',
+        default: true,
+        defaultModelId: 'openai/gpt-5.5',
+        agent: new Agent({ id: 'test-agent', name: 'test-agent', instructions: 'Test.', model: 'openai/gpt-5.5' }),
+      },
+    ],
+  });
+  await live.init();
+  live.onSessionCreated(session => observeSessionThreadStamp(session));
+  return live;
+}
 
 describe('canViewSourceControlSession', () => {
   it('lets the owner and same-org teammates see org sessions, and only the owner see private ones', () => {
@@ -187,6 +213,28 @@ describe('createSessionAccessGuard', () => {
 
   it('passes through a session on its own id that no Factory session row claims', async () => {
     expect((await teammate.request(sessionPath('teammate-scratch', 'stream'))).status).toBe(200);
+  });
+
+  it("403s a teammate's own session bound to the owner's thread, so a second session id can't switch its model", async () => {
+    const live = await liveController();
+    const shared = await live.createSession({ id: SHARED_ID, resourceId: FACTORY_ID, threadId: SHARED_ID });
+    const alias = await live.createSession({ id: 'teammate-alias', resourceId: FACTORY_ID, threadId: SHARED_ID });
+    const app = buildApp({ workosId: 'teammate', organizationId: 'org-1' }, { controller: live });
+    const switchModel = { modelId: 'openai/gpt-5-mini' };
+    const aliasPath = (suffix: string) => sessionPath('teammate-alias', suffix);
+
+    expect((await post(app, aliasPath('model'), switchModel)).status).toBe(403);
+    expect((await put(app, aliasPath('state'), { state: { thinkingLevel: 'high' } })).status).toBe(403);
+
+    const opened = await shared.thread.create();
+    await vi.waitFor(async () =>
+      expect((await live.queryThreadById({ threadId: opened.id }))?.metadata?.factorySessionId).toBe(SHARED_ID),
+    );
+    await alias.thread.switch({ threadId: opened.id });
+    expect((await post(app, aliasPath('model'), switchModel)).status).toBe(403);
+
+    await alias.thread.create();
+    expect((await post(app, aliasPath('model'), switchModel)).status).toBe(200);
   });
 
   it('reads a multipart body the way the server adapter does, so form fields cannot slip past the checks', async () => {

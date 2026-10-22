@@ -36,10 +36,14 @@ export function canSwitchSessionModel(
   return session.userId === viewer.userId;
 }
 
-/** The controller reads the guard needs to find which resource a session runs on. */
+/** The controller reads the guard needs to find which resource and thread a session runs on. */
 export interface SessionResourceLookup {
-  getSession(sessionId: string): Promise<{ identity: { getResourceId(): string } } | undefined>;
-  queryThreadById(input: { threadId: string }): Promise<{ resourceId: string } | null>;
+  getSession(
+    sessionId: string,
+  ): Promise<{ identity: { getResourceId(): string }; thread: { getId(): string | null } } | undefined>;
+  queryThreadById(input: {
+    threadId: string;
+  }): Promise<{ resourceId: string; metadata?: Record<string, unknown> } | null>;
 }
 
 type Viewer = { orgId?: string; userId: string };
@@ -194,6 +198,22 @@ export function createSessionAccessGuard({
     return canReachResource(resourceId, viewer);
   };
 
+  /**
+   * A model change lands on the session's live thread, so the Factory session that thread belongs to (its own id
+   * or `factorySessionId` stamp) must allow it too: a second session bound to the owner's thread would otherwise
+   * switch the owner's model. A forged stamp only adds a session to check, so every stamp counts.
+   */
+  const canSwitchModelThrough = async (sessionId: string, viewer: Viewer): Promise<boolean> => {
+    const lookup = controller();
+    const threadId = (await lookup?.getSession(sessionId))?.thread.getId() ?? sessionId;
+    const stamp = (await lookup?.queryThreadById({ threadId }))?.metadata?.factorySessionId;
+    for (const claimant of new Set([sessionId, threadId, ...(typeof stamp === 'string' ? [stamp] : [])])) {
+      const session = await sessions.getBySessionId(claimant);
+      if (session && !canSwitchSessionModel(session, viewer)) return false;
+    }
+    return true;
+  };
+
   return async (c, next) => {
     if (!auth.enabled()) return next();
     const ctx = c as unknown as Context;
@@ -214,8 +234,7 @@ export function createSessionAccessGuard({
     }
     if (await switchesModel(ctx)) {
       for (const sessionId of target.sessionIds) {
-        const session = await sessions.getBySessionId(sessionId);
-        if (session && !canSwitchSessionModel(session, viewer)) {
+        if (!(await canSwitchModelThrough(sessionId, viewer))) {
           return c.json({ error: 'Only the session’s owner can change its model' }, 403);
         }
       }
