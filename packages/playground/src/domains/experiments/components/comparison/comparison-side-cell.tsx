@@ -3,8 +3,6 @@ import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
-import { textStyle } from '@mastra/playground-ui/primitives/text';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { getResultErrorMessage, getResultOutputText } from '../../utils/result-output';
 import { sideAverageScore, sideDurationMs } from './build-comparison-rows';
 import type { ComparisonColumn } from './build-comparison-rows';
@@ -141,17 +139,12 @@ export function ComparisonSideCell({
       )}
 
       {data.metadata && Object.keys(data.metadata).length > 0 && (
-        <ComparisonSection title="Metadata">
-          <dl className="grid gap-1">
-            {Object.entries(data.metadata).map(([key, value]) => (
-              <div key={key} className="flex items-start justify-between gap-4">
-                <dt className={textStyle({ tone: 'muted', variant: 'body' })}>{key}</dt>
-                <dd className={cn(textStyle({ tone: 'ink', variant: 'body', font: 'mono' }), 'break-all')}>
-                  {formatValue(value)}
-                </dd>
-              </div>
-            ))}
-          </dl>
+        <ComparisonSection
+          title="Metadata"
+          framed
+          actions={<CopyButton content={formatValue(data.metadata)} size="sm" variant="ghost" />}
+        >
+          <ComparisonPayload value={data.metadata} />
         </ComparisonSection>
       )}
     </div>
