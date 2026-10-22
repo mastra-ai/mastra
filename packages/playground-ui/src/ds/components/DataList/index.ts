@@ -1,5 +1,6 @@
 export * from './data-list';
 export * from './data-list-skeleton';
+export { getColumnOrderStorageKey, keyedColumnOrderSchema } from './data-list-column-order';
 export { ScoresDataList } from './ScoresDataList/scores-data-list';
 export { TabbedContainer } from './TabbedContainer/tabbed-container';
 export type {

@@ -1,9 +1,11 @@
 import { CopyIcon, LayersIcon, LayersPlusIcon, PencilIcon, TextCursorInputIcon, Trash2Icon } from 'lucide-react';
 import { Fragment, useState } from 'react';
 import type { ReactNode } from 'react';
+import { SavedViewDeleteDialog } from './saved-view-delete-dialog';
 import { SavedViewNameInput } from './saved-view-name-input';
 import type { SavedView } from './saved-view-schema';
 import { SavedViewSummary } from './saved-view-summary';
+import { SavedViewUnsavedDialog } from './saved-view-unsaved-dialog';
 import type { SavedViewsController } from './use-saved-views';
 import { Button, buttonVariants } from '@/ds/components/Button/Button';
 import { ContextMenu } from '@/ds/components/ContextMenu';
@@ -31,6 +33,10 @@ export type SavedViewTabsProps<TSettings> = {
   defaultLabel: string;
   newViewSettings: NoInfer<TSettings>;
   describeSettings?: (settings: TSettings) => ReactNode;
+  /** Asks before deleting a view. */
+  confirmDelete?: boolean;
+  /** Asks before switching away from a draft with unsaved changes. */
+  confirmUnsavedSwitch?: boolean;
   'aria-label'?: string;
   className?: string;
 };
@@ -42,13 +48,25 @@ export function SavedViewTabs<TSettings>({
   defaultLabel,
   newViewSettings,
   describeSettings,
+  confirmDelete = false,
+  confirmUnsavedSwitch = false,
   'aria-label': ariaLabel = 'Views',
   className,
 }: SavedViewTabsProps<TSettings>) {
   const [renamingViewId, setRenamingViewId] = useState<string>();
+  const [deletingView, setDeletingView] = useState<SavedView<TSettings>>();
+  // The tab picked while the draft had unsaved changes, held until the user decides.
+  const [switchingTo, setSwitchingTo] = useState<{ viewId: string | undefined }>();
   const { draft } = views;
   const creating = draft !== undefined && draft.viewId === undefined;
   const defaultSelected = views.activeView === undefined && !creating;
+  const error = views.storageError ?? (views.loadError !== undefined ? 'Could not load views.' : undefined);
+
+  const select = (viewId: string | undefined) => {
+    const leaving = creating || viewId !== views.activeView?.id;
+    if (confirmUnsavedSwitch && views.unsaved && leaving) setSwitchingTo({ viewId });
+    else views.select(viewId);
+  };
 
   return (
     <div role="group" aria-label={ariaLabel} className={cn('flex flex-wrap items-center gap-1.5', className)}>
@@ -56,7 +74,7 @@ export function SavedViewTabs<TSettings>({
         type="button"
         aria-pressed={defaultSelected}
         className={defaultSelected ? selectedTabClass : restingTabClass}
-        onClick={() => views.select(undefined)}
+        onClick={() => select(undefined)}
       >
         {defaultLabel}
       </button>
@@ -82,17 +100,18 @@ export function SavedViewTabs<TSettings>({
             fields={fields}
             operators={operators}
             settings={describeSettings?.(view.settings)}
-            onSelect={() => views.select(view.id)}
+            deleteLabel={confirmDelete ? 'Delete view…' : 'Delete view'}
+            onSelect={() => select(view.id)}
             onEdit={() => views.edit(view.id)}
             onRename={() => setRenamingViewId(view.id)}
             onDuplicate={() => views.duplicate(view.id)}
-            onDelete={() => views.remove(view.id)}
+            onDelete={() => (confirmDelete ? setDeletingView(view) : views.remove(view.id))}
           />
         );
       })}
-      {views.storageError && (
+      {error && (
         <Txt role="alert" variant="caption" className="w-full text-destructive-foreground">
-          {views.storageError}
+          {error}
         </Txt>
       )}
       {creating ? (
@@ -107,6 +126,26 @@ export function SavedViewTabs<TSettings>({
         >
           <LayersPlusIcon />
         </Button>
+      )}
+      {confirmDelete && (
+        <SavedViewDeleteDialog
+          view={deletingView}
+          onConfirm={() => {
+            if (deletingView) views.remove(deletingView.id);
+          }}
+          onClose={() => setDeletingView(undefined)}
+        />
+      )}
+      {confirmUnsavedSwitch && (
+        <SavedViewUnsavedDialog
+          views={views}
+          open={switchingTo !== undefined}
+          onProceed={() => {
+            if (switchingTo) views.select(switchingTo.viewId);
+            setSwitchingTo(undefined);
+          }}
+          onCancel={() => setSwitchingTo(undefined)}
+        />
       )}
     </div>
   );
@@ -182,6 +221,7 @@ function SavedViewTab<TSettings>({
   fields,
   operators,
   settings,
+  deleteLabel,
   onSelect,
   onEdit,
   onRename,
@@ -194,6 +234,7 @@ function SavedViewTab<TSettings>({
   fields: readonly FilterBarField[];
   operators: readonly FilterBarOperator[];
   settings: ReactNode;
+  deleteLabel: string;
   onSelect: () => void;
   onEdit: () => void;
   onRename: () => void;
@@ -204,7 +245,7 @@ function SavedViewTab<TSettings>({
     { label: 'Edit view', icon: <PencilIcon aria-hidden />, onClick: onEdit },
     { label: 'Rename', icon: <TextCursorInputIcon aria-hidden />, onClick: onRename },
     { label: 'Duplicate', icon: <CopyIcon aria-hidden />, onClick: onDuplicate },
-    { label: 'Delete view', icon: <Trash2Icon aria-hidden />, onClick: onDelete, destructive: true },
+    { label: deleteLabel, icon: <Trash2Icon aria-hidden />, onClick: onDelete, destructive: true },
   ];
   const [menuOpen, setMenuOpen] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);

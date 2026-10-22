@@ -68,7 +68,9 @@ export function useTracesFilterBarFields(): FilterBarField[] {
  */
 export function useTracesFilterBar() {
   const { scopedFieldIds } = useTracesConfig();
-  const { filters, setFilterTokens } = useTracesFilters();
+  // Every filter the host holds, including the ones this server can't run: the bar shows those
+  // muted rather than dropping them, and edits write them back.
+  const { rawFilters: filters, setFilterTokens } = useTracesFilters();
 
   const items = traceTokensToFilterBarItems(filters.tokens).filter(item => !scopedFieldIds.has(item.fieldId));
   // The time-range chip is a synthetic, always-present item so it takes part in keyboard
@@ -79,8 +81,6 @@ export function useTracesFilterBar() {
     ...groupsExpression,
     nodes: [TRACE_TIME_RANGE_ITEM, ...items, ...groupsExpression.nodes],
   };
-  // Legacy mode: the list endpoint can't express AND/OR groups, so the bar runs flat.
-  const flatFilterBarValue = [TRACE_TIME_RANGE_ITEM, ...items];
 
   const onFilterBarChange = (expression: FilterBarExpression) => {
     const { tokens, groups } = filterBarExpressionToTraceFilters({
@@ -92,10 +92,7 @@ export function useTracesFilterBar() {
 
   return {
     filterBarValue,
-    flatFilterBarValue,
     onFilterBarChange,
-    onFlatFilterBarChange: (nodes: FilterBarItem[]) =>
-      onFilterBarChange({ ...traceFiltersToFilterBarExpression([], []), nodes }),
     /** Replaces any filter on `fieldId` with `is value`, e.g. from a list cell. */
     onFilterByField: (fieldId: string, value: string) => {
       const withoutField = items.filter(item => item.fieldId !== fieldId);

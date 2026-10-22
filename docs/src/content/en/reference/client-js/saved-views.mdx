@@ -7,7 +7,7 @@ packages:
 
 # Saved Views API
 
-A saved view stores how a Studio page looks so you can come back to it, such as its filters, time range, sort, and columns. Views live in the `savedViews` domain of your [Mastra storage](/reference/storage/overview), and everyone who can open Studio sees every view.
+A saved view stores how a Studio page looks so you can come back to it, such as its filters, time range, sort, and columns. Studio uses saved views on the **Traces** page. Views live in the `savedViews` domain of your [Mastra storage](/reference/storage/overview), and everyone who can open Studio sees every view.
 
 Saved views need a storage adapter with the `savedViews` domain: `@mastra/pg`, `@mastra/libsql`, `@mastra/mongodb`, `@mastra/mysql`, `@mastra/spanner`, or the in-memory store. Other stores answer `501`, and servers that predate saved views answer `404`.
 

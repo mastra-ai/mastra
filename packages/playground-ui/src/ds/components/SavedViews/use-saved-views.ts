@@ -36,11 +36,17 @@ export type SavedViewsController<TSettings> = {
   create: (settings: TSettings, filters?: FilterBarItem[]) => void;
   edit: (viewId: string) => void;
   change: (patch: SavedViewDraftChange<TSettings>) => void;
-  save: () => void;
+  save: () => Promise<void>;
   discard: () => void;
   rename: (viewId: string, name: string) => void;
   duplicate: (viewId: string) => void;
   remove: (viewId: string) => void;
+  /** A write to a remote store is in flight. */
+  pending?: boolean;
+  /** Views are still loading from a remote store. */
+  isLoading?: boolean;
+  /** Views could not be loaded from a remote store. */
+  loadError?: unknown;
 };
 
 function createSavedViewId(): string {
@@ -125,7 +131,7 @@ export function useSavedViews<TSettings>({
       const { id, ...content } = activeView;
       setDraft({ ...content, ...patch, viewId: id });
     },
-    save: () => {
+    save: async () => {
       if (!draft) return;
       const { viewId, ...content } = draft;
       const saved: SavedView<TSettings> = {

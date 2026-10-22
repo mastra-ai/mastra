@@ -1,5 +1,6 @@
 import type {
   FilterBarExpression,
+  FilterBarField,
   FilterBarGroup,
   FilterBarItem,
   FilterBarLogic,
@@ -67,6 +68,20 @@ export const groupDepth = (expr: FilterBarExpression, groupId: string): number =
   };
   return walk(expr.nodes, 1);
 };
+
+/** The operators a field offers: its own subset, in the bar's order, or all of them. */
+export const operatorsForField = (
+  field: FilterBarField,
+  operators: readonly FilterBarOperator[],
+): FilterBarOperator[] => {
+  if (!field.operators) return [...operators];
+  const allowed = new Set(field.operators);
+  return operators.filter(operator => allowed.has(operator.id));
+};
+
+/** A chip leaves its operator out when it is the only one the field offers. */
+export const isOperatorImplied = (fieldOperators: readonly FilterBarOperator[], operatorId: string): boolean =>
+  fieldOperators.length === 1 && fieldOperators[0]?.id === operatorId;
 
 /** Number of leaf conditions under a group, at any depth. */
 export const countLeaves = (group: FilterBarGroup): number =>

@@ -115,6 +115,9 @@ export type TracesListViewProps = {
   onFilterByField?: (field: TraceCustomColumn, value: string) => void;
   /** Storage id for the persisted column order. Use a distinct id per page so each keeps its own order. */
   listId?: string;
+  /** Controlled column order (column keys in visual order). When set, the list does not persist the order itself. */
+  columnOrder?: string[];
+  onColumnOrderChange?: (order: string[]) => void;
 };
 
 /**
@@ -139,6 +142,8 @@ export function TracesListView({
   onSortChange,
   onFilterByField,
   listId = ALL_TRACES_LIST_ID,
+  columnOrder,
+  onColumnOrderChange,
 }: TracesListViewProps) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const columns = buildTraceListColumns(columnPreferences);
@@ -170,6 +175,8 @@ export function TracesListView({
       id={listId}
       columns={columns}
       columnKeys={columnKeys}
+      columnOrder={columnOrder}
+      onColumnOrderChange={onColumnOrderChange}
       fit="container"
       scrollRef={scrollRef}
       className="min-w-0"

@@ -1,7 +1,7 @@
-import { BracesIcon, XIcon } from 'lucide-react';
+import { BracesIcon, CircleAlertIcon, XIcon } from 'lucide-react';
 import { useRef } from 'react';
 import type { KeyboardEvent } from 'react';
-import { chipClass, editableSegmentClass } from './filter-bar-chip';
+import { chipClass, editableSegmentClass, segmentClass } from './filter-bar-chip';
 import { FILTER_BAR_SCOPE_ATTR, useFilterBarContext } from './filter-bar-context';
 import { FilterBarGroupEditor } from './filter-bar-group-editor';
 import { countLeaves } from './filter-bar-tree';
@@ -14,6 +14,11 @@ import { cn } from '@/lib/utils';
 
 export type FilterBarAdvancedChipProps = {
   group: FilterBarGroup;
+  /**
+   * Why this group can't be applied, e.g. the backend can't run AND/OR groups. The chip shows
+   * muted with the reason and can only be removed; its popover doesn't open.
+   */
+  unsupported?: string;
   className?: string;
 };
 
@@ -21,13 +26,15 @@ export type FilterBarAdvancedChipProps = {
  * A root-level group rendered as one "Advanced filter" chip. Its popover hosts the
  * recursive rule builder; the chip's remove button drops the whole subtree.
  */
-export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChipProps) {
+export function FilterBarAdvancedChip({ group, unsupported, className }: FilterBarAdvancedChipProps) {
   const ctx = useFilterBarContext();
   const rootRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
   const leaving = ctx.leaving.has(group.id);
-  const open = ctx.openGroupId === group.id;
+  const isUnsupported = unsupported !== undefined;
+  const open = !isUnsupported && ctx.openGroupId === group.id;
   const count = countLeaves(group);
+  const conditions = `${count} ${count === 1 ? 'condition' : 'conditions'}`;
   // Position in the flattened item list: navigation from the chip continues from its first leaf.
   const firstLeafIndex = ctx.items.findIndex(item => isUnder(group, item.id));
   const index = firstLeafIndex === -1 ? ctx.items.length : firstLeafIndex;
@@ -72,31 +79,40 @@ export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChi
       <div
         ref={rootRef}
         role="group"
-        aria-label={`Advanced filter, ${count} ${count === 1 ? 'condition' : 'conditions'}`}
+        aria-label={isUnsupported ? `Advanced filter, ${conditions}, ${unsupported}` : `Advanced filter, ${conditions}`}
         aria-hidden={leaving || undefined}
+        title={unsupported}
         data-slot="filter-bar-advanced"
         data-leaving={leaving || undefined}
-        className={cn('filter-bar-advanced', chipClass, leaving && 'pointer-events-none', className)}
+        className={cn(
+          'filter-bar-advanced',
+          chipClass,
+          isUnsupported && 'text-muted-foreground',
+          leaving && 'pointer-events-none',
+          className,
+        )}
         onKeyDown={handleKeyDown}
       >
-        <PopoverTrigger
-          ref={el => {
-            triggerRef.current = el;
-            ctx.registerSegment(group.id, 'field', leaving ? null : el);
-          }}
-          render={<button type="button" />}
-          data-filter-bar-segment="field"
-          className={cn(editableSegmentClass, 'gap-1.5')}
-          title="Edit advanced filter"
-        >
-          <BracesIcon className="size-[1.1em] shrink-0" aria-hidden />
-          <span className="truncate">Advanced filter</span>
-          {count > 0 && (
-            <Txt as="span" variant="column" tone="muted" aria-hidden>
-              {count}
-            </Txt>
-          )}
-        </PopoverTrigger>
+        {isUnsupported ? (
+          <span className={cn(segmentClass, 'gap-1.5')}>
+            <CircleAlertIcon className="size-[1.1em] shrink-0 text-warning-foreground" aria-hidden />
+            <AdvancedChipLabel count={count} />
+          </span>
+        ) : (
+          <PopoverTrigger
+            ref={el => {
+              triggerRef.current = el;
+              ctx.registerSegment(group.id, 'field', leaving ? null : el);
+            }}
+            render={<button type="button" />}
+            data-filter-bar-segment="field"
+            className={cn(editableSegmentClass, 'gap-1.5')}
+            title="Edit advanced filter"
+          >
+            <BracesIcon className="size-[1.1em] shrink-0" aria-hidden />
+            <AdvancedChipLabel count={count} />
+          </PopoverTrigger>
+        )}
         {leaving ? (
           <span aria-hidden className={cn(editableSegmentClass, 'px-1.5')}>
             <XIcon className="size-[1.1em]" />
@@ -150,6 +166,19 @@ export function FilterBarAdvancedChip({ group, className }: FilterBarAdvancedChi
         />
       </PopoverContent>
     </Popover>
+  );
+}
+
+function AdvancedChipLabel({ count }: { count: number }) {
+  return (
+    <>
+      <span className="truncate">Advanced filter</span>
+      {count > 0 && (
+        <Txt as="span" variant="column" tone="muted" aria-hidden>
+          {count}
+        </Txt>
+      )}
+    </>
   );
 }
 

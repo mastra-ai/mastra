@@ -12,6 +12,7 @@ import {
   insertItem,
   mergeCondition,
   normalize,
+  operatorsForField,
   pruneEmptyGroups,
   removeNode,
   setGroupLogic,
@@ -62,7 +63,7 @@ export type FilterBarContextValue = {
   items: FilterBarItem[];
   /** The rendered tree, including the pending commit and leaving nodes. */
   expression: FilterBarExpression;
-  /** False when the consumer passed a flat `FilterBarItem[]`: no groups are offered. */
+  /** False when the consumer passed a flat `FilterBarItem[]` or a `maxDepth` of 0: no groups are offered. */
   groupsEnabled: boolean;
   /** Deepest allowed group nesting (root-level group = 1). */
   maxDepth: number;
@@ -157,7 +158,7 @@ export type FilterBarProviderProps = {
   /** Derives ids for root-level items only; items inside groups always get a random id
    *  because a group may hold several conditions on the same field. */
   createItemId?: (fieldId: string) => string;
-  /** Deepest allowed group nesting (root-level group = 1). Defaults to 3. */
+  /** Deepest allowed group nesting (root-level group = 1). Defaults to 3. 0 offers no groups; groups in `value` still render. */
   maxDepth?: number;
   ariaLabel: string;
   /**
@@ -232,14 +233,7 @@ export function FilterBarProvider({
 
   const getField = useCallback((fieldId: string) => fields.find(f => f.id === fieldId), [fields]);
   const getOperator = useCallback((operatorId: string) => operators.find(o => o.id === operatorId), [operators]);
-  const getFieldOperators = useCallback(
-    (field: FilterBarField) => {
-      if (!field.operators) return operators;
-      const allowed = new Set(field.operators);
-      return operators.filter(o => allowed.has(o.id));
-    },
-    [operators],
-  );
+  const getFieldOperators = useCallback((field: FilterBarField) => operatorsForField(field, operators), [operators]);
 
   const announce = useCallback((message: string) => setAnnouncement(message), []);
 
@@ -543,7 +537,7 @@ export function FilterBarProvider({
       operators,
       items,
       expression: rendered,
-      groupsEnabled: !flat,
+      groupsEnabled: !flat && maxDepth >= 1,
       maxDepth,
       draft,
       setDraft,
