@@ -231,6 +231,8 @@ describe("a teammate's Factory session", () => {
     it('refuses /model and /think without changing the session', async () => {
       const modelSwitches: unknown[] = [];
       const stateWrites: unknown[] = [];
+      serveModelCatalogs({ sessionScope: 'user', viewerModels: [openAIKeyModel] });
+      openWardSessionAs('user-damien');
       server.use(
         http.post(`${AC}/sessions/:resourceId/model`, async ({ request }) => {
           modelSwitches.push(await request.json());
@@ -241,8 +243,6 @@ describe("a teammate's Factory session", () => {
           return HttpResponse.json({ ok: true });
         }),
       );
-      serveModelCatalogs({ sessionScope: 'user', viewerModels: [openAIKeyModel] });
-      openWardSessionAs('user-damien');
       const user = userEvent.setup();
 
       const input = await screen.findByRole('textbox', { name: 'Message' });
