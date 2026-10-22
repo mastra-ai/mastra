@@ -210,7 +210,6 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
   entry: TimelineEntry;
   suspensions: ReadonlyMap<string, SuspensionPrompt>;
   reply?: string;
-  /** The chat platform the reply was posted to, when it went out through `reply_in_thread`. */
   redundantSuspension: boolean;
   isSubmitting: boolean;
   viewerId?: string;
