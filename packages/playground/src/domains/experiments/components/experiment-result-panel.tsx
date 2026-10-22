@@ -313,7 +313,7 @@ function ExperimentResultPanelBody({
         <DataPanel.HeaderActions>
           {experimentLink && (
             <Button
-              size="sm"
+              size="icon-sm"
               variant="ghost"
               render={<Link href={experimentLink} />}
               tooltip="See experiment"
@@ -323,7 +323,7 @@ function ExperimentResultPanelBody({
             </Button>
           )}
           {result.traceId && onShowTrace && (
-            <Button size="sm" variant="ghost" onClick={onShowTrace} tooltip="See trace" aria-label="See trace">
+            <Button size="icon-sm" variant="ghost" onClick={onShowTrace} tooltip="See trace" aria-label="See trace">
               <TraceIcon />
             </Button>
           )}
