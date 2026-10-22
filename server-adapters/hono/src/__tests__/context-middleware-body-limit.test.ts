@@ -190,4 +190,21 @@ describe('context middleware body reads respect the body limit', () => {
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({ tenant: 'acme' });
   });
+
+  it('reads requestContext up to the route limit when mounted from an app with an error handler', async () => {
+    const { app: child } = await createApp();
+    // A custom error handler makes app.route() wrap the child's handlers.
+    child.onError((error, c) => c.json({ error: error.message }, 500));
+    const parent = new Hono().route('/', child);
+    const body = JSON.stringify({ requestContext: { tenant: 'acme' }, padding: 'x'.repeat(8 * 1024) });
+
+    const response = await parent.request('/api/large', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body,
+    });
+
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ tenant: 'acme' });
+  });
 });

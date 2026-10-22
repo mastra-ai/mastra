@@ -105,6 +105,9 @@ const BODY_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 /** Max size enforced by each route-level bodyLimit middleware, keyed by the middleware itself. */
 const bodyLimitMiddlewareSizes = new WeakMap<Function, number>();
 
+/** Key Hono's app.route() uses to link a wrapped sub-app handler to the original (hono/utils/constants). */
+const COMPOSED_HANDLER = '__COMPOSED_HANDLER';
+
 /**
  * Parse a JSON body from a clone of `request`, reading at most `maxSize` bytes.
  * Returns undefined without reading when the declared Content-Length is over the
@@ -269,7 +272,13 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
   private getEffectiveBodyLimit(c: Context): number | undefined {
     try {
       for (const route of matchedRoutes(c)) {
-        const limit = bodyLimitMiddlewareSizes.get(route.handler);
+        // app.route() wraps handlers of sub-apps that have a custom error handler and
+        // links the original under COMPOSED_HANDLER; unwrap so the lookup still matches.
+        let handler: any = route.handler;
+        while (handler && !bodyLimitMiddlewareSizes.has(handler) && handler[COMPOSED_HANDLER]) {
+          handler = handler[COMPOSED_HANDLER];
+        }
+        const limit = bodyLimitMiddlewareSizes.get(handler);
         if (limit !== undefined) return limit;
       }
     } catch {
