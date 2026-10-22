@@ -467,9 +467,14 @@ type AcceptedIdleMessage = {
   admission?: Promise<AcceptedIdleMessage>;
 };
 
+type ThreadAdmissionOutcome = {
+  action: 'local' | 'remote' | 'blocked';
+  runId: string;
+};
+
 type PendingThreadAdmission = {
   runId: string;
-  accepted: Promise<SendAgentSignalAccepted<any>>;
+  outcome: Promise<ThreadAdmissionOutcome>;
 };
 
 type AgentThreadRuntimeState = {
@@ -1205,6 +1210,28 @@ export class AgentThreadStreamRuntime {
       stopped = true;
       clearTimeout(timeout);
     }
+  }
+
+  #trackPendingThreadAdmission(
+    state: AgentThreadRuntimeState,
+    key: string,
+    runId: string,
+    outcome: Promise<ThreadAdmissionOutcome>,
+  ): void {
+    const pendingAdmission: PendingThreadAdmission = { runId, outcome };
+    state.pendingThreadAdmissions.set(key, pendingAdmission);
+    const clearPendingAdmission = () => {
+      if (state.pendingThreadAdmissions.get(key) === pendingAdmission) {
+        state.pendingThreadAdmissions.delete(key);
+      }
+    };
+    void outcome.then(clearPendingAdmission, clearPendingAdmission);
+  }
+
+  #threadAdmissionOutcome(runId: string, lease: { acquired: boolean; owner?: string }): ThreadAdmissionOutcome {
+    if (lease.acquired) return { action: 'local', runId };
+    if (lease.owner && !isRetakeLeaseOwner(lease.owner)) return { action: 'remote', runId: lease.owner };
+    return { action: 'blocked', runId: lease.owner?.split(RETAKE_LEASE_MARKER)[0] ?? runId };
   }
 
   /**
@@ -2253,10 +2280,18 @@ export class AgentThreadStreamRuntime {
       }
       state.activeThreadRunIds.set(key, runId);
       state.threadKeysByRunId.set(runId, key);
+      let settleThreadAdmission!: (outcome: ThreadAdmissionOutcome) => void;
+      let failThreadAdmission!: (error: unknown) => void;
+      const threadAdmission = new Promise<ThreadAdmissionOutcome>((resolve, reject) => {
+        settleThreadAdmission = resolve;
+        failThreadAdmission = reject;
+      });
+      this.#trackPendingThreadAdmission(state, key, runId, threadAdmission);
       let lease: { acquired: boolean; owner?: string };
       try {
         lease = await this.#acquireOrTransferThreadLease(pubsub, key, runId);
       } catch (error) {
+        failThreadAdmission(error);
         // No run and no lease exist for this attempt yet, so unwind the run
         // bookkeeping it just claimed and let a retry of the logical message route.
         releaseMessageIdentity(getErrorFromUnknown(error));
@@ -2273,6 +2308,7 @@ export class AgentThreadStreamRuntime {
         state.activeThreadRunIds.delete(key);
         state.threadKeysByRunId.delete(runId);
         if (!ownerActive || expired) {
+          settleThreadAdmission({ action: 'blocked', runId });
           const error = !ownerActive
             ? `Claimed thread owner was released for ${describeThreadKey(key)}`
             : `Claimed thread owner acceptance expired for ${describeThreadKey(key)}`;
@@ -2281,14 +2317,23 @@ export class AgentThreadStreamRuntime {
           if (lease.acquired && !drained) this.#releaseThreadLease(pubsub, key, runId);
           return { runId, error };
         }
+        if (lease.owner && isRetakeLeaseOwner(lease.owner)) {
+          const ownerRunId = lease.owner.split(RETAKE_LEASE_MARKER)[0]!;
+          settleThreadAdmission({ action: 'blocked', runId: ownerRunId });
+          const error = `Thread ${describeThreadKey(key)} is waiting for its lease owner to finish starting`;
+          releaseMessageIdentity(error);
+          return { runId: ownerRunId, error, blocked: true };
+        }
         if (lease.owner && this.#isSweptLeaseOwner(state, lease.owner)) {
           // The lease still belongs to a suspended run the TTL sweep evicted, so a
           // signal forwarded to it is never consumed. Fail the admission instead.
+          settleThreadAdmission({ action: 'blocked', runId: lease.owner });
           const error = `Thread ${describeThreadKey(key)} is still leased to a suspended run that was released from memory; retry once its lease expires`;
           releaseMessageIdentity(error);
           return { runId: lease.owner, error, blocked: true };
         }
         if (lease.owner) {
+          settleThreadAdmission({ action: 'remote', runId: lease.owner });
           this.#publish(pubsub, key, {
             type: 'signal-enqueued',
             runId: lease.owner,
@@ -2301,6 +2346,7 @@ export class AgentThreadStreamRuntime {
           settleMessageIdentity?.({ runId: lease.owner }, false);
           return { runId: lease.owner };
         }
+        settleThreadAdmission({ action: 'blocked', runId });
         releaseMessageIdentity(
           new Error(`Claimed thread owner could not acquire the execution lease for ${describeThreadKey(key)}`),
         );
@@ -2308,6 +2354,7 @@ export class AgentThreadStreamRuntime {
         return undefined;
       }
 
+      settleThreadAdmission({ action: 'local', runId });
       try {
         const output = toModelOutput<OUTPUT>(
           await owner.agent.stream(signal, {
@@ -4199,11 +4246,19 @@ export class AgentThreadStreamRuntime {
         // and another process took over), forward the signal to the new winner
         // instead of starting a competing run here.
         nextRunId = globalThis.crypto.randomUUID();
-        state.activeThreadRunIds.set(key, nextRunId);
-        state.threadKeysByRunId.set(nextRunId, key);
+        const reservedRunId = nextRunId;
+        state.activeThreadRunIds.set(key, reservedRunId);
+        state.threadKeysByRunId.set(reservedRunId, key);
         draining = { signal, cancelled: false, handedOff: false };
         state.drainingPendingSignalsByThread.set(key, draining);
-        const owns = await this.#acquireOrTransferThreadLease(pubsub, key, nextRunId, previousRun.runId);
+        const ownership = this.#acquireOrTransferThreadLease(pubsub, key, reservedRunId, previousRun.runId);
+        this.#trackPendingThreadAdmission(
+          state,
+          key,
+          reservedRunId,
+          ownership.then(lease => this.#threadAdmissionOutcome(reservedRunId, lease)),
+        );
+        const owns = await ownership;
         if (draining.cancelled) {
           if (state.activeThreadRunIds.get(key) === nextRunId) state.activeThreadRunIds.delete(key);
           state.threadKeysByRunId.delete(nextRunId);
@@ -4378,7 +4433,14 @@ export class AgentThreadStreamRuntime {
     if (fromRunId) {
       state.activeThreadRunIds.set(key, pending.runId);
       state.threadKeysByRunId.set(pending.runId, key);
-      const owns = await this.#acquireOrTransferThreadLease(pubsub, key, pending.runId, fromRunId);
+      const ownership = this.#acquireOrTransferThreadLease(pubsub, key, pending.runId, fromRunId);
+      this.#trackPendingThreadAdmission(
+        state,
+        key,
+        pending.runId,
+        ownership.then(lease => this.#threadAdmissionOutcome(pending.runId, lease)),
+      );
+      const owns = await ownership;
       if (!owns.acquired) {
         if (state.activeThreadRunIds.get(key) === pending.runId) {
           state.activeThreadRunIds.delete(key);
@@ -4520,7 +4582,14 @@ export class AgentThreadStreamRuntime {
     // otherwise two processes could each start a competing idle run.
     let owns: { acquired: boolean; owner?: string };
     try {
-      owns = await this.#acquireOrTransferThreadLease(pubsub, key, pendingIdle.runId, fromRunId);
+      const ownership = this.#acquireOrTransferThreadLease(pubsub, key, pendingIdle.runId, fromRunId);
+      this.#trackPendingThreadAdmission(
+        state,
+        key,
+        pendingIdle.runId,
+        ownership.then(lease => this.#threadAdmissionOutcome(pendingIdle.runId, lease)),
+      );
+      owns = await ownership;
     } catch (err) {
       // No run started for this message and it will not be retried from the queue,
       // so the accepted identity must not keep claiming delivery — a sender retry
@@ -6415,13 +6484,13 @@ export class AgentThreadStreamRuntime {
           state.preRunSignalsByThread.set(key, queue);
           this.#recordLocallyQueuedSignal(state, key, signal.id);
           this.#notifyPendingSignals(state, key);
-          const accepted = pendingAdmission.accepted.then(async admission => {
-            if (admission.action === 'wake') {
+          const accepted = pendingAdmission.outcome.then(async admission => {
+            if (admission.action === 'local') {
               // The reserved run owns the lease and takes this signal from the pre-run queue.
               return { action: 'deliver' as const, runId: admission.runId };
             }
-            if (admission.action === 'deliver') {
-              // The reservation lost its lease. Its cleanup removed the pre-run copy, so
+            if (admission.action === 'remote') {
+              // The reservation lost its lease. Its cleanup removes the pre-run copy, so
               // hand this signal to the same real owner before acknowledging it.
               await this.#publishAndWait(pubsub, pendingKey, {
                 type: 'signal-enqueued',
@@ -6429,8 +6498,9 @@ export class AgentThreadStreamRuntime {
                 signal: this.#serializeSignal(signal),
                 sourceId: this.#getSourceId(),
               }).catch(() => {});
+              return { action: 'deliver' as const, runId: admission.runId };
             }
-            return admission;
+            return { action: 'blocked' as const, reason: 'thread-blocked' as const, runId: admission.runId };
           });
           void accepted.catch(() => {});
           return { signal, accepted };
@@ -6704,14 +6774,17 @@ export class AgentThreadStreamRuntime {
       }
     })();
     if (sharePendingAdmission) {
-      const pendingAdmission: PendingThreadAdmission = { runId: reservedRunId, accepted };
-      state.pendingThreadAdmissions.set(reservedKey, pendingAdmission);
-      const clearPendingAdmission = () => {
-        if (state.pendingThreadAdmissions.get(reservedKey) === pendingAdmission) {
-          state.pendingThreadAdmissions.delete(reservedKey);
-        }
-      };
-      void accepted.then(clearPendingAdmission, clearPendingAdmission);
+      this.#trackPendingThreadAdmission(
+        state,
+        reservedKey,
+        reservedRunId,
+        accepted.then(admission => {
+          if (admission.action === 'wake') return { action: 'local' as const, runId: admission.runId };
+          if (admission.action === 'deliver') return { action: 'remote' as const, runId: admission.runId };
+          if (admission.action === 'blocked') return { action: 'blocked' as const, runId: admission.runId };
+          throw new Error(`Unexpected ${admission.action} result while reserving ${describeThreadKey(reservedKey)}`);
+        }),
+      );
     }
     // Attach a detached no-op catch so that if stream setup throws (a misconfigured
     // agent: no/unsupported model, FGA denial) and the caller never awaits
