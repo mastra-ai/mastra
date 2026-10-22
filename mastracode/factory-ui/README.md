@@ -71,9 +71,9 @@ Owners can choose **Regenerate title** from a web or Slack session's sidebar men
 
 ## User menu and settings
 
-The sidebar footer shows your profile picture (or an initial), name, and email. It opens a user menu with shortcuts to **My account**, **Preferences**, **Your models**, **Your memory**, and **Connections**. **Settings** opens the shared Factory model settings, the theme control switches between system, light, and dark appearance, and **Log out** ends the current session. Deployments without authentication show a **Settings** menu without account or logout actions.
+The sidebar footer shows your profile picture (or an initial), name, and email. It opens a user menu with shortcuts to **My account**, **Preferences**, and **Connections**. **Settings** opens **Models**, the theme control switches between system, light, and dark appearance, and **Log out** ends the current session. Deployments without authentication show a **Settings** menu without account or logout actions.
 
-Settings pages keep their existing URLs and searchable navigation. **Back to app** returns to the page where settings was opened, including its filters, even after switching sections through the user menu.
+Settings navigation groups pages by topic: **Account**, **Agent** (Models, Memory, Skills, Behavior), and **Factory**. **Models** picks the Factory's routing (`user`, `hybrid`, or `factory`) and shows the personal and Factory defaults side by side; the defaults the routing leaves unused fold away. **Memory** holds personal and Factory observational memory. Retired `personal-models` and `factory-memory` URLs redirect to Models and Memory, and navigation stays searchable. **Back to app** returns to the page where settings was opened, including its filters, even after switching sections through the user menu.
 
 ## Tests
 

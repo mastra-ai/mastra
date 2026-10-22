@@ -1,9 +1,12 @@
 import type { ProviderInfo } from '../../../../api/types';
 
 export type ProviderCredential = NonNullable<ProviderInfo['userCredential']>;
+export type CredentialScope = 'user' | 'org';
+
+export const CREDENTIAL_LABEL: Record<ProviderCredential, string> = { oauth: 'Signed in', api_key: 'Key saved' };
 
 /** The credential saved at exactly this scope. Deployment env keys belong to neither scope. */
-export function credentialAt(provider: ProviderInfo, scope: 'org' | 'user'): ProviderCredential | undefined {
+export function credentialAt(provider: ProviderInfo, scope: CredentialScope): ProviderCredential | undefined {
   if (scope === 'org') {
     if (provider.orgCredential) return provider.orgCredential;
     if (provider.source === 'oauth-org') return 'oauth';

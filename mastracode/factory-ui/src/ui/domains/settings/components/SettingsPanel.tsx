@@ -7,7 +7,6 @@ import { useChatPermissions } from '../../chat/context/useChatPermissions';
 import { useChatSessionContext } from '../../chat/context/useChatSessionContext';
 import { useSettingsSection } from '../hooks/useSettingsSection';
 import { useAgentControllerSettings } from '../../../../hooks/useAgentControllerSettings';
-import { useAvailableModelsQuery } from '../../../../hooks/useAvailableModels';
 import {
   SettingsUpdateVerificationError,
   useUpdateAgentControllerSettingsMutation,
@@ -22,9 +21,8 @@ import { IntakeSection } from './IntakeSection';
 import { RepositoriesSection } from './RepositoriesSection';
 import { SettingsSubsection } from './SettingsSubsection';
 import { BehaviorSettings, GeneralSettings } from './SettingsPanel.parts';
-import { FactoryModelsSettings } from './FactoryModelsSettings';
-import { PersonalModelsSettings } from './PersonalModelsSettings';
 import { MemorySettings } from './MemorySettings';
+import { ModelsSettings } from './models/ModelsSettings';
 
 function getSettingsUpdateErrorMessage(error: unknown): string {
   if (error instanceof SettingsUpdateVerificationError) return error.message;
@@ -50,13 +48,8 @@ export function SettingsPanel() {
     enabled: resourceEnabled,
   };
 
-  // Factory-level pickers only offer what the Factory's model scope can run;
-  // personal pickers keep the caller's full catalog.
-  const factoryScoped = section === 'models' || section === 'factory-memory';
-  const modelsQuery = useAvailableModelsQuery(factoryScoped ? { factoryProjectId: factoryId } : undefined);
   const settingsQuery = useAgentControllerSettings(hookArgs);
   const updateSettingsMutation = useUpdateAgentControllerSettingsMutation(hookArgs);
-  const models = modelsQuery.data ?? [];
   const settings = settingsQuery.data ?? null;
   const sessionId = resourceEnabled ? chatSessionId : undefined;
 
@@ -85,17 +78,8 @@ export function SettingsPanel() {
       {section === 'repositories' && <RepositoriesSection />}
       {section === 'environment' && <EnvironmentSection />}
       {section === 'intake' && <IntakeSection />}
-      {section === 'models' && <FactoryModelsSettings models={models} />}
-      {section === 'personal-models' && <PersonalModelsSettings />}
-      {(section === 'memory' || section === 'factory-memory') && (
-        <MemorySettings
-          key={section}
-          scope={section === 'factory-memory' ? 'factory' : 'personal'}
-          factoryId={factoryId}
-          models={models}
-          sessionId={sessionId}
-        />
-      )}
+      {section === 'models' && factoryId && <ModelsSettings factoryId={factoryId} />}
+      {section === 'memory' && factoryId && <MemorySettings factoryId={factoryId} sessionId={sessionId} />}
       {section === 'skills' && <FactorySkillsSection factoryId={factoryId} />}
       {section === 'behavior' && (
         <BehaviorSettings

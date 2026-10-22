@@ -1,25 +1,21 @@
-import { Brain } from 'lucide-react';
+import { Brain, Building2, CircleUserRound, MessagesSquare, SquareKanban } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { buttonVariants } from '@mastra/playground-ui/components/Button';
+import { Card, CardContent } from '@mastra/playground-ui/components/Card';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { SettingsContainer } from '@mastra/playground-ui/new/settings';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { cn } from '@mastra/playground-ui/utils/cn';
 
-import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
+import { useAvailableModelsQuery } from '../../../../hooks/useAvailableModels';
 import { useProviderConnectionState } from '../hooks/useProviderConnectionState';
 import { settingsSectionPath } from '../settingsSections';
 import { SettingsSubsection } from './SettingsSubsection';
 import { OMSection } from './OMSection';
 
-interface MemorySettingsProps {
-  scope: 'personal' | 'factory';
-  factoryId: string | undefined;
-  models: AvailableModelOption[];
-  sessionId: string | undefined;
-}
-
-export function MemorySettings({ scope, factoryId, models, sessionId }: MemorySettingsProps) {
+export function MemorySettings({ factoryId, sessionId }: { factoryId: string; sessionId: string | undefined }) {
   const { anyConnected, providersKnown } = useProviderConnectionState();
-  const factoryView = scope === 'factory' && factoryId;
 
   if (providersKnown && !anyConnected) {
     return (
@@ -29,14 +25,9 @@ export function MemorySettings({ scope, factoryId, models, sessionId }: MemorySe
         titleSlot="No models configured"
         descriptionSlot="Observational memory needs a model to summarize and retain context. Connect a provider on the Models page first."
         actionSlot={
-          factoryId ? (
-            <Link
-              to={settingsSectionPath(factoryId, scope === 'factory' ? 'models' : 'personal-models')}
-              className={buttonVariants({ variant: 'primary' })}
-            >
-              Open Models settings
-            </Link>
-          ) : undefined
+          <Link to={settingsSectionPath(factoryId, 'models')} className={buttonVariants({ variant: 'primary' })}>
+            Open Models settings
+          </Link>
         }
       />
     );
@@ -45,20 +36,77 @@ export function MemorySettings({ scope, factoryId, models, sessionId }: MemorySe
   return (
     <SettingsSubsection
       title="Observational memory"
-      description={
-        factoryView
-          ? 'Models and token thresholds used to summarize and retain context in Factory runs.'
-          : 'Models and token thresholds used to summarize and retain context in your interactive chats.'
-      }
-      scope={scope}
+      description="When a thread grows, the observer summarizes it and the reflector condenses those notes."
     >
-      <SettingsContainer>
-        {factoryView ? (
-          <OMSection key="factory" factoryId={factoryId} models={models} />
-        ) : (
-          <OMSection key="personal" sessionId={sessionId} models={models} />
-        )}
-      </SettingsContainer>
+      <div className="flex flex-col gap-3">
+        <MemoryCard
+          title="Personal memory"
+          icon={CircleUserRound}
+          tone="text-chart-purple"
+          usedBy="Chats"
+          usedByIcon={MessagesSquare}
+        >
+          <PersonalOMSection sessionId={sessionId} />
+        </MemoryCard>
+        <MemoryCard
+          title="Factory memory"
+          icon={Building2}
+          tone="text-chart-blue"
+          usedBy="Work-item runs"
+          usedByIcon={SquareKanban}
+        >
+          <FactoryOMSection factoryId={factoryId} />
+        </MemoryCard>
+      </div>
     </SettingsSubsection>
+  );
+}
+
+function PersonalOMSection({ sessionId }: { sessionId: string | undefined }) {
+  const modelsQuery = useAvailableModelsQuery();
+  return <OMSection sessionId={sessionId} models={modelsQuery.data ?? []} />;
+}
+
+function FactoryOMSection({ factoryId }: { factoryId: string }) {
+  const modelsQuery = useAvailableModelsQuery({ factoryProjectId: factoryId });
+  return <OMSection factoryId={factoryId} models={modelsQuery.data ?? []} />;
+}
+
+function MemoryCard({
+  title,
+  icon: Icon,
+  tone,
+  usedBy,
+  usedByIcon: UsedByIcon,
+  children,
+}: {
+  title: string;
+  icon: LucideIcon;
+  tone: string;
+  usedBy: string;
+  usedByIcon: LucideIcon;
+  children: ReactNode;
+}) {
+  return (
+    <Card as="section" aria-label={title}>
+      <CardContent className="flex flex-col gap-4">
+        <header className="flex flex-wrap items-center gap-3">
+          <span className={cn('bg-fill-subtle flex size-8 shrink-0 items-center justify-center rounded-lg', tone)}>
+            <Icon className="size-4" aria-hidden="true" />
+          </span>
+          <Txt as="h3" variant="label" className="flex-1">
+            {title}
+          </Txt>
+          <Txt as="span" variant="meta" tone="muted" className="flex items-center gap-2">
+            Used by{' '}
+            <span className="bg-fill-subtle text-foreground inline-flex h-6 items-center gap-1.5 rounded-md px-2">
+              <UsedByIcon className={cn('size-3.5', tone)} aria-hidden="true" />
+              {usedBy}
+            </span>
+          </Txt>
+        </header>
+        {children}
+      </CardContent>
+    </Card>
   );
 }

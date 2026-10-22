@@ -181,8 +181,8 @@ describe('OMSection', () => {
     expect(await screen.findByRole('status', { name: 'Loading observational-memory settings' })).toBeInTheDocument();
     expect(await screen.findByDisplayValue('1,000')).toBeInTheDocument();
     expect(screen.getByDisplayValue('2,000')).toBeInTheDocument();
-    expect(screen.getByText('Observer model')).toBeInTheDocument();
-    expect(screen.getByText('Reflector model')).toBeInTheDocument();
+    expect(screen.getByRole('combobox', { name: 'Observer model' })).toHaveValue('Observer X');
+    expect(screen.getByRole('combobox', { name: 'Reflector model' })).toHaveValue('Reflector X');
     expect(screen.getByRole('radio', { name: 'Auto' })).toHaveAttribute('aria-checked', 'true');
   });
 

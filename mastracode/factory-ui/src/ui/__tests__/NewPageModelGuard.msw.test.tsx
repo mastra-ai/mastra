@@ -119,9 +119,25 @@ describe('NewPage credential guard', () => {
     expect(screen.getByText(/ask an org admin to share an org-wide key/)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: 'Open Models settings' })).toHaveAttribute(
       'href',
-      '/factories/fp-1/settings/personal-models',
+      '/factories/fp-1/settings/models#personal-defaults',
     );
     expect(screen.queryByLabelText('Message')).not.toBeInTheDocument();
+  });
+
+  it('points a Factory-routed Factory at the Factory defaults that hold its credentials', async () => {
+    stubFactory({ id: 'fp-1', name: 'Mastra', modelScope: 'factory', defaultModelId: 'anthropic/claude-sonnet-4-5' });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+        HttpResponse.json({ providers: [{ provider: 'anthropic', source: 'none', orgKey: false }] }),
+      ),
+    );
+
+    renderNewPage();
+
+    expect(await screen.findByRole('link', { name: 'Open Models settings' })).toHaveAttribute(
+      'href',
+      '/factories/fp-1/settings/models#factory-defaults',
+    );
   });
 
   it('renders the composer when the caller has a shared org credential for the default model provider', async () => {

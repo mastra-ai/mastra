@@ -26,8 +26,8 @@ const liveSession: ChatSessionContextApi = {
 
 describe('ProviderLoginAction', () => {
   it.each([
-    { modelScope: 'factory', href: '/factories/factory-1/settings/models' },
-    { modelScope: 'user', href: '/factories/factory-1/settings/personal-models' },
+    { modelScope: 'factory', href: '/factories/factory-1/settings/models#factory-defaults' },
+    { modelScope: 'user', href: '/factories/factory-1/settings/models#personal-defaults' },
   ] as const)('links a $modelScope-scoped session to $href', async ({ modelScope, href }) => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1`, () =>

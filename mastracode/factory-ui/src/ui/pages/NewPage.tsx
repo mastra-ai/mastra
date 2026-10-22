@@ -12,7 +12,7 @@ import { useProvidersQuery } from '../../hooks/use-providers';
 import { useFactoryAuth } from '../../hooks/useFactoryAuth';
 import { useUserSessionQuery } from '../../hooks/useWorkspaces';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
-import { settingsSectionPath } from '../domains/settings/settingsSections';
+import { sessionDefaultsAnchor, settingsSectionPath } from '../domains/settings/settingsSections';
 import type { FactoryProject } from '../domains/workspaces/services/github';
 import { ChatPageLayout } from '../domains/chat/components/ChatPageLayout';
 import { ComposerPanel } from '../domains/chat/components/ComposerPanel';
@@ -160,6 +160,7 @@ function DraftStart({
 
 function MissingCredentialState({ factoryId, guard }: { factoryId: string; guard: MissingCredentialGuard }) {
   const authQuery = useFactoryAuth();
+  const projectQuery = useFactoryProjectQuery(factoryId);
   const providerName = providerDisplayName(guard.provider);
   const orgHint =
     authQuery.data?.authEnabled === true ? ', or ask an org admin to share an org-wide key with your team' : '';
@@ -168,9 +169,12 @@ function MissingCredentialState({ factoryId, guard }: { factoryId: string; guard
       as="h2"
       iconSlot={<Bot />}
       titleSlot={`You don't have access to ${providerName}`}
-      descriptionSlot={`The Factory default model (${guard.modelId}) needs a ${providerName} credential. Add your own key in Your models settings${orgHint}.`}
+      descriptionSlot={`The Factory default model (${guard.modelId}) needs a ${providerName} credential. Add your own key in Models settings${orgHint}.`}
       actionSlot={
-        <Link to={settingsSectionPath(factoryId, 'personal-models')} className={buttonVariants({ variant: 'primary' })}>
+        <Link
+          to={settingsSectionPath(factoryId, 'models', sessionDefaultsAnchor(projectQuery.data?.modelScope))}
+          className={buttonVariants({ variant: 'primary' })}
+        >
           Open Models settings
         </Link>
       }

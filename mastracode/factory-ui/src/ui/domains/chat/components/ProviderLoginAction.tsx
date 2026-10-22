@@ -2,7 +2,7 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { ArrowRight } from 'lucide-react';
 import { Link, useLocation } from 'react-router';
 
-import { settingsSectionPath } from '../../settings/settingsSections';
+import { sessionDefaultsAnchor, settingsSectionPath } from '../../settings/settingsSections';
 import { useChatModelScope } from '../context/useChatModelScope';
 
 /**
@@ -16,9 +16,15 @@ export function ProviderLoginAction() {
   // Wait for the scope so the link never points at the wrong credentials page.
   if (!factoryId || scopeLoading) return null;
 
-  const section = modelScope === 'factory' ? 'models' : 'personal-models';
   return (
-    <Notice.Button render={<Link to={settingsSectionPath(factoryId, section)} state={{ from: location }} />}>
+    <Notice.Button
+      render={
+        <Link
+          to={settingsSectionPath(factoryId, 'models', sessionDefaultsAnchor(modelScope))}
+          state={{ from: location }}
+        />
+      }
+    >
       Login <ArrowRight aria-hidden="true" />
     </Notice.Button>
   );

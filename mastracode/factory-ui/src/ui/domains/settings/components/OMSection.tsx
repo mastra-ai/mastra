@@ -1,4 +1,5 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
+import { Field, FieldLabel } from '@mastra/playground-ui/components/Field';
 import { InputGroupAddon, InputGroupText } from '@mastra/playground-ui/components/InputGroup';
 import {
   InputNumber,
@@ -8,8 +9,9 @@ import {
   InputNumberInput,
 } from '@mastra/playground-ui/components/InputNumber';
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
-import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { ChevronRight, MessageSquare } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useState } from 'react';
 
 import {
@@ -37,20 +39,22 @@ function choiceToAttachment(choice: AttachmentChoice): 'auto' | boolean {
   return 'auto';
 }
 
-/**
- * Token count field with steppers. It stays editable while a save is in flight, since
- * disabling it would drop focus mid-edit; each save returns the full config.
- */
-function TokenThresholdInput({ value, onCommit }: { value: number; onCommit: (value: number) => void }) {
+// Stays editable while saving: disabling would drop focus mid-edit.
+function TokenThresholdInput({
+  label,
+  value,
+  onCommit,
+}: {
+  label: string;
+  value: number;
+  onCommit: (value: number) => void;
+}) {
   const [draft, setDraft] = useState<number | null>(value);
-  // The last value this field asked to save, so a draft is compared with what was sent,
-  // not with a saved value whose response may still be on its way.
+  // Compared with what was sent, not a saved value whose response may still be in flight.
   const [sent, setSent] = useState(value);
   const [editing, setEditing] = useState(false);
   const [syncedValue, setSyncedValue] = useState(value);
-  // Follow the saved value (e.g. after another surface changed it) without remounting, so
-  // focus stays put. While the person is still in the field, a save landing must not
-  // overwrite what they are typing; leaving the field saves the draft.
+  // Follows outside saves without remounting, and never overwrites a draft being typed.
   if (syncedValue !== value) {
     setSyncedValue(value);
     if (!editing) {
@@ -83,7 +87,7 @@ function TokenThresholdInput({ value, onCommit }: { value: number; onCommit: (va
         // Typing and arrow-key stepping save once on blur; a stepper press saves when released.
         if (details.reason === 'increment-press' || details.reason === 'decrement-press') commit(next);
       }}
-      className="sm:w-64 sm:shrink-0"
+      className="shrink-0 @min-[46rem]:w-40"
     >
       <InputNumberGroup
         size="sm"
@@ -92,7 +96,7 @@ function TokenThresholdInput({ value, onCommit }: { value: number; onCommit: (va
           if (!event.currentTarget.contains(event.relatedTarget)) setEditing(false);
         }}
       >
-        <InputNumberInput onBlur={() => commit(draft)} />
+        <InputNumberInput aria-label={label} onBlur={() => commit(draft)} />
         <InputGroupAddon align="inline-end" variant="flush">
           <InputGroupText className="mr-2">tokens</InputGroupText>
           <InputNumberDecrement />
@@ -121,7 +125,6 @@ export function OMSection({
   const config = omQuery.data?.config;
   const modelsAvailable =
     config?.observer.providerStatus === 'available' && config.reflector.providerStatus === 'available';
-  const loading = omQuery.isPending;
   const busy =
     observerMutation.isPending ||
     reflectorMutation.isPending ||
@@ -141,25 +144,21 @@ export function OMSection({
     mutation.mutate({ modelId });
   };
 
-  if (loading) {
-    return (
-      <div className="px-4 py-3">
-        <SkeletonRows label="Loading observational-memory settings" rows={4} rowClassName="h-10 w-full" />
-      </div>
-    );
+  if (omQuery.isPending) {
+    return <SkeletonRows label="Loading observational-memory settings" rows={2} rowClassName="h-14 w-full" />;
   }
 
   const attachmentChoice = attachmentToChoice(config?.observeAttachments ?? 'auto');
   return (
-    <>
+    <div className="flex flex-col gap-4">
       {error && (
-        <Txt as="p" variant="caption" className="text-destructive-foreground px-4 py-3">
+        <Txt as="p" variant="caption" className="text-destructive-foreground">
           {error}
         </Txt>
       )}
 
       {config && !modelsAvailable && (
-        <div className="flex items-center gap-2 px-4 py-3">
+        <div className="flex items-center gap-2">
           <Badge size="md" variant="warning">
             Model credentials required
           </Badge>
@@ -169,52 +168,70 @@ export function OMSection({
         </div>
       )}
 
-      <SettingsRow label="Observer model" description="Summarizes the conversation into observations">
-        <ModelCombobox
-          models={models}
-          value={config?.observer.model ?? ''}
-          auto={{ effectiveModelId: config?.observer.effectiveModelId }}
-          placeholder="Select observer model…"
-          disabled={busy || !config}
-          onValueChange={modelId => switchModel('observer', modelId)}
-        />
-      </SettingsRow>
+      {config && (
+        <div className="@container">
+          <ol className="flex flex-col items-stretch gap-1 @min-[46rem]:flex-row @min-[46rem]:items-center">
+            <PipelineStep>
+              <span className="bg-fill-subtle text-muted-foreground h-control-sm inline-flex items-center gap-1.5 rounded-full px-3">
+                <MessageSquare className="size-3.5" aria-hidden="true" />
+                <Txt as="span" variant="caption">
+                  Messages
+                </Txt>
+              </span>
+            </PipelineStep>
+            <PipelineStep>
+              <TokenThresholdInput
+                label="Messages before observation"
+                value={config.observationThreshold}
+                onCommit={observationThreshold => thresholdsMutation.mutate({ observationThreshold })}
+              />
+            </PipelineStep>
+            <PipelineStep>
+              <ModelStage label="Observer">
+                <ModelCombobox
+                  models={models}
+                  value={config.observer.model}
+                  auto={{ effectiveModelId: config.observer.effectiveModelId }}
+                  placeholder="Select observer model…"
+                  aria-label="Observer model"
+                  size="sm"
+                  disabled={busy}
+                  onValueChange={modelId => switchModel('observer', modelId)}
+                />
+              </ModelStage>
+            </PipelineStep>
+            <PipelineStep>
+              <TokenThresholdInput
+                label="Observations before reflection"
+                value={config.reflectionThreshold}
+                onCommit={reflectionThreshold => thresholdsMutation.mutate({ reflectionThreshold })}
+              />
+            </PipelineStep>
+            <PipelineStep>
+              <ModelStage label="Reflector">
+                <ModelCombobox
+                  models={models}
+                  value={config.reflector.model}
+                  auto={{ effectiveModelId: config.reflector.effectiveModelId }}
+                  placeholder="Select reflector model…"
+                  aria-label="Reflector model"
+                  size="sm"
+                  disabled={busy}
+                  onValueChange={modelId => switchModel('reflector', modelId)}
+                />
+              </ModelStage>
+            </PipelineStep>
+          </ol>
+        </div>
+      )}
 
-      <SettingsRow label="Reflector model" description="Distills observations into longer-term memory">
-        <ModelCombobox
-          models={models}
-          value={config?.reflector.model ?? ''}
-          auto={{ effectiveModelId: config?.reflector.effectiveModelId }}
-          placeholder="Select reflector model…"
-          disabled={busy || !config}
-          onValueChange={modelId => switchModel('reflector', modelId)}
-        />
-      </SettingsRow>
-
-      <SettingsRow label="Messages before observation" description="Message tokens processed before the observer runs.">
-        {config && (
-          <TokenThresholdInput
-            value={config.observationThreshold}
-            onCommit={observationThreshold => thresholdsMutation.mutate({ observationThreshold })}
-          />
-        )}
-      </SettingsRow>
-
-      <SettingsRow
-        label="Observations before reflection"
-        description="Observation tokens accumulated before the reflector runs."
-      >
-        {config && (
-          <TokenThresholdInput
-            value={config.reflectionThreshold}
-            onCommit={reflectionThreshold => thresholdsMutation.mutate({ reflectionThreshold })}
-          />
-        )}
-      </SettingsRow>
-
-      <SettingsRow label="Observe attachments" description="Whether attached files are included in observations">
+      <div className="border-border flex flex-wrap items-center justify-between gap-3 border-t pt-4">
+        <Txt as="span" variant="caption" tone="muted">
+          Observe attachments
+        </Txt>
         <SegmentedControl
           aria-label="Observe attachments"
+          size="sm"
           value={attachmentChoice}
           disabled={busy || !config}
           onValueChange={choice => attachmentsMutation.mutate({ value: choiceToAttachment(choice) })}
@@ -223,7 +240,33 @@ export function OMSection({
           <SegmentedControlItem value="on">On</SegmentedControlItem>
           <SegmentedControlItem value="off">Off</SegmentedControlItem>
         </SegmentedControl>
-      </SettingsRow>
-    </>
+      </div>
+    </div>
+  );
+}
+
+function PipelineStep({ children }: { children: ReactNode }) {
+  return (
+    <li className="group/step flex flex-col items-stretch gap-1 @min-[46rem]:flex-auto @min-[46rem]:flex-row @min-[46rem]:items-center @min-[46rem]:gap-0 @min-[46rem]:last:flex-none">
+      {children}
+      <span
+        aria-hidden="true"
+        className="text-placeholder flex items-center justify-center group-last/step:hidden @min-[46rem]:min-w-6 @min-[46rem]:flex-1"
+      >
+        <span className="bg-border hidden h-px flex-1 @min-[46rem]:block" />
+        <ChevronRight className="size-3 rotate-90 @min-[46rem]:-ml-1 @min-[46rem]:rotate-0" />
+      </span>
+    </li>
+  );
+}
+
+function ModelStage({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <Field className="border-border gap-1.5 rounded-lg border p-3 @min-[46rem]:w-52">
+      <FieldLabel size="smaller" className="text-muted-foreground">
+        {label}
+      </FieldLabel>
+      {children}
+    </Field>
   );
 }
