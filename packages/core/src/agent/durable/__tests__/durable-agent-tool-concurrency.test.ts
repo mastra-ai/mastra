@@ -6,14 +6,19 @@
  * correctly influence tool execution order.
  */
 
+import { createOpenAI } from '@ai-sdk/openai-v5';
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { z } from 'zod';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
+import { useLoopScenarioAimock } from '../../../loop/test-utils/aimock/aimock-scenario';
+import { SCENARIO_MODEL_ID } from '../../../loop/test-utils/aimock/types';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
+import { createGate, createRestartScenario } from './restart-harness';
+import type { Gate } from './restart-harness';
 
 // ============================================================================
 // Helper Functions
@@ -347,4 +352,96 @@ describe('DurableAgent tool concurrency', () => {
       expect(parsed.options.toolCallConcurrency).toBe(3);
     });
   });
+});
+
+// ============================================================================
+// Restart mid tool-call foreach (#26214)
+// ============================================================================
+
+describe('DurableAgent parallel tool calls across a restart', () => {
+  const getMock = useLoopScenarioAimock();
+  const gates: Gate[] = [];
+  const scenarios: { stop(): Promise<void> }[] = [];
+
+  afterEach(async () => {
+    for (const gate of gates.splice(0)) gate.release();
+    await Promise.all(scenarios.splice(0).map(s => s.stop()));
+  });
+
+  /**
+   * The model asks for three `lookup` calls at once. In graph 1, call 2 blocks on a gate while
+   * calls 1 and 3 finish; `crashAfterMs` after both have returned, graph 1 is cut and graph 2
+   * recovers the run.
+   */
+  async function crashWhileCallTwoRuns(runId: string, crashAfterMs: number) {
+    const llm = getMock();
+    llm.on(
+      { endpoint: 'chat', hasToolResult: false },
+      {
+        toolCalls: [1, 2, 3].map(index => ({
+          id: `call_${index}`,
+          name: 'lookup',
+          arguments: { index },
+        })),
+      },
+    );
+    llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'done' });
+
+    const gate = createGate();
+    gates.push(gate);
+    const started: { generation: number; index: number }[] = [];
+    const finished: { generation: number; index: number }[] = [];
+    let markOthersDone!: () => void;
+    const othersDone = new Promise<void>(resolve => (markOthersDone = resolve));
+
+    const scenario = createRestartScenario({
+      kind: 'durable',
+      runId,
+      build: ({ core, generation }) => {
+        const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url.replace(/\/+$/, '')}/v1` });
+        return new core.Agent({
+          id: 'parallel-restart-agent',
+          name: 'parallel-restart-agent',
+          instructions: 'Look things up.',
+          model: openai(SCENARIO_MODEL_ID),
+          tools: {
+            lookup: core.createTool({
+              id: 'lookup',
+              description: 'Looks something up',
+              inputSchema: z.object({ index: z.number() }),
+              execute: async ({ index }) => {
+                started.push({ generation, index });
+                if (generation === 1 && index === 2) await gate.wait();
+                finished.push({ generation, index });
+                if (generation === 1 && finished.filter(c => c.generation === 1).length === 2) markOthersDone();
+                return { ok: true, index };
+              },
+            }),
+          },
+        });
+      },
+    });
+    scenarios.push(scenario);
+
+    const original = await scenario.start(({ agent }) => agent.stream('Look three things up', { runId }));
+    await gate.reached;
+    await othersDone;
+    await new Promise(resolve => setTimeout(resolve, crashAfterMs));
+    const recovered = await scenario.restart(await original.checkpoint());
+
+    return {
+      recovered,
+      rerun: started.filter(c => c.generation === 2).map(c => c.index),
+    };
+  }
+
+  it('re-runs only the tool call that was still running at the crash', async () => {
+    // Crash after the foreach checkpoint interval (1s) so both finished calls are on disk.
+    const { recovered, rerun } = await crashWhileCallTwoRuns('parallel-tools-restart', 1_500);
+
+    expect(recovered.streamErrors).toEqual([]);
+    expect(recovered.executionError).toBeUndefined();
+    expect(recovered.text).toBe('done');
+    expect(rerun).toEqual([2]);
+  }, 30_000);
 });
