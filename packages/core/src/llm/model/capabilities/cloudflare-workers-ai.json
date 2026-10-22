@@ -57,34 +57,16 @@
     "@cf/zai-org/glm-5.3-flash"
   ],
   "reasoning": {
-    "@cf/moonshotai/kimi-k2.6": [
+    "@cf/zai-org/glm-5.2": [
       {
         "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "@cf/openai/gpt-oss-20b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "@cf/openai/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "high", "max"]
       }
     ],
     "@cf/zai-org/glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "@cf/zai-org/glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
       }
     ],
     "@cf/zai-org/glm-4.7-flash": [
@@ -98,13 +80,19 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "@cf/nvidia/nemotron-3-120b-a12b": [
+    "@cf/moonshotai/kimi-k2.6": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "@cf/qwen/qwen3.8-27b": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
-        "values": ["low", "high"]
+        "values": ["low", "medium", "xhigh"]
       }
     ],
     "@cf/deepseek-ai/deepseek-v4.1-flash-1017": [
@@ -125,13 +113,25 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "@cf/qwen/qwen3.8-27b": [
+    "@cf/openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "@cf/openai/gpt-oss-20b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "@cf/nvidia/nemotron-3-120b-a12b": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
-        "values": ["low", "medium", "xhigh"]
+        "values": ["low", "high"]
       }
     ],
     "@cf/google/gemma-4-26b-a4b-it": [

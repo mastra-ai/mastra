@@ -174,7 +174,37 @@
     "z-ai/glm-5"
   ],
   "reasoning": {
+    "doubao-seed-1.6": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "doubao-seed-2.0-code": [
+      {
+        "type": "toggle"
+      }
+    ],
     "doubao-seed-2.0-pro": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3.5-397b-a17b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-4.5": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3-235b-a22b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "doubao-seed-2.0-mini": [
       {
         "type": "toggle"
       }
@@ -184,7 +214,12 @@
         "type": "toggle"
       }
     ],
-    "doubao-seed-2.0-code": [
+    "qwen3-32b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen-turbo": [
       {
         "type": "toggle"
       }
@@ -200,41 +235,6 @@
       }
     ],
     "doubao-seed-2.0-lite": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "doubao-seed-1.6": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen3-235b-a22b": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen3.5-397b-a17b": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen-turbo": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "glm-4.5": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen3-32b": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "doubao-seed-2.0-mini": [
       {
         "type": "toggle"
       }

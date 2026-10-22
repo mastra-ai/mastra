@@ -18,6 +18,7 @@ import { DefaultStorage } from '@mastra/libsql';
 import { Inngest } from 'inngest';
 
 import { serve as inngestServe } from '../index';
+import type { InngestFlowControlConfig } from '../types';
 import { ensureInngestCliBinary } from './inngest-cli';
 
 // Set INNGEST_TEST_PORT_OFFSET to run several dev servers side by side (one per test worker).
@@ -95,7 +96,8 @@ export async function waitForInngestSync(ms = 500): Promise<void> {
  */
 async function startInngestDevServer({
   sdkUrl = `http://localhost:${HANDLER_PORT}/inngest/api`,
-}: { sdkUrl?: string | null } = {}): Promise<ChildProcess> {
+  fastRetries = false,
+}: { sdkUrl?: string | null; fastRetries?: boolean } = {}): Promise<ChildProcess> {
   const inngestBinary = ensureInngestCliBinary();
   return new Promise((resolve, reject) => {
     const args = [
@@ -105,6 +107,7 @@ async function startInngestDevServer({
       ...(sdkUrl ? ['-u', sdkUrl] : []),
       '--poll-interval=1',
       '--no-discovery',
+      ...(fastRetries ? ['--retry-interval=1'] : []),
       ...CONNECT_PORT_ARGS,
     ];
 
@@ -209,15 +212,19 @@ export async function startConnectInngestDevServer(): Promise<ChildProcess | nul
 export async function setupSharedTestInfrastructure({
   observability,
   backgroundTasks,
+  retries,
+  fastRetries = false,
 }: {
   observability?: NonNullable<ConstructorParameters<typeof Mastra>[0]>['observability'];
   backgroundTasks?: NonNullable<ConstructorParameters<typeof Mastra>[0]>['backgroundTasks'];
+  retries?: InngestFlowControlConfig['retries'];
+  fastRetries?: boolean;
 } = {}): Promise<void> {
   // Start Inngest dev server first (needs to be running before we create the app server)
   // Skip if INNGEST_DEV_EXTERNAL=true (for running against Docker or existing server)
   if (process.env.INNGEST_DEV_EXTERNAL !== 'true') {
     try {
-      inngestDevServer = await startInngestDevServer();
+      inngestDevServer = await startInngestDevServer({ fastRetries });
       // Give it a moment to fully initialize
       await waitForInngestReady();
     } catch (error) {
@@ -231,7 +238,7 @@ export async function setupSharedTestInfrastructure({
 
   // Create the shared workflow
   const { createInngestDurableAgenticWorkflow } = await import('../durable-agent/create-inngest-agentic-workflow');
-  const workflow = createInngestDurableAgenticWorkflow({ inngest });
+  const workflow = createInngestDurableAgenticWorkflow({ inngest, retries });
 
   // Create shared Mastra instance with the workflow pre-registered
   // This is required because Inngest reads workflows at serve() time
@@ -263,19 +270,62 @@ export async function setupSharedTestInfrastructure({
     port: HANDLER_PORT,
   });
 
-  // Wait for Inngest to sync with our app
+  if (fastRetries) {
+    const deadline = Date.now() + 30_000;
+    while (Date.now() < deadline) {
+      await fetch(`http://localhost:${HANDLER_PORT}/inngest/api`, { method: 'PUT' });
+      const registration = await fetch(`http://localhost:${INNGEST_PORT}/dev`).then(response => response.json());
+      if (registration.functions?.some((fn: { slug: string }) => fn.slug.endsWith(`workflow.${workflow.id}`))) return;
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+    throw new Error(`Inngest did not register ${workflow.id}`);
+  }
+
+  // Preserve the existing startup behavior for other suites.
   await waitForInngestSync(2000);
+}
+
+/** Simulate a dropped serve request without stopping its in-flight tool execution. */
+export function dropSharedHandlerConnections(): void {
+  if (!sharedServer || !('closeAllConnections' in sharedServer)) {
+    throw new Error('Shared HTTP handler server is not initialized');
+  }
+  sharedServer.closeAllConnections();
+}
+
+/** Stop the owned scheduler and wait for its process and listening port to close. */
+export async function stopSharedInngestDevServer(): Promise<void> {
+  const server = inngestDevServer;
+  if (!server) return;
+  await stopInngestDevServer(server);
+  const exited = () => server.exitCode !== null || server.signalCode !== null;
+  if (!exited()) server.kill('SIGKILL');
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    try {
+      await fetch(`http://localhost:${INNGEST_PORT}/health`, { signal: AbortSignal.timeout(1000) });
+    } catch {
+      if (exited()) {
+        inngestDevServer = null;
+        return;
+      }
+    }
+    await new Promise(resolve => setTimeout(resolve, 100));
+  }
+  throw new Error('Shared Inngest dev server did not exit and release its port');
 }
 
 /**
  * Teardown shared test infrastructure.
  * Call this once in afterAll for the test suite.
  */
-export async function teardownSharedTestInfrastructure(): Promise<void> {
+export async function teardownSharedTestInfrastructure({ forceClose = false } = {}): Promise<void> {
   // Stop the app server first
   if (sharedServer) {
+    const server = sharedServer;
     await new Promise<void>(resolve => {
-      sharedServer!.close(() => resolve());
+      server.close(() => resolve());
+      if (forceClose && 'closeAllConnections' in server) server.closeAllConnections();
     });
     sharedServer = null;
   }
