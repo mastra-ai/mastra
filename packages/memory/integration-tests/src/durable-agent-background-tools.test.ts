@@ -21,9 +21,8 @@
  *     on the `durable-agentic-execution` row instead, and the loop row is deleted once the run
  *     settles). That held for the whole in-flight window, sampled to an 8s deadline, so the
  *     interruption the harness simulates — process death mid-step — leaves nothing restartable
- *     either. No open ticket owns this: COR-1310 (F8) covers restart *task* failure signalling
- *     and COR-1449 holds the restart-family cells, so it is reported on COR-1443 instead of
- *     being pinned against a ticket that does not own it.
+ *     either. Tracked as COR-1493, which owns the fix and adds this cell back once `recover()`
+ *     can restart a run that is mid-step.
  *
  * Like T78, this lives in `packages/memory/integration-tests` because the harness setup needs
  * a real `@mastra/memory` `Memory` over `@mastra/libsql`. Replay is the default: the committed
