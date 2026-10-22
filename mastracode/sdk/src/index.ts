@@ -34,7 +34,7 @@ import {
 import type { InputProcessor, OutputProcessor, Processor } from '@mastra/core/processors';
 import { RequestContext } from '@mastra/core/request-context';
 import type { PublicSchema } from '@mastra/core/schema';
-import type { ApiRoute } from '@mastra/core/server';
+import type { ApiRoute, Middleware } from '@mastra/core/server';
 import { TaskSignalProvider } from '@mastra/core/signals';
 import type { SignalProvider } from '@mastra/core/signals';
 import { MastraCompositeStore } from '@mastra/core/storage';
@@ -61,6 +61,7 @@ import {
   setCredentialLogger,
   withCredentialTenantPreparation,
 } from './agents/credential-resolver.js';
+import { createExperimentControllerContextMiddleware } from './agents/experiment-context.js';
 import { getDynamicInstructions } from './agents/instructions.js';
 import { getDynamicMemory, hasSubconsciousTools } from './agents/memory.js';
 import {
@@ -1716,6 +1717,24 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
 
   const typedStateSchema = stateSchema as PublicSchema<MastraCodeState>;
   const backgroundCompletionEvents = backgroundToolsEnabled ? createBackgroundCompletionEvents() : undefined;
+  const initialState: Partial<MastraCodeState> = {
+    projectPath: project.rootPath,
+    projectName: project.name,
+    gitBranch: project.gitBranch,
+    pluginSkillPaths: loadedPlugins.flatMap(plugin => (plugin.status === 'active' ? (plugin.skillPaths ?? []) : [])),
+    pluginCommandPaths: loadedPlugins.flatMap(plugin =>
+      plugin.status === 'active' ? (plugin.commandPaths ?? []) : [],
+    ),
+    pluginInstructions: loadedPlugins.flatMap(plugin =>
+      plugin.status === 'active' && plugin.instructions ? [plugin.instructions] : [],
+    ),
+    yolo: true,
+    ...globalInitialState,
+    ...config?.initialState,
+    // configDir must always win over initialState spreads to stay in sync
+    // with MCP/hooks/storage which were already initialized with this value.
+    configDir,
+  };
   let controller: AgentController<MastraCodeState>;
   controller = new AgentController<MastraCodeState>({
     id: 'mastra-code',
@@ -1761,24 +1780,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     browser: config?.browser,
     idGenerator: config?.idGenerator,
     toolCategoryResolver: getToolCategory,
-    initialState: {
-      projectPath: project.rootPath,
-      projectName: project.name,
-      gitBranch: project.gitBranch,
-      pluginSkillPaths: loadedPlugins.flatMap(plugin => (plugin.status === 'active' ? (plugin.skillPaths ?? []) : [])),
-      pluginCommandPaths: loadedPlugins.flatMap(plugin =>
-        plugin.status === 'active' ? (plugin.commandPaths ?? []) : [],
-      ),
-      pluginInstructions: loadedPlugins.flatMap(plugin =>
-        plugin.status === 'active' && plugin.instructions ? [plugin.instructions] : [],
-      ),
-      yolo: true,
-      ...globalInitialState,
-      ...config?.initialState,
-      // configDir must always win over initialState spreads to stay in sync
-      // with MCP/hooks/storage which were already initialized with this value.
-      configDir,
-    },
+    initialState,
     modes,
     intervalHandlers,
     modelUseCountProvider: () => loadSettings().modelUseCounts,
@@ -1872,6 +1874,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // session). Case 3 uses `bootLocalAgentController` (init + one wired session).
   return {
     controller: controller,
+    initialState,
+    defaultModeId,
     storage,
     storageMaintenance,
     createKnowledgeInspector: (session: Session<MastraCodeState>, knowledgeKey?: string) =>
@@ -2229,8 +2233,20 @@ export async function prepareAgentControllerMount(
   // brought their own, they're responsible for what's registered on it.
   const weOwnTheMastra = !config?.mastra;
 
+  // Dataset experiments reach the Code Agent over HTTP with a JSON `controller`
+  // snapshot. Turn it into a live, request-local context after the host's own
+  // middleware so the agent's dynamic model/instructions/workspace can read it.
+  const hostMiddleware = (extraServerConfig as { middleware?: Middleware | Middleware[] } | undefined)?.middleware;
   const serverConfig = {
     ...extraServerConfig,
+    middleware: [
+      ...(Array.isArray(hostMiddleware) ? hostMiddleware : hostMiddleware ? [hostMiddleware] : []),
+      createExperimentControllerContextMiddleware({
+        controllerId: controller.id,
+        initialState: base.initialState,
+        defaultModeId: base.defaultModeId,
+      }),
+    ],
     ...(apiRoutes?.length ? { apiRoutes } : {}),
   };
   const mastraArgs = {
@@ -2252,7 +2268,7 @@ export async function prepareAgentControllerMount(
     // cross-process when a distributed PubSub (e.g. Redis Streams) is
     // configured.
     ...(base.signalsPubSub ? { pubsub: base.signalsPubSub } : {}),
-    ...(Object.keys(serverConfig).length ? { server: serverConfig } : {}),
+    server: serverConfig,
   };
 
   const finalize = async () => {
@@ -2284,6 +2300,11 @@ export async function prepareAgentControllerMount(
  */
 export const createMastraCode = bootLocalAgentController;
 export * from './knowledge-inspector.js';
+export {
+  createExperimentControllerContext,
+  createExperimentControllerContextMiddleware,
+  type ControllerSnapshot,
+} from './agents/experiment-context.js';
 export { LOCAL_KNOWLEDGE_ORG_ID } from './knowledge-scope.js';
 
 /**

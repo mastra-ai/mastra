@@ -105,6 +105,20 @@ const summary = await dataset.startExperiment({
 
 Each item's `input` is passed directly to the agent. Use a supported message format, such as a prompt string, a message object, or an array of messages. See the [`agent.generate()` reference](/reference/agents/generate) for accepted inputs.
 
+#### Mastra Code agents
+
+The Mastra Code `code-agent` reads its model, mode, and project folder from the controller session that started the run. An experiment has no session, so pass the selection in the `requestContext` instead. Over HTTP, send a `controller` object with the selected model:
+
+```json
+{
+  "requestContext": {
+    "controller": { "session": { "modelId": "openai/gpt-5.6" } }
+  }
+}
+```
+
+Mastra Code turns this snapshot into a session that lives for that item only. The agent works in the folder the server was started in, so a request can't choose a different project. When `session.modelId` is missing, the run fails with the usual "No model selected" error instead of using a guessed model.
+
 #### Memory-enabled agents
 
 When the target agent has its own memory, the experiment runner injects a fresh memory thread for each item and retry. Without a resource id in the request context, each thread gets an isolated, experiment-owned resource.
