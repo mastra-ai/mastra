@@ -423,8 +423,11 @@ export class Tool<
     // Tools receive two parameters:
     // 1. input - The raw, validated input data
     // 2. context - Execution metadata (mastra, suspend, etc.)
-    if (opts.execute) {
-      const originalExecute = opts.execute;
+    if (opts.renderOnly && opts.execute) {
+      throw new Error('A render-only tool cannot also define execute');
+    }
+    const originalExecute = opts.renderOnly ? async () => ({ acknowledged: true }) : opts.execute;
+    if (originalExecute) {
       this.execute = async (inputData: TSchemaIn, context?: any) => {
         // When a tool is being resumed (resumeData present in context), skip input
         // validation. The original args were already validated during the initial
