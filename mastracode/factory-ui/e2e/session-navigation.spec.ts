@@ -8,22 +8,24 @@ const sessions: FactoryUserSession[] = [
   ['user/session', 'User session'],
   ['slack/1791936483-798759', 'Slack discussion'],
   ['factory/issue-528', 'Work session'],
-].map(([branch, title], index): FactoryUserSession => ({
-  id: `row-${index}`,
-  sessionId: `session-${index}`,
-  projectRepositoryId: 'repo-1',
-  orgId: 'org-1',
-  userId: 'user-1',
-  visibility: 'org',
-  branch,
-  title,
-  baseBranch: 'main',
-  sandboxId: null,
-  sandboxWorkdir: null,
-  materializedAt: null,
-  createdAt: '2026-10-22T00:00:00.000Z',
-  updatedAt: '2026-10-22T00:00:00.000Z',
-}));
+].map(
+  ([branch, title], index): FactoryUserSession => ({
+    id: `row-${index}`,
+    sessionId: `session-${index}`,
+    projectRepositoryId: 'repo-1',
+    orgId: 'org-1',
+    userId: 'user-1',
+    visibility: 'org',
+    branch,
+    title,
+    baseBranch: 'main',
+    sandboxId: null,
+    sandboxWorkdir: null,
+    materializedAt: null,
+    createdAt: '2026-10-22T00:00:00.000Z',
+    updatedAt: '2026-10-22T00:00:00.000Z',
+  }),
+);
 
 // FACT-528: jsdom cannot open browser tabs. Exercise native anchors in the
 // real app; only API traffic crosses the same MSW boundary as the UI suite.
