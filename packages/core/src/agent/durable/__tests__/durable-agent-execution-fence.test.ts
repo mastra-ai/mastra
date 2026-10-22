@@ -802,15 +802,12 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       const next = gatedModel('recovered answer');
       next.release();
       const agentB = buildAgent({ model: next.model, storage, memory });
-      if (backend === 'lease') {
-        // A pubsub lease leaves no record of the released run, so its thread
-        // lease marks it live until that lapses once the process exits.
-        const refusal = await agentB.recover(runId).catch(error => error);
-        const refusedBy = Date.now();
-        expect(refusal).toMatchObject({ id: RUN_ACTIVE_ERROR_ID, details: { runId, liveBy: 'thread-lease' } });
-        expect(refusal.details.retryAt).toBeLessThanOrEqual(refusedBy + agentThreadStreamRuntime.threadLeaseTtlMs);
-        vi.spyOn(agentThreadStreamRuntime, 'isRunHoldingThreadLease').mockResolvedValue(false);
-      }
+      // Shutdown released the run's thread lease too, so even a pubsub lease
+      // backend, which keeps no record of the released run, does not mark it
+      // live until the lease would have lapsed.
+      expect(await agentThreadStreamRuntime.isRunHoldingThreadLease(durableAgent.pubsub, runId, THREAD, RESOURCE)).toBe(
+        false,
+      );
       const recovered = await agentB.recover(runId);
       const chunks = await drain(recovered.fullStream);
       expect(chunks.some(chunk => chunk.type === 'finish')).toBe(true);
