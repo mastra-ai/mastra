@@ -354,6 +354,7 @@ export class DefaultExporter extends BaseExporter {
     deferredUpdates: BufferedEvent[],
     isEnd: boolean,
     persistedSpans: Map<string, boolean>,
+    lookupErrors: Map<string, unknown>,
   ): Promise<FlushResult> {
     const deferredCountAtEntry = deferredUpdates.length;
     if (events.length === 0) return FLUSH_SUCCEEDED;
@@ -365,10 +366,9 @@ export class DefaultExporter extends BaseExporter {
     try {
       // Cache only for this flush: a missing span may be created before a retry.
       const pendingSpans = new Map<string, TracingEvent['exportedSpan']>();
-      const lookupErrors = new Map<string, unknown>();
       for (const { exportedSpan: span } of events) {
         const key = `${span.traceId}:${span.id}`;
-        if (!this.#eventBuffer.spanExists(span) && !persistedSpans.has(key)) {
+        if (!this.#eventBuffer.spanExists(span) && !persistedSpans.has(key) && !lookupErrors.has(key)) {
           pendingSpans.set(key, span);
         }
       }
@@ -397,7 +397,7 @@ export class DefaultExporter extends BaseExporter {
       await Promise.all(Array.from({ length: Math.min(8, pendingSpans.size) }, lookup));
 
       const partials: UpdateSpanPartial[] = [];
-      const lookupFailedEvents: BufferedEvent[] = [];
+      const lookupFailedEvents: (TracingEvent & RetryCount)[] = [];
       for (const event of events) {
         const span = event.exportedSpan;
         const key = `${span.traceId}:${span.id}`;
@@ -424,7 +424,10 @@ export class DefaultExporter extends BaseExporter {
         }
       }
       if (lookupFailedEvents.length > 0) {
-        const error = lookupErrors.values().next().value;
+        const firstFailedEvent = lookupFailedEvents[0];
+        const error = firstFailedEvent
+          ? lookupErrors.get(`${firstFailedEvent.exportedSpan.traceId}:${firstFailedEvent.exportedSpan.id}`)
+          : undefined;
         const dropped = this.#eventBuffer.reAddUpdates(lookupFailedEvents);
         const retryAttempt = this.retryAttempt(lookupFailedEvents);
         this.logStorageFailure('tracing', lookupFailedEvents, retryAttempt, error);
@@ -572,8 +575,11 @@ export class DefaultExporter extends BaseExporter {
     const deferredUpdates: BufferedEvent[] = [];
 
     const persistedSpans = new Map<string, boolean>();
-    flushResults.push(await this.flushSpanUpdates(updateSpanEvents, deferredUpdates, false, persistedSpans));
-    flushResults.push(await this.flushSpanUpdates(endSpanEvents, deferredUpdates, true, persistedSpans));
+    const lookupErrors = new Map<string, unknown>();
+    flushResults.push(
+      await this.flushSpanUpdates(updateSpanEvents, deferredUpdates, false, persistedSpans, lookupErrors),
+    );
+    flushResults.push(await this.flushSpanUpdates(endSpanEvents, deferredUpdates, true, persistedSpans, lookupErrors));
 
     let deferredDropCount = 0;
     if (deferredUpdates.length > 0) {
