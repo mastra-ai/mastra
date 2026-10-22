@@ -42,10 +42,12 @@ function renderFactorySwitcher(initialEntry: string) {
   };
 }
 
-async function switchToNextFactory() {
+async function switchToNextFactory(expectedLocation: string) {
   const user = userEvent.setup();
   await user.click(await screen.findByRole('button', { name: 'Select factory' }));
-  await user.click(await screen.findByRole('menuitem', { name: 'Next Factory' }));
+  const link = await screen.findByRole('menuitem', { name: 'Next Factory' });
+  expect(link).toHaveAttribute('href', expectedLocation);
+  await user.click(link);
 }
 
 describe('Factory switch navigation', () => {
@@ -66,7 +68,7 @@ describe('Factory switch navigation', () => {
     ])('keeps the $tab location without the previous Factory filters', async ({ initialEntry, expectedLocation }) => {
       const { currentLocation } = renderFactorySwitcher(initialEntry);
 
-      await switchToNextFactory();
+      await switchToNextFactory(expectedLocation);
 
       expect(currentLocation()).toBe(expectedLocation);
     });
@@ -86,7 +88,7 @@ describe('Factory switch navigation', () => {
     ])('opens the destination board landing from a $session session', async ({ initialEntry }) => {
       const { currentLocation } = renderFactorySwitcher(initialEntry);
 
-      await switchToNextFactory();
+      await switchToNextFactory('/factories/factory-next');
 
       expect(currentLocation()).toBe('/factories/factory-next');
     });

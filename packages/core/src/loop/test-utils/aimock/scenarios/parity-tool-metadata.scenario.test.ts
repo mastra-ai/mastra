@@ -28,6 +28,7 @@
  */
 import { it, expect } from 'vitest';
 import { z } from 'zod';
+import { describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 import { Agent } from '../../../../agent';
 import { MockMemory } from '../../../../memory/mock';
 import { createTool } from '../../../../tools';
@@ -283,4 +284,48 @@ describeParity('tool-metadata parity', target => {
       }
     });
   }
+});
+
+describeForAllEngines('tool-result provider metadata in public streams', engine => {
+  const getMock = useLoopScenarioAimock();
+
+  it('keeps model-facing output in metadata while exposing the raw tool result', async () => {
+    const echo = createTool({
+      id: 'echo',
+      description: 'Echo a number',
+      inputSchema: z.object({ n: z.number() }),
+      execute: async ({ n }) => ({ n, secret: 'raw' }),
+      toModelOutput: () => ({ type: 'text' as const, value: 'mapped:1' }),
+    });
+    const { output, requests, chunks } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: 'Echo one.',
+      tools: { echo },
+      maxSteps: 3,
+      collectChunks: true,
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', sequenceIndex: 0 },
+          { toolCalls: [{ id: 'call_echo', name: 'echo', arguments: { n: 1 } }] },
+        );
+        llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Done.' });
+      },
+    });
+
+    expect(await output.text).toBe('Done.');
+    expect(requests).toHaveLength(2);
+    const toolMessage = requests[1]!.body?.messages.find(message => message.role === 'tool');
+    expect(JSON.stringify(toolMessage)).toContain('mapped:1');
+    expect(JSON.stringify(toolMessage)).not.toContain('"secret"');
+    const results = chunks?.filter(chunk => chunk.type === 'tool-result' && chunk.payload.toolCallId === 'call_echo');
+    expect(results).toHaveLength(1);
+    expect(results?.[0]?.payload.result).toEqual({ n: 1, secret: 'raw' });
+    expect(results?.[0]?.payload.providerMetadata).toMatchObject({
+      mastra: { modelOutput: { type: 'text', value: 'mapped:1' } },
+    });
+    const call = chunks?.find(chunk => chunk.type === 'tool-call' && chunk.payload.toolCallId === 'call_echo');
+    expect(call?.payload.providerMetadata?.openai).toBeDefined();
+    expect(results?.[0]?.payload.providerMetadata?.openai).toEqual(call?.payload.providerMetadata?.openai);
+  });
 });

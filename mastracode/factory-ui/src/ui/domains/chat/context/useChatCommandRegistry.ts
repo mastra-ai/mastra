@@ -23,7 +23,7 @@ import { useFactoryThinkingDefaultQuery } from '../../../../hooks/use-thinking';
 import { useModelReasoningOptions } from '../../../../hooks/useAvailableModels';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useUpdateAgentControllerSettingsMutation } from '../../../../hooks/useUpdateAgentControllerSettingsMutation';
-import { settingsSectionPath } from '../../settings/settingsSections';
+import { sessionDefaultsAnchor, settingsSectionPath } from '../../settings/settingsSections';
 import type { SlashCommand, SlashCommandOption } from '../services/commands';
 import { findCommand, parseSlashCommand } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
@@ -50,7 +50,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   const { transcript, busy, localUser, pushNotice } = useChatTranscript();
   const { usage, omPhase } = useChatRuntime();
   const { activeModelId, setModel } = useChatModels();
-  const { catalogTarget } = useChatModelScope();
+  const { catalogTarget, modelScope } = useChatModelScope();
   const activeModelReasoningOptions = useModelReasoningOptions(activeModelId, catalogTarget);
   const availableThinkingLevels = getAvailableThinkingLevelsForModel(activeModelId ?? '', activeModelReasoningOptions);
 
@@ -70,6 +70,13 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   const factoryThinkingQuery = useFactoryThinkingDefaultQuery(factoryId, { enabled: false });
   const updateSettingsMutation = useUpdateAgentControllerSettingsMutation(hookArgs);
   const { permissions, permissionsLoading, setPermissionForCategory } = useChatPermissions();
+
+  const openSessionDefaults = () => {
+    if (factoryId)
+      void navigate(settingsSectionPath(factoryId, 'models', sessionDefaultsAnchor(modelScope)), {
+        state: { from: location },
+      });
+  };
 
   const currentThinkingLevel = settingsQuery.data?.thinkingLevel;
   const runningThinkingLevel =
@@ -256,17 +263,13 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
       name: 'connect',
       description: 'Connect a model provider',
       requiresSession: false,
-      execute: async () => {
-        if (factoryId) void navigate(settingsSectionPath(factoryId, 'personal-models'), { state: { from: location } });
-      },
+      execute: async () => openSessionDefaults(),
     },
     {
       name: 'login',
       description: 'Sign in with a provider account',
       requiresSession: false,
-      execute: async () => {
-        if (factoryId) void navigate(settingsSectionPath(factoryId, 'personal-models'), { state: { from: location } });
-      },
+      execute: async () => openSessionDefaults(),
     },
     {
       name: 'follow-up',
