@@ -2295,7 +2295,13 @@ export class AgentThreadStreamRuntime {
         // No run and no lease exist for this attempt yet, so unwind the run
         // bookkeeping it just claimed and let a retry of the logical message route.
         releaseMessageIdentity(getErrorFromUnknown(error));
-        state.activeThreadRunIds.delete(key);
+        if (state.activeThreadRunIds.get(key) === runId) {
+          state.activeThreadRunIds.delete(key);
+          // Concurrent senders queued pre-run copies behind this reservation;
+          // dropping them keeps a later local run from replaying input this
+          // attempt never delivered.
+          state.preRunSignalsByThread.delete(key);
+        }
         state.threadKeysByRunId.delete(runId);
         throw error;
       }
@@ -2304,8 +2310,15 @@ export class AgentThreadStreamRuntime {
       if (!lease.acquired || !ownerActive || expired) {
         // This attempt admitted no run of its own — the owner went away, the
         // deadline passed, or the wake was handed to another live lease owner — so
-        // a later retry of the same logical message must be free to route.
-        state.activeThreadRunIds.delete(key);
+        // a later retry of the same logical message must be free to route. Give up
+        // the reservation identity-first: a newer reservation may own the thread
+        // slot, and only this attempt's provisional pre-run copies (queued behind
+        // its own admission and forwarded by their senders on a remote outcome)
+        // may be discarded — otherwise a later local run replays them.
+        if (state.activeThreadRunIds.get(key) === runId) {
+          state.activeThreadRunIds.delete(key);
+          state.preRunSignalsByThread.delete(key);
+        }
         state.threadKeysByRunId.delete(runId);
         if (!ownerActive || expired) {
           settleThreadAdmission({ action: 'blocked', runId });
