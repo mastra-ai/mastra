@@ -305,9 +305,9 @@ describe("a teammate's Factory session", () => {
       expect(
         await within(dialog).findByText(/You have no OpenAI connection, so GPT-4o Mini can’t run for you\./),
       ).toBeInTheDocument();
-      expect(within(dialog).getByRole('link', { name: 'Your models' })).toHaveAttribute(
+      expect(within(dialog).getByRole('link', { name: 'Models' })).toHaveAttribute(
         'href',
-        `/factories/${FACTORY_ID}/settings/personal-models`,
+        `/factories/${FACTORY_ID}/settings/models#personal-defaults`,
       );
       expect(within(dialog).getByRole('button', { name: 'Take ownership' })).toBeEnabled();
     });
