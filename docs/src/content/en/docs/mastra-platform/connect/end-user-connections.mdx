@@ -60,7 +60,15 @@ Calling `tools()` per request is cheap: identical options share one internal sta
 
 If both a global and a user connection exist for one provider, the agent sees both through the usual [multi-connection handling](/docs/mastra-platform/connect/tools#choose-between-connections).
 
-Every platform call made under a resource ID asserts it, and the platform rejects mismatches, so one user's connection can never serve another user's request.
+## How user isolation is enforced
+
+Scoping by an identifier is only as strong as the binding between the signed-in user and that identifier. In systems where application code passes a user ID as an ordinary parameter, isolation depends on every call site labeling every request correctly. Mastra removes that burden: the resource ID is never a value a request gets to choose, and the binding is verified again on every call.
+
+- The server derives the resource ID. `mapUserToResourceId` runs after authentication and writes the result to a reserved request-context key that clients can't set. No route or tool accepts a resource ID from request input.
+- The platform verifies it at execution time. Every call made under a resource ID carries an assertion, and the platform compares it to the connection's stored resource ID before serving tool calls, credentials, or proxy traffic. A mismatch is rejected as if the connection didn't exist, so one user's connection can never serve another user's request.
+- Ownership is checked before OAuth begins. Creating a connection returns a launch URL that re-verifies the caller owns the pending session before redirecting into the provider's flow. See [the authorization link never leaves the server](#the-authorization-link-never-leaves-the-server).
+
+The inverse is deliberate: a connection without a resource ID is global. It belongs to the project, ignores the assertion, and serves every user's requests. Only create a global connection for an account meant to be shared by everyone, such as a team Slack workspace. Anything a single user should own belongs in an end-user connection.
 
 ## Let users connect their accounts
 
@@ -78,7 +86,8 @@ export const mastra = new Mastra({
     },
     apiRoutes: [
       ...userConnectRoutes({
-        // Required: only these providers are exposed to end users.
+        // Optional: override the project's provider configuration.
+        // Omit to use endUserProviders from Mastra Platform.
         providers: ['linear', 'slack'],
       }),
     ],
@@ -113,6 +122,20 @@ const auth = {
 With token-only auth, the hosted page returns a 401. The JSON routes still work: call them with the bearer token and build your own UI instead.
 
 Prefer your own UI? Call the JSON routes directly. See the [route reference](/reference/connect/user-connect-routes#routes).
+
+### The authorization link never leaves the server
+
+The provider's authorization link is a bearer capability: anyone who opens it can bind their third-party account to the pending connection. For end-user sessions, that link stays on the platform. Session creation returns a `launchUrl` instead: an authenticated route that re-verifies the caller owns the session before redirecting into the provider's flow. A forwarded or leaked launch URL returns 404 for anyone else, so another user can't attach their account to a session they don't own.
+
+## Let agents prompt for a connection
+
+Resource-scoped tool resolutions include a built-in `request_connection` tool. When a task needs a provider the user hasn't connected (or the user asks to connect one), the agent calls it and gets back a structured list of connectable providers with their current connection state. Chat UIs that understand the payload (Studio does) render it as a connect card: the user clicks Connect, authorizes in a popup through the mounted routes, and the agent can retry the task against fresh tools.
+
+The connectable set follows your `tools()` configuration. A `providers` allowlist overrides the project's provider configuration in Mastra Platform. When you omit it, an unset project configuration exposes the full catalog, a configured list restricts providers, and an empty list disables new connections. The tool never creates sessions or handles authorization links. It only reports what can be connected. It's also never added to global-only resolutions, since there is no user to scope a new connection to. To turn it off, pass `connectPrompt: false` to [`tools()`](/reference/connect/tools).
+
+## Inspect connections in Studio
+
+With `userConnectRoutes()` mounted, Studio's **Connections** page shows the project's global connections alongside the connections belonging to the resource ID your studio session resolves to, and lets you run the connect flow against the providers your routes expose. Because the routes are gated on an end-user identity, the page needs `server.auth` with `mapUserToResourceId` configured. Without it, Studio shows a setup prompt instead.
 
 ## Clean up after deleted users
 

@@ -40,6 +40,36 @@ export interface CommandsApi {
  */
 export const ATTACH_TIMEOUT_MS = 0;
 
+/**
+ * Output callbacks for `run`/`connect` that hold output until the handle
+ * exists. The SDK's handle reads events from construction, before `run()`
+ * returns, so output that arrives with the start event reaches the
+ * callbacks first.
+ */
+function outputUntilHandled() {
+  let handle: CommandsApiProcessHandle | undefined;
+  const early: Array<{ stream: 'stdout' | 'stderr'; data: string }> = [];
+  return {
+    onStdout: (data: string) => {
+      if (handle) handle.emitStdout(data);
+      else early.push({ stream: 'stdout', data });
+    },
+    onStderr: (data: string) => {
+      if (handle) handle.emitStderr(data);
+      else early.push({ stream: 'stderr', data });
+    },
+    handledBy<H extends CommandsApiProcessHandle>(created: H): H {
+      for (const { stream, data } of early) {
+        if (stream === 'stdout') created.emitStdout(data);
+        else created.emitStderr(data);
+      }
+      early.length = 0;
+      handle = created;
+      return created;
+    },
+  };
+}
+
 /** envd runs every command as `/bin/bash -l -c <command>`; show the command itself. */
 function commandOf(proc: { cmd: string; args: string[] }): string {
   const [flag, c, command] = proc.args;
@@ -195,9 +225,7 @@ export abstract class CommandsApiProcessManager<
       Object.entries({ ...options.env }).filter((entry): entry is [string, string] => entry[1] !== undefined),
     );
     return this.runCommands('spawn', async commands => {
-      // Callbacks are fixed at run() time but output arrives after it
-      // resolves, so `handle` is assigned before the first callback fires.
-      let handle: CommandsApiProcessHandle;
+      const output = outputUntilHandled();
       const inner = await commands.run(command, {
         background: true,
         // `stdinMode: 'ignore'` closes stdin at spawn so a command that reads
@@ -208,10 +236,10 @@ export abstract class CommandsApiProcessManager<
         // Without this the SDK falls back to its own 60s connection deadline,
         // which bounds the whole command and kills anything that runs longer.
         timeoutMs: options.timeout ?? this.defaultTimeout,
-        onStdout: data => handle.emitStdout(data),
-        onStderr: data => handle.emitStderr(data),
+        onStdout: output.onStdout,
+        onStderr: output.onStderr,
       });
-      handle = this.createHandle(inner, options.stdinMode, options);
+      const handle = output.handledBy(this.createHandle(inner, options.stdinMode, options));
       this._tracked.set(handle.pid, handle);
       return handle;
     });
@@ -248,16 +276,16 @@ export abstract class CommandsApiProcessManager<
     const numericPid = /^\d+$/.test(pid) ? Number(pid) : undefined;
     if (numericPid === undefined) return undefined;
 
-    let handle: CommandsApiProcessHandle;
+    const output = outputUntilHandled();
     try {
       const inner = await this.runCommands('connect', commands =>
         commands.connect(numericPid, {
-          onStdout: data => handle.emitStdout(data),
-          onStderr: data => handle.emitStderr(data),
+          onStdout: output.onStdout,
+          onStderr: output.onStderr,
           timeoutMs: ATTACH_TIMEOUT_MS,
         }),
       );
-      handle = this.createHandle(inner, undefined);
+      const handle = output.handledBy(this.createHandle(inner, undefined));
       this._tracked.set(handle.pid, handle);
       return handle;
     } catch {

@@ -73,16 +73,10 @@
         "type": "toggle"
       }
     ],
-    "thinkingmachines/inkling-small": [
+    "meta/muse-spark-1.2-contributor": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "thinkingmachines/inkling": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
       }
     ],
     "sakana/fugu-ultra": [
@@ -96,10 +90,16 @@
         "type": "toggle"
       }
     ],
-    "upstage/solar-pro3": [
+    "thinkingmachines/inkling-small": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "thinkingmachines/inkling": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh"]
       }
     ],
     "upstage/solar-pro2": [
@@ -114,12 +114,10 @@
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "qwen/qwen3-vl-plus": [
+    "upstage/solar-pro3": [
       {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "qwen/qwen3.7-plus": [
@@ -138,23 +136,23 @@
         "type": "budget_tokens"
       }
     ],
+    "qwen/qwen-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "qwen/qwen3-vl-plus": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
     "qwen/qwen3.6-flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "qwen/qwen-plus": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "qwen/qwen3.5-plus": [
       {
         "type": "toggle"
       },
@@ -170,6 +168,14 @@
         "type": "budget_tokens"
       }
     ],
+    "qwen/qwen3.5-plus": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
     "qwen/qwen3.6-plus": [
       {
         "type": "toggle"
@@ -178,18 +184,12 @@
         "type": "budget_tokens"
       }
     ],
-    "qwen/qwen-flash": [
+    "qwen/qwen-plus": [
       {
         "type": "toggle"
       },
       {
         "type": "budget_tokens"
-      }
-    ],
-    "meta/muse-spark-1.2-contributor": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh"]
       }
     ]
   }

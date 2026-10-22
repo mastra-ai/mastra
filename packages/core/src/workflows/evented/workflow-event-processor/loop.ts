@@ -636,6 +636,28 @@ export async function processWorkflowForEach(
         requestContext: withoutAuthToken(requestContext),
       });
       stepResults[getEntryId(step.step)] = result as StepResult<any, any, any, any>;
+    } else if (currentResult?.status !== 'success') {
+      // Iteration step-ends keep the record 'running'; only here has every iteration settled.
+      result = {
+        ...currentResult,
+        status: 'success',
+        startedAt: currentResult.startedAt ?? Date.now(),
+        endedAt: Date.now(),
+      };
+      const merged = await workflowsStore?.updateWorkflowResults({
+        workflowName: workflowId,
+        runId,
+        stepId: getEntryId(step.step),
+        result,
+        requestContext: withoutAuthToken(requestContext),
+      });
+      stepResults[getEntryId(step.step)] = (merged?.[getEntryId(step.step)] ?? result) as StepResult<
+        any,
+        any,
+        any,
+        any
+      >;
+      result = stepResults[getEntryId(step.step)] as typeof result;
     }
 
     await pubsub.publish('workflows', {
@@ -681,7 +703,8 @@ export async function processWorkflowForEach(
       runId,
       stepId: getEntryId(step.step),
       result: {
-        status: 'success',
+        // Iterations are still running; the completion branch above writes success.
+        status: 'running',
         output: dummyResult as any,
         startedAt: Date.now(),
         payload: (prevResult as any)?.output,
@@ -737,9 +760,9 @@ export async function processWorkflowForEach(
     runId,
     stepId: getEntryId(step.step),
     result: {
-      status: 'success',
+      status: 'running',
       output: (currentResult as any).output,
-      startedAt: Date.now(),
+      startedAt: currentResult?.startedAt ?? Date.now(),
       payload: (prevResult as any)?.output,
     } as any,
     requestContext: withoutAuthToken(requestContext),
