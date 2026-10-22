@@ -88,6 +88,8 @@ interface ReplyStream {
   update(text: string): void;
   /** End the post with the validated text. Resolves false if the post failed. */
   finish(text: string, suffix: string): Promise<boolean>;
+  /** End the post with whatever has been shown, for a call that never ran. */
+  close(): Promise<boolean>;
 }
 
 function replyStreams(requestContext: RequestContext): Map<string, ReplyStream> {
@@ -145,6 +147,11 @@ function openReplyStream(chatThread: ChatChannelRenderContext['chatThread']): Re
       wake?.();
       return done;
     },
+    async close() {
+      closed = true;
+      wake?.();
+      return done ?? false;
+    },
   };
 }
 
@@ -175,9 +182,31 @@ export class FactoryReplyStreamProcessor implements Processor {
       const json = (args[part.payload.toolCallId] += part.payload.argsTextDelta);
       const text = partialStringField(json, 'text');
       if (text !== undefined) replyStreams(requestContext).get(part.payload.toolCallId)?.update(text);
+    } else if ((part.type === 'tool-error' || part.type === 'tool-result') && part.payload.toolCallId in args) {
+      // A call that failed validation never reaches `execute`; a successful one already finished its post.
+      delete args[part.payload.toolCallId];
+      await closeStream(requestContext, part.payload.toolCallId);
+    } else if (RUN_END.has(part.type)) {
+      for (const toolCallId of Object.keys(args)) await closeStream(requestContext, toolCallId);
+      state.args = {};
     }
     return part;
   }
+}
+
+/** Chunks after which no `reply_in_thread` call of this run will still execute. */
+const RUN_END = new Set<string>(['finish', 'abort', 'error', 'tripwire']);
+
+/**
+ * Ends a streamed post whose call will never reach `execute`, keeping the text
+ * shown so far, so Slack isn't left with a message that never finishes.
+ */
+async function closeStream(requestContext: RequestContext, toolCallId: string): Promise<void> {
+  const streams = replyStreams(requestContext);
+  const stream = streams.get(toolCallId);
+  if (!stream) return;
+  streams.delete(toolCallId);
+  await stream.close();
 }
 
 const ESCAPES: Record<string, string> = { '"': '"', '\\': '\\', '/': '/', b: '\b', f: '\f', n: '\n', r: '\r', t: '\t' };
