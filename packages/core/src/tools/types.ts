@@ -14,7 +14,7 @@ import type { ActorSignal } from '../auth/ee';
 import type { BackgroundTaskAdoptionContext, ToolBackgroundConfig } from '../background-tasks';
 import type { MastraBrowser } from '../browser/browser';
 import type { Mastra } from '../mastra';
-import type { ObservabilityContext } from '../observability';
+import type { ObservabilityContext, ToolCallGuardAttributes } from '../observability';
 import type { RequestContext } from '../request-context';
 import type { PublicSchema } from '../schema';
 import type { SuspendOptions, OutputWriter } from '../workflows';
@@ -155,6 +155,52 @@ export interface ToolHooks<
     context: ToolHookContext<TInput, TContext, TMetadata>,
   ) => void | ToolBeforeHookResult<TOutput> | Promise<void | ToolBeforeHookResult<TOutput>>;
   afterToolCall?: (context: ToolAfterHookContext<TInput, TOutput, TContext, TMetadata>) => void | Promise<void>;
+  /**
+   * Decides whether a tool call the approval rules leave open may run.
+   *
+   * Runs before execution and only when `requireToolApproval`, the tool's `requireApproval`
+   * and its `needsApprovalFn` do not already require human approval. `allow` runs the tool,
+   * `deny` returns the reason to the model as a declined call, and `ask` raises the regular
+   * approval suspension. A throwing guard is treated as `ask`.
+   */
+  guardToolCall?: ToolCallGuard;
+  /** Options for {@link ToolHooks.guardToolCall}. */
+  guardToolCallOptions?: ToolCallGuardOptions;
+}
+
+/** Verdict returned by {@link ToolHooks.guardToolCall}. */
+export type ToolCallGuardVerdict = { action: 'allow' } | { action: 'deny'; reason: string } | { action: 'ask' };
+
+export interface ToolCallGuardContext {
+  /** The name exposed to the model for this tool call. */
+  toolName: string;
+  toolCallId: string;
+  /** Arguments the model supplied for this call. */
+  args: unknown;
+  /** User-authored messages in the conversation so far. */
+  userMessages: MastraDBMessage[];
+  /**
+   * The full conversation, including assistant text and tool results. Only set when
+   * `guardToolCallOptions.includeUntrustedContext` is true: that content can be steered by
+   * tool output (prompt injection) and should not be trusted as user intent.
+   */
+  messages?: MastraDBMessage[];
+  requestContext: RequestContext;
+  workspace?: Workspace;
+  /** Denials this guard issued earlier in the run. `consecutive` resets after any non-denied call. */
+  declines: { consecutive: number; total: number };
+}
+
+export type ToolCallGuard = (ctx: ToolCallGuardContext) => ToolCallGuardVerdict | Promise<ToolCallGuardVerdict>;
+
+export interface ToolCallGuardOptions {
+  /** Pass the full conversation as `messages` to the guard. Defaults to false. */
+  includeUntrustedContext?: boolean;
+  /**
+   * After this many denials in the run, a further `deny` becomes `ask` so a person decides.
+   * Defaults to 3 consecutive and 20 total.
+   */
+  escalation?: { consecutive?: number; total?: number };
 }
 
 export type ToolPayloadTransformTarget = 'display' | 'transcript';
@@ -384,6 +430,11 @@ export type MastraToolInvocationOptions = ToolInvocationOptions &
      * workflow runs still attach to `tracingContext.currentSpan`.
      */
     skipToolSpan?: boolean;
+    /**
+     * Verdict of the `guardToolCall` hook that allowed this call, recorded on the TOOL_CALL span.
+     * @internal Set by the agent runtime.
+     */
+    toolCallGuard?: ToolCallGuardAttributes;
     /**
      * Workspace for tool execution. When provided at execution time, this overrides
      * any workspace configured at tool build time. Allows dynamic workspace selection

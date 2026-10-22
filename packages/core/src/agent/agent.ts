@@ -141,6 +141,8 @@ import { createTool } from '../tools';
 import { createWebSearchProviderTool, isWebSearchTool, normalizeWebSearchProvider } from '../tools/builtin/web-search';
 import { normalizeToolPayloadTransformPolicy } from '../tools/payload-transform';
 import type { ToolToConvert } from '../tools/tool-builder/builder';
+import { attachToolCallGuard, createToolCallGuardState } from '../tools/tool-call-guard';
+import type { ToolCallGuardState } from '../tools/tool-call-guard';
 import { isMastraTool, isProviderTool, isApprovalExempt, markApprovalExempt } from '../tools/toolchecks';
 import type {
   CoreTool,
@@ -7400,15 +7402,35 @@ export class Agent<
   }
 
   private wrapToolsWithHooks(tools: Record<string, CoreTool>, hooks?: ToolHooks): Record<string, CoreTool> {
-    if (!hooks?.beforeToolCall && !hooks?.afterToolCall) return tools;
+    if (!hooks?.beforeToolCall && !hooks?.afterToolCall && !hooks?.guardToolCall) return tools;
+
+    // One guard state per conversion (one run), so denial counters span every tool in the run.
+    const guardState = hooks.guardToolCall
+      ? createToolCallGuardState(hooks.guardToolCall, hooks.guardToolCallOptions)
+      : undefined;
 
     return Object.fromEntries(
-      Object.entries(tools).map(([toolName, tool]) => [toolName, this.wrapToolWithHooks(toolName, tool, hooks)]),
+      Object.entries(tools).map(([toolName, tool]) => [
+        toolName,
+        this.wrapToolWithHooks(toolName, tool, hooks, guardState),
+      ]),
     );
   }
 
-  private wrapToolWithHooks(toolName: string, tool: CoreTool, hooks: ToolHooks): CoreTool {
+  private wrapToolWithHooks(
+    toolName: string,
+    tool: CoreTool,
+    hooks: ToolHooks,
+    guardState?: ToolCallGuardState,
+  ): CoreTool {
     if (typeof tool.execute !== 'function') return tool;
+    if (!hooks.beforeToolCall && !hooks.afterToolCall) {
+      // Copy so the guard marker never leaks onto a tool object shared outside this run.
+      const guarded: CoreTool = { ...tool };
+      if (isApprovalExempt(tool)) markApprovalExempt(guarded);
+      if (guardState) attachToolCallGuard(guarded, guardState);
+      return guarded;
+    }
 
     const wrapped: CoreTool = {
       ...tool,
@@ -7441,6 +7463,7 @@ export class Agent<
     };
     // The spread drops the non-enumerable exemption marker.
     if (isApprovalExempt(tool)) markApprovalExempt(wrapped);
+    if (guardState) attachToolCallGuard(wrapped, guardState);
     return wrapped;
   }
 

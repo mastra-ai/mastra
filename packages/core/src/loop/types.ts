@@ -46,6 +46,7 @@ import type {
   StreamTransportRef,
 } from '../stream/types';
 import type { MCPToolExecutionContext, RequireToolApproval, ToolPayloadTransformPolicy } from '../tools';
+import type { ResolvedToolCallGuardVerdict } from '../tools/tool-call-guard';
 import type { MastraIdGenerator } from '../types';
 import type { OutputWriter, WorkflowRunState } from '../workflows/types';
 import type { Workspace } from '../workspace/workspace';
@@ -136,6 +137,8 @@ export type StreamInternal = {
   stepWorkspace?: Workspace;
   /** @deprecated Use `runScope.get(TOOL_APPROVAL_VERDICTS_KEY)` from `loop/run-scope-keys`. */
   toolApprovalVerdicts?: Map<string, boolean>;
+  /** @deprecated Use `runScope.get(TOOL_GUARD_VERDICTS_KEY)` from `loop/run-scope-keys`. */
+  toolGuardVerdicts?: Map<string, ResolvedToolCallGuardVerdict>;
   /** @deprecated Use `runScope.get(STEP_USAGE_KEY)` from `loop/run-scope-keys`. */
   stepUsage?: LanguageModelUsage;
   /** @deprecated Use `runScope.get(STEP_MODEL_MESSAGES_KEY)` from `loop/run-scope-keys`. */

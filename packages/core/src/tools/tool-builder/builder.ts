@@ -943,11 +943,13 @@ export class CoreToolBuilder extends MastraBase {
                   toolType: logType || 'tool',
                   toolDescription: options.description,
                   toolCallId: execOptions?.toolCallId,
+                  ...(execOptions?.toolCallGuard ? { guard: execOptions.toolCallGuard } : {}),
                 }
               : {
                   toolDescription: options.description,
                   toolType: logType || 'tool',
                   toolCallId: execOptions?.toolCallId,
+                  ...(execOptions?.toolCallGuard ? { guard: execOptions.toolCallGuard } : {}),
                 },
             tracingPolicy: options.tracingPolicy,
             tracingContext: tracingContext,

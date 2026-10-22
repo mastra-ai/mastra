@@ -452,6 +452,8 @@ export interface DurableToolCallInput {
   requireApproval?: boolean;
   /** @see requireApproval */
   hasSuspendSchema?: boolean;
+  /** The tool has a `guardToolCall` hook, whose `ask` verdict can suspend the call for approval. */
+  hasToolCallGuard?: boolean;
   /** Exported model_step span data so the TOOL_CALL span nests under the LLM call */
   stepSpanData?: unknown;
   /** Model usage of the step that produced this call, reported on its suspension chunk */

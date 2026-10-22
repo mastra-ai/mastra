@@ -15,6 +15,12 @@ import {
   withToolPayloadTransformProviderMetadata,
 } from '../../../tools/payload-transform';
 import { findProviderToolByName } from '../../../tools/provider-tool-utils';
+import {
+  evaluateToolCallGuard,
+  getToolCallGuardState,
+  recordToolCallGuardSpan,
+  toolCallGuardAttributes,
+} from '../../../tools/tool-call-guard';
 import { getToolTitle } from '../../../tools/tool-title';
 import type { MastraToolInvocationOptions } from '../../../tools/types';
 import { resolveToolOutputValidationSchema, validateToolOutput } from '../../../tools/validation';
@@ -43,6 +49,7 @@ import {
   THREAD_EXISTS_KEY,
   THREAD_ID_KEY,
   TOOL_APPROVAL_VERDICTS_KEY,
+  TOOL_GUARD_VERDICTS_KEY,
   TOOL_PAYLOAD_TRANSFORM_KEY,
 } from '../../run-scope-keys';
 import { approvalResumeSchema } from '../../shared/approval-schema';
@@ -540,7 +547,52 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
         // Approval decisions must come from the workflow resume boundary; model-authored
         // resumeData is untrusted and cannot grant or decline consent.
         const isFreshCall = suspendData === undefined;
-        const approvalGated = !isDelegatedApproval && (suspendedForApproval || (toolRequiresApproval && isFreshCall));
+
+        // Rules first: `guardToolCall` only decides fresh calls that no approval rule already
+        // sends to a person. The verdict is usually reached while scheduling the step (so
+        // guards run in emission order); fall back to evaluating it here. A resumed call never
+        // re-runs the guard: an `ask` suspended as an ordinary approval, which the suspend
+        // payload records.
+        const guardVerdicts = readScoped(scopeCtx, TOOL_GUARD_VERDICTS_KEY, 'toolGuardVerdicts');
+        const cachedGuardVerdict = guardVerdicts?.get(inputData.toolCallId);
+        guardVerdicts?.delete(inputData.toolCallId);
+        const guardState = getToolCallGuardState(tool);
+        const guardVerdict =
+          guardState && isFreshCall && !isDelegatedApproval && !toolRequiresApproval
+            ? (cachedGuardVerdict ??
+              (await evaluateToolCallGuard({
+                state: guardState,
+                toolName: inputData.toolName,
+                toolCallId: inputData.toolCallId,
+                args,
+                messages: messageList.get.all.db(),
+                requestContext,
+                workspace: approvalWorkspace,
+                logger,
+              })))
+            : undefined;
+        if (guardVerdict && guardVerdict.action !== 'allow') {
+          recordToolCallGuardSpan({
+            toolName: inputData.toolName,
+            toolCallId: inputData.toolCallId,
+            args,
+            verdict: guardVerdict,
+            tracingContext: modelSpanTracker?.getTracingContext(),
+            requestContext,
+          });
+        }
+        if (guardVerdict?.action === 'deny') {
+          // Same shape as a declined approval: persisted as `output-denied` with the guard's
+          // reason, which the model sees. Sibling calls in the step are unaffected.
+          return {
+            approval: { id: inputData.toolCallId, approved: false, reason: guardVerdict.reason },
+            ...inputData,
+          };
+        }
+
+        const approvalGated =
+          !isDelegatedApproval &&
+          (suspendedForApproval || ((toolRequiresApproval || guardVerdict?.action === 'ask') && isFreshCall));
 
         // A suspended step never reaches `step-finish`, so its model usage rides on the first
         // suspension chunk of the step. Consume it so parallel suspended calls and later
@@ -836,6 +888,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           outputWriter,
           // Pass current step span as parent for tool call spans
           tracingContext: modelSpanTracker?.getTracingContext(),
+          ...(guardVerdict ? { toolCallGuard: toolCallGuardAttributes(guardVerdict) } : {}),
           // Pass workspace from the run scope (set by llmExecutionStep via prepareStep/processInputStep)
           workspace: readScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace'),
           // Forward requestContext so tools receive values set by the workflow step

@@ -33,6 +33,12 @@ import {
 } from '../../../../tools/payload-transform';
 import { findProviderToolByName } from '../../../../tools/provider-tool-utils';
 import { ToolStream } from '../../../../tools/stream';
+import {
+  evaluateToolCallGuard,
+  getToolCallGuardState,
+  recordToolCallGuardSpan,
+  toolCallGuardAttributes,
+} from '../../../../tools/tool-call-guard';
 import { getToolTitle } from '../../../../tools/tool-title';
 import { resolveToolOutputValidationSchema, validateToolOutput } from '../../../../tools/validation';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
@@ -90,6 +96,7 @@ const durableToolCallInputSchema = z.object({
   // `toolsMetadata` lacks (e.g. tools added by input processors, issue #24377).
   requireApproval: z.boolean().optional(),
   hasSuspendSchema: z.boolean().optional(),
+  hasToolCallGuard: z.boolean().optional(),
   // Exported MODEL_STEP span so the TOOL_CALL nests under the LLM call
   stepSpanData: z.any().optional(),
   // First-chunk clock of the step that produced this call, for ending spans on suspend
@@ -983,7 +990,89 @@ export function createDurableToolCallStep() {
         typeof suspendData === 'object' &&
         (suspendData as { type?: unknown }).type === 'approval';
       const isFreshCall = suspendData === undefined;
-      const approvalGated = suspendedForApproval || (requiresApproval && isFreshCall);
+      // Returns the denial (not a `result` string) so it persists as `state: 'output-denied'`
+      // with `approval`, and emits a terminal `tool-output-denied` chunk so live stream
+      // subscribers resolve the pending tool call (issue #20880) — persistence alone is not enough.
+      const denyToolCall = async (reason: string) => {
+        const approval = { id: toolCallId, approved: false as const, reason };
+        if (pubsub) {
+          try {
+            const deniedChunk = await applyToolPayloadTransformToChunk(
+              {
+                type: 'tool-output-denied' as const,
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: { toolCallId, toolName, args, approval },
+              },
+              {
+                policy: toolPayloadTransform,
+                tools: toolsForTransform,
+                logger: logger as any,
+              },
+            );
+            // Processes through output processors and emits (or emits a tripwire when blocked).
+            await processChunkThroughOutputProcessors(
+              deniedChunk as ChunkType,
+              registryEntry,
+              pubsub,
+              runId,
+              initData.agentId,
+              logger,
+              messageList,
+              processorObservabilityContext,
+              collectProcessorDataPart,
+            );
+          } catch (emitError) {
+            if (emitError instanceof DurableOutputProcessorError) {
+              throw emitError;
+            }
+            logger?.warn?.(`[DurableAgent] Failed to emit tool-output-denied chunk for ${toolName}: ${emitError}`);
+          }
+        }
+        return {
+          ...typedInput,
+          approval,
+          ...(processorDataParts.length ? { processorDataParts } : {}),
+        };
+      };
+
+      // Rules first: `guardToolCall` only decides fresh calls no approval rule already gates.
+      // A resumed call never re-runs the guard — an `ask` suspends as an ordinary approval.
+      const guardState = getToolCallGuardState(tool);
+      const guardVerdict =
+        guardState && isFreshCall && !requiresApproval
+          ? await evaluateToolCallGuard({
+              state: guardState,
+              toolName,
+              toolCallId,
+              args,
+              messages: contextMessageList?.get.all.db() ?? [],
+              requestContext: approvalRequestContext,
+              workspace,
+              logger: logger as any,
+            })
+          : undefined;
+
+      if (guardVerdict && guardVerdict.action !== 'allow') {
+        const guardStepSpan =
+          typedInput.stepSpanData && observability
+            ? observability.rebuildSpan(typedInput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>)
+            : undefined;
+        recordToolCallGuardSpan({
+          toolName,
+          toolCallId,
+          args,
+          verdict: guardVerdict,
+          tracingContext: guardStepSpan ? { currentSpan: guardStepSpan } : undefined,
+          requestContext,
+        });
+      }
+      if (guardVerdict?.action === 'deny') {
+        return denyToolCall(guardVerdict.reason);
+      }
+
+      const approvalGated =
+        suspendedForApproval || ((requiresApproval || guardVerdict?.action === 'ask') && isFreshCall);
 
       if (approvalGated && !approvalDecision && isFreshCall) {
         const rejection = await runBeforeApprovalChecks({
@@ -1146,55 +1235,7 @@ export function createDurableToolCallStep() {
         // A delegated decline is the sub-agent's decision to act on; only a decline of
         // this step's own gate is denied locally.
         if (!approvalDecision.approved && !isDelegatedApprovalResume) {
-          // Return the approval decision (not a `result` string) so it persists as
-          // `state: 'output-denied'` with `approval`. The denial reason carries the
-          // existing string so downstream consumers/UI keep the same message.
-          // Also emit a terminal `tool-output-denied` chunk so live stream subscribers
-          // resolve the pending tool call (issue #20880) — persistence alone is not enough.
-          const approval = {
-            id: toolCallId,
-            approved: false as const,
-            reason: resolveDeclineReason(approvalDecision),
-          };
-          if (pubsub) {
-            try {
-              const deniedChunk = await applyToolPayloadTransformToChunk(
-                {
-                  type: 'tool-output-denied' as const,
-                  runId,
-                  from: ChunkFrom.AGENT,
-                  payload: { toolCallId, toolName, args, approval },
-                },
-                {
-                  policy: toolPayloadTransform,
-                  tools: toolsForTransform,
-                  logger: logger as any,
-                },
-              );
-              // Processes through output processors and emits (or emits a tripwire when blocked).
-              await processChunkThroughOutputProcessors(
-                deniedChunk as ChunkType,
-                registryEntry,
-                pubsub,
-                runId,
-                initData.agentId,
-                logger,
-                messageList,
-                processorObservabilityContext,
-                collectProcessorDataPart,
-              );
-            } catch (emitError) {
-              if (emitError instanceof DurableOutputProcessorError) {
-                throw emitError;
-              }
-              logger?.warn?.(`[DurableAgent] Failed to emit tool-output-denied chunk for ${toolName}: ${emitError}`);
-            }
-          }
-          return {
-            ...typedInput,
-            approval,
-            ...(processorDataParts.length ? { processorDataParts } : {}),
-          };
+          return denyToolCall(resolveDeclineReason(approvalDecision));
         }
       }
 
@@ -1344,6 +1385,7 @@ export function createDurableToolCallStep() {
         requestContext,
         mcp: registryEntry?.mcp,
         tracingContext: toolTracingContext,
+        ...(guardVerdict ? { toolCallGuard: toolCallGuardAttributes(guardVerdict) } : {}),
         // Use the actor supplied for this workflow segment. A resumed segment
         // must never recover the initial actor from serialized agent options.
         actor,

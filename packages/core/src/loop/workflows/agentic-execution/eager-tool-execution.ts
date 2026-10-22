@@ -1,5 +1,6 @@
 import { isToolBackgroundEligible } from '../../../background-tasks/resolve-config';
 import type { AgentBackgroundConfig, ToolBackgroundConfig } from '../../../background-tasks/types';
+import { hasToolCallGuard } from '../../../tools/tool-call-guard';
 
 type EagerToolResult = unknown;
 
@@ -650,6 +651,8 @@ export function isEagerlyExecutableToolCall({
   // sets `requireApproval` to true alongside it, so the check above already caught this.
   // Kept because this predicate must not depend on that pairing holding forever.
   if (getNeedsApprovalFn(tool)) return false;
+  // A `guardToolCall` hook decides the call (and may send it to approval) in the foreach.
+  if (hasToolCallGuard(tool)) return false;
 
   return true;
 }

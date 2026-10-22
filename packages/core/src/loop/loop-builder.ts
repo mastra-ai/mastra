@@ -5,6 +5,7 @@ import { InternalSpans, resolveExportedSpanId, SpanType } from '../observability
 import { safeEnqueue } from '../stream/base';
 import type { ChunkType } from '../stream/types';
 import { ChunkFrom } from '../stream/types';
+import type { ResolvedToolCallGuardVerdict } from '../tools/tool-call-guard';
 import type { createEventedWorkflow } from '../workflows/create';
 import { createWorkflow } from '../workflows/create';
 import type { Step } from '../workflows/step';
@@ -24,6 +25,7 @@ import {
   STEP_WORKSPACE_KEY,
   THREAD_ID_KEY,
   TOOL_APPROVAL_VERDICTS_KEY,
+  TOOL_GUARD_VERDICTS_KEY,
 } from './run-scope-keys';
 import { decideContinuation } from './shared/continuation-core';
 import { drainSignalsToTranscript } from './shared/steps/signal-drain-core';
@@ -369,6 +371,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
           // Cache each verdict so toolCallStep applies the exact scheduling decision without
           // evaluating a potentially stateful policy a second time.
           const approvalVerdicts = new Map<string, boolean>();
+          const guardVerdicts = new Map<string, ResolvedToolCallGuardVerdict>();
           toolCallForeachOptions.concurrency = await resolveEmittedToolCallConcurrency({
             requireToolApproval: rest.requireToolApproval ?? requestContext?.get('__mastra_requireToolApproval'),
             tools: (readScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools') as Tools | undefined) ?? rest.tools,
@@ -377,12 +380,15 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
             strategy: toolCallConcurrencyStrategy,
             toolCalls,
             approvalVerdicts,
+            guardVerdicts,
+            getMessages: () => rest.messageList.get.all.db(),
             requestContext,
             workspace: readScoped(scopeCtx, STEP_WORKSPACE_KEY, 'stepWorkspace'),
             logger: rest.logger,
           });
           emittedConcurrencyResolved = true;
           writeScoped(scopeCtx, TOOL_APPROVAL_VERDICTS_KEY, 'toolApprovalVerdicts', approvalVerdicts);
+          writeScoped(scopeCtx, TOOL_GUARD_VERDICTS_KEY, 'toolGuardVerdicts', guardVerdicts);
           writeScoped(scopeCtx, STEP_USAGE_KEY, 'stepUsage', typedInputData.output.usage);
           return toolCalls;
         },

@@ -243,6 +243,43 @@ await consumeApprovalStream(stream)
 
 In production, store the approved fingerprint in durable storage scoped to the user, run, tool call, and policy version. The `Set` above is intentionally small so the boundary is clear: the approval is consumed once, and only for the same canonical tool arguments that were reviewed.
 
+### Guard tool calls with `guardToolCall`
+
+Approval rules decide by tool name. When the decision depends on the arguments and on what the user asked for, add a `guardToolCall` hook. It runs for every call that no approval rule already sends to a person, and returns one of three verdicts:
+
+- `{ action: 'allow' }`: the call runs.
+- `{ action: 'deny', reason }`: the call is refused. The model receives `reason` in place of a result, and other calls in the same step still run.
+- `{ action: 'ask' }`: the call suspends for approval exactly like a `requireToolApproval` call, emitting `tool-call-approval`. Approving or declining it does not run the guard again.
+
+```typescript title="src/mastra/agents/coding-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
+export const codingAgent = new Agent({
+  id: 'coding-agent',
+  name: 'Coding Agent',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  tools: { runShell, readFile },
+  hooks: {
+    guardToolCall: async ({ toolName, args, userMessages }) => {
+      if (toolName !== 'runShell') return { action: 'allow' }
+      // Call your own classifier or policy service here.
+      const decision = await classifyCommand(args.command, userMessages)
+      if (decision === 'safe') return { action: 'allow' }
+      if (decision === 'destructive') {
+        return { action: 'deny', reason: `"${args.command}" is destructive and was not run.` }
+      }
+      return { action: 'ask' }
+    },
+  },
+})
+```
+
+By default the guard receives only the user's messages (`userMessages`), so tool output or model text cannot talk it into allowing a call. Set `guardToolCallOptions: { includeUntrustedContext: true }` to also receive the full conversation as `messages`.
+
+If the model keeps retrying refused calls, the next denial becomes `ask` so a person decides. This happens after 3 consecutive or 20 total denials in a run; change the thresholds with `guardToolCallOptions: { escalation: { consecutive, total } }`. The guard receives the current counts as `declines`. A guard that throws or returns an invalid verdict is treated as `ask`.
+
+Each verdict is recorded on the tool call span as the `guard` attribute (`action`, `reason`, `escalated`).
+
 ### Runtime suspension with `suspend()`
 
 A tool can also pause _during_ its `execute` function by calling `suspend()`. This is useful when the tool starts running and then discovers it needs additional user input or confirmation before it can finish.

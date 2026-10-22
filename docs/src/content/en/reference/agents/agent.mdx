@@ -1018,6 +1018,20 @@ SystemMessage types: string | string[] | CoreSystemMessage | CoreSystemMessage[]
             description:
               'Runs after a tool executes. Receives `{ toolName, input, context, metadata, output, error }`. `output` is undefined when the tool throws, and `error` is set instead.',
           },
+          {
+            name: 'guardToolCall',
+            type: '(context: ToolCallGuardContext) => ToolCallGuardVerdict | Promise<ToolCallGuardVerdict>',
+            isOptional: true,
+            description:
+              "Decides each tool call before it runs. Receives `{ toolName, toolCallId, args, userMessages, messages, requestContext, workspace, declines }`. Return `{ action: 'allow' }` to run the call, `{ action: 'deny', reason }` to refuse it (the model sees `reason`), or `{ action: 'ask' }` to suspend for human approval. Skipped when `requireToolApproval`, `requireApproval`, or `needsApprovalFn` already require approval. A guard that throws is treated as `ask`.",
+          },
+          {
+            name: 'guardToolCallOptions',
+            type: 'ToolCallGuardOptions',
+            isOptional: true,
+            description:
+              'Options for `guardToolCall`. `includeUntrustedContext` (default `false`) passes the full conversation as `messages`; otherwise the guard only receives `userMessages`. `escalation: { consecutive, total }` (defaults `3` and `20`) turns further denials into `ask` once the run reaches that many consecutive or total denials.',
+          },
         ],
       },
     ],
@@ -1203,6 +1217,23 @@ const result = await agent.generate('Clean up old records', {
       if (toolName === 'deleteRecord') {
         return { proceed: false, output: { blocked: true } }
       }
+    },
+  },
+})
+```
+
+`guardToolCall` decides each call before it runs, so it can allow it, refuse it with a reason the model sees, or send it to [human approval](/docs/agents/human-in-the-loop#guard-tool-calls-with-guardtoolcall):
+
+```typescript
+const agent = new Agent({
+  // ...
+  hooks: {
+    guardToolCall: ({ toolName, args }) => {
+      if (toolName !== 'runShell') return { action: 'allow' }
+      if (args.command.startsWith('rm -rf /')) {
+        return { action: 'deny', reason: 'Deleting the filesystem root is not allowed.' }
+      }
+      return { action: 'ask' }
     },
   },
 })

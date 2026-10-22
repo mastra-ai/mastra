@@ -59,6 +59,7 @@ import { ChunkFrom } from '../../../../stream/types';
 import { withToolPayloadTransformProviderMetadata } from '../../../../tools/payload-transform';
 import { findProviderToolByName, inferProviderExecuted } from '../../../../tools/provider-tool-utils';
 import type { ToolToConvert } from '../../../../tools/tool-builder/builder';
+import { hasToolCallGuard } from '../../../../tools/tool-call-guard';
 import { isMastraTool } from '../../../../tools/toolchecks';
 import type { CoreTool } from '../../../../tools/types';
 import { createMastraProxy, makeProcessorCoreTool } from '../../../../utils';
@@ -191,6 +192,7 @@ const durableLLMOutputSchema = z.object({
       activeTools: z.array(z.string()).nullable().optional(),
       requireApproval: z.boolean().optional(),
       hasSuspendSchema: z.boolean().optional(),
+      hasToolCallGuard: z.boolean().optional(),
       stepSpanData: z.any().optional(),
     }),
   ),
@@ -2065,6 +2067,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       activeTools: currentActiveTools ?? null,
                       ...(effectiveTool?.requireApproval ? { requireApproval: true } : {}),
                       ...(effectiveTool?.hasSuspendSchema ? { hasSuspendSchema: true } : {}),
+                      ...(hasToolCallGuard(effectiveTool) ? { hasToolCallGuard: true } : {}),
                     });
                     break;
                   }

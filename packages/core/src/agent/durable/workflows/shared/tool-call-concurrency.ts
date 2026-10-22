@@ -38,7 +38,10 @@ export function resolveDurableToolCallConcurrency({
 }: {
   options?: Pick<SerializableDurableOptions, 'requireToolApproval' | 'toolCallConcurrency' | 'activeTools'>;
   toolsMetadata?: SerializableToolMetadata[];
-  toolCalls?: Pick<DurableToolCallInput, 'activeTools' | 'toolName' | 'requireApproval' | 'hasSuspendSchema'>[];
+  toolCalls?: Pick<
+    DurableToolCallInput,
+    'activeTools' | 'toolName' | 'requireApproval' | 'hasSuspendSchema' | 'hasToolCallGuard'
+  >[];
 }): number {
   if (options?.requireToolApproval) {
     return 1;
@@ -49,7 +52,8 @@ export function resolveDurableToolCallConcurrency({
   // run-start `toolsMetadata`, so the metadata lookups below cannot see them.
   // The stamps are persisted with the tool calls, so this stays correct across
   // cold durable resumes (issue #24377).
-  if (toolCalls?.some(tc => tc.requireApproval || tc.hasSuspendSchema)) {
+  // A guarded call can be sent to approval by its guard, so it runs sequentially as well.
+  if (toolCalls?.some(tc => tc.requireApproval || tc.hasSuspendSchema || tc.hasToolCallGuard)) {
     return 1;
   }
 
