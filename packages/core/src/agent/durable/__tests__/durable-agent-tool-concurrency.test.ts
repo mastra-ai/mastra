@@ -373,7 +373,7 @@ describe('DurableAgent parallel tool calls across a restart', () => {
    * calls 1 and 3 finish; `crashAfterMs` after both have returned, graph 1 is cut and graph 2
    * recovers the run.
    */
-  async function crashWhileCallTwoRuns(runId: string, crashAfterMs: number) {
+  async function crashWhileCallTwoRuns(runId: string, crashAfterMs: number, callThreeDelayMs = 0) {
     const llm = getMock();
     llm.on(
       { endpoint: 'chat', hasToolResult: false },
@@ -412,6 +412,8 @@ describe('DurableAgent parallel tool calls across a restart', () => {
               execute: async ({ index }) => {
                 started.push({ generation, index });
                 if (generation === 1 && index === 2) await gate.wait();
+                if (generation === 1 && index === 3 && callThreeDelayMs)
+                  await new Promise(r => setTimeout(r, callThreeDelayMs));
                 finished.push({ generation, index });
                 if (generation === 1 && finished.filter(c => c.generation === 1).length === 2) markOthersDone();
                 return { ok: true, index };
@@ -443,5 +445,14 @@ describe('DurableAgent parallel tool calls across a restart', () => {
     expect(recovered.executionError).toBeUndefined();
     expect(recovered.text).toBe('done');
     expect(rerun).toEqual([2]);
+  }, 30_000);
+
+  it('re-runs a call that finished within the checkpoint interval before the crash', async () => {
+    // Pins the coalescing trade-off: call 3 returns 300ms after call 1, so its progress is still
+    // waiting for the next checkpoint when the run is cut 200ms later, and it runs again.
+    const { recovered, rerun } = await crashWhileCallTwoRuns('parallel-tools-window', 200, 300);
+
+    expect(recovered.text).toBe('done');
+    expect(rerun).toEqual([2, 3]);
   }, 30_000);
 });
