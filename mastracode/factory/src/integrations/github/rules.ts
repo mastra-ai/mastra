@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 
+import { routedBoardEvent, routeEventMoves } from '../../boards/event-routing.js';
 import {
   boardEventHandlers,
   boardForWorkItem,
@@ -12,7 +13,7 @@ import type { BoardRegistry } from '../../boards/index.js';
 import { matchIntakeRoute } from '../../boards/intake-routing.js';
 import { cardLabels, moveCardToBoard } from '../../boards/relocate.js';
 import type { BoardResolver } from '../../boards/resolver.js';
-import { selectEventRule } from '../../rules/event-rules.js';
+import { hasExplicitRuleOverride, selectEventRule } from '../../rules/event-rules.js';
 import type {
   FactoryGithubEventName,
   FactoryGithubRuleContext,
@@ -31,6 +32,7 @@ import type {
 import type { WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import {
   FACTORY_PULL_REQUEST_RECONCILIATION_KEY,
+  externalSourceKey,
   WorkItemUpdateConflictError,
 } from '../../storage/domains/work-items/base.js';
 import type { IntegrationContext, IntegrationHooks } from '../base.js';
@@ -176,6 +178,15 @@ function canonicalSourceKey(kind: 'issue' | 'pull-request', itemNumber: number):
 
 function legacySourceKey(repositoryId: number, kind: 'issue' | 'pull-request', itemNumber: number): string {
   return `github:${repositoryId}:${kind}:${itemNumber}`;
+}
+
+/** The link key a GitHub pull request is stored under: the same key its own card's source uses. */
+export function githubPullRequestLinkKey(repositoryId: number, pullRequestNumber: number): string {
+  return externalSourceKey({
+    integrationId: 'github',
+    type: 'pull-request',
+    externalId: `github:${repositoryId}:pull-request:${pullRequestNumber}`,
+  })!;
 }
 
 function provenanceTarget(repositoryId: number, pullRequestNumber: number): string {
@@ -354,6 +365,48 @@ export class GithubRules {
    * stored fallback route. Only installed boards count. Undefined leaves built-in routing (Work)
    * in charge.
    */
+  /** A stored board's event routes decide where the rule's proposed card move lands (see `routeEventMoves`). */
+  async #routeEventMoves(
+    project: { orgId: string; factoryProjectId: string },
+    event: FactoryGithubEventName,
+    item: WorkItemRow | null | undefined,
+    context: FactoryGithubRuleContext,
+    decisions: Record<string, unknown>[],
+  ): Promise<Record<string, unknown>[]> {
+    const resolver = this.options.boardResolver;
+    const boardEvent = routedBoardEvent(event);
+    if (!resolver || !item || !boardEvent || context.pullRequestIntake) return decisions;
+    if (hasExplicitRuleOverride(this.options.github.rules, event)) return decisions;
+    const board = boardForWorkItem(item);
+    const routes = await resolver.eventRoutes(project, board);
+    if (!routes) return decisions;
+    const pullRequestKey = context.pullRequest
+      ? githubPullRequestLinkKey(context.repository.id, context.pullRequest.number)
+      : undefined;
+    const links = await this.options.storage.listSources({ ...project, workItemId: item.id });
+    const pullRequestLinks = links.filter(link => link.kind === 'pull_request');
+    const openPullRequestNumber = item.metadata?.openPullRequestNumber;
+    const hasOtherOpenPullRequest = pullRequestLinks.length
+      ? pullRequestLinks.some(link => link.state === 'open' && link.sourceKey !== pullRequestKey)
+      : typeof openPullRequestNumber === 'number' && openPullRequestNumber !== context.pullRequest?.number;
+    return routeEventMoves({
+      decisions: decisions as { type: string }[],
+      routes,
+      event: boardEvent,
+      board,
+      fromPhase: item.stages.length === 1 ? item.stages[0] : undefined,
+      facts: {
+        'pullRequest.merged': context.pullRequest?.merged,
+        'pullRequest.draft': context.pullRequest?.draft,
+        'pullRequest.factoryAuthored': context.pullRequest?.factoryAuthored,
+        'issue.stateReason': context.issue?.stateReason,
+        'item.hasOtherOpenPullRequest': hasOtherOpenPullRequest,
+        'item.sourceKind': item.externalSource?.type === 'pull-request' ? 'pull_request' : 'issue',
+        'actor.trusted': context.actor.type === 'github' ? context.actor.trusted : undefined,
+      },
+    }) as Record<string, unknown>[];
+  }
+
   async #intakeTarget(
     project: ExternalRepositoryProjectTarget,
     repositoryName: string,
@@ -826,6 +879,14 @@ export class GithubRules {
           : {}),
       };
 
+      if (context.pullRequest && (event === 'pullRequestMerged' || event === 'pullRequestClosed')) {
+        await this.options.storage.updateSourceState({
+          orgId: project.orgId,
+          factoryProjectId: project.factoryProjectId,
+          sourceKey: githubPullRequestLinkKey(context.repository.id, context.pullRequest.number),
+          state: event === 'pullRequestMerged' ? 'merged' : 'closed',
+        });
+      }
       const rule = selectEventRule(
         this.options.github.rules,
         boardEventHandlers(this.options.boards, eventBoardId(context), 'github'),
@@ -844,6 +905,7 @@ export class GithubRules {
             return { ...entry };
           });
         }
+        decisions = await this.#routeEventMoves(project, event, item, context, decisions);
       } catch (error) {
         const timedOut = error instanceof Error && error.message === 'FACTORY_RULE_TIMEOUT';
         outcome = {

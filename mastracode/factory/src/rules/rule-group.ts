@@ -48,6 +48,7 @@ export const EVENT_ROUTE_FIELDS = [
   'issue.stateReason',
   'item.hasOtherOpenPullRequest',
   'actor.trusted',
+  'item.sourceKind',
 ] as const;
 
 export type RuleValue = string | number | boolean | Array<string | number | boolean>;

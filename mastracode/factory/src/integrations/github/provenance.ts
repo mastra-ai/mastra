@@ -3,7 +3,7 @@ import type { IntegrationStorageHandle } from '../../storage/domains/integration
 import type { SourceControlStorageHandle } from '../../storage/domains/source-control/base.js';
 import type { FactoryRunBindingRecord, WorkItemRow, WorkItemsStorage } from '../../storage/domains/work-items/base.js';
 import type { GithubIntegration } from './integration.js';
-import { cardBelongsToRepository } from './rules.js';
+import { cardBelongsToRepository, githubPullRequestLinkKey } from './rules.js';
 import { parseCreatedPullRequest } from './session-subscriptions.js';
 
 export interface RecordFactoryPullRequestProvenanceInput {
@@ -110,6 +110,20 @@ export async function recordFactoryPullRequestProvenance(
     )
       return;
     const targetKey = `factory-pr-provenance:${repositoryId}:${pullRequestNumber}`;
+    // The authoring card owns the pull request: its link moves here even when the PR's own card
+    // was filed first.
+    const linkPullRequest = () =>
+      workItems.linkSource({
+        orgId: input.binding.orgId,
+        factoryProjectId: input.binding.factoryProjectId,
+        workItemId: input.item.id,
+        sourceKey: githubPullRequestLinkKey(repositoryId!, pullRequestNumber),
+        kind: 'pull_request',
+        integration: 'github',
+        external: { repositoryId, number: pullRequestNumber, url },
+        factoryAuthored: true,
+        reassign: true,
+      });
     // Dedupe within the authoring project only: a sibling project's row must
     // not block this project from recording its own provenance.
     if (
@@ -117,6 +131,7 @@ export async function recordFactoryPullRequestProvenance(
         row => row.orgId === input.binding.orgId && row.data?.factoryProjectId === input.binding.factoryProjectId,
       )
     ) {
+      await linkPullRequest();
       return;
     }
 
@@ -142,6 +157,8 @@ export async function recordFactoryPullRequestProvenance(
         toolCallId: input.toolCallId,
       },
     });
+
+    await linkPullRequest();
 
     const reviewItem = (
       await workItems.list({

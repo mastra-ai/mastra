@@ -20,7 +20,17 @@ export const workBoardTemplate = {
     { key: 'canceled', name: 'Canceled', kind: 'terminal' },
   ],
   eventRoutes: [
-    { event: 'pull_request.merged', toPhaseKey: 'done' },
+    // Event routes decide where a move the integration's rule proposes lands; the rule keeps its gates
+    // (trusted actor, Factory-authored, recorded verdict, PR still open).
+    { event: 'pull_request.opened', fromPhases: ['execute'], toPhaseKey: 'review' },
+    {
+      event: 'pull_request.merged',
+      when: {
+        operator: 'AND',
+        conditions: [{ field: 'item.hasOtherOpenPullRequest', operator: 'equals', value: false }],
+      },
+      toPhaseKey: 'done',
+    },
     {
       event: 'pull_request.closed',
       when: {
@@ -29,8 +39,8 @@ export const workBoardTemplate = {
       },
       toPhaseKey: 'canceled',
     },
-    { event: 'pull_request.review_requested', fromPhases: ['intake', 'canceled'], toPhaseKey: 'review' },
-    { event: 'pull_request.updated', fromPhases: ['review', 'done'], toPhaseKey: 'review' },
+    { event: 'pull_request.review_requested', toPhaseKey: 'review' },
+    { event: 'pull_request.updated', toPhaseKey: 'review' },
     {
       event: 'issue.closed',
       when: {

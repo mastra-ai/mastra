@@ -6,7 +6,7 @@ import { boardForWorkItem, workItemPhaseSemantics } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { SELF_REVIEW_ROUND_LIMIT } from '../boards/work.js';
 import type { IntegrationTools } from '../integrations/base.js';
-import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
+import { externalSourceKey, WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
 import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import type { FactorySessionSourceLookup } from './binding-context.js';
 import { resolveFactorySessionAddress } from './binding-context.js';
@@ -246,6 +246,17 @@ function createReviewVerdictTool(
             patch: {
               metadata: { reviewVerdict: verdict, reviewedHeadSha: reviewedHeadSha.toLowerCase(), reviewedAt },
             },
+          });
+        }
+        const sourceKey = externalSourceKey(item.externalSource);
+        if (sourceKey) {
+          await options.storage.recordSourceReview({
+            orgId: binding.orgId,
+            factoryProjectId: item.factoryProjectId,
+            sourceKey,
+            verdict,
+            reviewedHeadSha: reviewedHeadSha.toLowerCase(),
+            reviewedAt: new Date(reviewedAt),
           });
         }
         return { status: 'recorded', verdict, reviewedHeadSha, reviewedAt };

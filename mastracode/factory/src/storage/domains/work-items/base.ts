@@ -27,6 +27,15 @@ import {
   readBoardVersion,
   trackBoardWrites,
 } from './board-version.js';
+import {
+  findBySourceKey,
+  linkSource,
+  listSources,
+  recordSourceReview,
+  updateSourceState,
+  WORK_ITEM_SOURCES_SCHEMA,
+} from './sources.js';
+import type { LinkSourceInput, SourceScope, WorkItemSourceLink, WorkItemSourceState } from './sources.js';
 
 export type WorkItemStage = string;
 
@@ -1357,6 +1366,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       WORK_ITEM_COMMENT_MENTIONS_SCHEMA,
       WORK_ITEM_ACTIVITY_SCHEMA,
       FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA,
+      WORK_ITEM_SOURCES_SCHEMA,
     ]);
     await this.repairLegacyAttentionState();
   }
@@ -1364,6 +1374,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
   async dangerouslyClearAll(): Promise<void> {
     await this.ops.deleteMany('work_items', {});
     await super.ops.deleteMany(FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name, {});
+    await super.ops.deleteMany(WORK_ITEM_SOURCES_SCHEMA.name, {});
     // A project with no version row is never served from cache, so this invalidates every replica.
     await super.ops.deleteMany(FACTORY_BOARD_VERSIONS_SCHEMA.name, {});
     this.#listCache.clear();
@@ -3225,7 +3236,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     let lastError: unknown;
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        return await prepare();
+        const prepared = await prepare();
+        if (!prepared.replayed) await this.#linkOwnSource(prepared.item);
+        return prepared;
       } catch (error) {
         if (!(error instanceof UniqueViolationError)) throw error;
         // A claim another project holds is a refusal, not a race to retry.
@@ -3276,7 +3289,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         ? this.#withProjectRelationTransaction(params.orgId, params.factoryProjectId, run)
         : run(this.#db);
     try {
-      return await execute();
+      const result = await execute();
+      await this.#linkOwnSource(result.item);
+      return result;
     } catch (error) {
       if (!(error instanceof UniqueViolationError)) throw error;
       // A claim taken by another project is a refusal, not a race to replay.
@@ -3290,7 +3305,34 @@ export class WorkItemsStorage extends FactoryStorageDomain {
         throw new WorkItemClaimConflictError(toWorkItem(claimant));
       }
       if (claimant) return { item: toWorkItem(claimant), created: false, previous: priorState(claimant) };
-      return execute();
+      const result = await execute();
+      await this.#linkOwnSource(result.item);
+      return result;
+    }
+  }
+
+  /**
+   * Links a card to its own issue or pull request. The holder of an existing link keeps it (a
+   * Factory-authored pull request belongs to the card that authored it). Runs after the card
+   * commits; a failure leaves the card unlinked until its source's next delivery links it.
+   */
+  async #linkOwnSource(item: WorkItemRow): Promise<void> {
+    const source = item.externalSource;
+    const kind = source?.type === 'pull-request' ? 'pull_request' : source?.type === 'issue' ? 'issue' : null;
+    const sourceKey = externalSourceKey(source);
+    if (!source || !kind || !sourceKey) return;
+    try {
+      await linkSource(this.#db, {
+        orgId: item.orgId,
+        factoryProjectId: item.factoryProjectId,
+        workItemId: item.id,
+        sourceKey,
+        kind,
+        integration: source.integrationId,
+        external: { externalId: source.externalId, ...(source.url ? { url: source.url } : {}) },
+      });
+    } catch (error) {
+      console.warn(`[factory] could not link work item ${item.id} to ${sourceKey}:`, error);
     }
   }
 
@@ -3646,6 +3688,31 @@ export class WorkItemsStorage extends FactoryStorageDomain {
     return rows.map(toWorkItemSubscription);
   }
 
+  /** Links an external record (its own source, or a pull request opened for it) to a card. */
+  linkSource(input: LinkSourceInput): Promise<WorkItemSourceLink> {
+    return linkSource(this.#db, input);
+  }
+
+  listSources(scope: SourceScope & { workItemId: string }): Promise<WorkItemSourceLink[]> {
+    return listSources(this.#db, scope);
+  }
+
+  findBySourceKey(scope: SourceScope & { sourceKey: string }): Promise<WorkItemSourceLink | null> {
+    return findBySourceKey(this.#db, scope);
+  }
+
+  updateSourceState(
+    scope: SourceScope & { sourceKey: string; state: WorkItemSourceState; headSha?: string | null },
+  ): Promise<WorkItemSourceLink | null> {
+    return updateSourceState(this.#db, scope);
+  }
+
+  recordSourceReview(
+    scope: SourceScope & { sourceKey: string; verdict: string; reviewedHeadSha: string | null; reviewedAt: Date },
+  ): Promise<WorkItemSourceLink | null> {
+    return recordSourceReview(this.#db, scope);
+  }
+
   async delete({
     orgId,
     id,
@@ -3665,6 +3732,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       if (deleted === 0) return null;
       await this.#purgeFeedState(ops, { orgId, factoryProjectId: existing.factory_project_id, workItemId: id });
       await ops.deleteMany(FACTORY_WORK_ITEM_SUBSCRIPTIONS_SCHEMA.name, { org_id: orgId, work_item_id: id });
+      await ops.deleteMany(WORK_ITEM_SOURCES_SCHEMA.name, { org_id: orgId, work_item_id: id });
       if (purgeRuleState && existing.external_source?.externalId) {
         await this.#purgeRuleState(ops, {
           orgId,

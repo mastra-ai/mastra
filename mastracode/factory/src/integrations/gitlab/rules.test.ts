@@ -1,8 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry, defineBoard } from '../../boards/index.js';
+import { BoardResolver } from '../../boards/resolver.js';
+import { defaultProjectBoardConfig } from '../../boards/templates/work.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryTransitionService } from '../../rules/transition-service.js';
 import type { FactoryGitLabRuleContext } from '../../rules/types.js';
+import type { ProjectBoardConfigInput } from '../../storage/domains/boards/validation.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { resolveGitLabRules } from './default-rules.js';
 import { encodeSourceId } from './integration.js';
@@ -111,6 +114,9 @@ async function setup(
     installationHost?: string;
     platformOnly?: boolean;
     boards?: ReturnType<typeof createBoardRegistry>;
+    bindingBoard?: string | null;
+    /** Seed the project's stored boards and route intake through a resolver. */
+    storedIntakeRoutes?: ProjectBoardConfigInput['intakeRoutes'];
   } = {},
 ) {
   const seeded = await createFactoryStorageForTests();
@@ -169,9 +175,25 @@ async function setup(
     integrationId: 'gitlab',
     sourceId: SOURCE_ID,
     factoryProjectId: project.id,
-    board: 'work',
+    board: options.bindingBoard === undefined ? 'work' : options.bindingBoard,
     userId: 'user-1',
   });
+  const boards = options.boards ?? createBoardRegistry();
+  let boardResolver: BoardResolver | undefined;
+  if (options.storedIntakeRoutes) {
+    await seeded.boardDefinitions.saveConfig({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      userId: 'user-1',
+      expectedRevision: 0,
+      config: { ...defaultProjectBoardConfig, intakeRoutes: options.storedIntakeRoutes },
+    });
+    boardResolver = new BoardResolver({
+      codeBoards: boards,
+      installedBoardIds: new Set([...boards.keys()].filter(id => id !== 'work' && id !== 'review')),
+      storage: seeded.boardDefinitions,
+    });
+  }
 
   const gitlab: GitLabRulesIntegration = {
     rules: resolveGitLabRules(),
@@ -190,12 +212,80 @@ async function setup(
     storage: seeded.workItems,
     intake: seeded.intake,
     configVersion: 'gitlab-test-v1',
-    boards: options.boards ?? createBoardRegistry(),
+    boards,
+    ...(boardResolver ? { boardResolver } : {}),
   });
   return { seeded, project, gitlab, service };
 }
 
 describe('GitLabRules', () => {
+  describe('with stored intake routes', () => {
+    const bugToPlanning = {
+      when: {
+        operator: 'AND' as const,
+        conditions: [
+          { field: 'item.labels', operator: 'contains' as const, value: 'BUG' },
+          { field: 'source.integration', operator: 'equals' as const, value: 'gitlab' },
+          { field: 'source.repository', operator: 'equals' as const, value: 'Acme/App' },
+        ],
+      },
+      boardKey: 'work',
+      phaseKey: 'planning',
+    };
+    const fallback = { when: null, boardKey: 'work' };
+    const delivery = defineBoard({
+      id: 'delivery',
+      title: 'Delivery',
+      initialPhase: 'queued',
+      phases: {
+        queued: { title: 'Queued', kind: 'resting', next: 'shipped' },
+        shipped: { title: 'Shipped', kind: 'terminal' },
+      },
+    });
+
+    async function intakeDecision(options: Parameters<typeof setup>[0]) {
+      const { seeded, project, service } = await setup(options);
+      await expect(service.ingest(issueOpened())).resolves.toEqual({ status: 'committed' });
+      const [record] = await seeded.workItems.listDeferredDecisions('org-1', project.id);
+      return record?.decision;
+    }
+
+    it('files an issue a conditional route matches on that route board and phase, ahead of the binding', async () => {
+      expect(
+        await intakeDecision({
+          boards: createBoardRegistry({ boards: [delivery] }),
+          bindingBoard: 'delivery',
+          storedIntakeRoutes: [bugToPlanning, fallback],
+        }),
+      ).toMatchObject({ type: 'upsertLinkedWorkItem', source: 'gitlab-issue', board: 'work', stage: 'planning' });
+    });
+
+    it('lets the binding board win over the stored fallback route', async () => {
+      expect(
+        await intakeDecision({
+          boards: createBoardRegistry({ boards: [delivery] }),
+          bindingBoard: 'delivery',
+          storedIntakeRoutes: [fallback],
+        }),
+      ).toMatchObject({ board: 'delivery', stage: 'queued' });
+    });
+
+    it('uses the stored fallback route when the binding names no board', async () => {
+      expect(
+        await intakeDecision({
+          bindingBoard: null,
+          storedIntakeRoutes: [
+            {
+              ...bugToPlanning,
+              when: { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'release' }] },
+            },
+            { ...fallback, phaseKey: 'triage' },
+          ],
+        }),
+      ).toMatchObject({ board: 'work', stage: 'triage' });
+    });
+  });
+
   it('commits a selected linked issue once and replays the same delivery', async () => {
     const { seeded, project, service } = await setup();
     await expect(service.ingest(issueOpened())).resolves.toEqual({ status: 'committed' });
