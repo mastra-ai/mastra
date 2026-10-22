@@ -43,8 +43,8 @@
     "@mastra/core": "workspace:*",
     "@opentelemetry/context-async-hooks": "^2.10.0",
     "@opentelemetry/sdk-logs": "^0.221.0",
-    "@types/node": "22.20.1",
-    "tsdown": "0.22.9",
+    "@types/node": "22.20.5",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

@@ -59,7 +59,7 @@
     "@internal/types-builder": "workspace:*",
     "@opencode-ai/plugin": "1.14.48",
     "@opencode-ai/sdk": "^1.18.5",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

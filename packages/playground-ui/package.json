@@ -252,7 +252,7 @@
     "@testing-library/user-event": "^14.6.7",
     "@types/json-schema": "^7.0.15",
     "@types/mdast": "^4.0.4",
-    "@types/node": "22.20.1",
+    "@types/node": "22.20.5",
     "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.2.0",
