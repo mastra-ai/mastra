@@ -50,10 +50,10 @@ describe('SpanDataPanelView — header summary', () => {
 describe('SpanDataPanelView — span id in the header', () => {
   const fullId = 'span-0123456789abcdef';
 
-  it('shows the id truncated without a # prefix', () => {
+  it('shows the first 6 characters of the id, with no ellipsis and no # prefix', () => {
     render(<SpanDataPanelView {...baseProps} spanId={fullId} />);
 
-    const heading = screen.getByRole('heading', { name: /^Span span-0123456…/ });
+    const heading = screen.getByRole('heading', { name: 'Span span-0' });
     expect(heading.textContent).not.toContain('#');
     expect(screen.queryByText(fullId)).toBeNull();
   });
@@ -61,7 +61,7 @@ describe('SpanDataPanelView — span id in the header', () => {
   it('shows the copy action instead of the full id in a tooltip', async () => {
     render(<SpanDataPanelView {...baseProps} spanId={fullId} />);
 
-    fireEvent.focus(screen.getByRole('button', { name: 'span-0123456…' }));
+    fireEvent.focus(screen.getByRole('button', { name: 'span-0' }));
 
     expect((await screen.findByRole('tooltip')).textContent).toBe('Copy to clipboard');
     expect(screen.queryByText(fullId)).toBeNull();
@@ -73,12 +73,12 @@ describe('SpanDataPanelView — span id in the header', () => {
 
     render(<SpanDataPanelView {...baseProps} spanId={fullId} />);
 
-    const button = screen.getByRole('button', { name: 'span-0123456…' });
+    const button = screen.getByRole('button', { name: 'span-0' });
     fireEvent.click(button);
 
     expect(writeText).toHaveBeenCalledWith(fullId);
     expect((await screen.findByRole('tooltip')).textContent).toBe('Copied to clipboard');
-    expect(button.textContent).toBe('span-0123456…');
+    expect(button.textContent).toBe('span-0');
     expect(button.querySelector('svg')).toBeNull();
   });
 

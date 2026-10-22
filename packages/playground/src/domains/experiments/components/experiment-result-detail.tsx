@@ -1,6 +1,6 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
 
-import { TraceScoresTab } from '@mastra/playground-ui/domains/scores';
+import { TraceScoresList } from '@mastra/playground-ui/domains/scores';
 import { SpanFeedbackTab } from '@mastra/playground-ui/domains/traces/components/span-feedback-tab';
 import { TraceFeedbackTab } from '@mastra/playground-ui/domains/traces/components/trace-feedback-tab';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
@@ -148,11 +148,13 @@ export function ExperimentResultDetail({
         withFeedback={withFeedback}
         onOpenScore={(traceId, scoreId) => navigate(traceScoreLink(traceId, scoreId))}
         feedbackTabBadge={withFeedback ? (traceFeedback?.pagination?.total ?? undefined) : undefined}
-        feedbackTabSlot={withFeedback ? ({ traceId }) => <TraceFeedbackTab traceId={traceId} /> : undefined}
+        feedbackTabSlot={
+          withFeedback ? ({ traceId }) => <TraceFeedbackTab traceId={traceId} variant="embed" /> : undefined
+        }
         scoresTabBadge={anchorSpanScores?.pagination?.total ?? undefined}
         scoresTabSlot={({ traceId, rootSpanId }) =>
           rootSpanId ? (
-            <TraceScoresTab
+            <TraceScoresList
               traceId={traceId}
               spanId={rootSpanId}
               onScoreSelect={scoreId => {

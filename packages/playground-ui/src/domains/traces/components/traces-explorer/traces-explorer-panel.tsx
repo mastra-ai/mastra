@@ -10,7 +10,7 @@ import { TraceSpanPanel } from '../trace-span-panel';
 import type { TraceSpanPanelProps } from '../trace-span-panel';
 import { useTraceUsageColumns, useTracesConfig, useTracesList, useTracesSelection } from './traces-explorer-context';
 import { TraceAsItemDialog } from '@/domains/observability/components/trace-as-item-dialog';
-import { ScoreDataPanel, TraceScoresTab } from '@/domains/scores';
+import { ScoreDataPanel, TraceScoresList } from '@/domains/scores';
 
 export type TracesExplorerPanelProps = {
   /** Opens a score of one of the full thread's traces (the host owns routing). */
@@ -20,7 +20,7 @@ export type TracesExplorerPanelProps = {
   headerActionsSlot?: (args: { traceId: string; spans: TraceSpanPanelProps['spans'] }) => ReactNode;
   /** Builds the href of the dedicated trace page; without it the drawer offers no "Open trace page" link. */
   traceHref?: (traceId: string) => string;
-  /** Shows "Add full trace to dataset" in the trace actions menu. Defaults to `true`. */
+  /** Shows the "Add to dataset" button next to "Score trace". Defaults to `true`. */
   withAddTraceToDataset?: boolean;
 };
 
@@ -119,10 +119,12 @@ export function TracesExplorerPanel({
         featuredSpanIds={selection.highlightSpanIds}
         onHighlightSpans={highlightSpans}
         feedbackTabBadge={withFeedback ? (traceFeedbackData?.pagination?.total ?? undefined) : undefined}
-        feedbackTabSlot={withFeedback ? ({ traceId: tid }) => <TraceFeedbackTab traceId={tid} /> : undefined}
+        feedbackTabSlot={
+          withFeedback ? ({ traceId: tid }) => <TraceFeedbackTab traceId={tid} variant="embed" /> : undefined
+        }
         scoresTabBadge={spanScoresData?.pagination?.total ?? undefined}
         scoresTabSlot={({ traceId: tid, rootSpanId }) =>
-          rootSpanId ? <TraceScoresTab traceId={tid} spanId={rootSpanId} onScoreSelect={selectScore} /> : null
+          rootSpanId ? <TraceScoresList traceId={tid} spanId={rootSpanId} onScoreSelect={selectScore} /> : null
         }
         spanView={selection.spanView}
         onSpanViewChange={setSpanView}

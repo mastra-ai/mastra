@@ -7,7 +7,6 @@ import {
   Loader2Icon,
   MessageSquareReplyIcon,
   MessageSquareTextIcon,
-  MoreHorizontalIcon,
   SaveIcon,
 } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
@@ -19,32 +18,30 @@ import { useTraceSearch } from '../hooks/use-trace-search';
 import type { TraceUsageSummary } from '../trace-list-columns';
 import type { LightSpanRecord } from '../types';
 import { formatHierarchicalSpans } from './format-hierarchical-spans';
-import { TraceIdButton } from './trace-id-button';
 import { TraceSpanTimeline } from './trace-span-timeline';
 import { TraceSpanTree } from './trace-span-tree';
-import { TraceSummaryDescription } from './trace-summary-description';
+import { TraceEntityMeta, TraceStatusMeta, TraceSummaryDescription } from './trace-summary-description';
 import { Button } from '@/ds/components/Button';
 import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DataPanel } from '@/ds/components/DataPanel';
 import type { DataPanelProps } from '@/ds/components/DataPanel';
-import { DropdownMenu } from '@/ds/components/DropdownMenu';
 import { Notice } from '@/ds/components/Notice';
 import { SearchInput } from '@/ds/components/SearchInput';
+import { Skeleton } from '@/ds/components/Skeleton';
 import { Tab, TabList, Tabs } from '@/ds/components/Tabs';
 import { Icon } from '@/ds/icons/Icon';
 import { ScorersIcon } from '@/ds/icons/ScorersIcon';
+import { TraceIcon } from '@/ds/icons/TraceIcon';
 import type { LinkComponent } from '@/ds/types/link-component';
 import { useScrollToFirstHighlight } from '@/hooks/use-scroll-to-first-highlight';
 import { useTextHighlight } from '@/hooks/use-text-highlight';
 import { PanelGroup } from '@/lib/resize/panel-group';
 import { PanelSeparator } from '@/lib/resize/separator';
-import { cn } from '@/lib/utils';
 
 export type TraceDataPanelPlacement = 'traces-list' | 'trace-page';
 
 export type TraceSpanView = 'tree' | 'timeline';
 
-/** What the side column next to the span tree shows. */
 export type TraceSideView = 'messages' | 'feedback' | 'scores';
 
 export interface TraceDataPanelViewProps {
@@ -96,18 +93,19 @@ export interface TraceDataPanelViewProps {
    */
   showUnavailableFeaturesMsg?: boolean;
   /**
-   * When provided, a "Scores" tab appears; the slot renders whatever trace-level
-   * scoring UI the consumer wants.
+   * When provided, a "Scores" tab appears in the side column and a "Scores" readout in the
+   * summary row opens the same slot in a popover.
    */
   scoresTabSlot?: (args: { traceId: string; rootSpanId: string | undefined }) => ReactNode;
-  /** Optional count shown in the "Scores" tab label. */
+  /** Optional count rendered after the "Scores" labels, e.g. `Scores (3)`. */
   scoresTabBadge?: ReactNode;
   /**
-   * When provided, a "Feedback" tab appears; the slot renders the trace-level
-   * feedback UI. Trace feedback is not scoped to a span — the span panel owns that.
+   * When provided, a "Feedback" tab appears in the side column and a "Feedback" readout in
+   * the summary row opens the same slot in a popover. Trace feedback is not scoped to a
+   * span — the span panel owns that.
    */
   feedbackTabSlot?: (args: { traceId: string }) => ReactNode;
-  /** Optional count rendered after the "Feedback" tab label, e.g. `Feedback (3)`. */
+  /** Optional count rendered after the "Feedback" labels, e.g. `Feedback (3)`. */
   feedbackTabBadge?: ReactNode;
   /** Span ids to feature in the timeline; every other span is faded. */
   featuredSpanIds?: string[];
@@ -311,34 +309,30 @@ export function TraceDataPanelView({
     <TraceSummaryDescription rootSpan={rootSpan} usage={usage} entityHref={entityHref} LinkComponent={LinkComponent} />
   );
 
-  const traceActionsMenu = traceId && (
-    <DropdownMenu>
-      <DropdownMenu.Trigger
-        render={
-          <Button size="sm" variant="ghost" tooltip="Open trace actions" aria-label="Open trace actions">
-            <MoreHorizontalIcon />
-          </Button>
-        }
-      />
-      <DropdownMenu.Content align="end">
-        {!isOnTracePage && onSaveAsDatasetItem && (
-          <DropdownMenu.Item onSelect={() => onSaveAsDatasetItem({ traceId, rootSpanId: rootSpan?.spanId })}>
-            <SaveIcon />
-            Add full trace to dataset
-          </DropdownMenu.Item>
-        )}
-        {!isOnTracePage && LinkComponent && traceHref && (
-          <DropdownMenu.Item render={<LinkComponent href={traceHref} />}>
-            <Link2Icon />
-            Open trace page
-          </DropdownMenu.Item>
-        )}
-        <DropdownMenu.Item disabled={isDownloadingTrace} onSelect={() => downloadTraceJson(traceId)}>
-          {isDownloadingTrace ? <Loader2Icon className="animate-spin" /> : <DownloadIcon />}
-          Download trace JSON
-        </DropdownMenu.Item>
-      </DropdownMenu.Content>
-    </DropdownMenu>
+  const traceActions = traceId && (
+    <>
+      {!isOnTracePage && LinkComponent && traceHref && (
+        <Button size="icon-sm" variant="ghost" tooltip="Open trace page" render={<LinkComponent href={traceHref} />}>
+          <Link2Icon />
+        </Button>
+      )}
+      <Button
+        size="icon-sm"
+        variant="ghost"
+        tooltip="Download trace JSON"
+        disabled={isDownloadingTrace}
+        onClick={() => downloadTraceJson(traceId)}
+      >
+        {isDownloadingTrace ? <Loader2Icon className="animate-spin" /> : <DownloadIcon />}
+      </Button>
+    </>
+  );
+
+  const scoreAction = onEvaluateTrace && (
+    <Button variant="primary" size="sm" onClick={onEvaluateTrace} disabled={!rootSpan}>
+      <CircleGaugeIcon />
+      Score trace
+    </Button>
   );
 
   const sideColumn =
@@ -351,14 +345,14 @@ export function TraceDataPanelView({
         {/* Whether the Messages tab exists depends on the spans, so the tabs wait for them;
             otherwise the column flickers Feedback → Messages as the first tab changes. */}
         {isLoading ? (
-          <DataPanel.Header className="border-b border-border">
+          <DataPanel.Header className="border-b border-surface-rim">
             <div aria-hidden className="h-control-sm" />
           </DataPanel.Header>
         ) : (
           <Tabs<TraceSideView> defaultTab={sideView} value={sideView} onValueChange={handleSideViewChange}>
             {/* `flex-nowrap` + a shrinkable tab column: the tab list's scroll wrapper is full-width,
                 so in a wrapping row it would push the actions onto a second line. */}
-            <DataPanel.Header className="flex-nowrap border-b border-border">
+            <DataPanel.Header className="flex-nowrap border-b border-surface-rim">
               <div className="min-w-0 flex-1">
                 <TabList variant="pill-ghost" size="sm">
                   {sideViews.map(view => (
@@ -399,49 +393,84 @@ export function TraceDataPanelView({
       {traceId && (
         <>
           {headerSlot}
-          <DataPanel.Header>
-            {isOnTracePage ? (
-              <>
-                <DataPanel.HeaderContent>
-                  <DataPanel.Heading>Trace Timeline</DataPanel.Heading>
-                  {traceSummary}
-                </DataPanel.HeaderContent>
-                <DataPanel.HeaderActions>
-                  {headerActionsSlot}
-                  {traceActionsMenu}
-                </DataPanel.HeaderActions>
-              </>
-            ) : (
-              <>
+          {isOnTracePage ? (
+            <DataPanel.Header>
+              <DataPanel.HeaderContent>
+                <DataPanel.Heading>Trace Timeline</DataPanel.Heading>
+                {traceSummary}
+              </DataPanel.HeaderContent>
+              <DataPanel.HeaderActions>
+                {headerActionsSlot}
+                {scoreAction}
+                {traceActions}
+              </DataPanel.HeaderActions>
+            </DataPanel.Header>
+          ) : (
+            <>
+              {/* Navigation row: trace stepping and the trace id on the left; trace actions, then close, on the right. */}
+              <DataPanel.Header>
+                {(onPrevious || onNext) && (
+                  <DataPanel.NextPrevNav
+                    onPrevious={onPrevious}
+                    onNext={onNext}
+                    previousLabel="Go to previous trace"
+                    nextLabel="Go to next trace"
+                  />
+                )}
                 <DataPanel.HeaderContent>
                   <DataPanel.Heading>
-                    Trace
-                    <TraceIdButton id={traceId} />
+                    <span className="sr-only">Trace</span>
+                    <DataPanel.CopyId id={traceId} maxLength={6} ellipsis={false} icon={<TraceIcon />} />
                   </DataPanel.Heading>
-                  {traceSummary}
                 </DataPanel.HeaderContent>
                 <DataPanel.HeaderActions>
                   {headerActionsSlot}
-                  {onEvaluateTrace && (
-                    <Button variant="primary" size="sm" onClick={onEvaluateTrace} disabled={!rootSpan}>
-                      <CircleGaugeIcon />
-                      Score trace
+                  {scoreAction}
+                  {onSaveAsDatasetItem && (
+                    <Button
+                      size="sm"
+                      tooltip="Add the full trace to a dataset"
+                      onClick={() => onSaveAsDatasetItem({ traceId, rootSpanId: rootSpan?.spanId })}
+                    >
+                      <SaveIcon />
+                      Add to dataset
                     </Button>
                   )}
-                  {traceActionsMenu}
-                  {(onPrevious || onNext) && (
-                    <DataPanel.NextPrevNav
-                      onPrevious={onPrevious}
-                      onNext={onNext}
-                      previousLabel="Go to previous trace"
-                      nextLabel="Go to next trace"
-                    />
-                  )}
+                  {traceActions}
+                  <div aria-hidden="true" className="mx-1 h-4 w-px shrink-0 bg-border-strong" />
                   <DataPanel.CloseButton icon="x" onClick={onClose} label="Close trace" tooltip="Close trace" />
                 </DataPanel.HeaderActions>
-              </>
-            )}
-          </DataPanel.Header>
+              </DataPanel.Header>
+              {/* Summary row: what ran and how it ended on the left; timing, tokens and cost on the right. */}
+              {!rootSpan && isLoading && (
+                <DataPanel.Header>
+                  <div role="status" aria-label="Loading trace summary" className="flex w-full items-center gap-2">
+                    <Skeleton className="h-3 w-32" />
+                    <Skeleton className="h-5 w-16 rounded-full" />
+                    <Skeleton className="ml-auto h-3 w-48" />
+                  </div>
+                </DataPanel.Header>
+              )}
+              {rootSpan && (
+                <DataPanel.Header>
+                  <DataPanel.Metadata>
+                    <TraceEntityMeta rootSpan={rootSpan} entityHref={entityHref} LinkComponent={LinkComponent} />
+                    <TraceStatusMeta rootSpan={rootSpan} />
+                  </DataPanel.Metadata>
+                  <div className="ml-auto flex min-w-0">
+                    <TraceSummaryDescription
+                      rootSpan={rootSpan}
+                      usage={usage}
+                      entityHref={entityHref}
+                      LinkComponent={LinkComponent}
+                      showEntity={false}
+                      showStatus={false}
+                    />
+                  </div>
+                </DataPanel.Header>
+              )}
+            </>
+          )}
 
           <TracePanelColumns
             layoutKey={rootSpan ? (rootSpan.entityType ?? 'unknown') : undefined}
@@ -458,7 +487,7 @@ export function TraceDataPanelView({
                 // filtered `hierarchicalSpans`, so one query drives both.
                 const isTimeline = spanView === 'timeline';
                 const searchHeader = (
-                  <DataPanel.Header className="gap-2 border-b border-border">
+                  <DataPanel.Header className="gap-2 border-b border-surface-rim">
                     <SearchInput
                       label="Search spans"
                       placeholder="Search spans..."
@@ -642,7 +671,7 @@ function TracePanelColumns({
         {sideColumnSlot && (
           <>
             <Panel id="trace-side" minSize={280} defaultSize="40%">
-              <div className="flex h-full min-h-0 flex-col border-r border-border">{sideColumnSlot}</div>
+              <div className="flex h-full min-h-0 flex-col border-r border-surface-rim">{sideColumnSlot}</div>
             </Panel>
             <PanelSeparator variant="pill" />
           </>
@@ -657,7 +686,7 @@ function TracePanelColumns({
               <div
                 ref={scrollToMatchRef}
                 data-highlight
-                className="flex h-full min-h-0 animate-in flex-col border-l border-border duration-300 fade-in-0"
+                className="flex h-full min-h-0 animate-in flex-col border-l border-surface-rim duration-300 fade-in-0"
               >
                 {spanPanelSlot}
               </div>

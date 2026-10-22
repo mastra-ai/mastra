@@ -81,7 +81,6 @@ export type TracesListContextValue = Pick<
   | 'error'
   | 'refetch'
   | 'autoRefetch'
-  | 'setAutoRefetch'
 > & {
   sortDirection: TracesSortDirection;
   onSortChange: (direction: DataListSort) => void;
