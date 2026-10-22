@@ -49,7 +49,8 @@ import { FactoryChannelReplyProcessor } from './session/channel-reply-processor.
 import { FactoryEnvironmentStateProcessor } from './session/environment-state-processor.js';
 import type * as resourceMigrationModule from './session/resource-migration.js';
 import type { CustomProvidersStorage } from './storage/domains/custom-providers/base.js';
-import type { MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
+import { factoryMemorySettingsUserId } from './storage/domains/memory-settings/base.js';
+import type { MemorySettingsRecord, MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
 import type { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import type { SourceControlStorage } from './storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from './storage/domains/work-items/base.js';
@@ -460,36 +461,74 @@ describe('MastraFactory.prepare', () => {
     warn.mockRestore();
   });
 
-  it("layers a channel sender's saved memory settings over the project's", async () => {
+  // FACT-529: a hybrid Factory pays for chats with the owner's credentials, so
+  // a chat reading the Factory's memory row observed with a provider the owner
+  // never connected.
+  it("observes a chat with the memory model of whoever's credentials pay for it", async () => {
     const storage = fakeStorage();
-    vi.spyOn(storage, 'isDomainReady').mockImplementation(domain => domain !== 'work-items');
     const config = await prepareFactory({ storage, auth: null });
+    await storage.init();
+    const projects = storage.getDomain<FactoryProjectsStorage>('projects');
+    const project = await projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Shipyard' } });
+    const sourceControl = storage.getDomain<SourceControlStorage>('source-control').forIntegration('github');
+    const installation = await sourceControl.installations.upsert({
+      orgId: 'org-1',
+      connectedByUserId: 'user-1',
+      externalId: '123',
+    });
+    const repository = await sourceControl.repositories.upsert({
+      orgId: 'org-1',
+      input: { installationId: installation.id, externalId: '456', slug: 'mastra-ai/mastra', defaultBranch: 'main' },
+    });
+    const connection = await sourceControl.connections.create({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      installationId: installation.id,
+      createdByUserId: 'user-1',
+    });
+    const projectRepository = await sourceControl.projectRepositories.link({
+      orgId: 'org-1',
+      connectionId: connection.id,
+      repositoryId: repository.id,
+      createdByUserId: 'user-1',
+      sandboxProvider: 'local',
+      sandboxWorkdir: '/sandbox/mastra',
+    });
+    await sourceControl.sessions.create({
+      sessionId: 'session-1',
+      projectRepositoryId: projectRepository.id,
+      factoryProjectId: project.id,
+      orgId: 'org-1',
+      userId: 'user-1',
+      visibility: 'private',
+      branch: 'user/session-1',
+      baseBranch: 'main',
+    });
     const memorySettings = storage.getDomain<MemorySettingsStorage>('memory-settings');
     await memorySettings.patch({
       orgId: 'org-1',
-      userId: 'factory-project:fp-1',
-      patch: { observerModelId: 'anthropic/project-observer', reflectorModelId: 'anthropic/project-reflector' },
+      userId: factoryMemorySettingsUserId(project.id),
+      patch: { observerModelId: 'anthropic/factory-observer' },
     });
-    await memorySettings.patch({ orgId: 'org-1', userId: 'user-1', patch: { reflectorModelId: 'openai/mine' } });
+    await memorySettings.patch({ orgId: 'org-1', userId: 'user-1', patch: { observerModelId: 'openai/my-observer' } });
     const inputProcessors = config.inputProcessors as (args: { requestContext: RequestContext }) => Promise<unknown[]>;
-    const run = async (channel: boolean) => {
+    const observerModelForChat = async () => {
       const requestContext = new RequestContext();
       requestContext.set('controller', {
-        getState: () => ({ factoryProjectId: 'fp-1', factoryOrgId: 'org-1' }),
+        sessionId: 'session-1',
+        resourceId: 'user-1',
+        threadId: 'session-1',
+        getState: () => ({ factoryProjectId: project.id, factoryOrgId: 'org-1' }),
         emitEvent: vi.fn(),
       });
       requestContext.set('user', { id: 'user-1', organizationId: 'org-1' });
-      if (channel) requestContext.set('channel', { platform: 'slack' });
       await inputProcessors({ requestContext });
-      return requestContext.get('mastra__factoryMemorySettings');
+      return (requestContext.get('mastra__factoryMemorySettings') as MemorySettingsRecord | null)?.observerModelId;
     };
 
-    await expect(run(true)).resolves.toMatchObject({
-      observerModelId: 'anthropic/project-observer',
-      reflectorModelId: 'openai/mine',
-    });
-    // Web runs of a project session share the project's row as-is.
-    await expect(run(false)).resolves.toMatchObject({ reflectorModelId: 'anthropic/project-reflector' });
+    await expect(observerModelForChat()).resolves.toBe('openai/my-observer');
+    await projects.update({ orgId: 'org-1', id: project.id, input: { modelScope: 'factory' } });
+    await expect(observerModelForChat()).resolves.toBe('anthropic/factory-observer');
   });
 
   it('uses the platform bot co-author identity', async () => {

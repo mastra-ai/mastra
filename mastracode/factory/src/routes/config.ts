@@ -639,8 +639,8 @@ interface MemorySettingsContext {
  * Resolve the memory-settings context for a request, or a ready-to-return
  * error response. When `factoryProjectId` is provided the row addressed is the
  * factory project's shared settings (a sentinel user id in the caller's org)
- * instead of the caller's personal row — this is what factory board runs and
- * channel sessions hydrate from.
+ * instead of the caller's personal row — the row requests paid with the
+ * Factory's credentials read.
  */
 async function resolveMemorySettingsContext({
   c,
