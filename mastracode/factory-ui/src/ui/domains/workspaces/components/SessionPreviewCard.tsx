@@ -2,55 +2,34 @@ import { Avatar } from '@mastra/playground-ui/components/Avatar';
 import { HoverCardContent } from '@mastra/playground-ui/components/HoverCard';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { CircleDot, GitBranch, GitMerge } from 'lucide-react';
-import type { ReactNode, RefObject } from 'react';
+import { ArrowRight } from 'lucide-react';
+import { useState } from 'react';
+import type { RefObject } from 'react';
 
-import { relativeTime } from '../../../../lib/date/relativeTime';
 import { PullRequestStatusIcon } from '../../factory/components/PullRequestStatusIcon';
-import type { SessionRowStatus } from '../services/sessionStatus';
+import { WorkItemExternalLink } from '../../factory/components/WorkItemExternalLink';
+import type { FactoryMentionMember } from '../../factory/services/members';
+import type { WorkItem } from '../../factory/services/workItems';
+import { useSessionTrail } from '../hooks/useSessionTrail';
+import { layoutSessionTrack } from '../services/sessionTrack';
 import type { SessionOwnerDetails } from '../services/sessionPresentation';
+import type { SessionRowStatus } from '../services/sessionStatus';
+import type { FactoryUserSession } from '../services/user-sessions';
+import { SessionTrack } from './SessionTrack';
 
 export interface SessionPreviewDetails {
-  kind: 'Work session' | 'Review session' | 'User session';
+  factoryId: string;
+  session: FactoryUserSession;
   owner: SessionOwnerDetails;
-  itemLabel?: string;
-  itemTitle?: string;
-  branch: string;
-  baseBranch: string;
-  updatedAt: string;
+  item?: WorkItem;
+  threadId?: string;
 }
 
-function getStatusLabel(status: SessionRowStatus | undefined) {
-  if (status === 'initializing') return 'Initializing';
-  if (status === 'working') return 'Agent working';
-  if (status === 'ready') return 'Waiting on you';
-  return undefined;
-}
-
-/** The icon carries the meaning visually, so `label` names the row for screen readers. */
-function DetailRow({
-  icon,
-  label,
-  children,
-  centered = false,
-}: {
-  icon: ReactNode;
-  label: string;
-  children: ReactNode;
-  centered?: boolean;
-}) {
-  return (
-    <div className={cn('flex gap-2', centered ? 'items-center' : 'items-start')}>
-      <span className={cn('text-muted-foreground flex w-avatar-sm shrink-0 justify-center', !centered && 'mt-0.5')}>
-        {icon}
-      </span>
-      <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="sr-only">{label}</span>
-        {children}
-      </div>
-    </div>
-  );
-}
+const STATUS_LABELS: Record<SessionRowStatus, string> = {
+  initializing: 'Initializing',
+  working: 'Agent working',
+  ready: 'Waiting on you',
+};
 
 export function SessionPreviewCard({
   name,
@@ -66,18 +45,6 @@ export function SessionPreviewCard({
   merged?: boolean;
   details: SessionPreviewDetails;
 }) {
-  const statusLabel = getStatusLabel(status);
-  const itemTitle = details.itemTitle?.trim();
-  const subtitle = itemTitle && itemTitle !== name ? itemTitle : undefined;
-  const updated = relativeTime(details.updatedAt);
-  const ownerName = details.owner.name;
-  const itemIcon =
-    details.kind === 'Review session' ? (
-      <PullRequestStatusIcon status={merged ? 'merged' : 'open'} size={14} decorative />
-    ) : (
-      <CircleDot size={14} aria-hidden />
-    );
-
   return (
     <HoverCardContent
       aria-label={`${name} session details`}
@@ -89,54 +56,107 @@ export function SessionPreviewCard({
       showArrow={false}
       className="w-80 max-w-[calc(100vw-2rem)]"
     >
-      <div className="flex flex-col gap-2.5">
-        <div className="flex flex-col gap-0.5">
-          <div className="flex items-baseline gap-3">
-            <Txt tone="ink" as="p" variant="column" className="m-0 min-w-0 flex-1 wrap-anywhere">
-              {name}
-            </Txt>
-            {updated && (
-              <Txt tone="muted" as="span" variant="meta" className="shrink-0">
-                {updated}
-              </Txt>
-            )}
-          </div>
-          <Txt tone="muted" as="p" variant="meta" className="m-0">
-            {statusLabel ? `${details.kind} · ${statusLabel}` : details.kind}
-          </Txt>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <DetailRow icon={<Avatar src={details.owner.avatarUrl} name={ownerName} size="sm" />} label="Owner" centered>
-            <Txt tone="ink" as="p" variant="caption" className="m-0 truncate">
-              {ownerName}
-            </Txt>
-          </DetailRow>
-          {(details.itemLabel || subtitle) && (
-            <DetailRow icon={itemIcon} label={details.kind === 'Review session' ? 'Pull request' : 'Work item'}>
-              {details.itemLabel && (
-                <Txt tone="ink" as="p" variant="caption" className="m-0 truncate">
-                  {details.itemLabel}
-                </Txt>
-              )}
-              {subtitle && (
-                <Txt tone="muted" as="p" variant="meta" className="m-0 truncate">
-                  {subtitle}
-                </Txt>
-              )}
-            </DetailRow>
-          )}
-          <DetailRow icon={<GitBranch size={14} aria-hidden />} label="Branch">
-            <Txt tone="ink" as="p" variant="caption" className="m-0 truncate">
-              {details.branch}
-            </Txt>
-          </DetailRow>
-          <DetailRow icon={<GitMerge size={14} aria-hidden />} label="Base branch">
-            <Txt tone="ink" as="p" variant="caption" className="m-0 truncate">
-              {details.baseBranch}
-            </Txt>
-          </DetailRow>
+      <SessionPreview name={name} status={status} merged={merged} details={details} />
+    </HoverCardContent>
+  );
+}
+
+/** Mounts only while the card is open, so the trail is fetched for the session being looked at, not every row. */
+function SessionPreview({
+  name,
+  status,
+  merged,
+  details,
+}: {
+  name: string;
+  status?: SessionRowStatus;
+  merged?: boolean;
+  details: SessionPreviewDetails;
+}) {
+  const [openedAt] = useState(Date.now);
+  const { runs, ownerChanges, people } = useSessionTrail({
+    factoryId: details.factoryId,
+    sessionRowId: details.session.id,
+    threadId: details.threadId,
+  });
+  const startedAt = Date.parse(details.session.createdAt);
+  const layout = layoutSessionTrack({
+    startedAt,
+    now: openedAt,
+    stageHistory: details.item?.stageHistory ?? [],
+    runs,
+    ownerChanges,
+  });
+  const previousOwnerId = ownerChanges.at(-1)?.fromOwnerId;
+
+  return (
+    <div className="flex flex-col gap-3.5">
+      <div className="flex flex-col gap-2">
+        <Txt as="p" variant="label" tone="ink" className="m-0 line-clamp-2 wrap-anywhere">
+          {name}
+        </Txt>
+        <div className="flex items-center justify-between gap-3">
+          <SessionOwner
+            owner={details.owner}
+            previousOwner={previousOwnerId === undefined ? undefined : ownerDetailsFor(people, previousOwnerId)}
+          />
+          {details.item && <WorkItemExternalLink item={details.item} variant="default" />}
         </div>
       </div>
-    </HoverCardContent>
+      <SessionStatusLine status={status} merged={merged} />
+      {(layout.stages.length > 0 || layout.runs.length > 0) && (
+        <SessionTrack layout={layout} startedAt={startedAt} now={openedAt} people={people} />
+      )}
+    </div>
+  );
+}
+
+function ownerDetailsFor(people: ReadonlyMap<string, FactoryMentionMember>, personId: string): SessionOwnerDetails {
+  const person = people.get(personId);
+  return { name: person?.name ?? personId, ...(person?.avatarUrl ? { avatarUrl: person.avatarUrl } : {}) };
+}
+
+function SessionOwner({ owner, previousOwner }: { owner: SessionOwnerDetails; previousOwner?: SessionOwnerDetails }) {
+  return (
+    <div className="flex min-w-0 items-center gap-1.5">
+      {previousOwner && (
+        <>
+          <span className="sr-only">Taken over from {previousOwner.name}</span>
+          <span aria-hidden title={`Previously ${previousOwner.name}`} className="flex items-center gap-1.5">
+            <span className="flex opacity-50">
+              <Avatar src={previousOwner.avatarUrl} name={previousOwner.name} size="inline" />
+            </span>
+            <ArrowRight className="text-placeholder size-2.5" />
+          </span>
+        </>
+      )}
+      <Avatar src={owner.avatarUrl} name={owner.name} size="inline" />
+      <Txt as="span" variant="caption" tone="muted" className="truncate">
+        {owner.name}
+      </Txt>
+    </div>
+  );
+}
+
+function SessionStatusLine({ status, merged }: { status?: SessionRowStatus; merged?: boolean }) {
+  if (status) {
+    return (
+      <div className="flex items-center gap-2">
+        {/* `session-*` sets the hue the sidebar belt shows for the same status. */}
+        <span aria-hidden className={cn('size-[7px] shrink-0 rounded-sm bg-(--belt-hue)', `session-${status}`)} />
+        <Txt as="span" variant="caption" tone="ink">
+          {STATUS_LABELS[status]}
+        </Txt>
+      </div>
+    );
+  }
+  if (!merged) return null;
+  return (
+    <div className="flex items-center gap-2">
+      <PullRequestStatusIcon status="merged" size={12} decorative />
+      <Txt as="span" variant="caption" tone="ink">
+        Merged
+      </Txt>
+    </div>
   );
 }

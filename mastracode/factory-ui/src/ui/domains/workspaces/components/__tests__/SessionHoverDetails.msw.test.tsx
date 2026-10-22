@@ -45,6 +45,15 @@ function stubSessionDetails(updatedAt: string, { includeSessionTitles = true, sl
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/active-runs`, () =>
       HttpResponse.json(fixtures.activeRunsResponse),
     ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/mention-roster`, () =>
+      HttpResponse.json(fixtures.rosterResponse),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${factoryId}/audit`, ({ request }) => {
+      const query = new URL(request.url).searchParams;
+      if (query.get('namespaces') === 'session') return HttpResponse.json(fixtures.transfersResponse);
+      if (query.get('actor') === `agent:${workSessionId}`) return HttpResponse.json(fixtures.workRunsResponse);
+      return HttpResponse.json({ events: [], actors: {} });
+    }),
   );
 }
 
@@ -98,37 +107,38 @@ describe('Workspace session hover details', () => {
   });
 
   describe('when a work session is hovered', () => {
-    it('shows the related work metadata', async () => {
+    it('shows who owns it, where the work lives, and what the agent is doing', async () => {
       const { user, workRow } = await setupSessionRows();
 
       await user.hover(workRow);
 
       const card = await screen.findByLabelText(`${workName} session details`);
       expect(within(card).getByText(workName)).toBeInTheDocument();
-      expect(within(card).getByText('Work session · Agent working')).toBeInTheDocument();
       expect(within(card).getByText('Ada Lovelace')).toBeInTheDocument();
       expect(within(card).getByRole('img', { name: 'Ada Lovelace' })).toHaveAttribute(
         'src',
         'https://example.com/ada.png',
       );
-      expect(within(card).getByText('Work item: Issue #42')).toBeInTheDocument();
-      expect(within(card).getByText('Authentication fails after token refresh')).toBeInTheDocument();
-      expect(within(card).getByText('factory/issue-42-authentication-regression')).toBeInTheDocument();
-      expect(within(card).getByText('main')).toBeInTheDocument();
-      expect(within(card).getByText('just now')).toBeInTheDocument();
+      expect(within(card).getByRole('link', { name: 'Open in GitHub: #42' })).toHaveAttribute(
+        'href',
+        'https://github.com/mastra-ai/mastra/issues/42',
+      );
+      expect(within(card).getByText('Agent working')).toBeInTheDocument();
       expect(workRow).not.toHaveAttribute('title');
     });
 
-    it('names the icon-only rows for screen readers', async () => {
+    it('tells the session story from the stage history and the audit trail', async () => {
       const { user, workRow } = await setupSessionRows();
 
       await user.hover(workRow);
 
       const card = await screen.findByLabelText(`${workName} session details`);
-      expect(within(card).getByText('Owner')).toBeInTheDocument();
-      expect(within(card).getByText('Work item')).toBeInTheDocument();
-      expect(within(card).getByText('Branch')).toBeInTheDocument();
-      expect(within(card).getByText('Base branch')).toBeInTheDocument();
+      expect(await within(card).findByText('Taken over from Grace Hopper')).toBeInTheDocument();
+      expect(
+        within(card).getByRole('img', {
+          name: 'Session timeline. Triage, Building. 1 agent run. Grace Hopper moved it to Building. Ada Lovelace took over',
+        }),
+      ).toBeInTheDocument();
     });
 
     it('closes the details when the pointer leaves', async () => {
@@ -153,13 +163,11 @@ describe('Workspace session hover details', () => {
       expect(reviewRow).toHaveFocus();
       const card = await screen.findByLabelText(`${reviewName} session details`);
       expect(within(card).getByText(reviewName)).toBeInTheDocument();
-      expect(within(card).getByText('Review session')).toBeInTheDocument();
       expect(within(card).getByText('Ada Lovelace')).toBeInTheDocument();
-      expect(within(card).getByText('Review: PR #99')).toBeInTheDocument();
-      expect(within(card).getByText('Fix authentication refresh handling')).toBeInTheDocument();
-      expect(within(card).getByText('factory/pr-99-authentication-refresh')).toBeInTheDocument();
-      expect(within(card).getByText('main')).toBeInTheDocument();
-      expect(within(card).getByText('just now')).toBeInTheDocument();
+      expect(within(card).getByRole('link', { name: 'Open in GitHub: #99' })).toHaveAttribute(
+        'href',
+        'https://github.com/mastra-ai/mastra/pull/99',
+      );
       expect(reviewRow).not.toHaveAttribute('title');
     });
 

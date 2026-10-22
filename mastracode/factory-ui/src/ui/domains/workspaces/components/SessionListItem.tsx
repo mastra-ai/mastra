@@ -48,15 +48,7 @@ export function SessionListItem({
       changeRequestProvider={row.pullRequest?.provider}
       status={STATUS_MARKER_BY_ACTIVITY[row.status]}
       pinned={row.pinned}
-      preview={{
-        kind: row.kind,
-        owner: row.owner,
-        itemLabel: row.itemLabel,
-        itemTitle: row.itemTitle,
-        branch: row.session.branch,
-        baseBranch: row.session.baseBranch,
-        updatedAt: row.updatedAt,
-      }}
+      preview={{ factoryId, session: row.session, owner: row.owner, item: row.item, threadId: row.threadId }}
       onSelect={() => void navigate(row.openPath, row.origin === 'factory' ? { state: { from: location } } : undefined)}
       onPinChange={pinned => setSessionPinned(row.session.sessionId, pinned)}
       onDelete={row.ownedByViewer ? () => onDelete(row) : undefined}
