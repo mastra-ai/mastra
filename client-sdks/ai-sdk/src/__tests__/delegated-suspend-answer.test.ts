@@ -1,4 +1,6 @@
 /**
+ * Ported from validation harness case T68 (delegated-suspend-answer).
+ *
  * COR-1362 — port of harness case T68 (`delegated-suspend-answer`).
  *
  * A delegated sub-agent can suspend one of its own tools. The delegation wrapper
