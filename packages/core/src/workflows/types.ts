@@ -408,6 +408,12 @@ export interface WorkflowRunState {
   runId: string;
   status: WorkflowRunStatus;
   result?: Record<string, any>;
+  /**
+   * Set instead of `result` when `result` is this step's output, so the output is not stored twice.
+   * Storage reads restore `result` from it and never return this field.
+   * @internal
+   */
+  resultFromStep?: string;
   error?: SerializedError;
   requestContext?: Record<string, any>;
   value: Record<string, string>;
