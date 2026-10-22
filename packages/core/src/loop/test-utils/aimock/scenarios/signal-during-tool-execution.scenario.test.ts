@@ -13,7 +13,7 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
 import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
-import type { AgentSignalInput } from '../../../../agent/signals';
+import type { AgentSignalInput, CreatedAgentSignal } from '../../../../agent/signals';
 import { MockMemory } from '../../../../memory/mock';
 import type { InputProcessor } from '../../../../processors';
 import { createTool } from '../../../../tools';
@@ -21,7 +21,6 @@ import {
   runLoopScenario,
   useLoopScenarioAimock,
   describeForAllEngines,
-  isDurableEngineVariant,
 } from '../aimock-scenario';
 import type { EngineVariant } from '../types';
 
@@ -39,15 +38,19 @@ function toolInvocationsFor(messages: any[], toolCallId: string) {
   );
 }
 
-async function runDeployWithReminder(engine: EngineVariant, llm: ReturnType<ReturnType<typeof useLoopScenarioAimock>>) {
+async function runDeployWithReminder(engine: EngineVariant, llm: ReturnType<ReturnType<typeof useLoopScenarioAimock>>, duringInput = false) {
   const threadId = 'signal-during-tool-thread';
   const resourceId = 'signal-during-tool-user';
 
-  let heldSendSignal: ((signal: AgentSignalInput) => Promise<unknown>) | undefined;
+  let heldSendSignal: ((signal: AgentSignalInput) => Promise<CreatedAgentSignal>) | undefined;
+  let sentSignal: CreatedAgentSignal | undefined;
   const reminderProcessor: InputProcessor = {
     id: 'background-reminder',
     processInputStep: async ({ sendSignal, stepNumber }) => {
-      if (stepNumber === 0) heldSendSignal = sendSignal;
+      if (stepNumber === 0) {
+        heldSendSignal = sendSignal;
+        if (duringInput) sentSignal = await sendSignal({ type: 'reactive', contents: REMINDER });
+      }
     },
   };
 
@@ -58,7 +61,10 @@ async function runDeployWithReminder(engine: EngineVariant, llm: ReturnType<Retu
     inputSchema: z.object({ service: z.string() }),
     execute: async ({ service }, context) => {
       // The reminder fires from background work while the deploy is in flight.
-      await heldSendSignal!({ type: 'reactive', contents: REMINDER });
+      if (!duringInput) {
+        if (!heldSendSignal) throw new Error('Input processor did not provide sendSignal');
+        sentSignal = await heldSendSignal({ type: 'reactive', contents: REMINDER });
+      }
       signalSent = true;
       await context?.writer?.custom({ type: 'data-deploy-log', data: { service, status: 'rolled-out' } });
       return { deployed: service };
@@ -66,13 +72,14 @@ async function runDeployWithReminder(engine: EngineVariant, llm: ReturnType<Retu
   });
 
   const memory = new MockMemory();
-  const { output, requests } = await runLoopScenario({
+  const { output, requests, chunks } = await runLoopScenario({
     engine,
     llm,
     prompt: 'Deploy the api service.',
     tools: { deploy },
     inputProcessors: [reminderProcessor],
     memory,
+    collectChunks: true,
     threadId,
     resourceId,
     stopWhen: stepCountIs(5),
@@ -85,8 +92,8 @@ async function runDeployWithReminder(engine: EngineVariant, llm: ReturnType<Retu
     },
   });
   const text = await output.text;
-  const { messages } = await memory.recall({ threadId, resourceId });
-  return { text, requests, messages, signalSent };
+  const { messages } = await memory.recall({ threadId, resourceId, hideSignals: false });
+  return { text, requests, messages, signalSent, chunks, sentSignal };
 }
 
 describeForAllEngines('AIMock scenario: signal arrives while a tool is running', engine => {
@@ -127,13 +134,19 @@ describeForAllEngines('AIMock scenario: signal arrives while a tool is running',
     ).toBe(true);
   });
 
-  // Known gap: on durable/evented engines a processor's step-level sendSignal
-  // stamps the response boundary but the signal's contents are never drained
-  // into the next model request (durable drains only the thread runtime queue).
-  const deliversReminder = isDurableEngineVariant(engine) ? it.fails : it;
-  deliversReminder('shows the reminder to the model on the next turn', async () => {
-    const { requests } = await runDeployWithReminder(engine, getMock());
+  it.each([false, true])('delivers the reminder exactly once (during input: %s) (#27457)', async duringInput => {
+    const { requests, messages, chunks, sentSignal } = await runDeployWithReminder(engine, getMock(), duringInput);
     expect(requests).toHaveLength(2);
-    expect(JSON.stringify(requestMessages(requests[1]))).toContain(REMINDER);
+    expect(JSON.stringify(requestMessages(requests[1])).split(REMINDER)).toHaveLength(2);
+    expect(JSON.stringify(requestMessages(requests[1]))).toContain('call_deploy');
+    expect(JSON.stringify(requestMessages(requests[1]))).toContain('deployed');
+    if (duringInput) expect(JSON.stringify(requestMessages(requests[0]))).toContain(REMINDER);
+
+    const reminders = messages.filter(message => message.id === sentSignal?.id);
+    expect(reminders).toHaveLength(1);
+    expect(JSON.stringify(reminders[0])).toContain(REMINDER);
+    const echoes = chunks?.filter(chunk => chunk.type === 'data-signal');
+    expect(echoes).toHaveLength(1);
+    expect(echoes?.[0]).toMatchObject({ data: { id: sentSignal?.id, contents: REMINDER } });
   });
 });
