@@ -314,10 +314,82 @@ describe('EventedAgent split transport (agent pubsub ≠ mastra.pubsub)', () => 
     expect((agent.pubsub as CachingPubSub).getInner()).not.toBe(mastraPubsub);
 
     const topic = AGENT_STREAM_TOPIC('reused-run');
-    await agent.pubsub.publish(topic, { type: 'chunk' });
+    await agent.pubsub.publish(topic, { type: 'chunk', runId: 'reused-run', data: {} });
     expect(await sharedCache.listLength(`pubsub:{${topic}}`)).toBe(1);
 
     await transport.close();
+  });
+
+  it('moves run frames to the Mastra bus even when the agent carries its own CachingPubSub', async () => {
+    // The agent's own wrapper sits on a different transport than the run bus.
+    // Reusing it because `#innerPubsub` is a CachingPubSub would keep run frames
+    // on the agent transport, i.e. the split this file exists to rule out.
+    const agentCache = new InMemoryServerCache();
+    const agentTransport = new EventEmitterPubSub();
+    const serverCache = new InMemoryServerCache();
+    const runTransport = new EventEmitterPubSub();
+
+    const agent = createEventedAgent({
+      agent: new Agent({
+        id: 'custom-wrapper-agent',
+        name: 'Custom Wrapper Agent',
+        instructions: 'test',
+        model: createTextStreamModel('Hi'),
+      }),
+      pubsub: new CachingPubSub(agentTransport, agentCache),
+    });
+    new Mastra({
+      agents: { 'custom-wrapper-agent': agent as any },
+      logger: false,
+      storage: new InMemoryStore(),
+      pubsub: runTransport,
+      cache: serverCache,
+    });
+
+    const delivered: unknown[] = [];
+    await runTransport.subscribe(AGENT_STREAM_TOPIC('moved-run'), event => {
+      delivered.push(event);
+    });
+
+    const topic = AGENT_STREAM_TOPIC('moved-run');
+    await agent.pubsub.publish(topic, { type: 'chunk', runId: 'moved-run', data: {} });
+
+    expect(delivered).toHaveLength(1);
+    expect(await serverCache.listLength(`pubsub:{${topic}}`)).toBe(1);
+    expect(await agentCache.listLength(`pubsub:{${topic}}`)).toBe(0);
+
+    await runTransport.close();
+    await agentTransport.close();
+  });
+
+  it('still aligns the cache when the agent is read before it is registered', () => {
+    // Reading `agent.cache` resolves the workflow engine; before registration
+    // `#mastra` is undefined and the resolver memoizes 'default'. The evented
+    // cache alignment must therefore not depend on resolving the engine early.
+    const agentCache = new InMemoryServerCache();
+    const serverCache = new InMemoryServerCache();
+
+    const agent = createEventedAgent({
+      agent: new Agent({
+        id: 'early-read-agent',
+        name: 'Early Read Agent',
+        instructions: 'test',
+        model: createTextStreamModel('Hi'),
+      }),
+      pubsub: agentPubsub,
+      cache: agentCache,
+    });
+
+    expect(agent.cache).toBe(agentCache);
+
+    new Mastra({
+      agents: { 'early-read-agent': agent as any },
+      logger: false,
+      storage: new InMemoryStore(),
+      cache: serverCache,
+    });
+
+    expect(agent.cache).toBe(serverCache);
   });
 
   it('uses mastra.serverCache for evented run frames when the agent configures another cache', () => {

@@ -10,11 +10,11 @@ export interface RedisClient {
   expire(key: string, seconds: number): Promise<number | boolean>;
   /**
    * Remaining lifetime of `key` in seconds: `-1` when it has no expiry, `-2`
-   * when it does not exist. Used by {@link RedisServerCache.expire} so a
-   * retention refresh never shortens a longer configured TTL. A client that
-   * omits it keeps the older unconditional `EXPIRE` behaviour.
+   * when it does not exist. Required because {@link RedisServerCache.expire}
+   * has to compare deadlines: without it a retention refresh could shorten a
+   * longer configured TTL, expiring a parked run's replay log early.
    */
-  ttl?(key: string): Promise<number>;
+  ttl(key: string): Promise<number>;
   scan(cursor: string | number, ...args: unknown[]): Promise<[string | number, string[]]>;
   incr(key: string): Promise<number>;
   /**
@@ -258,12 +258,17 @@ export class RedisServerCache extends MastraServerCache {
     // every writer treats as immortal.
     if (ttlMs <= 0 || this.ttlSeconds <= 0) return;
     const fullKey = this.getKey(key);
-    if (this.client.ttl) {
-      const remainingSeconds = await this.client.ttl(fullKey);
-      // `-1` is a key without expiry and `-2` one that is already gone: neither
-      // should be given a (possibly shorter) deadline.
-      if (remainingSeconds < 0 || remainingSeconds * 1000 >= ttlMs) return;
+    if (typeof this.client.ttl !== 'function') {
+      // `ttl` is part of the client contract, but an untyped client can still
+      // omit it. Without the current deadline we cannot tell a longer configured
+      // TTL from a shorter one, and applying ours anyway would shorten the very
+      // log this call exists to protect, so skip instead of guessing.
+      return;
     }
+    const remainingSeconds = await this.client.ttl(fullKey);
+    // `-1` is a key without expiry and `-2` one that is already gone: neither
+    // should be given a (possibly shorter) deadline.
+    if (remainingSeconds < 0 || remainingSeconds * 1000 >= ttlMs) return;
     await this.client.expire(fullKey, Math.max(1, Math.ceil(ttlMs / 1000)));
   }
 

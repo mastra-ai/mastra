@@ -294,6 +294,18 @@ describe('RedisServerCache', () => {
       expect(mockClient.expire).not.toHaveBeenCalled();
     });
 
+    it('does not shorten a key when the client cannot report its TTL', async () => {
+      // `ttl` is part of the client contract, but an untyped client can omit
+      // it. Guessing a deadline there would shorten a longer configured TTL,
+      // so the refresh is skipped instead.
+      const { ttl: _omitted, ...clientWithoutTtl } = mockClient;
+      const noTtlCache = new RedisServerCache({ client: clientWithoutTtl as any });
+
+      await noTtlCache.expire('events', 24 * 60 * 60 * 1000);
+
+      expect(mockClient.expire).not.toHaveBeenCalled();
+    });
+
     it('leaves a cache configured without expiry persistent', async () => {
       // The cache itself never grants deadlines, so a parked-run retention
       // bump must not turn its keys into expiring ones.

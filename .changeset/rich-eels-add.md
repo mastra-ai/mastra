@@ -6,7 +6,7 @@ Fixed `observe()` sending duplicate frames, and made a run's cached frames exact
 
 A durable run's frames are now appended to one log (`MastraServerCache.listPushIndexed`), which allocates the frame's position and stores it in a single atomic step, before the frame is published to the transport. The cached list is the run's history; the transport is only the live tail. A subscriber tracks one cursor: frames below it are dropped as already seen, the frame at it is delivered, and a gap is filled from the log before carrying on. This deletes the watermark/id deduplication and the follower machinery that re-stored frames the log already held, which is where the duplicate frames came from.
 
-Evented durable steps now publish run frames on the Mastra-level pubsub and cache rather than their own bus, so every worker that claims a step appends to the same run log. An agent constructed with its own `pubsub` keeps that bus for signals and aborts, and logs a warning that its run frames are observable only on the Mastra transport.
+Durable runs now publish their frames on the Mastra-level pubsub and cache rather than an agent-level bus, so every worker that claims a step appends to the same run log. This holds for every engine, not only the evented one: abort requests and execution leases go through the same bus, because a peer in another process has to be able to act on the run. An agent constructed with its own `pubsub` keeps it only for thread signals, and logs a warning that its run frames, aborts and leases are observable only on the Mastra transport.
 
 The list and its index counter always share one TTL, and keys are hash-tagged (`pubsub:{topic}`) so the append script stays on a single Redis Cluster slot. `RedisServerCache.counterTtlSeconds` is gone, because a counter that expires separately from its list either restarts at zero or reuses indices.
 
@@ -23,7 +23,15 @@ const agent = new Agent({
 
 `MastraServerCache.expire(key, ttlMs)` is the underlying contract: give the key a deadline of at least `ttlMs` from now, never shorten it. Its default implementation is a no-op, so third-party caches keep their configured TTL.
 
-To observe run frames from another process, configure one shared bus and cache (`new Mastra({ pubsub, cache })`); run frames follow the Mastra-level pubsub.
+To observe run frames from another process, configure one shared bus and cache (`new Mastra({ pubsub, cache })`); run frames, abort requests and leases follow the Mastra-level pubsub. A transport that was configured on the agent has to move:
+
+```ts
+// Before: the agent's own pubsub carried run traffic
+const agent = new Agent({ /* ... */, pubsub: redisPubsub });
+
+// After: configure the shared transport on Mastra
+const mastra = new Mastra({ agents: { agent }, pubsub: redisPubsub, cache: redisCache });
+```
 
 A cache that cannot allocate and append in one step (`supportsAtomicAppend === false`) publishes unnumbered frames: observers see the live tail but cannot resume from an offset. When no shared cache is configured the same applies, and `observe({ offset })` is documented as live-only.
 

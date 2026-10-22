@@ -14,4 +14,4 @@ const cache = new RedisServerCache({ client: redis, ttlSeconds: 300 });
 
 `supportsAtomicAppend` reports whether `client.eval` is available, which is what lets `CachingPubSub` number durable run frames and replay them from an offset. Without scripting there is no atomic append, so frames are published unnumbered instead; `listPushIndexed` fails fast with `listPushIndexed requires scripting support (client.eval)` rather than falling back to a non-atomic `increment` plus `listPush`.
 
-`expire(key, ttlMs)` gives a key a deadline of at least `ttlMs`, used to keep a parked run's log alive while it waits for approval. It only ever lengthens: a key that already lives longer, has no expiry, or belongs to a cache configured with `ttlSeconds: 0` is left alone.
+`expire(key, ttlMs)` gives a key a deadline of at least `ttlMs`, used to keep a parked run's log alive while it waits for approval. It only ever lengthens: a key that already lives longer, has no expiry, or belongs to a cache configured with `ttlSeconds: 0` is left alone. `RedisClient` therefore requires `ttl()`; a client that cannot report a key's remaining lifetime gets no extension rather than a shortened one.
