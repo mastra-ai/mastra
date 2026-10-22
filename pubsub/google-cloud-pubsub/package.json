@@ -1,7 +1,8 @@
 {
   "name": "@mastra/google-cloud-pubsub",
-  "version": "1.1.4-alpha.0",
+  "version": "1.1.4",
   "description": "Mastra Google Cloud PubSub integration",
+  "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -44,11 +45,11 @@
     "@mastra/core": "workspace:*",
     "@mastra/deployer": "workspace:*",
     "@mastra/libsql": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.20.5",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "ai": "^4.3.19",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

@@ -169,13 +169,10 @@ async function getInputPlugins(
 
   return [
     virtual(
-      Array.from(virtualDependencies.entries()).reduce(
-        (acc, [dep, virtualDep]) => {
-          acc[`#virtual-${dep}`] = virtualDep.virtual;
-          return acc;
-        },
-        {} as Record<string, string>,
-      ),
+      Array.from(virtualDependencies.entries()).reduce<Record<string, string>>((acc, [dep, virtualDep]) => {
+        acc[`#virtual-${dep}`] = virtualDep.virtual;
+        return acc;
+      }, {}),
     ),
     moduleAlias(alias, path.join(rootDir, 'package.json'), platform),
     tsConfigPaths({ cwd: projectRoot }),
@@ -354,13 +351,10 @@ async function buildExternalDependencies(
 
   const bundler = await rollup({
     logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
-    input: Array.from(virtualDependencies.entries()).reduce(
-      (acc, [dep, virtualDep]) => {
-        acc[virtualDep.name] = `#virtual-${dep}`;
-        return acc;
-      },
-      {} as Record<string, string>,
-    ),
+    input: Array.from(virtualDependencies.entries()).reduce<Record<string, string>>((acc, [dep, virtualDep]) => {
+      acc[virtualDep.name] = `#virtual-${dep}`;
+      return acc;
+    }, {}),
     external: rollupExternals,
     treeshake: noBundling ? false : 'safest',
     plugins,

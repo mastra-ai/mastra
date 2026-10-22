@@ -106,7 +106,7 @@ export function StudioFrame({ children, className }: { children: React.ReactNode
               collapsible
               collapsedSize={0}
               hideExpandButton
-              minSize={320}
+              minSize={370}
               maxSize="50%"
               defaultSize={380}
               className="min-w-0"

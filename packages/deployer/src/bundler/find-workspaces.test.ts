@@ -131,6 +131,23 @@ describe('findWorkspaces', () => {
     expect(found?.map(w => w.package.name).sort()).toEqual(['a', 'nested']);
   });
 
+  it('lists the root package when the workspace globs include it', async () => {
+    await writeFile(join(root, 'pnpm-workspace.yaml'), 'packages:\n  - "."\n  - "packages/*"\n');
+    await writePackage(root, 'root', { dependencies: { '@scope/shared': 'workspace:*' } });
+    await writePackage(join(root, 'packages', 'shared'), '@scope/shared');
+
+    const found = await findWorkspaces(root, { stopDir: tmpdir() });
+    expect(found?.map(w => w.package.name).sort()).toEqual(['@scope/shared', 'root']);
+  });
+
+  it('lists the root package when a brace glob contains the root alternative', async () => {
+    await writePackage(root, 'root', { workspaces: ['{.,packages/*}'] });
+    await writePackage(join(root, 'packages', 'shared'), '@scope/shared');
+
+    const found = await findWorkspaces(root, { stopDir: tmpdir() });
+    expect(found?.map(w => w.package.name).sort()).toEqual(['@scope/shared', 'root']);
+  });
+
   it('finds a workspace package that is a symlink to a directory', async () => {
     await writePackage(root, 'r', { workspaces: ['packages/*'] });
     await writePackage(join(root, 'packages', 'a'), 'a');

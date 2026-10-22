@@ -37,7 +37,7 @@ export const MastraVersionNavLink = ({ state }: MastraVersionNavLinkProps) => {
       <Sidebar.NavLink
         state={state}
         isActive={open}
-        link={{ name: `Mastra v${version}`, url: '#' }}
+        link={{ name: `Version ${version}`, url: '#' }}
         render={
           <PopoverTrigger render={<button type="button" />}>
             <span className="relative inline-flex">
@@ -53,7 +53,7 @@ export const MastraVersionNavLink = ({ state }: MastraVersionNavLinkProps) => {
               )}
             </span>
             <Sidebar.NavLabel state={state}>
-              <span className="tabular-nums">v{version}</span>
+              <span className="tabular-nums">Version {version}</span>
             </Sidebar.NavLabel>
             {!isCollapsed && needsUpdate && (
               <Badge variant={badgeVariant} emphasis="subtle" size="xs" className="ml-auto">

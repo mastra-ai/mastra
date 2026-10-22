@@ -101,7 +101,7 @@ async function openDialog() {
 describe('Recreate sandbox in the workspace panel', () => {
   it.each([
     ['has no capabilities', undefined],
-    ['is not allowed to recreate', { recreateSandbox: false }],
+    ['is not allowed to recreate', { recreateSandbox: false, takeOwnership: false }],
   ])('hides the action when the session %s', async (_label, capabilities) => {
     const counts = installHandlers({ capabilities });
     const { client } = renderPanel();
@@ -113,7 +113,7 @@ describe('Recreate sandbox in the workspace panel', () => {
   });
 
   it('hides the action when the panel has no session', async () => {
-    const counts = installHandlers({ capabilities: { recreateSandbox: true } });
+    const counts = installHandlers({ capabilities: { recreateSandbox: true, takeOwnership: false } });
     const { client } = renderPanel(null);
 
     await screen.findByRole('button', { name: /Changes/ });
@@ -123,7 +123,7 @@ describe('Recreate sandbox in the workspace panel', () => {
   });
 
   it('warns how many uncommitted changes will be lost and that a running agent stops', async () => {
-    installHandlers({ capabilities: { recreateSandbox: true } });
+    installHandlers({ capabilities: { recreateSandbox: true, takeOwnership: false } });
     renderPanel();
     await screen.findByText('+5');
 
@@ -141,7 +141,7 @@ describe('Recreate sandbox in the workspace panel', () => {
       () => HttpResponse.json({ workspacePath: WORKSPACE, available: false, additions: 0, deletions: 0, changes: [] }),
     ],
   ])('warns that changes could not be checked when the changes query %s', async (_label, changes) => {
-    installHandlers({ capabilities: { recreateSandbox: true }, changes });
+    installHandlers({ capabilities: { recreateSandbox: true, takeOwnership: false }, changes });
     const { client } = renderPanel();
     await screen.findByRole('button', { name: /Recreate sandbox/ });
     await waitForMutationsIdle(client);
@@ -152,7 +152,7 @@ describe('Recreate sandbox in the workspace panel', () => {
   });
 
   it('recreates, refetches the workspace and session, and confirms with a toast', async () => {
-    const counts = installHandlers({ capabilities: { recreateSandbox: true } });
+    const counts = installHandlers({ capabilities: { recreateSandbox: true, takeOwnership: false } });
     const { client } = renderPanel();
     client.setQueryData(queryKeys.sessions(FACTORY_ID), { sessions: [] });
     // Listings and file contents from other threads of the same workspace.
@@ -178,7 +178,7 @@ describe('Recreate sandbox in the workspace panel', () => {
 
   it('keeps the dialog open and shows the server error when recreate fails', async () => {
     const counts = installHandlers({
-      capabilities: { recreateSandbox: true },
+      capabilities: { recreateSandbox: true, takeOwnership: false },
       recreate: () => HttpResponse.json({ error: 'Platform proxy unavailable' }, { status: 500 }),
     });
     const { client } = renderPanel();
@@ -195,7 +195,7 @@ describe('Recreate sandbox in the workspace panel', () => {
     let sessionFetches = 0;
     server.use(
       http.post(`${TEST_BASE_URL}/web/source-control/projects/link-1/sessions`, () =>
-        HttpResponse.json({ session: sessionPayload({ recreateSandbox: true }) }),
+        HttpResponse.json({ session: sessionPayload({ recreateSandbox: true, takeOwnership: false }) }),
       ),
       http.get(CHANGES_URL, () => HttpResponse.json(twoChanges)),
       // The refetch never answers, so the row can only come from the seeded create response.

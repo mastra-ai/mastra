@@ -8,21 +8,28 @@ export type TracesPageSkeletonProps = {
 };
 
 /**
- * Page-level placeholder shown while filter-field discovery is pending: a toolbar-height
- * bar stands in for the FilterBar and the usual list skeleton for the trace rows.
+ * Page-level placeholder shown while filter-field discovery is pending. Pills sized like the
+ * toolbar controls (time chip and filter input, then columns menu and auto-refresh) stand in
+ * for the action row, spaced from the list skeleton as the action row is from the list.
  */
 export function TracesPageSkeleton({ columnPreferences = DEFAULT_TRACE_COLUMN_PREFERENCES }: TracesPageSkeletonProps) {
   const columns = buildTraceListColumns(columnPreferences);
   return (
     <div
-      className="flex h-full min-h-0 flex-col gap-2"
+      className="flex h-full min-h-0 flex-col gap-4"
       role="status"
       aria-label="Loading traces"
       data-testid="traces-page-skeleton"
     >
-      <div className="flex items-center gap-2">
-        <Skeleton className="h-control-md min-w-64 flex-1" />
-        <Skeleton className="h-control-md w-28" />
+      <div className="flex min-h-control-md flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-1">
+          <Skeleton className="h-control-sm w-38 rounded-full" />
+          <Skeleton className="h-control-sm w-48 rounded-full" />
+        </div>
+        <div className="flex items-center gap-8">
+          <Skeleton className="h-control-sm w-24 rounded-full" />
+          <Skeleton className="h-control-sm w-20 rounded-full" />
+        </div>
       </div>
       <DataListSkeleton columns={columns} fit="container" />
     </div>

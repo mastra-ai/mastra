@@ -449,7 +449,9 @@ describe('live session file tree', () => {
     readFile.mockRestore();
   });
 
-  it('reports a large file it cannot read instead of showing it empty', async () => {
+  // Root ignores file permissions, so the unreadable file can't be produced (CI runs as root).
+  const runningAsRoot = typeof process.getuid === 'function' && process.getuid() === 0;
+  it.skipIf(runningAsRoot)('reports a large file it cannot read instead of showing it empty', async () => {
     const { parent } = await seedHostCheckouts();
     const path = join(parent, 'repo', 'locked.log.txt');
     await writeFile(path, 'a'.repeat(512 * 1024 + 1));
@@ -850,6 +852,7 @@ describe('workspace changes', () => {
       expect(script).toContain('ls-files --others --exclude-standard -z');
       expect(script).toContain('GIT_OBJECT_DIRECTORY="$object_dir"');
       expect(args.slice(2)).toEqual(['mastracode-numstat', WORKDIR, BASE_SHA]);
+      // oxlint-disable-next-line no-useless-concat -- Keep NUL-delimited records separate from the next record's leading digit.
       return { exitCode: 0, stdout: '3\t1\tsrc/edited.ts\0' + '5\t0\t\0/dev/null\0src/new.ts\0' };
     });
 

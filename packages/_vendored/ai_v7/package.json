@@ -1,6 +1,6 @@
 {
   "name": "@internal/ai-v7",
-  "version": "0.0.91",
+  "version": "0.0.92",
   "description": "",
   "type": "module",
   "private": true,
@@ -53,7 +53,7 @@
     "msw": "^2.12.11",
     "resolve.exports": "^2.0.3",
     "ts-morph": "^27.0.2",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "typescript": "catalog:"
   },
   "peerDependencies": {

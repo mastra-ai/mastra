@@ -2489,6 +2489,7 @@ export class Agent extends BaseResource {
                     payload: {
                       toolCallId: string;
                       toolName: string;
+                      args: unknown;
                       result: unknown;
                       isError: boolean;
                       providerExecuted: false;
@@ -2551,6 +2552,7 @@ export class Agent extends BaseResource {
                     payload: {
                       toolCallId: toolCall.toolCallId,
                       toolName: toolCall.toolName,
+                      args: toolCall.args,
                       result,
                       isError: false,
                       providerExecuted: false,

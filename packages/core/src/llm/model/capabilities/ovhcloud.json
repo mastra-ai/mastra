@@ -34,10 +34,10 @@
     "qwen3.8-27b"
   ],
   "reasoning": {
-    "gpt-oss-120b": [
+    "qwen3.6-27b": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
     "qwen3.8-27b": [
@@ -58,16 +58,16 @@
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "gpt-oss-20b": [
+    "gpt-oss-120b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "qwen3.6-27b": [
+    "gpt-oss-20b": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
+        "values": ["low", "medium", "high"]
       }
     ]
   }

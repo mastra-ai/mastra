@@ -108,7 +108,7 @@ const supervisor = new Agent({
 
 // highlight-start
 const rubricScorer = createRubricScorer({
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   criteria: [
     { description: 'The response includes an analysis section' },
     { description: 'The response includes concrete recommendations' },
@@ -133,7 +133,7 @@ A newline-delimited string is parsed into criteria, with common list markers (`-
 
 ```typescript
 const rubricScorer = createRubricScorer({
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   criteria: `- All tests pass in the test suite
 - The function is named find_duplicates and accepts a single list argument`,
 })
@@ -145,7 +145,7 @@ Mark a criterion as optional to have it graded and reported without gating compl
 
 ```typescript
 const rubricScorer = createRubricScorer({
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   criteria: [
     { description: 'Includes an analysis section', required: true },
     { description: 'Includes citations', required: false },
@@ -159,7 +159,7 @@ When no `criteria` is passed to the factory, the scorer resolves a `rubric` valu
 
 ```typescript
 const rubricScorer = createRubricScorer({
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
 })
 
 await supervisor.stream('Write find_duplicates', {
