@@ -340,6 +340,107 @@ describe('thread ownership (#24878)', () => {
     runB.complete();
   });
 
+  it('starts a new run when the lease disappears between acquisition and owner lookup', async () => {
+    class VanishingLeasePubSub extends LeasePubSub {
+      first = true;
+      override async acquireLease(key: string, owner: string) {
+        if (this.first) {
+          this.first = false;
+          return { acquired: false, owner: undefined };
+        }
+        return super.acquireLease(key, owner);
+      }
+    }
+    const pubsub = new VanishingLeasePubSub();
+    const runtime = new AgentThreadStreamRuntime();
+    const agent = {
+      id: 'vanishing-lease-agent',
+      stream: vi.fn(async (_signal: unknown, options: { runId: string }) => ({ runId: options.runId })),
+    } as unknown as Agent<any, any, any, any>;
+
+    const result = runtime.sendSignal(
+      agent,
+      { type: 'user-message', contents: 'not lost' },
+      { resourceId: 'user', threadId: 'thread' },
+      pubsub,
+    );
+    const accepted = await result.accepted;
+    expect(accepted.action).toBe('wake');
+    expect((agent as any).stream).toHaveBeenCalledOnce();
+    runtime.releaseThreadRunReservation(accepted.runId!, pubsub);
+  });
+
+  it('does not report delivery to an ended run whose lease is still being released', async () => {
+    let release!: () => void;
+    const released = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    let releasing!: () => void;
+    const releaseStarted = new Promise<void>(resolve => {
+      releasing = resolve;
+    });
+    let checked!: () => void;
+    const leaseChecked = new Promise<void>(resolve => {
+      checked = resolve;
+    });
+    class DelayedReleasePubSub extends LeasePubSub {
+      override async releaseLease(key: string, owner: string) {
+        releasing();
+        await released;
+        return super.releaseLease(key, owner);
+      }
+      override async acquireLease(key: string, owner: string) {
+        const lease = await super.acquireLease(key, owner);
+        if (owner !== 'ended-run') checked();
+        return lease;
+      }
+    }
+    const pubsub = new DelayedReleasePubSub();
+    const owner = new AgentThreadStreamRuntime();
+    const sender = new AgentThreadStreamRuntime();
+    const agent = {
+      id: 'ending-run-agent',
+      stream: vi.fn(async (_signal: unknown, options: { runId: string }) => ({ runId: options.runId })),
+    } as unknown as Agent<any, any, any, any>;
+    const run = registerRun(owner, agent, pubsub, 'ended-run', 'thread', 'user');
+    await run.registered;
+    run.complete();
+    await releaseStarted;
+
+    const result = sender.sendSignal(
+      agent,
+      { type: 'user-message', contents: 'not lost' },
+      { resourceId: 'user', threadId: 'thread' },
+      pubsub,
+    );
+    await leaseChecked;
+    release();
+    const accepted = await result.accepted;
+    expect(accepted.action).toBe('wake');
+    expect(accepted.runId).not.toBe('ended-run');
+    expect((agent as any).stream).toHaveBeenCalledOnce();
+    sender.releaseThreadRunReservation(accepted.runId!, pubsub);
+  });
+
+  it('confirms a live owner admitted a remotely forwarded signal', async () => {
+    const pubsub = new LeasePubSub();
+    const owner = new AgentThreadStreamRuntime();
+    const sender = new AgentThreadStreamRuntime();
+    const agent = { id: 'live-owner-agent', stream: vi.fn() } as unknown as Agent<any, any, any, any>;
+    const run = registerRun(owner, agent, pubsub, 'live-run', 'thread', 'user');
+    await run.registered;
+
+    const result = sender.sendSignal(
+      agent,
+      { type: 'user-message', contents: 'delivered' },
+      { resourceId: 'user', threadId: 'thread' },
+      pubsub,
+    );
+    expect(await result.accepted).toEqual({ action: 'deliver', runId: 'live-run' });
+    expect((agent as any).stream).not.toHaveBeenCalled();
+    run.complete();
+  });
+
   it('does not deliver a signal to a remote run whose owner agent is unknown', async () => {
     const senderRuntime = new AgentThreadStreamRuntime();
     const pubsub = new LeasePubSub();
