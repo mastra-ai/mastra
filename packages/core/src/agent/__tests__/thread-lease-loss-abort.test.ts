@@ -1001,7 +1001,8 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
     async stuck => {
       const thread = `retake-token-signal-thread-${stuck}`;
       const key = [RESOURCE, thread].join('\u0000');
-      const marker = `signal-during-retake-${engine}-${stuck}`;
+      const marker = `primary-retake-input-${engine}-${stuck}`;
+      const concurrentMarker = `concurrent-retake-input-${engine}-${stuck}`;
       const runId = `retaking-run-${engine}-${stuck}`;
       const prompt = `retake signal owner ${stuck}`;
       llm.on(
@@ -1009,7 +1010,8 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
         { toolCalls: [{ id: `call_retake_signal_${engine}_${stuck}`, name: 'tick', arguments: {} }] },
       );
       llm.on({ userMessage: prompt, sequenceIndex: 1 }, { content: 'owner finished' });
-      llm.on({ userMessage: marker }, { content: 'signal received' });
+      llm.on({ userMessage: marker }, { content: 'primary signal received' });
+      llm.on({ userMessage: concurrentMarker }, { content: 'concurrent signal received' });
       const shared = new SharedLeases();
       const events = new EventEmitter();
       let releaseTransfer!: () => void;
@@ -1050,7 +1052,12 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
       });
       const done = drain().catch(() => undefined);
       let accepted: { action: string; runId?: string } | undefined;
+      let concurrentAccepted: { action: string; runId?: string } | undefined;
+      let signalIds: string[] = [];
+      let forwardedEvents: Array<{ type?: string; runId?: string; signal?: { id: string } }> = [];
       let handover: ReturnType<typeof setTimeout> | undefined;
+      const senderPubSub = new ReplicaPubSub(shared, events);
+      const published = vi.spyOn(senderPubSub, 'publish');
       const startedAt = performance.now();
       try {
         await vi.waitFor(() => expect(ticking).toBe(true));
@@ -1058,25 +1065,42 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
         shared.drop(key);
         await vi.waitFor(() => expect(ownerPubSub.tokenHeld).toBe(true));
         expect(shared.owner(key)).toContain('\u0000retake\u0000');
-        const sender = replica(shared, new MockMemory(), {}, new ReplicaPubSub(shared, events));
-        const sent = await sender.sendSignal(
+        const sender = replica(shared, new MockMemory(), {}, senderPubSub);
+        const sent = sender.sendSignal(
           { type: 'user-message', contents: marker },
           { resourceId: RESOURCE, threadId: thread, ifIdle: { behavior: 'wake' } },
         );
+        await new Promise(resolve => setTimeout(resolve, 10));
+        const concurrent = sender.sendSignal(
+          { type: 'user-message', contents: concurrentMarker },
+          { resourceId: RESOURCE, threadId: thread, ifIdle: { behavior: 'wake' } },
+        );
+        signalIds = [sent.signal.id, concurrent.signal.id];
         if (!stuck) handover = setTimeout(releaseTransfer, 20);
-        accepted = await sent.accepted;
+        [accepted, concurrentAccepted] = await Promise.all([sent.accepted, concurrent.accepted]);
       } finally {
         clearTimeout(handover);
         ownerPubSub.cut = false;
         releaseTransfer();
         releaseTool();
         await done;
+        forwardedEvents = published.mock.calls
+          .map(([, event]) => event.data as { type?: string; runId?: string; signal?: { id: string } })
+          .filter(event => event.type === 'signal-enqueued' && signalIds.includes(event.signal?.id ?? ''));
+        published.mockRestore();
       }
       expect(accepted).toMatchObject({ action: stuck ? 'blocked' : 'deliver', runId });
+      expect(concurrentAccepted).toMatchObject({ action: stuck ? 'blocked' : 'deliver', runId });
       expect(performance.now() - startedAt).toBeLessThan(2_000);
       expect(await output.finishReason).toBe('stop');
-      const received = llm.getRequests().some(request => JSON.stringify(request.body).includes(marker));
-      expect(received).toBe(!stuck);
+      for (const signalId of signalIds) {
+        const matching = forwardedEvents.filter(event => event.signal?.id === signalId);
+        expect(matching).toHaveLength(stuck ? 0 : 1);
+        if (!stuck) expect(matching[0]?.runId).toBe(runId);
+      }
+      const requests = llm.getRequests().map(request => JSON.stringify(request.body));
+      expect(requests.some(request => request.includes(marker))).toBe(!stuck);
+      expect(requests.some(request => request.includes(concurrentMarker))).toBe(!stuck);
     },
     20_000,
   );
