@@ -1018,31 +1018,37 @@ export class AgentThreadStreamRuntime {
   /**
    * Takes back a lease that lapsed while its run was still going because this process was late:
    * it stalled past the TTL, so a renewal went out after the lease had run out, or not at all
-   * before the deadline. Acquiring succeeds only when the lease is free or
-   * still this run's, so a run another process took over is still stopped. The run keeps calling the model
-   * while this waits, so a backend that doesn't answer within one renewal interval counts as a lost lease:
-   * a process that only stalled answers at once when it runs again.
+   * before the deadline. A free lease is acquired under a token unique to this attempt and then
+   * handed to the run id; a lease still held under the run id is taken again under it. A run another process
+   * took over under a different id is still stopped. A retake granted after this run gave up
+   * releases only a grant made under its own token: a lease under the run id may be a successor's
+   * (a durable recover takes the run under the same id), so it is left to expire.
+   * The run keeps calling the model while this waits, so a backend that doesn't answer within one
+   * renewal interval counts as a lost lease: a process that only stalled answers at once when it runs again.
    */
   #retakeLease(pubsub: PubSub, key: string, runId: string, timer: ReturnType<typeof setInterval>): Promise<boolean> {
     const state = this.#getState(pubsub);
     const inFlight = state.leaseRetakes.get(runId);
     if (inFlight) return inFlight;
     const sentAt = Date.now();
-    // The run ended meanwhile: don't hold its thread for a TTL. A later registration of the run keeps its own.
-    const releaseIfEnded = () => {
-      if (state.leaseRenewalTimers.has(runId)) return;
-      void this.#getLeaseProvider(pubsub)
-        .releaseLease(key, runId)
-        .catch(() => {});
+    const leaseProvider = this.#getLeaseProvider(pubsub);
+    const token = `${runId}\u0000retake\u0000${globalThis.crypto.randomUUID()}`;
+    const releaseToken = () => {
+      void leaseProvider.releaseLease(key, token).catch(() => {});
+    };
+    /** `token` when it acquired a free lease under the token, `run` when the lease was still under the run id. */
+    const take = async (): Promise<'token' | 'run' | undefined> => {
+      const lease = await leaseProvider.acquireLease(key, token, AGENT_THREAD_LEASE_TTL_MS);
+      if (lease.acquired) return 'token';
+      if (lease.owner !== runId) return undefined;
+      return (await leaseProvider.acquireLease(key, runId, AGENT_THREAD_LEASE_TTL_MS)).acquired ? 'run' : undefined;
     };
     const retake = (async () => {
       let giveUp: ReturnType<typeof setTimeout> | undefined;
       let gaveUp = false;
-      const acquiring = this.#getLeaseProvider(pubsub)
-        .acquireLease(key, runId, AGENT_THREAD_LEASE_TTL_MS)
-        .catch(() => undefined);
-      const lease = await Promise.race([
-        acquiring,
+      const taking = take().catch(() => undefined);
+      const taken = await Promise.race([
+        taking,
         new Promise<undefined>(
           resolve =>
             (giveUp = setTimeout(() => {
@@ -1053,14 +1059,32 @@ export class AgentThreadStreamRuntime {
       ]).finally(() => clearTimeout(giveUp));
       if (gaveUp) {
         // The run stops now, but the backend may still grant the acquire. Nothing would renew that lease.
-        void acquiring.then(late => {
-          if (late?.acquired) releaseIfEnded();
+        void taking.then(late => {
+          if (late === 'token') releaseToken();
         });
         return false;
       }
-      if (!lease?.acquired) return false;
+      if (!taken) return false;
+      if (taken === 'token') {
+        // The run ended meanwhile: don't hold its thread for a TTL.
+        if (state.leaseRenewalTimers.get(runId) !== timer) {
+          releaseToken();
+          return false;
+        }
+        const handedOver = await leaseProvider
+          .transferLease(key, token, runId, AGENT_THREAD_LEASE_TTL_MS)
+          .catch(() => false);
+        if (!handedOver) {
+          releaseToken();
+          return false;
+        }
+      }
       if (state.leaseRenewalTimers.get(runId) !== timer) {
-        releaseIfEnded();
+        // The run ended meanwhile. A lease this attempt handed over is its own, so free it unless a later
+        // registration of the run now renews it. One it found under the run id may be a successor's: leave it.
+        if (taken === 'token' && !state.leaseRenewalTimers.has(runId)) {
+          void leaseProvider.releaseLease(key, runId).catch(() => {});
+        }
         return false;
       }
       this.#armLeaseDeadline(pubsub, key, runId, sentAt);
