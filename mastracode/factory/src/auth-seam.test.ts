@@ -335,6 +335,26 @@ describe('mountFactoryAuth with an explicit custom provider', () => {
     });
   });
 
+  it('SSO callback also expires legacy session cookies (SP-5)', async () => {
+    const legacy = ['wos-session=; Path=/; Max-Age=0; Secure; Domain=.mastra.cloud'];
+    const provider = fakeProvider(ssoCapability({ getLegacySessionClearCookies: vi.fn(() => legacy) }));
+    const { app } = buildApp(provider);
+
+    const res = await app.request('/auth/callback?code=abc');
+
+    expect(res.headers.getSetCookie()).toEqual(expect.arrayContaining(['fake_session=abc', ...legacy]));
+  });
+
+  it('SSO logout also expires legacy session cookies (SP-5)', async () => {
+    const legacy = ['wos-session=; Path=/; Max-Age=0; Secure; Domain=.mastra.cloud'];
+    const provider = fakeProvider(ssoCapability({ getLegacySessionClearCookies: vi.fn(() => legacy) }));
+    const { app } = buildApp(provider);
+
+    const res = await app.request('/auth/logout');
+
+    expect(res.headers.getSetCookie()).toEqual(expect.arrayContaining(['fake_session=; Path=/; Max-Age=0', ...legacy]));
+  });
+
   it('logout for a handler-shaped provider revokes the session and clears the cookie', async () => {
     const handleAuthRequest = vi.fn(
       async () => new Response(null, { status: 200, headers: { 'Set-Cookie': 'fake_session=revoked; Max-Age=0' } }),

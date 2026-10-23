@@ -72,7 +72,7 @@ describe('Workspace sidebar visibility', () => {
     const { client } = renderSection();
     await waitForMutationsIdle(client);
 
-    expect(await screen.findByRole('button', { name: 'factory/task-6' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'factory/task-6' })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Show 1 more' })).toBeInTheDocument();
   });
 
@@ -84,7 +84,7 @@ describe('Workspace sidebar visibility', () => {
     const { client } = renderSection();
     await waitForMutationsIdle(client);
 
-    expect(await screen.findByRole('button', { name: 'factory/task-5' })).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'factory/task-6' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'factory/task-5' })).toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'factory/task-6' })).not.toBeInTheDocument();
   });
 });

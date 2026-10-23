@@ -438,12 +438,56 @@ describe('workspace_apply_patch', () => {
     });
   });
 
-  // LocalFilesystem skips its realpath check when the target does not exist yet,
-  // so a new file under a symlinked parent directory lands outside the root.
-  // This already affects write_file on main; the fix belongs in LocalFilesystem.
   describe('symlinked parent directory (#27916)', () => {
-    it.todo('rejects "*** Add File: link/x.txt" when link points outside the workspace');
-    it.todo('rejects "*** Move to: link/x.txt" when link points outside the workspace');
+    it.each(['link/new.txt', 'link/missing/nested/new.txt'])(
+      'rejects Add File to %s without creating anything outside',
+      async destination => {
+        const workspaceDir = path.join(tempDir, 'workspace');
+        const outside = path.join(tempDir, 'outside');
+        await fs.mkdir(workspaceDir);
+        await fs.mkdir(outside);
+        await fs.symlink(outside, path.join(workspaceDir, 'link'), 'dir');
+        const workspace = new Workspace({
+          filesystem: new LocalFilesystem({ basePath: workspaceDir }),
+          tools: { [APPLY_PATCH]: { enabled: true } },
+        });
+        const tools = await createWorkspaceTools(workspace);
+
+        await expect(
+          tools[APPLY_PATCH].execute(
+            { patch: `*** Begin Patch\n*** Add File: ${destination}\n+content\n*** End Patch` },
+            { workspace },
+          ),
+        ).rejects.toThrow(PermissionError);
+        expect(await fs.readdir(outside)).toEqual([]);
+      },
+    );
+
+    it.each(['link/new.txt', 'link/missing/nested/new.txt'])(
+      'rejects Move to %s without moving the source outside',
+      async destination => {
+        const workspaceDir = path.join(tempDir, 'workspace');
+        const outside = path.join(tempDir, 'outside');
+        await fs.mkdir(workspaceDir);
+        await fs.mkdir(outside);
+        await fs.symlink(outside, path.join(workspaceDir, 'link'), 'dir');
+        await fs.writeFile(path.join(workspaceDir, 'source.txt'), 'content\n');
+        const workspace = new Workspace({
+          filesystem: new LocalFilesystem({ basePath: workspaceDir }),
+          tools: { [APPLY_PATCH]: { enabled: true } },
+        });
+        const tools = await createWorkspaceTools(workspace);
+
+        await expect(
+          tools[APPLY_PATCH].execute(
+            { patch: `*** Begin Patch\n*** Update File: source.txt\n*** Move to: ${destination}\n*** End Patch` },
+            { workspace },
+          ),
+        ).rejects.toThrow(PermissionError);
+        expect(await fs.readdir(outside)).toEqual([]);
+        expect(await fs.readFile(path.join(workspaceDir, 'source.txt'), 'utf-8')).toBe('content\n');
+      },
+    );
   });
 
   describe('read-before-write', () => {

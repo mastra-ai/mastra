@@ -1,9 +1,11 @@
 import type { MastraClient } from '@mastra/client-js';
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent/message-list';
 import { SpanType } from '@mastra/core/observability';
+import { isUserSignalType } from '@/domains/chat/messages/signal-data';
 import { isHiddenTool } from '@/domains/chat/tools/tool-card-kind';
 import { formatHierarchicalSpans } from '@/domains/traces/components/format-hierarchical-spans';
 import type { UISpan } from '@/domains/traces/types';
+import { getSpanSignal } from '@/domains/traces/utils/span-signal';
 
 type SpanRecord = Awaited<ReturnType<MastraClient['getTrace']>>['spans'][number];
 
@@ -262,12 +264,41 @@ export function formatTraceThreadMessages(spans: SpanRecord[]): TraceViewMastraD
   if (!root) return [];
 
   const userParts = getUserParts(root.input);
+  const signal = getSpanSignal(root);
+  // A run started by a non-user signal (a skill, a reminder…) opens with that signal instead of a user turn.
+  const signalParts = signal && !isUserSignalType(signal.type) ? toTextParts(signal.contents) : [];
   const { tools, textSpanIds, resumedOutput } = collectAssistantSpans(hierarchicalRoot, spans);
   const responseText = getResponseText(root.output) || getResponseText(resumedOutput);
   const assistantCreatedAt = new Date(root.endedAt ?? root.startedAt);
   const threadId = root.threadId ?? undefined;
 
   const messages: TraceViewMastraDBMessage[] = [
+    ...(signal && signalParts.length > 0
+      ? [
+          {
+            id: `${root.traceId}:${root.spanId}:signal`,
+            role: 'signal' as const,
+            type: signal.tagName,
+            createdAt: new Date(root.startedAt),
+            threadId,
+            content: {
+              format: 2 as const,
+              parts: signalParts,
+              content: messageContent(signalParts),
+              metadata: {
+                signal: {
+                  id: signal.id,
+                  type: signal.type,
+                  tagName: signal.tagName,
+                  attributes: signal.attributes,
+                  metadata: signal.metadata,
+                },
+              },
+            },
+            traceSpanIds: [root.spanId],
+          },
+        ]
+      : []),
     // A resumed run's input is the resume payload, not a user message: no user bubble then.
     ...(userParts.length > 0
       ? [

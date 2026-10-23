@@ -7,7 +7,7 @@ packages:
   - "@mastra/server"
 ---
 
-# MCP authentication
+# MCP authentication and authorization
 
 You either connect your Mastra application to someone else's protected MCP server, or you expose your own tools and data to a third-party client. Each direction needs different credentials and different checks.
 
@@ -147,7 +147,7 @@ An MCP access token is for the MCP server. The specification prohibits passing t
 
 Keep access tokens, refresh tokens, and service credentials outside model-visible instructions, tool arguments, and tool results. Return only the data needed for the task. The [authentication and identity guide](/docs/guides/authentication-identity#keep-secrets-outside-the-model-boundary) explains this model boundary.
 
-## Verify before production
+## Production checklist
 
 - [ ] **Validate tokens:** Configure validation for your issuer, including audience and expiry checks, and confirm an unvalidated token is rejected.
 - [ ] **Challenge missing tokens:** Confirm every protected server path returns `401` without a bearer token.

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { MetricsShareListHeader } from './metrics-share-list-header';
 import { ShareListRow } from './metrics-share-list-row';
 import {
@@ -24,16 +25,23 @@ import { cn } from '@/lib/utils';
  * and values. Hovering a segment or a row highlights the pair; every segment has its row, so
  * there is no tooltip. A non-zero share always gets a visible segment; a zero gets none.
  */
-export function MetricsShareList({ showHeader = true, className, ...props }: MetricsShareListProps) {
+export function MetricsShareList({
+  showHeader = true,
+  headerPlacement = 'top',
+  className,
+  ...props
+}: MetricsShareListProps) {
   const { columns = [], valueLabel, valueWidth = 'w-14' } = props;
+  const belowStrip = headerPlacement === 'below-strip';
+  const header = showHeader && (
+    <div className={cn('flex justify-end', belowStrip && 'pt-3 pb-0.5')}>
+      <MetricsShareListHeader columns={columns} valueLabel={valueLabel} valueWidth={valueWidth} />
+    </div>
+  );
   return (
-    <div className={cn('grid grid-cols-1 gap-4', className)}>
-      {showHeader && (
-        <div className="flex justify-end">
-          <MetricsShareListHeader columns={columns} valueLabel={valueLabel} valueWidth={valueWidth} />
-        </div>
-      )}
-      <ShareListBody {...props} />
+    <div className={cn('grid grid-cols-1', belowStrip ? 'gap-0' : 'gap-4', className)}>
+      {!belowStrip && header}
+      <ShareListBody {...props} header={belowStrip ? header : undefined} />
     </div>
   );
 }
@@ -54,7 +62,11 @@ function ShareListBody({
   emptyState = 'No data in this range.',
   isLoading = false,
   LinkComponent,
-}: Omit<MetricsShareListProps, 'showHeader' | 'className'>) {
+  header,
+}: Omit<MetricsShareListProps, 'showHeader' | 'headerPlacement' | 'className'> & {
+  /** Column headers between the strip and the rows (`headerPlacement="below-strip"`). */
+  header?: ReactNode;
+}) {
   const [hover, setHover] = useState<string>();
   // Extra pages opened with "Show more", so the row count follows `limit` when it changes.
   const [pages, setPages] = useState(0);
@@ -62,16 +74,24 @@ function ShareListBody({
 
   if (isLoading) {
     return (
-      <ShareListSkeleton rows={overflow === 'other' ? limit + 1 : limit} columns={columns} valueWidth={valueWidth} />
+      <ShareListSkeleton
+        rows={overflow === 'other' ? limit + 1 : limit}
+        columns={columns}
+        valueWidth={valueWidth}
+        header={header}
+      />
     );
   }
 
   const ranked = rankRows(rows);
   if (ranked.length === 0) {
     return (
-      <Txt variant="body-sm" tone="muted" className="py-6 text-center">
-        {emptyState}
-      </Txt>
+      <>
+        <Txt variant="body-sm" tone="muted" className="py-6 text-center">
+          {emptyState}
+        </Txt>
+        {header}
+      </>
     );
   }
 
@@ -101,6 +121,7 @@ function ShareListBody({
           />
         ))}
       </div>
+      {header}
       <ul className="grid min-w-0 grid-cols-1 gap-0.5" onMouseLeave={clearHover}>
         {shown.map(r => (
           <ShareListRow

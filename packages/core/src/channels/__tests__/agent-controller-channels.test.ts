@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import z from 'zod';
 
 import { Agent } from '../../agent';
+import { MessageList } from '../../agent/message-list';
 import { AgentController } from '../../agent-controller/agent-controller';
 import { createMockWorkspace } from '../../agent-controller/test-utils';
 import type { AgentControllerEvent } from '../../agent-controller/types';
@@ -1128,6 +1129,211 @@ describe('AgentControllerChannels', () => {
 
       const renderContext = await channels.buildRenderContextForThread(mapped!.id);
       expect(renderContext).not.toBeNull();
+    }, 30_000);
+
+    it('rebuilds the thread around its last sender, so a reply streams the way an inbound one would', async () => {
+      const { adapter, mastra, channels } = await createSetup({});
+      const chatThread = createChatThread(adapter, 'discord:t-sender');
+      const message = { ...createMessage('m-1', 'hello'), raw: { team_id: 'T1', text: 'not kept' } };
+      await (channels as any).processChatMessage(chatThread, message, mastra, new RequestContext());
+      const memoryStore = await mastra.getStorage()!.getStore('memory');
+      const { threads } = await memoryStore!.listThreads({
+        filter: { metadata: { channel_externalThreadId: 'discord:t-sender' } },
+        perPage: 1,
+      });
+      expect(threads[0]!.metadata?.channel_lastSender).toEqual({
+        author: { userId: 'user-1', userName: 'caleb', fullName: 'Caleb Barnes' },
+        raw: { team_id: 'T1' },
+      });
+
+      // A run that didn't start from a message: the thread comes from metadata alone.
+      adapter.stream = vi.fn(async (_threadId: string, stream: AsyncIterable<string>) => {
+        for await (const _ of stream);
+        return { id: 'streamed-1', threadId: 'discord:t-sender', raw: {} };
+      });
+      const render = await channels.buildRenderContextForThread(threads[0]!.id);
+      await render!.chatThread.post(
+        (async function* () {
+          yield 'hi';
+        })(),
+      );
+
+      expect(adapter.stream).toHaveBeenCalledWith(
+        'discord:t-sender',
+        expect.anything(),
+        expect.objectContaining({ recipientUserId: 'user-1', recipientTeamId: 'T1' }),
+      );
+    }, 30_000);
+
+    for (const isDM of [true, false]) {
+      it(`gives a run that did not start from a message the same system prompt as one that did (${isDM ? 'DM' : 'thread'})`, async () => {
+        const systemPrompts: string[] = [];
+        const model = new MockLanguageModelV2({
+          doStream: async ({ prompt }) => {
+            systemPrompts.push(
+              prompt
+                .filter(m => m.role === 'system')
+                .map(m => m.content)
+                .join('\n'),
+            );
+            return createTextStreamModel('hi').doStream({ prompt } as any);
+          },
+        });
+        const { adapter, mastra, channels } = await createSetup({ model });
+        const chatThread = createChatThread(adapter, 'discord:t-same', { isDM });
+        await (channels as any).processChatMessage(
+          chatThread,
+          createMessage('m-1', 'hello'),
+          mastra,
+          new RequestContext(),
+        );
+        await waitFor(() => systemPrompts.length > 0, { what: 'the inbound run' });
+        // Everything after the agent's own instructions comes from the channel processor.
+        const inbound = systemPrompts[0]!.replace('You are a test agent.\n', '');
+        expect(inbound.startsWith('This conversation is connected to a discord')).toBe(true);
+
+        const memoryStore = await mastra.getStorage()!.getStore('memory');
+        const { threads } = await memoryStore!.listThreads({
+          filter: { metadata: { channel_externalThreadId: 'discord:t-same' } },
+          perPage: 1,
+        });
+        // A schedule, a Studio prompt or a signal: the memory thread, but no `channel`.
+        const requestContext = new RequestContext();
+        requestContext.set('MastraMemory', { thread: { id: threads[0]!.id } });
+        const messageList = new MessageList({});
+        const processor = channels.getInputProcessors().find(p => p.id === 'chat-channel-context')!;
+        await processor.processInputStep!({ messageList, requestContext, state: {}, tools: {} } as any);
+        const linked = messageList
+          .getSystemMessages('chat-channel-context')
+          .map(m => m.content)
+          .join('\n');
+
+        expect(linked).toBe(inbound);
+      }, 30_000);
+    }
+  });
+
+  describe('reaction tools on a run with no inbound message', () => {
+    // A schedule, a Studio prompt or a woken run in a channel-backed thread has
+    // no `channel` on request context. The reaction tools must still find the
+    // chat thread through the run's memory thread, like the output processor.
+    async function mappedThread() {
+      const { adapter, mastra, channels } = await createSetup({});
+      const chatThread = createChatThread(adapter, 'discord:t-react');
+      await (channels as any).processChatMessage(
+        chatThread,
+        createMessage('m-1', 'hello'),
+        mastra,
+        new RequestContext(),
+      );
+      const memoryStore = await mastra.getStorage()!.getStore('memory');
+      const { threads } = await memoryStore!.listThreads({
+        filter: { metadata: { channel_externalThreadId: 'discord:t-react' } },
+        perPage: 1,
+      });
+      expect(threads[0], 'inbound dispatch mapped the chat thread to a Mastra thread').toBeDefined();
+      adapter.addReaction.mockClear();
+      const tools = channels.getTools() as Record<
+        string,
+        { execute: (input: unknown, ctx: unknown) => Promise<unknown> }
+      >;
+      return { adapter, tools, threadId: threads[0]!.id };
+    }
+
+    it('reacts through the agent thread id', async () => {
+      const { adapter, tools, threadId } = await mappedThread();
+
+      await tools.add_reaction!.execute(
+        { messageId: 'm-1', emoji: 'eyes' },
+        { requestContext: new RequestContext(), agent: { threadId } },
+      );
+      await tools.remove_reaction!.execute(
+        { messageId: 'm-1', emoji: 'eyes' },
+        { requestContext: new RequestContext(), agent: { threadId } },
+      );
+
+      expect(adapter.addReaction).toHaveBeenCalledWith('discord:t-react', 'm-1', 'eyes');
+      expect(adapter.removeReaction).toHaveBeenCalledWith('discord:t-react', 'm-1', 'eyes');
+    }, 30_000);
+
+    it('reacts through the memory thread on request context', async () => {
+      const { adapter, tools, threadId } = await mappedThread();
+      const requestContext = new RequestContext();
+      requestContext.set('MastraMemory', { thread: { id: threadId } });
+
+      await tools.add_reaction!.execute({ messageId: 'm-1', emoji: 'eyes' }, { requestContext });
+
+      expect(adapter.addReaction).toHaveBeenCalledWith('discord:t-react', 'm-1', 'eyes');
+    }, 30_000);
+
+    it('reacts from an agent run that a prompt outside the channel started', async () => {
+      // Inbound runs answer with text; the later prompt answers with a reaction.
+      let react = false;
+      let call = 0;
+      const model = new MockLanguageModelV2({
+        doStream: async options => {
+          call += 1;
+          const reacting = react && !options.prompt.some(m => m.role === 'tool');
+          if (!reacting) return createTextStreamModel('ok').doStream(options);
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: `id-${call}`, modelId: 'mock-model-id', timestamp: new Date(0) },
+              {
+                type: 'tool-call',
+                toolCallId: 'react-1',
+                toolName: 'add_reaction',
+                input: '{"messageId":"m-1","emoji":"eyes"}',
+                providerExecuted: false,
+              },
+              {
+                type: 'finish',
+                finishReason: 'tool-calls',
+                usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+              },
+            ]),
+          };
+        },
+      });
+      // Like a host that mounts `channels.getTools()` on its agent.
+      let channelTools: Record<string, unknown> = {};
+      const { adapter, controller, mastra, channels } = await createSetup({
+        model,
+        tools: (() => channelTools) as any,
+      });
+      channelTools = channels.getTools();
+      const chatThread = createChatThread(adapter, 'discord:t-react-run');
+      await (channels as any).processChatMessage(
+        chatThread,
+        createMessage('m-1', 'hello'),
+        mastra,
+        new RequestContext(),
+      );
+      await waitFor(() => postedText(chatThread).includes('ok'), { what: 'the inbound reply' });
+      expect(adapter.addReaction).not.toHaveBeenCalled();
+
+      // A Studio or API prompt on the same session: no inbound message, no `channel`.
+      react = true;
+      const session = (await controller.getSession('channel:discord:t-react-run'))!;
+      await session.permissions.setForTool({ toolName: 'add_reaction', policy: 'allow' });
+      await session.sendMessage({ content: 'react to the last message' });
+
+      await waitFor(() => adapter.addReaction.mock.calls.length > 0, { what: 'the reaction from the agent run' });
+      expect(adapter.addReaction).toHaveBeenCalledWith('discord:t-react-run', 'm-1', 'eyes');
+    }, 30_000);
+
+    it('still fails clearly when the thread is not in a channel', async () => {
+      const { adapter, tools } = await mappedThread();
+
+      await expect(
+        tools.add_reaction!.execute(
+          { messageId: 'm-1', emoji: 'eyes' },
+          { requestContext: new RequestContext(), agent: { threadId: 'no-such-thread' } },
+        ),
+      ).rejects.toThrow('No channel context');
+      expect(adapter.addReaction).not.toHaveBeenCalled();
     }, 30_000);
   });
 });

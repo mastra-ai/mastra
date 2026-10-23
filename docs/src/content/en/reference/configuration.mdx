@@ -446,7 +446,7 @@ import { ModerationProcessor } from '@mastra/core/processors'
 export const mastra = new Mastra({
   processors: {
     moderation: new ModerationProcessor({
-      model: '__GATEWAY_OPENAI_MODEL_MINI__',
+      model: '__GATEWAY_OPENAI_MODEL_LUNA__',
       categories: ['hate', 'harassment', 'violence'],
     }),
   },
@@ -493,7 +493,7 @@ import { createToxicityScorer } from '@mastra/evals/scorers/prebuilt'
 
 export const mastra = new Mastra({
   scorers: {
-    toxicity: createToxicityScorer({ model: '__GATEWAY_OPENAI_MODEL_MINI__' }),
+    toxicity: createToxicityScorer({ model: '__GATEWAY_OPENAI_MODEL_LUNA__' }),
   },
 })
 ```
@@ -779,7 +779,7 @@ export const mastra = new Mastra({
 })
 ```
 
-Explicit values override copied source settings. Omitting this option preserves the existing workspace-copy behavior; it doesn't copy all settings from the source workspace.
+Explicit values override copied source settings. Omitting this option preserves the existing workspace-copy behavior, which copies only a subset of the source workspace's settings.
 
 Only these keys are supported: `allowBuilds`, `onlyBuiltDependencies`, `ignoredBuiltDependencies`, `minimumReleaseAge`, `minimumReleaseAgeExclude`, `trustPolicy`, `trustPolicyExclude`, `trustPolicyIgnoreAfter`, and `blockExoticSubdeps`. Any other key throws an error before pnpm runs, including keys Mastra generates for deployment output (`packages`, `overrides`, `patchedDependencies`, `allowUnusedPatches`, `supportedArchitectures`, `nodeLinker`) and settings that change TLS verification, registries, network access, store integrity, dependency extensions, catalogs, or build-script permissions. `neverBuiltDependencies` is rejected because pnpm 10 runs every build script it doesn't list. This option doesn't accept command-line flags and isn't a place for secrets.
 

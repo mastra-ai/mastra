@@ -1,6 +1,7 @@
 import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import type { SidebarLink } from '@mastra/playground-ui/components/Sidebar';
+import { useConnectSurface } from '@mastra/playground-ui/domains/connect';
 import { useKeyboardShortcutLabel } from '@mastra/playground-ui/hooks/use-keyboard-shortcut-label';
 import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
 import { useMCPServers } from '@mastra/react/hooks/mcps';
@@ -13,7 +14,7 @@ import { ImpersonationBanner } from '@/domains/auth/components/impersonation-ban
 import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { getPermissionForRoute, hasRoutePermission } from '@/domains/auth/route-permissions';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
-import { MastraVersionFooter } from '@/domains/configuration/components/mastra-version-footer';
+import { MastraVersionNavLink } from '@/domains/configuration/components/mastra-version-nav-link';
 import { useNavigationCommand } from '@/lib/command';
 import { useMastraPlatform } from '@/lib/mastra-platform/hooks/use-mastra-platform';
 import { getIsLinkActive } from '@/lib/nav/get-is-link-active';
@@ -44,6 +45,11 @@ export function AppSidebar() {
   const { data: authCapabilities } = useAuthCapabilities();
   const { isCmsAvailable, isLoading: isCmsLoading } = useIsCmsAvailable();
   const { hasPermission, hasAnyPermission, isLoading: isPermissionsLoading } = usePermissions();
+  // The Connections entry only shows once the connect-surface probe confirms
+  // userConnectRoutes() is mounted (a 401 still means mounted). The page stays
+  // reachable at /connections, where the empty states explain the setup.
+  const { data: connectSurface } = useConnectSurface();
+  const isConnectSurfaceMounted = connectSurface !== undefined && connectSurface.status !== 'not-mounted';
 
   const isUserAuthenticated = authCapabilities && isAuthenticated(authCapabilities);
   const cmsOnlyLinks = new Set(['/prompts']);
@@ -57,6 +63,7 @@ export function AppSidebar() {
 
   const filterItem = (item: NavItem) => {
     if (item.hidden) return false;
+    if (item.url === '/connections' && !isConnectSurfaceMounted) return false;
     if (cmsOnlyLinks.has(item.url) && !isCmsAvailable && !isCmsLoading) return false;
     if (isMastraPlatform && !item.isOnMastraPlatform) return false;
     if (isPermissionsLoading) {
@@ -138,19 +145,17 @@ export function AppSidebar() {
       </Sidebar.Nav>
 
       <Sidebar.Footer>
-        {filteredBottom.length > 0 && (
-          <Sidebar.NavList>
-            {filteredBottom.map(item => (
-              <Sidebar.NavLink
-                key={item.name}
-                state={state}
-                link={toSidebarLink(item)}
-                isActive={getIsLinkActive(item, pathname)}
-              />
-            ))}
-          </Sidebar.NavList>
-        )}
-        <MastraVersionFooter collapsed={state === 'collapsed'} />
+        <Sidebar.NavList>
+          {filteredBottom.map(item => (
+            <Sidebar.NavLink
+              key={item.name}
+              state={state}
+              link={toSidebarLink(item)}
+              isActive={getIsLinkActive(item, pathname)}
+            />
+          ))}
+          <MastraVersionNavLink state={state} />
+        </Sidebar.NavList>
       </Sidebar.Footer>
     </Sidebar>
   );

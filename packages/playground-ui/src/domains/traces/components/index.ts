@@ -26,5 +26,11 @@ export { TracesPageSkeleton, type TracesPageSkeletonProps } from './traces-page-
 export { TracesListModeToggle, type TracesListModeToggleProps } from './traces-list-mode-toggle';
 export { TracesErrorContent, type TracesErrorContentProps } from './traces-error-content';
 export { NoTracesInfo, type NoTracesInfoProps } from './no-traces-info';
+export {
+  TracesSpansSwitch,
+  TracesSpansSwitchSkeleton,
+  type ObservabilityView,
+  type TracesSpansSwitchProps,
+} from './traces-spans-switch';
 export * from './thread-trace';
 export * from './span-payload';

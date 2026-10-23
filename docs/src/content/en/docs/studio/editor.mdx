@@ -12,7 +12,7 @@ packages:
 
 Editor works like a CMS for Mastra agents. Collaborators can change an agent's instructions and tools in Studio without accessing the codebase or writing code. They can test changes before making them live.
 
-TypeScript defines the agent's default values. Editor saves changes separately instead of updating the source code, so collaborators can improve the agent while developers retain control over its model, identity, and runtime.
+By default, TypeScript defines starting values that collaborators can override. When you hand a field to Editor, Studio owns that field instead: define it in Studio and omit it from the agent config.
 
 A [deployed Studio](/docs/studio/deployment) makes Editor available to collaborators outside local development.
 
@@ -61,7 +61,7 @@ With database storage, save changes as a draft to test them without affecting th
 
 ## Instructions
 
-The **Instructions** section shows the agent's system prompt defined in code. Collaborators can override it or add instruction blocks.
+The **Instructions** section reflects the agent's instructions. When instructions stay in code (the default), it starts from that prompt and collaborators can override it or add instruction blocks. When `editor.instructions` is `true`, Studio owns the prompt: omit `instructions` from code and publish a version in Studio before the agent runs.
 
 An instruction block can include values from the current request. For example, <code>{'{{userName}}'}</code> inserts a name supplied through [request context](/docs/server/request-context). A [display condition](/reference/editor/prompt-blocks#display-conditions) can show a block only for a customer, role, or feature flag.
 
@@ -103,7 +103,7 @@ export const mastra = new Mastra({
 })
 ```
 
-The Studio tool picker lists the tool. A collaborator can add it to an agent when that agent allows tool editing. The agent's Editor view also lists tools attached in code.
+The Studio tool picker lists the tool. A collaborator can add it to an agent when that agent allows tool editing. When tool membership stays in code, the agent's Editor view also lists tools attached in code.
 
 ### Composio
 
@@ -159,18 +159,32 @@ See the [Editor tools reference](/reference/editor/tools) for MCP configuration,
 
 ## Decide what collaborators can edit
 
-By default, collaborators can change an agent's instructions and manage its tools, including their descriptions. The agent's `id`, `name`, and `model` always come from code.
-
-Use the agent's `editor` field to limit what can be changed:
+The `editor` field decides which fields Studio owns. When omitted, collaborators can change an agent's instructions and manage its tools, including their descriptions, starting from the values in code. The agent's `id`, `name`, and `model` always come from code.
 
 ```typescript title="src/mastra/agents/support-agent.ts"
 import { Agent } from '@mastra/core/agent'
+import { searchOrders } from './tools/search-orders'
 
 export const supportAgent = new Agent({
   id: 'support-agent',
   name: 'Support agent',
   instructions: 'Help customers with Acme products.',
   model: '__GATEWAY_OPENAI_MODEL__',
+  tools: { searchOrders },
+})
+```
+
+Set a field to `true` to hand it to Studio exclusively. Studio then owns the field, so omit it from code: TypeScript rejects `instructions` when `editor.instructions` is `true`, and rejects `tools` when `editor.tools` is `true`. An agent whose instructions are owned by Studio fails closed until a version containing instructions is published.
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { searchOrders } from './tools/search-orders'
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support agent',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  tools: { searchOrders },
   editor: {
     instructions: true,
     tools: {
@@ -180,15 +194,15 @@ export const supportAgent = new Agent({
 })
 ```
 
-This agent lets collaborators change its instructions and improve the descriptions of tools already attached to it. They can't add or remove tools.
+Here Studio owns the instructions, while tool membership stays in code: collaborators can only improve the descriptions of `searchOrders`.
 
-| `editor` value | What collaborators can change |
-| - | - |
-| Omitted | Instructions, tools, and tool descriptions |
-| `false` | Nothing |
-| `{ instructions: true }` | Instructions |
-| `{ tools: true }` | Tools and tool descriptions |
-| `{ tools: { description: true } }` | Descriptions of tools already added in code |
+| `editor` value | What collaborators can change | What code must provide |
+| - | - | - |
+| Omitted | Instructions, tools, and tool descriptions | `instructions`; tools are optional |
+| `false` | Nothing | `instructions` |
+| `{ instructions: true }` | Instructions | No `instructions`; tools are optional |
+| `{ tools: true }` | Tools and tool descriptions | `instructions`; no `tools` |
+| `{ tools: { description: true } }` | Descriptions of tools already added in code | `instructions`; the tools to describe |
 
 Studio shows everything else as read-only. See [editor overrides](/reference/agents/agent#editor-overrides) for the complete configuration.
 
@@ -321,19 +335,21 @@ await editor.agent.update({
 })
 ```
 
-The direct `editor.agent.update()` method activates the new version immediately. To create a draft without changing the live agent, use the stored-agent REST API or Client SDK instead:
+The direct `editor.agent.update()` method saves the changed snapshot fields as a new version, but that version starts as an inactive draft. The method only changes record fields such as `status` or `activeVersionId` when you pass them. The published agent keeps serving its previous version until you publish. To publish, fetch the draft's version ID (for example with `listVersions()` from the Client SDK) and assign it explicitly:
 
-```bash title="Create a draft through the REST API"
-curl -X PATCH http://localhost:4111/api/stored/agents/support-agent \
-  -H "Content-Type: application/json" \
-  -d '{
-    "instructions": "Help customers with Acme products. Reply in their language."
-  }'
+```typescript title="src/scripts/publish-agent.ts"
+await editor.agent.update({
+  id: 'support-agent',
+  status: 'published',
+  activeVersionId: versionId,
+})
 ```
+
+The stored-agent REST API follows the same rule. `PATCH /api/stored/agents/support-agent` creates an inactive draft unless you set `autoPublish: true`, and `POST /api/stored/agents/support-agent/versions/:versionId/activate` publishes an existing version.
 
 The default server prefix is `/api`. Developers can set a custom prefix in the server configuration.
 
-See the [`MastraEditor` namespaces](/reference/editor/mastra-editor#namespaces) and [Client SDK agents API](/reference/client-js/agents#stored-agents) for available operations.
+See the [Editor versioning reference](/reference/editor/versioning) for the draft, publish, and restore lifecycle, and the [`MastraEditor` namespaces](/reference/editor/mastra-editor#namespaces) and [Client SDK agents API](/reference/client-js/agents#stored-agents) for available operations.
 
 ## Next steps
 

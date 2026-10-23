@@ -101,6 +101,51 @@ describe('api command registration', () => {
     });
   });
 
+  it('exposes span query and aggregate commands with schema discovery and examples', () => {
+    const program = new Command();
+    registerApiCommand(program);
+
+    const api = program.commands.find(command => command.name() === 'api');
+    const span = api?.commands.find(command => command.name() === 'span');
+    const spanQuery = span?.commands.find(command => command.name() === 'query');
+    const spanAggregate = span?.commands.find(command => command.name() === 'aggregate');
+    let queryHelp = '';
+    spanQuery?.configureOutput({ writeOut: chunk => (queryHelp += chunk) });
+    spanQuery?.outputHelp();
+    let aggregateHelp = '';
+    spanAggregate?.configureOutput({ writeOut: chunk => (aggregateHelp += chunk) });
+    spanAggregate?.outputHelp();
+
+    expect(span?.description()).toBe('Query and aggregate observability spans');
+    expect(spanQuery?.description()).toBe('Query observability spans with advanced predicates');
+    expect(queryHelp).toContain('--schema');
+    expect(queryHelp).not.toContain('--verbose');
+    expect(queryHelp).toContain('{"op":"eq","left":{"path":"status"},"right":{"literal":"error"}}');
+    expect(queryHelp).toContain('{"op":"eq","left":{"path":"entityName"},"right":{"literal":"weather-agent"}}');
+    expect(queryHelp).toContain('"page":{"limit":50,"after":"NEXT_CURSOR"}');
+    expect(spanAggregate?.description()).toBe('Aggregate observability spans into grouped measures');
+    expect(aggregateHelp).toContain('--schema');
+    expect(aggregateHelp).toContain('"groupBy":["status"],"interval":"1d","measures":["count"]');
+    expect(aggregateHelp).toContain(
+      '"groupBy":["entityName"],"measures":["count","errorRate","duration.p95"],"orderBy":{"field":"errorRate","direction":"desc"},"limit":10',
+    );
+    expect(aggregateHelp).toContain('"groupBy":["rootEntityName"],"measures":["tokens.total.sum","cost.sum"]');
+    expect(API_COMMANDS.spanQuery).toMatchObject({
+      method: 'POST',
+      path: '/observability/spans/query',
+      acceptsInput: true,
+      inputRequired: true,
+      list: false,
+    });
+    expect(API_COMMANDS.spanAggregate).toMatchObject({
+      method: 'POST',
+      path: '/observability/spans/aggregate',
+      acceptsInput: true,
+      inputRequired: true,
+      list: false,
+    });
+  });
+
   it('exposes score and feedback deletion commands', () => {
     const program = new Command();
     registerApiCommand(program);
@@ -792,6 +837,176 @@ describe('api command executor', () => {
 
     await executeDescriptor(
       API_COMMANDS.traceAggregate,
+      [],
+      '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"measures":["count"]}',
+      {
+        url: 'https://observability.mastra.ai',
+        header: ['Authorization: Bearer token', 'X-Mastra-Project-Id: project-1'],
+        pretty: false,
+      },
+    );
+
+    expect(stdout).toBe('');
+    expect(JSON.parse(stderr)).toEqual({
+      error: { code: 'HTTP_ERROR', message: 'Request failed with status 501', details: { status: 501, body } },
+    });
+    expect(process.exitCode).toBe(1);
+  });
+
+  it('queries spans with a JSON body and preserves cursor pagination', async () => {
+    const input = {
+      timeRange: { from: '2026-08-01T00:00:00.000Z', to: '2026-08-02T00:00:00.000Z' },
+      where: {
+        op: 'and',
+        args: [
+          { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } },
+          { op: 'eq', left: { path: 'status' }, right: { literal: 'error' } },
+        ],
+      },
+      orderBy: [{ field: 'startedAt', direction: 'desc' }],
+      page: { limit: 25, after: 'previous-cursor' },
+    };
+    const response = {
+      spans: [
+        {
+          traceId: 'trace-1',
+          spanId: 'span-2',
+          parentSpanId: 'span-1',
+          name: "tool: 'get-weather'",
+          spanType: 'tool_call',
+          status: 'error',
+          startedAt: '2026-08-01T12:00:00.000Z',
+          endedAt: '2026-08-01T12:00:01.000Z',
+          durationMs: 1000,
+          entityType: 'tool',
+          entityId: 'get-weather',
+          entityName: 'get-weather',
+          rootEntityName: 'weather-agent',
+          model: null,
+          provider: null,
+          inputPreview: { text: '{"city":"Paris"}', truncated: false },
+          outputPreview: null,
+          errorPreview: { text: 'Upstream timeout', truncated: false },
+        },
+      ],
+      page: { next: 'next-cursor' },
+    };
+    fetchMock.mockResolvedValueOnce(jsonResponse(response));
+
+    await executeDescriptor(API_COMMANDS.spanQuery, [], JSON.stringify(input), {
+      url: 'https://observability.mastra.ai',
+      header: ['Authorization: Bearer token', 'X-Mastra-Project-Id: project-1'],
+      pretty: false,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('https://observability.mastra.ai/api/observability/spans/query', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Mastra-Project-Id': 'project-1',
+        'content-type': 'application/json',
+      },
+      signal: expect.any(AbortSignal),
+      body: JSON.stringify(input),
+    });
+    expect(JSON.parse(stdout)).toEqual({ data: response });
+    expect(stderr).toBe('');
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it.each([
+    [
+      501,
+      {
+        code: 'SPAN_QUERY_UNSUPPORTED',
+        message: 'Span queries are not supported by the configured observability store',
+      },
+    ],
+    [
+      422,
+      {
+        code: 'TRACE_QUERY_INVALID',
+        message: 'The span query is invalid',
+        issues: [
+          {
+            code: 'field_not_allowed',
+            path: ['where'],
+            message: 'Filtering by threadId requires an updated storage adapter with span query context-field support.',
+          },
+        ],
+      },
+    ],
+  ])('prints span query capability errors (%i) as HTTP errors with the server body', async (status, body) => {
+    fetchMock.mockResolvedValueOnce(jsonResponse(body, { status }));
+
+    await executeDescriptor(
+      API_COMMANDS.spanQuery,
+      [],
+      '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-02T00:00:00.000Z"},"where":{"op":"eq","left":{"path":"threadId"},"right":{"literal":"thread-1"}}}',
+      {
+        url: 'https://observability.mastra.ai',
+        header: ['Authorization: Bearer token', 'X-Mastra-Project-Id: project-1'],
+        pretty: false,
+      },
+    );
+
+    expect(stdout).toBe('');
+    expect(JSON.parse(stderr)).toEqual({
+      error: { code: 'HTTP_ERROR', message: `Request failed with status ${status}`, details: { status, body } },
+    });
+    expect(process.exitCode).toBe(1);
+  });
+
+  it('posts span aggregate requests and preserves rows and truncation', async () => {
+    const input = {
+      timeRange: { from: '2026-08-01T00:00:00.000Z', to: '2026-08-08T00:00:00.000Z' },
+      where: { op: 'eq', left: { path: 'spanType' }, right: { literal: 'tool_call' } },
+      groupBy: ['entityName'],
+      measures: ['count', 'errorRate', 'duration.p95'],
+      orderBy: { field: 'errorRate', direction: 'desc' },
+      limit: 1,
+    };
+    const response = {
+      rows: [
+        {
+          dimensions: { entityName: 'get-weather' },
+          measures: { count: 120, errorRate: 0.1, 'duration.p95': 850 },
+        },
+      ],
+      truncated: true,
+    };
+    fetchMock.mockResolvedValueOnce(jsonResponse(response));
+
+    await executeDescriptor(API_COMMANDS.spanAggregate, [], JSON.stringify(input), {
+      url: 'https://observability.mastra.ai',
+      header: ['Authorization: Bearer token', 'X-Mastra-Project-Id: project-1'],
+      pretty: false,
+    });
+
+    expect(fetchMock).toHaveBeenCalledWith('https://observability.mastra.ai/api/observability/spans/aggregate', {
+      method: 'POST',
+      headers: {
+        Authorization: 'Bearer token',
+        'X-Mastra-Project-Id': 'project-1',
+        'content-type': 'application/json',
+      },
+      signal: expect.any(AbortSignal),
+      body: JSON.stringify(input),
+    });
+    expect(JSON.parse(stdout)).toEqual({ data: response });
+    expect(stderr).toBe('');
+    expect(process.exitCode).toBeUndefined();
+  });
+
+  it('prints span aggregate capability errors as HTTP errors with the server body', async () => {
+    const body = {
+      code: 'SPAN_AGGREGATE_UNSUPPORTED',
+      message: 'Span aggregation is not supported by the configured observability store',
+    };
+    fetchMock.mockResolvedValueOnce(jsonResponse(body, { status: 501 }));
+
+    await executeDescriptor(
+      API_COMMANDS.spanAggregate,
       [],
       '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"measures":["count"]}',
       {

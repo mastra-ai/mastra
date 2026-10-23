@@ -7,6 +7,7 @@ import {
 } from '../../../../loop/shared/steps/tool-result-commit-core';
 import type { Mastra } from '../../../../mastra';
 import type { SpanType, ExportedSpan } from '../../../../observability';
+import { extractUsageMetrics } from '../../../../observability/usage';
 import { persistProcessorDataChunk } from '../../../../stream/base/output';
 import { withToolPayloadTransformProviderMetadata } from '../../../../tools/payload-transform';
 import { createStep } from '../../../../workflows/workflow';
@@ -419,7 +420,7 @@ export function createDurableLLMMappingStep() {
               toolCalls: llmOutput.toolCalls,
             },
             attributes: {
-              usage: pendingPayload?.output?.usage,
+              usage: extractUsageMetrics(pendingPayload?.output?.usage, pendingPayload?.metadata?.providerMetadata),
               finishReason: pendingPayload?.stepResult?.reason,
               isContinued: pendingPayload?.stepResult?.isContinued,
             },

@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useId } from 'react';
+import { expect } from 'storybook/test';
 
 import { Meter } from './meter';
 import { Card, CardContent } from '@/ds/components/Card';
@@ -14,7 +15,7 @@ const meta = {
     docs: {
       description: {
         component:
-          'Usage against an allowance, as a thin bar. Within the allowance the used part fills the track. Past it, the bar fills, and the part beyond the allowance turns red, sized to how far over it is. The meter draws only the bar: put the name and reading beside it with `Txt`, and pass `aria-valuetext` with the same reading so screen readers hear the units.',
+          'Usage against an allowance, as a thin bar. Within the allowance the used part fills the track. Past it, the bar fills, and the part beyond the allowance turns red, sized to how far over it is. Use the optional `label` slot for a heading above the bar. The billing caption sits at the right of that row, or above the bar on its own when no label is supplied. Pass `aria-valuetext` with the reading so screen readers hear the units.',
       },
     },
   },
@@ -27,6 +28,7 @@ const meta = {
   argTypes: {
     value: { control: { type: 'number', min: 0 } },
     max: { control: { type: 'number', min: 0 } },
+    label: { control: 'text' },
   },
   render: args => (
     <div className="max-w-md">
@@ -223,4 +225,140 @@ export const UsageCard: Story = {
       </CardContent>
     </Card>
   ),
+};
+
+export const PaidFromCredits: Story = {
+  args: {
+    variant: 'over-allowance',
+    value: 112,
+    max: 100,
+    paidFromCredits: 4.37,
+    'aria-label': 'vCPU',
+    'aria-valuetext': '112 of 100 vCPU-hours, 12 over',
+  },
+  parameters: {
+    docs: {
+      description: {
+        story:
+          'The billing variant marks usage past the allowance with a warning segment and shows the amount paid from credits. Pass the charged amount in dollars; the meter does not calculate a price from usage.',
+      },
+    },
+  },
+  play: async ({ canvas }) => {
+    await expect(canvas.getByRole('meter', { name: 'vCPU' })).toHaveAccessibleDescription('$4.37 paid from credits');
+  },
+};
+
+export const PaidFromCreditsWithLabel: Story = {
+  ...PaidFromCredits,
+  args: { ...PaidFromCredits.args, label: 'vCPU' },
+  play: async ({ canvas }) => {
+    const label = canvas.getByText('vCPU').getBoundingClientRect();
+    const caption = canvas.getByText('$4.37 paid from credits').getBoundingClientRect();
+    const meter = canvas.getByRole('meter', { name: 'vCPU' }).getBoundingClientRect();
+    await expect(caption.bottom).toBeLessThan(meter.top);
+    await expect(Math.abs(label.bottom - caption.bottom)).toBeLessThan(2);
+    await expect(caption.right).toBeCloseTo(meter.right, 0);
+  },
+};
+
+export const LongLabel: Story = {
+  ...PaidFromCredits,
+  args: { ...PaidFromCredits.args, label: 'Compute usage for production and preview environments across all projects' },
+  play: async ({ canvas }) => {
+    const label = canvas.getByTitle('Compute usage for production and preview environments across all projects');
+    const labelBounds = label.getBoundingClientRect();
+    const caption = canvas.getByText('$4.37 paid from credits').getBoundingClientRect();
+    const meter = canvas.getByRole('meter', { name: 'vCPU' }).getBoundingClientRect();
+    await expect(getComputedStyle(label).textOverflow).toBe('ellipsis');
+    await expect(label.scrollWidth).toBeGreaterThan(label.clientWidth);
+    await expect(labelBounds.height).toBeCloseTo(Number.parseFloat(getComputedStyle(label).lineHeight), 1);
+    await expect(Math.abs(labelBounds.bottom - caption.bottom)).toBeLessThan(2);
+    await expect(labelBounds.right).toBeLessThan(caption.left);
+    await expect(caption.bottom).toBeLessThan(meter.top);
+    await expect(caption.right).toBeCloseTo(meter.right, 0);
+  },
+};
+
+export const BillingStates: Story = {
+  render: () => (
+    <div className="flex max-w-md flex-col gap-6">
+      <Meter label="Within allowance" variant="over-allowance" value={80} max={100} aria-label="Within allowance" />
+      <Meter label="At allowance" variant="over-allowance" value={100} max={100} aria-label="At allowance" />
+      <Meter
+        label="Over allowance"
+        variant="over-allowance"
+        value={112}
+        max={100}
+        paidFromCredits={4.37}
+        aria-label="Over allowance"
+      />
+      <Meter
+        label="No allowance"
+        variant="over-allowance"
+        value={12}
+        max={0}
+        paidFromCredits={0.004}
+        aria-label="No allowance"
+      />
+    </div>
+  ),
+};
+
+export const PaidFromCreditsWithSources: Story = {
+  ...PaidFromCredits,
+  render: args => (
+    <div className="max-w-md pt-24">
+      <Meter {...args}>
+        <Meter.Source label="research-workflows" value={88} />
+        <Meter.Source label="Sandboxes" value={24} />
+      </Meter>
+    </div>
+  ),
+  play: async ({ canvas, userEvent }) => {
+    await userEvent.tab();
+    await expect(canvas.getByRole('meter')).toHaveFocus();
+    await expect(canvas.getByRole('meter')).toHaveAccessibleDescription(/\$4.37 paid from credits/);
+  },
+};
+
+export const BillingWithinAllowance: Story = {
+  args: {
+    variant: 'over-allowance',
+    value: 80,
+    max: 100,
+    'aria-label': 'vCPU',
+    'aria-valuetext': '80 of 100 vCPU-hours',
+  },
+};
+
+export const BillingAtAllowance: Story = {
+  args: {
+    variant: 'over-allowance',
+    value: 100,
+    max: 100,
+    'aria-label': 'vCPU',
+    'aria-valuetext': '100 of 100 vCPU-hours',
+  },
+};
+
+export const BillingUnused: Story = {
+  args: {
+    variant: 'over-allowance',
+    value: 0,
+    max: 100,
+    'aria-label': 'vCPU',
+    'aria-valuetext': '0 of 100 vCPU-hours',
+  },
+};
+
+export const BillingNoAllowance: Story = {
+  args: {
+    variant: 'over-allowance',
+    value: 12,
+    max: 0,
+    paidFromCredits: 0.004,
+    'aria-label': 'vCPU',
+    'aria-valuetext': '12 vCPU-hours, no allowance',
+  },
 };

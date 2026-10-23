@@ -37,7 +37,7 @@ export interface FactoryUserSession {
   createdAt: string;
   updatedAt: string;
   /** What the viewer may do with this session, computed by the server. */
-  capabilities?: { recreateSandbox: boolean };
+  capabilities?: { recreateSandbox: boolean; takeOwnership: boolean; switchModel?: boolean };
 }
 
 type FactoryUserSessionPayload = Omit<FactoryUserSession, 'title'> & { title?: string | null };
@@ -161,5 +161,22 @@ export async function setUserSessionVisibility(
     res,
     'Failed to change session visibility',
   );
+  return normalizeUserSession(body.session);
+}
+
+/** Move a teammate's org-visible session to the viewer. `expectedOwnerId` is the owner the viewer saw; the server refuses a stale one with 409 and says why. */
+export async function takeUserSessionOwnership(
+  baseUrl: string,
+  sessionId: string,
+  expectedOwnerId: string,
+): Promise<FactoryUserSession> {
+  const res = await fetch(`${baseUrl}/web/user-sessions/${encodeURIComponent(sessionId)}/owner`, {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'content-type': 'application/json', Accept: 'application/json' },
+    body: JSON.stringify({ expectedOwnerId }),
+  });
+  const body: { session?: FactoryUserSessionPayload; error?: string } = await res.json().catch(() => ({}));
+  if (!res.ok || !body.session) throw new Error(body.error ?? `Failed to take ownership (${res.status})`);
   return normalizeUserSession(body.session);
 }

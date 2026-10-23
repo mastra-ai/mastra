@@ -9,7 +9,12 @@ import { ChatHeaderSidebarTrigger } from '../domains/chat/components/ChatHeaderS
 import { GlobalSearchButton } from '../domains/search/components/GlobalSearchButton';
 import { SettingsHeader } from '../domains/settings/components/SettingsHeader';
 import { SettingsPanel } from '../domains/settings/components/SettingsPanel';
-import { SETTINGS_SECTION_LABELS, isSettingsSection, settingsSectionPath } from '../domains/settings/settingsSections';
+import {
+  SETTINGS_SECTION_LABELS,
+  isSettingsSection,
+  retiredSettingsTarget,
+  settingsSectionPath,
+} from '../domains/settings/settingsSections';
 
 /**
  * Routed settings page (`/settings/:section`). Sections are URL-addressable;
@@ -20,10 +25,15 @@ export function SettingsPage() {
   const { section, factoryId } = useParams();
   const location = useLocation();
 
-  if (factoryId && section === 'models' && location.hash === '#model-packs') {
+  const retired = retiredSettingsTarget(section, location.hash);
+  if (factoryId && retired) {
     return (
       <Navigate
-        to={`${settingsSectionPath(factoryId, 'personal-models')}${location.search}#default-model`}
+        to={{
+          pathname: settingsSectionPath(factoryId, retired.section),
+          search: location.search,
+          hash: retired.anchor ?? location.hash,
+        }}
         replace
         state={location.state}
       />

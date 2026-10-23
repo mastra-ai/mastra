@@ -7,6 +7,8 @@ minimumReleaseAgeExclude:
   - '@opentelemetry/auto-instrumentations-node@0.80.0'
 
 overrides:
+  # Vanta 2026-10-21: GHSA-587h-7wmj-h5pm (CVE-2026-112942/3/4) via vitest 4 (vite ^6||^7||^8)
+  'vite@>=8.0.0 <8.3.3': 8.3.4
   '@mastra/core': link:../../../../packages/core
   '@mastra/libsql': link:../../../../stores/libsql
   '@mastra/observability': link:../../../mastra

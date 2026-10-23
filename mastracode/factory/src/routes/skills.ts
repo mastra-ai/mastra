@@ -6,7 +6,7 @@ import { registerApiRoute } from '@mastra/core/server';
 import type { Context } from 'hono';
 
 import { listFactorySkills } from '../skills/catalog.js';
-import { resolveSkillInvocation, SkillInvocationError } from '../skills/service.js';
+import { formatSkillMessage, resolveSkillInvocation, SkillInvocationError } from '../skills/service.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
@@ -133,15 +133,16 @@ export class SkillRoutes extends Route<SkillRoutesDeps> {
 
       try {
         const resolved = await resolveSkillInvocation(controller, body);
+        const message = formatSkillMessage(resolved.skillName, resolved.contents);
         if (dispatch) {
           const requestContext = c.get('requestContext' as never) as RequestContext | undefined;
           void resolved.session
-            .sendMessage({ content: resolved.message, ...(requestContext ? { requestContext } : {}) })
+            .sendMessage({ content: message, ...(requestContext ? { requestContext } : {}) })
             .catch((error: unknown) => {
               console.error('Workspace skill dispatch failed after acceptance', error);
             });
         }
-        return c.json({ ok: true, skill: resolved.skillName, message: resolved.message });
+        return c.json({ ok: true, skill: resolved.skillName, message });
       } catch (error) {
         if (error instanceof SkillInvocationError) {
           return c.json({ error: error.code, message: error.message }, 404);
