@@ -92,6 +92,7 @@ describe('DurableAgent.recover() with ToolSearchProcessor (#26437)', () => {
       const resultsSeen: unknown[] = [];
       const scenario = createRestartScenario({
         kind,
+        storageMode: 'serializing',
         runId: `search-recovery-${kind}`,
         build: ({ core, generation }) => {
           const stamp = core.createTool({
@@ -173,7 +174,7 @@ describe('DurableAgent.recover() with ToolSearchProcessor (#26437)', () => {
     },
   );
 
-  it('restores tools the processor loaded during the run', async () => {
+  it.each(['value', 'evented-state'] as const)('restores tools from the latest %s transcript', async source => {
     const store = new InMemoryStore();
     const agent = createDurableAgent({
       agent: new Agent({
@@ -198,11 +199,16 @@ describe('DurableAgent.recover() with ToolSearchProcessor (#26437)', () => {
       resourceId: 'r',
       snapshot: snapshot('run-1'),
     });
+    const executionSnapshot = snapshot('run-1', { messageListState: transcript() });
+    if (source === 'evented-state') {
+      executionSnapshot.context.__state = { messageListState: transcript() };
+      executionSnapshot.value = { messageListState: new MessageList({ threadId: 't', resourceId: 'r' }).serialize() };
+    }
     await workflows.persistWorkflowSnapshot({
       workflowName: DurableStepIds.AGENTIC_EXECUTION,
       runId: 'run-1',
       resourceId: 'r',
-      snapshot: snapshot('run-1', { messageListState: transcript() }),
+      snapshot: executionSnapshot,
     });
 
     const restart = vi.fn(async () => ({ status: 'success' }));
