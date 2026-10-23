@@ -39,7 +39,12 @@ const countScannedText = () => {
       return includes.call(this, search, position);
     }),
   ];
-  return { get scanned() { return scanned; }, restore: () => spies.forEach(spy => spy.mockRestore()) };
+  return {
+    get scanned() {
+      return scanned;
+    },
+    restore: () => spies.forEach(spy => spy.mockRestore()),
+  };
 };
 
 for (const process of [processMastraStream, processMastraNetworkStream]) {
@@ -49,7 +54,12 @@ for (const process of [processMastraStream, processMastraNetworkStream]) {
       const counter = countScannedText();
       const chunks: unknown[] = [];
       try {
-        await process({ stream: bytesStream(wire, 128), onChunk: chunk => { chunks.push(chunk); } });
+        await process({
+          stream: bytesStream(wire, 128),
+          onChunk: chunk => {
+            chunks.push(chunk);
+          },
+        });
       } finally {
         counter.restore();
       }
@@ -61,11 +71,18 @@ for (const process of [processMastraStream, processMastraNetworkStream]) {
       const chunks: unknown[] = [];
       await process({
         stream: bytesStream(`${sse('hé🙂')}\n\n${sse('next')}\n\ndata: [DONE]\n\n${sse('ignored')}\n\n`, size),
-        onChunk: chunk => { chunks.push(chunk); },
+        onChunk: chunk => {
+          chunks.push(chunk);
+        },
       });
       expect(chunks).toEqual([event('hé🙂'), event('next')]);
       const tail: unknown[] = [];
-      await process({ stream: bytesStream(sse('unterminated'), size), onChunk: chunk => { tail.push(chunk); } });
+      await process({
+        stream: bytesStream(sse('unterminated'), size),
+        onChunk: chunk => {
+          tail.push(chunk);
+        },
+      });
       expect(tail).toEqual([]);
     });
 
@@ -73,11 +90,21 @@ for (const process of [processMastraStream, processMastraNetworkStream]) {
       const abort = new AbortController();
       let cancelled = false;
       const stream = new ReadableStream<Uint8Array>({
-        start(controller) { controller.enqueue(new TextEncoder().encode('data: {')); },
-        cancel() { cancelled = true; },
+        start(controller) {
+          controller.enqueue(new TextEncoder().encode('data: {'));
+        },
+        cancel() {
+          cancelled = true;
+        },
       });
       const chunks: unknown[] = [];
-      const processing = process({ stream, signal: abort.signal, onChunk: chunk => { chunks.push(chunk); } });
+      const processing = process({
+        stream,
+        signal: abort.signal,
+        onChunk: chunk => {
+          chunks.push(chunk);
+        },
+      });
       abort.abort();
       await processing;
       expect(cancelled).toBe(true);
@@ -89,7 +116,19 @@ for (const process of [processMastraStream, processMastraNetworkStream]) {
 
 describe('MastraClient agent.stream SSE readers', () => {
   let wire = '';
-  const server = createServer((_request, response) => {
+  let onDisconnect = () => {};
+  const server = createServer((request, response) => {
+    if (request.url?.endsWith('/abort')) {
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      response.end(JSON.stringify({ aborted: true }));
+      return;
+    }
+    if (request.url?.includes('/cancel/')) {
+      response.on('close', () => onDisconnect());
+      response.writeHead(200, { 'Content-Type': 'text/event-stream' });
+      response.write(`${sse('first')}\n\ndata: {`);
+      return;
+    }
     response.writeHead(200, { 'Content-Type': 'text/event-stream' });
     response.end(wire);
   });
@@ -102,7 +141,7 @@ describe('MastraClient agent.stream SSE readers', () => {
   });
   afterAll(async () => {
     server.closeAllConnections();
-    await new Promise<void>((resolve, reject) => server.close(error => error ? reject(error) : resolve()));
+    await new Promise<void>((resolve, reject) => server.close(error => (error ? reject(error) : resolve())));
   });
 
   it('bounds scanning through agent.stream and processDataStream (#28188)', async () => {
@@ -111,7 +150,11 @@ describe('MastraClient agent.stream SSE readers', () => {
     const chunks: unknown[] = [];
     try {
       const result = await new MastraClient({ baseUrl, retries: 0 }).getAgent('a').stream('hi');
-      await result.processDataStream({ onChunk: async chunk => { chunks.push(chunk); } });
+      await result.processDataStream({
+        onChunk: async chunk => {
+          chunks.push(chunk);
+        },
+      });
     } finally {
       counter.restore();
     }
@@ -121,11 +164,33 @@ describe('MastraClient agent.stream SSE readers', () => {
     expect(counter.scanned).toBeLessThanOrEqual(wire.length * 8);
   });
 
+  it('cancels both tee readers while the next event is unfinished', async () => {
+    const disconnected = new Promise<void>(resolve => {
+      onDisconnect = resolve;
+    });
+    const result = await new MastraClient({ baseUrl, retries: 0 }).getAgent('cancel').stream('hi');
+    if (!result.body) throw new Error('Expected a response body');
+    const reader = result.body.getReader();
+    try {
+      const first = await reader.read();
+      expect(new TextDecoder().decode(first.value)).toBe(`${sse('first')}\n\n`);
+      await reader.cancel();
+      await disconnected;
+      expect(await reader.read()).toEqual({ done: true, value: undefined });
+    } finally {
+      reader.releaseLock();
+    }
+  });
+
   it('flushes an unterminated final event on the returned stream and removes DONE', async () => {
     wire = `${sse('hé🙂')}\n\ndata: [DONE]\n\n${sse('final')}`;
     const result = await new MastraClient({ baseUrl, retries: 0 }).getAgent('a').stream('hi');
     const chunks: unknown[] = [];
-    await result.processDataStream({ onChunk: async chunk => { chunks.push(chunk); } });
+    await result.processDataStream({
+      onChunk: async chunk => {
+        chunks.push(chunk);
+      },
+    });
     expect(chunks).toEqual([event('hé🙂'), event('final')]);
   });
 });
