@@ -65,7 +65,11 @@ import { LRUCache } from 'lru-cache';
 import xxhash from 'xxhash-wasm';
 import type { ObservationalMemory, ObservationalMemoryConfig } from './processors/observational-memory';
 import { KnowledgeSemanticIndexCoordinator, Subconscious } from './processors/observational-memory/subconscious';
-import { createKnowledgeTools } from './processors/observational-memory/subconscious/knowledge-tools';
+import { createKnowledgeReadTools } from './processors/observational-memory/subconscious/knowledge-tools';
+import {
+  createKnowledgeWriteTools,
+  resolveRunKnowledgeWriteOptions,
+} from './processors/observational-memory/subconscious/knowledge-write-tools';
 import { getRemindThreadId, isOwnedRemindThread } from './processors/observational-memory/subconscious/remind-protocol';
 import { createAskMemoryTool } from './processors/observational-memory/subconscious/remind-questions';
 import { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
@@ -687,6 +691,13 @@ export class Memory extends MastraMemory {
       );
     }
     return this._mastraInstance.getKnowledge(this._knowledge);
+  }
+
+  /** The tools flag of the configured Knowledge instance; a key is read once Mastra can resolve it. */
+  private getKnowledgeToolsConfig(): { read: boolean; write: boolean } {
+    if (this._knowledge === undefined || this._knowledge === false) return { read: false, write: false };
+    if (typeof this._knowledge === 'string' && !this._mastraInstance) return { read: false, write: false };
+    return this.getKnowledgeInstance()!.tools;
   }
 
   /** Resolves the configured Knowledge storage domain used by every Subconscious path on this Memory. */
@@ -3089,14 +3100,16 @@ Notes:
         },
       });
     }
-    if (
-      omConfig?.experimental_subconscious instanceof Subconscious &&
-      omConfig.experimental_subconscious.resolved.tools
-    ) {
-      Object.assign(tools, createKnowledgeTools(this));
-      const remind = omConfig.experimental_subconscious.resolved.observation.find(
-        agent => agent.name === 'remind' && 'builtIn' in agent,
-      );
+    const knowledgeTools = this.getKnowledgeToolsConfig();
+    const subconscious =
+      omConfig?.experimental_subconscious instanceof Subconscious && omConfig.experimental_subconscious.resolved.tools
+        ? omConfig.experimental_subconscious
+        : undefined;
+    if (subconscious || knowledgeTools.read) Object.assign(tools, createKnowledgeReadTools(this));
+    // Subconscious never gives the main agent write tools; only the Knowledge instance's flag does.
+    if (knowledgeTools.write) Object.assign(tools, createKnowledgeWriteTools(this, resolveRunKnowledgeWriteOptions));
+    if (omConfig && subconscious) {
+      const remind = subconscious.resolved.observation.find(agent => agent.name === 'remind' && 'builtIn' in agent);
       if (remind && 'builtIn' in remind) {
         tools.ask_memory = createAskMemoryTool({
           memory: this,
@@ -4328,6 +4341,9 @@ export type { StorageCloneThreadInput, StorageCloneThreadOutput, ThreadCloneMeta
 
 // Observational Memory utilities
 export { getObservationsAsOf } from './processors/observational-memory';
+
+export { createKnowledgeTools } from './tools/knowledge-tools';
+export type { CreateKnowledgeToolsOptions } from './tools/knowledge-tools';
 
 // Working memory state-signal processor (opt-in via workingMemory.useStateSignals)
 export {

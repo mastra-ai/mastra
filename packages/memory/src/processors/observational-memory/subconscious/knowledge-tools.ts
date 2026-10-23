@@ -26,9 +26,19 @@ export type KnowledgeStoreMemory = {
   };
 };
 
-type KnowledgeToolsMemory = KnowledgeStoreMemory & {
+export type KnowledgeToolsMemory = KnowledgeStoreMemory & {
   getKnowledgeSemanticIndex(): Promise<KnowledgeSemanticIndexCoordinator | undefined>;
 };
+
+/** A fixed host, or one chosen per call from the tool context (a Knowledge key resolved through Mastra). */
+export type KnowledgeToolsHost<T> = T | ((context: KnowledgeToolContext | undefined) => T);
+
+export function resolveKnowledgeToolsHost<T extends object>(
+  host: KnowledgeToolsHost<T>,
+  context: KnowledgeToolContext | undefined,
+): T {
+  return typeof host === 'function' ? (host as (context: KnowledgeToolContext | undefined) => T)(context) : host;
+}
 
 /** Record writes go through Knowledge, which rejects placements no reader could see; bare storage has no Knowledge. */
 export function knowledgeRecordWriter(
@@ -39,8 +49,9 @@ export function knowledgeRecordWriter(
 }
 
 export type KnowledgeToolContext = {
-  agent?: { threadId?: string; resourceId?: string };
+  agent?: { agentId?: string; threadId?: string; resourceId?: string };
   requestContext?: { get(key: string): unknown };
+  mastra?: { getKnowledge?: (key: string) => Knowledge };
 };
 
 export async function getKnowledgeStore(memory: KnowledgeStoreMemory): Promise<KnowledgeStorage> {
@@ -214,8 +225,8 @@ function mergeHybridResults(
     .slice(0, limit);
 }
 
-export function createKnowledgeTools(
-  memory: KnowledgeToolsMemory,
+export function createKnowledgeReadTools(
+  host: KnowledgeToolsHost<KnowledgeToolsMemory>,
   fixedScopeIds?: KnowledgeScopeIds,
 ): Record<string, ToolAction<any, any, any>> {
   const knowledgeSearch = createTool({
@@ -233,6 +244,7 @@ export function createKnowledgeTools(
     } satisfies JSONSchema7,
     execute: async (input, context) => {
       const { query, limit: requestedLimit } = input as { query: string; limit?: number };
+      const memory = resolveKnowledgeToolsHost(host, context as KnowledgeToolContext);
       const scopeIds = await effectiveScopeIds(memory, fixedScopeIds, context as KnowledgeToolContext);
       const limit = normalizeLimit(requestedLimit);
       const store = await getKnowledgeStore(memory);
@@ -272,6 +284,7 @@ export function createKnowledgeTools(
         limit?: number;
       };
       if (!id && !name) throw new Error('knowledge_read requires id or name.');
+      const memory = resolveKnowledgeToolsHost(host, context as KnowledgeToolContext);
       const scopeIds = await effectiveScopeIds(memory, fixedScopeIds, context as KnowledgeToolContext);
       const store = await getKnowledgeStore(memory);
       const node = id ? await store.getNode(id) : await store.resolveNode({ name: name!, scopeIds });
@@ -321,6 +334,7 @@ export function createKnowledgeTools(
         cursor?: string;
         limit?: number;
       };
+      const memory = resolveKnowledgeToolsHost(host, context as KnowledgeToolContext);
       const scopeIds = await effectiveScopeIds(memory, fixedScopeIds, context as KnowledgeToolContext);
       const limit = normalizeLimit(requestedLimit);
       const store = await getKnowledgeStore(memory);

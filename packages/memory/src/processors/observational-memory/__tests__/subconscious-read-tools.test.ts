@@ -7,7 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { Memory } from '../../../index';
 import { Subconscious } from '../subconscious';
-import { createKnowledgeTools, resolveKnowledgeScopeIds } from '../subconscious/knowledge-tools';
+import { createKnowledgeReadTools, resolveKnowledgeScopeIds } from '../subconscious/knowledge-tools';
 
 function createSemanticDependencies() {
   const indexes = new Set<string>();
@@ -251,7 +251,7 @@ describe('Subconscious knowledge read tools', () => {
     });
     expect(visible).toEqual({ nodeIds: [team.id], recordIds: [note.id] });
 
-    const tools = createKnowledgeTools(memory as never, callerScopeIds);
+    const tools = createKnowledgeReadTools(memory as never, callerScopeIds);
     const result = await tools.knowledge_search!.execute?.({ query: 'cobalt rollout' }, toolContext());
     const semantic = (result as any).results.filter((hit: any) => hit.sources.includes('semantic'));
     expect(semantic).toEqual(
