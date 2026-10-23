@@ -132,7 +132,7 @@ const unfencedStoresWarned = new WeakSet<WorkflowsStorage | MemoryStorage>();
  * middleware sets them from the authenticated identity so a request body cannot route memory
  * to another user's thread or resource.
  */
-function applyReservedMemoryContextKeys<T extends { requestContext?: RequestContext; memory?: any }>(
+export function applyReservedMemoryContextKeys<T extends { requestContext?: RequestContext; memory?: any }>(
   options: T | undefined,
 ): T | undefined {
   const requestContext = options?.requestContext;

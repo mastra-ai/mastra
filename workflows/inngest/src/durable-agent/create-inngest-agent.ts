@@ -41,6 +41,7 @@ import {
   AGENT_STREAM_TOPIC,
   AgentStreamEventTypes,
   agentThreadStreamRuntime,
+  applyReservedMemoryContextKeys,
   prepareForDurableExecution,
   createDurableAgentStream,
   emitChunkEvent,
@@ -1153,6 +1154,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     },
 
     async stream(messages, streamOptions): Promise<InngestAgentStreamResult<TOutput>> {
+      // Reserved request-context keys win over `memory` options, as in core.
+      streamOptions = applyReservedMemoryContextKeys(streamOptions);
       // Delegate to the idle-loop wrapper when `untilIdle` is set.
       if (streamOptions?.untilIdle) {
         const { untilIdle, ...rest } = streamOptions;
