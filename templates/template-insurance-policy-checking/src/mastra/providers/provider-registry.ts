@@ -1,5 +1,5 @@
-import type { ProviderCategories } from './contracts.js';
-import { IntakeError } from './errors.js';
+import type { ProviderCategories } from '../domain/contracts.js';
+import { IntakeError } from '../domain/errors.js';
 import { z } from 'zod';
 
 const registrationSchema = z.object({
@@ -36,7 +36,7 @@ export function createRegistry(registrations: Registrations, defaults: Selection
       throw new IntakeError(
         'PROVIDER_CONFIGURATION',
         `The default ${category} provider is not registered.`,
-        'Correct the default selection in providers.ts.',
+        'Correct the default selection in src/providers.ts.',
       );
   }
   return {
@@ -51,7 +51,7 @@ export function createRegistry(registrations: Registrations, defaults: Selection
         throw new IntakeError(
           'PROVIDER_CONFIGURATION',
           `No compatible ${category} provider is selected.`,
-          'Register the selected provider and its required capability in providers.ts.',
+          'Register the selected provider and its required capability in src/providers.ts.',
         );
       return provider as ProviderCategories[C];
     },

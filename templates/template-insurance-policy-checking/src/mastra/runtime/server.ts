@@ -1,6 +1,37 @@
 import type { ServerConfig } from '@mastra/core/server';
-import { safeFailure } from './errors.js';
-import type { InputLimits } from '../../../config/limits.js';
+import { IntakeError, safeFailure } from '../domain/errors.js';
+import type { InputLimits } from '../../config/limits.js';
+import { z } from 'zod';
+
+const controlledProviderEnvironmentSchema = z
+  .object({
+    NODE_ENV: z.string().optional(),
+    POLICY_TEST_PROVIDER_URL: z.string().optional(),
+  })
+  .superRefine((environment, context) => {
+    if (
+      environment.POLICY_TEST_PROVIDER_URL &&
+      (environment.NODE_ENV !== 'test' || !/^http:\/\/127\.0\.0\.1:\d+\/v1$/.test(environment.POLICY_TEST_PROVIDER_URL))
+    )
+      context.addIssue({
+        code: 'custom',
+        path: ['POLICY_TEST_PROVIDER_URL'],
+        message: 'A controlled test provider must run on loopback in test mode.',
+      });
+  });
+
+export function resolveControlledProviderEndpoint(
+  environment: Record<string, string | undefined> = process.env,
+): string | undefined {
+  const result = controlledProviderEnvironmentSchema.safeParse(environment);
+  if (!result.success)
+    throw new IntakeError(
+      'MODEL_CONFIGURATION',
+      'A controlled test provider must run on loopback in test mode.',
+      'Remove POLICY_TEST_PROVIDER_URL outside deterministic local tests.',
+    );
+  return result.data.POLICY_TEST_PROVIDER_URL || undefined;
+}
 
 const modelUnavailable =
   'The conversation model is unavailable. Read /status to check captured documents before retrying.';

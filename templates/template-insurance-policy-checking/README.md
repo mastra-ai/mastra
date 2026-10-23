@@ -1,6 +1,6 @@
 # Insurance Policy Checking
 
-Capture synthetic insurance proposals, contracts and issued policies in Mastra Studio. This intake version keeps original PDFs and exact physical-page text locally, records explicit case identity and document roles, and retrieves the same evidence after a restart. Reconciliation, reports and broker review are not available yet.
+Use this template as the starting point for a production insurance policy-checking application, with durable document intake, verifiable evidence and conversation context in Mastra Studio. Brokers can capture proposals, contracts and issued policies, identify each case and retrieve the original documents and exact physical-page text after a restart. The current functionality covers intake and clarification; reconciliation, reports and broker review are not available yet.
 
 ## Why we built this
 
@@ -8,20 +8,18 @@ Policy checking starts with knowing which documents belong to a case and where e
 
 ## Prerequisites
 
-- Use independently authored synthetic documents. The default input accepts direct textual PDF attachments, including insurance lines beyond property. Remote URLs, local paths, image-only PDFs, encrypted files and OCR are unsupported.
-- No external credential is needed for deterministic intake. Conversation model dispatch is disabled while spending configuration is unavailable. Setting `OPENAI_API_KEY` alone does not enable paid calls.
-- Optional local settings in `.env`: `POLICY_OPERATOR_ID` identifies the local broker (default `local-broker`), `PORT` selects the loopback port (default `4111`), and `POLICY_DATA_DIR` selects private persistence (default `.runtime` in the project root).
+- **[OpenAI API key](https://platform.openai.com/api-keys)**: add your key as `OPENAI_API_KEY` in `.env`.
 
 ## Quickstart 🚀
 
 1. **Create the project**
    - Run `npx create-mastra@latest insurance-policy-checking --template insurance-policy-checking`.
    - Run `cd insurance-policy-checking`, then `npm install`.
-2. **Configure the local session**
-   - Run `cp .env.example .env` and use the optional settings described above.
+2. **Add your API key**
+   - Run `cp .env.example .env` and fill in the key described under Prerequisites.
 3. **Start Studio**
    - Run `npm run dev` and open [Mastra Studio](http://127.0.0.1:4111).
-   - Select **Policy Checking**, attach two synthetic textual PDFs using **Add attachment → Add a local file**, and send a message. The intake response identifies the saved case and sources, then asks for clarification. Studio displays this deterministic response in its processor notice while model dispatch is disabled.
+   - Select **Policy Checking**, attach a proposal and its issued policy using **Add attachment → Add a local file**, and send a message. The intake response identifies the saved case and sources, then asks for clarification. Studio displays this response in its processor notice while model dispatch is disabled.
 
 ## Try it out
 
@@ -33,8 +31,16 @@ Policy checking starts with knowing which documents belong to a case and where e
 
 ## Customization
 
-- Ask your coding agent: “Add an insurance line profile and a local structured-record input provider. Explore the contracts and propose a plan before changing the implementation.” Profiles live in `config/insurance.ts`; provider category arrays and explicit defaults live in `providers.ts`.
-- Change `config/limits.ts`, then restart. Defaults are four documents per case, 10 MiB per PDF, 50 physical pages per PDF and 100 physical pages per case. These values feed upload schemas, parser checks and HTTP capacity. Raising capacity does not authorize model spending. Register a provider with its request schema and shared captured-source contract; structured records use real record/field locators and never invent PDF pages.
+- Ask your coding agent: “Add an insurance line profile and a local structured-record input provider. Explore the contracts and propose a plan before changing the implementation.” Profiles live in `src/config/insurance.ts`; provider category arrays and explicit defaults live in `src/providers.ts`.
+- Change `src/config/limits.ts`, then restart. Defaults are four documents per case, 10 MiB per PDF, 50 physical pages per PDF and 100 physical pages per case. These values feed upload schemas, parser checks and HTTP capacity. Raising capacity does not authorize model spending. Register a provider with its request schema and shared captured-source contract; structured records use real record/field locators and never invent PDF pages.
+
+## Runtime configuration and current limits
+
+Optional settings in `.env` include `POLICY_OPERATOR_ID` for the local broker identity (default `local-broker`), `PORT` for the loopback port (default `4111`), and `POLICY_DATA_DIR` for private persistence (default `.runtime` in the project root).
+
+The current release captures and retrieves documents deterministically. Paid conversation dispatch remains disabled until spending configuration is implemented and explicitly authorized; providing an API key alone does not enable it. No paid model call is needed for the current intake commands.
+
+The default input accepts direct textual PDF attachments across insurance lines. Remote URLs, arbitrary filesystem paths, image-only PDFs, encrypted files and OCR are unsupported. Use the provider contracts to add other document sources while preserving captured evidence and case authority.
 
 ## Case clarification
 

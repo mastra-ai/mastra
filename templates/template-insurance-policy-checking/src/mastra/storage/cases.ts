@@ -2,72 +2,19 @@ import { createClient, type Client } from '@libsql/client';
 import { randomUUID } from 'node:crypto';
 import { open, readFile, readdir, stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { z } from 'zod';
-import type { InputLimits } from '../../../config/limits.js';
+import type { InputLimits } from '../../config/limits.js';
 import {
   canonicalJson,
   hashBytes,
-  roleSchema,
+  clarifySchema,
+  type CaseRecord,
   type CapturedSource,
   type OperationContext,
   type SourceBundle,
-} from '../services/contracts.js';
-import { IntakeError } from '../services/errors.js';
-import { ensurePrivateDirectory } from '../services/paths.js';
+} from '../domain/contracts.js';
+import { IntakeError } from '../domain/errors.js';
+import { ensurePrivateDirectory } from '../runtime/paths.js';
 
-const identitySchema = z
-  .object({
-    policyNumber: z.string().min(1).max(200).nullable(),
-    insuredName: z.string().min(1).max(200).nullable(),
-    insuranceProduct: z.string().min(1).max(200).nullable(),
-  })
-  .strict();
-export const clarifySchema = z
-  .object({
-    caseId: z.uuid(),
-    expectedRevision: z.number().int().positive(),
-    identity: identitySchema,
-    intent: z.enum(['document_comparison', 'agreed_terms_checking']),
-    referenceId: z.uuid(),
-    targetId: z.uuid(),
-    roles: z.array(z.object({ sourceId: z.uuid(), role: roleSchema.exclude(['unknown']) }).strict()).min(2),
-    acceptedBaseline: z
-      .object({ statement: z.string().min(1).max(2000), sourceId: z.uuid() })
-      .strict()
-      .nullable(),
-  })
-  .strict()
-  .superRefine((value, context) => {
-    if (value.referenceId === value.targetId)
-      context.addIssue({ code: 'custom', message: 'Reference and target must be distinct.' });
-    if (new Set(value.roles.map(role => role.sourceId)).size !== value.roles.length)
-      context.addIssue({ code: 'custom', message: 'A source may have only one declared role.' });
-    if (
-      value.intent === 'agreed_terms_checking' &&
-      (!value.acceptedBaseline ||
-        value.acceptedBaseline.sourceId !== value.referenceId ||
-        value.roles.find(role => role.sourceId === value.targetId)?.role !== 'issued_policy' ||
-        !['proposal', 'contract'].includes(value.roles.find(role => role.sourceId === value.referenceId)?.role ?? ''))
-    )
-      context.addIssue({
-        code: 'custom',
-        message: 'Agreed-term checking needs an explicitly accepted proposal or contract and an issued target policy.',
-      });
-    if (value.intent === 'document_comparison' && value.acceptedBaseline)
-      context.addIssue({ code: 'custom', message: 'Use agreed-term checking when declaring contractual acceptance.' });
-  });
-export type Clarification = z.infer<typeof clarifySchema>;
-export type CaseRecord = {
-  id: string;
-  revision: number;
-  state: 'CREATED';
-  createdAt: string;
-  identity: z.infer<typeof identitySchema>;
-  clarification: Clarification | null;
-  sourceIds: string[];
-  limits: InputLimits;
-  providerId: string;
-};
 type SavedSource =
   | Omit<Extract<CapturedSource, { kind: 'pdf' }>, 'bytes'>
   | Extract<CapturedSource, { kind: 'records' }>;
@@ -166,7 +113,7 @@ export class CaseRepository {
         throw new IntakeError(
           'CASE_PAGE_LIMIT',
           `A case may contain at most ${limits.pdf.maxPagesPerCase} physical PDF pages.`,
-          'Start a separate case or change config/limits.ts and restart.',
+          'Start a separate case or change src/config/limits.ts and restart.',
         );
       const saved = [];
       for (const source of additions) {

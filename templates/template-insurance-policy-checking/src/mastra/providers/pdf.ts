@@ -2,10 +2,10 @@ import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { z } from 'zod';
-import type { InputLimits } from '../../../config/limits.js';
-import { hashBytes, roleSchema, type InputProvider } from '../services/contracts.js';
-import { IntakeError } from '../services/errors.js';
-import { projectRoot } from '../services/paths.js';
+import type { InputLimits } from '../../config/limits.js';
+import { hashBytes, roleSchema, type InputProvider } from '../domain/contracts.js';
+import { IntakeError } from '../domain/errors.js';
+import { projectRoot } from '../runtime/paths.js';
 
 export function attachmentSchema(limits: InputLimits) {
   const maxEncodedLength = 'data:application/pdf;base64,'.length + Math.ceil(limits.pdf.maxBytesPerFile / 3) * 4;
@@ -66,7 +66,8 @@ export async function extractPdf(
   workerPath = resolve(projectRoot(), 'scripts/pdf-worker.mjs'),
 ) {
   return new Promise<z.infer<typeof extractionSchema>['pages']>((resolveResult, reject) => {
-    // POSIX CPU seconds plus bounded V8 heap; this is not a hard RSS guarantee.
+    // A static POSIX launcher applies CPU/core-dump limits before exec; arguments never enter shell source.
+    // The V8 heap bound is separate and does not impose a hard RSS ceiling.
     const child = spawn(
       '/bin/sh',
       [
@@ -118,7 +119,7 @@ export async function extractPdf(
             new IntakeError(
               'PAGE_LIMIT',
               `Each PDF must have at most ${maxPages} physical pages.`,
-              'Upload a shorter textual PDF or change config/limits.ts and restart.',
+              'Upload a shorter textual PDF or change src/config/limits.ts and restart.',
             ),
           );
           return;
@@ -159,7 +160,7 @@ export function createPdfProvider(limits: InputLimits, workerPath?: string): Inp
           throw new IntakeError(
             'BYTE_LIMIT',
             `Each PDF must contain 1 to ${effectiveLimits.pdf.maxBytesPerFile} bytes.`,
-            'Upload a smaller textual PDF or change config/limits.ts and restart.',
+            'Upload a smaller textual PDF or change src/config/limits.ts and restart.',
           );
         if (!bytes.subarray(0, 5).equals(Buffer.from('%PDF-')))
           throw new IntakeError(

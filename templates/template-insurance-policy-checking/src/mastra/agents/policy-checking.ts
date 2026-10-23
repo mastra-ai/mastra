@@ -1,11 +1,13 @@
 import { Agent } from '@mastra/core/agent';
 import type { Memory } from '@mastra/memory';
-import type { IntakeService } from '../services/intake.js';
-import { createIntakeTools } from '../tools/intake.js';
-import { createIntakeProcessor } from '../processors/intake.js';
+import type { CaseService } from '../domain/case-service.js';
+import { createCaseStatusTool } from '../tools/case-status-tool.js';
+import { createClarifyCaseTool } from '../tools/clarify-case-tool.js';
+import { createSourceEvidenceTool } from '../tools/source-evidence-tool.js';
+import { createDocumentIntakeProcessor } from '../processors/document-intake-processor.js';
 
 export function createPolicyCheckingAgent(
-  service: IntakeService,
+  caseService: CaseService,
   memory: Memory,
   operatorId: string,
   controlledEndpoint?: string,
@@ -36,8 +38,12 @@ export function createPolicyCheckingAgent(
           doStream: budgetGuard,
         },
     memory,
-    tools: createIntakeTools(service, operatorId),
-    inputProcessors: [createIntakeProcessor(service, memory, operatorId, Boolean(controlledEndpoint))],
+    tools: {
+      caseStatus: createCaseStatusTool(caseService, operatorId),
+      clarifyCase: createClarifyCaseTool(caseService, operatorId),
+      sourceEvidence: createSourceEvidenceTool(caseService, operatorId),
+    },
+    inputProcessors: [createDocumentIntakeProcessor(caseService, memory, operatorId, Boolean(controlledEndpoint))],
     defaultOptions: { maxSteps: 3 },
   });
 }

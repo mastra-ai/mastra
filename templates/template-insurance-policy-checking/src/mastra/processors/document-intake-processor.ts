@@ -4,8 +4,8 @@ import type { Memory } from '@mastra/memory';
 import { parseMemoryRequestContext } from '@mastra/core/memory';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
-import type { IntakeService } from '../services/intake.js';
-import { failureText, IntakeError } from '../services/errors.js';
+import type { CaseService } from '../domain/case-service.js';
+import { failureText, IntakeError } from '../domain/errors.js';
 
 export const workingMemorySchema = z.object({
   activeCaseId: z.string().nullable(),
@@ -19,8 +19,8 @@ export const workingMemorySchema = z.object({
   reviewStatus: z.string().nullable(),
 });
 
-export function createIntakeProcessor(
-  service: IntakeService,
+export function createDocumentIntakeProcessor(
+  caseService: CaseService,
   memory: Memory,
   operatorId: string,
   allowControlledModel: boolean,
@@ -33,7 +33,7 @@ export function createIntakeProcessor(
           .reverse()
           .find(message => message.role === 'user' || (message.role === 'signal' && message.type === 'user'));
         const memoryContext = parseMemoryRequestContext(requestContext);
-        const threadId = service.requireThread(memoryContext?.thread?.id ?? latest?.threadId);
+        const threadId = caseService.requireThread(memoryContext?.thread?.id ?? latest?.threadId);
         const context = { threadId, operatorId };
         requestContext?.set('insuranceThreadId', threadId);
         const parts = latest?.content.parts ?? [];
@@ -49,7 +49,7 @@ export function createIntakeProcessor(
           .join('\n');
         let receipt = '';
         if (files.length) {
-          const record = await service.capture(context, { files }, text.trim() === '/new');
+          const record = await caseService.capture(context, { files }, text.trim() === '/new');
           receipt = `Captured ${record.sourceIds.length} immutable source(s). Case ${record.id}, revision ${record.revision}. `;
         }
         if (text.startsWith('/clarify ')) {
@@ -63,7 +63,7 @@ export function createIntakeProcessor(
               'Use /clarify followed by the documented case identity, intent and source-role fields.',
             );
           }
-          await service.clarify(context, clarification);
+          await caseService.clarify(context, clarification);
         }
         let evidence = '';
         if (text.startsWith('/evidence ')) {
@@ -74,9 +74,9 @@ export function createIntakeProcessor(
               'Use /evidence followed by a source ID and physical page number.',
               'Read /status for the captured source IDs.',
             );
-          evidence = JSON.stringify(await service.evidence(context, match[1]!, { physicalPage: Number(match[2]) }));
+          evidence = JSON.stringify(await caseService.evidence(context, match[1]!, { physicalPage: Number(match[2]) }));
         }
-        const status = await service.status(context);
+        const status = await caseService.status(context);
         const resourceId = memoryContext?.resourceId ?? latest?.resourceId ?? operatorId;
         if (!(await memory.getThreadById({ threadId }))) await memory.createThread({ threadId, resourceId });
         if ('case' in status && status.case) {

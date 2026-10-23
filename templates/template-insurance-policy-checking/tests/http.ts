@@ -2,6 +2,7 @@ import { createServer, request, type Server } from 'node:http';
 import { spawn, type ChildProcess } from 'node:child_process';
 import { setTimeout as delay } from 'node:timers/promises';
 import { resolve } from 'node:path';
+import { writeFile } from 'node:fs/promises';
 
 export async function controlledProvider(fail = false) {
   const requests: Record<string, unknown>[] = [];
@@ -81,19 +82,26 @@ export async function freePort() {
 }
 export async function startStudio(dataRoot: string, providerUrl?: string) {
   const port = await freePort();
-  const processHandle = spawn(process.execPath, [resolve('node_modules/mastra/dist/index.js'), 'dev'], {
-    cwd: process.cwd(),
-    env: {
-      ...process.env,
-      DO_NOT_TRACK: '1',
-      NODE_ENV: 'test',
-      PORT: String(port),
-      POLICY_DATA_DIR: dataRoot,
-      POLICY_TEST_PROVIDER_URL: providerUrl ?? '',
-      PATH: `${resolve(process.execPath, '..')}:${process.env.PATH}`,
+  // The installed CLI selects child NODE_ENV from its env-file map, not the parent environment.
+  const environmentFile = resolve(dataRoot, 'studio-test.env');
+  await writeFile(environmentFile, 'NODE_ENV=test\n', { mode: 0o600 });
+  const processHandle = spawn(
+    process.execPath,
+    [resolve('node_modules/mastra/dist/index.js'), 'dev', '--env', environmentFile],
+    {
+      cwd: process.cwd(),
+      env: {
+        ...process.env,
+        DO_NOT_TRACK: '1',
+        NODE_ENV: 'test',
+        PORT: String(port),
+        POLICY_DATA_DIR: dataRoot,
+        POLICY_TEST_PROVIDER_URL: providerUrl ?? '',
+        PATH: `${resolve(process.execPath, '..')}:${process.env.PATH}`,
+      },
+      stdio: ['ignore', 'pipe', 'pipe'],
     },
-    stdio: ['ignore', 'pipe', 'pipe'],
-  });
+  );
   let logs = '';
   processHandle.stdout?.on('data', chunk => (logs += String(chunk)));
   processHandle.stderr?.on('data', chunk => (logs += String(chunk)));

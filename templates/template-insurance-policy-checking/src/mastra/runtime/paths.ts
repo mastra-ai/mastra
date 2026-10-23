@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import { chmod, lstat, mkdir } from 'node:fs/promises';
 import { dirname, resolve } from 'node:path';
-import { IntakeError } from './errors.js';
+import { IntakeError } from '../domain/errors.js';
 
 export async function ensurePrivateDirectory(path: string) {
   await mkdir(path, { recursive: true, mode: 0o700 });

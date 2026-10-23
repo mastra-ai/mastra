@@ -1,7 +1,7 @@
 import { PDFDocument, StandardFonts, PDFName, PDFDict, PDFNumber, PDFHexString } from 'pdf-lib';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
-import { canonicalJson, hashBytes, type InputProvider, type SourceBundle } from '../src/mastra/services/contracts.js';
+import { canonicalJson, hashBytes, type InputProvider, type SourceBundle } from '../src/mastra/domain/contracts.js';
 
 export async function policyPdf(
   title = 'Issued policy SYN-CP-001',
@@ -31,7 +31,7 @@ export async function policyPdf(
       index === 0
         ? [
             title,
-            'Synthetic example. Independently authored for local testing.',
+            'Insurance document and coverage schedule.',
             'Insured: Elm Harbor Fabrication LLC',
             'Product: Commercial property',
             'Policy period: 01 Jan 2026 to 01 Jan 2027',
@@ -50,7 +50,7 @@ export async function policyPdf(
             'Water damage is subject to the terms and exclusions below.',
             'The insured must notify the insurer promptly after a loss.',
             'Valuation follows replacement cost subject to stated conditions.',
-            'This synthetic wording does not establish contractual acceptance.',
+            'This document does not establish contractual acceptance without an acceptance record.',
           ];
     if (options.printedLabels) lines.push(`Printed label ${index === 0 ? 'A' : index + 10}`);
     lines.forEach((line, row) => page.drawText(line, { font, size: 11, x: 45, y: 740 - row * 25 }));

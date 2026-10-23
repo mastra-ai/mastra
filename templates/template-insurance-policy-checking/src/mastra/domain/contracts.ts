@@ -1,7 +1,17 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import type { InputLimits } from '../../../config/limits.js';
+import type { InputLimits } from '../../config/limits.js';
 import { IntakeError } from './errors.js';
+
+export const portSchema = z.coerce.number().int().min(1024).max(65535);
+export const operatorIdSchema = z.string().min(1).max(200);
+export const applicationConfigurationSchema = z
+  .object({
+    port: portSchema.default(4111),
+    operatorId: operatorIdSchema.default('local-broker'),
+    dataDirectory: z.string().min(1).default('.runtime'),
+  })
+  .strict();
 
 export const roleSchema = z.enum([
   'proposal',
@@ -12,6 +22,60 @@ export const roleSchema = z.enum([
   'reference',
   'unknown',
 ]);
+export const identitySchema = z
+  .object({
+    policyNumber: z.string().min(1).max(200).nullable(),
+    insuredName: z.string().min(1).max(200).nullable(),
+    insuranceProduct: z.string().min(1).max(200).nullable(),
+  })
+  .strict();
+export const clarifySchema = z
+  .object({
+    caseId: z.uuid(),
+    expectedRevision: z.number().int().positive(),
+    identity: identitySchema,
+    intent: z.enum(['document_comparison', 'agreed_terms_checking']),
+    referenceId: z.uuid(),
+    targetId: z.uuid(),
+    roles: z.array(z.object({ sourceId: z.uuid(), role: roleSchema.exclude(['unknown']) }).strict()).min(2),
+    acceptedBaseline: z
+      .object({ statement: z.string().min(1).max(2000), sourceId: z.uuid() })
+      .strict()
+      .nullable(),
+  })
+  .strict()
+  .superRefine((value, context) => {
+    if (value.referenceId === value.targetId)
+      context.addIssue({ code: 'custom', message: 'Reference and target must be distinct.' });
+    if (new Set(value.roles.map(role => role.sourceId)).size !== value.roles.length)
+      context.addIssue({ code: 'custom', message: 'A source may have only one declared role.' });
+    if (
+      value.intent === 'agreed_terms_checking' &&
+      (!value.acceptedBaseline ||
+        value.acceptedBaseline.sourceId !== value.referenceId ||
+        value.roles.find(role => role.sourceId === value.targetId)?.role !== 'issued_policy' ||
+        !['proposal', 'contract'].includes(value.roles.find(role => role.sourceId === value.referenceId)?.role ?? ''))
+    )
+      context.addIssue({
+        code: 'custom',
+        message: 'Agreed-term checking needs an explicitly accepted proposal or contract and an issued target policy.',
+      });
+    if (value.intent === 'document_comparison' && value.acceptedBaseline)
+      context.addIssue({ code: 'custom', message: 'Use agreed-term checking when declaring contractual acceptance.' });
+  });
+export type Clarification = z.infer<typeof clarifySchema>;
+export type CaseRecord = {
+  id: string;
+  revision: number;
+  state: 'CREATED';
+  createdAt: string;
+  identity: z.infer<typeof identitySchema>;
+  clarification: Clarification | null;
+  sourceIds: string[];
+  limits: InputLimits;
+  providerId: string;
+};
+
 export const contextSchema = z
   .object({ threadId: z.string().min(1).max(200), operatorId: z.string().min(1).max(200) })
   .strict();
@@ -104,7 +168,7 @@ export function validateBundle(input: unknown, limits: InputLimits, providerId: 
     throw new IntakeError(
       'DOCUMENT_LIMIT',
       `At most ${limits.maxDocumentsPerCase} documents are allowed per case.`,
-      'Remove excess documents or change config/limits.ts and restart.',
+      'Remove excess documents or change src/config/limits.ts and restart.',
     );
   let pages = 0;
   for (const source of bundle.sources) {
@@ -156,7 +220,7 @@ export function validateBundle(input: unknown, limits: InputLimits, providerId: 
     throw new IntakeError(
       'CASE_PAGE_LIMIT',
       `A case may contain at most ${limits.pdf.maxPagesPerCase} physical PDF pages.`,
-      'Remove excess pages or change config/limits.ts and restart.',
+      'Remove excess pages or change src/config/limits.ts and restart.',
     );
   return bundle;
 }

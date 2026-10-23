@@ -5,11 +5,11 @@ import { join } from 'node:path';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
 import { CaseRepository } from '../src/mastra/storage/cases.js';
-import { hashBytes } from '../src/mastra/services/contracts.js';
+import { hashBytes } from '../src/mastra/domain/contracts.js';
 import { controlledProvider, startStudio } from './http.js';
 import { policyPdf } from './fixtures.js';
-import { workingMemorySchema } from '../src/mastra/processors/intake.js';
-import { inputLimits } from '../config/limits.js';
+import { workingMemorySchema } from '../src/mastra/processors/document-intake-processor.js';
+import { inputLimits } from '../src/config/limits.js';
 
 async function openAgent(page: Page, url: string) {
   await page.goto(url);
@@ -68,7 +68,7 @@ test('studio_attachments_persist_page_evidence', async ({ browser, page }) => {
   try {
     studio = await startStudio(root, provider.url);
     await openAgent(page, studio.url);
-    await send(page, 'Capture these synthetic policy documents. Please ask for intent and roles.', [
+    await send(page, 'Capture these policy documents. Please ask for intent and roles.', [
       { name: 'proposal.pdf', buffer: proposal },
       { name: 'policy.pdf', buffer: policy },
       { name: 'duplicate-policy.pdf', buffer: policy },
@@ -144,7 +144,7 @@ test('studio_attachments_persist_page_evidence', async ({ browser, page }) => {
     studio = await startStudio(root, provider.url);
     await page.goto(studio.url + firstSession);
     await expect(
-      page.getByText('Capture these synthetic policy documents. Please ask for intent and roles.', { exact: true }),
+      page.getByText('Capture these policy documents. Please ask for intent and roles.', { exact: true }),
     ).toBeVisible();
     await expect(
       page.getByText('The PDFs were captured locally. Please identify the document roles and comparison intent.', {
@@ -188,7 +188,7 @@ test('studio_attachments_persist_page_evidence', async ({ browser, page }) => {
     expect(secondMemory.activePolicyNumber).toBeNull();
     const history = await memory.recall({ threadId: context.threadId, resourceId: 'policy-checking-agent' });
     expect(JSON.stringify(history.messages)).toContain('SYN-CP-001');
-    expect(JSON.stringify(history.messages)).toContain('Capture these synthetic policy');
+    expect(JSON.stringify(history.messages)).toContain('Capture these policy');
     expect(JSON.stringify(history.messages)).not.toContain('data:application/pdf');
     const toolReplies = provider.requests.flatMap(request =>
       (request.messages as { role: string; content: unknown }[])

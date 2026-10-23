@@ -7,14 +7,14 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { RequestContext } from '@mastra/core/request-context';
 import { noopObserve } from '@mastra/core/tools';
-import { inputLimits, inputLimitsSchema, type InputLimits } from '../config/limits.js';
+import { inputLimits, inputLimitsSchema, type InputLimits } from '../src/config/limits.js';
 import { createPdfProvider, extractPdf } from '../src/mastra/providers/pdf.js';
 import { CaseRepository } from '../src/mastra/storage/cases.js';
-import { createIntakeService } from '../src/mastra/services/intake.js';
-import type { InputProvider } from '../src/mastra/services/contracts.js';
-import { createRegistry } from '../src/mastra/services/registry.js';
-import { safeFailure } from '../src/mastra/services/errors.js';
-import { createIntakeTools } from '../src/mastra/tools/intake.js';
+import { createCaseService } from '../src/mastra/domain/case-service.js';
+import type { InputProvider } from '../src/mastra/domain/contracts.js';
+import { createRegistry } from '../src/mastra/providers/provider-registry.js';
+import { safeFailure } from '../src/mastra/domain/errors.js';
+import { createCaseStatusTool } from '../src/mastra/tools/case-status-tool.js';
 import { fileInput, policyPdf, recordProvider } from './fixtures.js';
 import { controlledProvider, startStudio, requestHost } from './http.js';
 
@@ -28,7 +28,7 @@ async function setup(limits: InputLimits = inputLimits, provider?: InputProvider
   const repository = new CaseRepository(root);
   await repository.initialize();
   repositories.push(repository);
-  return { root, repository, service: createIntakeService(repository, provider ?? createPdfProvider(limits), limits) };
+  return { root, repository, service: createCaseService(repository, provider ?? createPdfProvider(limits), limits) };
 }
 afterEach(async () => {
   for (const repository of repositories.splice(0)) repository.close();
@@ -269,7 +269,7 @@ describe('Durable insurance intake across real boundaries', () => {
       roots.push(root);
       const repository = new CaseRepository(root);
       repositories.push(repository);
-      expect(() => createIntakeService(repository, counted, invalid)).toThrow();
+      expect(() => createCaseService(repository, counted, invalid)).toThrow();
       expect(calls).toBe(0);
     }
   });
@@ -291,10 +291,10 @@ describe('Durable insurance intake across real boundaries', () => {
       );
       const { service } = await setup(inputLimits, registry.resolve('input', undefined, 'structured-records'));
       await service.capture(context, {});
-      const tools = createIntakeTools(service, context.operatorId);
+      const caseStatusTool = createCaseStatusTool(service, context.operatorId);
       const requestContext = new RequestContext();
       requestContext.set('insuranceThreadId', context.threadId);
-      const status = await tools.caseStatus.execute!({}, { requestContext, observe: noopObserve });
+      const status = await caseStatusTool.execute!({}, { requestContext, observe: noopObserve });
       expect(JSON.stringify(status)).toContain('Captured contract record');
       expect(() => registry.resolve('input', 'missing')).toThrow();
       expect(() => registry.resolve('input', 'selected', 'pdf-attachments')).toThrow();

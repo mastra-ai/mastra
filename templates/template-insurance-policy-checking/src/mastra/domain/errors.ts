@@ -53,7 +53,7 @@ export function safeFailure(error: unknown): Failure {
         message: bytes
           ? `Each PDF must contain at most ${issue.params.effectiveLimit} bytes.`
           : `At most ${issue.params.effectiveLimit} documents are allowed per case.`,
-        nextAction: 'Reduce the input or change config/limits.ts and restart.',
+        nextAction: 'Reduce the input or change src/config/limits.ts and restart.',
       };
     }
   }
@@ -64,7 +64,7 @@ export function safeFailure(error: unknown): Failure {
       status: 400,
       message: 'The request or provider result does not match the supported input contract.',
       nextAction:
-        'Use direct textual PDF attachments within config/limits.ts, or correct the registered provider and case clarification fields.',
+        'Use direct textual PDF attachments within src/config/limits.ts, or correct the registered provider and case clarification fields.',
     };
   return {
     ok: false,
