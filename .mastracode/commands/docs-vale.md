@@ -1,6 +1,6 @@
 # Fix documentation prose lint
 
-From the `docs` directory, run `pnpm vale:download` if `scripts/vale/bin/vale` is missing. Then run `pnpm lint:prose` and fix all reported errors. Preserve the intended meaning, technical accuracy, and correct grammar. The outcome should be natural, readable documentation—not merely text that passes lint.
+From the `docs` directory, run `pnpm vale:download` to ensure the required Vale version is installed. The script handles platform-specific binary names and skips the download when that version is already installed. Then run `pnpm lint:prose` and fix all reported errors. Preserve the intended meaning, technical accuracy, and correct grammar. The outcome should be natural, readable documentation—not merely text that passes lint.
 
 - Follow `docs/AGENTS.md` and the `mastra-docs` skill. Read each flagged passage in context before editing.
 - Make focused wording changes. Preserve API names, code examples, links, and technical distinctions. Check source when a rewrite could change a technical claim.
