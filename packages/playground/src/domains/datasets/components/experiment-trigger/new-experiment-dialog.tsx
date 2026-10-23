@@ -14,6 +14,7 @@ import { useRef, useState } from 'react';
 import type { KeyboardEvent } from 'react';
 import { toast } from 'sonner';
 import { AdvancedToggle } from './advanced-toggle';
+import { AgentModelField } from './agent-model-field';
 import { DatasetField } from './dataset-field';
 import { DatasetVersionField } from './dataset-version-field';
 import { ExperimentDescriptionField } from './experiment-description-field';
@@ -23,6 +24,7 @@ import { RequestContextField } from './request-context-field';
 import { RunExperimentAction } from './run-experiment-action';
 import { ScorersField } from './scorers-field';
 import { TargetField } from './target-field';
+import { useAgentModelChoice } from './use-agent-model-choice';
 import { useDatasetChoice } from './use-dataset-choice';
 import { useExperimentName } from './use-experiment-name';
 import { useRequestContextInput } from './use-request-context-input';
@@ -64,12 +66,14 @@ export function NewExperimentDialog({
   const scorerChoice = useScorerChoice({ datasetId: datasetChoice.datasetId, initialScorerIds });
   const requestContextInput = useRequestContextInput(datasetChoice.datasetId);
   const experimentName = useExperimentName({ initialName, targetLabel: targetChoice.target?.label });
+  const agentModelChoice = useAgentModelChoice();
   const [description, setDescription] = useState(initialDescription ?? '');
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const { triggerExperiment } = useDatasetMutations();
 
   const { target } = targetChoice;
   const { datasetId } = datasetChoice;
+  const isAgentTarget = target?.type === 'agent';
   const isRunning = triggerExperiment.isPending;
   // The schema form converts its schema once per mount, so it remounts for each dataset; the JSON editor stays.
   const requestContextKey = requestContextInput.schema ? datasetId : undefined;
@@ -98,6 +102,7 @@ export function NewExperimentDialog({
         description: optionalText(description),
         targetType: target.type,
         targetId: target.id,
+        agentModel: isAgentTarget ? agentModelChoice.agentModel : undefined,
         scorerIds: optionalList(scorerChoice.scorerIds),
         version: datasetChoice.version,
         requestContext: requestContext.requestContext,
@@ -160,6 +165,16 @@ export function NewExperimentDialog({
                   datasetId={datasetId}
                   version={datasetChoice.version}
                   onVersionChange={datasetChoice.setVersion}
+                  container={contentRef}
+                />
+              )}
+              {isAgentTarget && (
+                <AgentModelField
+                  provider={agentModelChoice.provider}
+                  modelId={agentModelChoice.modelId}
+                  onProviderChange={agentModelChoice.setProvider}
+                  onModelIdChange={agentModelChoice.setModelId}
+                  onReset={agentModelChoice.reset}
                   container={contentRef}
                 />
               )}
