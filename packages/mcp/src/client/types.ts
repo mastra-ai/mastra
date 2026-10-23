@@ -573,6 +573,8 @@ export type InternalMastraMCPClientOptions = {
   clientInfo?: MCPClientInfo;
   /** Optional timeout in milliseconds */
   timeout?: number;
+  /** Install process exit and signal hooks (default: true). */
+  registerProcessHooks?: boolean;
   /** Webhook settings and receiver shared by the owning `MCPClient`'s servers. */
   webhook?: EventsWebhookSetup;
 };
