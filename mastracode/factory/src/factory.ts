@@ -1105,14 +1105,15 @@ export class MastraFactory {
     });
     // The row follows whoever pays for the request, so its memory model is one their credentials reach.
     const memorySettingsRowKey = async (requestContext: RequestContext, binding: FactoryRunBindingRecord | null) => {
-      const policy = await resolveFactoryModelPolicy(requestContext, modelPolicyDependencies);
+      // A wake lends the session owner even with auth off, but credentials stay process-wide there.
+      const policy = auth ? await resolveFactoryModelPolicy(requestContext, modelPolicyDependencies) : undefined;
       if (policy) {
         const orgId = tenantOrgId(policy.tenant);
         return policy.tenant.credentialScope === 'factory' && policy.factoryProjectId
           ? { orgId, userId: factoryMemorySettingsUserId(policy.factoryProjectId) }
           : { orgId, userId: policy.tenant.userId };
       }
-      // No signed-in user: credentials are process-wide, so the session's Factory row applies.
+      // No tenant pays: the session's Factory row applies.
       const scope = readFactorySessionScope(requestContext);
       const factoryProjectId = binding?.factoryProjectId ?? scope?.factoryProjectId;
       if (!factoryProjectId) return { orgId: 'local', userId: 'local' };

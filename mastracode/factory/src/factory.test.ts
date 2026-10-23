@@ -330,6 +330,86 @@ function threadsById(threads: Record<string, { id: string; resourceId: string; m
   );
 }
 
+/**
+ * A hybrid Factory whose session-1 chat and bound run-thread can each read one
+ * of two memory rows that name different observer models.
+ */
+async function prepareThreadsWithTwoMemoryRows(auth: IMastraAuthProvider | null) {
+  const storage = fakeStorage();
+  const config = await prepareFactory({ storage, auth });
+  await storage.init();
+  const projects = storage.getDomain<FactoryProjectsStorage>('projects');
+  const project = await projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Shipyard' } });
+  const sourceControl = storage.getDomain<SourceControlStorage>('source-control').forIntegration('github');
+  const installation = await sourceControl.installations.upsert({
+    orgId: 'org-1',
+    connectedByUserId: 'user-1',
+    externalId: '123',
+  });
+  const repository = await sourceControl.repositories.upsert({
+    orgId: 'org-1',
+    input: { installationId: installation.id, externalId: '456', slug: 'mastra-ai/mastra', defaultBranch: 'main' },
+  });
+  const connection = await sourceControl.connections.create({
+    orgId: 'org-1',
+    factoryProjectId: project.id,
+    installationId: installation.id,
+    createdByUserId: 'user-1',
+  });
+  const projectRepository = await sourceControl.projectRepositories.link({
+    orgId: 'org-1',
+    connectionId: connection.id,
+    repositoryId: repository.id,
+    createdByUserId: 'user-1',
+    sandboxProvider: 'local',
+    sandboxWorkdir: '/sandbox/mastra',
+  });
+  await sourceControl.sessions.create({
+    sessionId: 'session-1',
+    projectRepositoryId: projectRepository.id,
+    factoryProjectId: project.id,
+    orgId: 'org-1',
+    userId: 'user-1',
+    visibility: 'private',
+    branch: 'user/session-1',
+    baseBranch: 'main',
+  });
+  const memorySettings = storage.getDomain<MemorySettingsStorage>('memory-settings');
+  await memorySettings.patch({
+    orgId: 'org-1',
+    userId: factoryMemorySettingsUserId(project.id),
+    patch: { observerModelId: 'anthropic/factory-observer' },
+  });
+  await memorySettings.patch({ orgId: 'org-1', userId: 'user-1', patch: { observerModelId: 'openai/my-observer' } });
+  const workItems = storage.getDomain<WorkItemsStorage>('work-items');
+  await workItems.prepareRunStart({
+    orgId: 'org-1',
+    userId: 'user-1',
+    factoryProjectId: project.id,
+    workItem: { input: { title: 'Bound item', stages: ['execute'] } },
+    role: 'work',
+    session: { sessionId: 'session-1', branch: 'factory/session-1', threadId: 'run-thread' },
+    resourceId: 'user-1',
+    kickoffKey: 'kickoff-run-thread',
+    kickoffMessage: null,
+  });
+  const inputProcessors = config.inputProcessors as (args: { requestContext: RequestContext }) => Promise<unknown[]>;
+  const observerModelFor = async (threadId: string, prepareRequest: (requestContext: RequestContext) => unknown) => {
+    const requestContext = new RequestContext();
+    requestContext.set('controller', {
+      sessionId: 'session-1',
+      resourceId: 'user-1',
+      threadId,
+      getState: () => ({ factoryProjectId: project.id, factoryOrgId: 'org-1' }),
+      emitEvent: vi.fn(),
+    });
+    await prepareRequest(requestContext);
+    await inputProcessors({ requestContext });
+    return (requestContext.get('mastra__factoryMemorySettings') as MemorySettingsRecord | null)?.observerModelId;
+  };
+  return { config, projects, project, observerModelFor };
+}
+
 describe('MastraFactory constructor', () => {
   it('requires a storage backend', () => {
     expect(() => new MastraFactory({ secretEncryption } as never)).toThrow(/'storage' is required/);
@@ -481,74 +561,31 @@ describe('MastraFactory.prepare', () => {
     warn.mockRestore();
   });
 
-  // FACT-529: a hybrid Factory pays for chats with the owner's credentials, so
-  // a chat reading the Factory's memory row observed with a provider the owner
-  // never connected.
-  it("observes a chat with the memory model of whoever's credentials pay for it", async () => {
-    const storage = fakeStorage();
-    const config = await prepareFactory({ storage, auth: null });
-    await storage.init();
-    const projects = storage.getDomain<FactoryProjectsStorage>('projects');
-    const project = await projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Shipyard' } });
-    const sourceControl = storage.getDomain<SourceControlStorage>('source-control').forIntegration('github');
-    const installation = await sourceControl.installations.upsert({
-      orgId: 'org-1',
-      connectedByUserId: 'user-1',
-      externalId: '123',
-    });
-    const repository = await sourceControl.repositories.upsert({
-      orgId: 'org-1',
-      input: { installationId: installation.id, externalId: '456', slug: 'mastra-ai/mastra', defaultBranch: 'main' },
-    });
-    const connection = await sourceControl.connections.create({
-      orgId: 'org-1',
-      factoryProjectId: project.id,
-      installationId: installation.id,
-      createdByUserId: 'user-1',
-    });
-    const projectRepository = await sourceControl.projectRepositories.link({
-      orgId: 'org-1',
-      connectionId: connection.id,
-      repositoryId: repository.id,
-      createdByUserId: 'user-1',
-      sandboxProvider: 'local',
-      sandboxWorkdir: '/sandbox/mastra',
-    });
-    await sourceControl.sessions.create({
-      sessionId: 'session-1',
-      projectRepositoryId: projectRepository.id,
-      factoryProjectId: project.id,
-      orgId: 'org-1',
-      userId: 'user-1',
-      visibility: 'private',
-      branch: 'user/session-1',
-      baseBranch: 'main',
-    });
-    const memorySettings = storage.getDomain<MemorySettingsStorage>('memory-settings');
-    await memorySettings.patch({
-      orgId: 'org-1',
-      userId: factoryMemorySettingsUserId(project.id),
-      patch: { observerModelId: 'anthropic/factory-observer' },
-    });
-    await memorySettings.patch({ orgId: 'org-1', userId: 'user-1', patch: { observerModelId: 'openai/my-observer' } });
-    const inputProcessors = config.inputProcessors as (args: { requestContext: RequestContext }) => Promise<unknown[]>;
-    const observerModelForChat = async () => {
-      const requestContext = new RequestContext();
-      requestContext.set('controller', {
-        sessionId: 'session-1',
-        resourceId: 'user-1',
-        threadId: 'session-1',
-        getState: () => ({ factoryProjectId: project.id, factoryOrgId: 'org-1' }),
-        emitEvent: vi.fn(),
-      });
+  it("observes each thread with the memory model of whoever's credentials pay for it", async () => {
+    const { projects, project, observerModelFor } = await prepareThreadsWithTwoMemoryRows(fakeProvider());
+    const signedIn = (requestContext: RequestContext) =>
       requestContext.set('user', { id: 'user-1', organizationId: 'org-1' });
-      await inputProcessors({ requestContext });
-      return (requestContext.get('mastra__factoryMemorySettings') as MemorySettingsRecord | null)?.observerModelId;
-    };
 
-    await expect(observerModelForChat()).resolves.toBe('openai/my-observer');
+    await expect(observerModelFor('session-1', signedIn)).resolves.toBe('openai/my-observer');
+    await expect(observerModelFor('run-thread', signedIn)).resolves.toBe('anthropic/factory-observer');
     await projects.update({ orgId: 'org-1', id: project.id, input: { modelScope: 'factory' } });
-    await expect(observerModelForChat()).resolves.toBe('anthropic/factory-observer');
+    await expect(observerModelFor('session-1', signedIn)).resolves.toBe('anthropic/factory-observer');
+  });
+
+  it("keeps an auth-disabled chat on the Factory's memory row when a wake lends it the session owner", async () => {
+    const { config, observerModelFor } = await prepareThreadsWithTwoMemoryRows(null);
+    const prepareWake = config.prepareWakeRequestContext as (args: {
+      requestContext: RequestContext;
+      resourceId: string;
+      threadId: string;
+    }) => Promise<void>;
+
+    await expect(observerModelFor('session-1', () => {})).resolves.toBe('anthropic/factory-observer');
+    await expect(
+      observerModelFor('session-1', requestContext =>
+        prepareWake({ requestContext, resourceId: 'user-1', threadId: 'session-1' }),
+      ),
+    ).resolves.toBe('anthropic/factory-observer');
   });
 
   it('uses the platform bot co-author identity', async () => {
