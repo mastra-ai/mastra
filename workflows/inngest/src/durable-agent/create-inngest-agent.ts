@@ -1537,6 +1537,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         globalRunRegistry.set(runId, existingEntry);
       }
       existingEntry.abortController = abortController;
+      // Steps and stream-side processors on this segment see the merged
+      // context, as core `DurableAgent.resume` does.
+      existingEntry.requestContext = callbackOptions.requestContext;
       // Re-arm the run-level budget for the resumed session, as core does: a
       // budget on the resume call wins, otherwise the original run's budget from
       // its registry entry (warm) or persisted workflow input (cold).
@@ -1594,7 +1597,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         messageList: existingEntry.messageList,
         outputProcessors: existingEntry.outputProcessors,
         processorStates: existingEntry.processorStates,
-        requestContext: existingEntry.requestContext,
+        requestContext: callbackOptions.requestContext,
         onChunk: chunk => {
           resumedChunkSeen = true;
           return callbackOptions.onChunk?.(chunk);
