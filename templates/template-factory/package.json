@@ -1,0 +1,30 @@
+{
+  "name": "template-factory",
+  "version": "1.0.0",
+  "description": "An agent-powered software delivery environment built on Mastra.",
+  "main": "src/mastra/index.ts",
+  "private": true,
+  "scripts": {
+    "dev": "mastra factory dev",
+    "build": "mastra build",
+    "start": "mastra start"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13.0"
+  },
+  "dependencies": {
+    "@mastra/core": "latest",
+    "@mastra/factory": "latest",
+    "@mastra/platform-workspace": "latest",
+    "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "@types/node": "latest",
+    "mastra": "latest",
+    "typescript": "^6.0.3"
+  }
+}
