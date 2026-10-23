@@ -78,6 +78,11 @@ function userMessageSignalId(part: unknown): string | undefined {
 
 const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
 
+/** Keys {@link AgentThreadRuntimeState.claimedQueuedMessages} by thread and signal id. */
+function claimedQueuedMessageKey(key: string, signalId: string): string {
+  return JSON.stringify([key, signalId]);
+}
+
 /**
  * Formats a thread key for use in error messages.
  *
@@ -88,11 +93,6 @@ const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
  * drops everything after the resource id, including the thread id and the rest
  * of the message. Ids themselves may contain NUL, so it is escaped as well.
  */
-/** Keys {@link AgentThreadRuntimeState.claimedQueuedMessages} by thread and signal id. */
-function claimedQueuedMessageKey(key: string, signalId: string): string {
-  return JSON.stringify([key, signalId]);
-}
-
 function describeThreadKey(key: string): string {
   const separator = key.indexOf(AGENT_THREAD_KEY_SEPARATOR);
   // An id containing NUL makes the split ambiguous: show the whole key, escaped.
