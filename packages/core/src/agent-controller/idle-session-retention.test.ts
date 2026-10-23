@@ -2,7 +2,6 @@ import { setImmediate } from 'node:timers/promises';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import { Agent } from '../agent';
-import type { RequestContext } from '../request-context';
 import { InMemoryStore } from '../storage/mock';
 import { AgentController } from './agent-controller';
 import { createMockWorkspace } from './test-utils';
@@ -11,7 +10,7 @@ import { createMockWorkspace } from './test-utils';
 describe('idle Session retention (#28230)', () => {
   it('releases finished run contexts while keeping the session usable', async () => {
     expect(globalThis.gc).toBeTypeOf('function');
-    const contexts: WeakRef<RequestContext>[] = [];
+    const contexts: WeakRef<object>[] = [];
     const agent = new Agent({
       id: 'test-agent',
       name: 'test-agent',
@@ -19,9 +18,12 @@ describe('idle Session retention (#28230)', () => {
       inputProcessors: [
         {
           id: 'capture-run-context',
-          processInput: ({ messages, requestContext }) => {
+          processInput: ({ messages, requestContext, state }) => {
             if (!requestContext) throw new Error('Expected a run context');
-            contexts.push(new WeakRef(requestContext));
+            // Session consumers copy context entries; track the per-run payload
+            // so both the original and copied contexts must release it.
+            requestContext.set('retention-probe', state);
+            contexts.push(new WeakRef(state));
             return messages;
           },
         },
