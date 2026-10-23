@@ -3,7 +3,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { MessageList } from '@mastra/core/agent';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import { InMemoryStore } from '@mastra/core/storage';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { Memory } from '../../../index';
 import { Extractor } from '../extractor';
@@ -133,6 +133,70 @@ describe('buffered reflection extracted thread values (#27262)', () => {
       extracted: { priority: 'prepared' },
     });
     expect((await activeMemory.getThreadById({ threadId: f.threadId }))?.metadata?.unrelated).toBe('preserved');
+  });
+
+  it('stores a compact reflection fingerprint instead of duplicating the reflection', async () => {
+    const f = await setup(() => reflection('prepared'));
+    await prepare(f.memory, f.threadId, f.resourceId);
+    const thread = await f.memory.getThreadById({ threadId: f.threadId });
+    expect(thread?.metadata?.mastra).toMatchObject({
+      omBufferedReflection: { reflectionDigest: expect.stringMatching(/^[a-f0-9]{64}$/) },
+    });
+    expect(JSON.stringify(thread?.metadata)).not.toContain('condensed prepared');
+    await reachActivation(f);
+    expect(await values(f.memory, f.threadId)).toMatchObject({ extracted: { priority: 'prepared' } });
+  });
+
+  it('publishes a legacy pending entry containing the full reflection after reload', async () => {
+    const f = await setup(() => reflection('legacy'));
+    await prepare(f.memory, f.threadId, f.resourceId);
+    const record = await f.om.getRecord(f.threadId, f.resourceId);
+    if (!record) throw new Error('Missing head');
+    await f.store.updateThreadMetadata({
+      id: f.threadId,
+      update: thread => ({
+        ...thread.metadata,
+        mastra: {
+          omBufferedReflection: {
+            recordId: record.id,
+            reflection: record.bufferedReflection,
+            reflectedObservationLineCount: record.reflectedObservationLineCount ?? 0,
+            values: { priority: 'legacy' },
+          },
+        },
+      }),
+    });
+    f.om.buffering.cleanupStaticMaps(f.threadId, f.resourceId);
+    const replacement = createMemory(f.storage, () => {
+      throw new Error('Must activate the persisted legacy buffer');
+    });
+    await reachActivation(f, replacement);
+    expect(await values(replacement, f.threadId)).toMatchObject({ extracted: { priority: 'legacy' } });
+  });
+
+  it('completes activation cleanup even when publishing thread metadata fails', async () => {
+    const f = await setup(() => reflection('prepared'));
+    await prepare(f.memory, f.threadId, f.resourceId);
+    // Inject a failed storage write only at publication; preparation and the swap
+    // use the real store. The next turn must be able to buffer another reflection.
+    const publish = vi.spyOn(f.store, 'updateThreadMetadata').mockRejectedValueOnce(new Error('storage unavailable'));
+    try {
+      await reachActivation(f);
+    } finally {
+      publish.mockRestore();
+    }
+    expect((await f.om.getRecord(f.threadId, f.resourceId))?.generationCount).toBe(1);
+    expect(await values(f.memory, f.threadId)).toMatchObject({ extracted: { priority: 'original' } });
+    const head = await f.om.getRecord(f.threadId, f.resourceId);
+    if (!head) throw new Error('Missing head');
+    await f.store.updateActiveObservations({
+      id: head.id,
+      observations: head.activeObservations + '\n* new observations after activation',
+      tokenCount: 800,
+      lastObservedAt: new Date(),
+    });
+    await prepare(f.memory, f.threadId, f.resourceId);
+    expect((await f.om.getRecord(f.threadId, f.resourceId))?.bufferedReflection).toContain('condensed prepared');
   });
 
   it('does not publish staged values if the persisted buffer has changed', async () => {
