@@ -7,6 +7,7 @@ import type { WorkspaceChangesScope } from '../../../../../api/types';
 import { useWorkspacePatches } from '../../../../../hooks/use-fs';
 import type { DiffLayout } from '../../hooks/useDiffLayout';
 import { ChangesEmptyState } from './ChangesEmptyState';
+import { ChangesNotice } from './ChangesNotice';
 import type { StackedDiffsHandle } from './diffs/StackedDiffs';
 
 const StackedDiffs = lazy(() => import('./diffs/StackedDiffs').then(({ StackedDiffs }) => ({ default: StackedDiffs })));
@@ -39,15 +40,16 @@ export function ChangesBody({ workspacePath, scope, visible, layout, diffsRef }:
   }
   if (!patches.data) return centeredSpinner;
   if (patches.data.changes.length === 0) {
-    return <ChangesEmptyState workspacePath={workspacePath} sandboxRunning={patches.data.available} />;
+    return (
+      <>
+        <ChangesNotice changes={patches.data} />
+        <ChangesEmptyState workspacePath={workspacePath} sandboxRunning={patches.data.available} />
+      </>
+    );
   }
   return (
     <>
-      {patches.data.diffError ? (
-        <Txt variant="caption" className="border-border text-destructive-foreground border-b px-3 py-2 wrap-anywhere">
-          Diffs unavailable: {patches.data.diffError}
-        </Txt>
-      ) : null}
+      <ChangesNotice changes={patches.data} />
       <Suspense fallback={centeredSpinner}>
         <StackedDiffs key={scope} ref={diffsRef} changes={patches.data} layout={layout} className="flex-1" />
       </Suspense>

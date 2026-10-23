@@ -18,6 +18,10 @@ interface StackedDiffsProps {
   ref?: Ref<StackedDiffsHandle>;
 }
 
+function ownValue<T>(record: Record<string, T>, key: string): T | undefined {
+  return Object.hasOwn(record, key) ? record[key] : undefined;
+}
+
 export function StackedDiffs({ changes, layout, className, ref }: StackedDiffsProps) {
   const cardsByPath = useRef(new Map<string, HTMLDivElement>());
 
@@ -39,8 +43,8 @@ export function StackedDiffs({ changes, layout, className, ref }: StackedDiffsPr
           key={change.path}
           ref={trackCard(change.path)}
           change={change}
-          patch={changes.patches[change.path]}
-          omission={changes.omittedPatches[change.path]}
+          patch={ownValue(changes.patches, change.path)}
+          omission={ownValue(changes.omittedPatches, change.path)}
           layout={layout}
         />
       ))}

@@ -7,6 +7,8 @@ import { ChangeStatusIcon } from '../ChangeStatusIcon';
 import { FileLineSummary } from './FileLineSummary';
 import { hasTextChanges } from './has-text-changes';
 
+const PERMISSION_CHANGE = /^old mode /m;
+
 interface ChangeDiffProps {
   change: WorkspaceChange;
   patch?: string;
@@ -23,6 +25,7 @@ export function ChangeDiff({ change, patch, omission, layout, ref }: ChangeDiffP
     meta: <FileLineSummary change={change} patch={patch} omission={omission} />,
   };
 
-  if (patch === undefined || !hasTextChanges(change)) return <CodeDiff ref={ref} header={header} />;
+  const showsPatch = patch !== undefined && (hasTextChanges(change) || PERMISSION_CHANGE.test(patch));
+  if (!showsPatch) return <CodeDiff ref={ref} header={header} />;
   return <CodeDiff ref={ref} header={header} patch={patch} layout={layout} overflow="scroll" />;
 }

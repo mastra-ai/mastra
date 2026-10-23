@@ -493,6 +493,49 @@ describe('WorkspaceViewerPanel', () => {
       await waitFor(() => expect(changesPanel.querySelectorAll('diffs-container')).toHaveLength(1));
     });
 
+    it('shows a permission change that edits no lines', async () => {
+      installHandlers();
+      const script = { path: 'bin/run.sh', status: 'modified', additions: 0, deletions: 0 } as const;
+      const scriptPatch = 'diff --git a/bin/run.sh b/bin/run.sh\nold mode 100644\nnew mode 100755\n';
+      server.use(
+        pendingChangesHandler(),
+        patchesHandler({
+          branch: {
+            changes: [AGENT_CHANGE, script],
+            patches: { [AGENT_CHANGE.path]: AGENT_PATCH, [script.path]: scriptPatch },
+          },
+          uncommitted: { changes: [], patches: {} },
+        }),
+      );
+      const user = userEvent.setup();
+
+      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
+      await user.click(await screen.findByRole('button', { name: /Changes/ }));
+      const changesPanel = await screen.findByTestId('workspace-changes-panel');
+
+      expect(await within(changesPanel).findByText('new mode 100755')).toBeInTheDocument();
+      expect(within(changesPanel).getByRole('button', { name: /bin\/run\.sh/, expanded: true })).toBeInTheDocument();
+    });
+
+    it('says a file named constructor has no diff instead of reading one off the response object', async () => {
+      installHandlers();
+      const constructorFile = { path: 'constructor', status: 'modified', additions: 1, deletions: 0 } as const;
+      server.use(
+        pendingChangesHandler(),
+        patchesHandler({
+          branch: { changes: [AGENT_CHANGE, constructorFile], patches: { [AGENT_CHANGE.path]: AGENT_PATCH } },
+          uncommitted: { changes: [], patches: {} },
+        }),
+      );
+      const user = userEvent.setup();
+
+      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
+      await user.click(await screen.findByRole('button', { name: /Changes/ }));
+      const changesPanel = await screen.findByTestId('workspace-changes-panel');
+
+      expect(await within(changesPanel).findByText('Diff unavailable')).toBeInTheDocument();
+    });
+
     it('shows only uncommitted work once switched away from the whole branch', async () => {
       installHandlers();
       const notes = { path: 'NOTES.md', status: 'untracked', additions: 1, deletions: 0 } as const;

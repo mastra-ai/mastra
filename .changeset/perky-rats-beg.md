@@ -9,6 +9,7 @@ Added `CodeDiffList`, a scroll container for many `CodeDiff`s. It stacks them ed
 ```tsx
 import { CodeDiff, CodeDiffList } from '@mastra/playground-ui/components/CodeDiff';
 import { DiffStat } from '@mastra/playground-ui/components/DiffStat';
+import { SquareArrowRight } from 'lucide-react';
 
 <CodeDiffList className="h-[640px]">
   <CodeDiff

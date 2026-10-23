@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
-import type { WorkspaceChanges } from '../../../../../api/types';
+import type { WorkspaceChangePatches, WorkspaceChanges } from '../../../../../api/types';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
 import { WorkspaceChangesPanel } from '../WorkspaceChangesPanel';
@@ -83,5 +83,30 @@ describe('workspace repository groups', () => {
     expect(repositoryGroups(tree)).toHaveLength(0);
     expect(treeItemIds(tree)).toEqual(['src/agent.ts', 'README.md']);
     expect(within(tree).getByRole('button', { name: 'src' })).toHaveAttribute('aria-expanded', 'true');
+  });
+
+  it('names a repository it could not read when the others have no changes', async () => {
+    server.use(
+      http.get(PATCHES_URL, () =>
+        HttpResponse.json({
+          workspacePath: WORKSPACE,
+          available: true,
+          changes: [],
+          scope: 'branch',
+          patches: {},
+          omittedPatches: {},
+          repositories: [
+            { slug: 'mastra-ai/mastra', prefix: 'mastra/', available: true, additions: 0, deletions: 0, changes: [] },
+            { slug: 'mastra-ai/platform', prefix: 'platform/', available: false, changes: [] },
+          ],
+        } satisfies WorkspaceChangePatches),
+      ),
+    );
+    renderWithProviders(
+      <WorkspaceChangesPanel workspacePath={WORKSPACE} visible repositoryProviders={{}} onBack={() => {}} />,
+    );
+
+    expect(await screen.findByText("Couldn't read changes in mastra-ai/platform")).toBeInTheDocument();
+    expect(screen.getByText('No changes')).toBeInTheDocument();
   });
 });
