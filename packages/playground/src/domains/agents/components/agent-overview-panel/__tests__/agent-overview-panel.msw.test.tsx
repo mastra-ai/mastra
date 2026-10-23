@@ -162,6 +162,29 @@ describe('AgentOverviewPanel', () => {
     });
   });
 
+  describe('when an unpublished model-list draft exists', () => {
+    it('shows the draft model order after loading the panel', async () => {
+      const publishedAgent: GetAgentResponse = { ...dynamicFallbackAgent, modelListEditable: true };
+      const draftAgent: GetAgentResponse = {
+        ...publishedAgent,
+        modelList: publishedAgent.modelList?.toReversed(),
+      };
+      const requestedStatuses: Array<string | null> = [];
+      installHandlers();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/agents/${AGENT_ID}`, ({ request }) => {
+          const status = new URL(request.url).searchParams.get('status');
+          requestedStatuses.push(status);
+          return HttpResponse.json(status === 'draft' ? draftAgent : publishedAgent);
+        }),
+      );
+      renderPanel();
+
+      expect(await screen.findAllByRole('switch')).toHaveLength(2);
+      expect(requestedStatuses).toEqual(['draft']);
+    });
+  });
+
   describe('when a model-list update is rejected', () => {
     it('restores the previous enabled state', async () => {
       installHandlers({ agent: dynamicFallbackAgent });

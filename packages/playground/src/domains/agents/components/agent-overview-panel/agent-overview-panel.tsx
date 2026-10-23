@@ -66,6 +66,7 @@ export function AgentOverviewPanel({ agentId }: AgentOverviewPanelProps) {
 function AgentOverviewSections({ agentId }: AgentOverviewPanelProps) {
   const { data: agent, isLoading } = useAgent({
     agentId: agentId,
+    version: { status: 'draft' },
     requestContext: useEntityRequestContext('agent', agentId)[0],
     queryOptions: { enabled: Boolean(agentId) },
   });
