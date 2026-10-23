@@ -13,6 +13,10 @@ export type MetricsShareListRow = {
   value: ReactNode;
   /** Extra columns before Share, in `columns` order. */
   cells?: ReactNode[];
+  /** Values the list sorts by, keyed by a column's `sortKey`. A row without one sorts last. */
+  sortValues?: Record<string, number | null | undefined>;
+  /** The row's own colour (e.g. one a project keeps across cards), instead of one from the palette. */
+  color?: string;
   /** Drill-down for the whole row. */
   href?: string;
   /** Row action (e.g. filter the page to this row); the row renders as a button. */
@@ -23,7 +27,11 @@ export type MetricsShareListColumn = {
   label: string;
   /** Tailwind width class, shared by the header and the cells. Default `w-16`. */
   width?: string;
+  /** Makes the header a sort button (with `onSortChange`); rows sort by `sortValues[sortKey]`. */
+  sortKey?: string;
 };
+
+export type MetricsShareListSort = { key: string; direction: 'ascending' | 'descending' };
 
 export type MetricsShareListHeaderProps = {
   /** Extra columns before Share, in the rows' `cells` order. */
@@ -32,6 +40,15 @@ export type MetricsShareListHeaderProps = {
   valueLabel: string;
   /** Tailwind width class of the main column. Default `w-14`. */
   valueWidth?: string;
+  /** Makes the main column's header a sort button, like a column's `sortKey`. */
+  valueSortKey?: string;
+  /**
+   * The order rows are listed in. The strip, the Share column and each row's colour still follow
+   * share, so they keep their meaning whatever the sort.
+   */
+  sort?: MetricsShareListSort;
+  /** Called from a sortable header: the same column again flips the direction, another starts descending. */
+  onSortChange?: (sort: MetricsShareListSort) => void;
   className?: string;
 };
 
