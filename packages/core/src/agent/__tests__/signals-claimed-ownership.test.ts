@@ -494,6 +494,116 @@ describe('Agent signals: claimed thread ownership', () => {
     }
   });
 
+  it.each(['a running run', 'a reserved run'] as const)(
+    'gives remote input that joins %s its ifActive attributes, and input that wakes the owner its ifIdle ones',
+    async joinKind => {
+      const pubsub = new ControlledLeasePubSub();
+      const ownerRuntime = agentThreadStreamRuntime;
+      const senderRuntime = new AgentThreadStreamRuntime();
+      let releaseFirst!: () => void;
+      const firstFinished = new Promise<void>(resolve => {
+        releaseFirst = resolve;
+      });
+      const prompts: string[] = [];
+      const model = new MockLanguageModelV2({
+        doStream: async ({ prompt }) => {
+          prompts.push(JSON.stringify(prompt));
+          const call = prompts.length;
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: new ReadableStream({
+              async start(controller) {
+                controller.enqueue({ type: 'stream-start', warnings: [] });
+                controller.enqueue({ type: 'text-start', id: `text-${call}` });
+                controller.enqueue({ type: 'text-delta', id: `text-${call}`, delta: `answer ${call}. ` });
+                controller.enqueue({ type: 'text-end', id: `text-${call}` });
+                if (call === 1) await firstFinished;
+                controller.enqueue({
+                  type: 'finish',
+                  finishReason: 'stop',
+                  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                });
+                controller.close();
+              },
+            }),
+          };
+        },
+      });
+      const kind = joinKind === 'a running run' ? 'running' : 'reserved';
+      const ownerAgent = new Agent({
+        id: `attributes-owner-${kind}`,
+        name: 'Owner',
+        instructions: 'Test',
+        model,
+        pubsub,
+      });
+      const senderAgent = new Agent({
+        id: `attributes-sender-${kind}`,
+        name: 'Sender',
+        instructions: 'Test',
+        model: createTextStreamModel('sender response'),
+        pubsub,
+      });
+      const target = { resourceId: `attributes-user-${kind}`, threadId: `attributes-thread-${kind}` };
+      const subscription = await ownerRuntime.subscribeToThread(ownerAgent, target, pubsub);
+      const claim = await ownerRuntime.claimThreadOwnership(ownerAgent, target, pubsub);
+      let releaseLease = () => {};
+      let leaseRequested = false;
+      if (kind === 'reserved') {
+        pubsub.acquireLeaseWait = new Promise<void>(resolve => (releaseLease = resolve));
+        pubsub.onAcquireLease = () => (leaseRequested = true);
+      }
+      // The sender can't see the owner's run, so only the owner knows which set applies.
+      const sendRemote = (contents: string) =>
+        senderRuntime.sendSignal(
+          senderAgent,
+          { type: 'user-message', contents },
+          {
+            ...target,
+            ifActive: { attributes: { delivery: 'while-active' } },
+            ifIdle: { behavior: 'wake', requireClaimedOwner: true, attributes: { delivery: 'while-idle' } },
+          },
+          pubsub,
+        );
+
+      try {
+        const wake = sendRemote('wakes the owner');
+        if (kind === 'reserved') await waitForCondition(() => leaseRequested);
+        else {
+          await expect(wake.accepted).resolves.toMatchObject({ action: 'deliver' });
+          await waitForCondition(() => prompts.length === 1);
+        }
+        const first = sendRemote('first joined input');
+        const second = sendRemote('second joined input');
+        if (kind === 'reserved') {
+          await waitForCondition(() =>
+            pubsub.publishedData.some(
+              data => data?.type === 'idle-signal-enqueued' && data.signal?.contents === 'second joined input',
+            ),
+          );
+          await pubsub.flush();
+          releaseLease();
+        }
+        const runId = (await wake.accepted).runId;
+        await expect(first.accepted).resolves.toEqual({ action: 'deliver', runId });
+        await expect(second.accepted).resolves.toEqual({ action: 'deliver', runId });
+        releaseFirst();
+        await waitForCondition(() => prompts.some(prompt => prompt.includes('second joined input')), 2_000);
+
+        const all = prompts.join('\n');
+        expect(all).toContain('<user delivery=\\"while-idle\\">wakes the owner</user>');
+        expect(all).toContain('<user delivery=\\"while-active\\">first joined input</user>');
+        expect(all).toContain('<user delivery=\\"while-active\\">second joined input</user>');
+      } finally {
+        releaseLease();
+        releaseFirst();
+        claim.unsubscribe();
+        subscription.unsubscribe();
+      }
+    },
+  );
+
   it('hands remote claimed-owner input to an owner run that has reserved the thread but not started', async () => {
     const pubsub = new ControlledLeasePubSub();
     const ownerRuntime = agentThreadStreamRuntime;
