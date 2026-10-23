@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { dayHeading, groupByDay, startOfLocalDay } from './activity';
 
-const NOW = Date.parse('2026-07-17T12:00:00.000Z');
+const NOW = new Date(2026, 6, 17, 12).getTime();
 
 describe('groupByDay', () => {
   it('cuts the stream where the local day changes', () => {
