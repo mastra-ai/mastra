@@ -315,7 +315,7 @@ For each, a red control showing the test fails without the change.
 - Pin limits are enforced in tokens.
 
 **Factory**
-- A record at `[org:x, project:p]` is reported with its tags, not as `org`, and is shown in a view `[org:x, resource:r, thread:t, project:p]`; `selectedView` on a view with `project:` and no `org:` picks by type. A Factory-called read or write with no `org:` tag is refused. A Factory session given a differing `project:` is refused; a write in project A is not visible in project B. A Factory run's tools have no `scope` argument, and naming another project's scope through the explicit API is refused. `scopeKindLabel` labels by tag type, and `#vouchIdentityScopes` vouches exactly the run's org/resource/thread.
+- A record at `[org:x, project:p]` is reported with its tags, not as `org`, and is shown in a view `[org:x, resource:r, thread:t, project:p]`; `selectedView` on a view with `project:` and no `org:` picks by type. A Factory-called read or write with no `org:` tag is refused. A Factory session given a differing `project:` is refused; a write in project A is not visible in project B. A Factory run's tools have no `scope` argument, and naming another project's scope through the explicit API is refused. `scopeKindLabel` labels by tag type, and `#vouchIdentityScopes` vouches exactly the run's org/project/resource/thread.
 
 **Leftovers and instructions**
 - A repo-wide `git grep -n "org:\|organizationId"` on the alpha tip is attached to the PR, each remaining hit explained (Factory auth/session plumbing, tests, docs).
