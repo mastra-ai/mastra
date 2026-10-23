@@ -20,7 +20,7 @@ export function AgentConfigToggle() {
           size="icon-sm"
           type="button"
           aria-label="Config"
-          tooltip="Show Config panel"
+          tooltip="Show config panel"
           data-testid="agent-overview-panel-toggle"
         >
           <PanelEdgeIcon side="right" />
@@ -38,7 +38,7 @@ export function AgentConfigToggle() {
       aria-pressed={!isCollapsed}
       tooltip={
         <span className="inline-flex items-center gap-1.5">
-          {isCollapsed ? 'Show Config panel' : 'Hide Config panel'}
+          {isCollapsed ? 'Show config panel' : 'Hide config panel'}
           <Kbd size="xs">{OVERVIEW_PANEL_SHORTCUT}</Kbd>
         </span>
       }
