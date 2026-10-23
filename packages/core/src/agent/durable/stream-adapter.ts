@@ -247,6 +247,13 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   outputProcessors?: OutputProcessorOrWorkflow[];
   /** Processor state map shared with the durable workflow's producer-side processing. */
   processorStates?: Map<string, ProcessorState>;
+  /**
+   * When true, `step-start` chunks skip this stream's output processors.
+   * For engines whose step-start reaches the consumer asynchronously: a processor
+   * that holds parts would otherwise hold a step-start that arrives after the
+   * producer already released the step's text, and the step text resolves empty.
+   */
+  skipOutputProcessorsOnStepStart?: boolean;
   /** When true, `getFullOutput()` includes `scoringData` assembled from the MessageList. */
   returnScorerData?: boolean;
   /** Run context passed to output processors for every streamed chunk. */
@@ -326,6 +333,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     structuredOutput,
     outputProcessors,
     processorStates,
+    skipOutputProcessorsOnStepStart = false,
     returnScorerData,
     requestContext,
     tracingContext,
@@ -563,6 +571,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           // Step start - enqueue if it's a chunk type
           const chunk = streamEvent.data as ChunkType<OUTPUT>;
           if (chunk && 'type' in chunk) {
+            if (skipOutputProcessorsOnStepStart) markChunkOutputProcessed(chunk);
             safeEnqueue(controller, chunk);
           }
           break;
