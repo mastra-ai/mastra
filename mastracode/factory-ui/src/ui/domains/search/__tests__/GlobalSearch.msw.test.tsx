@@ -431,6 +431,22 @@ describe('Global search', () => {
     await waitFor(() => expect(focusedBeforeSearch).toHaveFocus());
   });
 
+  it('opens from the sidebar search button and hands focus back to it on close', async () => {
+    stubSearchApi();
+    const user = userEvent.setup();
+    renderSearchRoute();
+
+    const sidebar = await screen.findByRole('complementary', { name: 'Main sidebar' }, { timeout: 5_000 });
+    const trigger = within(sidebar).getByRole('button', { name: 'Search and navigate' });
+    await user.click(trigger);
+    await screen.findByRole('dialog', { name: 'Global search' });
+    expect(screen.getByRole('combobox', { name: 'Search MastraCode' })).toHaveFocus();
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Global search' })).not.toBeInTheDocument();
+    await waitFor(() => expect(trigger).toHaveFocus());
+  });
+
   it.each(['activity', 'overview', 'attention', 'metrics', 'audit'])(
     'opens the same Factory board from the retired %s URL',
     async page => {
@@ -468,8 +484,8 @@ describe('Global search', () => {
     expect(within(results).getByText('Work Sessions')).toBeInTheDocument();
     expect(within(results).getByText('Review Sessions')).toBeInTheDocument();
     expect(within(results).getByText('User Sessions')).toBeInTheDocument();
-    expect(screen.getByText('Mastra Factory')).toBeInTheDocument();
-    expect(screen.getByText('Docs Factory')).toBeInTheDocument();
+    expect(within(results).getByText('Mastra Factory')).toBeInTheDocument();
+    expect(within(results).getByText('Docs Factory')).toBeInTheDocument();
     for (const label of [
       'Work',
       'Review',
@@ -601,10 +617,10 @@ describe('Global search', () => {
     const requests = stubSearchApi({ failSessionAttempts: 2 });
     const user = userEvent.setup();
     renderSearchRoute();
-    await openWithShortcut();
+    const dialog = await openWithShortcut();
 
     expect(await screen.findByText('Sessions could not be loaded.')).toBeInTheDocument();
-    expect(screen.getByText('Mastra Factory')).toBeInTheDocument();
+    expect(within(dialog).getByText('Mastra Factory')).toBeInTheDocument();
     expect(requests.sessionRequests[ACTIVE_FACTORY_ID]).toBe(2);
 
     await user.click(screen.getByRole('button', { name: /Retry/ }));

@@ -165,7 +165,7 @@ describe('ThreadPage loading shell', () => {
     // the loading spinner instead of a bare full-page placeholder.
     expect(await screen.findByLabelText('Loading session')).toBeInTheDocument();
     expect(screen.getByRole('region', { name: 'Sessions' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'New user session' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'New session' })).toBeInTheDocument();
     // The thread chrome itself is not mounted yet.
     expect(screen.queryByRole('region', { name: 'Thread composer' })).not.toBeInTheDocument();
 

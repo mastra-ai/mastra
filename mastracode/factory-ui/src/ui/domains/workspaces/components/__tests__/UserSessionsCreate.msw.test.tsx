@@ -11,6 +11,7 @@ import { queryKeys } from '../../../../../api/keys';
 import type { FactoryUserSession } from '../../services/user-sessions';
 import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
 import { SessionsSection } from '../SessionsSection';
+import { SidebarNewSessionButton } from '../SidebarNewSessionButton';
 import { testChatSession } from './fixtures/sessionsSection';
 
 const projectRepositoryId = 'ghp-1';
@@ -87,15 +88,24 @@ function LocationProbe() {
   return <output data-testid="pathname">{useLocation().pathname}</output>;
 }
 
+function SidebarSessions() {
+  return (
+    <>
+      <SidebarNewSessionButton />
+      <SessionsSection />
+    </>
+  );
+}
+
 function renderSection() {
   return renderWithProviders(
     <MemoryRouter initialEntries={['/factories/fp-1']}>
       <ChatSessionContext.Provider value={testChatSession('fp-1', projectRepositoryId)}>
         <Routes>
-          <Route path="/factories/:factoryId" element={<SessionsSection />} />
-          <Route path="/factories/:factoryId/user/new/:draftSessionId" element={<SessionsSection />} />
-          <Route path="/factories/:factoryId/user/threads/:threadId" element={<SessionsSection />} />
-          <Route path="*" element={<SessionsSection />} />
+          <Route path="/factories/:factoryId" element={<SidebarSessions />} />
+          <Route path="/factories/:factoryId/user/new/:draftSessionId" element={<SidebarSessions />} />
+          <Route path="/factories/:factoryId/user/threads/:threadId" element={<SidebarSessions />} />
+          <Route path="*" element={<SidebarSessions />} />
         </Routes>
       </ChatSessionContext.Provider>
       <LocationProbe />
@@ -121,7 +131,7 @@ describe('User sessions creation', () => {
     const { client } = renderSection();
     expect(await screen.findByText('No sessions yet')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'New user session' }));
+    await user.click(await screen.findByRole('button', { name: 'New session' }));
 
     await waitFor(() =>
       expect(screen.getByTestId('pathname')).toHaveTextContent(
@@ -178,7 +188,7 @@ describe('User sessions creation', () => {
 
     expect(await screen.findByText('Couldn’t load sessions')).toBeInTheDocument();
     expect(screen.queryByText('No sessions yet')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'New user session' })).toBeEnabled();
+    expect(await screen.findByRole('button', { name: 'New session' })).toBeEnabled();
   });
 
   it('deletes the session row and leaves its controller thread in place', async () => {
