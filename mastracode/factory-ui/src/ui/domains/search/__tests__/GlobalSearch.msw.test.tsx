@@ -436,6 +436,18 @@ describe('Global search', () => {
     expect(screen.getByRole('combobox', { name: 'Search MastraCode' })).toHaveFocus();
   });
 
+  it.each(['activity', 'overview', 'attention', 'metrics', 'audit'])(
+    'opens the same Factory board from the retired %s URL',
+    async page => {
+      stubSearchApi();
+      const { router } = renderSearchRoute(`/factories/${OTHER_FACTORY_ID}/${page}?events=all`);
+
+      await screen.findByLabelText('Board stages');
+      expect(router.state.location.pathname).toBe(`/factories/${OTHER_FACTORY_ID}/work`);
+      expect(router.state.location.search).toBe('');
+    },
+  );
+
   it('opens with Ctrl+K from the Work route', async () => {
     stubSearchApi();
     const user = userEvent.setup();
@@ -466,22 +478,20 @@ describe('Global search', () => {
     for (const label of [
       'Work',
       'Review',
-      'Activity',
       'Rules',
-      'Audit log',
       'Preferences',
       'Manage Factory',
       'Connections',
       'Repositories',
       'Work Intake',
-      'Factory models',
-      'Your models',
-      'Factory memory',
-      'Your memory',
+      'Models',
+      'Memory',
       'Behavior',
     ]) {
       expect(within(dialog).getByText(label)).toBeInTheDocument();
     }
+    expect(within(dialog).queryByText('Activity')).not.toBeInTheDocument();
+    expect(within(dialog).queryByText('Audit log')).not.toBeInTheDocument();
     expect(requests.sessionRequests).toEqual({ [ACTIVE_FACTORY_ID]: 1 });
   });
 
@@ -496,17 +506,17 @@ describe('Global search', () => {
     const results = within(dialog).getByRole('region', { name: 'Search results' });
     expect(within(rail).getByRole('button', { name: /All/ })).toHaveAttribute('aria-pressed', 'true');
     expect(within(rail).getByRole('button', { name: /Navigation/ })).toBeInTheDocument();
-    expect(within(rail).getByRole('button', { name: /Work Sessions/ })).toBeInTheDocument();
-    expect(within(rail).getByRole('button', { name: /Review Sessions/ })).toBeInTheDocument();
-    expect(within(rail).getByRole('button', { name: /User Sessions/ })).toBeInTheDocument();
+    expect(within(rail).getByRole('button', { name: /Work sessions/ })).toBeInTheDocument();
+    expect(within(rail).getByRole('button', { name: /Review sessions/ })).toBeInTheDocument();
+    expect(within(rail).getByRole('button', { name: /User sessions/ })).toBeInTheDocument();
     expect(within(rail).getByRole('button', { name: /Factories/ })).toBeInTheDocument();
 
-    await user.click(within(rail).getByRole('button', { name: /Review Sessions/ }));
+    await user.click(within(rail).getByRole('button', { name: /Review sessions/ }));
 
     expect(screen.getByText('Review command palette PR')).toBeInTheDocument();
     expect(screen.queryByText('Add universal command search')).not.toBeInTheDocument();
     expect(within(results).queryByText('Navigation')).not.toBeInTheDocument();
-    expect(within(rail).getByRole('button', { name: /Review Sessions/ })).toHaveAttribute('aria-pressed', 'true');
+    expect(within(rail).getByRole('button', { name: /Review sessions/ })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('filters locally across titles, branches, ids, and Factory repositories without issuing more requests', async () => {
@@ -744,7 +754,7 @@ describe('Global search', () => {
     await screen.findByText('Review command palette PR');
 
     const rail = screen.getByRole('complementary', { name: 'Search categories' });
-    expect(await within(rail).findByRole('button', { name: /^Work Items\s*4$/ })).toBeInTheDocument();
+    expect(await within(rail).findByRole('button', { name: /^Work items\s*4$/ })).toBeInTheDocument();
 
     await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), '#4242');
     const card = await screen.findByText('Bump the command palette dependencies');
@@ -919,7 +929,7 @@ describe('Global search', () => {
     await screen.findByText('Review command palette PR');
 
     const rail = screen.getByRole('complementary', { name: 'Search categories' });
-    await user.click(within(rail).getByRole('button', { name: /Work Items/ }));
+    await user.click(within(rail).getByRole('button', { name: /Work items/ }));
 
     expect(within(dialog).getByText('Bump the command palette dependencies')).toBeInTheDocument();
     expect(within(dialog).getByText('Palette keyboard traps focus on mobile')).toBeInTheDocument();
@@ -1009,6 +1019,17 @@ describe('Global search', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(onAbort).not.toHaveBeenCalled();
     releaseSessions();
+  });
+
+  it('finds Memory settings by the former page name "personal memory"', async () => {
+    stubSearchApi();
+    const user = userEvent.setup();
+    renderSearchRoute();
+    const dialog = await openFromSidebar();
+
+    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), 'personal memory');
+
+    expect(await within(dialog).findByText('Memory')).toBeInTheDocument();
   });
 
   it('selects Settings with origin state and closes without creating a session', async () => {

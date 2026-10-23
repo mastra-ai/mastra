@@ -94,7 +94,7 @@ const GateInvalidBaseUrl = ({ error, baseUrl }: GateInvalidBaseUrlProps) => {
         descriptionSlot={messages.join('\n\n')}
         actionSlot={
           <Button icon={<RotateCcw />} onClick={handleReset}>
-            Reset Studio Configuration
+            Reset Studio configuration
           </Button>
         }
       />

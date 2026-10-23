@@ -5,8 +5,15 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { ContextMenu } from './context-menu';
 
+const setPlatform = (value: string) => {
+  Object.defineProperty(navigator, 'platform', { value, configurable: true });
+};
+
+const originalPlatform = navigator.platform;
+
 afterEach(() => {
   cleanup();
+  setPlatform(originalPlatform);
 });
 
 function ControlledMenu() {
@@ -39,6 +46,33 @@ describe('ContextMenu', () => {
     fireEvent.pointerDown(trigger, { button: 2 });
     expect(fireEvent.contextMenu(trigger)).toBe(true);
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+    expect(fireEvent.contextMenu(trigger)).toBe(false);
+    await screen.findByRole('menuitem', { name: 'Pin session' });
+  });
+
+  it('allows the next macOS Control-click to open the native menu', async () => {
+    setPlatform('MacIntel');
+    render(<ControlledMenu />);
+    const trigger = screen.getByRole('link', { name: 'Session' });
+    fireEvent.contextMenu(trigger);
+    await screen.findByRole('menuitem', { name: 'Pin session' });
+    fireEvent.pointerDown(trigger, { button: 0, ctrlKey: true });
+    expect(fireEvent.contextMenu(trigger)).toBe(true);
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+  });
+
+  it.each([
+    ['a left-click', 'MacIntel', { button: 0 }],
+    ['a Windows Control-click', 'Win32', { button: 0, ctrlKey: true }],
+  ])('keeps the app menu for a keyboard context menu after %s dismissed it', async (_press, platform, press) => {
+    setPlatform(platform);
+    render(<ControlledMenu />);
+    const trigger = screen.getByRole('link', { name: 'Session' });
+    fireEvent.contextMenu(trigger);
+    await screen.findByRole('menuitem', { name: 'Pin session' });
+    fireEvent.pointerDown(trigger, press);
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+    fireEvent.keyDown(trigger, { key: 'F10', shiftKey: true });
     expect(fireEvent.contextMenu(trigger)).toBe(false);
     await screen.findByRole('menuitem', { name: 'Pin session' });
   });

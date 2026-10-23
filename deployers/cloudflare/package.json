@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-cloudflare",
-  "version": "1.2.38",
+  "version": "1.2.39-alpha.0",
   "description": "",
   "type": "module",
   "files": [
@@ -51,6 +51,7 @@
   },
   "devDependencies": {
     "@babel/types": "^8.0.4",
+    "@copilotkit/aimock": "^1.29.0",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",

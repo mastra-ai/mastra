@@ -191,7 +191,7 @@ The processor looks at the files of every user message the model receives, the t
 Files sent inline, as binary, base64, or a data URL, are uploaded. The processor never downloads anything itself, so a request made by the server can't be pointed at an internal address:
 
 - A link the model fetches itself, or a provider file ID, stays in the prompt, and `filter` isn't called for it.
-- A link the model can't fetch is downloaded by Mastra before the model call. The model would receive those bytes, so the processor handles them like any other file.
+- A link the model can't fetch is downloaded by Mastra before the model call. The processor handles the downloaded bytes like any other file the model would receive.
 
 ## Upload location
 
@@ -240,7 +240,7 @@ The constructor throws a `MastraError` with the ID `FILE_UPLOAD_PROCESSOR_NO_SAN
 
 The files of the current turn are checked as they were sent, before anything is written. A file that can't be uploaded stops the turn, and nothing is uploaded.
 
-A file of the thread history that is too large or can't be decoded doesn't stop the turn: a file stored in the thread would stop every turn after it. The processor replaces it with a note that says why, and the turn goes on:
+For a file in thread history that's too large or can't be decoded, the processor substitutes a note explaining the problem and lets the turn continue. This prevents a stored file from blocking every subsequent turn:
 
 ```text
 [File not uploaded]
@@ -248,7 +248,7 @@ name: report.pdf
 reason: File "report.pdf" is 31457280 bytes, over the 10485760 byte limit.
 ```
 
-When the sandbox can't take the files, because there is no sandbox, it can't write, or a write fails, a file of the current turn stops the turn. A file of the thread history gets a note with the reason instead, and the turn goes on. A `filter` or `maxFileSize` that fails stops the turn, whichever file it affects. Nothing is changed in storage, so the thread works again once the setup is fixed. A turn without a file to upload checks nothing, so scorers, agent networks, and calls without a thread keep working.
+When the sandbox can't take the files, because there is no sandbox, it can't write, or a write fails, a file of the current turn stops the turn. A file of the thread history gets a note with the reason instead, and the turn goes on. A `filter` or `maxFileSize` that fails stops the turn, whichever file it affects. Storage remains unchanged, allowing the thread to work again once the setup is fixed. A turn without a file to upload checks nothing, so scorers, agent networks, and calls without a thread keep working.
 
 The processor stops a turn by calling `abort()` with `retry: false`. The model isn't called. `agent.generate()` resolves with `result.tripwire` set instead of rejecting, and `agent.stream()` emits a `tripwire` chunk.
 
@@ -328,7 +328,7 @@ The processor handles files sent with `agent.sendMessage()` and `agent.sendSigna
 
 - A signal that wakes an idle agent is processed like the input of `agent.stream()`.
 - A signal delivered to an active run is checked and uploaded before the next model call of that run.
-- On a durable agent, a signal that arrives before the first model call of a run joins the prompt after the checks of the turn. Its files are uploaded like files of the thread history.
+- Signals that arrive on a durable agent before a run's first model call join the prompt after the turn's checks. Their files are uploaded like files in thread history.
 
 ## Limitations
 

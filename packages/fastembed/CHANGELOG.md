@@ -1,5 +1,11 @@
 # @mastra/fastembed
 
+## 1.3.5-alpha.0
+
+### Patch Changes
+
+- Use attention-mask-aware mean pooling for MiniLM and multilingual E5 embeddings while preserving BGE CLS pooling. Publish sparse model caches only after complete downloads so failed downloads can be retried safely. ([#28091](https://github.com/mastra-ai/mastra/pull/28091))
+
 ## 1.3.4
 
 ### Patch Changes

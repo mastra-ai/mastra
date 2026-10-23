@@ -57,7 +57,7 @@ export function FactorySwitcher() {
         {factories.length > 0 && <DropdownMenu.Separator />}
         <DropdownMenu.Item disabled={!createFactoryFrom} onSelect={openCreateFactory}>
           <Plus />
-          <span>Create Factory</span>
+          <span>Create factory</span>
         </DropdownMenu.Item>
       </DropdownMenu.Content>
     </DropdownMenu>

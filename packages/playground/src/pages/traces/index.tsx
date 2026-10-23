@@ -3,14 +3,12 @@ import { TracesExplorer } from '@mastra/playground-ui/domains/traces/components/
 import { TRACE_PROPERTY_FILTER_PARAM_BY_FIELD } from '@mastra/playground-ui/domains/traces/trace-filters';
 import { useMemo } from 'react';
 import { useSearchParams } from 'react-router';
+import { STUDIO_TRACES_FEATURES } from './features';
 import { useTraceFilterPersistence } from './hooks/use-trace-filter-persistence';
 import { useTracesRouteState } from './hooks/use-traces-route-state';
 import { useTracesScopeParams } from './hooks/use-traces-scope-params';
 import { TracesPageContent } from './traces-page-content';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
-
-// Studio always offers the spans view; the server capability still decides whether it shows.
-const FEATURES = { spanQuery: true };
 
 type TracesPageProps = {
   scopedEntityId?: string;
@@ -51,7 +49,7 @@ export default function TracesPage({ scopedEntityId, scopedEntityType }: TracesP
       sortDirection={route.sortDirection}
       onSortDirectionChange={route.setSortDirection}
       scope={scope}
-      features={FEATURES}
+      features={STUDIO_TRACES_FEATURES}
     >
       <TracesPageContent isScoped={isScoped} />
     </TracesExplorer>

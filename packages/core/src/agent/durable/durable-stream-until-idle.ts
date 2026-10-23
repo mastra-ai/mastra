@@ -76,11 +76,12 @@ export async function runDurableStreamUntilIdle<OUTPUT = undefined>(
               }
             }),
           );
-          ctx.forceClose();
+          ctx.abort();
         },
       };
     },
     {
+      detachOnCancel: streamOptions?._detachObserverOnCancel === true,
       onInnerResult: (inner: any) => {
         if (typeof inner.cleanup === 'function') innerCleanups.push(inner.cleanup);
         if (typeof inner.abort === 'function') innerAborts.push(inner.abort);
@@ -159,11 +160,12 @@ export async function runResumeDurableStreamUntilIdle<OUTPUT = undefined>(
               }
             }),
           );
-          ctx.forceClose();
+          ctx.abort();
         },
       };
     },
     {
+      detachOnCancel: streamOptions?._detachObserverOnCancel === true,
       onInnerResult: (inner: any) => {
         if (typeof inner.cleanup === 'function') innerCleanups.push(inner.cleanup);
         if (typeof inner.abort === 'function') innerAborts.push(inner.abort);

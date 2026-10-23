@@ -1,3 +1,5 @@
+import { isMacPlatform } from '@/lib/platform';
+
 /**
  * Map of key bindings to handlers.
  *
@@ -18,9 +20,6 @@ export type ParsedKeyCombo = {
   alt: boolean;
   key: string;
 };
-
-const isMacPlatform = () =>
-  typeof navigator !== 'undefined' && /mac/i.test(navigator.platform || navigator.userAgent || '');
 
 export const parseKeyCombo = (combo: string): ParsedKeyCombo => {
   const parsed: ParsedKeyCombo = { meta: false, ctrl: false, shift: false, alt: false, key: '' };

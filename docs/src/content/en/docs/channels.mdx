@@ -210,6 +210,16 @@ channels: {
 
 Tool display, approval prompts, error messages, and typing status are unaffected. The reply text still reaches the agent's stream and memory.
 
+The channel instructions Mastra adds to the agent's prompt follow this setting: with text hidden, the agent is told that only what it posts with tools reaches the conversation, and that it can skip a message by not posting anything.
+
+## Runs that don't start from a message
+
+A thread that started in a channel can also run from elsewhere, such as a schedule, a Studio prompt, or a signal waking the agent. Those runs get the same channel instructions as a run started by a message. The agent knows its identity in the channel and whether its text replies are posted there. Because the system prompt is identical for both kinds of run, it stays cached.
+
+Messages that come in over a channel carry a `platform` attribute (for example `platform="slack"`), so the agent can tell them apart from a prompt sent from somewhere else.
+
+Replies on those runs go through the same adapter path as replies to a message. Mastra remembers the last person who wrote in the thread, so adapters that need a recipient, like Slack's native streaming, work the same way.
+
 ## Multi-user awareness
 
 In group conversations, Mastra prefixes each message with the sender's name and platform ID so the agent can distinguish between speakers:

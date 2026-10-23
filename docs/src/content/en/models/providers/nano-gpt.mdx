@@ -7,7 +7,7 @@ description: "Browse NanoGPT model IDs, capabilities, context windows, and prici
 
 # <img src="https://models.dev/logos/nano-gpt.svg" alt="NanoGPT logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />NanoGPT
 
-Access 624 NanoGPT models through Mastra's model router. Authentication is handled automatically using the `NANO_GPT_API_KEY` environment variable.
+Access 626 NanoGPT models through Mastra's model router. Authentication is handled automatically using the `NANO_GPT_API_KEY` environment variable.
 
 Learn more in the [NanoGPT documentation](https://docs.nano-gpt.com).
 
@@ -80,6 +80,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 999990,
     "inputCost": 3,
     "outputCost": 5
+  },
+  {
+    "model": "nano-gpt/abliteration-ai/abliterated-model-large-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 262144,
+    "inputCost": 1,
+    "outputCost": 2
   },
   {
     "model": "nano-gpt/abliteration-ai/abliterated-model-large-v2",
@@ -2452,7 +2464,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 524288,
+    "contextWindow": 1048576,
     "maxOutput": 235929,
     "inputCost": 1,
     "outputCost": 3
@@ -4762,6 +4774,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.5
   },
   {
+    "model": "nano-gpt/prism-ml/ternary-bonsai-2-9b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 65536,
+    "inputCost": 0.08,
+    "outputCost": 0.13
+  },
+  {
     "model": "nano-gpt/qvq-max",
     "imageInput": true,
     "audioInput": false,
@@ -5584,7 +5608,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1048576,
+    "contextWindow": 1010000,
     "maxOutput": 32768,
     "inputCost": 1,
     "outputCost": 3
@@ -5596,7 +5620,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1048576,
+    "contextWindow": 1010000,
     "maxOutput": 32768,
     "inputCost": 1,
     "outputCost": 3
@@ -6510,7 +6534,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": false,
     "contextWindow": 1048000,
     "maxOutput": 32768,
-    "inputCost": 0.95,
+    "inputCost": 1,
     "outputCost": 4.05
   },
   {
@@ -6546,7 +6570,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048000,
     "maxOutput": 32768,
-    "inputCost": 0.95,
+    "inputCost": 1,
     "outputCost": 4.05
   },
   {
