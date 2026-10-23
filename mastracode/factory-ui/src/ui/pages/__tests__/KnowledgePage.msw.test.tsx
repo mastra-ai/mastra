@@ -19,7 +19,7 @@ const nodeFixture: KnowledgeNodePayload = {
     kind: 'service',
     content: 'Handles charging flows through [[Deploy Runbook]].',
     description: 'Owns customer payment processing.',
-    scope: ['org:org-1', `resource:${FACTORY_ID}`],
+    scope: ['org:org-1', `project:${FACTORY_ID}`],
     rung: 'resource',
     createdAt: '2026-08-13T00:00:00.000Z',
     updatedAt: '2026-08-13T01:00:00.000Z',
@@ -30,7 +30,7 @@ const nodeFixture: KnowledgeNodePayload = {
       node: 'ent-1',
       relation: 'owned',
       text: 'Payments Service uses [[Deploy Runbook]] for charging flows.',
-      scope: ['org:org-1', `resource:${FACTORY_ID}`],
+      scope: ['org:org-1', `project:${FACTORY_ID}`],
       rung: 'resource',
       sourceThreadId: 'thread-abc-123',
       capturedAt: '2026-08-13T02:00:00.000Z',
@@ -42,7 +42,7 @@ const nodeFixture: KnowledgeNodePayload = {
       node: 'ent-1',
       relation: 'owned',
       text: 'Deploys run nightly.',
-      scope: ['org:org-1', `resource:${FACTORY_ID}`],
+      scope: ['org:org-1', `project:${FACTORY_ID}`],
       rung: 'resource',
       sourceThreadId: 'thread-abc-123',
       capturedAt: '2026-08-13T03:00:00.000Z',
@@ -60,7 +60,7 @@ const graphFixture: KnowledgeGraphPayload = {
       kind: 'service',
       description:
         'Handles charging flows through [[Deploy Runbook]]. Operational reference: https://github.com/mastra-ai/mastra/tree/main/mastracode/factory',
-      scope: ['org:org-1', `resource:${FACTORY_ID}`],
+      scope: ['org:org-1', `project:${FACTORY_ID}`],
       rung: 'resource',
       pinned: true,
       recordCount: 3,
@@ -71,7 +71,7 @@ const graphFixture: KnowledgeGraphPayload = {
       id: 'ent-2',
       name: 'Deploy Runbook',
       kind: 'doc',
-      scope: ['org:org-1', `resource:${FACTORY_ID}`],
+      scope: ['org:org-1', `project:${FACTORY_ID}`],
       rung: 'resource',
       pinned: false,
       recordCount: 1,
@@ -187,7 +187,7 @@ function stubKnowledgeRoute(
           },
           {
             id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-            address: `resource:${FACTORY_ID}`,
+            address: `project:${FACTORY_ID}`,
             name: FACTORY_ID,
             parentIds: ['11111111-1111-4111-8111-111111111111'],
             memberCount: threadId ? 3 : 2,
@@ -280,7 +280,7 @@ function stubKnowledgeRoute(
               id: 'ent-thread',
               name: 'Session Scratchpad',
               kind: 'note',
-              scope: ['org:org-1', `resource:${FACTORY_ID}`, `thread:${threadId}`],
+              scope: ['org:org-1', `project:${FACTORY_ID}`, `thread:${threadId}`],
               rung: 'thread' as const,
               pinned: false,
               recordCount: 1,
@@ -310,14 +310,84 @@ function stubKnowledgeRoute(
         events: [
           {
             id: 'activity-1',
-            action: 'record-created',
+            action: 'create',
             recordType: 'record',
             recordId: 'record-1',
-            scope: ['org:org-1', `resource:${FACTORY_ID}`],
+            scope: ['org:org-1', `project:${FACTORY_ID}`],
             node: { id: 'ent-a', name: 'Payments Service', rung: 'resource' },
+            sourceType: 'importer',
+            sourceId: 'github',
+            importRunId: 'run-1',
             createdAt: '2026-08-13T03:00:00.000Z',
           },
         ],
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers`, () =>
+      HttpResponse.json({
+        importers: [
+          {
+            id: 'github',
+            importKind: 'agentic',
+            triggers: ['programmatic', 'webhook'],
+            bindings: [{ source: 'repo:mastra', scope: 'scope:payments' }],
+          },
+        ],
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers/github/runs`, () =>
+      HttpResponse.json({
+        runs: [
+          {
+            id: 'run-1',
+            importerId: 'github',
+            binding: '["repo:mastra","scope:payments"]',
+            source: 'repo:mastra',
+            scope: 'scope:payments',
+            importKind: 'agentic',
+            triggerKind: 'webhook',
+            status: 'succeeded',
+            transcriptThreadId: 'thread-run-1',
+            queuedAt: '2026-08-13T03:00:00.000Z',
+            startedAt: '2026-08-13T03:00:01.000Z',
+            completedAt: '2026-08-13T03:00:02.000Z',
+          },
+        ],
+      }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/importers/github/runs/run-1`, () =>
+      HttpResponse.json({
+        run: {
+          id: 'run-1',
+          importerId: 'github',
+          binding: '["repo:mastra","scope:payments"]',
+          source: 'repo:mastra',
+          scope: 'scope:payments',
+          importKind: 'agentic',
+          triggerKind: 'webhook',
+          status: 'succeeded',
+          transcriptThreadId: 'thread-run-1',
+          queuedAt: '2026-08-13T03:00:00.000Z',
+          startedAt: '2026-08-13T03:00:01.000Z',
+          completedAt: '2026-08-13T03:00:02.000Z',
+        },
+        activity: [
+          { id: 'activity-import', action: 'create', targetType: 'record', createdAt: '2026-08-13T03:00:02.000Z' },
+        ],
+        transcript: {
+          threadId: 'thread-run-1',
+          available: true,
+          messages: [
+            {
+              id: 'message-1',
+              role: 'assistant',
+              preview: 'Integrated repository history.',
+              truncated: false,
+              omittedBytes: 0,
+              createdAt: '2026-08-13T03:00:02.000Z',
+            },
+          ],
+        },
       }),
     ),
   );
@@ -448,7 +518,7 @@ describe('KnowledgePage', () => {
               id: '55555555-5555-4555-8555-555555555555',
               name: 'Memory Extraction',
               kind: 'subsystem',
-              scope: ['org:org-1', `resource:${FACTORY_ID}`],
+              scope: ['org:org-1', `project:${FACTORY_ID}`],
               rung: 'resource' as const,
               pinned: false,
               recordCount: 1,
@@ -778,10 +848,10 @@ describe('KnowledgePage', () => {
           events: [
             {
               id: 'activity-scope-1',
-              action: 'record-created',
+              action: 'create',
               recordType: 'record',
               recordId: 'record-1',
-              scope: ['org:org-1', `resource:${FACTORY_ID}`],
+              scope: ['org:org-1', `project:${FACTORY_ID}`],
               node: { id: 'ent-a', name: 'Payments Service', rung: 'resource' },
               createdAt: '2026-08-13T03:00:00.000Z',
             },
@@ -937,8 +1007,8 @@ describe('KnowledgePage', () => {
 
     await user.click(screen.getByRole('tab', { name: 'activity' }));
     expect(await screen.findByText('new record')).toBeInTheDocument();
-    expect(screen.queryByText('knowledge appended')).not.toBeInTheDocument();
-    expect(screen.getByText(`org:org-1 → resource:${FACTORY_ID}`)).toBeInTheDocument();
+    expect(screen.queryByText('create')).not.toBeInTheDocument();
+    expect(screen.getByText(`org:org-1 → project:${FACTORY_ID}`)).toBeInTheDocument();
     await user.click(screen.getByRole('button', { name: 'Payments Service' }));
     expect(router.state.location.search).not.toContain('view=activity');
     expect(router.state.location.search).toContain('node=ent-a');
@@ -954,9 +1024,9 @@ describe('KnowledgePage', () => {
         const cursor = new URL(request.url).searchParams.get('cursor');
         requestedCursors.push(cursor);
         const shared = {
-          action: 'record-created',
+          action: 'create',
           recordType: 'record',
-          scope: ['org:org-1', `resource:${FACTORY_ID}`],
+          scope: ['org:org-1', `project:${FACTORY_ID}`],
           createdAt: '2026-08-13T03:00:00.000Z',
         };
         return cursor
@@ -1006,7 +1076,7 @@ describe('KnowledgePage', () => {
               action: 'record-created',
               recordType: 'record',
               recordId: 'record-covered',
-              scope: ['org:org-1', `resource:${FACTORY_ID}`],
+              scope: ['org:org-1', `project:${FACTORY_ID}`],
               node: { id: 'ent-covered', name: 'Covered Service', rung: 'resource' },
               createdAt: '2026-08-13T03:00:00.000Z',
             },
@@ -1035,7 +1105,7 @@ describe('KnowledgePage', () => {
               action: 'record-created',
               recordType: 'record',
               recordId: `record-${page}`,
-              scope: ['org:org-1', `resource:${FACTORY_ID}`],
+              scope: ['org:org-1', `project:${FACTORY_ID}`],
               node: { id: `ent-${page}`, name: `Service ${page}`, rung: 'resource' },
               createdAt: '2026-08-13T03:00:00.000Z',
             },
@@ -1064,7 +1134,7 @@ describe('KnowledgePage', () => {
           {
             id: 'ent-x',
             name: 'Elsewhere',
-            scope: ['org:org-1', `resource:${FACTORY_ID}`],
+            scope: ['org:org-1', `project:${FACTORY_ID}`],
             rung: 'resource',
           },
         ],
@@ -1457,7 +1527,7 @@ describe('KnowledgePage', () => {
             },
             {
               id: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
-              address: `resource:${FACTORY_ID}`,
+              address: `project:${FACTORY_ID}`,
               name: FACTORY_ID,
               parentIds: ['11111111-1111-4111-8111-111111111111'],
               memberCount: 3,
@@ -1467,7 +1537,7 @@ describe('KnowledgePage', () => {
             },
             {
               id: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb',
-              address: 'thread:thread-abc-123',
+              address: `thread:thread-abc-123`,
               name: 'thread-abc-123',
               parentIds: ['aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'],
               memberCount: 1,
