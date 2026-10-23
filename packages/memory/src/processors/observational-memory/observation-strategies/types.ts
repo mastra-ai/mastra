@@ -20,6 +20,18 @@ export interface ObservationIndexWrite {
   recordId?: string;
 }
 
+/** The generation an observation group was committed to. */
+export type ObservationIndexRecord = Pick<
+  ObservationalMemoryRecord,
+  'id' | 'threadId' | 'resourceId' | 'generationCount'
+>;
+
+/** A committed group's vector write that failed, kept for a later cycle to retry. */
+export interface UnindexedObservation {
+  write: ObservationIndexWrite;
+  record: ObservationIndexRecord;
+}
+
 /** Parameters for running an observation via a strategy. */
 export interface ObservationRunOpts {
   record: ObservationalMemoryRecord;

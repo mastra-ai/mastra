@@ -304,7 +304,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
     await this.indexGroups(
       added ? [{ group: added, threadId, observedAt: processed.lastObservedAt }] : [],
       resourceId,
-      committed.record.id,
+      committed.record,
     );
 
     return { status: 'committed', processed, record: committed.record, alreadyCovered: committed.alreadyCovered };

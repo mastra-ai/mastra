@@ -534,7 +534,7 @@ export class ResourceScopedObservationStrategy extends ObservationStrategy {
           const group = this.newGroups.get(threadId);
           return group ? [{ group, threadId, observedAt: this.getMaxMessageTimestamp(threadMessages) }] : [];
         });
-    await this.indexGroups(added, resourceId, committed.record.id);
+    await this.indexGroups(added, resourceId, committed.record);
 
     return { status: 'committed', processed, record: committed.record, alreadyCovered: committed.alreadyCovered };
   }

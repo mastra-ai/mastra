@@ -218,4 +218,33 @@ describe('synchronous observation indexing delta (#27930)', () => {
     await observe(memory, 3);
     expect(vector.writes).toHaveLength(3);
   });
+
+  it('retries a failed group write after a reflection rolls the generation over', async () => {
+    const { memory, observe, vector, headGroups } = await setup();
+    vector.failNextUpsert = true;
+    await expect(observe(memory, 1)).rejects.toThrow('vector store unavailable');
+    const { head, store, groups } = await headGroups();
+    await store.createReflectionGeneration({
+      currentRecord: head,
+      reflection: head.activeObservations,
+      tokenCount: 10,
+    });
+    await observe(memory, 2);
+    // The retried write keeps naming the generation its group was committed to.
+    expect(vector.writes.find(row => row.group_id === groups[0]?.id)?.record_id).toBe(head.id);
+    expect(vector.writes).toHaveLength(2);
+  });
+
+  it('does not retry a failed group write after its observational memory was cleared', async () => {
+    const { memory, observe, vector, headGroups } = await setup();
+    vector.failNextUpsert = true;
+    await expect(observe(memory, 1)).rejects.toThrow('vector store unavailable');
+    const { head, groups } = await headGroups();
+    const engine = await memory.omEngine;
+    await engine!.clear(head.threadId!, head.resourceId);
+    await observe(memory, 2);
+    expect(vector.writes.map(row => row.group_id)).not.toContain(groups[0]?.id);
+    expect(vector.writes).toHaveLength(1);
+    expect(engine!.unindexedObservations.size).toBe(0);
+  });
 });

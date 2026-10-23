@@ -327,7 +327,7 @@ import { didProviderChange as hasProviderChanged } from './model-context';
 import { renderObservationGroupsForReflection, wrapInObservationGroup } from './observation-groups';
 import { ObservationStrategy } from './observation-strategies/index';
 import { resolveThreadTitleUpdate } from './observation-strategies/thread-title';
-import type { ObservationIndexWrite, ObservationRunResult } from './observation-strategies/types';
+import type { ObservationRunResult, UnindexedObservation } from './observation-strategies/types';
 import { ObservationTurn } from './observation-turn/index';
 import type { ObservationTurnHooks } from './observation-turn/types';
 import { optimizeObservationsForContext, formatMessagesForObserver } from './observer-agent';
@@ -475,8 +475,8 @@ export class ObservationalMemory {
    * @internal Used by observation strategies. Do not call directly.
    */
   observedMessageIds = new Set<string>();
-  /** Committed observation groups whose vector write failed, retried by the next cycle on the same record. */
-  readonly unindexedObservations = new Map<string, ObservationIndexWrite>();
+  /** Committed observation groups whose vector write failed, retried by later cycles on the same lineage. */
+  readonly unindexedObservations = new Map<string, UnindexedObservation>();
 
   /** Internal MessageHistory for message persistence */
   private messageHistory: MessageHistory;

@@ -30,12 +30,14 @@ import type {
 } from '../types';
 
 import type {
+  ObservationIndexRecord,
   ObservationIndexWrite,
   ObservationPersistOutcome,
   ObservationRunOpts,
   ObservationRunResult,
   ObserverOutput,
   ProcessedObservation,
+  UnindexedObservation,
 } from './types';
 
 /** Module-level xxhash singleton — loaded once, shared across all strategy instances. */
@@ -44,7 +46,7 @@ const hasherPromise = xxhash();
 /** Recompose-and-retry rounds for an observation commit that hit a retired or changed head. */
 const MAX_HEAD_COMMIT_RETRIES = 3;
 
-/** Failed observation-group vector writes kept in process for the next cycle to retry. */
+/** Failed observation-group vector writes kept in process for a later cycle to retry. */
 const MAX_UNINDEXED_OBSERVATIONS = 100;
 
 const OBSERVATION_LIFECYCLE_MARKERS = new Set([
@@ -105,9 +107,9 @@ export interface StrategyDeps {
   onIndexObservations?: (observation: ObservationIndexWrite) => Promise<void>;
   /**
    * Committed groups whose vector write failed, keyed by group ID. The next cycle that commits to
-   * the same record retries them, so one failed write does not leave a group unsearchable.
+   * the same lineage retries them, so one failed write does not leave a group unsearchable.
    */
-  unindexedObservations: Map<string, ObservationIndexWrite>;
+  unindexedObservations: Map<string, UnindexedObservation>;
   emitDebugEvent: (event: ObservationDebugEvent) => void;
   /** Applies `observation.previousObserverTokens` to the previous observations the Observer sees. */
   prepareObserverContext: (
@@ -546,45 +548,58 @@ export abstract class ObservationStrategy {
     threadId: string,
     resourceId: string | undefined,
     observedAt: Date | undefined,
-    recordId: string,
+    record: ObservationIndexRecord,
   ): Promise<void> {
     const groups = parseObservationGroups(observations).map(group => ({ group, threadId, observedAt }));
-    await this.indexGroups(groups, resourceId, recordId);
+    await this.indexGroups(groups, resourceId, record);
   }
 
   /**
-   * Index the observation groups a commit to `recordId` added, retrying each write. Groups from an
-   * earlier commit to the same record whose write failed are retried too. A write that still fails
-   * is kept for the next cycle and rethrown, so the cycle reports the failure.
+   * Index the observation groups a commit to `record` added, retrying each write. Earlier groups
+   * of the same lineage whose write failed are retried too, under the generation they were
+   * committed to; those of a cleared lineage are dropped. A write that still fails is kept for a
+   * later cycle and rethrown, so the cycle reports the failure.
    */
   protected async indexGroups(
     groups: Array<{ group: ObservationGroup; threadId: string; observedAt?: Date }>,
     resourceId: string | undefined,
-    recordId: string,
+    record: ObservationIndexRecord,
   ): Promise<void> {
     if (!resourceId || !this.deps.onIndexObservations) {
       return;
     }
 
     const pending = this.deps.unindexedObservations;
-    const writes: ObservationIndexWrite[] = [
-      ...[...pending.values()].filter(write => write.recordId === recordId),
+    const retries: UnindexedObservation[] = [];
+    for (const entry of pending.values()) {
+      if (entry.record.threadId !== record.threadId || entry.record.resourceId !== record.resourceId) continue;
+      if (entry.record.id === record.id || (await getLineageHead(this.storage, entry.record))) {
+        retries.push(entry);
+      } else {
+        pending.delete(entry.write.groupId);
+      }
+    }
+    const entries: UnindexedObservation[] = [
+      ...retries,
       ...groups.map(({ group, threadId, observedAt }) => ({
-        text: group.content,
-        groupId: group.id,
-        range: group.range,
-        threadId,
-        resourceId,
-        observedAt,
-        recordId,
+        write: {
+          text: group.content,
+          groupId: group.id,
+          range: group.range,
+          threadId,
+          resourceId,
+          observedAt,
+          recordId: record.id,
+        },
+        record,
       })),
     ];
-    if (writes.length === 0) {
+    if (entries.length === 0) {
       return;
     }
 
     const results = await Promise.allSettled(
-      writes.map(write =>
+      entries.map(({ write }) =>
         withRetry(() => this.deps.onIndexObservations!(write), {
           label: 'index-observations',
           abortSignal: this.opts.abortSignal,
@@ -593,11 +608,11 @@ export abstract class ObservationStrategy {
     );
     let failure: unknown;
     results.forEach((result, index) => {
-      const write = writes[index]!;
-      pending.delete(write.groupId);
+      const entry = entries[index]!;
+      pending.delete(entry.write.groupId);
       if (result.status === 'fulfilled') return;
       failure ??= result.reason;
-      pending.set(write.groupId, write);
+      pending.set(entry.write.groupId, entry);
     });
     // Bound the in-process backlog; the oldest failed writes are dropped first.
     for (const groupId of pending.keys()) {

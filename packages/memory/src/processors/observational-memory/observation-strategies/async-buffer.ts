@@ -249,7 +249,7 @@ export class AsyncBufferObservationStrategy extends ObservationStrategy {
         threadId,
         resourceId,
         processed.lastObservedAt,
-        this.persistedRecordId,
+        committedRecord,
       );
 
       // Persist extracted values immediately; buffered observation activation is unrelated to extractor state.
