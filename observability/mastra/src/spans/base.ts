@@ -59,6 +59,10 @@ const LINEAGE_KEYS = [
 ] as const satisfies readonly (keyof SpanEntityLineage)[];
 
 /** Copy only the lineage fields that have values, so spans don't carry undefined keys */
+function ownEntityVersionId(span: AnySpan): string | undefined {
+  return span instanceof BaseSpan ? span.ownEntityVersionId : undefined;
+}
+
 function definedLineage(source: SpanEntityLineage): SpanEntityLineage {
   const lineage: SpanEntityLineage = {};
   for (const key of LINEAGE_KEYS) {
@@ -232,6 +236,12 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
    * live `parent`, so its original ancestors are only known from the cached export.
    */
   protected restoredLineage?: SpanEntityLineage;
+  /**
+   * Version declared for this span's own entity, or inherited from a parent span
+   * of the same entity. Unlike `metadata.entityVersionId`, never an ancestor's
+   * version for a different entity.
+   */
+  public ownEntityVersionId?: string;
   /** Child spans that have started but not yet ended */
   #openChildren?: Set<BaseSpan<any>>;
   /** The span whose open-child set currently tracks this span: the parent, or a live ancestor after promotion */
@@ -297,6 +307,17 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     this.entityType = options.entityType ?? entityParent?.entityType;
     this.entityId = options.entityId ?? entityParent?.entityId;
     this.entityName = options.entityName ?? entityParent?.entityName;
+    const declaredVersion = options.metadata?.entityVersionId;
+    const sameEntityParent =
+      entityParent instanceof BaseSpan &&
+      entityParent.entityType === this.entityType &&
+      entityParent.entityId === this.entityId;
+    this.ownEntityVersionId =
+      typeof declaredVersion === 'string'
+        ? declaredVersion
+        : sameEntityParent
+          ? entityParent.ownEntityVersionId
+          : undefined;
 
     if (this.isExcluded) {
       // Keep the shape of attributes stable for any live-span reader.
@@ -531,41 +552,16 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
    * Restore the parent and root entity a span had before it was exported and
    * rebuilt (durable execution), so it and its new children keep their lineage.
    */
-  public restoreEntityLineage(cached: SpanEntityLineage): void {
+  public restoreEntityLineage(cached: SpanEntityLineage & Pick<SpanSnapshot<SpanType>, 'ownEntityVersionId'>): void {
+    // Snapshots from older versions lack this, so the version from cached metadata stays
+    if (cached.ownEntityVersionId !== undefined) {
+      this.ownEntityVersionId = cached.ownEntityVersionId ?? undefined;
+    }
     const lineage = definedLineage(cached);
     if (Object.keys(lineage).length > 0) {
       this.restoredLineage = lineage;
       this.correlationContext = undefined;
     }
-  }
-
-  /**
-   * The version of a span's own entity. Child spans inherit their parent's
-   * metadata, so `metadata.entityVersionId` can belong to an ancestor with a
-   * different entity (e.g. an unversioned sub-agent under a versioned agent).
-   */
-  private static getOwnEntityVersionId(span: AnySpan): string | undefined {
-    const version = span.metadata?.entityVersionId;
-    if (typeof version !== 'string') return undefined;
-    const isSameEntity = (type?: EntityType, id?: string) => type === span.entityType && id === span.entityId;
-
-    const entityParent = span instanceof BaseSpan ? span.getParentSpan(false) : undefined;
-    if (entityParent) {
-      if (entityParent.metadata?.entityVersionId !== version) return version;
-      return isSameEntity(entityParent.entityType, entityParent.entityId)
-        ? BaseSpan.getOwnEntityVersionId(entityParent)
-        : undefined;
-    }
-
-    // A rebuilt span has no live parent, so compare with the parent lineage saved before export
-    const restored = span instanceof BaseSpan ? span.restoredLineage : undefined;
-    if (
-      restored?.parentEntityVersionId === version &&
-      !isSameEntity(restored.parentEntityType, restored.parentEntityId)
-    ) {
-      return undefined;
-    }
-    return version;
   }
 
   /**
@@ -602,7 +598,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
           parentEntityType: parentSpan.entityType,
           parentEntityId: parentSpan.entityId,
           parentEntityName: parentSpan.entityName,
-          parentEntityVersionId: BaseSpan.getOwnEntityVersionId(parentSpan),
+          parentEntityVersionId: ownEntityVersionId(parentSpan),
         }
       : {
           parentEntityType: restored?.parentEntityType,
@@ -621,7 +617,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
           rootEntityType: rootSpan.entityType,
           rootEntityId: rootSpan.entityId,
           rootEntityName: rootSpan.entityName,
-          rootEntityVersionId: BaseSpan.getOwnEntityVersionId(rootSpan),
+          rootEntityVersionId: ownEntityVersionId(rootSpan),
         };
 
     const rootTags = rootSpan.tags?.length ? [...rootSpan.tags] : undefined;
@@ -697,7 +693,11 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
 
   /** Returns the span saved for a later `rebuildSpan()`, with its trace state */
   public snapshot(): SpanSnapshot<TType> {
-    return { ...this.exportSpan(), ...(this.traceState ? { traceState: this.traceState } : {}) };
+    return {
+      ...this.exportSpan(),
+      ownEntityVersionId: this.ownEntityVersionId ?? null,
+      ...(this.traceState ? { traceState: this.traceState } : {}),
+    };
   }
 
   get externalTraceId(): string | undefined {

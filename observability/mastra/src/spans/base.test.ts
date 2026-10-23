@@ -313,6 +313,42 @@ describe('Span', () => {
       expect(exportedTool).toMatchObject({ parentEntityId: 'researcher', rootEntityVersionId: 'supervisor-v1' });
       expect(exportedTool?.parentEntityVersionId).toBeUndefined();
     });
+
+    it('keeps a version a distinct entity declares, even when it matches its parent version', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+      const supervisor = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'supervisor',
+        entityType: EntityType.AGENT,
+        entityId: 'supervisor',
+        entityName: 'Supervisor',
+        metadata: { entityVersionId: 'v1' },
+      });
+      const subAgent = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'sub-agent',
+        parent: supervisor,
+        entityType: EntityType.AGENT,
+        entityId: 'researcher',
+        entityName: 'Researcher',
+        metadata: { entityVersionId: 'v1' },
+      });
+      const tool = tracing.startSpan({
+        type: SpanType.TOOL_CALL,
+        name: 'tool',
+        parent: subAgent,
+        entityType: EntityType.TOOL,
+        entityId: 'search',
+        entityName: 'search',
+      });
+
+      expect(tool.exportSpan()).toMatchObject({ parentEntityId: 'researcher', parentEntityVersionId: 'v1' });
+    });
   });
 
   describe('metadata inheritance', () => {

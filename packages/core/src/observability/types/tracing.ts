@@ -1655,6 +1655,8 @@ export interface ExportedSpan<TType extends SpanType> extends SpanData<TType> {
  */
 export interface SpanSnapshot<TType extends SpanType> extends ExportedSpan<TType> {
   traceState?: TraceState;
+  /** Version of the span's own entity, `null` when it has none. Absent in snapshots from older versions. */
+  ownEntityVersionId?: string | null;
 }
 
 /**
