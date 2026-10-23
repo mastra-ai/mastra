@@ -184,7 +184,7 @@ function loadTokenizerFromDir(modelDir: PathLike, maxLength: number): Tokenizer 
     throw new Error(`Tokenizer config file not found at ${tokenizerFilePath}`);
   }
   const tokenizerConfig = JSON.parse(fs.readFileSync(tokenizerFilePath, 'utf-8'));
-  maxLength = Math.min(maxLength, tokenizerConfig['model_max_length']);
+  maxLength = Math.min(maxLength, tokenizerConfig['model_max_length'] ?? maxLength);
 
   const tokensMapPath = path.join(modelDir.toString(), 'special_tokens_map.json');
   if (!fs.existsSync(tokensMapPath)) {
