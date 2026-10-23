@@ -44,3 +44,4 @@ export { useMetricsLatency, type LatencyBucket, type LatencyEntity } from './use
 export { useMetricsScores, type MetricsScores, type ScorerAverage, type ScoresBucket } from './use-metrics-scores';
 export { useTokenSpend, type SpendDimension, type SpendRow } from './use-token-spend';
 export { useMetricsTokenSeries, TOKEN_SERIES_METRICS, type TokenSeriesOptions } from './use-metrics-token-series';
+export { useMetricsCostBreakdown } from './use-metrics-cost-breakdown';

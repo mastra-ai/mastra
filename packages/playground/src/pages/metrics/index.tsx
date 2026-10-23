@@ -12,6 +12,7 @@ import {
   LatencyCard,
   MetricsGrid,
   MetricsKpis,
+  MoversCard,
   ScoresCard,
   TokenUsageCard,
   TraceVolumeCard,
@@ -280,7 +281,14 @@ function MetricsCards() {
             <MetricsGrid.Item>{usage}</MetricsGrid.Item>
           </MetricsGrid>
           <BreakdownCard onRowClick={openTraces} />
-          <DistinctIdsCard onTimeRangeClick={openTraces} />
+          <MetricsGrid columns={2}>
+            <MetricsGrid.Item>
+              <DistinctIdsCard onTimeRangeClick={openTraces} />
+            </MetricsGrid.Item>
+            <MetricsGrid.Item>
+              <MoversCard onRowClick={openTraces} />
+            </MetricsGrid.Item>
+          </MetricsGrid>
         </>
       ) : (
         <>

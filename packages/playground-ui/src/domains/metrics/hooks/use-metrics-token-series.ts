@@ -7,7 +7,10 @@ import { useMetricsFilters } from './use-metrics-filters';
 type TimeSeriesArgs = Parameters<MastraClient['getMetricTimeSeries']>[0];
 
 /** Input plus output tokens; each point's `estimatedCost` prices both, cache and reasoning included. */
-export const TOKEN_SERIES_METRICS = ['mastra_model_total_input_tokens', 'mastra_model_total_output_tokens'];
+export const TOKEN_SERIES_METRICS: [string, ...string[]] = [
+  'mastra_model_total_input_tokens',
+  'mastra_model_total_output_tokens',
+];
 
 export type TokenSeriesOptions = {
   /** Dimensions the series split by, e.g. `['projectId']` or `['entityName']`. */

@@ -22,3 +22,14 @@ export {
   type BreakdownRow,
   type BreakdownTab,
 } from './breakdown';
+export {
+  MOVER_SPAN_TYPES,
+  buildMovers,
+  moverEntitiesRequest,
+  moverTrend,
+  previousWindow,
+  windowLength,
+  type Mover,
+  type MoverFigures,
+  type MoverMetric,
+} from './movers';

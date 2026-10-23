@@ -268,6 +268,19 @@ describe('Metrics storage support', () => {
       expect(await screen.findByText('Resources and threads')).toBeTruthy();
     });
 
+    it('shows Biggest movers', async () => {
+      observeRequests();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(aggregateStorage)),
+        http.post(`${TEST_BASE_URL}/api/observability/traces/aggregate`, () => HttpResponse.json(emptyTraceAggregate)),
+        http.post(`${TEST_BASE_URL}/api/observability/spans/aggregate`, () => HttpResponse.json(nestedAgentRuns)),
+      );
+
+      renderPage('/metrics?period=7d');
+
+      expect(await screen.findByText('Nothing changed compared with the previous 7 days.')).toBeTruthy();
+    });
+
     it('replaces Trace volume with Breakdown, whose rows open the traces an agent ran in, nested or not', async () => {
       observeRequests();
       server.use(
@@ -303,6 +316,18 @@ describe('Metrics storage support', () => {
 
       await screen.findAllByRole('button', { name: 'View in traces' });
       expect(screen.queryByText('Resources and threads')).toBeNull();
+    });
+
+    it('shows no Biggest movers', async () => {
+      observeRequests();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(traceAggregateOnlyStorage)),
+      );
+
+      renderPage('/metrics?period=7d');
+
+      await screen.findAllByRole('button', { name: 'View in traces' });
+      expect(screen.queryByText('Biggest movers')).toBeNull();
     });
 
     it('keeps Trace volume and shows no Breakdown', async () => {
