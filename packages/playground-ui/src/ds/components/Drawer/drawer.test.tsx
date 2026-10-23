@@ -391,6 +391,21 @@ describe('Drawer', () => {
     expect(popup?.classList.contains('max-w-[85vw]')).toBe(true);
   });
 
+  it('applies a DrawerContent size override to a floating viewport', () => {
+    render(
+      <Drawer side="left" variant="floating" size="lg" defaultOpen>
+        <DrawerContent size="xl">
+          <DrawerTitle>Extra wide floating drawer</DrawerTitle>
+        </DrawerContent>
+      </Drawer>,
+    );
+
+    const viewport = document.querySelector('[data-slot="drawer-viewport"]');
+    expect(viewport?.classList.contains('w-[calc(var(--container-4xl)+1.5rem)]')).toBe(true);
+    expect(viewport?.classList.contains('sm:w-[calc(var(--container-4xl)+2rem)]')).toBe(true);
+    expect(viewport?.classList.contains('w-[calc(var(--container-2xl)+1.5rem)]')).toBe(false);
+  });
+
   it('keeps top and bottom drawers full width regardless of `size`', () => {
     render(
       <Drawer size="xl" defaultOpen>
