@@ -4,9 +4,14 @@ import { describe, expect, it } from 'vitest';
 import { AppShell } from './app-shell';
 import { MainCard } from './main-card';
 
-function renderShell({ mobileHeader = true, sidebar = false }: { mobileHeader?: boolean; sidebar?: boolean } = {}) {
+function renderShell({
+  edgeToEdge = false,
+  mobileHeader = true,
+  sidebar = false,
+}: { edgeToEdge?: boolean; mobileHeader?: boolean; sidebar?: boolean } = {}) {
   return renderToStaticMarkup(
     <AppShell
+      edgeToEdge={edgeToEdge}
       mobileHeader={mobileHeader ? <header>Mobile header</header> : undefined}
       sidebar={sidebar ? <nav>Sidebar</nav> : undefined}
     >
@@ -95,13 +100,27 @@ describe('AppShell', () => {
       expect(markup).toContain('Main content');
     });
   });
+
+  describe('when edge to edge', () => {
+    it.each([{ sidebar: true }, { sidebar: false }])('drops every lg inset, sidebar: $sidebar', ({ sidebar }) => {
+      const padding = bodyClassName(renderShell({ edgeToEdge: true, sidebar }))
+        .split(/\s+/)
+        .filter(className => /^(lg:)?p[trblxy]?-/.test(className));
+      expect(padding).toEqual([]);
+    });
+  });
 });
 
-describe('MainCard', () => {
-  const classes =
-    renderToStaticMarkup(<MainCard>Content</MainCard>)
+function mainCardClasses({ edgeToEdge = false }: { edgeToEdge?: boolean } = {}) {
+  return (
+    renderToStaticMarkup(<MainCard edgeToEdge={edgeToEdge}>Content</MainCard>)
       .match(/data-slot="main-card" class="([^"]*)"/)?.[1]
-      ?.split(/\s+/) ?? [];
+      ?.split(/\s+/) ?? []
+  );
+}
+
+describe('MainCard', () => {
+  const classes = mainCardClasses();
 
   it('frames the content only from lg, where the sidebar sits beside it', () => {
     expect(classes).toEqual(expect.arrayContaining(['lg:rounded-studio-frame', 'lg:p-px', 'lg:shadow-raised']));
@@ -109,6 +128,13 @@ describe('MainCard', () => {
 
   it('is flat below lg: no rounding, rim padding or elevation outside the lg variant', () => {
     const frameClasses = classes.filter(className => /^(max-lg:)?(rounded|p-|shadow)/.test(className));
+    expect(frameClasses).toEqual([]);
+  });
+
+  it('drops the frame when edge to edge', () => {
+    const frameClasses = mainCardClasses({ edgeToEdge: true }).filter(className =>
+      /^(lg:)?(rounded|p-|shadow)/.test(className),
+    );
     expect(frameClasses).toEqual([]);
   });
 });
