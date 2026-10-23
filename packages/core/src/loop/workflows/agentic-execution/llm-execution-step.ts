@@ -14,7 +14,7 @@ import { getErrorFromUnknown } from '../../../error/utils.js';
 import type { MastraModelSettings } from '../../../llm/model/model-settings';
 import { validateModelTimeoutSettings } from '../../../llm/model/model-settings';
 import { mergeProviderOptions } from '../../../llm/model/provider-options';
-import { ModelRouterLanguageModel } from '../../../llm/model/router';
+import { ModelRouterLanguageModel, resolveApiProviderId } from '../../../llm/model/router';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
 import type { IMastraLogger } from '../../../logger';
 import { ConsoleLogger } from '../../../logger';
@@ -1953,6 +1953,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             const requestStepResult = await requestStepRunner.runProcessLLMRequest({
               prompt: inputMessages,
               model: currentStep.model,
+              apiProviderId: await resolveApiProviderId(currentStep.model),
               messageList,
               workspace: currentStep.workspace,
               stepNumber: inputData.output?.steps?.length || 0,

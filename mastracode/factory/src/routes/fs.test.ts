@@ -24,11 +24,11 @@ import {
   listSessionWorkspaceTree,
   listSessionRenderedPath,
   listSessionWorkspaceChanges,
+  listSessionWorkspacePatches,
   listWorkspaceRenderedPath,
   parseWorkspaceChanges,
   parseWorkspaceChangeStats,
   parseWorkspaceTrackedChanges,
-  readSessionWorkspaceDiff,
   readSessionWorkspaceFile,
   readWorkspaceFile,
 } from './fs.js';
@@ -322,11 +322,6 @@ async function requestSessionRoute(path: string, sessionFs: ReturnType<typeof ma
 }
 
 /**
- * A real git checkout on the host behind a sandbox whose commands run on the
- * host and whose native filesystem is the host's, so the tree and file routes
- * run real `git check-ignore`, real directory listings and real symlink checks.
- */
-/**
  * Answers the tree's checks for a mocked sandbox with no symlinks and nothing
  * ignored: `realpath` maps each path under the root, `check-ignore` matches none.
  */
@@ -356,27 +351,39 @@ async function seedHostCheckouts(repos: string[] = ['acme/repo']) {
     await writeFile(join(dir, 'dist', 'out.js'), '');
     await execFileAsync('git', ['init', '-q', dir]);
   }
+  const executeCommand = attachHostSandbox(parent, repos);
+  return { parent, executeCommand };
+}
+
+function failedHostCommand(error: unknown) {
+  if (!(error instanceof Error)) throw error;
+  return {
+    exitCode: 'code' in error && typeof error.code === 'number' ? error.code : 1,
+    stdout: 'stdout' in error && typeof error.stdout === 'string' ? error.stdout : '',
+    stderr: 'stderr' in error && typeof error.stderr === 'string' ? error.stderr : '',
+  };
+}
+
+function attachHostSandbox(parent: string, slugs: string[]) {
   const executeCommand = vi.fn(async (command: string, args: string[] = [], options?: { cwd?: string }) => {
     try {
-      const { stdout, stderr } = await execFileAsync(command, args, { cwd: options?.cwd ?? parent });
+      const { stdout, stderr } = await execFileAsync(command, args, {
+        cwd: options?.cwd ?? parent,
+        maxBuffer: 64 * 1024 * 1024,
+      });
       return { exitCode: 0, stdout, stderr };
     } catch (error) {
-      const failed = error as { code?: number; stdout?: string; stderr?: string };
-      return {
-        exitCode: typeof failed.code === 'number' ? failed.code : 1,
-        stdout: failed.stdout ?? '',
-        stderr: failed.stderr ?? '',
-      };
+      return failedHostCommand(error);
     }
   });
   const filesystem = new LocalFilesystem({ basePath: '/', contained: false });
   getSessionSandbox(
     'row-1',
-    repos[0]!,
+    slugs[0]!,
     () => ({ id: 'sbx-1', provider: 'local', workingDirectory: parent, executeCommand, filesystem }) as never,
-    repos.length > 1 ? repos : undefined,
+    slugs.length > 1 ? slugs : undefined,
   );
-  return { parent, executeCommand };
+  return executeCommand;
 }
 
 describe('live session file tree', () => {
@@ -449,7 +456,9 @@ describe('live session file tree', () => {
     readFile.mockRestore();
   });
 
-  it('reports a large file it cannot read instead of showing it empty', async () => {
+  // Root ignores file permissions, so the unreadable file can't be produced (CI runs as root).
+  const runningAsRoot = typeof process.getuid === 'function' && process.getuid() === 0;
+  it.skipIf(runningAsRoot)('reports a large file it cannot read instead of showing it empty', async () => {
     const { parent } = await seedHostCheckouts();
     const path = join(parent, 'repo', 'locked.log.txt');
     await writeFile(path, 'a'.repeat(512 * 1024 + 1));
@@ -839,17 +848,14 @@ describe('workspace changes', () => {
   });
 
   it('lists pending changes with per-file and total line counts', async () => {
-    const { executeCommand } = seedSessionSandbox((script, command, args) => {
+    const { executeCommand } = seedSessionSandbox((_script, command, args) => {
       if (command === 'git') {
         expect(args).toEqual(['-C', WORKDIR, 'status', '--porcelain=v1', '-z', '--untracked-files=all']);
         return { exitCode: 0, stdout: ' M src/edited.ts\0?? src/new.ts\0' };
       }
 
       expect(command).toBe('sh');
-      expect(script).toContain('diff --numstat -z --find-renames');
-      expect(script).toContain('ls-files --others --exclude-standard -z');
-      expect(script).toContain('GIT_OBJECT_DIRECTORY="$object_dir"');
-      expect(args.slice(2)).toEqual(['mastracode-numstat', WORKDIR, BASE_SHA]);
+      expect(args.slice(2)).toEqual(['mastracode-numstat', WORKDIR, BASE_SHA, '--numstat', '-z']);
       // oxlint-disable-next-line no-useless-concat -- Keep NUL-delimited records separate from the next record's leading digit.
       return { exitCode: 0, stdout: '3\t1\tsrc/edited.ts\0' + '5\t0\t\0/dev/null\0src/new.ts\0' };
     });
@@ -907,174 +913,177 @@ describe('workspace changes', () => {
       changes: [{ path: 'src/edited.ts', status: 'modified' }],
     });
   });
+});
 
-  it('returns a bounded unified diff for one selected file', async () => {
-    const patch = [
-      'diff --git a/src/edited.ts b/src/edited.ts',
-      '--- a/src/edited.ts',
-      '+++ b/src/edited.ts',
-      '@@ -1 +1 @@',
-      '-old',
-      '+new',
-      '',
-    ].join('\n');
-    const { executeCommand } = seedSessionSandbox((script, command, args) => {
-      expect(command).toBe('sh');
-      expect(script).toContain('head -c 524289');
-      expect(args.slice(3)).toEqual([
-        '0',
-        '--literal-pathspecs',
-        '-C',
-        WORKDIR,
-        'diff',
-        '--find-renames',
-        '--no-ext-diff',
-        '--no-color',
-        '--unified=3',
-        BASE_SHA,
-        '--',
-        'src/edited.ts',
-      ]);
-      return { exitCode: 0, stdout: patch };
+describe('workspace patches', () => {
+  const COMMIT_IDENTITY = [
+    '-c',
+    'user.name=Factory',
+    '-c',
+    'user.email=factory@example.com',
+    '-c',
+    'commit.gpgsign=false',
+  ];
+
+  async function seedRepositories(slugs: string[] = ['acme/repo']) {
+    const parent = await realpath(await mkdtemp(join(tmpdir(), 'factory-patches-')));
+    const dirs = slugs.map(slug => join(parent, slug.split('/')[1]!));
+    for (const dir of dirs) await execFileAsync('git', ['init', '-q', '-b', 'main', dir]);
+    attachHostSandbox(parent, slugs);
+    return dirs;
+  }
+
+  async function commitAll(dir: string, message: string) {
+    await execFileAsync('git', ['-C', dir, 'add', '-A']);
+    await execFileAsync('git', ['-C', dir, ...COMMIT_IDENTITY, 'commit', '-q', '--no-verify', '-m', message]);
+  }
+
+  async function publishBase(dir: string) {
+    await execFileAsync('git', ['-C', dir, 'update-ref', 'refs/remotes/origin/main', 'HEAD']);
+  }
+
+  async function seedSessionWork() {
+    const [dir] = await seedRepositories();
+    await writeFile(join(dir!, 'keep.txt'), 'a\nb\nc\n');
+    await writeFile(join(dir!, 'old name.txt'), 'same\n');
+    await writeFile(join(dir!, 'gone.txt'), 'bye\n');
+    await writeFile(join(dir!, 'logo.png'), Buffer.from([0, 1, 2, 3]));
+    await commitAll(dir!, 'base');
+    await publishBase(dir!);
+
+    await writeFile(join(dir!, 'keep.txt'), 'a\nB\nc\n');
+    await commitAll(dir!, 'session commit');
+
+    await execFileAsync('git', ['-C', dir!, 'mv', 'old name.txt', 'new näme.txt']);
+    await execFileAsync('git', ['-C', dir!, 'rm', '-q', 'gone.txt']);
+    await writeFile(join(dir!, 'logo.png'), Buffer.from([0, 1, 2, 4]));
+    await writeFile(join(dir!, 'say "hi".md'), 'hello\n');
+    await writeFile(join(dir!, 'tab\tname.txt'), 'tabbed\n');
+  }
+
+  it('gives every change of the session branch its own diff, committed or not', async () => {
+    await seedSessionWork();
+
+    const result = await listSessionWorkspacePatches(makeSession(), 'branch');
+
+    expect(result.changes.map(change => [change.path, change.status])).toEqual([
+      ['gone.txt', 'deleted'],
+      ['keep.txt', 'modified'],
+      ['logo.png', 'modified'],
+      ['new näme.txt', 'renamed'],
+      ['say "hi".md', 'untracked'],
+      ['tab\tname.txt', 'untracked'],
+    ]);
+    expect(new Set(Object.keys(result.patches))).toEqual(new Set(result.changes.map(change => change.path)));
+    for (const patch of Object.values(result.patches)) expect(patch.match(/^diff --git /gm)).toHaveLength(1);
+    expect(result.patches['gone.txt']).toContain('-bye\n');
+    expect(result.patches['keep.txt']).toContain('-b\n+B\n');
+    expect(result.patches['logo.png']).toContain('Binary files');
+    expect(result.patches['new näme.txt']).toContain('rename from old name.txt');
+    expect(result.patches['say "hi".md']).toContain('+hello\n');
+    expect(result.patches['tab\tname.txt']).toContain('+tabbed\n');
+  });
+
+  it('leaves committed work out of the uncommitted scope', async () => {
+    await seedSessionWork();
+
+    const result = await listSessionWorkspacePatches(makeSession(), 'uncommitted');
+
+    expect(result.scope).toBe('uncommitted');
+    expect(result.changes.map(change => change.path)).toEqual([
+      'gone.txt',
+      'logo.png',
+      'new näme.txt',
+      'say "hi".md',
+      'tab\tname.txt',
+    ]);
+    expect(new Set(Object.keys(result.patches))).toEqual(new Set(result.changes.map(change => change.path)));
+  });
+
+  it('lists a change without a diff when its diff passes 512 KB or no longer fits in 8 MB, never cutting one', async () => {
+    const [dir] = await seedRepositories();
+    await writeFile(join(dir!, 'small.txt'), 'one\n');
+    await commitAll(dir!, 'base');
+    await publishBase(dir!);
+
+    const line = `${'x'.repeat(99)}\n`;
+    const bulkLines = 4096;
+    const bulkFiles = Array.from({ length: 22 }, (_, index) => `bulk-${String(index).padStart(2, '0')}.txt`);
+    await writeFile(join(dir!, 'small.txt'), 'two\n');
+    await writeFile(join(dir!, 'big.txt'), line.repeat(6000));
+    for (const file of bulkFiles) await writeFile(join(dir!, file), line.repeat(bulkLines));
+
+    const result = await listSessionWorkspacePatches(makeSession(), 'branch');
+
+    expect(result.changes).toHaveLength(24);
+    expect(result.patches['small.txt']).toContain('-one\n+two\n');
+    expect(result.patches['big.txt']).toBeUndefined();
+    expect(result.omittedPatches['big.txt']).toBe('file-too-large');
+    const shown = bulkFiles.filter(file => result.patches[file] !== undefined);
+    expect(shown.length).toBeGreaterThan(0);
+    expect(shown.length).toBeLessThan(bulkFiles.length);
+    expect(shown).toEqual(bulkFiles.slice(0, shown.length));
+    for (const file of shown) {
+      const added = result.patches[file]!.split('\n').filter(patchLine => /^\+x/.test(patchLine));
+      expect(added).toHaveLength(bulkLines);
+    }
+    const skipped = bulkFiles.slice(shown.length);
+    expect(skipped.map(file => result.omittedPatches[file])).toEqual(skipped.map(() => 'total-too-large'));
+    expect(result.omittedPatches['small.txt']).toBeUndefined();
+  });
+
+  it('keeps listing the changes with git’s error when git cannot diff them, as in a repository without a commit', async () => {
+    const [dir] = await seedRepositories();
+    await writeFile(join(dir!, 'first.txt'), 'hello\n');
+
+    const result = await listSessionWorkspacePatches(makeSession(), 'branch');
+
+    expect(result.available).toBe(true);
+    expect(result.changes.map(change => [change.path, change.status])).toEqual([['first.txt', 'untracked']]);
+    expect(result.patches).toEqual({});
+    expect(result.omittedPatches).toEqual({});
+    expect(result.diffError).toMatch(/^fatal: .*HEAD/);
+  });
+
+  it('keys each repository’s diffs by its prefixed path', async () => {
+    const [repoDir, docsDir] = await seedRepositories(['acme/repo', 'acme/docs']);
+    const session = makeSession({ baseBranch: 'main' });
+    recordSessionEnvironment(session.sessionId, {
+      workingDirectory: join(repoDir!, '..'),
+      repositories: [
+        {
+          slug: 'acme/repo',
+          dir: repoDir!,
+          branch: 'factory/issue-1',
+          defaultBranch: 'main',
+          position: 1,
+          setupStatus: 'ok',
+        },
+        { slug: 'acme/docs', dir: docsDir!, branch: 'main', defaultBranch: 'main', position: 2, setupStatus: 'ok' },
+      ],
     });
+    for (const dir of [repoDir!, docsDir!]) {
+      await writeFile(join(dir, 'README.md'), 'base\n');
+      await commitAll(dir, 'base');
+      await publishBase(dir);
+      await writeFile(join(dir, 'README.md'), `changed in ${dir.split('/').at(-1)}\n`);
+    }
 
-    const session = makeSession();
-    await expect(readSessionWorkspaceDiff(session, 'src/edited.ts')).resolves.toEqual({
-      workspacePath: session.sessionId,
-      path: 'src/edited.ts',
-      patch,
-      truncated: false,
-    });
-    expect(executeCommand).toHaveBeenCalledTimes(2);
+    const result = await listSessionWorkspacePatches(session, 'branch');
+    __clearSessionEnvironmentsForTests();
+
+    expect(result.changes.map(change => change.path)).toEqual(['docs/README.md', 'repo/README.md']);
+    expect(result.patches['docs/README.md']).toContain('+changed in docs\n');
+    expect(result.patches['repo/README.md']).toContain('+changed in repo\n');
   });
 
-  it('marks and limits a diff that exceeds the output boundary', async () => {
-    const maxDiffBytes = 512 * 1024;
-    seedSessionSandbox(() => ({ exitCode: 0, stdout: 'a'.repeat(maxDiffBytes + 1) }));
+  it('rejects a scope it does not know', async () => {
+    const { deps } = makeSessionFs();
+    const request = await requestSessionRoute('/web/workspace/changes/patches', deps);
 
-    const result = await readSessionWorkspaceDiff(makeSession(), 'src/large.ts');
+    const response = await request(`?workspacePath=${makeSession().sessionId}&scope=last-turn`);
 
-    expect(result.truncated).toBe(true);
-    expect(Buffer.byteLength(result.patch)).toBe(maxDiffBytes);
-  });
-
-  it('does not emit a replacement character when truncation splits UTF-8', async () => {
-    const maxDiffBytes = 512 * 1024;
-    const prefix = 'a'.repeat(maxDiffBytes - 1);
-    seedSessionSandbox(() => ({ exitCode: 0, stdout: `${prefix}€` }));
-
-    const result = await readSessionWorkspaceDiff(makeSession(), 'src/unicode.ts');
-
-    expect(result.truncated).toBe(true);
-    expect(result.patch).toBe(prefix);
-    expect(result.patch).not.toContain('\uFFFD');
-  });
-
-  it('includes both paths when reading a renamed file diff', async () => {
-    seedSessionSandbox((_script, command, args) => {
-      expect(command).toBe('sh');
-      expect(args.slice(3)).toEqual([
-        '0',
-        '--literal-pathspecs',
-        '-C',
-        WORKDIR,
-        'diff',
-        '--find-renames',
-        '--no-ext-diff',
-        '--no-color',
-        '--unified=3',
-        BASE_SHA,
-        '--',
-        'src/old.ts',
-        'src/renamed.ts',
-      ]);
-      return { exitCode: 0, stdout: 'rename diff' };
-    });
-
-    await expect(readSessionWorkspaceDiff(makeSession(), 'src/renamed.ts', 'src/old.ts')).resolves.toEqual(
-      expect.objectContaining({ path: 'src/renamed.ts', patch: 'rename diff' }),
-    );
-  });
-
-  it('treats pathspec magic in file names literally', async () => {
-    const path = 'src/:(exclude)*.ts';
-    seedSessionSandbox((_script, command, args) => {
-      expect(command).toBe('sh');
-      expect(args.slice(3)).toEqual([
-        '0',
-        '--literal-pathspecs',
-        '-C',
-        WORKDIR,
-        'diff',
-        '--find-renames',
-        '--no-ext-diff',
-        '--no-color',
-        '--unified=3',
-        BASE_SHA,
-        '--',
-        path,
-      ]);
-      return { exitCode: 0, stdout: 'literal path diff' };
-    });
-
-    await expect(readSessionWorkspaceDiff(makeSession(), path)).resolves.toEqual(
-      expect.objectContaining({ path, patch: 'literal path diff' }),
-    );
-  });
-
-  it('creates a bounded diff for an untracked file', async () => {
-    let commandIndex = 0;
-    const { executeCommand } = seedSessionSandbox((script, command, args) => {
-      commandIndex += 1;
-      if (commandIndex === 1) {
-        expect(command).toBe('sh');
-        return { exitCode: 0, stdout: '' };
-      }
-      if (commandIndex === 2) {
-        expect(command).toBe('git');
-        expect(args).toEqual([
-          '--literal-pathspecs',
-          '-C',
-          WORKDIR,
-          'ls-files',
-          '--others',
-          '--exclude-standard',
-          '--',
-          'src/new.ts',
-        ]);
-        return { exitCode: 0, stdout: 'src/new.ts\n' };
-      }
-      expect(command).toBe('sh');
-      expect(script).toContain('head -c 524289');
-      expect(args.slice(3)).toEqual([
-        '1',
-        '-C',
-        WORKDIR,
-        'diff',
-        '--no-index',
-        '--no-ext-diff',
-        '--no-color',
-        '--unified=3',
-        '--',
-        '/dev/null',
-        'src/new.ts',
-      ]);
-      return { exitCode: 0, stdout: 'new file diff' };
-    });
-
-    await expect(readSessionWorkspaceDiff(makeSession(), 'src/new.ts')).resolves.toEqual(
-      expect.objectContaining({ path: 'src/new.ts', patch: 'new file diff' }),
-    );
-    expect(executeCommand).toHaveBeenCalledTimes(4);
-    const lsFiles = executeCommand.mock.calls.find(([, args]) => args?.includes('ls-files'));
-    expect(lsFiles?.[2]?.maxRetainedBytes).toBe(Infinity);
-  });
-
-  it('rejects diff paths that escape the workspace before running git', async () => {
-    const { executeCommand } = seedSessionSandbox(() => ({ exitCode: 0, stdout: '' }));
-
-    await expect(readSessionWorkspaceDiff(makeSession(), '../secret')).rejects.toThrow('path escapes workspace');
-    expect(executeCommand).not.toHaveBeenCalled();
+    expect(response.status).toBe(400);
   });
 });
 
@@ -1089,15 +1098,10 @@ describe('workspace changes across environment repositories', () => {
    * sandbox answers each git call by the checkout it names.
    */
   function seedEnvironment(
-    answer: (
-      dir: string,
-      kind: 'merge-base' | 'status' | 'tracked' | 'numstat' | 'diff' | 'other',
-      args: string[],
-    ) => Answer,
+    answer: (dir: string, kind: 'merge-base' | 'status' | 'tracked' | 'numstat' | 'other', args: string[]) => Answer,
     { recorded = ['acme/repo', 'acme/docs', 'acme/site'] }: { recorded?: string[] } = {},
   ) {
     const executeCommand = vi.fn(async (command: string, args: string[] = []) => {
-      const script = args[1] ?? '';
       const dirIndex = args.indexOf('-C');
       const dir = dirIndex >= 0 ? args[dirIndex + 1]! : (args[3] ?? '');
       const kind =
@@ -1107,11 +1111,9 @@ describe('workspace changes across environment repositories', () => {
             ? 'status'
             : command === 'git' && args[2] === 'diff'
               ? 'tracked'
-              : script.includes('diff --numstat')
+              : args.includes('--numstat')
                 ? 'numstat'
-                : script.includes('head -c')
-                  ? 'diff'
-                  : 'other';
+                : 'other';
       const result = answer(dir, kind, args);
       return { exitCode: result.exitCode, stdout: result.stdout, stderr: result.stderr ?? '' };
     });
@@ -1264,65 +1266,6 @@ describe('workspace changes across environment repositories', () => {
         { slug: 'acme/site', prefix: 'site/', available: false, changes: [] },
       ],
     });
-  });
-
-  it('runs the diff of a prefixed path inside its checkout and echoes the prefixed path', async () => {
-    const patch = 'diff --git a/guide.md b/guide.md\n+hello\n';
-    const { executeCommand, session } = seedEnvironment((dir, kind, args) => {
-      if (kind === 'merge-base') {
-        expect(args).toEqual(['-C', DIRS['acme/docs'], 'merge-base', 'HEAD', 'origin/develop']);
-        return { exitCode: 0, stdout: `${BASE_SHA}\n` };
-      }
-      if (kind === 'diff') {
-        expect(dir).toBe(DIRS['acme/docs']);
-        expect(args.slice(-3)).toEqual([BASE_SHA, '--', 'guide.md']);
-        return { exitCode: 0, stdout: patch };
-      }
-      return { exitCode: 1, stdout: '', stderr: `unexpected ${kind}` };
-    });
-
-    await expect(readSessionWorkspaceDiff(session, 'docs/guide.md')).resolves.toEqual({
-      workspacePath: session.sessionId,
-      path: 'docs/guide.md',
-      patch,
-      truncated: false,
-    });
-    expect(executeCommand).toHaveBeenCalledTimes(2);
-  });
-
-  it('passes both halves of a rename relative to their checkout', async () => {
-    const { session } = seedEnvironment((_dir, kind, args) => {
-      if (kind === 'merge-base') return { exitCode: 0, stdout: `${BASE_SHA}\n` };
-      if (kind === 'diff') {
-        expect(args.slice(-4)).toEqual([BASE_SHA, '--', 'old.md', 'new.md']);
-        return { exitCode: 0, stdout: 'renamed' };
-      }
-      return { exitCode: 1, stdout: '' };
-    });
-
-    await expect(readSessionWorkspaceDiff(session, 'docs/new.md', 'docs/old.md')).resolves.toMatchObject({
-      path: 'docs/new.md',
-      patch: 'renamed',
-    });
-  });
-
-  it('rejects a rename whose previous path lives in another repository before running git', async () => {
-    const { executeCommand, session } = seedEnvironment(() => ({ exitCode: 0, stdout: '' }));
-
-    await expect(readSessionWorkspaceDiff(session, 'docs/new.md', 'repo/old.md')).rejects.toThrow(
-      'previousPath is not available',
-    );
-    expect(executeCommand).not.toHaveBeenCalled();
-  });
-
-  it('rejects a bare repository prefix, an unknown prefix and a traversal through a prefix before running git', async () => {
-    const { executeCommand, session } = seedEnvironment(() => ({ exitCode: 0, stdout: '' }));
-
-    await expect(readSessionWorkspaceDiff(session, 'docs')).rejects.toThrow('path is not available');
-    await expect(readSessionWorkspaceDiff(session, 'docs/')).rejects.toThrow('path is not available');
-    await expect(readSessionWorkspaceDiff(session, '.workspace-setup-ran')).rejects.toThrow('path is not available');
-    await expect(readSessionWorkspaceDiff(session, 'docs/../repo/x')).rejects.toThrow('path escapes workspace');
-    expect(executeCommand).not.toHaveBeenCalled();
   });
 
   it('reads a root artifact and a prefixed file on the workspace root filesystem', async () => {

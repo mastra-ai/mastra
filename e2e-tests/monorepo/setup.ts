@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url';
 import getPort from 'get-port';
 import { copyFile, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { setupPublishedRegistryFromEnv, startRegistry } from '../_local-registry-setup';
+import { resolveVerdaccioPath, setupPublishedRegistryFromEnv, startRegistry } from '../_local-registry-setup';
 import { publishPackages } from '../_local-registry-setup/publish';
 import { getSuitePublishFilters } from '../_local-registry-setup/publish-roots.js';
 
@@ -21,7 +21,7 @@ export default async function setup(project: TestProject) {
   const tag = 'monorepo-test';
   const teardown = await prepareMonorepo(rootDir, globby, tag);
 
-  const verdaccioPath = require.resolve('verdaccio/bin/verdaccio');
+  const verdaccioPath = resolveVerdaccioPath();
   const port = await getPort();
   const registryLocation = await mkdtemp(join(tmpdir(), 'mastra-monorepo-test-registry'));
   console.log('registryLocation', registryLocation);

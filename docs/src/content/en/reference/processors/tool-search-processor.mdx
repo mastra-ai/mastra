@@ -324,7 +324,7 @@ Use `clearState`, `clearAllState`, `getStateStats`, and `cleanupNow` to inspect 
 
 Loaded state is derived from the conversation messages: a tool is loaded while a `search_tools` or `load_tool` result naming it remains in the messages. This mode:
 
-- Works without memory configuration. Without memory, loaded tools are kept for the current process only, and only for requests with a real thread ID; anonymous requests retain nothing between calls unless the caller resends the relevant messages.
+- Works without memory configuration. Without memory, loaded tools are kept for the current process only, and only for requests with a real thread ID. Anonymous requests require the caller to resend the relevant messages to retain loaded tools between calls.
 - Survives a restart whenever the messages are available again: from memory with message history, or because the caller resends the conversation. Without memory, a restart restores only what's in the messages the caller sends.
 - De-loads a tool automatically once that result is no longer present in the messages.
 

@@ -1040,6 +1040,12 @@ export function createDurableToolCallStep() {
         // Persist active goal time before exposing the approval wait.
         await stopGoalActivity({ agentId: initData.agentId, runId });
 
+        // Add approval metadata to message before persisting
+        addToolMetadata({ type: 'approval', resumeSchema: approvalResumeSchema });
+
+        // Flush messages before suspension
+        await doFlush();
+
         // Emit approval chunk via PubSub (mirrors base agent's controller.enqueue).
         // Apply the tool payload transform first so display targets never see raw
         // args on the approval prompt (parity with the main loop's approval chunk).
@@ -1079,12 +1085,6 @@ export function createDurableToolCallStep() {
             }),
           );
         }
-
-        // Add approval metadata to message before persisting
-        addToolMetadata({ type: 'approval', resumeSchema: approvalResumeSchema });
-
-        // Flush messages before suspension
-        await doFlush();
 
         // End the trace's open spans as suspended before pausing.
         endSpansAsSuspended({ toolCallId, toolName, reason: 'approval' });
@@ -1391,6 +1391,16 @@ export function createDurableToolCallStep() {
             // Tool is requesting approval during execution
             await stopGoalActivity({ agentId: initData.agentId, runId });
 
+            // Add approval metadata to message before persisting
+            addToolMetadata({
+              type: 'approval',
+              resumeSchema: approvalResumeSchema,
+              delegatedRunId,
+              ...(innerApproval ? { approvalToolName, approvalArgs } : {}),
+            });
+
+            await doFlush();
+
             if (pubsub) {
               const approvalChunk = await applyToolPayloadTransformToChunk(
                 {
@@ -1427,16 +1437,6 @@ export function createDurableToolCallStep() {
               );
             }
 
-            // Add approval metadata to message before persisting
-            addToolMetadata({
-              type: 'approval',
-              resumeSchema: approvalResumeSchema,
-              delegatedRunId,
-              ...(innerApproval ? { approvalToolName, approvalArgs } : {}),
-            });
-
-            await doFlush();
-
             endSpansAsSuspended({ toolCallId, toolName: approvalToolName, reason: 'approval' });
 
             return suspend(
@@ -1460,6 +1460,16 @@ export function createDurableToolCallStep() {
               type: 'suspension',
               resumeSchema: suspendOptions?.resumeSchema,
             };
+
+            // Add suspension metadata to message before persisting
+            addToolMetadata({
+              type: 'suspension',
+              suspendPayload,
+              resumeSchema: suspendOptions?.resumeSchema,
+              delegatedRunId,
+            });
+
+            await doFlush();
 
             if (pubsub) {
               const suspensionChunk = await applyToolPayloadTransformToChunk(
@@ -1485,16 +1495,6 @@ export function createDurableToolCallStep() {
               await publishAfterPersist(() => emitChunkEvent(pubsub, runId, suspensionChunk));
               await publishAfterPersist(() => emitSuspendedEvent(pubsub, runId, suspendedEventData));
             }
-
-            // Add suspension metadata to message before persisting
-            addToolMetadata({
-              type: 'suspension',
-              suspendPayload,
-              resumeSchema: suspendOptions?.resumeSchema,
-              delegatedRunId,
-            });
-
-            await doFlush();
 
             endSpansAsSuspended({ toolCallId, toolName, reason: 'suspension' });
 

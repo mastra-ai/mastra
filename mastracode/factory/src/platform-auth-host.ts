@@ -6,7 +6,8 @@ const LOOPBACK_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]']);
 
 export function isPlatformAuthSupportedHost(hostname: string): boolean {
   const normalizedHostname = hostname.toLowerCase();
-  if (LOOPBACK_HOSTS.has(normalizedHostname)) return true;
+  // `*.localhost` is loopback too (RFC 6761), e.g. a dev proxy's per-worktree names.
+  if (LOOPBACK_HOSTS.has(normalizedHostname) || normalizedHostname.endsWith('.localhost')) return true;
   return PLATFORM_AUTH_DOMAINS.some(
     domain => normalizedHostname === domain || normalizedHostname.endsWith(`.${domain}`),
   );

@@ -8,13 +8,13 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "k3": [
+    "k3-256k": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "k3-256k": [
+    "k3": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]

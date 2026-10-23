@@ -180,6 +180,14 @@ export function buildCreateSpanRecord(span: AnyExportedSpan): CreateSpanRecord {
     entityId: span.entityId ?? null,
     entityName: span.entityName ?? null,
     entityVersionId: getStringOrNull(metadata.entityVersionId),
+    parentEntityType: span.parentEntityType ?? null,
+    parentEntityId: span.parentEntityId ?? null,
+    parentEntityName: span.parentEntityName ?? null,
+    parentEntityVersionId: span.parentEntityVersionId ?? null,
+    rootEntityType: span.rootEntityType ?? null,
+    rootEntityId: span.rootEntityId ?? null,
+    rootEntityName: span.rootEntityName ?? null,
+    rootEntityVersionId: span.rootEntityVersionId ?? null,
 
     // Identity & Tenancy - extracted from metadata if present
     userId: getStringOrNull(metadata.userId),

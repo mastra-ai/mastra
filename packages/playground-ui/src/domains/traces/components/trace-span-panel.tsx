@@ -40,6 +40,7 @@ export interface TraceSpanPanelProps {
 
   // Trace-panel pass-through.
   anchorSpanId?: string;
+  entityType?: TraceDataPanelViewProps['entityType'];
   initialSpanId?: string | null;
   onPrevious?: () => void;
   onNext?: () => void;
@@ -100,6 +101,7 @@ export function TraceSpanPanel({
   onSpanSelect,
   onClose,
   anchorSpanId,
+  entityType,
   initialSpanId,
   onPrevious,
   onNext,
@@ -159,6 +161,7 @@ export function TraceSpanPanel({
         traceId={traceId}
         spans={spans}
         anchorSpanId={anchorSpanId}
+        entityType={entityType}
         entityHref={entityHref}
         usage={usage}
         isLoading={isLoadingSpans}

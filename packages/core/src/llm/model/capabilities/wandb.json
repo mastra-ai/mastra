@@ -62,11 +62,6 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "ibm-granite/granite-4.2-8b": [
-      {
-        "type": "toggle"
-      }
-    ],
     "zai-org/GLM-5.2": [
       {
         "type": "toggle"
@@ -78,13 +73,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "reflection/Beam-1.0-501B-A23B": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B": [
+    "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B": [
       {
         "type": "toggle"
       }
@@ -94,12 +83,23 @@
         "type": "toggle"
       }
     ],
-    "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B": [
+    "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B": [
       {
         "type": "toggle"
       }
     ],
-    "deepseek-ai/DeepSeek-V4-Flash-0731": [
+    "ibm-granite/granite-4.2-8b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "reflection/Beam-1.0-501B-A23B": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4.1-Flash": [
       {
         "type": "toggle"
       }
@@ -109,7 +109,17 @@
         "type": "toggle"
       }
     ],
-    "deepseek-ai/DeepSeek-V4.1-Flash": [
+    "deepseek-ai/DeepSeek-V4-Flash-0731": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "google/gemma-4-26B-A4B-it": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "google/gemma-4-31B-it": [
       {
         "type": "toggle"
       }
@@ -120,16 +130,6 @@
       }
     ],
     "Qwen/Qwen3.8-27B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "google/gemma-4-31B-it": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "google/gemma-4-26B-A4B-it": [
       {
         "type": "toggle"
       }

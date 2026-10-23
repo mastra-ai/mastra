@@ -10,6 +10,16 @@
   ],
   "structuredOutput": ["deepseek-v4.1-flash:fast", "glm-5.3", "glm-5.3-flash:fast", "glm-5.3:fast", "kimi-k3:fast"],
   "reasoning": {
+    "deepseek-v4.1-flash:fast": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-5.3": [
+      {
+        "type": "toggle"
+      }
+    ],
     "glm-5.3:fast": [
       {
         "type": "toggle"
@@ -21,16 +31,6 @@
       }
     ],
     "glm-5.3-flash:fast": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek-v4.1-flash:fast": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "glm-5.3": [
       {
         "type": "toggle"
       }

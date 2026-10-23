@@ -20,14 +20,14 @@ export interface DataPanelCloseButtonProps {
 export function DataPanelCloseButton({
   onClick,
   tooltip = 'Close panel',
-  label = 'Close Panel',
+  label = 'Close panel',
   icon = 'arrow',
   className,
   variant = 'ghost',
 }: DataPanelCloseButtonProps) {
   return (
     <Button
-      size="sm"
+      size="icon-sm"
       variant={variant}
       onClick={onClick}
       aria-label={label}
