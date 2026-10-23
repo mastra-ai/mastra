@@ -285,6 +285,7 @@ export async function createRestrictedMastraCodeAgentController(config: Restrict
     subagents: [],
     gateways: [],
     includeDefaultGateways: false,
+    modelFallbacks: false,
     workspace: config.workspace,
     initialState: {
       ...config.initialState,

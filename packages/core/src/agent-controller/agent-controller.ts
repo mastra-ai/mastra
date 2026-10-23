@@ -2285,7 +2285,10 @@ export class AgentController<TState = {}> {
 
     // Auto-enable Anthropic server-side fallbacks for fable-5 so a classifier
     // block is transparently retried on the fallback model instead of failing.
-    const fableFallback = buildFableFallbackProviderOptions(context?.session.modelId ?? session.model.get());
+    const fableFallback =
+      this.config.modelFallbacks === false
+        ? undefined
+        : buildFableFallbackProviderOptions(context?.session.modelId ?? session.model.get());
     if (fableFallback) {
       shared.providerOptions = { anthropic: { ...fableFallback.anthropic } };
     }

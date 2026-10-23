@@ -12,3 +12,5 @@ const controller = new AgentController({
   includeDefaultGateways: false,
 });
 ```
+
+Added `modelFallbacks` to `AgentController`. Set it to `false` so runs never add provider-side fallback models, such as retrying a blocked `claude-fable-5` turn on `claude-opus-4-8`.

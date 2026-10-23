@@ -77,6 +77,7 @@ The restricted factory doesn't register these capabilities:
 - Project or global hook, plugin, and Model Context Protocol (MCP) discovery
 - Local or global instruction files
 - Observational memory model selection. The observer and reflector model fields in session state are locked to a disabled value, so configure those models on the injected `memory`
+- Provider-side fallback models. Selecting a model such as `claude-fable-5` in a session doesn't add a fallback to another model
 - Subagents
 - Workflow creation, loading, or execution
 

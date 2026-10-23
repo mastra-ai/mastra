@@ -125,9 +125,12 @@ describe('restricted workspace tool enforcement', () => {
     expect(session.resolveToolApproval('view')).toBe('deny');
     await session.permissions.setForTool({ toolName: 'view', policy: 'ask' });
 
+    // A client-selected model id must not add provider-side fallback models to the host's model.
+    await session.model.switch('anthropic/claude-fable-5');
     await session.sendMessage({ content: 'Delete protected.txt' });
 
     const streamOptions = stream.mock.calls[0]![1];
+    expect(streamOptions?.providerOptions?.anthropic).toBeUndefined();
     expect(streamOptions?.activeTools).toEqual(['view']);
     expect(streamOptions?.activeTools).not.toContain('delete_file');
     expect(deleteFile).not.toHaveBeenCalled();

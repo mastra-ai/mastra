@@ -370,6 +370,14 @@ export interface AgentControllerConfig<TState = {}> {
   includeDefaultGateways?: boolean;
 
   /**
+   * Whether runs add automatic provider-side fallback models for the selected
+   * model, such as retrying a blocked `claude-fable-5` turn on
+   * `claude-opus-4-8`. Set to `false` when only the agent's own model may run.
+   * @default true
+   */
+  modelFallbacks?: boolean;
+
+  /**
    * Observational Memory configuration defaults.
    * The AgentController auto-manages OM state (model IDs, thresholds) internally
    * and provides accessors that Memory's dynamic model functions can close over.

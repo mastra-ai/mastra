@@ -99,6 +99,7 @@ describe('restricted Mastra Code embedding', () => {
     expect(controllerConfig.subagents).toEqual([]);
     expect(controllerConfig.gateways).toEqual([]);
     expect(controllerConfig.includeDefaultGateways).toBe(false);
+    expect(controllerConfig.modelFallbacks).toBe(false);
     expect(controllerConfig.intervalHandlers).toEqual([]);
     expect(controllerConfig.modes).toEqual([
       { id: 'build', availableTools: ['remote_read', 'view'] },
