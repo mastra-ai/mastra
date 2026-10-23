@@ -1,5 +1,11 @@
 import type { ObservabilityExporter, TracingEvent } from '@mastra/core/observability';
-import { SpanType, SamplingStrategyType, InternalSpans, TracingEventType } from '@mastra/core/observability';
+import {
+  EntityType,
+  SpanType,
+  SamplingStrategyType,
+  InternalSpans,
+  TracingEventType,
+} from '@mastra/core/observability';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { DefaultObservabilityInstance } from '../instances';
@@ -260,6 +266,52 @@ describe('Span', () => {
       expect(toolSpan.entityName).toBe('MyTool');
 
       agentSpan.end();
+    });
+  });
+
+  describe('entity lineage versions', () => {
+    it('does not report an ancestor version as the parent entity version', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+      const supervisor = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'supervisor',
+        entityType: EntityType.AGENT,
+        entityId: 'supervisor',
+        entityName: 'Supervisor',
+        metadata: { entityVersionId: 'supervisor-v1' },
+      });
+      const step = tracing.startSpan({ type: SpanType.WORKFLOW_STEP, name: 'step', parent: supervisor });
+      const subAgent = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'sub-agent',
+        parent: step,
+        entityType: EntityType.AGENT,
+        entityId: 'researcher',
+        entityName: 'Researcher',
+      });
+      const tool = tracing.startSpan({
+        type: SpanType.TOOL_CALL,
+        name: 'tool',
+        parent: subAgent,
+        entityType: EntityType.TOOL,
+        entityId: 'search',
+        entityName: 'search',
+      });
+
+      // The step inherits the supervisor entity, so it carries the supervisor's version
+      expect(subAgent.exportSpan()).toMatchObject({
+        parentEntityId: 'supervisor',
+        parentEntityVersionId: 'supervisor-v1',
+        rootEntityVersionId: 'supervisor-v1',
+      });
+      const exportedTool = tool.exportSpan();
+      expect(exportedTool).toMatchObject({ parentEntityId: 'researcher', rootEntityVersionId: 'supervisor-v1' });
+      expect(exportedTool?.parentEntityVersionId).toBeUndefined();
     });
   });
 

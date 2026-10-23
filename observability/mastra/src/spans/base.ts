@@ -540,6 +540,35 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   }
 
   /**
+   * The version of a span's own entity. Child spans inherit their parent's
+   * metadata, so `metadata.entityVersionId` can belong to an ancestor with a
+   * different entity (e.g. an unversioned sub-agent under a versioned agent).
+   */
+  private static getOwnEntityVersionId(span: AnySpan): string | undefined {
+    const version = span.metadata?.entityVersionId;
+    if (typeof version !== 'string') return undefined;
+    const isSameEntity = (type?: EntityType, id?: string) => type === span.entityType && id === span.entityId;
+
+    const entityParent = span instanceof BaseSpan ? span.getParentSpan(false) : undefined;
+    if (entityParent) {
+      if (entityParent.metadata?.entityVersionId !== version) return version;
+      return isSameEntity(entityParent.entityType, entityParent.entityId)
+        ? BaseSpan.getOwnEntityVersionId(entityParent)
+        : undefined;
+    }
+
+    // A rebuilt span has no live parent, so compare with the parent lineage saved before export
+    const restored = span instanceof BaseSpan ? span.restoredLineage : undefined;
+    if (
+      restored?.parentEntityVersionId === version &&
+      !isSameEntity(restored.parentEntityType, restored.parentEntityId)
+    ) {
+      return undefined;
+    }
+    return version;
+  }
+
+  /**
    * Build and cache the canonical correlation context for this live span.
    *
    * Parent entity: the nearest ancestor that is not internal or excluded, the
@@ -561,10 +590,6 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     const metadata = this.metadata ?? {};
     const getMetadataString = (key: string): string | undefined =>
       typeof metadata[key] === 'string' ? metadata[key] : undefined;
-    const getSpanMetadataString = (span: AnySpan | null | undefined, key: string): string | undefined => {
-      const m = span?.metadata;
-      return m && typeof m[key] === 'string' ? m[key] : undefined;
-    };
     const parentSpan = this.getParentSpan(false);
 
     let rootSpan: AnySpan = this;
@@ -577,7 +602,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
           parentEntityType: parentSpan.entityType,
           parentEntityId: parentSpan.entityId,
           parentEntityName: parentSpan.entityName,
-          parentEntityVersionId: getSpanMetadataString(parentSpan, 'entityVersionId'),
+          parentEntityVersionId: BaseSpan.getOwnEntityVersionId(parentSpan),
         }
       : {
           parentEntityType: restored?.parentEntityType,
@@ -596,7 +621,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
           rootEntityType: rootSpan.entityType,
           rootEntityId: rootSpan.entityId,
           rootEntityName: rootSpan.entityName,
-          rootEntityVersionId: getSpanMetadataString(rootSpan, 'entityVersionId'),
+          rootEntityVersionId: BaseSpan.getOwnEntityVersionId(rootSpan),
         };
 
     const rootTags = rootSpan.tags?.length ? [...rootSpan.tags] : undefined;

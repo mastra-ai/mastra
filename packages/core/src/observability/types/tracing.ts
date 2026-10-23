@@ -1634,6 +1634,7 @@ export interface ExportedSpan<TType extends SpanType> extends SpanData<TType> {
   parentEntityType?: EntityType;
   parentEntityId?: string;
   parentEntityName?: string;
+  /** Omitted when the parent entity has no version of its own, even if it inherited one from an ancestor */
   parentEntityVersionId?: string;
   /**
    * Entity of the top span in this process's parent chain (the span's own entity when it is that span).

@@ -129,6 +129,8 @@ describe('rebuildSpan internal status', () => {
       parentEntityName: 'Support',
       ...workflowLineage,
     });
+    // The agent has no version of its own; it only inherited the workflow's through metadata
+    expect(endedSpan('tool')?.parentEntityVersionId).toBeUndefined();
   });
 
   it('falls back to the restored parent entity when the rebuilt ancestor is internal', async () => {
