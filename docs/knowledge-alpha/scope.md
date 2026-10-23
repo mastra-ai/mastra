@@ -83,11 +83,13 @@ On main, `canonicalizeKnowledgeScope` (`storage/domains/knowledge/base.ts:685`) 
    | Position | Levels |
    |---|---|
    | 0, 1, 2 | `org`, `resource`, `thread` (unchanged, `SCOPE_ORDER` `:680`) |
-   | then | every other level, by level name, then value, compared by UTF-16 code unit (not `localeCompare`, which depends on locale) |
+   | then | every other level, by level name, then by value; the name and the value are compared separately (not the whole `type:value` string), each by UTF-16 code unit (not `localeCompare`, which depends on locale) |
 
    Code-unit order and `localeCompare` disagree for the characters the type pattern allows (`^[a-z][a-z0-9_-]*$`): `['a-b:x','a_b:x','a1:x','ab:x','a:x']` sorts `a_b a-b a: a1 ab` by `localeCompare` and `a-b a1 a: a_b ab` by code unit. Keys are matched by string equality, so two processes with different ICU or locale data (the Director dogfood runs ~15) would compute different keys for one scope. The comparator is `a < b ? -1 : a > b ? 1 : 0`.
 
-   No existing key changes: every stored scope holds only `org`/`resource`/`thread`, whose order is unchanged. A new level can't move a key either. Its position comes from its own name, so a key containing only older levels is unaffected, and a key containing it is new. Today's `localeCompare` (`:719`) is replaced by plain code-unit comparison so keys can't differ between machines.
+   Comparing name and value separately matters: by name, `a:x` sorts before `a-b:x`, but by whole entry `a-b:x` comes first because `-` (45) is below `:` (58). The alpha compares by name, then value, and the test uses types `a`, `a-b`, `a_b` and `a1`.
+
+   No existing key changes: every stored scope holds only `org`/`resource`/`thread` entries, whose order is unchanged. Ties only arise between entries of one old level, and the only such pairs are `:uncurated` companions (`resource:x`, `resource:x:uncurated`), where one is a prefix of the other, so either comparison puts the shorter first. Those rows fail the one-per-level rule anyway (item 6, D9). A new level can't move a key either. Its position comes from its own name, so a key containing only older levels is unaffected, and a key containing it is new. Today's `localeCompare` (`:719`) is replaced by plain code-unit comparison so keys can't differ between machines.
 4. **Subset containment narrows** (`isKnowledgeScopeVisible`, `:728-731`). A record is visible only to runs holding every one of its tags, so every extra tag narrows who can read it. That's the intended model:
    - A record at `org:acme` + `team:director` is visible to every run holding both, whatever else it holds.
    - A record that also carries `request:r25` is visible only to runs tagged `request:r25`.
@@ -123,8 +125,9 @@ At the rebase, #28318's `canonicalizeKnowledgeScope` conflicts with the alpha's 
 
 **Factory routes read the scope array, so they change too.** `mastracode/factory/src/routes/knowledge.ts`:
 - `deepestRung` (`:316-325`) returns `org` for any scope without `resource`/`thread`, so a record at `[org:x, project:p]` would be reported as org-level in the UI payload.
+- `view.scope.slice(0, 1)` and `slice(0, 2)` (`:636-640`) assume the org comes first and the resource second, which no longer holds for a scope without an org tag.
 - `withinViewBoundary` (`:327-334`) tests an index-by-index prefix of the canonical array. `project:` sorts after `thread`, so `[org:x, project:p]` is not a prefix of the view `[org:x, resource:r, thread:t, project:p]` even though subset containment makes it visible. Sibling-project filtering in the member lens would hide content it should show.
-- Both are rewritten to subset containment, with a Factory route test.
+- All three are rewritten to subset containment, with a Factory route test that uses a project tag.
 
 **What Mastra Code passes.** The API is `createMastraCode({ knowledge: { instance, scopes? } })`. The `key` goes away with Memory's `knowledge` option (D4), and so do v4's `organizationId`/`resourceId` overrides.
 - The SDK sets the agent's `scopes` to the caller's `scopes` plus the session's own tags.
@@ -153,9 +156,11 @@ At the rebase, #28318's `canonicalizeKnowledgeScope` conflicts with the alpha's 
 - **Write** (write tools on): one durable fact per record; append to an existing node before creating a new one; record a change as a new dated record rather than rewriting; remove only records that are wrong.
 - **Pins** (pin tools on): `PINNED_INSTRUCTIONS` from `curate.ts:54`, reused verbatim. Its first sentence addresses the curator ("Maintain the pin set…"), but it already speaks to whoever holds the pin tools, so it fits the main agent unchanged.
 
-**Where it's injected.** A `KnowledgeInstructionsProcessor` in `core/knowledge`, modelled on `WorkspaceInstructionsProcessor` (`processors/processors/workspace-instructions.ts:77-95`): `processInputStep` calls `messageList.addSystem(...)`. The Agent adds it next to the workspace-instructions processor (`agent.ts:1836-1856`), with the same de-duplication by processor id, so an app that configures its own copy isn't doubled.
+**Where it's injected.** A `KnowledgeInstructionsProcessor` in `core/knowledge`, modelled on `WorkspaceInstructionsProcessor` (`processors/processors/workspace-instructions.ts:77-95`): `processInputStep` calls `messageList.addSystem(...)`. The Agent adds it next to the workspace-instructions processor (assembled at `agent.ts:2450`, returned as `[...memory, ...workspace, ...skills, ...channel, ...browser, ...configured]` at `:2465-2470`), so it lands after the memory processors. Its fixed id is `'knowledge-instructions-processor' as const`, de-duplicated like the workspace one (`workspace-instructions.ts:54`), so an app that configures its own copy isn't doubled.
 
-**Caching.** The block is static: its text depends only on which tool groups are on and the app's override. It never depends on run scopes, pins, search results or time. So it's identical every turn and the cached prefix holds. Pins stay in their own state-signal lane (section 3), not here.
+**Caching.** The block's text is stable: it depends only on which tool groups are on and the app's override, never on run scopes, pins, search results or time. Its position follows the memory processors, so it sits behind OM's system block, which changes when observations activate (not every turn). The block doesn't make the prefix stable by itself; it just never breaks it. The tool schemas, which most providers place before the system prompt, are also stable: the write tools' scope enum lists the run's tag *types*, not values, so it's identical for every run holding the same types and differs only between runs with different type sets (for example with and without a thread). Pins stay in their own state-signal lane (section 3), not here.
+
+The pin part is included whenever pin tools exist, but the pins processor skips runs without a resource or thread id (`runner.ts:503-510`). In such a run the block describes pins while none are shown. That's harmless and accepted.
 
 **Override API.**
 ```ts
@@ -223,7 +228,7 @@ Counted with `estimateTokenCount` from tokenx, which is already a core dependenc
 - A Mastra Code agent still has its knowledge tools and pins after the SDK rewire.
 - The TUI renders an old thread containing `subconscious-activity` signals without printing them.
 - Instructions: an agent with read tools only gets the read part and no write or pin parts. With write tools it also gets the write part. With pins it also gets `PINNED_INSTRUCTIONS`, byte-equal to `curate.ts:54`. The block is byte-identical across two turns with different scopes and pin changes. `instructions: false` removes it, a string replaces it, and a function extends it. An app-configured processor with the same id isn't doubled.
-- Store: new-level keys sort by code unit independent of locale, checked with `-`, `_` and digits in type names (`a-b`, `a_b`, `a1`, `ab`, `a`). Two values of one level are refused. A `thread` tag without `resource` is refused, and one without `org` is accepted.
+- Store: new-level keys sort by type name then value, each by code unit, independent of locale, checked with `-`, `_` and digits in type names (`a`, `a-b`, `a_b`, `a1`, `ab`). Two values of one level are refused. A `thread` tag without `resource` is refused, and one without `org` is accepted.
 - Store boundary: `canonicalizeKnowledgeScope` with 9 entries throws, called directly and through each adapter's read and write, not only through a run.
 - Factory routes: a record at `[org:x, project:p]` is reported at its own rung, not `org`, and is shown in a view `[org:x, resource:r, thread:t, project:p]`. A Factory-called write or read with no `org:` tag is refused.
 - For each, a red control showing the test fails without the change.
