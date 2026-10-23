@@ -22,8 +22,8 @@ describe('workflow.fail publish fails after retry exhaustion', () => {
     vi.restoreAllMocks();
   });
 
-  it.each([0, 1, 2])(
-    'fails the run when %i workflow.fail publishes throw',
+  it.each([0, 1, 2, 3])(
+    'handles %i workflow.fail publish failures',
     async failPublishes => {
       const workflowId = `fail-publish-${randomUUID()}`;
       let executions = 0;
@@ -83,8 +83,15 @@ describe('workflow.fail publish fails after retry exhaustion', () => {
         runId: run.runId,
       });
 
-      expect(failAttempts).toBe(failPublishes + 1);
       expect(executions).toBe(3);
+      if (failPublishes === 3) {
+        // Bounded give-up: no more publishes, run left for recoverActiveRuns().
+        expect(failAttempts).toBe(3);
+        expect(result).toBe('HANG');
+        expect(stored?.status).toBe('running');
+        return;
+      }
+      expect(failAttempts).toBe(failPublishes + 1);
       expect(result).not.toBe('HANG');
       expect((result as { status: string }).status).toBe('failed');
       expect(stored?.status).toBe('failed');
