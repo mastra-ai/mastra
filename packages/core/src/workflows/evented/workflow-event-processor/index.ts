@@ -3744,6 +3744,14 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (pendingFailure) {
       return this.#publishPendingFailure(event, eventKey, pendingFailure);
     }
+    // Budget already spent but the pending entry was evicted from the bounded
+    // map: retry the publish instead of rerunning the handler.
+    if ((this.deliveryAttempts.get(eventKey) ?? 0) >= WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS) {
+      return this.#publishPendingFailure(event, eventKey, {
+        error: new Error(`Event ${event.type} exhausted its delivery attempts`),
+        publishAttempts: 0,
+      });
+    }
 
     try {
       await this.#dispatch(event);

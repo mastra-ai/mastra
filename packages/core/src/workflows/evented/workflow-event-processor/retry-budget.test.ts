@@ -202,6 +202,74 @@ describe('WorkflowEventProcessor retry budget (Sig D)', () => {
     await mastra.shutdown();
   });
 
+  it('retries the workflow.fail publish, not the handler, when the pending entry was evicted', async () => {
+    const inner = new EventEmitterPubSub();
+    let rejectFailPublish = true;
+    const pubsub = new Proxy(inner, {
+      get(target, prop) {
+        if (prop === 'publish') {
+          return async (topic: string, event: Event, options?: { localOnly?: boolean }) => {
+            if (topic === 'workflows' && event.type === 'workflow.fail' && rejectFailPublish) {
+              throw new Error('injected workflow.fail publish failure');
+            }
+            return target.publish(topic, event, options);
+          };
+        }
+        const value = Reflect.get(target, prop, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+    const mastra = new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      workflows: { wf: makeWorkflow('wf') } as any,
+      pubsub,
+    });
+
+    const failRuns: string[] = [];
+    await inner.subscribe('workflows', async event => {
+      if (event.type === 'workflow.fail') failRuns.push(event.runId);
+    });
+
+    const processor = new AlwaysThrowsProcessor({ mastra });
+    const cap = (WorkflowEventProcessor as unknown as { DELIVERY_ATTEMPTS_MAX_ENTRIES: number })
+      .DELIVERY_ATTEMPTS_MAX_ENTRIES;
+    const exhaust = async (event: Event) => {
+      for (let i = 0; i < 3; i++) await processor.handle(event);
+    };
+
+    // `cap - 1` other events exhaust first, each leaving a pending failure.
+    const others = Array.from({ length: cap - 1 }, (_, i) => makeStartEvent('wf', `run-other-${i}`, `other-${i}`));
+    for (const event of others) await exhaust(event);
+
+    // Target exhausts next: delivery counter is 3, its first publish fails.
+    const target = makeStartEvent('wf', 'run-target', 'target');
+    await exhaust(target);
+
+    // Redeliveries of the others refresh their pending entries, then one more
+    // event exhausts, pushing the target's pending entry out while its
+    // delivery counter (older entries evict first there) is still 3.
+    for (const event of others) await processor.handle(event);
+    await exhaust(makeStartEvent('wf', 'run-last', 'last'));
+    const internals = processor as unknown as {
+      pendingFailures: Map<string, unknown>;
+      deliveryAttempts: Map<string, number>;
+    };
+    expect(internals.pendingFailures.has('target')).toBe(false);
+    expect(internals.deliveryAttempts.get('target')).toBe(3);
+
+    rejectFailPublish = false;
+    const dispatchBefore = processor.dispatchCalls;
+    expect(await processor.handle(target)).toEqual({ ok: false, retry: false });
+
+    // The handler must not rerun; the redelivery only retries the publish.
+    expect(processor.dispatchCalls).toBe(dispatchBefore);
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(failRuns).toContain('run-target');
+
+    await mastra.shutdown();
+  });
+
   it('clears the counter on success so a later transient failure gets a fresh budget', async () => {
     const pubsub = new EventEmitterPubSub();
     const mastra = new Mastra({
