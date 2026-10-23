@@ -186,7 +186,7 @@ export const processingBudgetSchema = z
     inputMicrosPerToken: z.number().int().nonnegative(),
     outputMicrosPerToken: z.number().int().nonnegative(),
     pricingAssumption: text,
-    timeoutMs: z.number().int().min(1).max(120000),
+    timeoutMs: z.number().int().min(1).max(240000),
     maxResponseBytes: z
       .number()
       .int()

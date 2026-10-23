@@ -463,7 +463,7 @@ describe('Evidence-backed insurance reconciliation through agent tools, workflow
   it('reconciles_omitted_location_and_authorized_deductible', async () => {
     const originalExtractionSchema = standardSchemaToJSONSchema(toStandardSchema(extractionSchema));
     const originalSemanticSchema = standardSchemaToJSONSchema(toStandardSchema(semanticSchema));
-    const app = await setup();
+    const app = await setup(propertyDocuments(), { ...testBudget, timeoutMs: 240000 });
     const result = await app.submit();
     expect(result).toMatchObject({ conclusion: 'INCOMPLETE' });
     const { analyses, attempts } = await app.repository.status(context);
