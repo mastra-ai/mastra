@@ -171,6 +171,14 @@ export class WorkflowEventProcessor extends EventProcessor {
   // the same logical event short-circuits as terminal and does NOT re-run
   // errorWorkflow or reset the per-event budget.
   private static readonly TERMINAL_SENTINEL = Number.POSITIVE_INFINITY;
+  // Events that exhausted their budget but whose workflow.fail publish threw.
+  // A redelivery skips the handler and retries the publish; the event only
+  // turns TERMINAL once the publish lands or MAX_FAIL_PUBLISH_ATTEMPTS is hit.
+  // Without this, a live caller awaiting workflows-finish never hears back.
+  private pendingFailures: Map<string, { error: Error; publishAttempts: number }> = new Map();
+  // Bounded so the total (3 handler + 2 republish deliveries) stays within the
+  // tightest transport redelivery cap (RedisStreamsPubSub: 5 deliveries).
+  private static readonly MAX_FAIL_PUBLISH_ATTEMPTS = 3;
   // Upper bound on entries kept in deliveryAttempts so a long-lived processor
   // can't grow the map without limit. When the map exceeds this size we evict
   // the oldest entries in insertion order (Map preserves insertion order). The
@@ -3732,6 +3740,11 @@ export class WorkflowEventProcessor extends EventProcessor {
       return { ok: false, retry: false };
     }
 
+    const pendingFailure = this.pendingFailures.get(eventKey);
+    if (pendingFailure) {
+      return this.#publishPendingFailure(event, eventKey, pendingFailure);
+    }
+
     try {
       await this.#dispatch(event);
       this.deliveryAttempts.delete(eventKey);
@@ -3758,37 +3771,62 @@ export class WorkflowEventProcessor extends EventProcessor {
 
       // Transport-level retries are exhausted. Surface as a terminal workflow
       // failure so any caller awaiting workflows-finish (e.g. agent.generate())
-      // sees an error instead of hanging forever. Replace the counter with a
-      // TERMINAL sentinel so any later redelivery of the same logical event
-      // short-circuits at the top of handle() instead of rerunning
-      // errorWorkflow or resetting the budget.
-      this.#setDeliveryAttempts(eventKey, WorkflowEventProcessor.TERMINAL_SENTINEL);
-      try {
-        const failWorkflowData = event.data as Omit<ProcessorArgs, 'workflow'>;
-        // Never republish workflow.fail for an event that IS workflow.fail.
-        // Each publish gets a fresh event id (fresh retry bucket), so with a
-        // persistently-broken dependency (e.g. missing workflows table) the
-        // fail event would exhaust its own budget and publish another
-        // workflow.fail forever.
-        if (
-          event.type !== 'workflow.fail' &&
-          failWorkflowData &&
-          failWorkflowData.workflowId &&
-          failWorkflowData.runId
-        ) {
-          await this.errorWorkflow(failWorkflowData, getErrorFromUnknown(err));
-        }
-      } catch (failErr) {
-        this.mastra
-          .getLogger()
-          ?.error('WorkflowEventProcessor.handle: failed to publish workflow.fail after retry exhaustion', {
-            type: event.type,
-            runId: event.runId,
-            error: failErr,
-          });
+      // sees an error instead of hanging forever.
+      const failWorkflowData = event.data as Omit<ProcessorArgs, 'workflow'> | undefined;
+      // Never republish workflow.fail for an event that IS workflow.fail.
+      // Each publish gets a fresh event id (fresh retry bucket), so with a
+      // persistently-broken dependency (e.g. missing workflows table) the
+      // fail event would exhaust its own budget and publish another
+      // workflow.fail forever.
+      if (event.type === 'workflow.fail' || !failWorkflowData?.workflowId || !failWorkflowData.runId) {
+        this.#setDeliveryAttempts(eventKey, WorkflowEventProcessor.TERMINAL_SENTINEL);
+        return { ok: false, retry: false };
       }
-      return { ok: false, retry: false };
+      return this.#publishPendingFailure(event, eventKey, { error: getErrorFromUnknown(err), publishAttempts: 0 });
     }
+  }
+
+  /**
+   * Publish workflow.fail for an event that exhausted its delivery budget. If
+   * the publish throws, ask the transport to redeliver so the next delivery
+   * retries the publish (skipping the handler). Once the publish lands, or
+   * after MAX_FAIL_PUBLISH_ATTEMPTS, the event becomes TERMINAL so later
+   * redeliveries short-circuit at the top of handle().
+   */
+  async #publishPendingFailure(
+    event: Event,
+    eventKey: string,
+    pending: { error: Error; publishAttempts: number },
+  ): Promise<{ ok: false; retry: boolean }> {
+    const publishAttempts = pending.publishAttempts + 1;
+    try {
+      await this.errorWorkflow(event.data as Omit<ProcessorArgs, 'workflow'>, pending.error);
+    } catch (failErr) {
+      const giveUp = publishAttempts >= WorkflowEventProcessor.MAX_FAIL_PUBLISH_ATTEMPTS;
+      this.mastra
+        .getLogger()
+        ?.error('WorkflowEventProcessor.handle: failed to publish workflow.fail after retry exhaustion', {
+          type: event.type,
+          runId: event.runId,
+          publishAttempts,
+          maxPublishAttempts: WorkflowEventProcessor.MAX_FAIL_PUBLISH_ATTEMPTS,
+          terminal: giveUp,
+          error: failErr,
+        });
+      if (!giveUp) {
+        this.pendingFailures.delete(eventKey);
+        this.pendingFailures.set(eventKey, { error: pending.error, publishAttempts });
+        while (this.pendingFailures.size > WorkflowEventProcessor.DELIVERY_ATTEMPTS_MAX_ENTRIES) {
+          const oldestKey = this.pendingFailures.keys().next().value;
+          if (oldestKey === undefined) break;
+          this.pendingFailures.delete(oldestKey);
+        }
+        return { ok: false, retry: true };
+      }
+    }
+    this.pendingFailures.delete(eventKey);
+    this.#setDeliveryAttempts(eventKey, WorkflowEventProcessor.TERMINAL_SENTINEL);
+    return { ok: false, retry: false };
   }
 
   /**
