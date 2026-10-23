@@ -44,7 +44,7 @@ const MISSING_INPUTS: [string, Record<string, unknown>][] = [
 describeForAllEngines('AIMock scenario: stored tool call without input', engine => {
   const getMock = useLoopScenarioAimock();
 
-  it.each(MISSING_INPUTS)('replays a stored tool-invocation with %s as an empty object', async (_label, args) => {
+  async function replayStoredInvocation(invocation: Record<string, unknown>) {
     const memory = new MockMemory();
     const threadId = `stored-no-input-${engine}`;
     const resourceId = 'user-stored-no-input';
@@ -72,13 +72,7 @@ describeForAllEngines('AIMock scenario: stored tool call without input', engine 
             parts: [
               {
                 type: 'tool-invocation',
-                toolInvocation: {
-                  state: 'output-error',
-                  errorText: ERROR_TEXT,
-                  toolCallId: 'call-stored',
-                  toolName: 'team_status',
-                  ...args,
-                },
+                toolInvocation: { toolCallId: 'call-stored', toolName: 'team_status', ...invocation },
               },
             ],
           },
@@ -103,14 +97,35 @@ describeForAllEngines('AIMock scenario: stored tool call without input', engine 
     expect(await run.output.text).toBe('Still here.');
     expect(run.requests).toHaveLength(1);
     const body = run.requests[0]!.body as any;
+    const stored = await memory.recall({ threadId, resourceId });
+    const storedPart = (stored.messages.find(m => m.id === 'm-assistant')!.content as any).parts[0];
+    return { body, storedInvocation: storedPart.toolInvocation };
+  }
+
+  it.each(MISSING_INPUTS)('replays a stored tool-invocation with %s as an empty object', async (_label, args) => {
+    const { body, storedInvocation } = await replayStoredInvocation({
+      state: 'output-error',
+      errorText: ERROR_TEXT,
+      ...args,
+    });
     expect(replayedCall(body)).toEqual(expect.objectContaining({ function: { name: 'team_status', arguments: '{}' } }));
     // The error result stays paired with the call.
     const result = body.messages.find((m: any) => m.role === 'tool' && m.tool_call_id === 'call-stored');
     expect(result.content).toContain('received invalid arguments');
-
     // The stored row is untouched.
-    const stored = await memory.recall({ threadId, resourceId });
-    const part = (stored.messages.find(m => m.id === 'm-assistant')!.content as any).parts[0];
-    expect(part.toolInvocation.args).toBe((args as any).args);
+    expect(storedInvocation.args).toBe((args as any).args);
+  });
+
+  // `''` is a real stored argument (a call that succeeded with it), not a parse failure: it must not become `{}`.
+  it('replays a successful stored call whose argument is an empty string unchanged', async () => {
+    const { body, storedInvocation } = await replayStoredInvocation({
+      state: 'result',
+      args: '',
+      result: { ok: true },
+    });
+    expect(replayedCall(body)).toEqual(expect.objectContaining({ function: { name: 'team_status', arguments: '""' } }));
+    const result = body.messages.find((m: any) => m.role === 'tool' && m.tool_call_id === 'call-stored');
+    expect(JSON.parse(result.content)).toEqual({ ok: true });
+    expect(storedInvocation.args).toBe('');
   });
 });
