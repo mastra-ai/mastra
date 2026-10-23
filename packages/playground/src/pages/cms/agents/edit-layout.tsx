@@ -82,7 +82,7 @@ function EditFormContent({
           onClick={() => void handlePublish(selectedVersionId ?? undefined)}
           disabled={selectedVersionId === activeVersionId}
         >
-          Publish This Version
+          Publish this version
         </Button>
       </div>
     </Notice>
@@ -330,7 +330,7 @@ function EditLayoutWrapper() {
             ) : (
               <>
                 <Check />
-                {isViewingPreviousVersion ? 'Publish This Version' : 'Publish'}
+                {isViewingPreviousVersion ? 'Publish this version' : 'Publish'}
               </>
             )}
           </Button>

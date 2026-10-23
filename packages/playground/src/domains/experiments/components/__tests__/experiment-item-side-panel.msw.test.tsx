@@ -182,7 +182,7 @@ describe('ExperimentItemSidePanel', () => {
       renderExperimentPage(itemPath);
       await findInlineResult();
 
-      fireEvent.click(screen.getByRole('button', { name: 'Close Panel' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Close panel' }));
 
       await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/experiments/exp-1'));
       expect(screen.queryByTestId('collapsible-route-side-panel')).toBeNull();

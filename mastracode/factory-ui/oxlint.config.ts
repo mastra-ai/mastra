@@ -11,11 +11,17 @@ export default defineConfig({
     'typescript/no-unnecessary-template-expression': 'error',
     'typescript/no-unnecessary-type-arguments': 'error',
     'typescript/no-unnecessary-type-parameters': 'error',
+    'mastra/sentence-case-labels': 'error',
   },
   overrides: [
     {
       files: ['**/*.{ts,tsx}'],
       rules: { 'typescript/no-floating-promises': 'off', 'typescript/no-misused-promises': 'off' },
+    },
+    {
+      // Test stubs aren't UI people see.
+      files: ['src/**/*.{test,spec}.*', 'src/**/__tests__/**'],
+      rules: { 'mastra/sentence-case-labels': 'off' },
     },
   ],
 });
