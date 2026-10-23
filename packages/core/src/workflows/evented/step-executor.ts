@@ -1,10 +1,12 @@
 import { TripWire } from '../../agent/trip-wire';
 import type { ActorSignal } from '../../auth/ee';
 import { MastraBase } from '../../base';
+import { InMemoryServerCache } from '../../cache/inmemory';
 import type { RequestContext } from '../../di';
 import { MastraError, MastraNonRetryableError, ErrorDomain, ErrorCategory } from '../../error';
 import { getErrorFromUnknown } from '../../error/utils.js';
 import { CachingPubSub } from '../../events/caching-pubsub';
+import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { PubSub } from '../../events/pubsub';
 import { isRunLocalTopic } from '../../events/topics';
 import { RegisteredLogger } from '../../logger';
@@ -55,6 +57,11 @@ export class StepExecutor extends MastraBase {
    *
    * Reusing an existing `CachingPubSub`, or wrapping the bus with one that
    * shares `mastra.serverCache`, puts every frame through one append path.
+   *
+   * A process-local cache only numbers frames correctly when every publisher
+   * shares it. Behind a cross-process transport, each process would number its
+   * own frames from 0 and observers would drop the worker's frames as late
+   * duplicates, so those steps publish unnumbered (live-only), as before.
    */
   #getStepPubsub(): PubSub {
     if (this.#stepPubsub) return this.#stepPubsub;
@@ -62,7 +69,7 @@ export class StepExecutor extends MastraBase {
     const cache = this.mastra?.serverCache;
     if (inner instanceof CachingPubSub) {
       this.#stepPubsub = inner;
-    } else if (cache) {
+    } else if (cache && !(cache instanceof InMemoryServerCache && !(inner.__rawBus() instanceof EventEmitterPubSub))) {
       this.#stepPubsub = new CachingPubSub(inner, cache, {
         // Run-local watch events are per-process fan-out (often megabytes of
         // cumulative step results) and must never land in a shared cache.

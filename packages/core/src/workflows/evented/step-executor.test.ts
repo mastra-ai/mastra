@@ -6,7 +6,7 @@ import { InMemoryServerCache } from '../../cache/inmemory';
 import { MastraError } from '../../error';
 import { CachingPubSub } from '../../events/caching-pubsub';
 import { EventEmitterPubSub } from '../../events/event-emitter';
-import type { PubSub } from '../../events/pubsub';
+import { PubSub } from '../../events/pubsub';
 import type { Event } from '../../events/types';
 import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
@@ -563,6 +563,36 @@ describe('StepExecutor', () => {
       expect(cached.map(event => event.index)).toEqual([0]);
       expect(live[0]?.index).toBe(0);
       expect(stepPubsub).toBe(target.pubsub);
+    });
+
+    it('publishes step frames unnumbered when a process-local cache sits behind a cross-process transport', async () => {
+      // Stands in for a transport that reaches other processes (Redis, Unix socket).
+      class RemoteTransport extends PubSub {
+        readonly bus = new EventEmitterPubSub();
+        publish(...args: Parameters<PubSub['publish']>) {
+          return this.bus.publish(...args);
+        }
+        subscribe(...args: Parameters<PubSub['subscribe']>) {
+          return this.bus.subscribe(...args);
+        }
+        unsubscribe(...args: Parameters<PubSub['unsubscribe']>) {
+          return this.bus.unsubscribe(...args);
+        }
+        flush() {
+          return this.bus.flush();
+        }
+      }
+      const cache = new InMemoryServerCache();
+      const context = await captureStepPubsub(new Mastra({ pubsub: new RemoteTransport(), cache }));
+      const stepPubsub = context[PUBSUB_SYMBOL] as PubSub;
+      const topic = AGENT_STREAM_TOPIC('run-remote');
+
+      // Each process would number from its own in-memory counter, and the
+      // observer would drop the worker's frames as late duplicates.
+      await stepPubsub.publish(topic, { type: 'chunk', runId: 'run-remote', data: { n: 0 } } as any);
+
+      expect(stepPubsub).not.toBeInstanceOf(CachingPubSub);
+      expect(await cache.listLength(`pubsub:${topic}`)).toBe(0);
     });
 
     it('does not cache run-local step events even when the cache is atomic', async () => {

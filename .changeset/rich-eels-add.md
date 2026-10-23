@@ -10,4 +10,4 @@ On the evented engine, a run's frames, abort requests and execution leases now u
 
 Because every frame is in the log before it reaches the transport, a frame the transport delivers late is filled in from the log at its original position instead of being dropped. This includes reasoning from an attempt a signal preempted, which clients already see when it arrives on time; it is still kept out of memory and the replacement request.
 
-When no shared cache is configured, `observe({ offset })` is live-only: observers see the live tail but cannot resume from an offset.
+When no shared cache is configured, `observe({ offset })` is live-only: observers see the live tail but cannot resume from an offset. With the default in-memory cache and a transport that reaches other processes, evented steps publish their frames uncached, as before, because each process would otherwise number frames from its own counter.
