@@ -347,7 +347,23 @@ export type ConnectionContext = z.infer<typeof connectionContextSchema>;
 
 // —— endpoint functions ——
 
+function assertProjectId(projectId: string): void {
+  if (!projectId?.trim()) {
+    throw new MastraConnectError(
+      'missing_project_id',
+      'Missing project id: pass the project whose connections to use.',
+    );
+  }
+}
+
+function assertConnectionId(connectionId: string): void {
+  if (!connectionId?.trim()) {
+    throw new MastraConnectError('missing_connection_id', 'Missing connection id.');
+  }
+}
+
 export async function listProjectConnections(client: ResolvedClient, projectId: string): Promise<ProjectConnection[]> {
+  assertProjectId(projectId);
   // A resource-scoped client lists global + that resource's connections in one
   // round trip; an unscoped client keeps the platform's fail-safe default
   // (global-only), so pre-resourceId deployments never see end-user rows.
@@ -409,6 +425,7 @@ export async function getProjectIntegrationSettings(
 }
 
 export async function getConnectionContext(client: ResolvedClient, connectionId: string): Promise<ConnectionContext> {
+  assertConnectionId(connectionId);
   const response = await platformFetch(client, `/v2/connections/${encodeURIComponent(connectionId)}/context`);
   if (!response.ok) {
     await throwPlatformError(response, `retrieving context for connection ${connectionId}`);
@@ -539,6 +556,7 @@ export async function proxyRequestWithResponse(
   connectionId: string,
   options: ProxyRequestOptions,
 ): Promise<ProxyResponse> {
+  assertConnectionId(connectionId);
   const cleanPath = options.path.replace(/^\/+/, '');
   if (hasDotSegment(cleanPath)) {
     throw new MastraConnectError(
