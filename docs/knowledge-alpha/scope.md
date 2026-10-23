@@ -1,15 +1,15 @@
-# Knowledge alpha scope, v15 (report 20261023T223907)
+# Knowledge alpha scope, v16 (report 20261023T223907)
 
 Everything here was checked against main `b1244bd3bc0`.
 
 v12 follows Tyler's comment on Kayle's dogfood plan (v45), which supersedes v5–v11's scope model:
-- Scope types come from the Knowledge structure (`org:$orgId`, `org:*`, `project:*`). Nothing is hard-coded; only `resource` and `thread` are conventions, and Knowledge adds them from the run.
+- Scope types come from the Knowledge structure (`org:$orgId`, `team:$orgId:$teamId`, `project:$projectId`), with `$param` patterns only. Nothing is hard-coded; only `resource` and `thread` are conventions, and Knowledge adds them from the run.
 - `canonicalizeKnowledgeScope` stops rejecting; the org throw goes.
 - Knowledge tools take a `scope` argument, bounded by the scopes the agent threads through.
 - A scope can own other scopes (org owns teams) through the structure.
 - Everything Knowledge leaves Memory for core, including the pins state-signal provider, and pins work without Memory.
 
-v15 folds Fayth's v12 review (ownership binding, runner in-run path, remaining Factory readers). v14 removes the built-in project scope (Tyler) and adds D13, how org-owns-team is held. v13 added the Director dogfood gap list (Kayle): a scope per message on long-lived sessions, many processes on one LibSQL file, an explicit off switch, and undeclared tag types (D12).
+v16 drops the `*` wildcard (Tyler approved `$param` only). v15 folded Fayth's v12 review (ownership binding, runner in-run path, remaining Factory readers). v14 removes the built-in project scope (Tyler) and adds D13, how org-owns-team is held. v13 added the Director dogfood gap list (Kayle): a scope per message on long-lived sessions, many processes on one LibSQL file, an explicit off switch, and undeclared tag types (D12).
 
 Carried from earlier versions: Knowledge reads the run's tagged scopes; `organizationId` and `knowledgeResourceId` are deleted; pins stay a prompt-cacheable state signal; Knowledge ships its own usage instructions (section 3b).
 
@@ -69,7 +69,7 @@ const tools = company.createTools({ write: true }); // explicit wiring
 
 ## 3. Scopes come from the run and the Knowledge structure
 
-Tyler's direction (comment on Kayle's dogfood plan v45): scopes are never hard-coded; the Knowledge structure defines them (`org:$orgId`, `org:*`, `project:*`, …); only `resource` and `thread` are known conventions, from Memory; Knowledge tools take a `scope` argument threaded through from the agent; an org scope can own team scopes and access them.
+Tyler's direction (comment on Kayle's dogfood plan v45): scopes are never hard-coded; the Knowledge structure defines them (`org:$orgId`, `project:$projectId`, …; Tyler later approved `$param` only, no `*` wildcard); only `resource` and `thread` are known conventions, from Memory; Knowledge tools take a `scope` argument threaded through from the agent; an org scope can own team scopes and access them.
 
 **Knowledge reads the run's scopes, and nothing else.**
 - On main, agent methods already take `scopes: string[]` (`agent.types.ts:467-472` for generate/stream, `:620-625`), Agents take `scopes` (`types.ts:838-841`), and `mastra__scopes` carries them in the request context. `resolveAgentScopes` (`agent/scopes.ts:201-215`) unions the three. Each tag is `<type>:<value>`, e.g. `org:acme`, `team:director`, `request:r25`. The value may itself contain `:` (`team:acme:director`).
@@ -84,7 +84,7 @@ Tyler's direction (comment on Kayle's dogfood plan v45): scopes are never hard-c
   - `IDENTITY_SCOPE_PATTERNS` (`reconcile.ts:195`) lists `org:$orgId`. It keeps only resource and thread.
   - In the store: `KnowledgeScopeLevel = 'org'|'resource'|'thread'` (`storage/domains/knowledge/base.ts:6`), `SCOPE_ORDER` (`:680`), the level check and throw in `canonicalizeKnowledgeScope` (`:693`), one-entry-per-level (`:697-700`), the ancestor rules (`:706-711`), `expandKnowledgeScope` (`:748`). All removed (section 3a).
 - **Undeclared tags work.** A run can read and write a tag type the structure doesn't declare. It falls to `custom` (main's existing fallback, `reconcile.ts:135-150`), which gives the holder owner rights over its own tag and nothing more. Declaring a type adds what the structure can say about it: a description, `children` templates, and **who owns it** (below). Only ownership needs a declaration: an undeclared type can't be owned by another scope. D12 offers a strict mode instead.
-- **Wildcards.** `matchPattern` (`reconcile.ts:224-240`) understands only `$param` captures and literal segments. The alpha adds `*`: a segment that matches any non-empty value and captures nothing. `assertPattern` (`:257-271`) accepts it, and `patternsOverlap` treats it like `$param`. So `'org:*'` and `'project:*'` are valid type patterns.
+- **Patterns are `$param` only** (Tyler). `matchPattern` (`reconcile.ts:224-240`), `assertPattern` (`:257-271`) and `patternsOverlap` are unchanged: no `*` wildcard is added.
 
 **Ownership: a scope can own other scopes.**
 - Declared with main's existing `access` on a scope type, whose `principal` already accepts a pattern string (`KnowledgeScopeAccessConfig`, `reconcile.ts:9-13`), and main's roles `readonly | append | edit | owner`:
@@ -93,16 +93,14 @@ Tyler's direction (comment on Kayle's dogfood plan v45): scopes are never hard-c
     'org:$orgId': { description: 'The company' },
     // tenant-bound: the team address carries its org, so only that org owns it
     'team:$orgId:$teamId': { access: [{ principal: 'org:$orgId', role: 'owner' }] },
-    // single-tenant only: any org tag owns every project. Cross-tenant by
-    // construction (org:A owns project:B), so a multi-tenant app such as
-    // Factory must never declare it.
-    'project:*': { access: [{ principal: 'org:*', role: 'edit' }] },
+    // an app that wants projects declares them; the alpha has none built in
+    'project:$projectId': { description: 'A project' },
   }
   ```
 - **The check** (new, in core Knowledge, about 30 lines): a run may use scope `S` if it holds `S`, or it holds a tag that matches an `access` principal on `S`'s type, with `$params` bound from `S`'s own address. `org:acme` owns `team:acme:director` but not `team:other:director`. Reads need any role; writes need `append` or more; remove, rescope and merge need `edit` or more.
 - **Binding rules**, so a named scope can't manufacture ownership:
-  - `*` and `$…` are refused as a whole segment in any run tag or `scope` value (shape check in canonicalize and in the tools' `scope` validator). `*` is a wildcard only when written in config.
-  - After `$params` are bound from `S`, the principal is compared to the held tag by **exact string equality**. A principal with a config-written `*` (`org:*`) is matched as a pattern against held tags, never against the named scope. So naming `team:*:director` is refused, and a held `org:*` tag is refused at the shape check.
+  - `$…` is refused as a whole segment in any run tag or `scope` value (shape check in canonicalize and in the tools' `scope` validator), so a named scope can't look like a pattern.
+  - After `$params` are bound from `S`, the principal is compared to the held tag by **exact string equality**. With no wildcard, a principal that binds to `org:acme` is owned only by a run holding exactly `org:acme`.
   - `validateKnowledgeScopeTypes` refuses, at construction, a principal that uses a `$param` absent from its type's pattern, so `substituteParameters` (`reconcile.ts`) can't throw at call time.
   - The `self` and `parent` principals resolve against materialization input (`resolvePrincipal`), which the call-time check doesn't have. The check ignores them: holding the scope already covers `self`, and `parent` stays a materialization-only notion.
   - Tags with extra `:` in the value (`resource:x:uncurated`) don't match a pattern by segment count and fall to `custom`.
@@ -171,7 +169,7 @@ Tyler's direction (comment on Kayle's dogfood plan v45): scopes are never hard-c
 
 **No existing key moves.** Every stored scope holds one `org`, one `resource` and one `thread` entry at most, and code-unit order already puts them `org < resource < thread` (`o` < `r` < `t`), which is what `SCOPE_ORDER` produced. `:uncurated` companions (`resource:x:uncurated`) sort after `resource:x` under both orders (prefix). They're now just a tag of type `resource` with value `x:uncurated` that no run holds: invisible, but rescoping one no longer throws (D9).
 
-The doc comment at `base.ts:207` ("Avoid identity-style addresses such as `org:*`, `resource:*`") now contradicts wildcard patterns and is rewritten.
+The doc comment at `base.ts:207` ("Avoid identity-style addresses such as `org:*`, `resource:*`") stays: with `$param` only, there are no wildcard addresses.
 
 **Visibility is unchanged:** a record is visible to a query scope that contains every one of its tags (`isKnowledgeScopeVisible`, `:728-731`). The read path passes `run tags ∪ named owned scopes` as the query scope, and the 8-entry cap applies to it.
 
@@ -244,7 +242,7 @@ Counted with `estimateTokenCount` from tokenx, which is already a core dependenc
 | Instance `tools` flag | Alpha | Drop the stack's Memory-side wiring: `getKnowledgeToolsConfig`, `#withoutKnowledgeTools`, memory-root `createKnowledgeTools` |
 | Importer-claim guard (remove, rescope, merge) | Wave 2 | Port into the moved core `knowledge-write-tools`; the guard in `curate.ts` disappears with Subconscious |
 | Run-scope reader `getRunAgentScopes` and tag-accepting store | Alpha | Keep one copy of the reader (Wave 2 has the same function). Wave 2's scope nodes, grants and importer scopes build on the alpha's tags, and its own `canonicalizeKnowledgeScope` changes conflict with the alpha's |
-| Scope ownership (`access` on scope types, `*` wildcard, the run-time ownership check) | Alpha | Wave 2's stored grants and scope nodes implement the same `access` config; its own `IDENTITY_SCOPE_PATTERNS`/`BUILT_IN_SCOPE_TYPES` changes conflict with the alpha's removal of `org` |
+| Scope ownership (`access` on scope types with `$param` patterns, the run-time ownership check) | Alpha | Wave 2's stored grants and scope nodes implement the same `access` config; its own `IDENTITY_SCOPE_PATTERNS`/`BUILT_IN_SCOPE_TYPES` changes conflict with the alpha's removal of `org` |
 | State-signal in-run path (`stateSignalWithoutMemory`) | Alpha | None |
 | Token limits | Alpha | Recheck importers that write long record text against the 250-token limit |
 | Factory Knowledge routes (rungs removed, `selectedView` by tag type, subset containment, org-tag refusal) | Alpha | Wave 2's Factory routes and UI scope lens rebase onto them |
@@ -278,10 +276,9 @@ For each, a red control showing the test fails without the change.
 **Structure and ownership**
 - An undeclared type (`request:r25`, no structure entry) can be read and written by a run holding it, and can't be named through ownership.
 - No `org` is built in: a structure without `org:` types still accepts `org:x` tags (as `custom`), and `materializeKnowledgeScopePlan` accepts an `org:` child template.
-- `*` matches: `'project:*'` matches `project:p`, not `project` or `project:a:b`; `org:*` and `org:$orgId` are reported as overlapping.
-- Ownership: with `'team:$orgId:$teamId'` owned by `org:$orgId`, a run holding `org:acme` reads and writes `team:acme:director` through `scope`, and is refused `team:other:director`. With `'project:*'` owned by `org:*` at role `edit`, a run holding any `org:` tag can rescope a project record; with role `readonly` it can read but its write is refused.
+- Ownership: with `'team:$orgId:$teamId'` owned by `org:$orgId`, a run holding `org:acme` reads and writes `team:acme:director` through `scope`, and is refused `team:other:director`. With `'project:$orgId:$projectId'` owned by `org:$orgId` at role `edit`, a run holding `org:acme` can rescope a `project:acme:p` record; with role `readonly` it can read but its write is refused.
 - Ownership on LibSQL and PG, not only InMemory.
-- Naming `team:*:director` is refused; a run tag `org:*` is refused at the shape check; `$x` as a segment is refused.
+- A run tag or named scope with `$x` as a segment is refused; `team:acme:director` is not owned by a run holding `org:acme2`.
 - A principal using a `$param` missing from its type pattern fails at `new Knowledge(...)`, not at the first read.
 - `self`/`parent` principals grant nothing at call time.
 - Run tags plus named scopes over 8 return a tool error naming the cap.
