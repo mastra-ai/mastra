@@ -6,7 +6,6 @@
  * so test isolation is achieved through unique agent IDs and run IDs
  * rather than separate Inngest apps.
  */
-import type { InngestWorkflow } from '../workflow';
 import type { ChildProcess } from 'node:child_process';
 import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
@@ -21,6 +20,7 @@ import { Inngest } from 'inngest';
 
 import { serve as inngestServe } from '../index';
 import type { InngestFlowControlConfig } from '../types';
+import type { InngestWorkflow } from '../workflow';
 import { ensureInngestCliBinary } from './inngest-cli';
 
 // Set INNGEST_TEST_PORT_OFFSET to run several dev servers side by side (one per test worker).
