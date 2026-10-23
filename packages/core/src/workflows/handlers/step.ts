@@ -15,6 +15,7 @@ import type { ObservabilityContext, Span } from '../../observability';
 import { executeWithContext } from '../../observability/utils';
 import { ToolStream } from '../../tools/stream';
 import type { DynamicArgument } from '../../types';
+import { resolveDynamicArgument } from '../../utils/dynamic-argument';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
 import { workflowChildTermination as workflowTermination } from '../execution-outcome';
@@ -702,9 +703,7 @@ export async function runScorersForStep(params: RunScorersParams): Promise<void>
   let scorersToUse = scorers;
   if (typeof scorersToUse === 'function') {
     try {
-      scorersToUse = await scorersToUse({
-        requestContext: requestContext,
-      });
+      scorersToUse = await resolveDynamicArgument(scorersToUse, { requestContext });
     } catch (e) {
       const errorInstance = getErrorFromUnknown(e, { serializeStack: false });
       const mastraError = new MastraError(

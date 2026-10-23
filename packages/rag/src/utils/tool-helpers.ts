@@ -1,5 +1,6 @@
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraUnion } from '@mastra/core/tools';
+import { getRequestUser } from '@mastra/core/utils';
 import type { MastraVector } from '@mastra/core/vector';
 
 import type { VectorStoreResolver } from '../tools/types';
@@ -80,7 +81,11 @@ export async function resolveVectorStore(
     const vectorStoreOption = options.vectorStore as MastraVector | VectorStoreResolver;
     // Support dynamic vector store resolution for multi-tenant setups
     if (typeof vectorStoreOption === 'function') {
-      const resolved = await vectorStoreOption({ requestContext, mastra });
+      const resolved = await vectorStoreOption({
+        requestContext,
+        mastra,
+        user: requestContext ? getRequestUser(requestContext) : undefined,
+      });
 
       // Validate that the resolver returned a valid MastraVector
       if (!isValidMastraVector(resolved)) {

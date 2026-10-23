@@ -1,5 +1,6 @@
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MastraUnion } from '@mastra/core/tools';
+import type { MastraUser } from '@mastra/core/types';
 import type { MastraVector, MastraEmbeddingModel, MastraEmbeddingOptions } from '@mastra/core/vector';
 
 import type { RerankConfig } from '../rerank';
@@ -13,6 +14,8 @@ export interface VectorStoreResolverContext {
   requestContext?: RequestContext;
   /** The Mastra instance for accessing registered resources */
   mastra?: MastraUnion;
+  /** The authenticated end user, when the request was authenticated */
+  user?: MastraUser;
 }
 
 /**
