@@ -1,4 +1,4 @@
-import type { GetObservabilityCapabilitiesResponse, MastraClient } from '@mastra/client-js';
+import type { GetObservabilityCapabilitiesResponse, MastraClient, QuerySpansResult } from '@mastra/client-js';
 import { SpanType } from '@mastra/core/observability';
 import { TraceStatus } from '@mastra/core/storage';
 import type { TraceFilterGroup, TraceFilterToken } from '../../../traces/trace-query-filters';
@@ -102,3 +102,65 @@ export const spanDetailById: Record<string, Awaited<ReturnType<MastraClient['get
     },
   },
 };
+
+type SpanRow = QuerySpansResult['spans'][number];
+
+function makeSpan(overrides: Partial<SpanRow> & Pick<SpanRow, 'traceId' | 'spanId' | 'name'>): SpanRow {
+  return {
+    organizationId: null,
+    resourceId: null,
+    parentSpanId: null,
+    spanType: 'agent_run',
+    status: 'success',
+    startedAt: '2026-10-21T08:00:00.000Z',
+    endedAt: '2026-10-21T08:00:01.000Z',
+    durationMs: 1000,
+    entityType: 'agent',
+    entityId: 'weather-agent',
+    entityName: 'Weather Agent',
+    entityVersionId: null,
+    parentEntityType: null,
+    parentEntityId: null,
+    parentEntityName: null,
+    parentEntityVersionId: null,
+    rootEntityType: null,
+    rootEntityId: null,
+    rootEntityName: null,
+    rootEntityVersionId: null,
+    threadId: null,
+    runId: null,
+    sessionId: null,
+    userId: null,
+    requestId: null,
+    serviceName: null,
+    experimentId: null,
+    environment: null,
+    executionSource: null,
+    model: null,
+    provider: null,
+    inputPreview: null,
+    outputPreview: null,
+    errorPreview: null,
+    ...overrides,
+  };
+}
+
+/** One page of span rows, as `POST /observability/spans/query` returns it. */
+export const spanRowsPage: QuerySpansResult = {
+  spans: [
+    makeSpan({ traceId: 'trace-1', spanId: 'span-1', name: 'agent run: weather' }),
+    makeSpan({
+      traceId: 'trace-1',
+      spanId: 'span-2',
+      parentSpanId: 'span-1',
+      name: 'tool: get-weather',
+      spanType: 'tool_call',
+      entityType: 'tool',
+      entityId: 'get-weather',
+      entityName: 'Get Weather Tool',
+    }),
+  ],
+  page: { next: null },
+};
+
+export const emptySpanRows: QuerySpansResult = { spans: [], page: { next: null } };

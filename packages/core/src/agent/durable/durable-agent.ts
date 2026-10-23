@@ -439,6 +439,11 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   /** When true, the in-loop background task check step skips waiting (streamUntilIdle sets this) */
   _skipBgTaskWait?: boolean;
   /**
+   * @internal
+   * Detach HTTP observers on reader cancellation instead of aborting execution.
+   */
+  _detachObserverOnCancel?: boolean;
+  /**
    * External abort signal. The durable agent always installs its own internal
    * `AbortController` for the run; when this signal is provided, its `abort`
    * event is forwarded to the internal controller so either source can cancel
@@ -1642,8 +1647,8 @@ export class DurableAgent<
       // originals ended above.
       resumeAgentSpan: recoverAgentSpan,
       resumeModelSpan: recoverModelSpan,
-      resumeAgentSpanData: recoverAgentSpan?.exportSpan(),
-      resumeModelSpanData: recoverModelSpan?.exportSpan(),
+      resumeAgentSpanData: recoverAgentSpan?.snapshot?.() ?? recoverAgentSpan?.exportSpan(),
+      resumeModelSpanData: recoverModelSpan?.snapshot?.() ?? recoverModelSpan?.exportSpan(),
       // abortController/abortSignal are installed by
       // #installAbortWithTotalTimeout below, with the run-level budget
       // composed in.
@@ -3851,8 +3856,8 @@ export class DurableAgent<
           if (!reg) continue;
           reg.resumeAgentSpan = resumeAgentSpan;
           reg.resumeModelSpan = resumeModelSpan;
-          reg.resumeAgentSpanData = resumeAgentSpan?.exportSpan();
-          reg.resumeModelSpanData = resumeModelSpan?.exportSpan();
+          reg.resumeAgentSpanData = resumeAgentSpan?.snapshot?.() ?? resumeAgentSpan?.exportSpan();
+          reg.resumeModelSpanData = resumeModelSpan?.snapshot?.() ?? resumeModelSpan?.exportSpan();
           // Fresh spans capture their own first-chunk clock, never a prior segment's.
           reg.resumeCompletionStartTime = undefined;
         }
@@ -4502,6 +4507,15 @@ export class DurableAgent<
       closeOnSuspend: resumeOptions.closeOnSuspend ?? true,
     } as Parameters<DurableAgent<TAgentId, TTools, TOutput>['resume']>[2]);
     return result.output;
+  }
+
+  /** @deprecated Use `resumeStream(resumeData, { untilIdle: true })` instead. */
+  override async resumeStreamUntilIdle(resumeData: any, streamOptions?: any): Promise<MastraModelOutput<TOutput>> {
+    const { maxIdleMs, ...options } = streamOptions ?? {};
+    return this.resumeStream(resumeData, {
+      ...options,
+      untilIdle: maxIdleMs === undefined ? true : { maxIdleMs },
+    });
   }
 
   /**

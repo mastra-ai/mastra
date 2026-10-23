@@ -22,7 +22,9 @@ function stubFactoryShell() {
       HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Mastra' }] }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/work-items`, () => HttpResponse.json({ workItems: [] })),
-    http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: null })),
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+      HttpResponse.json({ modelId: null, thinkingLevel: null }),
+    ),
     http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/fp-1/permissions`, () =>
       HttpResponse.json({ categories: {}, tools: {} }),
     ),

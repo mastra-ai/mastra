@@ -57,24 +57,6 @@
     "@cf/zai-org/glm-5.3-flash"
   ],
   "reasoning": {
-    "@cf/deepseek-ai/deepseek-v4-pro-0813": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "@cf/deepseek-ai/deepseek-v4-flash-0731": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "@cf/deepseek-ai/deepseek-v4.1-flash-1017": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
     "@cf/qwen/qwen3.8-27b": [
       {
         "type": "toggle"
@@ -89,27 +71,16 @@
         "type": "toggle"
       }
     ],
-    "@cf/zai-org/glm-4.7-flash": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "@cf/zai-org/glm-5.3": [
+    "@cf/openai/gpt-oss-120b": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high"]
       }
     ],
-    "@cf/zai-org/glm-5.2": [
+    "@cf/openai/gpt-oss-20b": [
       {
         "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
-    "@cf/zai-org/glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "@cf/nvidia/nemotron-3-120b-a12b": [
@@ -127,16 +98,45 @@
         "values": ["none", "high"]
       }
     ],
-    "@cf/openai/gpt-oss-20b": [
+    "@cf/deepseek-ai/deepseek-v4.1-flash-1017": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
-    "@cf/openai/gpt-oss-120b": [
+    "@cf/deepseek-ai/deepseek-v4-flash-0731": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "@cf/deepseek-ai/deepseek-v4-pro-0813": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "@cf/zai-org/glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "@cf/zai-org/glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "@cf/zai-org/glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "@cf/zai-org/glm-4.7-flash": [
+      {
+        "type": "toggle"
       }
     ]
   }

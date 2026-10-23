@@ -7,7 +7,7 @@ import { useChatModelScope } from '../../context/useChatModelScope';
 import { useAvailableModelsQuery, useModelReasoningOptions } from '../../../../../hooks/useAvailableModels';
 import type { ChatThinkingApi } from '../../context/ChatThinkingContext';
 import { useChatThinking } from '../../context/useChatThinking';
-import { FACTORY_THINKING_SOURCE_LABEL, thinkingLevelOptionsForModel } from '../../services/thinkingLevels';
+import { THINKING_DEFAULT_SOURCE_LABELS, thinkingLevelOptionsForModel } from '../../services/thinkingLevels';
 import type { EffectiveThinkingLevel, ThinkingLevelOrigin } from '../../services/thinkingLevels';
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 
@@ -45,7 +45,7 @@ function showFailure(fallback: string) {
 }
 
 function originLabel(origin: ThinkingLevelOrigin) {
-  return origin === 'session' ? 'this session' : FACTORY_THINKING_SOURCE_LABEL;
+  return origin === 'session' ? 'this session' : THINKING_DEFAULT_SOURCE_LABELS[origin];
 }
 
 export function SessionThinkingControl({ modelId, switchingModel, lockedReason }: SessionThinkingControlProps) {

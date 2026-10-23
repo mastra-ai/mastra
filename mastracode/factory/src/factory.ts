@@ -43,7 +43,6 @@ import {
   createFactoryAuthGate,
   createFactoryInteractiveMarker,
   createFactoryRouteAuth,
-  factoryUserOrgId,
   getFactoryAuthOrgId,
   getFactoryAuthUserFromContext,
   getFactoryAuthUserId,
@@ -82,6 +81,7 @@ import {
   registerCustomProvidersSource,
 } from './routes/custom-provider-source.js';
 import { ProjectRoutes } from './routes/projects.js';
+import { tenantOrgId } from './routes/provider-credentials.js';
 import { createSessionAccessGuard } from './routes/session-access.js';
 import { assembleFactoryApiRoutes, buildIntegrationContext } from './routes/surface.js';
 import type { FactoryApiRoutesDeps } from './routes/surface.js';
@@ -108,7 +108,7 @@ import type { MastraFactorySandboxOption } from './sandbox/session-sandbox.js';
 import { createPlaintextFactorySecretEncryption } from './secret-encryption.js';
 import type { FactorySecretEncryption } from './secret-encryption.js';
 import { handleServerError } from './server-error.js';
-import { resolveFactoryCredentialTenant } from './session/credential-policy.js';
+import { resolveFactoryCredentialTenant, resolveFactoryModelPolicy } from './session/credential-policy.js';
 import { hydrateSessionDefaultModel } from './session/default-model-hydration.js';
 import { environmentSlugs, resolveSessionRepositories } from './session/environment-repositories.js';
 import { FactoryEnvironmentStateProcessor } from './session/environment-state-processor.js';
@@ -117,14 +117,14 @@ import { observeSessionFilesystem } from './session/filesystem-capture.js';
 import { observeSessionFirstExec } from './session/first-exec-capture.js';
 import { observeSessionFirstMessage } from './session/first-message-capture.js';
 import { LiveSessions } from './session/live-sessions.js';
-import { hydrateSessionMemorySettings, layerPersonalMemorySettings } from './session/memory-settings-hydration.js';
+import { hydrateSessionMemorySettings } from './session/memory-settings-hydration.js';
 import { hasResolvedOrg } from './session/org-seed.js';
 import { FactoryReplyCredentialProcessor } from './session/reply-credential-processor.js';
 import { migrateSessionResources, privatizeOwnerResourceSessions } from './session/resource-migration.js';
 import { observeSessionRunEnd } from './session/run-audit.js';
 import { sessionMemoryResourceId, sessionStampCounts } from './session/session-threads.js';
 import { createSourceControlTools } from './session/source-control-tools.js';
-import { readFactoryThinkingLevel, resolveFactoryThinkingLevel } from './session/thinking-default.js';
+import { resolveFactoryThinkingLevel } from './session/thinking-default.js';
 import { observeSessionThreadStamp } from './session/thread-session-stamp.js';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
@@ -143,7 +143,6 @@ import { FilesystemStorage } from './storage/domains/filesystem/base.js';
 import { IntakeStorage } from './storage/domains/intake/base.js';
 import { IntegrationStorage } from './storage/domains/integrations/base.js';
 import { factoryMemorySettingsUserId, MemorySettingsStorage } from './storage/domains/memory-settings/base.js';
-import type { MemorySettingsRecord } from './storage/domains/memory-settings/base.js';
 import { ModelDefaultsStorage } from './storage/domains/model-defaults/base.js';
 import { FactoryProjectsStorage } from './storage/domains/projects/base.js';
 import { QueueHealthStorage } from './storage/domains/queue-health/base.js';
@@ -710,13 +709,14 @@ export class MastraFactory {
     ];
     const sourceControlHandles = sourceControlIntegrationIds.map(id => sourceControlStorage.forIntegration(id));
     const sourceControlSessions = createSourceControlSessionLookup(sourceControlHandles);
+    const modelPolicyDependencies = {
+      projects: factoryProjectsStorage,
+      sourceControl: sourceControlSessions,
+      workItems: workItemsStorage,
+    };
     if (auth) {
       registerTenantCredentialResolver(modelCredentialsStorage, deploymentModelProviders, requestContext =>
-        resolveFactoryCredentialTenant(requestContext, {
-          projects: factoryProjectsStorage,
-          sourceControl: sourceControlSessions,
-          workItems: workItemsStorage,
-        }),
+        resolveFactoryCredentialTenant(requestContext, modelPolicyDependencies),
       );
     }
 
@@ -1103,6 +1103,25 @@ export class MastraFactory {
           }
         : {}),
     });
+    // The row follows whoever pays for the request, so its memory model is one their credentials reach.
+    const memorySettingsRowKey = async (requestContext: RequestContext, binding: FactoryRunBindingRecord | null) => {
+      // A wake lends the session owner even with auth off, but credentials stay process-wide there.
+      const policy = auth ? await resolveFactoryModelPolicy(requestContext, modelPolicyDependencies) : undefined;
+      if (policy) {
+        const orgId = tenantOrgId(policy.tenant);
+        return policy.tenant.credentialScope === 'factory' && policy.factoryProjectId
+          ? { orgId, userId: factoryMemorySettingsUserId(policy.factoryProjectId) }
+          : { orgId, userId: policy.tenant.userId };
+      }
+      // No tenant pays: the session's Factory row applies.
+      const scope = readFactorySessionScope(requestContext);
+      const factoryProjectId = binding?.factoryProjectId ?? scope?.factoryProjectId;
+      if (!factoryProjectId) return { orgId: 'local', userId: 'local' };
+      return {
+        orgId: binding?.orgId ?? scope?.factoryOrgId ?? 'local',
+        userId: factoryMemorySettingsUserId(factoryProjectId),
+      };
+    };
     const loadMemorySettings = async ({
       requestContext,
       binding,
@@ -1111,49 +1130,24 @@ export class MastraFactory {
       binding: FactoryRunBindingRecord | null;
     }) => {
       if (!requestContext) return;
-      const scope = readFactorySessionScope(requestContext);
-      const user = getFactoryAuthUserFromContext(requestContext);
-      const callerUserId = getFactoryAuthUserId(user);
-      const callerOrgId = factoryUserOrgId(user);
-      const factoryProjectId = binding?.factoryProjectId ?? scope?.factoryProjectId;
-      // Project-scoped sessions share one row per project, addressed by the
-      // sentinel user id the settings UI picks when it passes a `factoryId`;
-      // unscoped sessions read the caller's own row. Both are rows the
-      // settings UI writes, so intent and the run agree without any session
-      // mutation.
-      const target = factoryProjectId
-        ? {
-            orgId: binding?.orgId ?? scope?.factoryOrgId ?? callerOrgId ?? 'local',
-            userId: factoryMemorySettingsUserId(factoryProjectId),
-          }
-        : callerUserId && callerOrgId
-          ? { orgId: callerOrgId, userId: callerUserId }
-          : { orgId: 'local', userId: 'local' };
-      const record = await memorySettingsStorage.get(target);
-      // A channel sender's own settings beat the project's for every knob they
-      // saved. Best-effort: a failed personal read keeps the project's row.
-      let personal: MemorySettingsRecord | null = null;
-      if (factoryProjectId && requestContext.get('channel') && callerUserId && callerOrgId) {
-        try {
-          personal = await memorySettingsStorage.get({ orgId: callerOrgId, userId: callerUserId });
-        } catch (error) {
-          console.warn("[Factory Memory Settings] Unable to read the sender's memory settings", {
-            error: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
-      requestContext.set(
-        'mastra__factoryMemorySettings',
-        layerPersonalMemorySettings(record, personal) satisfies MemorySettingsRecord | null,
-      );
+      const record = await memorySettingsStorage.get(await memorySettingsRowKey(requestContext, binding));
+      requestContext.set('mastra__factoryMemorySettings', record);
     };
+    // Thinking defaults come from the session's defaults set, never the host's settings.json.
+    const resolveDefaultThinkingLevel = (requestContext: RequestContext | undefined) =>
+      resolveFactoryThinkingLevel(requestContext, {
+        projects: factoryProjectsStorage,
+        sourceControl: sourceControlSessions,
+        workItems: workItemsStorage,
+        modelDefaults: modelDefaultsStorage,
+      });
     const factoryProcessor = workItemsReady
       ? new FactoryPhaseStateProcessor({
           configVersion,
           storage: workItemsStorage,
           boards: this.#boards,
           loadMemorySettings,
-          factoryThinkingLevel: factoryProjectId => readFactoryThinkingLevel(factoryProjectsStorage, factoryProjectId),
+          defaultThinkingLevel: resolveDefaultThinkingLevel,
           ...(transitionService ? { transitionService } : {}),
           ...(githubIntegration
             ? {
@@ -1233,12 +1227,7 @@ export class MastraFactory {
         modes: false,
         // Subagents are disabled, matching the Mastra Code TUI default.
         subagents: [],
-        // Thinking defaults are stored per Factory, not in the host's settings.json.
-        resolveDefaultThinkingLevel: ({ requestContext }) =>
-          resolveFactoryThinkingLevel(requestContext, {
-            projects: factoryProjectsStorage,
-            sourceControl: sourceControlSessions,
-          }),
+        resolveDefaultThinkingLevel: ({ requestContext }) => resolveDefaultThinkingLevel(requestContext),
         workspace: createWorkspaceFactory({
           ...(sandboxConfig ? { sandbox: sandboxConfig } : {}),
           ...(this.#config.sandboxStart ? { sandboxStart: this.#config.sandboxStart } : {}),
