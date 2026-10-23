@@ -1,11 +1,11 @@
 import type {
   GetObservabilityCapabilitiesResponse,
+  ListScoresResponse,
   MastraClient,
   McpServerListResponse,
   QueryTraceThreadsResult,
   TraceQueryKeysetTraceResponse,
 } from '@mastra/client-js';
-import type { ListScoresResponse } from '@mastra/core/evals';
 import { SpanType } from '@mastra/core/observability';
 import { TraceStatus } from '@mastra/core/storage';
 
