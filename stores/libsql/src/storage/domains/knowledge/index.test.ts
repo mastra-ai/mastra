@@ -259,7 +259,7 @@ describe('KnowledgeLibSQL schema completion marker', () => {
     try {
       await new KnowledgeLibSQL({ client }).init();
       const marker = await client.execute(`SELECT version FROM ${TABLE_KNOWLEDGE_SCHEMA} WHERE id = 'canonical'`);
-      expect(marker.rows[0]?.version).toBe(1);
+      expect(marker.rows[0]?.version).toBe(3);
     } finally {
       client.close();
     }
@@ -342,7 +342,7 @@ describe('KnowledgeLibSQL published v1 layout', () => {
       await new KnowledgeLibSQL({ client }).init();
 
       const marker = await client.execute(`SELECT version FROM ${TABLE_KNOWLEDGE_SCHEMA} WHERE id = 'canonical'`);
-      expect(marker.rows[0]?.version).toBe(1);
+      expect(marker.rows[0]?.version).toBe(3);
       expect(await knowledgeObjects(client)).not.toContain('table:mastra_knowledge_cursors');
       const threads = await client.execute('SELECT id FROM mastra_threads');
       expect(threads.rows.map(row => row.id)).toEqual(['preserved']);
@@ -364,7 +364,7 @@ describe('KnowledgeLibSQL published v1 layout', () => {
       await new KnowledgeLibSQL({ client }).init();
 
       const marker = await client.execute(`SELECT version FROM ${TABLE_KNOWLEDGE_SCHEMA} WHERE id = 'canonical'`);
-      expect(marker.rows[0]?.version).toBe(1);
+      expect(marker.rows[0]?.version).toBe(3);
       expect((await client.execute("SELECT id FROM mastra_knowledge_nodes WHERE id = 'legacy'")).rows).toEqual([]);
       const threads = await client.execute('SELECT id FROM mastra_threads');
       expect(threads.rows.map(row => row.id)).toEqual(['preserved']);
@@ -399,7 +399,7 @@ describe('KnowledgeLibSQL published v1 layout', () => {
       await store.getStore('knowledge');
 
       const marker = await client.execute(`SELECT version FROM ${TABLE_KNOWLEDGE_SCHEMA} WHERE id = 'canonical'`);
-      expect(marker.rows[0]?.version).toBe(1);
+      expect(marker.rows[0]?.version).toBe(3);
     } finally {
       await store.close();
       client.close();
@@ -702,7 +702,7 @@ describe('KnowledgeLibSQL interim and released 1.76.0 canonical-model layout', (
       await new KnowledgeLibSQL({ client }).init();
 
       const marker = await client.execute(`SELECT version FROM ${TABLE_KNOWLEDGE_SCHEMA} WHERE id = 'canonical'`);
-      expect(marker.rows[0]?.version).toBe(1);
+      expect(marker.rows[0]?.version).toBe(3);
       expect((await client.execute('SELECT id FROM mastra_knowledge_semantic_outbox')).rows).toEqual([]);
       const nodeColumns = await client.execute('PRAGMA table_info("mastra_knowledge_nodes")');
       expect(nodeColumns.rows.map(row => String(row.name))).not.toContain('canonicalName');
@@ -783,6 +783,8 @@ describe('KnowledgeLibSQL interim and released 1.76.0 canonical-model layout', (
         await store.init();
 
         expect(warn).not.toHaveBeenCalled();
+        const marker = await client.execute(`SELECT version FROM ${TABLE_KNOWLEDGE_SCHEMA} WHERE id = 'canonical'`);
+        expect(marker.rows[0]?.version).toBe(3);
         const scopeId = '00000000-0000-4000-8000-000000000002';
         const record = await store.getRecord({ id: '00000000-0000-4000-8000-000000000006' });
         expect(record).toEqual(expect.objectContaining({ text: 'Launch is in Q4' }));
@@ -848,7 +850,7 @@ describe('KnowledgeLibSQL interim and released 1.76.0 canonical-model layout', (
 
       expect(warn).not.toHaveBeenCalled();
       const marker = await client.execute(`SELECT version FROM ${TABLE_KNOWLEDGE_SCHEMA} WHERE id = 'canonical'`);
-      expect(marker.rows[0]?.version).toBe(1);
+      expect(marker.rows[0]?.version).toBe(3);
     });
   });
 
@@ -866,7 +868,7 @@ describe('KnowledgeLibSQL interim and released 1.76.0 canonical-model layout', (
       await new KnowledgeLibSQL({ client }).init();
 
       const marker = await client.execute(`SELECT version FROM ${TABLE_KNOWLEDGE_SCHEMA} WHERE id = 'canonical'`);
-      expect(marker.rows[0]?.version).toBe(1);
+      expect(marker.rows[0]?.version).toBe(3);
     } finally {
       client.close();
     }

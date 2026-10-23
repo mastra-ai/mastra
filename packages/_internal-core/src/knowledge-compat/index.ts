@@ -7,8 +7,13 @@
  */
 export const KNOWLEDGE_CORE_FEATURE = 'knowledge-v2';
 
-export const KNOWLEDGE_STORAGE_CONTRACT_VERSION = 1 as const;
-export const KNOWLEDGE_STORAGE_SCHEMA_VERSION = 1 as const;
+export const KNOWLEDGE_STORAGE_CONTRACT_VERSION = 3 as const;
+export const KNOWLEDGE_STORAGE_SCHEMA_VERSION = 3 as const;
+/**
+ * Marker version pre-release snapshots wrote for the same canonical layout before the version moved past
+ * the released v2 contract; adapters rewrite it to {@link KNOWLEDGE_STORAGE_SCHEMA_VERSION} and keep the rows.
+ */
+export const PRE_RELEASE_KNOWLEDGE_SCHEMA_VERSION = 1 as const;
 
 const TABLE_KNOWLEDGE_NODES = 'mastra_knowledge_nodes';
 const TABLE_KNOWLEDGE_RECORDS = 'mastra_knowledge_records';

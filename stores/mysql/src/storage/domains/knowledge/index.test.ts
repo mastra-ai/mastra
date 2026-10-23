@@ -24,7 +24,7 @@ describe('MySQL canonical Knowledge support', () => {
   it('reports unsupported without initializing legacy Knowledge tables', async () => {
     const store = createStore();
 
-    expect(store.getCapabilities()).toEqual({ supported: false, contractVersion: 1, schemaVersion: null });
+    expect(store.getCapabilities()).toEqual({ supported: false, contractVersion: 3, schemaVersion: null });
     await expect(store.createNode({ name: 'Unsupported', scopeIds: [], isScope: false })).rejects.toBeInstanceOf(
       KnowledgeUnsupportedError,
     );

@@ -83,8 +83,8 @@ describe('InMemoryKnowledgeStorage canonical model', () => {
   it('reports one canonical storage contract', () => {
     expect(store.getCapabilities()).toEqual({
       supported: true,
-      schemaVersion: 1,
-      contractVersion: 1,
+      schemaVersion: 3,
+      contractVersion: 3,
     });
   });
 

@@ -25,6 +25,7 @@ import {
   KNOWLEDGE_SCOPE_GRANTS_SCHEMA,
   KNOWLEDGE_STORAGE_CONTRACT_VERSION,
   KNOWLEDGE_STORAGE_SCHEMA_VERSION,
+  PRE_RELEASE_KNOWLEDGE_SCHEMA_VERSION,
   KNOWLEDGE_RESET_GUIDANCE,
   KNOWLEDGE_TABLE_NAMES,
   knowledgeScopeIdsKey,
@@ -678,7 +679,12 @@ export class KnowledgePG extends KnowledgeStorage {
     const marker = await this.#executor.execute(
       `SELECT "version" FROM "${TABLE_KNOWLEDGE_SCHEMA}" WHERE "id" = 'canonical'`,
     );
-    if (Number(marker.rows[0]?.version) !== KNOWLEDGE_STORAGE_SCHEMA_VERSION) {
+    const version = Number(marker.rows[0]?.version);
+    if (version === PRE_RELEASE_KNOWLEDGE_SCHEMA_VERSION) {
+      await this.#executor.execute(
+        `UPDATE "${TABLE_KNOWLEDGE_SCHEMA}" SET "version" = ${KNOWLEDGE_STORAGE_SCHEMA_VERSION} WHERE "id" = 'canonical'`,
+      );
+    } else if (version !== KNOWLEDGE_STORAGE_SCHEMA_VERSION) {
       throw new KnowledgeSchemaError(
         `Knowledge schema reset required: the existing Knowledge schema version is unsupported. ${KNOWLEDGE_RESET_GUIDANCE}`,
       );

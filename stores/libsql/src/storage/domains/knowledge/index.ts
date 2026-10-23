@@ -26,6 +26,7 @@ import {
   KNOWLEDGE_SCOPE_GRANTS_SCHEMA,
   KNOWLEDGE_STORAGE_CONTRACT_VERSION,
   KNOWLEDGE_STORAGE_SCHEMA_VERSION,
+  PRE_RELEASE_KNOWLEDGE_SCHEMA_VERSION,
   KNOWLEDGE_RESET_GUIDANCE,
   KNOWLEDGE_TABLE_NAMES,
   discardedKnowledgeRowsWarning,
@@ -420,7 +421,13 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
         );
       }
       const marker = await this.#client.execute(`SELECT version FROM ${TABLE_KNOWLEDGE_SCHEMA} WHERE id = 'canonical'`);
-      if (Number(marker.rows[0]?.version) !== KNOWLEDGE_STORAGE_SCHEMA_VERSION) {
+      const version = Number(marker.rows[0]?.version);
+      if (version === PRE_RELEASE_KNOWLEDGE_SCHEMA_VERSION) {
+        await this.#client.execute({
+          sql: `UPDATE ${TABLE_KNOWLEDGE_SCHEMA} SET version = ? WHERE id = 'canonical'`,
+          args: [KNOWLEDGE_STORAGE_SCHEMA_VERSION],
+        });
+      } else if (version !== KNOWLEDGE_STORAGE_SCHEMA_VERSION) {
         throw new KnowledgeSchemaError(
           `Knowledge schema reset required: the existing Knowledge schema version is unsupported. ${KNOWLEDGE_RESET_GUIDANCE}`,
         );

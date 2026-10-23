@@ -136,7 +136,7 @@ describe('Knowledge core compatibility', () => {
     }));
 
     await expect(loadCore()).rejects.toThrow(
-      "Knowledge storage contract 2 in @mastra/core does not match the adapter's contract 1",
+      "Knowledge storage contract 2 in @mastra/core does not match the adapter's contract 3",
     );
   });
 

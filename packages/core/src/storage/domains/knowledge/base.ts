@@ -3,8 +3,8 @@ import { StorageDomain } from '../base';
 export type KnowledgeScopeIds = string[];
 export type KnowledgeSemanticDocumentType = 'node' | 'record';
 export type KnowledgeSemanticOperation = 'upsert' | 'delete';
-export const KNOWLEDGE_STORAGE_CONTRACT_VERSION = 1 as const;
-export const KNOWLEDGE_STORAGE_SCHEMA_VERSION = 1 as const;
+export const KNOWLEDGE_STORAGE_CONTRACT_VERSION = 3 as const;
+export const KNOWLEDGE_STORAGE_SCHEMA_VERSION = 3 as const;
 
 export interface KnowledgeStorageCapabilities {
   contractVersion: typeof KNOWLEDGE_STORAGE_CONTRACT_VERSION;
@@ -403,7 +403,17 @@ export interface KnowledgeCurationCursor {
   updatedAt: Date;
 }
 export type KnowledgeActivityAction =
-  'create' | 'edit' | 'delete' | 'restore' | 'move' | 'merge' | 'promote' | 'demote' | 'stamp' | 'rebind' | 'skip';
+  | 'create'
+  | 'edit'
+  | 'delete'
+  | 'restore'
+  | 'move'
+  | 'merge'
+  | 'promote'
+  | 'demote'
+  | 'stamp'
+  | 'rebind'
+  | 'skip';
 export interface KnowledgeActivityEvent {
   id: string;
   action: KnowledgeActivityAction;

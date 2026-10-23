@@ -147,7 +147,7 @@ describe('KnowledgePG schema completion marker', () => {
     const marker = await pool.query(
       `SELECT "version" FROM "${schemaName}"."${TABLE_KNOWLEDGE_SCHEMA}" WHERE id = 'canonical'`,
     );
-    expect(marker.rows[0]?.version).toBe(1);
+    expect(marker.rows[0]?.version).toBe(3);
   });
 
   it('rejects a markerless partial schema without mutating it', async () => {
@@ -245,7 +245,7 @@ describe('KnowledgePG published v1 layout', () => {
     const marker = await pool.query(
       `SELECT "version" FROM "${schemaName}"."${TABLE_KNOWLEDGE_SCHEMA}" WHERE id = 'canonical'`,
     );
-    expect(marker.rows[0]?.version).toBe(1);
+    expect(marker.rows[0]?.version).toBe(3);
     expect(await knowledgeObjects(schemaName)).not.toContain('table:mastra_knowledge_cursors');
     const threads = await pool.query(`SELECT id FROM "${schemaName}".mastra_threads`);
     expect(threads.rows.map(row => row.id)).toEqual(['preserved']);
@@ -290,7 +290,7 @@ describe('KnowledgePG published v1 layout', () => {
       await new KnowledgePG({ pool: restricted, schemaName }).init();
 
       const marker = await pool.query(`SELECT "version" FROM "${schemaName}"."${TABLE_KNOWLEDGE_SCHEMA}"`);
-      expect(marker.rows).toEqual([{ version: 1 }]);
+      expect(marker.rows).toEqual([{ version: 3 }]);
     } finally {
       await restricted.end();
       await pool.query(`DROP OWNED BY ${role}`);
@@ -322,7 +322,7 @@ describe('KnowledgePG published v1 layout', () => {
 
     await new KnowledgePG({ client, schemaName }).init();
     const marker = await pool.query(`SELECT "version" FROM "${schemaName}"."${TABLE_KNOWLEDGE_SCHEMA}"`);
-    expect(marker.rows).toEqual([{ version: 1 }]);
+    expect(marker.rows).toEqual([{ version: 3 }]);
   });
 
   it.each(['an empty schema', 'the empty published layout'])(
@@ -344,7 +344,7 @@ describe('KnowledgePG published v1 layout', () => {
         await Promise.all(pools.map(p => p.end()));
       }
       const marker = await pool.query(`SELECT "version" FROM "${schemaName}"."${TABLE_KNOWLEDGE_SCHEMA}"`);
-      expect(marker.rows).toEqual([{ version: 1 }]);
+      expect(marker.rows).toEqual([{ version: 3 }]);
       const accessState = await pool.query(`SELECT epoch FROM "${schemaName}".mastra_knowledge_access_state`);
       expect(accessState.rows).toHaveLength(1);
       expect(await knowledgeObjects(schemaName)).not.toContain('table:mastra_knowledge_cursors');
@@ -364,7 +364,7 @@ describe('KnowledgePG published v1 layout', () => {
     const marker = await pool.query(
       `SELECT "version" FROM "${schemaName}"."${TABLE_KNOWLEDGE_SCHEMA}" WHERE id = 'canonical'`,
     );
-    expect(marker.rows[0]?.version).toBe(1);
+    expect(marker.rows[0]?.version).toBe(3);
     const legacy = await pool.query(`SELECT id FROM "${schemaName}".mastra_knowledge_nodes WHERE id = 'legacy'`);
     expect(legacy.rows).toEqual([]);
     const threads = await pool.query(`SELECT id FROM "${schemaName}".mastra_threads`);
@@ -684,7 +684,7 @@ describe('KnowledgePG interim and released 1.76.0 canonical-model layout', () =>
     const marker = await pool.query(
       `SELECT "version" FROM "${schemaName}"."${TABLE_KNOWLEDGE_SCHEMA}" WHERE id = 'canonical'`,
     );
-    expect(marker.rows[0]?.version).toBe(1);
+    expect(marker.rows[0]?.version).toBe(3);
     const outbox = await pool.query(`SELECT id FROM "${schemaName}".mastra_knowledge_semantic_outbox`);
     expect(outbox.rows).toEqual([]);
     const nodeColumns = await pool.query(
@@ -826,7 +826,7 @@ describe('KnowledgePG interim and released 1.76.0 canonical-model layout', () =>
     const marker = await pool.query(
       `SELECT "version" FROM "${schemaName}"."${TABLE_KNOWLEDGE_SCHEMA}" WHERE id = 'canonical'`,
     );
-    expect(marker.rows[0]?.version).toBe(1);
+    expect(marker.rows[0]?.version).toBe(3);
   });
 
   it('leaves a layout mixing snapshot shapes untouched', async () => {

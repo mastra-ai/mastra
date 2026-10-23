@@ -26,8 +26,8 @@ describe('Knowledge', () => {
     const storage = new InMemoryStore({ id: 'structured' });
     const domain = storage.stores.knowledge!;
     vi.spyOn(domain, 'getCapabilities').mockReturnValue({
-      contractVersion: 1,
-      schemaVersion: 1,
+      contractVersion: 3,
+      schemaVersion: 3,
       supported: true,
     });
     const result = { scopes: { 'org:acme': 'scope-id' }, createdScopeIds: ['scope-id'], changed: true, accessEpoch: 1 };
@@ -207,8 +207,8 @@ describe('Knowledge', () => {
     const storage = new InMemoryStore({ id: 'lazy-structured' });
     const domain = storage.stores.knowledge!;
     vi.spyOn(domain, 'getCapabilities').mockReturnValue({
-      contractVersion: 1,
-      schemaVersion: 1,
+      contractVersion: 3,
+      schemaVersion: 3,
       supported: true,
     });
     const result = { scopes: { 'org:acme': 'scope-id' }, createdScopeIds: ['scope-id'], changed: true, accessEpoch: 1 };
@@ -481,7 +481,7 @@ describe('Knowledge', () => {
     const unsupportedStorage = new InMemoryStore();
     const domain = unsupportedStorage.stores.knowledge!;
     vi.spyOn(domain, 'getCapabilities').mockReturnValue({
-      contractVersion: 1,
+      contractVersion: 3,
       schemaVersion: null,
       supported: false,
     });
