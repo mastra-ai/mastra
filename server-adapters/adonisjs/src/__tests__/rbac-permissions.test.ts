@@ -58,7 +58,7 @@ describe('AdonisJS RBAC Permission Enforcement', () => {
     close = undefined;
   });
 
-  async function request(permission: string, role?: string) {
+  async function request(permission: string, role?: string, method = 'GET') {
     withAuth(context);
     const router = await createAdonisRouter();
     const adapter = new MastraServer({ app: router, mastra: context.mastra });
@@ -66,9 +66,10 @@ describe('AdonisJS RBAC Permission Enforcement', () => {
     const server = await listen(router);
     close = server.close;
     const res = await fetch(`${server.url}/api/test/${permission.replace(':', '-')}`, {
+      method,
       headers: role ? { Authorization: `Bearer ${role}` } : {},
     });
-    return { status: res.status, data: (await res.json()) as any };
+    return { status: res.status, data: method === 'HEAD' ? undefined : ((await res.json()) as any) };
   }
 
   it('returns 401 for an unauthenticated request', async () => {
@@ -92,8 +93,16 @@ describe('AdonisJS RBAC Permission Enforcement', () => {
     else expect(data.success).toBe(true);
   });
 
+  it.each([
+    [undefined, 401],
+    ['viewer', 403],
+    ['admin', 200],
+  ])('HEAD as %s returns %i (HEAD must not bypass auth or RBAC)', async (role, expected) => {
+    expect((await request('agents:execute', role, 'HEAD')).status).toBe(expected);
+  });
+
   describe('custom API routes', () => {
-    async function requestCustom(role?: string) {
+    async function requestCustom(role?: string, method = 'GET') {
       withAuth(context, [
         registerApiRoute('/reports', {
           method: 'GET',
@@ -107,6 +116,7 @@ describe('AdonisJS RBAC Permission Enforcement', () => {
       const server = await listen(router);
       close = server.close;
       const res = await fetch(`${server.url}/reports`, {
+        method,
         headers: role ? { Authorization: `Bearer ${role}` } : {},
       });
       return res.status;
@@ -122,6 +132,14 @@ describe('AdonisJS RBAC Permission Enforcement', () => {
 
     it('allows a user with the permission', async () => {
       expect(await requestCustom('reporter')).toBe(200);
+    });
+
+    it.each([
+      [undefined, 401],
+      ['viewer', 403],
+      ['reporter', 200],
+    ])('HEAD as %s returns %i (HEAD must not bypass auth or RBAC)', async (role, expected) => {
+      expect(await requestCustom(role, 'HEAD')).toBe(expected);
     });
   });
 });

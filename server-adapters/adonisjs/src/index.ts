@@ -39,8 +39,11 @@ type BodyResult = {
   body?: unknown;
   /** Raw body bytes, kept so custom API routes receive the original payload */
   raw?: Buffer | string;
-  /** Replacement content-type for `raw` (multipart bodies are re-encoded) */
-  rawContentType?: string;
+  /**
+   * Multipart parts already parsed by the AdonisJS bodyparser. Only custom API routes need
+   * them re-encoded, so encoding happens lazily in `handleCustomRoute`.
+   */
+  multipartParts?: Array<{ name: string; value: string | Buffer; fileName?: string }>;
   parseError?: { message: string };
   tooLarge?: boolean;
 };
@@ -257,6 +260,10 @@ export class MastraServer extends MastraServerBase<Router, HttpContext, HttpCont
    * Read the request body. Works both when the AdonisJS bodyparser middleware already
    * consumed the stream (the default AdonisJS setup) and when it did not (bodyparser not
    * installed, content types it ignores, or `multipart.processManually` routes).
+   *
+   * When the bodyparser already consumed the request, it buffered up to its own limits in
+   * `config/bodyparser.ts` before Mastra's limit is checked here. Keep those limits at or
+   * below `bodyLimitOptions.maxSize` to cap buffering at Mastra's limit.
    */
   private async readBody(ctx: HttpContext, limit: number | undefined): Promise<BodyResult> {
     const method = ctx.request.method();
@@ -327,14 +334,14 @@ export class MastraServer extends MastraServerBase<Router, HttpContext, HttpCont
 
     if (isMultipart) {
       const fields: Record<string, unknown> = {};
-      const formData = new FormData();
+      const parts: NonNullable<BodyResult['multipartParts']> = [];
       let size = 0;
       for (const [key, value] of Object.entries(parsed ?? {})) {
         if (!isSafeObjectKey(key)) continue;
         fields[key] = parseFieldValue(value);
         const text = typeof value === 'string' ? value : JSON.stringify(value);
         size += Buffer.byteLength(text);
-        formData.append(key, text);
+        parts.push({ name: key, value: text });
       }
       for (const [key, value] of Object.entries(ctx.request.allFiles())) {
         if (!isSafeObjectKey(key)) continue;
@@ -346,7 +353,7 @@ export class MastraServer extends MastraServerBase<Router, HttpContext, HttpCont
           if (!file.tmpPath) continue;
           const buffer = await readFile(file.tmpPath);
           buffers.push(buffer);
-          formData.append(key, new Blob([new Uint8Array(buffer)]), file.clientName);
+          parts.push({ name: key, value: buffer, fileName: file.clientName });
         }
         if (buffers.length > 0) {
           fields[key] = buffers.length === 1 ? buffers[0] : buffers;
@@ -354,12 +361,7 @@ export class MastraServer extends MastraServerBase<Router, HttpContext, HttpCont
       }
       if (limit !== undefined && size > limit) return { tooLarge: true };
 
-      const encoded = new Response(formData);
-      return {
-        body: fields,
-        raw: Buffer.from(await encoded.arrayBuffer()),
-        rawContentType: encoded.headers.get('content-type') ?? undefined,
-      };
+      return { body: fields, multipartParts: parts };
     }
 
     const raw = ctx.request.raw() ?? undefined;
@@ -915,9 +917,12 @@ export class MastraServer extends MastraServerBase<Router, HttpContext, HttpCont
   private async handleCustomRoute(ctx: HttpContext): Promise<void> {
     const path = getPath(ctx);
     const method = ctx.request.method();
+    // GET routes also answer HEAD. Auth config and route matching are keyed by GET,
+    // so resolve HEAD as GET here or HEAD would skip auth/RBAC/FGA.
+    const routeMethod = method === 'HEAD' ? 'GET' : method;
     const matchedRoute = findMatchingCustomRoute(
       path,
-      method,
+      routeMethod,
       this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes,
     );
 
@@ -927,12 +932,12 @@ export class MastraServer extends MastraServerBase<Router, HttpContext, HttpCont
       return;
     }
 
-    const shouldRunCustomRouteAuth = isProtectedCustomRoute(path, method, this.customRouteAuthConfig);
+    const shouldRunCustomRouteAuth = isProtectedCustomRoute(path, routeMethod, this.customRouteAuthConfig);
     const shouldRunCustomRouteFGA = !!matchedRoute?.route.fga;
 
     if (shouldRunCustomRouteAuth || shouldRunCustomRouteFGA) {
       const serverRoute: ServerRoute = {
-        method: (matchedRoute?.route.method ?? method) as any,
+        method: (matchedRoute?.route.method ?? routeMethod) as any,
         path: matchedRoute?.route.path ?? path,
         responseType: 'json',
         handler: async () => {},
@@ -944,7 +949,7 @@ export class MastraServer extends MastraServerBase<Router, HttpContext, HttpCont
       if (shouldRunCustomRouteAuth) {
         const authError = await this.checkRouteAuth(serverRoute, {
           path,
-          method,
+          method: routeMethod,
           getHeader: name => getHeader(ctx, name),
           getQuery: name => {
             const value = getQuery(ctx)[name];
@@ -990,19 +995,28 @@ export class MastraServer extends MastraServerBase<Router, HttpContext, HttpCont
     }
 
     const headers = { ...ctx.request.request.headers } as Record<string, string | string[] | undefined>;
-    if (state.rawContentType) {
-      headers['content-type'] = state.rawContentType;
+    let raw = state.raw;
+    if (state.multipartParts) {
+      // The bodyparser consumed the stream, so re-encode the parsed parts with a fresh boundary.
+      const formData = new FormData();
+      for (const part of state.multipartParts) {
+        if (typeof part.value === 'string') formData.append(part.name, part.value);
+        else formData.append(part.name, new Blob([part.value]), part.fileName);
+      }
+      const encoded = new Response(formData);
+      raw = Buffer.from(await encoded.arrayBuffer());
+      headers['content-type'] = encoded.headers.get('content-type') ?? undefined;
       delete headers['content-length'];
     }
     const contentType = String(headers['content-type'] ?? '');
     const body =
-      state.raw === undefined
+      raw === undefined
         ? undefined
         : contentType.includes('json') && state.body !== undefined
           ? state.body
-          : typeof state.raw === 'string'
-            ? state.raw
-            : new Uint8Array(state.raw);
+          : typeof raw === 'string'
+            ? raw
+            : new Uint8Array(raw);
 
     const request = ctx.request;
     const response = await this.handleCustomRouteRequest(
