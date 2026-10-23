@@ -1831,3 +1831,60 @@ describe('per-call tool injection survives in-process resume', () => {
     expect(tools?.perCallToolsetTool).toBeDefined();
   });
 });
+
+
+// #28229: invalid data must not consume the suspension before the caller can correct it.
+describe.each([DurableAgent, EventedAgent])('resume schema preflight (%#)', AgentClass => {
+  it.each(['warm', 'cold'])('allows correcting invalid resume data with a %s registry', async registry => {
+    const resumedValues: boolean[] = [];
+    const ask = createTool({
+      id: 'ask',
+      description: 'Ask for confirmation',
+      inputSchema: z.object({ action: z.string() }),
+      suspendSchema: z.object({}),
+      resumeSchema: z.object({ confirmed: z.boolean() }),
+      execute: async (_input, context) => {
+        if (!context?.agent?.resumeData) return context?.agent?.suspend({});
+        resumedValues.push(context.agent.resumeData.confirmed);
+        return { confirmed: context.agent.resumeData.confirmed };
+      },
+    });
+    const agent = new Agent({
+      id: 'resume-schema-agent',
+      name: 'Resume Schema Agent',
+      instructions: 'Ask for confirmation',
+      model: createSuspendingThenTextModel('ask', ['Confirmed']),
+      tools: { ask },
+    });
+    const pubsub = new EventEmitterPubSub();
+    const durable = new AgentClass({ agent, pubsub });
+    const host = new Mastra({ agents: { durable }, storage: new InMemoryStore(), logger: false });
+    try {
+      const initial = await durable.stream('Confirm', { closeOnSuspend: true });
+      await drain(initial.output.fullStream);
+      await globalRunRegistry.get(initial.runId)?.workflowExecution;
+      expect((await durable.listSuspendedRuns()).runs).toHaveLength(1);
+      if (registry === 'cold') {
+        durable.runRegistry.clear();
+        globalRunRegistry.delete(initial.runId);
+      }
+      const options = { runId: initial.runId, toolCallId: 'call-1' };
+      await expect(durable.resumeStream({ confirmed: 'yes' }, options)).rejects.toMatchObject({
+        id: 'AGENT_RESUME_INVALID_DATA',
+      });
+      expect((await durable.listSuspendedRuns()).runs).toHaveLength(1);
+      expect(resumedValues).toEqual([]);
+      const resumed = await durable.resumeStream({ confirmed: true }, options);
+      const chunks = await drain(resumed.fullStream);
+      expect(chunks.filter(chunk => chunk.type === 'error')).toEqual([]);
+      expect(await resumed.text).toBe('Confirmed');
+      expect(resumedValues).toEqual([true]);
+      expect(chunks.filter(chunk => chunk.type === 'tool-result').map(chunk => chunk.payload.result)).toContainEqual({
+        confirmed: true,
+      });
+    } finally {
+      await host.shutdown({ drainTimeout: 1000 });
+      await pubsub.close();
+    }
+  });
+});
