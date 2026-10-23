@@ -260,6 +260,7 @@ export async function setupSharedTestInfrastructure({
       [workflow.id]: workflow,
     },
     ...(observability ? { observability } : {}),
+    backgroundTasks: { enabled: true, globalConcurrency: 5, perAgentConcurrency: 3 },
     server: {
       apiRoutes: [
         {
@@ -270,6 +271,10 @@ export async function setupSharedTestInfrastructure({
       ],
     },
   });
+
+  // Scenarios that pass `backgroundTasks` (untilIdle wrapping, background tools)
+  // register on this Mastra, so it needs the background task manager running.
+  await sharedMastra.startWorkers();
 
   // Create and start shared server
   const app = await createHonoServer(sharedMastra);
@@ -342,6 +347,7 @@ export async function teardownSharedTestInfrastructure({ forceClose = false } = 
   await stopInngestDevServer(inngestDevServer);
   inngestDevServer = null;
 
+  await sharedMastra?.stopWorkers();
   sharedMastra = null;
   sharedInngest = null;
 }
