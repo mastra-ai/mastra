@@ -37,7 +37,7 @@ export interface FactoryUserSession {
   createdAt: string;
   updatedAt: string;
   /** What the viewer may do with this session, computed by the server. */
-  capabilities?: { recreateSandbox: boolean; takeOwnership: boolean };
+  capabilities?: { recreateSandbox: boolean; takeOwnership: boolean; switchModel?: boolean };
 }
 
 type FactoryUserSessionPayload = Omit<FactoryUserSession, 'title'> & { title?: string | null };

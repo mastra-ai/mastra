@@ -53,6 +53,7 @@ import {
   SEND_AGENT_MESSAGE_ROUTE,
   SEND_AGENT_SIGNAL_ROUTE,
   ABORT_AGENT_THREAD_ROUTE,
+  ABORT_AGENT_RUN_ROUTE,
   CANCEL_AGENT_PENDING_SIGNALS_ROUTE,
   SUBSCRIBE_AGENT_THREAD_ROUTE,
   OBSERVE_AGENT_STREAM_ROUTE,
@@ -2292,26 +2293,35 @@ describe('Agent Routes Authorization', () => {
       runId,
       resourceId,
       status = 'running',
+      inputCheckpointed = true,
+      workflowName = 'durable-agentic-loop',
+      threadId,
     }: {
       runId: string;
       resourceId?: string;
       status?: 'running' | 'suspended' | 'pending';
+      inputCheckpointed?: boolean;
+      workflowName?: string;
+      threadId?: string;
     }) {
       const workflowsStore = await storage.getStore('workflows');
       await workflowsStore?.persistWorkflowSnapshot({
-        workflowName: 'durable-agentic-loop',
+        workflowName,
         runId,
         resourceId,
         snapshot: {
           runId,
           status,
           value: {},
-          context: {
-            input: {
-              agentId: 'test-durable-agent',
-              __workflowKind: 'durable-agent',
-            },
-          } as any,
+          context: (inputCheckpointed
+            ? {
+                input: {
+                  agentId: 'test-durable-agent',
+                  __workflowKind: 'durable-agent',
+                  state: { threadId },
+                },
+              }
+            : {}) as any,
           activePaths: [],
           activeStepsPath: {},
           serializedStepGraph: [],
@@ -2322,6 +2332,113 @@ describe('Agent Routes Authorization', () => {
         },
       });
     }
+
+    it('resolves request-scoped memory before authorizing run cancellation', async () => {
+      const scopedAgent = createDurableAgent({
+        id: 'test-durable-agent',
+        agent: new Agent({
+          id: 'scoped-agent',
+          name: 'Scoped agent',
+          instructions: 'Do not run.',
+          model: 'openai/gpt-4o-mini',
+          memory: ({ requestContext }) => {
+            if (requestContext.get('tenantId') !== 'tenant-a') throw new Error('Missing memory tenant');
+            return mockMemory;
+          },
+        }),
+      });
+      mastra = new Mastra({ agents: { 'test-durable-agent': scopedAgent }, storage, logger: false });
+      await mockMemory.createThread({ threadId: 'scoped-abort-thread', resourceId: 'user-a' });
+      await persistDurableAgenticLoopRun({
+        runId: 'scoped-abort',
+        resourceId: 'user-a',
+        threadId: 'scoped-abort-thread',
+      });
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+      requestContext.set('tenantId', 'tenant-a');
+      const abort = vi.spyOn(scopedAgent, 'abortRunStream').mockResolvedValue(true);
+
+      await expect(
+        ABORT_AGENT_RUN_ROUTE.handler({ mastra, agentId: 'test-durable-agent', runId: 'scoped-abort', requestContext }),
+      ).resolves.toEqual({ aborted: true });
+      expect(abort).toHaveBeenCalledWith('scoped-abort');
+    });
+
+    it.each(['user-a', 'user-b'])('checks thread ownership for an ownerless run called by %s', async caller => {
+      await mockMemory.createThread({ threadId: 'abort-thread', resourceId: 'user-a', title: 'Protected thread' });
+      const abort = vi.spyOn(mockDurableAgent, 'abortRunStream').mockResolvedValue(true);
+      await persistDurableAgenticLoopRun({ runId: 'ownerless-thread-run', threadId: 'abort-thread' });
+      const cancellation = ABORT_AGENT_RUN_ROUTE.handler({
+        mastra,
+        agentId: 'test-durable-agent',
+        runId: 'ownerless-thread-run',
+        requestContext: createContextWithReservedKeys({ resourceId: caller }),
+      });
+      if (caller === 'user-a') {
+        await expect(cancellation).resolves.toEqual({ aborted: true });
+      } else {
+        await expect(cancellation).rejects.toMatchObject({ status: 403 });
+        expect(abort).not.toHaveBeenCalled();
+      }
+    });
+
+    it.each(['', 'inngest:'])('aborts an active run using its %s execution checkpoint', async prefix => {
+      Object.defineProperty(mockDurableAgent, 'durableLoopWorkflowName', { value: `${prefix}durable-agentic-loop` });
+      const abort = vi.spyOn(mockDurableAgent, 'abortRunStream').mockResolvedValue(true);
+      await persistDurableAgenticLoopRun({
+        runId: 'abort-active',
+        workflowName: `${prefix}durable-agentic-loop`,
+        inputCheckpointed: false,
+      });
+      await persistDurableAgenticLoopRun({
+        runId: 'abort-active',
+        workflowName: `${prefix}durable-agentic-execution`,
+      });
+      await expect(
+        ABORT_AGENT_RUN_ROUTE.handler({
+          mastra,
+          agentId: 'test-durable-agent',
+          runId: 'abort-active',
+          requestContext: createContextWithReservedKeys({}),
+        }),
+      ).resolves.toEqual({ aborted: true });
+      expect(abort).toHaveBeenCalledWith('abort-active');
+    });
+
+    it('does not acknowledge run abort before ownership has been checkpointed', async () => {
+      const abort = vi.spyOn(mockDurableAgent, 'abortRunStream');
+      await persistDurableAgenticLoopRun({ runId: 'abort-registering', status: 'pending', inputCheckpointed: false });
+      await expect(
+        ABORT_AGENT_RUN_ROUTE.handler({
+          mastra,
+          agentId: 'test-durable-agent',
+          runId: 'abort-registering',
+          requestContext: createContextWithReservedKeys({}),
+        }),
+      ).resolves.toEqual({ aborted: false });
+      expect(abort).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['another resource', 'user-a', 'user-b'],
+      ['an ownerless run', 'user-a', undefined],
+      ['an unscoped caller without FGA', undefined, 'user-b'],
+    ])('run-scoped abort rejects %s before cancellation', async (_case, caller, owner) => {
+      vi.spyOn(mastra, 'getServer').mockReturnValue({
+        auth: { mapUserToResourceId: (user: { id: string }) => user.id },
+      } as any);
+      const abort = vi.spyOn(mockDurableAgent, 'abortRunStream');
+      await persistDurableAgenticLoopRun({ runId: 'abort-ownership', resourceId: owner });
+      await expect(
+        ABORT_AGENT_RUN_ROUTE.handler({
+          mastra,
+          agentId: 'test-durable-agent',
+          runId: 'abort-ownership',
+          requestContext: createContextWithReservedKeys({ resourceId: caller }),
+        }),
+      ).rejects.toMatchObject({ status: 403 });
+      expect(abort).not.toHaveBeenCalled();
+    });
 
     it('should return 400 when runId is missing', async () => {
       const requestContext = createContextWithReservedKeys({});
@@ -2419,7 +2536,7 @@ describe('Agent Routes Authorization', () => {
       expect(recoverMock).toHaveBeenCalled();
     });
 
-    it('should call agent.recover(runId, { abortSignal }) and return fullStream', async () => {
+    it('should recover without coupling durable execution to the HTTP request signal', async () => {
       const expectedStream = new ReadableStream();
       const recoverMock = vi.fn().mockResolvedValue({ fullStream: expectedStream });
       (mockDurableAgent as any).recover = recoverMock;
@@ -2437,7 +2554,7 @@ describe('Agent Routes Authorization', () => {
         runId: 'recover-run-1',
       } as any);
 
-      expect(recoverMock).toHaveBeenCalledWith('recover-run-1', { abortSignal: abortController.signal });
+      expect(recoverMock).toHaveBeenCalledWith('recover-run-1');
       expect(result).toBe(expectedStream);
 
       delete (mockAgent as any).recover;

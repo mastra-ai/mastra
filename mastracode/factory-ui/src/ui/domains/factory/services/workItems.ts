@@ -172,14 +172,19 @@ function toWireCreateInput(input: CreateWorkItemInput): WireCreateWorkItemInput 
   return { ...rest, ...(externalSource ? { externalSource } : {}) };
 }
 
-function externalSourceUrl(source: ExternalWorkItemSource | null): string | null {
-  if (source?.url) return source.url;
-  if (source?.integrationId !== 'slack' || source.type !== 'slack-thread' || !source.workspaceId) return null;
-
-  const [, channelId, threadTs] = /^slack:([^:]+):(\d+\.\d+)?$/.exec(source.externalId) ?? [];
+function slackThreadUrl({ workspaceId, externalId }: ExternalWorkItemSource): string | null {
+  if (!workspaceId) return null;
+  const [, channelId, threadTs] = /^slack:([^:]+):(\d+\.\d+)?$/.exec(externalId) ?? [];
   if (!channelId) return null;
-  const channelUrl = `https://app.slack.com/client/${encodeURIComponent(source.workspaceId)}/${encodeURIComponent(channelId)}`;
+  const channelUrl = `https://app.slack.com/client/${encodeURIComponent(workspaceId)}/${encodeURIComponent(channelId)}`;
   return threadTs ? `${channelUrl}/thread/${encodeURIComponent(`${channelId}-${threadTs}`)}` : channelUrl;
+}
+
+function externalSourceUrl(source: ExternalWorkItemSource | null): string | null {
+  if (!source) return null;
+  // A Slack card's saved `url` is the Factory session it started, never the Slack thread.
+  if (sourceFromExternalSource(source) === 'slack-thread') return slackThreadUrl(source);
+  return source.url ?? null;
 }
 
 function fromWireWorkItem(item: WireWorkItem): WorkItem {

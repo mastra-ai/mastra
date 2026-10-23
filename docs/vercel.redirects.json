@@ -1,6 +1,16 @@
 {
   "redirects": [
     {
+      "source": "/docs/mastra-platform/connect/end-user-connections",
+      "destination": "/docs/mastra-platform/connect/overview",
+      "permanent": false
+    },
+    {
+      "source": "/reference/connect/user-connect-routes",
+      "destination": "/reference/connect/tools",
+      "permanent": false
+    },
+    {
       "source": "/docs/workspace/overview",
       "destination": "/docs/sandbox/overview",
       "permanent": true
@@ -2228,6 +2238,11 @@
     {
       "source": "/reference/observability/tracing/trace-query",
       "destination": "/reference/observability/tracing/advanced-queries",
+      "permanent": true
+    },
+    {
+      "source": "/docs/guides/mcp-events",
+      "destination": "/docs/connections/mcp#mcp-events",
       "permanent": true
     },
     {

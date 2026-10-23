@@ -35,6 +35,12 @@ export const spanQueryCoreOnlyCapabilities: GetObservabilityCapabilitiesResponse
   capabilities: { ...spanQueryCapabilities.capabilities, spanQueryContextFields: false },
 };
 
+/** Store that also returns thread rows, so Studio can offer the threads view. */
+export const spanAndThreadRowsCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...spanQueryCapabilities,
+  capabilities: { ...spanQueryCapabilities.capabilities, threadQueryRows: true },
+};
+
 export const noSpanQueryCapabilities: GetObservabilityCapabilitiesResponse = {
   observabilityStorageType: 'ObservabilityStorageLibSQL',
   capabilities: {

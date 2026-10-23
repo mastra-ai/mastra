@@ -94,13 +94,13 @@ export function DatasetHeader({
             </DropdownMenu.Trigger>
             <DropdownMenu.Content align="end" className="w-48">
               <DropdownMenu.Item onSelect={onEditClick}>
-                <Pencil /> Edit Dataset
+                <Pencil /> Edit dataset
               </DropdownMenu.Item>
               <DropdownMenu.Item onSelect={onDuplicateClick}>
-                <Copy /> Duplicate Dataset
+                <Copy /> Duplicate dataset
               </DropdownMenu.Item>
               <DropdownMenu.Item onSelect={onDeleteClick} variant="destructive">
-                <Trash2 /> Delete Dataset
+                <Trash2 /> Delete dataset
               </DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu>

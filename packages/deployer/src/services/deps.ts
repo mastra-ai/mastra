@@ -412,6 +412,33 @@ async function isYarnClassicLockfile(lockfilePath: string): Promise<boolean> {
   }
 }
 
+/**
+ * Removes overridden packages from every importer of a copied pnpm lockfile. When the Mastra app is the
+ * workspace root, the root importer still resolves its workspace dependencies to `link:` versions. pnpm
+ * keeps those versions although the output overrides them with packed tarballs, so the tarball is never
+ * installed and the dependency symlink dangles. Without the entries, pnpm resolves them from the overrides.
+ */
+async function dropPnpmImporterDependencies(lockfilePath: string, packageNames: string[]): Promise<void> {
+  const lockfile = parse(await fsPromises.readFile(lockfilePath, 'utf-8')) as {
+    importers?: Record<string, Record<string, Record<string, unknown> | undefined> | undefined>;
+  } | null;
+  let changed = false;
+  for (const importer of Object.values(lockfile?.importers ?? {})) {
+    for (const field of ['dependencies', 'devDependencies', 'optionalDependencies']) {
+      const dependencies = importer?.[field];
+      for (const name of packageNames) {
+        if (dependencies && name in dependencies) {
+          delete dependencies[name];
+          changed = true;
+        }
+      }
+    }
+  }
+  if (changed) {
+    await fsPromises.writeFile(lockfilePath, stringify(lockfile, { lineWidth: 0 }));
+  }
+}
+
 export class Deps extends MastraBase {
   private packageManager: PackageManager;
   private rootDir: string;
@@ -768,6 +795,9 @@ export class Deps extends MastraBase {
           await fsPromises.rm(destination, { force: true });
         } else {
           await fsPromises.copyFile(this.lockFile.path, destination);
+          if (pm === 'pnpm' && pnpmOverrides && Object.keys(pnpmOverrides).length > 0) {
+            await dropPnpmImporterDependencies(destination, Object.keys(pnpmOverrides));
+          }
         }
       }
 

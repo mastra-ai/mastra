@@ -73,7 +73,7 @@ describe('DatasetItemDetails', () => {
     it('copies the full item id', () => {
       render(<DatasetItemDetails item={itemWithUuid} />);
 
-      expect(screen.getByLabelText('Copy Item Id to clipboard')).not.toBeNull();
+      expect(screen.getByLabelText('Copy item ID to clipboard')).not.toBeNull();
     });
   });
 
