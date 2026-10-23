@@ -104,6 +104,17 @@ export const oneDriveScenario: Scenario = {
       steps.push(makeStep('create target folder', 'one_drive_create_folder', 'pass', target.id));
     } catch (error) {
       steps.push(makeStep('create folders', 'one_drive_create_folder', 'fail', errorMessage(error)));
+      // Graph can create a run-tagged folder and then lose the response before
+      // an ID is recorded; recover exact-name matches so cleanup removes them.
+      try {
+        const children = await call<{ items: Array<{ id: string; name?: string }> }>('one_drive_list_children', {
+          itemId: 'root',
+        });
+        sourceFolderId ??= children.items.find(item => item.name === `${runId}-source`)?.id;
+        targetFolderId ??= children.items.find(item => item.name === `${runId}-target`)?.id;
+      } catch {
+        // Nothing recoverable; creation genuinely failed.
+      }
     }
 
     if (sourceFolderId) {
