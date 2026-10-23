@@ -1950,7 +1950,7 @@ Records an occurrence, delivers it to matching push streams and webhook subscrip
 - Emitted events stay in the process that emitted them. Push streams, webhook subscriptions, and buffered polls only see events emitted by the same `MCPServer` instance, so a serverless or multi-instance deployment needs a `poll` source backed by shared storage.
 - The buffer is in memory. A restarted server treats earlier cursors as a gap and reports `truncated: true`.
 - Webhook delivery state (pending retries, suspension, verification results) is in memory and rebuilt when clients refresh.
-- Event-list change announcements require the `eventsListChanged` filter on `subscriptions/listen`, which the MCP TypeScript SDK 2.2.0 doesn't carry. Until that support is available, the server neither advertises `listChanged` nor sends `notifications/events/list_changed`. Clients should re-run `events/list` to see changed event types.
+- Event-list change announcements require the `eventsListChanged` filter on `subscriptions/listen`, which the MCP TypeScript SDK version used by `@mastra/mcp` doesn't carry. Until that support is available, the server neither advertises `listChanged` nor sends `notifications/events/list_changed`. Clients should re-run `events/list` to see changed event types.
 
 ## Related information
 
