@@ -18,6 +18,7 @@
  * capabilities by implementing `FactoryIntegration` from outside the package.
  */
 
+import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { AgentChannels, TypingStatusFn } from '@mastra/core/channels';
 import type { InputProcessor, OutputProcessor } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -27,6 +28,8 @@ import type { SlackAdapterChannelConfig } from '@mastra/slack';
 import type { WorkItemFeedPublisher } from '../../storage/domains/comments/feed-sync.js';
 
 import type { FactoryChannelsConfig, FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
+import { announcePullRequestMilestone } from '../channel-thread-announcements.js';
+import { parseCreatedPullRequest } from '../github/session-subscriptions.js';
 import { FactoryChannelReplyProcessor } from './channel-reply-processor.js';
 import { FactoryChannelSessionLinkProcessor } from './channel-session-link-processor.js';
 import { createSlackConnectRoutes } from './connect-route.js';
@@ -218,6 +221,21 @@ export class SlackIntegration implements FactoryIntegration {
       ...createShareFileTool(requestContext, this.#deps),
       ...(this.#textHidden ? createReplyTool(requestContext, this.#deps) : {}),
     };
+  }
+
+  /**
+   * When a run opens a pull request, post its link into the Slack thread the
+   * session is linked to, so the thread hears about it whatever the agent says.
+   */
+  async postToolObserver({
+    toolContext,
+    requestContext,
+  }: Parameters<NonNullable<FactoryIntegration['postToolObserver']>>[0]): Promise<void> {
+    const url = parseCreatedPullRequest(toolContext);
+    if (!url || !requestContext) return;
+    const threadId = (requestContext.get('controller') as AgentControllerRequestContext | undefined)?.threadId;
+    if (!threadId || !(await isSlackThread(requestContext, this.#deps))) return;
+    await announcePullRequestMilestone(this.#channels?.(), threadId, 'opened', url);
   }
 
   channels(ctx: IntegrationContext): FactoryChannelsConfig {

@@ -250,3 +250,49 @@ describe('SlackIntegration.channels', () => {
     expect(session.model.switch).toHaveBeenLastCalledWith('openai/gpt-5.6');
   });
 });
+
+describe('SlackIntegration.postToolObserver', () => {
+  const prTool = {
+    toolName: 'execute_command',
+    input: { command: 'gh pr create --draft --title "Fix"' },
+    output: { stdout: 'https://github.com/mastra-ai/mastra/pull/123\n' },
+    context: {},
+  };
+
+  function setup(platform: string | null) {
+    const post = vi.fn(async () => ({ id: 'reply-ts' }));
+    const addReaction = vi.fn(async () => {});
+    const channels = {
+      buildChannelContextForThread: vi.fn(async () => (platform ? { channel: { platform } } : null)),
+      buildRenderContextForThread: vi.fn(async () =>
+        platform ? { platform, chatThread: { id: 'slack:C123:1792771853.363419', post }, adapter: { addReaction } } : null,
+      ),
+    };
+    const integration = new SlackIntegration({ signingSecret: 'secret' });
+    integration.initialize({ channels: () => channels as any });
+    const requestContext = new Map<string, unknown>([['controller', { threadId: 'thread-1' }]]);
+    return { integration, requestContext: requestContext as any, post, addReaction };
+  }
+
+  it('posts the pull request link into the linked Slack thread when a run opens one', async () => {
+    const { integration, requestContext, post, addReaction } = setup('slack');
+
+    await integration.postToolObserver({ toolContext: prTool, requestContext });
+
+    expect(post).toHaveBeenCalledWith({ markdown: 'Pull request opened: https://github.com/mastra-ai/mastra/pull/123' });
+    expect(addReaction).not.toHaveBeenCalled();
+  });
+
+  it('stays silent for sessions not linked to Slack and for tools that open no pull request', async () => {
+    const unlinked = setup(null);
+    await unlinked.integration.postToolObserver({ toolContext: prTool, requestContext: unlinked.requestContext });
+    expect(unlinked.post).not.toHaveBeenCalled();
+
+    const linked = setup('slack');
+    await linked.integration.postToolObserver({
+      toolContext: { ...prTool, input: { command: 'gh pr view 123' } },
+      requestContext: linked.requestContext,
+    });
+    expect(linked.post).not.toHaveBeenCalled();
+  });
+});
