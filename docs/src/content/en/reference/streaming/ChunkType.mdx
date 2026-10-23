@@ -2009,6 +2009,113 @@ Emitted when the stream is forcibly terminated due to content being blocked by a
 ]}
 />
 
+## Thread subscription chunks
+
+### data-user-message-pending
+
+A transient user-message projection emitted when a thread accepts a steer or queued follow-up, before the agent consumes it. Subscribers can show the input immediately, then reconcile it with the delivered `data-user-message` chunk by `data.id`.
+
+The chunk isn't saved to conversation history. `data.metadata.status` is `pending` for a steer that joins the active run and `queued` for a follow-up that runs afterward.
+
+```typescript
+type UserMessagePendingChunk = {
+  type: 'data-user-message-pending'
+  runId: string
+  traceId?: string
+  from: ChunkFrom
+  metadata?: Record<string, any>
+  transient: true
+  data: AgentSignalDataPart['data'] & {
+    metadata: Record<string, unknown> & {
+      status: 'pending' | 'queued'
+    }
+  }
+}
+```
+
+### data-user-message-cancelled
+
+A transient removal event emitted when accepted user input is cancelled before delivery. Subscribers can remove the pending projection whose `data.id` matches the cancelled signal.
+
+The chunk isn't saved to conversation history. It is emitted only after the input is removed, not when cancellation is merely requested.
+
+```typescript
+type UserMessageCancelledChunk = {
+  type: 'data-user-message-cancelled'
+  runId: string
+  traceId?: string
+  from: ChunkFrom
+  metadata?: Record<string, any>
+  transient: true
+  data: {
+    id: string
+  }
+}
+```
+
+### thread-history
+
+The stored history of a thread, emitted at the start of a thread subscription.
+
+`thread-history` arrives only when you call [`agent.subscribeToThread()`](/reference/agents/agent#subscribetothreadoptions) with `withInitialHistory: true`. It is the first chunk, followed by retained parts newer than the history and then live parts. Without agent memory, or when the thread has no stored messages yet, the chunk is still emitted first with an empty `messages` array and `hasMore: false`.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'type',
+    type: '"thread-history"',
+    description: 'Chunk type identifier',
+  },
+  {
+    name: 'runId',
+    type: 'string',
+    description: 'Empty string. The chunk belongs to the subscription rather than an execution run.',
+  },
+  {
+    name: 'traceId',
+    type: 'string',
+    isOptional: true,
+    description: 'Trace ID of the run that produced this chunk. Undefined when tracing is disabled.',
+  },
+  {
+    name: 'from',
+    type: 'ChunkFrom',
+    description: 'Source of the chunk. Always `AGENT` for thread history.',
+  },
+  {
+    name: 'metadata',
+    type: 'Record<string, any>',
+    isOptional: true,
+    description: 'Additional chunk metadata.',
+  },
+  {
+    name: 'payload',
+    type: 'ThreadHistoryPayload',
+    description: 'Stored history for the subscription',
+    properties: [
+      {
+        type: 'ThreadHistoryPayload',
+        parameters: [
+          {
+            name: 'messages',
+            type: 'MastraDBMessage[]',
+            description:
+              'Stored thread messages, oldest first. Contains the newest `perPage` messages, where `perPage` defaults to 40.',
+          },
+          {
+            name: 'hasMore',
+            type: 'boolean',
+            description: 'Whether older messages exist beyond this page.',
+          },
+        ],
+      },
+    ],
+  },
+]}
+/>
+
+For queue-count events on the same thread, see the [Thread events reference](/reference/signals/thread-events).
+
 ## Usage example
 
 ```typescript

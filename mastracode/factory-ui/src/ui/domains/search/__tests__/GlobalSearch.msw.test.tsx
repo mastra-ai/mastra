@@ -474,10 +474,8 @@ describe('Global search', () => {
       'Connections',
       'Repositories',
       'Work Intake',
-      'Factory models',
-      'Your models',
-      'Factory memory',
-      'Your memory',
+      'Models',
+      'Memory',
       'Behavior',
     ]) {
       expect(within(dialog).getByText(label)).toBeInTheDocument();
@@ -1009,6 +1007,17 @@ describe('Global search', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     expect(onAbort).not.toHaveBeenCalled();
     releaseSessions();
+  });
+
+  it('finds Memory settings by the former page name "personal memory"', async () => {
+    stubSearchApi();
+    const user = userEvent.setup();
+    renderSearchRoute();
+    const dialog = await openFromSidebar();
+
+    await user.type(screen.getByRole('combobox', { name: 'Search MastraCode' }), 'personal memory');
+
+    expect(await within(dialog).findByText('Memory')).toBeInTheDocument();
   });
 
   it('selects Settings with origin state and closes without creating a session', async () => {

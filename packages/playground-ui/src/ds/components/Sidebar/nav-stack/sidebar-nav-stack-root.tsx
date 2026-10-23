@@ -1,5 +1,7 @@
+import { Tabs } from '@base-ui/react/tabs';
 import React from 'react';
 import type { ComponentPropsWithoutRef } from 'react';
+import { useSidebar } from '../root/sidebar-context';
 import { SidebarNavStackContext } from './sidebar-nav-stack-context';
 import { cn } from '@/lib/utils';
 
@@ -17,6 +19,8 @@ export function SidebarNavStackRoot({
   className,
   ...props
 }: SidebarNavStackProps) {
+  const { state } = useSidebar();
+
   function closeView(returnFocusRef?: React.RefObject<HTMLElement | null>) {
     onValueChange(rootValue);
     requestAnimationFrame(() => {
@@ -27,14 +31,16 @@ export function SidebarNavStackRoot({
 
   return (
     <SidebarNavStackContext.Provider value={{ activeValue: value, rootValue, closeView }}>
-      <div
+      {/* The collapsed rail always shows the root page's icons. */}
+      <Tabs.Root
+        value={state === 'collapsed' ? rootValue : value}
         data-slot="sidebar-nav-stack"
         data-value={value}
-        className={cn('relative -m-0.5 grid min-w-0 overflow-hidden p-0.5', className)}
+        className={cn('relative grid min-w-0', className)}
         {...props}
       >
         {children}
-      </div>
+      </Tabs.Root>
     </SidebarNavStackContext.Provider>
   );
 }

@@ -1,10 +1,10 @@
 import { DataPanel } from '@mastra/playground-ui/components/DataPanel';
-import { SpanDataPanelView } from '@mastra/playground-ui/domains/traces/components/span-data-panel-view';
+import { SpanDetailPanel } from '@mastra/playground-ui/domains/spans/components/span-detail-panel';
+import type { SpanSelection } from '@mastra/playground-ui/domains/spans/components/span-detail-panel';
 import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
-import { useSpanDetail } from '@mastra/react/hooks/traces';
 import { RouteSidePanel, useSelectedItemSidePanel } from '@/lib/route-side-panel';
 
-export type SpanSelection = { traceId: string; spanId: string };
+export type { SpanSelection };
 
 export interface SpanDetailSidePanelProps {
   selection: SpanSelection | undefined;
@@ -25,26 +25,11 @@ export function SpanDetailSidePanel({ selection, spans, onSelect, onClose, onSho
   // Span ids are only unique within a trace, so the pair identifies the selection.
   useSelectedItemSidePanel(selection ? `${selection.traceId}:${selection.spanId}` : undefined, onClose);
 
-  const { data, isLoading } = useSpanDetail({
-    traceId: selection?.traceId,
-    spanId: selection?.spanId,
-    queryOptions: { enabled: !!selection },
-  });
-
-  const index = selection
-    ? spans.findIndex(span => span.traceId === selection.traceId && span.spanId === selection.spanId)
-    : -1;
-  const previous = index > 0 ? spans[index - 1] : undefined;
-  const next = index >= 0 && index < spans.length - 1 ? spans[index + 1] : undefined;
-
   const view = selection ? (
-    <SpanDataPanelView
-      traceId={selection.traceId}
-      spanId={selection.spanId}
-      span={data?.span}
-      isLoading={isLoading}
-      onPrevious={previous ? () => onSelect(previous) : undefined}
-      onNext={next ? () => onSelect(next) : undefined}
+    <SpanDetailPanel
+      selection={selection}
+      spans={spans}
+      onSelect={onSelect}
       onClose={onClose}
       onShowTrace={onShowTrace}
     />

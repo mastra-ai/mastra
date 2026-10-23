@@ -25,6 +25,7 @@ constructor({
   timeout?: number;
   typegen?: { outFile: string };
   clientInfo?: { name?: string; version?: string };
+  registerProcessHooks?: boolean;
 }: MCPClientOptions)
 ```
 
@@ -67,6 +68,14 @@ constructor({
     isOptional: true,
     description:
       "Client name and version every server receives on connect and with each request, so servers can attribute traffic to your application. Defaults to the server key as `name` and `'1.0.0'` as `version`. Individual server configs can override either field with their own `clientInfo`. Doesn't change tool name prefixes, which always use the server key.",
+  },
+  {
+    name: 'registerProcessHooks',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'true',
+    description:
+      'Install process exit and signal hooks that disconnect servers and end the process. Set to false when your application handles shutdown, and call disconnect() from that handler. See [Handle shutdown yourself](#handle-shutdown-yourself).',
   },
   {
     name: 'webhook',
@@ -1061,9 +1070,9 @@ Notes:
 
 ### `events` Property (experimental)
 
-The `events` property lists and subscribes to server events from servers that implement the [MCP Events extension (SEP-3415)](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/3415). Use it to react to things that happen on the server, such as a push to a repository, without polling a tool.
+The `events` property lists and subscribes to server events from servers that implement the [MCP Events extension (SEP-3415)](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/3415). Use it to react to things that happen on the server, such as a push to a repository, without polling a tool. Delivery is at least once. After a reconnect or a resume, the server can resend an occurrence, and the client drops repeats by `eventId` within `dedupWindow` of recent ids.
 
-For an end-to-end walkthrough, see the [MCP events guide](/docs/guides/mcp-events).
+For an end-to-end walkthrough, see [MCP events](/docs/connections/mcp#mcp-events).
 
 :::warning
 SEP-3415 is a draft. This API may change in any release.
@@ -1100,7 +1109,7 @@ The client doesn't receive notifications when the server's event list changes ye
 
 #### `events.subscribe(serverName, eventName, args?, options?)`
 
-Starts a subscription and resolves once the server confirms it. Errors such as an unknown event, invalid arguments, or a forbidden subscription reject the returned promise.
+Starts a subscription and resolves once the server confirms it. Errors such as an unknown event, invalid arguments, or a forbidden subscription reject the returned promise. A new subscription starts at the point the server accepts it, so occurrences from before that point are not delivered unless `options.cursor` resumes from an earlier position. Under webhook delivery the promise can resolve after that point: the client answers `503` for a delivery it can't route yet, and the server retries it.
 
 ```typescript oxfmt:false
 async subscribe(
@@ -1284,7 +1293,7 @@ export const mastra = new Mastra({
 ]}
 />
 
-The client refreshes each subscription before it expires by repeating `events/subscribe` with the latest cursor. When the server reports failing delivery in `deliveryStatus`, for example because your endpoint timed out, `onError` receives `MCP_EVENTS_WEBHOOK_DELIVERY_FAILING` with `lastError` in its details. The next refresh resumes a suspended subscription. `cancel()` sends `events/unsubscribe`.
+The client refreshes each subscription before it expires by repeating `events/subscribe` with the latest cursor. When the server reports failing delivery in `deliveryStatus`, for example because your endpoint timed out, `onError` receives `MCP_EVENTS_WEBHOOK_DELIVERY_FAILING` with `lastError` in its details. The `cursor` in each webhook delivery only covers occurrences your endpoint has acknowledged, so resuming from a saved cursor can deliver the last handled occurrence again. The next refresh resumes a suspended subscription. `cancel()` sends `events/unsubscribe`.
 
 Webhook state lives in this process: run the receiving route in the same process as the `MCPClient` that subscribed.
 
@@ -1863,6 +1872,31 @@ MCPClient handles server connections gracefully:
 1. Automatic connection management for multiple servers
 1. Graceful server shutdown to prevent error messages during development
 1. Proper cleanup of resources when disconnecting
+
+### Handle shutdown yourself
+
+By default, a connected client installs hooks for `SIGINT`, `SIGTERM`, `SIGHUP`, and `beforeExit` that disconnect its servers and end the process. These hooks can interrupt your application's awaited cleanup, such as draining HTTP requests.
+
+Set `registerProcessHooks: false` to let your application own shutdown. Call `disconnect()` after requests that use the client have finished:
+
+```typescript
+import { MCPClient } from '@mastra/mcp'
+
+const mcp = new MCPClient({
+  servers: { weather: { url: new URL('https://example.com/mcp') } },
+  registerProcessHooks: false,
+})
+
+process.once('SIGTERM', async () => {
+  // Finish your application's cleanup before disconnecting the client.
+  await mcp.disconnect()
+  process.exit(0)
+})
+```
+
+Set the option on every `MCPClient` in the process before connecting. Once any client registers the default hooks, the global `SIGINT` and `SIGTERM` listeners remain until the process exits, even after `disconnect()`.
+
+With hooks disabled, your application is responsible for closing MCP connections. In a Mastra server, coordinate `disconnect()` with your server's shutdown lifecycle so in-flight requests can finish using the client.
 
 ## Using custom fetch for runtime-defined authentication
 
