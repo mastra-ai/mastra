@@ -8,5 +8,3 @@ Fixed chats in a Factory using the Factory's observational memory settings inste
 - A run that uses the Factory's credentials uses **Factory memory**.
 
 Before, a chat in a hybrid Factory could fail with `No usable anthropic credential is available` even though the owner had picked an OpenAI memory model and connected OpenAI.
-
-The Memory settings page now shows which threads each memory serves under the Factory's model routing, and says when one is not used.
