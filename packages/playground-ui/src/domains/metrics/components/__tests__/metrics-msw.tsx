@@ -34,6 +34,7 @@ const API = `${TEST_BASE_URL}/api/observability/metrics`;
 const SCORES_API = `${TEST_BASE_URL}/api/observability/scores`;
 export const CAPABILITIES_API = `${TEST_BASE_URL}/api/observability/capabilities`;
 export const TRACE_AGGREGATE_API = `${TEST_BASE_URL}/api/observability/traces/aggregate`;
+export const PERCENTILES_API = `${API}/percentiles`;
 export const SPAN_AGGREGATE_API = `${TEST_BASE_URL}/api/observability/spans/aggregate`;
 
 /** Capabilities the server reports; `'missing'` is a server without the capabilities route. */
