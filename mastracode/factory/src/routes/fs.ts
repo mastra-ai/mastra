@@ -156,6 +156,8 @@ export interface WorkspaceChangePatches extends WorkspaceChanges {
   patches: Record<string, string>;
   /** Why a change has no entry in `patches`; a change in neither map is one git could not diff. */
   omittedPatches: Record<string, WorkspacePatchOmission>;
+  /** Git's first error line when it could not diff changed files, prefixed by the slug with several repositories. */
+  diffError?: string;
 }
 
 export type ArtifactEntry = WorkspaceRenderedEntry;
@@ -1179,13 +1181,18 @@ export async function listSessionWorkspacePatches(
           { timeout: 30_000, maxRetainedBytes: Infinity },
         ),
       ]);
-      const keyed: KeyedPatches =
-        patch.exitCode === 0
-          ? keyWorkspacePatches(patch.stdout, changes.changes)
-          : { patches: new Map(), omitted: new Map() };
-      return { repo, changes, keyed };
+      if (patch.exitCode !== 0 && changes.changes.length > 0) {
+        const diffError = patch.stderr.trim().split('\n')[0] || `git diff exited with code ${patch.exitCode}`;
+        const keyed: KeyedPatches = { patches: new Map(), omitted: new Map() };
+        return { repo, changes, keyed, diffError };
+      }
+      return { repo, changes, keyed: keyWorkspacePatches(patch.stdout, changes.changes), diffError: undefined };
     }),
   );
+  const diffErrors = inspected.flatMap(({ repo, diffError }) => {
+    if (!diffError) return [];
+    return [layout.repos.length > 1 ? `${repo.slug}: ${diffError}` : diffError];
+  });
   return {
     ...assembleWorkspaceChanges(session.sessionId, inspected),
     scope,
@@ -1193,6 +1200,7 @@ export async function listSessionWorkspacePatches(
     omittedPatches: Object.fromEntries(
       inspected.flatMap(({ repo, keyed }) => prefixedEntries(repo.prefix, keyed.omitted)),
     ),
+    ...(diffErrors.length > 0 ? { diffError: diffErrors.join('\n') } : {}),
   };
 }
 

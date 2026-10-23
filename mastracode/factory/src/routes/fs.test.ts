@@ -1048,7 +1048,7 @@ describe('workspace patches', () => {
     expect(result.omittedPatches['small.txt']).toBeUndefined();
   });
 
-  it('keeps listing the changes when git cannot diff them, as in a repository without a commit yet', async () => {
+  it('keeps listing the changes with git’s error when git cannot diff them, as in a repository without a commit', async () => {
     const [dir] = await seedRepositories();
     await writeFile(join(dir!, 'first.txt'), 'hello\n');
 
@@ -1058,6 +1058,7 @@ describe('workspace patches', () => {
     expect(result.changes.map(change => [change.path, change.status])).toEqual([['first.txt', 'untracked']]);
     expect(result.patches).toEqual({});
     expect(result.omittedPatches).toEqual({});
+    expect(result.diffError).toMatch(/^fatal: .*HEAD/);
   });
 
   it('keys each repository’s diffs by its prefixed path', async () => {

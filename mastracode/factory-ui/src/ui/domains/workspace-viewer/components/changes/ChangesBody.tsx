@@ -42,8 +42,15 @@ export function ChangesBody({ workspacePath, scope, visible, layout, diffsRef }:
     return <ChangesEmptyState workspacePath={workspacePath} sandboxRunning={patches.data.available} />;
   }
   return (
-    <Suspense fallback={centeredSpinner}>
-      <StackedDiffs key={scope} ref={diffsRef} changes={patches.data} layout={layout} className="flex-1" />
-    </Suspense>
+    <>
+      {patches.data.diffError ? (
+        <Txt variant="caption" className="border-border text-destructive-foreground border-b px-3 py-2 wrap-anywhere">
+          Diffs unavailable: {patches.data.diffError}
+        </Txt>
+      ) : null}
+      <Suspense fallback={centeredSpinner}>
+        <StackedDiffs key={scope} ref={diffsRef} changes={patches.data} layout={layout} className="flex-1" />
+      </Suspense>
+    </>
   );
 }
