@@ -3157,6 +3157,9 @@ Notes:
     // patch shape: forwarding omitted fields would overwrite concurrent edits.
     const existing = await memoryStore.listMessagesById({ messageIds: messages.map(m => m.id) });
     const existingById = new Map(existing.messages.map(m => [m.id, m]));
+    // Text to index per edited message, read from the projected effective content so a
+    // sparse patch does not hide stored text. Fields the patch sets take priority.
+    const textForEmbeddingById = new Map<string, string | null>();
     messages = messages.flatMap(update => {
       const stored = existingById.get(update.id);
       if (!stored) return [];
@@ -3185,13 +3188,29 @@ Notes:
         ...(update.content.toolInvocations !== undefined ? { toolInvocations: projected.content.toolInvocations } : {}),
       };
       existingById.set(update.id, { ...effective, content: { ...effective.content, ...content } });
+      if (update.content.content !== undefined || update.content.parts !== undefined) {
+        const fromContent = () =>
+          typeof projected.content.content === 'string' && projected.content.content.trim() !== ''
+            ? projected.content.content
+            : null;
+        const fromParts = () =>
+          (projected.content.parts ?? [])
+            .filter((part): part is TextPart => part?.type === 'text')
+            .map(part => part.text)
+            .join(' ')
+            .trim() || null;
+        textForEmbeddingById.set(
+          update.id,
+          update.content.content === undefined ? (fromParts() ?? fromContent()) : (fromContent() ?? fromParts()),
+        );
+      }
       return [{ ...update, content }];
     });
     if (messages.length === 0) return [];
 
-    // Update vector database if semantic recall is enabled and any messages have content updates
+    // Update vector database if semantic recall is enabled and any messages have text updates
     if (this.vector && config.semanticRecall) {
-      const messagesWithContent = messages.filter(m => m.content !== undefined);
+      const messagesWithContent = messages.filter(m => textForEmbeddingById.has(m.id));
 
       if (messagesWithContent.length > 0) {
         // Reuse the pre-update rows for vector metadata.
@@ -3222,33 +3241,7 @@ Notes:
             const existingMessage = existingMessagesMap.get(message.id);
             if (!existingMessage) return;
 
-            // Extract text from the new content
-            let textForEmbedding: string | null = null;
-            const content = message.content;
-
-            if (content) {
-              if (
-                'content' in content &&
-                content.content &&
-                typeof content.content === 'string' &&
-                content.content.trim() !== ''
-              ) {
-                textForEmbedding = content.content;
-              } else if (
-                'parts' in content &&
-                content.parts &&
-                Array.isArray(content.parts) &&
-                content.parts.length > 0
-              ) {
-                // Extract text from all text parts, concatenate
-                const joined = (content.parts as any[])
-                  .filter(part => part?.type === 'text')
-                  .map(part => (part as TextPart).text)
-                  .join(' ')
-                  .trim();
-                if (joined) textForEmbedding = joined;
-              }
-            }
+            const textForEmbedding = textForEmbeddingById.get(message.id) ?? null;
 
             // If there's new text content, embed it
             if (textForEmbedding) {

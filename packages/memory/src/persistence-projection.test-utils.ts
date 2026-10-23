@@ -3,7 +3,8 @@ import { Agent, createSignal } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { MastraCompositeStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
-import { describe, expect, it } from 'vitest';
+import type { MastraVector } from '@mastra/core/vector';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { Memory } from './index';
@@ -193,6 +194,68 @@ export function testPersistenceProjection(createStorage: () => Promise<MastraCom
           parts: [{ type: 'text', text: 'Edited' }],
           metadata: { edited: true },
         },
+      });
+    });
+
+    describe('semantic recall index on edits', () => {
+      async function setup() {
+        const vector = {
+          id: 'projection-vector',
+          isSelfEmbedding: true,
+          createIndex: vi.fn().mockResolvedValue(undefined),
+          upsert: vi.fn().mockResolvedValue([]),
+          query: vi.fn().mockResolvedValue([]),
+          listIndexes: vi.fn().mockResolvedValue(['memory_messages']),
+          deleteVectors: vi.fn().mockResolvedValue(undefined),
+          describeIndex: vi.fn().mockResolvedValue({ dimension: 1024 }),
+        };
+        const memory = new Memory({
+          storage: await createStorage(),
+          vector: vector as unknown as MastraVector,
+          options: { semanticRecall: { topK: 2, messageRange: 0, scope: 'resource' }, generateTitle: false },
+        });
+        await memory.createThread({ threadId, resourceId });
+        await memory.persistMessages([
+          {
+            ...message(),
+            content: {
+              format: 2,
+              content: 'Stale mirror',
+              parts: [{ type: 'text', text: 'Stored visible text' }],
+            },
+          },
+        ]);
+        vector.upsert.mockClear();
+        return { memory, vector };
+      }
+
+      it('indexes stored visible parts when an edit leaves only working memory in content', async () => {
+        const { memory, vector } = await setup();
+        await memory.updateMessages({
+          // @ts-expect-error Storage supports nested partial content patches at runtime.
+          messages: [{ id: 'assistant', content: { format: 2, content: '<working_memory>private</working_memory>' } }],
+        });
+        expect(vector.upsert).toHaveBeenCalledTimes(1);
+        expect(vector.upsert.mock.calls[0]![0]).toMatchObject({ documents: ['Stored visible text'] });
+        expect(JSON.stringify(vector.upsert.mock.calls)).not.toMatch(/private|working_memory/);
+      });
+
+      it('indexes edited parts ahead of an omitted stale content mirror', async () => {
+        const { memory, vector } = await setup();
+        await memory.updateMessages({
+          messages: [{ id: 'assistant', content: { format: 2, parts: [{ type: 'text', text: 'Edited parts' }] } }],
+        });
+        expect(vector.upsert.mock.calls[0]![0]).toMatchObject({ documents: ['Edited parts'] });
+      });
+
+      it('keeps vectors when an edit does not touch text', async () => {
+        const { memory, vector } = await setup();
+        await memory.updateMessages({
+          // @ts-expect-error Storage supports nested partial content patches at runtime.
+          messages: [{ id: 'assistant', content: { format: 2, metadata: { edited: true } } }],
+        });
+        expect(vector.deleteVectors).not.toHaveBeenCalled();
+        expect(vector.upsert).not.toHaveBeenCalled();
       });
     });
 
@@ -396,6 +459,7 @@ export function testPersistenceProjection(createStorage: () => Promise<MastraCom
         await memory.settled();
         expect(await memory.getWorkingMemory({ threadId, resourceId })).toContain('private preference');
         const recalled = await memory.recall({ threadId, resourceId, perPage: false });
+        expect(boundaryMessages.length).toBeGreaterThan(0);
         expect(JSON.stringify(boundaryMessages)).not.toMatch(/private|updateWorkingMemory|working_memory/);
         const sealed = recalled.messages.filter(
           m => m.role === 'assistant' && (m.content.metadata?.mastra as { sealed?: boolean } | undefined)?.sealed,
