@@ -2,6 +2,20 @@
 
 Builds published `.d.ts` output for packages that bundle `@internal/*` (and other) type dependencies. `generateTypes()` compiles declarations, inlines bundled package types into `dist/_types/`, and validates that declaration imports only reference runtime dependencies or bundled packages.
 
+## Package build config
+
+Write a package's `tsdown.config.ts` with `defineLibConfig` from `@internal/types-builder/tsdown`. It sets the repo defaults (ESM and CJS, sourcemaps, tree-shaking, `nodeProtocol: 'strip'`, `fixedExtension: false`, `clean`) and runs `generateTypes()` after the build unless `dts` is enabled. List type-only bundled packages in `bundledTypes`; override any other tsdown option directly.
+
+```ts
+import { defineLibConfig } from '@internal/types-builder/tsdown';
+
+export default defineLibConfig({
+  entry: ['src/index.ts'],
+  deps: { alwaysBundle: ['@internal/core'] },
+  bundledTypes: ['@internal/core'],
+});
+```
+
 ## Boundary rule: bundled types must be structural
 
 Bundled declaration files are **copies** — multiple published packages ship their own duplicate of the same `@internal/*` declaration (e.g. `@mastra/core` and every auth provider each embed `MastraAuthProvider`/`MastraBase`). TypeScript checks `#private` and `protected` members **nominally**, so two identical copies with those members are mutually unassignable. This broke `server.auth = new MastraAuthWorkos()` in userland (#18682).

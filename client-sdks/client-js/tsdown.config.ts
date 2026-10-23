@@ -1,16 +1,6 @@
-import { generateTypes } from '@internal/types-builder';
-import { defineConfig } from 'tsdown';
+import { defineLibConfig } from '@internal/types-builder/tsdown';
 
-export default defineConfig({
+export default defineLibConfig({
   entry: ['src/index.ts'],
-  format: ['esm', 'cjs'],
-  fixedExtension: false,
-  nodeProtocol: 'strip',
-  clean: true,
-  dts: false,
-  treeshake: true,
-  sourcemap: true,
-  onSuccess: async () => {
-    await generateTypes(process.cwd(), new Set(['@ai-sdk/*', '@internal/ai-sdk-v4', '@internal/ai-sdk-v5']));
-  },
+  bundledTypes: ['@ai-sdk/*', '@internal/ai-sdk-v4', '@internal/ai-sdk-v5'],
 });

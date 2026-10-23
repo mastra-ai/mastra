@@ -1,7 +1,6 @@
-import { generateTypes } from '@internal/types-builder';
-import { defineConfig } from 'tsdown';
+import { defineLibConfig } from '@internal/types-builder/tsdown';
 
-export default defineConfig({
+export default defineLibConfig({
   entry: [
     'src/index.ts',
     'src/build/index.ts',
@@ -13,17 +12,8 @@ export default defineConfig({
     'src/build/bundler.ts',
     'src/validator/custom-resolver.ts',
   ],
-  format: ['esm', 'cjs'],
-  fixedExtension: false,
-  nodeProtocol: 'strip',
-  clean: true,
-  dts: false,
-  treeshake: true,
-  sourcemap: true,
   deps: {
     alwaysBundle: ['@hono/node-server', '@internal/core', '@mastra/hono'],
   },
-  onSuccess: async () => {
-    await generateTypes(process.cwd(), new Set(['@hono/node-server', '@internal/core', '@mastra/hono']));
-  },
+  bundledTypes: ['@hono/node-server', '@internal/core', '@mastra/hono'],
 });
