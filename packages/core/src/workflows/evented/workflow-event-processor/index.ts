@@ -3744,12 +3744,19 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (pendingFailure) {
       return this.#publishPendingFailure(event, eventKey, pendingFailure);
     }
-    // Budget already spent but the pending entry was evicted from the bounded
-    // map: retry the publish instead of rerunning the handler.
-    if ((this.deliveryAttempts.get(eventKey) ?? 0) >= WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS) {
+    // Deliveries already spent on this event. The transport's deliveryAttempt
+    // counts deliveries made to other processors too (e.g. a Redis nack picked
+    // up by another consumer), so it is a floor for the local count.
+    const priorAttempts = Math.max(this.deliveryAttempts.get(eventKey) ?? 0, (event.deliveryAttempt ?? 1) - 1);
+    // Budget already spent but there is no pending entry (evicted from the
+    // bounded map, or the earlier deliveries went to another processor):
+    // retry the publish instead of rerunning the handler. Each publish retry
+    // spends one delivery past the budget, so the publish count is derived
+    // from the delivery count and survives eviction.
+    if (priorAttempts >= WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS) {
       return this.#publishPendingFailure(event, eventKey, {
         error: new Error(`Event ${event.type} exhausted its delivery attempts`),
-        publishAttempts: 0,
+        publishAttempts: priorAttempts - WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS + 1,
       });
     }
 
@@ -3758,11 +3765,16 @@ export class WorkflowEventProcessor extends EventProcessor {
       this.deliveryAttempts.delete(eventKey);
       return { ok: true };
     } catch (err) {
-      const attempts = (this.deliveryAttempts.get(eventKey) ?? 0) + 1;
-      this.#setDeliveryAttempts(eventKey, attempts);
+      const attempts = priorAttempts + 1;
       // Deterministic failures (e.g. a throwing user callback) would fail the
       // same way on every redelivery, so fail them on the first attempt.
       const exhausted = attempts >= WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS || isNonRedeliverable(err);
+      // Record an exhausted event at the full budget so a redelivery never
+      // reruns its handler, even if its pending-failure entry is evicted.
+      this.#setDeliveryAttempts(
+        eventKey,
+        exhausted ? Math.max(attempts, WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS) : attempts,
+      );
 
       this.mastra.getLogger()?.error('WorkflowEventProcessor.handle: error processing event', {
         type: event.type,
@@ -3822,6 +3834,9 @@ export class WorkflowEventProcessor extends EventProcessor {
           error: failErr,
         });
       if (!giveUp) {
+        // Keep the delivery count in step with the publish count so a later
+        // delivery without a pending entry resumes at the right publish attempt.
+        this.#setDeliveryAttempts(eventKey, WorkflowEventProcessor.MAX_DELIVERY_ATTEMPTS + publishAttempts - 1);
         this.pendingFailures.delete(eventKey);
         this.pendingFailures.set(eventKey, { error: pending.error, publishAttempts });
         while (this.pendingFailures.size > WorkflowEventProcessor.DELIVERY_ATTEMPTS_MAX_ENTRIES) {

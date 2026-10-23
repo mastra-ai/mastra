@@ -5,6 +5,7 @@ import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { Event } from '../../../events/types';
 import { Mastra } from '../../../mastra';
 import { MockStore } from '../../../storage/mock';
+import { markNonRedeliverable } from '../helpers';
 import { WorkflowEventProcessor } from '.';
 
 function makeStartEvent(workflowId: string, runId: string, id?: string): Event {
@@ -202,7 +203,7 @@ describe('WorkflowEventProcessor retry budget (Sig D)', () => {
     await mastra.shutdown();
   });
 
-  it('retries the workflow.fail publish, not the handler, when the pending entry was evicted', async () => {
+  it('retries the workflow.fail publish, not the handler, when local state was evicted', async () => {
     const inner = new EventEmitterPubSub();
     let rejectFailPublish = true;
     const pubsub = new Proxy(inner, {
@@ -238,34 +239,152 @@ describe('WorkflowEventProcessor retry budget (Sig D)', () => {
       for (let i = 0; i < 3; i++) await processor.handle(event);
     };
 
-    // `cap - 1` other events exhaust first, each leaving a pending failure.
-    const others = Array.from({ length: cap - 1 }, (_, i) => makeStartEvent('wf', `run-other-${i}`, `other-${i}`));
-    for (const event of others) await exhaust(event);
-
-    // Target exhausts next: delivery counter is 3, its first publish fails.
+    // Target exhausts first: three deliveries, its first publish fails.
     const target = makeStartEvent('wf', 'run-target', 'target');
     await exhaust(target);
 
-    // Redeliveries of the others refresh their pending entries, then one more
-    // event exhausts, pushing the target's pending entry out while its
-    // delivery counter (older entries evict first there) is still 3.
-    for (const event of others) await processor.handle(event);
-    await exhaust(makeStartEvent('wf', 'run-last', 'last'));
+    // `cap` other events exhaust after it, pushing the target out of both
+    // bounded maps.
+    for (let i = 0; i < cap; i++) await exhaust(makeStartEvent('wf', `run-other-${i}`, `other-${i}`));
     const internals = processor as unknown as {
       pendingFailures: Map<string, unknown>;
       deliveryAttempts: Map<string, number>;
     };
     expect(internals.pendingFailures.has('target')).toBe(false);
-    expect(internals.deliveryAttempts.get('target')).toBe(3);
+    expect(internals.deliveryAttempts.has('target')).toBe(false);
 
     rejectFailPublish = false;
     const dispatchBefore = processor.dispatchCalls;
-    expect(await processor.handle(target)).toEqual({ ok: false, retry: false });
+    // The transport still reports this as the 4th delivery.
+    expect(await processor.handle({ ...target, deliveryAttempt: 4 })).toEqual({ ok: false, retry: false });
 
     // The handler must not rerun; the redelivery only retries the publish.
     expect(processor.dispatchCalls).toBe(dispatchBefore);
     await new Promise(resolve => setTimeout(resolve, 50));
     expect(failRuns).toContain('run-target');
+
+    await mastra.shutdown();
+  });
+
+  it('does not rerun a non-redeliverable handler when its pending failure entry is gone', async () => {
+    const inner = new EventEmitterPubSub();
+    let rejectFailPublish = true;
+    const pubsub = new Proxy(inner, {
+      get(target, prop) {
+        if (prop === 'publish') {
+          return async (topic: string, event: Event, options?: { localOnly?: boolean }) => {
+            if (topic === 'workflows' && event.type === 'workflow.fail' && rejectFailPublish) {
+              throw new Error('injected workflow.fail publish failure');
+            }
+            return target.publish(topic, event, options);
+          };
+        }
+        const value = Reflect.get(target, prop, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+    const mastra = new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      workflows: { wf: makeWorkflow('wf') } as any,
+      pubsub,
+    });
+
+    class DeterministicFailureProcessor extends WorkflowEventProcessor {
+      public dispatchCalls = 0;
+      override async loadData(): Promise<undefined> {
+        this.dispatchCalls++;
+        throw markNonRedeliverable(new Error('stopWhen exploded'));
+      }
+    }
+
+    const processor = new DeterministicFailureProcessor({ mastra });
+    const event = makeStartEvent('wf', 'run-nonredeliverable', 'event-nonredeliverable');
+
+    // Terminal on the first delivery; the workflow.fail publish throws.
+    expect(await processor.handle(event)).toEqual({ ok: false, retry: true });
+    // Same state the bounded map leaves behind after evicting the entry.
+    (processor as unknown as { pendingFailures: Map<string, unknown> }).pendingFailures.delete(
+      'event-nonredeliverable',
+    );
+
+    rejectFailPublish = false;
+    expect(await processor.handle(event)).toEqual({ ok: false, retry: false });
+    expect(processor.dispatchCalls).toBe(1);
+
+    await mastra.shutdown();
+  });
+
+  it('stops after MAX_FAIL_PUBLISH_ATTEMPTS even when the pending entry is evicted between deliveries', async () => {
+    const inner = new EventEmitterPubSub();
+    let failPublishes = 0;
+    const pubsub = new Proxy(inner, {
+      get(target, prop) {
+        if (prop === 'publish') {
+          return async (topic: string, event: Event, options?: { localOnly?: boolean }) => {
+            if (topic === 'workflows' && event.type === 'workflow.fail') {
+              failPublishes++;
+              throw new Error('injected workflow.fail publish failure');
+            }
+            return target.publish(topic, event, options);
+          };
+        }
+        const value = Reflect.get(target, prop, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    });
+    const mastra = new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      workflows: { wf: makeWorkflow('wf') } as any,
+      pubsub,
+    });
+    const processor = new AlwaysThrowsProcessor({ mastra });
+    const pending = (processor as unknown as { pendingFailures: Map<string, unknown> }).pendingFailures;
+    const event = makeStartEvent('wf', 'run-evicted-repeatedly', 'event-evicted-repeatedly');
+
+    expect(await processor.handle(event)).toEqual({ ok: false, retry: true });
+    expect(await processor.handle(event)).toEqual({ ok: false, retry: true });
+    // Budget spent; first publish throws.
+    expect(await processor.handle(event)).toEqual({ ok: false, retry: true });
+    pending.delete('event-evicted-repeatedly');
+    expect(await processor.handle(event)).toEqual({ ok: false, retry: true });
+    pending.delete('event-evicted-repeatedly');
+    // Third publish attempt: give up even though no pending entry survived.
+    expect(await processor.handle(event)).toEqual({ ok: false, retry: false });
+    expect(await processor.handle(event)).toEqual({ ok: false, retry: false });
+
+    expect(failPublishes).toBe(3);
+    expect(processor.dispatchCalls).toBe(3);
+
+    await mastra.shutdown();
+  });
+
+  it('retries only the publish when the transport says the budget was spent on another processor', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const mastra = new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      workflows: { wf: makeWorkflow('wf') } as any,
+      pubsub,
+    });
+    const failEvents: Event[] = [];
+    await pubsub.subscribe('workflows', async event => {
+      if (event.type === 'workflow.fail') failEvents.push(event);
+    });
+
+    // A fresh processor (e.g. another Redis consumer) receives the 4th
+    // delivery: three earlier deliveries failed elsewhere.
+    const processor = new AlwaysThrowsProcessor({ mastra });
+    const event = {
+      ...makeStartEvent('wf', 'run-other-consumer', 'event-other-consumer'),
+      deliveryAttempt: 4,
+    };
+
+    expect(await processor.handle(event)).toEqual({ ok: false, retry: false });
+    await pubsub.flush();
+    expect(processor.dispatchCalls).toBe(0);
+    expect(failEvents.length).toBe(1);
 
     await mastra.shutdown();
   });
