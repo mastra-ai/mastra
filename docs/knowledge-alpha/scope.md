@@ -63,11 +63,18 @@ const tools = company.createTools({ write: true }); // explicit wiring
 - Scopes stay main's fixed chain: `org:<requestContext.organizationId>`, then `resource:` (the `knowledgeResourceId` override if set, else the run's resourceId), then `thread:`.
 - Without an `organizationId` the tools and the pins processor both refuse or skip, as on main (D3). For Mastra Code sessions that can't resolve an org (today `hasSubconsciousTools` returns false), the agent simply gets no Knowledge tools or pins; nothing errors.
 
+**Where `organizationId` and `knowledgeResourceId` come from.**
+- Today the Mastra Code SDK stamps them only inside Memory resolution, and only when `MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS=1` and a vector store exist (`sdk/agents/memory.ts:306-319`). Values come from `resolveKnowledgeScopeIdentity` (`sdk/knowledge-scope.ts`): Factory sessions get their seeded org and the project id as resource; every other session gets the hard-coded org `local` and no resource override, with no way to change either.
+- With Memory's `knowledge` option removed (D4), that stamping moves to where the SDK attaches Knowledge to the agent. It runs whenever a Knowledge is attached (the switch or a caller-supplied `createMastraCode({ knowledge })`), not only when Subconscious and a vector store are on.
+- `createMastraCode({ knowledge: { key, instance, organizationId?, resourceId? } })` gains two optional overrides. A caller-supplied instance (e.g. the Director dogfood) sets its own org and shared resource; without them it falls back to `resolveKnowledgeScopeIdentity` as today (`local`, or the Factory org and project). A Factory session with no org still resolves to nothing and gets no Knowledge tools or pins (D3).
+- Outside Mastra Code, a plain `new Agent({ knowledge })` reads both keys from the request context the caller passes; the docs say so, and nothing stamps them for you.
+
 **Pins can't use the state-signal lane.**
 - `ProcessorRunner` throws `computeStateSignal requires Mastra memory…` (`processors/runner.ts:496`) and then loads the thread through Memory.
 - Changing that is a core processor-API change, which needs its own PR (`packages/core/AGENTS.md`).
 - **So pins become a plain input processor (`processInputStep`).** It adds one fixed context block of the visible pins each step. The block is rendered in a stable order, so the cached prompt prefix holds until a pin changes.
 - We lose the snapshot+delta updates Subconscious had. Each pin change rewrites the block, which costs a cache miss from that point on.
+- **The block sits in `systemMessages`, ahead of the conversation.** Pins live at the resource rung, so one agent's pin change is a full-prefix cache miss on the next turn of every agent sharing that resource (D7).
 - Pins need `organizationId` and a resourceId. Without them the block is skipped, and the pin tools refuse rather than write pins nobody can read back (D7).
 
 **Search.**
@@ -129,7 +136,7 @@ Counted with `estimateTokenCount` from tokenx, which is already a core dependenc
 | D4 | Memory's `knowledge` option | remove it; attach to the agent | keep it as a shortcut |
 | D5 | Mastra Code switch | rename `MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS` (`sdk/agents/memory.ts:~250`) to `MASTRACODE_EXPERIMENTAL_KNOWLEDGE=1`; it attaches a Knowledge with read, write and pins on and no longer requires a vector store (without one, search is keyword-only) | keep the old flag name |
 | D6 | Release note | Tyler's fixed wording, "Changes to an experimental, upcoming memory feature.", plus one line: "`experimental_subconscious` is removed; attach Knowledge to the agent instead." | wording only, no removal line |
-| D7 | Pins without Memory | plain input processor, one fixed block (section 3) | pins only on agents that also have Memory (state-signal lane, snapshot+delta) |
+| D7 | Pins without Memory | plain input processor, one fixed block in `systemMessages` (section 3); a pin change is a full-prefix cache miss for every agent on that resource | pins only on agents that also have Memory (state-signal lane, snapshot+delta) |
 | D8 | Leftovers in existing threads | keep three small protections: OM strip of old signals, `deleteThread` remind cleanup, TUI skips old activity signals | drop them and accept raw signals or orphaned remind threads in old threads |
 
 Build it means: branch `feat/knowledge-alpha-standalone` off main `b1244bd3bc0`, my pick on each decision, a draft PR from the first commit, Fayth reviews, no merge and no reviewer requests.
