@@ -3019,6 +3019,43 @@ describe('thread and run abort (#25156)', () => {
     }
   });
 
+  // A server that never saw the run finds it through the thread lease (#28310).
+  it('the thread-abort route asks the Inngest worker to stop the thread lease owner on a server that never saw the run', async () => {
+    const durableAgent = makeDurable('abort-thread-cold');
+    const publish = vi.spyOn(durableAgent.pubsub, 'publish');
+    const leaseOwner = vi
+      .spyOn(agentThreadStreamRuntime, 'getThreadLeaseOwnerRunId')
+      .mockResolvedValue('run-on-another-server');
+    try {
+      await expect(
+        durableAgent.__abortThreadStreamAcrossProcesses({ threadId: 'cold-t', resourceId: 'cold-r' }),
+      ).resolves.toBe(true);
+      expect(abortRequestsFor(publish, 'run-on-another-server')).toHaveLength(1);
+    } finally {
+      leaseOwner.mockRestore();
+    }
+  });
+
+  it('the thread-abort route leaves the lease owner alone when expectedRunId names another run', async () => {
+    const durableAgent = makeDurable('abort-thread-cold-stale');
+    const publish = vi.spyOn(durableAgent.pubsub, 'publish');
+    const leaseOwner = vi
+      .spyOn(agentThreadStreamRuntime, 'getThreadLeaseOwnerRunId')
+      .mockResolvedValue('run-on-another-server');
+    try {
+      await expect(
+        durableAgent.__abortThreadStreamAcrossProcesses({
+          threadId: 'cold-t',
+          resourceId: 'cold-r',
+          expectedRunId: 'an-earlier-run',
+        }),
+      ).resolves.toBe(false);
+      expect(abortRequestsFor(publish, 'run-on-another-server')).toHaveLength(0);
+    } finally {
+      leaseOwner.mockRestore();
+    }
+  });
+
   it('abortThreadStream publishes nothing when expectedRunId does not match the active run', async () => {
     const durableAgent = makeDurable('abort-thread-stale');
     const publish = vi.spyOn(durableAgent.pubsub, 'publish');

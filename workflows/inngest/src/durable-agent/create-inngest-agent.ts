@@ -2005,7 +2005,20 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     // Defined here so the proxy doesn't forward it to the wrapped Agent, whose
     // version would call that Agent's abortThreadStream and skip the override above.
     async __abortThreadStreamAcrossProcesses(abortOptions) {
-      return proxyRef!.abortThreadStream(abortOptions);
+      const aborted = proxyRef!.abortThreadStream(abortOptions);
+      if (aborted || abortOptions.localOnly) return aborted;
+      // This server never saw the run: the thread lease names it wherever it
+      // started, as in DurableAgent (#28310).
+      const threadPubSub = agent.getPubSub();
+      const runId = await agentThreadStreamRuntime.getThreadLeaseOwnerRunId(threadPubSub, abortOptions);
+      if (!runId) return false;
+      if (abortOptions.expectedRunId !== undefined && abortOptions.expectedRunId !== runId) return false;
+      if (abortOptions.clearPendingSignals) {
+        await agentThreadStreamRuntime.requestThreadRunAbort(threadPubSub, abortOptions, runId);
+      } else {
+        await publishAbortRequest(getPubsub(), runId);
+      }
+      return true;
     },
 
     abortRunStream(runId) {

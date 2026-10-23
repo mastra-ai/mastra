@@ -1,7 +1,6 @@
 ---
 '@mastra/core': patch
 '@mastra/server': patch
-'@mastra/inngest': patch
 ---
 
 Fixed thread aborts for durable agents on multi-server deployments. Aborting a thread on a server that didn't start the run now stops the run on whichever server executes it, as aborting by run id already did.

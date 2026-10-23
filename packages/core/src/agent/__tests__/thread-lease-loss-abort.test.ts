@@ -354,7 +354,12 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
   // A server answering a bare abort request has never subscribed to the thread, so it
   // knows no run on it; only the shared lease names the run (#28310). Non-durable runs
   // can only be stopped cross-process by a replica that subscribed to the thread.
-  function coldReplicaSetup(thread: string, prompt: string) {
+  function coldReplicaSetup(
+    thread: string,
+    prompt: string,
+    ownerPubSubFor: (shared: SharedLeases, events: EventEmitter) => ReplicaPubSub = (shared, events) =>
+      new ReplicaPubSub(shared, events),
+  ) {
     for (let i = 0; i < 200; i++) {
       llm.on(
         { userMessage: prompt, sequenceIndex: i },
@@ -376,7 +381,7 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
         return 'ticked';
       },
     });
-    const ownerReplica = replica(shared, memory, { tick }, new ReplicaPubSub(shared, events));
+    const ownerReplica = replica(shared, memory, { tick }, ownerPubSubFor(shared, events));
     const coldPubsub = new ReplicaPubSub(shared, events);
     const coldReplica = replica(shared, memory, {}, coldPubsub);
     return { ownerReplica, coldReplica, coldPubsub, counter };
@@ -521,6 +526,67 @@ describeForAllEngines('thread lease loss', (engine: EngineVariant) => {
       expect(await run.finishReason).toBe('aborted');
 
       // Give a follow-up run that drains the queued input time to reach the model.
+      await new Promise(resolve => setTimeout(resolve, 500));
+      const queuedRequests = llm
+        .getRequests()
+        .filter(request => JSON.stringify(request.body?.messages ?? []).includes(queuedText));
+      expect(queuedRequests).toHaveLength(0);
+    },
+    20_000,
+  );
+
+  it.skipIf(!isDurableEngineVariant(engine))(
+    'clears input queued on the owner when its lease retake finished just before the abort check',
+    async () => {
+      const thread = 'cold-abort-clear-retake-settled';
+      const queuedText = 'queued before settled retake';
+      // The owner's first lease read for the abort still sees its retake token, but the
+      // retake has already handed the lease back to the run id by the time it looks.
+      class SettledRetakePubSub extends ReplicaPubSub {
+        staleRetakeRead = false;
+        #wrapped = new Map<unknown, unknown>();
+        override async getLeaseOwner(key: string) {
+          const owner = await super.getLeaseOwner(key);
+          if (!this.staleRetakeRead || !owner) return owner;
+          this.staleRetakeRead = false;
+          return `${owner}\u0000retake\u0000settled`;
+        }
+        override async subscribe(...[topic, cb, options]: Parameters<ReplicaPubSub['subscribe']>) {
+          const wrapped: typeof cb = (event, ...rest) => {
+            if (event.type === 'run-abort-requested') this.staleRetakeRead = true;
+            return cb(event, ...rest);
+          };
+          this.#wrapped.set(cb, wrapped);
+          return super.subscribe(topic, wrapped, options);
+        }
+        override async unsubscribe(...[topic, cb]: Parameters<ReplicaPubSub['unsubscribe']>) {
+          return super.unsubscribe(topic, (this.#wrapped.get(cb) as typeof cb | undefined) ?? cb);
+        }
+      }
+      const { ownerReplica, coldReplica, counter } = coldReplicaSetup(
+        thread,
+        'cold abort settled retake',
+        (shared, events) => new SettledRetakePubSub(shared, events),
+      );
+      llm.on({ userMessage: queuedText }, { content: 'should never run' });
+      const { output: run, drain } = await startStream(ownerReplica, 'cold abort settled retake', {
+        maxSteps: 200,
+        memory: { thread, resource: RESOURCE },
+      });
+      const done = drain().catch(() => undefined);
+      await vi.waitFor(() => expect(counter.ticks).toBeGreaterThanOrEqual(3), { timeout: 5_000 });
+      await ownerReplica.queueMessage(queuedText, { resourceId: RESOURCE, threadId: thread }).accepted;
+
+      await expect(
+        coldReplica.__abortThreadStreamAcrossProcesses({
+          resourceId: RESOURCE,
+          threadId: thread,
+          clearPendingSignals: true,
+        }),
+      ).resolves.toBe(true);
+      await done;
+      expect(await run.finishReason).toBe('aborted');
+
       await new Promise(resolve => setTimeout(resolve, 500));
       const queuedRequests = llm
         .getRequests()

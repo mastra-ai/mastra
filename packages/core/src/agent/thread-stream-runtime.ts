@@ -900,7 +900,9 @@ export class AgentThreadStreamRuntime {
     if (owner === runId) return true;
     if (!owner?.startsWith(`${runId}${RETAKE_LEASE_MARKER}`)) return false;
     const retake = this.#getState(pubsub).leaseRetakes.get(runId);
-    return retake ? retake.catch(() => false) : false;
+    if (retake) return retake.catch(() => false);
+    // The retake may have settled between the two reads; the owner then names the run again.
+    return (await provider.getLeaseOwner(key).catch(() => undefined)) === runId;
   }
 
   /**
