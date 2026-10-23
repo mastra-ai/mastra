@@ -1301,7 +1301,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
         const customApp = await setupCustomRouteErrors();
         const response = await executeHttpRequest(customApp, { method: 'GET', path: '/custom-errors/not-found' });
         expect(response.status).toBe(404);
-        expect(await bodyText(response)).toContain('Widget not found');
+        expect(JSON.parse(await bodyText(response))).toEqual({ error: 'Widget not found' });
       });
 
       it('keeps the status and message of an HTTPException from another hono install', async () => {
@@ -1312,7 +1312,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
           body: {},
         });
         expect(response.status).toBe(409);
-        expect(await bodyText(response)).toContain('Widget already exists');
+        expect(JSON.parse(await bodyText(response))).toEqual({ error: 'Widget already exists' });
       });
 
       it('returns the HTTPException custom response with its headers', async () => {
