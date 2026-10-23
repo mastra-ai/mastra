@@ -1677,6 +1677,126 @@ describe('BackgroundTaskManager', () => {
       }
     });
 
+    const seedCrashedTask = async (storage: MockStore, id: string, leaseExpiresAt: Date) => {
+      const bgStore = await storage.getStore('backgroundTasks');
+      await bgStore!.createTask({
+        id,
+        status: 'running',
+        toolName: 't',
+        toolCallId: 'c',
+        args: {},
+        agentId: 'a',
+        runId: 'r',
+        retryCount: 0,
+        maxRetries: 0,
+        timeoutMs: 5000,
+        createdAt: new Date(),
+        startedAt: new Date(Date.now() - 60_000),
+        ownerId: 'dead-worker',
+        leaseExpiresAt,
+      });
+    };
+
+    it('fires onTaskFailed when startup recovery fails a crashed task', async () => {
+      const seedStorage = new MockStore();
+      const onTaskFailed = vi.fn();
+      const local = new Mastra({
+        logger: false,
+        storage: seedStorage,
+        backgroundTasks: { enabled: true, onTaskFailed },
+      });
+      await seedCrashedTask(seedStorage, 'crashed-startup', new Date(Date.now() - 1_000));
+      await local.startWorkers();
+
+      try {
+        await tick(200);
+
+        const task = await local.backgroundTaskManager!.getTask('crashed-startup');
+        expect(task?.status).toBe('failed');
+        expect(task?.error?.message).toMatch(/Worker process terminated/);
+        expect(onTaskFailed).toHaveBeenCalledTimes(1);
+        expect(onTaskFailed.mock.calls[0]![0]).toMatchObject({ id: 'crashed-startup', status: 'failed' });
+      } finally {
+        await local.backgroundTaskManager?.shutdown();
+        await local.stopWorkers();
+      }
+    });
+
+    it('fires onTaskFailed and streams background-task-failed when a later sweep fails a crashed task', async () => {
+      const seedStorage = new MockStore();
+      const onTaskFailed = vi.fn();
+      const local = new Mastra({
+        logger: false,
+        storage: seedStorage,
+        backgroundTasks: { enabled: true, onTaskFailed },
+      });
+      // Lease is still valid at startup, so only the scheduled sweep reclaims it.
+      await seedCrashedTask(seedStorage, 'crashed-later', new Date(Date.now() + 500));
+      await local.startWorkers();
+
+      const abortController = new AbortController();
+      try {
+        const mgr = local.backgroundTaskManager!;
+        await tick(50);
+        expect((await mgr.getTask('crashed-later'))?.status).toBe('running');
+        expect(onTaskFailed).not.toHaveBeenCalled();
+
+        const stream = mgr.stream({ abortSignal: abortController.signal, includeExisting: false });
+        const reader = stream.getReader();
+        const failedChunk = (async () => {
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) return undefined;
+            if (value?.type === 'background-task-failed') return value;
+          }
+        })();
+
+        // The sweep fires 1s past the lease expiry.
+        await tick(2_000);
+
+        expect((await mgr.getTask('crashed-later'))?.status).toBe('failed');
+        expect(onTaskFailed).toHaveBeenCalledTimes(1);
+        const chunk = await Promise.race([failedChunk, tick(500).then(() => 'timeout')]);
+        expect(chunk).toMatchObject({ type: 'background-task-failed' });
+        expect(JSON.stringify(chunk)).toContain('crashed-later');
+      } finally {
+        abortController.abort();
+        await local.backgroundTaskManager?.shutdown();
+        await local.stopWorkers();
+      }
+    });
+
+    it('does not publish task.failed when another replica wins the recovery write', async () => {
+      const seedStorage = new MockStore();
+      const onTaskFailed = vi.fn();
+      const local = new Mastra({
+        logger: false,
+        storage: seedStorage,
+        backgroundTasks: { enabled: true, onTaskFailed },
+      });
+      await seedCrashedTask(seedStorage, 'crashed-lost-race', new Date(Date.now() - 1_000));
+      const bgStore = await seedStorage.getStore('backgroundTasks');
+      const updateSpy = vi.spyOn(bgStore!, 'updateTask').mockImplementation(async (taskId, update) => {
+        if (taskId === 'crashed-lost-race' && update.status === 'failed') return false;
+        return true;
+      });
+      await local.startWorkers();
+
+      try {
+        await tick(200);
+        expect(updateSpy).toHaveBeenCalledWith(
+          'crashed-lost-race',
+          expect.objectContaining({ status: 'failed' }),
+          expect.anything(),
+        );
+        expect(onTaskFailed).not.toHaveBeenCalled();
+      } finally {
+        updateSpy.mockRestore();
+        await local.backgroundTaskManager?.shutdown();
+        await local.stopWorkers();
+      }
+    });
+
     it('stamps an execution lease on dispatch and clears it when the task finishes', async () => {
       const local = await makeLocalManager({
         enabled: true,
