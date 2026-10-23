@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
 import { resolve } from 'node:path';
 import { z } from 'zod';
-import type { InputLimits } from '../../config/limits.js';
+import type { InputLimits } from '../config/limits.js';
 import { hashBytes, roleSchema, type InputProvider } from '../domain/contracts.js';
 import { IntakeError } from '../domain/errors.js';
 import { projectRoot } from '../runtime/paths.js';
@@ -119,7 +119,7 @@ export async function extractPdf(
             new IntakeError(
               'PAGE_LIMIT',
               `Each PDF must have at most ${maxPages} physical pages.`,
-              'Upload a shorter textual PDF or change src/config/limits.ts and restart.',
+              'Upload a shorter textual PDF or change src/mastra/config/limits.ts and restart.',
             ),
           );
           return;
@@ -160,7 +160,7 @@ export function createPdfProvider(limits: InputLimits, workerPath?: string): Inp
           throw new IntakeError(
             'BYTE_LIMIT',
             `Each PDF must contain 1 to ${effectiveLimits.pdf.maxBytesPerFile} bytes.`,
-            'Upload a smaller textual PDF or change src/config/limits.ts and restart.',
+            'Upload a smaller textual PDF or change src/mastra/config/limits.ts and restart.',
           );
         if (!bytes.subarray(0, 5).equals(Buffer.from('%PDF-')))
           throw new IntakeError(

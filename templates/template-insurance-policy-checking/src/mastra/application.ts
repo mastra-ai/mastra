@@ -1,9 +1,9 @@
 import { resolve } from 'node:path';
 import { LibSQLStore } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
-import * as registrations from '../providers.js';
-import { inputLimits, inputLimitsSchema } from '../config/limits.js';
-import { insuranceConfiguration, insuranceConfigurationSchema } from '../config/insurance.js';
+import * as registrations from './providers.js';
+import { inputLimits, inputLimitsSchema } from './config/limits.js';
+import { insuranceConfiguration, insuranceConfigurationSchema } from './config/insurance.js';
 import { createRegistry } from './providers/provider-registry.js';
 import { CaseRepository } from './storage/cases.js';
 import { createCaseService } from './domain/case-service.js';

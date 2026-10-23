@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { inputLimits, inputLimitsSchema } from '../src/config/limits.js';
+import { inputLimits, inputLimitsSchema } from '../src/mastra/config/limits.js';
 import { applicationConfigurationSchema, clarifySchema } from '../src/mastra/domain/contracts.js';
-import { insuranceConfiguration, insuranceConfigurationSchema } from '../src/config/insurance.js';
+import { insuranceConfiguration, insuranceConfigurationSchema } from '../src/mastra/config/insurance.js';
 import { resolveControlledProviderEndpoint } from '../src/mastra/runtime/server.js';
 import { failureText } from '../src/mastra/domain/errors.js';
 import { sourceBundleSchema } from '../src/mastra/domain/contracts.js';

@@ -1,10 +1,10 @@
 # Insurance Policy Checking
 
-Use this template as the starting point for a production insurance policy-checking application, with durable document intake, verifiable evidence and conversation context in Mastra Studio. Brokers can capture proposals, contracts and issued policies, identify each case and retrieve the original documents and exact physical-page text after a restart. The current functionality covers intake and clarification; reconciliation, reports and broker review are not available yet.
+A starting point for a production insurance policy-checking application. Capture proposals, contracts and issued policies in Mastra Studio, clarify each case and retrieve original documents and exact physical-page text after a restart. Current functionality covers intake and clarification; reconciliation, reports and broker review are not available yet.
 
 ## Why we built this
 
-Policy checking starts with knowing which documents belong to a case and where each statement came from. Keeping immutable originals, searchable pages and explicit reference choices gives brokers a reliable starting point without treating an unaccepted proposal as agreed coverage.
+Policy checking starts with knowing which documents belong to a case and where each statement came from. Immutable originals and explicit reference choices preserve that evidence.
 
 ## Prerequisites
 
@@ -16,69 +16,22 @@ Policy checking starts with knowing which documents belong to a case and where e
    - Run `npx create-mastra@latest insurance-policy-checking --template insurance-policy-checking`.
    - Run `cd insurance-policy-checking`, then `npm install`.
 2. **Add your API key**
-   - Run `cp .env.example .env` and fill in the key described under Prerequisites.
+   - Run `cp .env.example .env` and fill in the key.
 3. **Start Studio**
    - Run `npm run dev` and open [Mastra Studio](http://127.0.0.1:4111).
-   - Select **Policy Checking**, attach a proposal and its issued policy using **Add attachment → Add a local file**, and send a message. The intake response identifies the saved case and sources, then asks for clarification. Studio displays this response in its processor notice while model dispatch is disabled.
+   - Select **Policy Checking**, attach a textual proposal and issued policy via **Add attachment → Add a local file**, and send a message. The processor notice identifies the saved case and sources and requests clarification.
+
+Paid model dispatch currently remains disabled; an API key alone does not enable it. Intake commands work without model calls.
 
 ## Try it out
 
-- Send `/status` to read the selected case, source hashes, physical-page counts, extraction limitations and missing clarification. Case state stays `CREATED`; captured documents are not a completed comparison.
-- Send `/evidence SOURCE_ID 2`, replacing `SOURCE_ID` with a saved source ID, to read exact text from physical PDF page 2. Printed page labels do not change physical numbering.
-- Attach the same PDF twice in one message. The case keeps one immutable source for identical bytes. New bytes create another source rather than overwriting history.
-- Start another Studio conversation and attach a liability proposal. Return to the first conversation after restarting the server; each conversation keeps its own selected case.
-- To start a fresh case in the current conversation, attach its documents with the message `/new`. Earlier source files remain in private storage.
+- Send `/status` to see the selected case, source IDs and missing clarification.
+- Send `/evidence SOURCE_ID 2` to read physical PDF page 2, using a saved source ID.
+- Attach documents with `/new` to start another case in the same conversation. Use [`/clarify` and the operating guide](./docs/usage.md) to declare document roles and reference choices.
 
 ## Customization
 
-- Ask your coding agent: “Add an insurance line profile and a local structured-record input provider. Explore the contracts and propose a plan before changing the implementation.” Profiles live in `src/config/insurance.ts`; provider category arrays and explicit defaults live in `src/providers.ts`.
-- Change `src/config/limits.ts`, then restart. Defaults are four documents per case, 10 MiB per PDF, 50 physical pages per PDF and 100 physical pages per case. These values feed upload schemas, parser checks and HTTP capacity. Raising capacity does not authorize model spending. Register a provider with its request schema and shared captured-source contract; structured records use real record/field locators and never invent PDF pages.
-
-## Runtime configuration and current limits
-
-Optional settings in `.env` include `POLICY_OPERATOR_ID` for the local broker identity (default `local-broker`), `PORT` for the loopback port (default `4111`), and `POLICY_DATA_DIR` for private persistence (default `.runtime` in the project root).
-
-The current release captures and retrieves documents deterministically. Paid conversation dispatch remains disabled until spending configuration is implemented and explicitly authorized; providing an API key alone does not enable it. No paid model call is needed for the current intake commands.
-
-The default input accepts direct textual PDF attachments across insurance lines. Remote URLs, arbitrary filesystem paths, image-only PDFs, encrypted files and OCR are unsupported. Use the provider contracts to add other document sources while preserving captured evidence and case authority.
-
-## Case clarification
-
-The `clarify-case` tool accepts explicit intent, distinct reference and target source IDs, document roles, case identity and the expected case revision. General document comparison can use unaccepted proposals and does not require an issued policy number. Agreed-term checking additionally requires a stated accepted proposal/contract and an issued target policy. These declarations prepare intake; they do not run comparison or approve a report.
-
-With model dispatch disabled, send `/clarify ` followed by a JSON object with the same fields. For example, replace the IDs and revision with values from `/status`:
-
-```json
-{
-  "caseId": "11111111-1111-4111-8111-111111111111",
-  "expectedRevision": 1,
-  "identity": {
-    "policyNumber": null,
-    "insuredName": "Elm Harbor Fabrication LLC",
-    "insuranceProduct": "Commercial property"
-  },
-  "intent": "document_comparison",
-  "referenceId": "22222222-2222-4222-8222-222222222222",
-  "targetId": "33333333-3333-4333-8333-333333333333",
-  "roles": [
-    { "sourceId": "22222222-2222-4222-8222-222222222222", "role": "proposal" },
-    { "sourceId": "33333333-3333-4333-8333-333333333333", "role": "issued_policy" }
-  ],
-  "acceptedBaseline": null
-}
-```
-
-## Local storage and parser limits
-
-Keep the server bound to its configured `127.0.0.1` address and open Studio using that exact host. Requests with another Host or Origin are rejected, including generic mutation routes. The local operator and OS account remain trusted; this is not a multi-tenant access system.
-
-The runtime folder contains the application database, separate Mastra history database and private immutable source files. Stop the server before backing up or restoring the entire folder as a pair. Missing or changed files produce an explicit unavailable/integrity response. Interrupted attempts and unreferenced files remain visible in recovery status. Cleanup is manual with the server stopped.
-
-PDF.js runs sequentially in a separate process per document with 10 CPU seconds, a 15-second wall timeout, 128 MiB V8 old space, an 8 MiB extraction-output boundary and a four-million-pixel image guard. V8 heap limits do not impose a hard RSS/native-memory ceiling. Large or complex documents can fail safely within these operational bounds even when they meet upload capacities. Blank, image-only and mixed pages have distinct limitations; unextracted content cannot support absence claims.
-
-## Development checks
-
-Run `npm run format:check`, `npm run typecheck`, `npm run test:unit`, `npm run test:integration` and `npm run build`. Run `npm run test:studio` for the real installed Studio attachment/restart proof. Browser tests require Playwright Chromium; `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` can select an existing Chromium executable. Tests replace only the external paid provider with a local controlled HTTP server and make no paid model calls.
+Ask your coding agent to explore `src/mastra/providers.ts` and propose a plan for adding a structured-record input provider.
 
 ## About Mastra templates
 

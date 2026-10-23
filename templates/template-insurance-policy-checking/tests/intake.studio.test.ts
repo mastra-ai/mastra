@@ -9,7 +9,7 @@ import { hashBytes } from '../src/mastra/domain/contracts.js';
 import { controlledProvider, startStudio } from './http.js';
 import { policyPdf } from './fixtures.js';
 import { workingMemorySchema } from '../src/mastra/processors/document-intake-processor.js';
-import { inputLimits } from '../src/config/limits.js';
+import { inputLimits } from '../src/mastra/config/limits.js';
 
 async function openAgent(page: Page, url: string) {
   await page.goto(url);

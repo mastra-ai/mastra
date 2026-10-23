@@ -2,7 +2,7 @@ import { createClient, type Client } from '@libsql/client';
 import { randomUUID } from 'node:crypto';
 import { open, readFile, readdir, stat } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import type { InputLimits } from '../../config/limits.js';
+import type { InputLimits } from '../config/limits.js';
 import {
   canonicalJson,
   hashBytes,
@@ -113,7 +113,7 @@ export class CaseRepository {
         throw new IntakeError(
           'CASE_PAGE_LIMIT',
           `A case may contain at most ${limits.pdf.maxPagesPerCase} physical PDF pages.`,
-          'Start a separate case or change src/config/limits.ts and restart.',
+          'Start a separate case or change src/mastra/config/limits.ts and restart.',
         );
       const saved = [];
       for (const source of additions) {

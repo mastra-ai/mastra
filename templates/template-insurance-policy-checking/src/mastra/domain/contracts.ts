@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
-import type { InputLimits } from '../../config/limits.js';
+import type { InputLimits } from '../config/limits.js';
 import { IntakeError } from './errors.js';
 
 export const portSchema = z.coerce.number().int().min(1024).max(65535);
@@ -168,7 +168,7 @@ export function validateBundle(input: unknown, limits: InputLimits, providerId: 
     throw new IntakeError(
       'DOCUMENT_LIMIT',
       `At most ${limits.maxDocumentsPerCase} documents are allowed per case.`,
-      'Remove excess documents or change src/config/limits.ts and restart.',
+      'Remove excess documents or change src/mastra/config/limits.ts and restart.',
     );
   let pages = 0;
   for (const source of bundle.sources) {
@@ -220,7 +220,7 @@ export function validateBundle(input: unknown, limits: InputLimits, providerId: 
     throw new IntakeError(
       'CASE_PAGE_LIMIT',
       `A case may contain at most ${limits.pdf.maxPagesPerCase} physical PDF pages.`,
-      'Remove excess pages or change src/config/limits.ts and restart.',
+      'Remove excess pages or change src/mastra/config/limits.ts and restart.',
     );
   return bundle;
 }

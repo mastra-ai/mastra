@@ -7,7 +7,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { RequestContext } from '@mastra/core/request-context';
 import { noopObserve } from '@mastra/core/tools';
-import { inputLimits, inputLimitsSchema, type InputLimits } from '../src/config/limits.js';
+import { inputLimits, inputLimitsSchema, type InputLimits } from '../src/mastra/config/limits.js';
 import { createPdfProvider, extractPdf } from '../src/mastra/providers/pdf.js';
 import { CaseRepository } from '../src/mastra/storage/cases.js';
 import { createCaseService } from '../src/mastra/domain/case-service.js';

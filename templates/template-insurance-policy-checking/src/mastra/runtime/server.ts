@@ -1,6 +1,6 @@
 import type { ServerConfig } from '@mastra/core/server';
 import { IntakeError, safeFailure } from '../domain/errors.js';
-import type { InputLimits } from '../../config/limits.js';
+import type { InputLimits } from '../config/limits.js';
 import { z } from 'zod';
 
 const controlledProviderEnvironmentSchema = z
