@@ -1,6 +1,7 @@
 import type { AggregateTracesResponse, MastraClient } from '@mastra/client-js';
 
 type TimeSeriesResponse = Awaited<ReturnType<MastraClient['getMetricTimeSeries']>>;
+type BreakdownResponse = Awaited<ReturnType<MastraClient['getMetricBreakdown']>>;
 type AggregateRow = AggregateTracesResponse['rows'][number];
 
 const recent = () => new Date(Date.now() - 2 * 3_600_000).toISOString();
@@ -64,3 +65,51 @@ export const agentRunsByProjectAndName: AggregateTracesResponse = {
 
 /** More tools than the server returns: it keeps the busiest and says so. */
 export const truncatedToolCalls: AggregateTracesResponse = { ...toolCallsByName, truncated: true };
+
+/** The same agents over the previous window: Explore Subagent doubled, Code Agent's errors went up. */
+export const previousAgentRunsByName: AggregateTracesResponse = {
+  rows: [
+    row({ entityName: 'Explore Subagent' }, { count: 60, errorCount: 1, errorRate: 1 / 60, 'duration.p95': 1_000 }),
+    row({ entityName: 'Code Agent' }, { count: 40, errorCount: 2, errorRate: 0.05, 'duration.p95': 40_000 }),
+  ],
+  truncated: false,
+};
+
+/** Agent tokens and cost over the previous window: Code Agent spent $5, less than now. */
+export const previousAgentUsage: BreakdownResponse = {
+  groups: [{ dimensions: { entityName: 'Code Agent' }, value: 1_000_000, estimatedCost: 5, costUnit: 'USD' }],
+};
+
+/** Tokens and cost per model; no runs, since a run isn't tied to one model. */
+export const usageByModel: BreakdownResponse = {
+  groups: [
+    { dimensions: { model: 'gpt-5' }, value: 2_000_000, estimatedCost: 12, costUnit: 'USD' },
+    { dimensions: { model: 'claude-haiku-4-5' }, value: 5_000_000, estimatedCost: 4, costUnit: 'USD' },
+  ],
+};
+
+/** Traces per thread. */
+export const tracesByThread: AggregateTracesResponse = {
+  rows: [
+    row({ threadId: 'thread-a' }, { count: 30, errorRate: 0.1, 'duration.p95': 5_000 }),
+    row({ threadId: 'thread-b' }, { count: 5, errorRate: 0, 'duration.p95': 800 }),
+  ],
+  truncated: false,
+};
+
+/** Tokens and cost per thread; usage outside any thread comes back as a null thread. */
+export const usageByThread: BreakdownResponse = {
+  groups: [
+    { dimensions: { threadId: 'thread-a' }, value: 40_000, estimatedCost: 0.4, costUnit: 'USD' },
+    { dimensions: { threadId: null }, value: 9_000, estimatedCost: 0.09, costUnit: 'USD' },
+  ],
+};
+
+/** The previous window with an agent that has stopped running since. */
+export const previousWithRetiredAgent: AggregateTracesResponse = {
+  rows: [
+    ...previousAgentRunsByName.rows,
+    row({ entityName: 'Retired Agent' }, { count: 25, errorCount: 0, errorRate: 0, 'duration.p95': 2_000 }),
+  ],
+  truncated: false,
+};

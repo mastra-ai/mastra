@@ -5,10 +5,10 @@ import { TOKEN_SERIES_METRICS } from './use-metrics-token-series';
 import type { TokenSeriesOptions } from './use-metrics-token-series';
 
 /**
- * Tokens and cost per group over another window than the page's (the Biggest movers card's
- * previous one), with the page's other filters.
+ * Tokens and cost per group as totals over a window, with the page's other filters: the
+ * Breakdown card's Models and Threads tabs, and every tab's previous window.
  */
-export function useMetricsCostBreakdown({
+export function useMetricsUsageTotals({
   groupBy,
   filters: extra,
   window,

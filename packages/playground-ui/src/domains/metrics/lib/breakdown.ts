@@ -6,10 +6,11 @@ import type { AggregateSpansArgs, AggregateTracesArgs, AggregateTracesResponse, 
 import type { BucketLabels } from './metrics-buckets';
 import { gridIndex } from './metrics-buckets';
 
-export type BreakdownTab = 'projects' | 'agents' | 'workflows' | 'tools' | 'environments';
+export type BreakdownTab = 'projects' | 'agents' | 'workflows' | 'tools' | 'models' | 'threads' | 'environments';
 
 type AggregateRow = AggregateTracesResponse['rows'][number];
 type TimeSeries = Awaited<ReturnType<MastraClient['getMetricTimeSeries']>>['series'][number];
+type UsageGroup = Awaited<ReturnType<MastraClient['getMetricBreakdown']>>['groups'][number];
 type SpanPredicate = NonNullable<AggregateSpansArgs['where']>;
 
 /** The span types each entity tab counts. MCP tools count as tools. */
@@ -33,17 +34,32 @@ export function spanTypeWhere(tab: BreakdownEntityTab): SpanPredicate {
  * Whether a tab has tokens and cost. Model usage is attributed to agents only (its `entityType` is
  * always `agent`), and tool spans carry none, so workflows and tools would show a column of dashes.
  */
-export const hasUsage = (tab: BreakdownTab) => tab === 'projects' || tab === 'agents' || tab === 'environments';
+export const hasUsage = (tab: BreakdownTab) => tab !== 'workflows' && tab !== 'tools';
+
+/**
+ * Whether a tab's tokens come per bucket, with a Trend column. Threads are too many for a series
+ * per thread, and models have no runs to put beside one: both take totals from a metrics breakdown.
+ */
+export const hasTrend = (tab: BreakdownTab) => tab === 'projects' || tab === 'agents' || tab === 'environments';
+
+/** Whether a tab has runs or traces. Models don't: a run isn't tied to one model. */
+export const hasRuns = (tab: BreakdownTab) => tab !== 'models';
+
+/** What each tab groups by, at project scope; org-wide entity tabs also group by project. */
+export function breakdownGroupBy(tab: BreakdownTab, byProject: boolean): string[] {
+  if (tab === 'projects') return ['projectId'];
+  if (tab === 'environments') return ['environment'];
+  if (tab === 'threads') return ['threadId'];
+  if (tab === 'models') return ['model'];
+  return byProject ? ['projectId', 'entityName'] : ['entityName'];
+}
 
 type Scope = Pick<AggregateTracesArgs, 'timeRange' | 'where'>;
 
 /** Rows the server returns per tab at most. Entity groups are capped lower: there can be thousands of tools. */
 export const BREAKDOWN_GROUP_LIMIT = { trace: 1000, span: 500 } as const;
 
-/**
- * Traces, errors, P95, resources and threads per project. The Biggest movers card at org scope
- * sends the same request, so React Query sends it once.
- */
+/** Traces, errors, P95, resources and threads per project. */
 export function projectsAggregateRequest({ timeRange, where }: Scope): AggregateTracesArgs {
   return {
     timeRange,
@@ -59,6 +75,18 @@ export function environmentsAggregateRequest({ timeRange, where }: Scope): Aggre
     timeRange,
     ...(where ? { where } : {}),
     groupBy: ['environment'],
+    measures: ['count', 'errorRate', 'duration.p95'],
+    limit: BREAKDOWN_GROUP_LIMIT.trace,
+  };
+}
+
+/** Traces, errors and P95 per thread; traces without a thread aren't listed. */
+export function threadsAggregateRequest({ timeRange, where }: Scope): AggregateTracesArgs {
+  const hasThread: NonNullable<AggregateTracesArgs['where']> = { op: 'exists', path: 'threadId' };
+  return {
+    timeRange,
+    where: where ? { op: 'and', args: [hasThread, where] } : hasThread,
+    groupBy: ['threadId'],
     measures: ['count', 'errorRate', 'duration.p95'],
     limit: BREAKDOWN_GROUP_LIMIT.trace,
   };
@@ -118,6 +146,8 @@ export function buildBreakdownRows(
   groupBy: readonly string[],
   series: TimeSeries[] | undefined,
   grid: { buckets: BucketLabels[]; stepHours: number },
+  /** Tokens and cost per group as totals, for tabs without a series (threads, models). */
+  usageGroups?: UsageGroup[],
 ): BreakdownRow[] {
   const rows = new Map<string, BreakdownRow>();
   const rowFor = (values: string[]) => {
@@ -134,7 +164,7 @@ export function buildBreakdownRows(
         p95: null,
         resources: null,
         threads: null,
-        tokens: series ? 0 : null,
+        tokens: series || usageGroups ? 0 : null,
         cost: null,
         costUnit: null,
         trend: [],
@@ -170,5 +200,118 @@ export function buildBreakdownRows(
     row.costUnit = cost == null ? null : (s.costUnit ?? null);
   }
 
+  for (const group of usageGroups ?? []) {
+    const row = rowFor(groupBy.map(d => (group.dimensions[d] == null ? '' : String(group.dimensions[d]))));
+    row.tokens = group.value;
+    row.cost = typeof group.estimatedCost === 'number' ? group.estimatedCost : null;
+    row.costUnit = row.cost === null ? null : (group.costUnit ?? null);
+  }
+
   return [...rows.values()];
+}
+
+/** A row's figures over the previous window, to compare with. */
+export type PreviousFigures = {
+  count?: number;
+  errorRate?: number | null;
+  p95?: number | null;
+  tokens?: number;
+  cost?: number | null;
+};
+
+/** The previous window's figures per row key, from its aggregate and its metrics breakdown. */
+export function previousFigures(
+  aggregateRows: AggregateRow[],
+  groupBy: readonly string[],
+  usageGroups: UsageGroup[],
+): Map<string, PreviousFigures> {
+  const figures = new Map<string, PreviousFigures>();
+  const at = (key: string) => {
+    let f = figures.get(key);
+    if (!f) figures.set(key, (f = {}));
+    return f;
+  };
+  for (const row of aggregateRows) {
+    const f = at(groupBy.map(d => dimension(row, d)).join('|'));
+    f.count = measure(row, 'count') ?? 0;
+    f.errorRate = measure(row, 'errorRate');
+    f.p95 = measure(row, 'duration.p95');
+  }
+  for (const group of usageGroups) {
+    const f = at(groupBy.map(d => (group.dimensions[d] == null ? '' : String(group.dimensions[d]))).join('|'));
+    f.tokens = group.value;
+    f.cost = typeof group.estimatedCost === 'number' ? group.estimatedCost : null;
+  }
+  return figures;
+}
+
+/**
+ * Adds a row for each group that had runs or usage in the previous window but none now, so a
+ * stopped agent or a dropped model still shows, at zero and −100%.
+ */
+export function withDropped(
+  rows: BreakdownRow[],
+  previous: Map<string, PreviousFigures>,
+  groupBy: readonly string[],
+  usage: boolean,
+): BreakdownRow[] {
+  const listed = new Set(rows.map(r => r.key));
+  const projectAt = groupBy.indexOf('projectId');
+  const dropped: BreakdownRow[] = [];
+  for (const [key, before] of previous) {
+    if (listed.has(key) || !((before.count ?? 0) > 0 || (before.tokens ?? 0) > 0)) continue;
+    const values = key.split('|');
+    dropped.push({
+      key,
+      ...(projectAt >= 0 ? { projectId: values[projectAt] ?? '' } : {}),
+      name: values[values.length - 1] ?? '',
+      count: 0,
+      errorRate: null,
+      p95: null,
+      resources: null,
+      threads: null,
+      tokens: usage ? 0 : null,
+      cost: usage && before.cost != null ? 0 : null,
+      costUnit: null,
+      trend: [],
+    });
+  }
+  return [...rows, ...dropped];
+}
+
+export type ChangeMetric = 'count' | 'errorRate' | 'p95' | 'tokens' | 'cost';
+
+export type Change = {
+  /** Now minus before; `null` when there is nothing to compare. */
+  delta: number | null;
+  /** Relative change (0.5 = +50%); for error rate, the difference as a ratio (0.02 = +2 points). */
+  change: number | null;
+  /** No figure in the previous window. */
+  isNew: boolean;
+};
+
+/**
+ * How a row's `metric` moved against the previous window. Runs, tokens and cost count a missing
+ * previous figure as new; error rate and P95 have no figure without runs, so there's no change.
+ */
+export function rowChange(row: BreakdownRow, previous: PreviousFigures | undefined, metric: ChangeMetric): Change {
+  const now = row[metric];
+  if (now === null) return { delta: null, change: null, isNew: false };
+  const before = previous?.[metric];
+  if (before === undefined || before === null) {
+    return {
+      delta: null,
+      change: null,
+      isNew: metric === 'count' || metric === 'tokens' || metric === 'cost' ? now > 0 : false,
+    };
+  }
+  const delta = now - before;
+  const change = metric === 'errorRate' ? delta : before > 0 ? delta / before : null;
+  return { delta, change, isNew: false };
+}
+
+/** Whether a change is good news: more runs is; a higher error rate, P95, tokens or cost isn't. */
+export function changeTrend(change: Change, metric: ChangeMetric): 'good' | 'bad' | null {
+  if (change.delta === null || change.delta === 0) return null;
+  return change.delta > 0 === (metric === 'count') ? 'good' : 'bad';
 }

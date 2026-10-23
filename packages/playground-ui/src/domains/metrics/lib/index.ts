@@ -14,22 +14,20 @@ export { bucketLabels, isMultiDay, type BucketLabels } from './bucket-labels';
 export {
   BREAKDOWN_GROUP_LIMIT,
   BREAKDOWN_SPAN_TYPES,
+  breakdownGroupBy,
   buildBreakdownRows,
+  changeTrend,
   entitiesAggregateRequest,
   environmentsAggregateRequest,
+  previousFigures,
   projectsAggregateRequest,
+  rowChange,
+  threadsAggregateRequest,
   type BreakdownEntityTab,
   type BreakdownRow,
   type BreakdownTab,
+  type Change,
+  type ChangeMetric,
+  type PreviousFigures,
 } from './breakdown';
-export {
-  MOVER_SPAN_TYPES,
-  buildMovers,
-  moverEntitiesRequest,
-  moverTrend,
-  previousWindow,
-  windowLength,
-  type Mover,
-  type MoverFigures,
-  type MoverMetric,
-} from './movers';
+export { previousWindow, windowLength } from './time-window';

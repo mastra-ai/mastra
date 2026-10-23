@@ -1,19 +1,26 @@
 // @vitest-environment jsdom
+import type { AggregateTracesResponse } from '@mastra/client-js';
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BreakdownCard } from '../breakdown-card';
 import {
   agentRunsByName,
   agentRunsByProjectAndName,
   agentTokensByName,
+  previousAgentRunsByName,
+  previousAgentUsage,
+  previousWithRetiredAgent,
   tokensByEnvironment,
   toolCallsByName,
   tracesByEnvironment,
   tracesByProject,
+  tracesByThread,
   truncatedToolCalls,
+  usageByModel,
+  usageByThread,
 } from './fixtures/breakdown';
-import { emptySeriesFixture } from './fixtures/metrics';
+import { emptyBreakdownFixture, emptySeriesFixture } from './fixtures/metrics';
 import { aggregateCapabilities, traceAggregateCapabilities } from './fixtures/trace-aggregate';
 import {
   renderInMetrics,
@@ -22,11 +29,36 @@ import {
   serveSpanAggregate,
   serveTraceAggregate,
 } from './metrics-msw';
-import type { SpanAggregateRequest } from './metrics-msw';
+import type { SpanAggregateRequest, TraceAggregateRequest } from './metrics-msw';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL } from '@/test/render';
 
 const TIMESERIES_API = `${TEST_BASE_URL}/api/observability/metrics/timeseries`;
+const BREAKDOWN_API = `${TEST_BASE_URL}/api/observability/metrics/breakdown`;
+
+/** Whether a window ends now (the page's) rather than a window earlier (the previous one). */
+const endsNow = (end: unknown) => Math.abs(Date.now() - new Date(String(end)).getTime()) < 3_600_000;
+
+type TotalsRequest = { groupBy: string[]; current: boolean };
+
+/** Tokens and cost per group as totals (Models, Threads, and every previous window). */
+function serveUsageTotals(respond: (request: TotalsRequest) => object) {
+  server.use(
+    http.post(BREAKDOWN_API, async ({ request }) => {
+      const body: unknown = await request.json();
+      const read = (key: string) =>
+        typeof body === 'object' && body !== null && key in body ? body[key as keyof typeof body] : undefined;
+      const groupBy = read('groupBy');
+      const filters = read('filters');
+      const timestamp =
+        typeof filters === 'object' && filters !== null && 'timestamp' in filters ? filters.timestamp : undefined;
+      const end = typeof timestamp === 'object' && timestamp !== null && 'end' in timestamp ? timestamp.end : undefined;
+      return HttpResponse.json(
+        respond({ groupBy: Array.isArray(groupBy) ? groupBy.map(String) : [], current: endsNow(end) }),
+      );
+    }),
+  );
+}
 
 type SeriesRequest = { groupBy: string[]; filters: Record<string, unknown> };
 
@@ -52,11 +84,12 @@ function serveTokenSeries(respond: (request: SeriesRequest) => object = () => em
 }
 
 /** Answers span aggregates by span type, recording each request. */
-function serveSpans() {
+function serveSpans(previous: AggregateTracesResponse = previousAgentRunsByName) {
   const requests: SpanAggregateRequest[] = [];
   serveSpanAggregate(request => {
     requests.push(request);
-    return JSON.stringify(request.where).includes('tool_call') ? toolCallsByName : agentRunsByName;
+    if (JSON.stringify(request.where).includes('tool_call')) return toolCallsByName;
+    return endsNow(request.timeRange.to) ? agentRunsByName : previous;
   });
   return requests;
 }
@@ -65,6 +98,8 @@ const rowNames = () =>
   screen.getAllByRole('listitem').map(item => item.querySelector('[title]')?.getAttribute('title'));
 
 describe('BreakdownCard', () => {
+  beforeEach(() => serveUsageTotals(() => emptyBreakdownFixture));
+
   describe('when the page covers one project', () => {
     it('opens on agents, ranks every agent run, nested ones included, and has no Projects tab', async () => {
       serveCapabilities(aggregateCapabilities);
@@ -165,6 +200,7 @@ describe('BreakdownCard', () => {
       fireEvent.click(screen.getByRole('tab', { name: 'Environments' }));
       fireEvent.click(await screen.findByTitle('staging'));
       expect(rowNames()).toEqual(['production', 'staging']);
+      expect(screen.getByRole('button', { name: 'Traces before' })).toBeDefined();
       expect(onRowClick).toHaveBeenCalledWith({ environment: 'staging' });
     });
   });
@@ -175,7 +211,7 @@ describe('BreakdownCard', () => {
       serveSpanAggregate(() => truncatedToolCalls);
       serveTokenSeries();
       renderInMetrics(<BreakdownCard />);
-      expect(await screen.findByText('Showing the 500 busiest; sorting covers only these.')).toBeDefined();
+      expect(await screen.findByText(/Showing the 500 busiest; sorting covers only these./)).toBeDefined();
     });
   });
 
@@ -185,6 +221,125 @@ describe('BreakdownCard', () => {
       const { container } = renderInMetrics(<BreakdownCard />);
       await waitFor(() => expect(screen.queryByText('Breakdown')).toBeNull());
       expect(container.textContent).toBe('');
+    });
+  });
+
+  describe('when the previous window has figures', () => {
+    it('shows each row’s runs before and the change, and says what they compare', async () => {
+      serveCapabilities(aggregateCapabilities);
+      serveSpans();
+      serveTokenSeries(() => agentTokensByName);
+      renderInMetrics(<BreakdownCard />);
+
+      const explore = (await screen.findByTitle('Explore Subagent')).closest('li');
+      if (!explore) throw new Error('Explore Subagent row not found');
+      expect(await within(explore).findByText('+100.0%')).toBeDefined();
+      expect(within(explore).getByText('60')).toBeDefined();
+      const reflector = screen.getByTitle('Reflector').closest('li');
+      expect(reflector && within(reflector).getByText('New')).toBeDefined();
+      expect(screen.getByRole('button', { name: 'Runs before' })).toBeDefined();
+      expect(screen.getByText('Before and change: the previous 24 hours. Sort a column to compare it.')).toBeDefined();
+    });
+
+    it('compares the sorted column: cost when sorted by cost, error rate in points', async () => {
+      serveCapabilities(aggregateCapabilities);
+      serveSpans();
+      serveTokenSeries(() => agentTokensByName);
+      serveUsageTotals(({ groupBy, current }) =>
+        !current && groupBy[0] === 'entityName' ? previousAgentUsage : emptyBreakdownFixture,
+      );
+      renderInMetrics(<BreakdownCard />);
+      await screen.findByTitle('Code Agent');
+
+      fireEvent.click(screen.getByRole('button', { name: 'Cost' }));
+      const code = () => {
+        const li = screen.getByTitle('Code Agent').closest('li');
+        if (!li) throw new Error('Code Agent row not found');
+        return li;
+      };
+      expect(await within(code()).findByText('+150.0%')).toBeDefined();
+      expect(within(code()).getByText('$5.00')).toBeDefined();
+      expect(screen.getByRole('button', { name: 'Cost change' })).toBeDefined();
+
+      fireEvent.click(screen.getByRole('button', { name: 'Errors' }));
+      expect(within(code()).getByText('+15.0 pt')).toBeDefined();
+    });
+
+    it('ranks by the change shown, rises first, then falls first, new rows last', async () => {
+      serveCapabilities(aggregateCapabilities);
+      serveSpans();
+      serveTokenSeries(() => agentTokensByName);
+      renderInMetrics(<BreakdownCard />);
+      await screen.findByText('+100.0%');
+
+      // Explore Subagent +100%, Code Agent 0%, Reflector is new.
+      fireEvent.click(screen.getByRole('button', { name: 'Runs change' }));
+      expect(rowNames()).toEqual(['Explore Subagent', 'Code Agent', 'Reflector']);
+      fireEvent.click(screen.getByRole('button', { name: 'Runs change' }));
+      expect(rowNames()).toEqual(['Code Agent', 'Explore Subagent', 'Reflector']);
+    });
+  });
+
+  describe('when a row ran in the previous window but not in this one', () => {
+    it('still lists it, at zero and −100%', async () => {
+      serveCapabilities(aggregateCapabilities);
+      serveSpans(previousWithRetiredAgent);
+      serveTokenSeries(() => agentTokensByName);
+      renderInMetrics(<BreakdownCard />);
+
+      const retired = (await screen.findByTitle('Retired Agent')).closest('li');
+      if (!retired) throw new Error('Retired Agent row not found');
+      expect(within(retired).getByText('−100.0%')).toBeDefined();
+      expect(within(retired).getByText('25')).toBeDefined();
+      expect(rowNames().at(-1)).toBe('Retired Agent');
+    });
+  });
+
+  describe('when the Models tab opens', () => {
+    it('ranks models by tokens with their cost, without run columns, and opens one from its row', async () => {
+      serveCapabilities(aggregateCapabilities);
+      serveSpans();
+      serveTokenSeries(() => agentTokensByName);
+      serveUsageTotals(({ groupBy, current }) =>
+        current && groupBy[0] === 'model' ? usageByModel : emptyBreakdownFixture,
+      );
+      const onRowClick = vi.fn();
+      renderInMetrics(<BreakdownCard onRowClick={onRowClick} />);
+      await screen.findByTitle('Code Agent');
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Models' }));
+      fireEvent.click(await screen.findByTitle('gpt-5'));
+      expect(rowNames()).toEqual(['claude-haiku-4-5', 'gpt-5']);
+      expect(screen.queryByRole('button', { name: 'Errors' })).toBeNull();
+      expect(screen.getByRole('button', { name: 'Cost' })).toBeDefined();
+      expect(onRowClick).toHaveBeenCalledWith({ model: 'gpt-5' });
+    });
+  });
+
+  describe('when the Threads tab opens', () => {
+    it('lists threads with traces and spend, leaves out usage outside any thread, and opens one', async () => {
+      serveCapabilities(aggregateCapabilities);
+      serveSpans();
+      serveTokenSeries(() => agentTokensByName);
+      const requests: TraceAggregateRequest[] = [];
+      serveTraceAggregate(request => {
+        requests.push(request);
+        return tracesByThread;
+      });
+      serveUsageTotals(({ groupBy, current }) =>
+        current && groupBy[0] === 'threadId' ? usageByThread : emptyBreakdownFixture,
+      );
+      const onRowClick = vi.fn();
+      renderInMetrics(<BreakdownCard onRowClick={onRowClick} />);
+      await screen.findByTitle('Code Agent');
+
+      fireEvent.click(screen.getByRole('tab', { name: 'Threads' }));
+      const thread = (await screen.findByTitle('thread-a')).closest('li');
+      expect(thread && within(thread).getByText('$0.40')).toBeDefined();
+      expect(rowNames()).toEqual(['thread-a', 'thread-b']);
+      expect(requests[0]?.groupBy).toEqual(['threadId']);
+      fireEvent.click(screen.getByTitle('thread-a'));
+      expect(onRowClick).toHaveBeenCalledWith({ threadId: 'thread-a' });
     });
   });
 
@@ -224,7 +379,7 @@ describe('BreakdownCard', () => {
 
       fireEvent.click(screen.getByRole('tab', { name: 'Agents' }));
       fireEvent.click(await screen.findByTitle('Code Agent'));
-      expect(groupings).toEqual([['projectId', 'entityName']]);
+      expect(new Set(groupings.map(g => g.join()))).toEqual(new Set(['projectId,entityName']));
       expect(series.map(s => s.groupBy)).toContainEqual(['projectId', 'entityName']);
       expect(onRowClick).toHaveBeenCalledWith({
         projectId: 'p1',

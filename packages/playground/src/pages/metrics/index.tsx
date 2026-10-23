@@ -12,7 +12,6 @@ import {
   LatencyCard,
   MetricsGrid,
   MetricsKpis,
-  MoversCard,
   ScoresCard,
   TokenUsageCard,
   TraceVolumeCard,
@@ -259,6 +258,7 @@ function MetricsCards() {
       onTimeRangeClick={range => openTraces({ window: range })}
     />
   );
+  // Breakdown replaces Usage in the unified layout: it has the same tokens and cost, sortable.
   const usage = (
     <UsageCard
       onViewTraces={() => openTraces()}
@@ -271,6 +271,7 @@ function MetricsCards() {
   return (
     <div className="grid content-start gap-4 pb-6">
       <MetricsKpis />
+      {layout === 'unified' && <BreakdownCard onRowClick={openTraces} />}
       <TokenUsageCard onViewTraces={() => openTraces()} onTimeRangeClick={range => openTraces({ window: range })} />
       {layout === 'unified' ? (
         <>
@@ -278,15 +279,8 @@ function MetricsCards() {
             <MetricsGrid.Item>{agentRuns}</MetricsGrid.Item>
             <MetricsGrid.Item>{failureRate}</MetricsGrid.Item>
             <MetricsGrid.Item>{latency}</MetricsGrid.Item>
-            <MetricsGrid.Item>{usage}</MetricsGrid.Item>
-          </MetricsGrid>
-          <BreakdownCard onRowClick={openTraces} />
-          <MetricsGrid columns={2}>
             <MetricsGrid.Item>
               <DistinctIdsCard onTimeRangeClick={openTraces} />
-            </MetricsGrid.Item>
-            <MetricsGrid.Item>
-              <MoversCard onRowClick={openTraces} />
             </MetricsGrid.Item>
           </MetricsGrid>
         </>
