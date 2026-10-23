@@ -85,8 +85,24 @@ describe('MemorySettings', () => {
 
   it("labels each memory with the threads the Factory's model routing sends to it", async () => {
     stubProviders([{ provider: 'openai', source: 'stored' }]);
+    server.use(
+      http.get(OM_URL, () => HttpResponse.json({ config: omConfig(30_000) })),
+      http.get(`${TEST_BASE_URL}/auth/me`, () =>
+        HttpResponse.json({ authenticated: true, user: { id: 'user-1', organizationId: 'org-1' } }),
+      ),
+    );
+    renderMemory('hybrid');
+
+    const personal = screen.getByRole('region', { name: 'Personal memory' });
+    const factory = screen.getByRole('region', { name: 'Factory memory' });
+    expect(await within(personal).findByText('Chats')).toBeInTheDocument();
+    expect(within(factory).getByText('Work-item runs')).toBeInTheDocument();
+  });
+
+  it('labels Factory memory as used by every thread while sign-in is off, whatever the routing', async () => {
+    stubProviders([{ provider: 'openai', source: 'stored' }]);
     server.use(http.get(OM_URL, () => HttpResponse.json({ config: omConfig(30_000) })));
-    renderMemory('factory');
+    renderMemory('hybrid');
 
     const personal = screen.getByRole('region', { name: 'Personal memory' });
     const factory = screen.getByRole('region', { name: 'Factory memory' });
