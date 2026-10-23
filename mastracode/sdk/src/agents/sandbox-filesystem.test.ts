@@ -977,6 +977,22 @@ describe('with a native sandbox filesystem', () => {
     expect(await fs.stat(`${WORKDIR}/src/a.ts`)).toMatchObject({ name: 'a.ts', path: '/src/a.ts', size: 5 });
   });
 
+  it('infers a missing file MIME type and keeps one the provider supplies', async () => {
+    const { native } = makeNative();
+    const sandbox = Object.assign(new FakeSandbox(), { filesystem: native });
+    const fs = new SandboxFilesystem({ sandbox, workdir: WORKDIR, verifySymlinks: false });
+    const base = { name: 'x', path: '/x', size: 5, createdAt: new Date(0), modifiedAt: new Date(0) };
+
+    native.stat = async () => ({ ...base, type: 'file' });
+    expect((await fs.stat('/page.png')).mimeType).toBe('image/png');
+
+    native.stat = async () => ({ ...base, type: 'file', mimeType: 'image/x-custom' });
+    expect((await fs.stat('/page.png')).mimeType).toBe('image/x-custom');
+
+    native.stat = async () => ({ ...base, type: 'directory' });
+    expect((await fs.stat('/assets.png')).mimeType).toBeUndefined();
+  });
+
   it('passes typed errors through', async () => {
     const { native } = makeNative();
     native.readFile = async () => {

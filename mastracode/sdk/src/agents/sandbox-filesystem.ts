@@ -39,6 +39,7 @@ import {
   DirectoryNotFoundError,
   FileExistsError,
   FileNotFoundError,
+  getMimeType,
   IsDirectoryError,
   NotDirectoryError,
   UnsupportedGrepPatternError,
@@ -1056,7 +1057,12 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
     if (native) {
       await this.verifyNative('target', abs, path);
       const info = await native.stat(abs);
-      return { ...info, name: posixPath.basename(abs), path: `/${posixPath.relative(this.basePath, abs)}` };
+      return {
+        ...info,
+        name: posixPath.basename(abs),
+        path: `/${posixPath.relative(this.basePath, abs)}`,
+        mimeType: info.type === 'file' ? (info.mimeType ?? getMimeType(abs)) : info.mimeType,
+      };
     }
     await this.assertContainedRealpath(abs, path);
     // GNU stat: %F=type, %s=size, %Y=mtime (epoch seconds), %W=birth (or -1).
@@ -1082,6 +1088,7 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
       size: type === 'directory' ? 0 : size,
       modifiedAt: new Date(mtime * 1000),
       createdAt: new Date((ctime > 0 ? ctime : mtime) * 1000),
+      mimeType: type === 'file' ? getMimeType(abs) : undefined,
     };
   }
 
