@@ -1889,6 +1889,29 @@ describe.each(['batch-with-updates', 'realtime'] as const)(
       }
     });
 
+    it('reports the second of two ends for one span in the same flush as dropped', async () => {
+      const storage = new InMemoryStore();
+      const crashed = openProcess(storage);
+      const recovering = openProcess(storage);
+      try {
+        const span = crashed.tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent run before crash' });
+        const snapshot = structuredClone(span.exportSpan());
+        await crashed.tracing.flush();
+
+        recovering.tracing.rebuildSpan(snapshot).end({ output: 'first end' });
+        recovering.tracing.rebuildSpan(snapshot).end({ output: 'second end' });
+        await recovering.tracing.flush();
+
+        expect((await getStoredSpan(storage, span))?.output).toBe('first end');
+        expect(recovering.drops).toEqual([
+          expect.objectContaining({ signal: 'tracing', reason: 'span-not-updatable', count: 1 }),
+        ]);
+      } finally {
+        await recovering.mastra.shutdown();
+        await crashed.mastra.shutdown();
+      }
+    });
+
     it('does not create a span that was never stored', async () => {
       const storage = new InMemoryStore();
       const recovering = openProcess(storage);

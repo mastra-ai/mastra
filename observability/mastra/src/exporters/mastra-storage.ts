@@ -446,14 +446,26 @@ export class MastraStorageExporter extends BaseExporter {
    * stored, or it had already ended. Ended spans are immutable, so these are dropped.
    */
   private emitNotApplied(partials: UpdateSpanPartial[], updated: { traceId: string; spanId: string }[]): void {
-    const updatedKeys = new Set(updated.map(span => `${span.traceId}:${span.spanId}`));
-    const notApplied = partials.filter(partial => !updatedKeys.has(`${partial.traceId}:${partial.spanId}`));
-    if (notApplied.length === 0) return;
+    // Count per key: one batch can hold two ends for the same span, and only the first applies.
+    const appliedCounts = new Map<string, number>();
+    for (const span of updated) {
+      const key = `${span.traceId}:${span.spanId}`;
+      appliedCounts.set(key, (appliedCounts.get(key) ?? 0) + 1);
+    }
+    let notApplied = 0;
+    for (const partial of partials) {
+      const key = `${partial.traceId}:${partial.spanId}`;
+      const remaining = appliedCounts.get(key) ?? 0;
+      if (remaining > 0) {
+        appliedCounts.set(key, remaining - 1);
+      } else {
+        notApplied++;
+      }
+    }
+    if (notApplied === 0) return;
 
-    this.logger.debug('Span updates not applied: span not stored or already ended', {
-      count: notApplied.length,
-    });
-    this.emitDrop('tracing', 'span-not-updatable', notApplied.length);
+    this.logger.debug('Span updates not applied: span not stored or already ended', { count: notApplied });
+    this.emitDrop('tracing', 'span-not-updatable', notApplied);
   }
 
   /**
