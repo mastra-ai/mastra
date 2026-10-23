@@ -34,6 +34,7 @@ import { getBuiltInRouteFGAConfig } from './routes/fga-manifest';
 export * from './routes';
 export { applyMcpRequestAuth, buildMcpAuthInfoFromRequestContext } from './mcp-auth';
 export type { McpAuthInfo, SetMcpRequestAuth } from './mcp-auth';
+export { propagateRequestAbort } from './mcp-disconnect';
 export { convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
 export { redactStreamChunk } from './redact';
 export { serializeStreamChunk, type SerializedStreamChunk } from './serialize';
@@ -61,18 +62,31 @@ export function getCustomHTTPExceptionResponse(error: unknown): Response | undef
 
 export interface HTTPErrorResponseBody {
   error: string;
-  cause?: { failingItems: unknown[] };
+  cause?: { failingItems: unknown[] } | { field: string; errors: Array<{ path: string; message: string }> };
 }
 
 /**
- * Only `cause.failingItems` (dataset schema-update rejections) is exposed to clients;
- * any other cause stays server-side.
+ * Only allowlisted causes are exposed to clients; any other cause stays server-side:
+ * - `cause.failingItems` (dataset schema-update rejections)
+ * - `cause.field` + `cause.errors` (schema validation failures), reduced to each error's path and message
  */
 function getSafeErrorCause(error: unknown): HTTPErrorResponseBody['cause'] {
   try {
     const raw = error instanceof Error ? error.cause : undefined;
-    if (raw && typeof raw === 'object' && !Array.isArray(raw) && Array.isArray((raw as any).failingItems)) {
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+    if (Array.isArray((raw as any).failingItems)) {
       return { failingItems: (raw as any).failingItems };
+    }
+    const { field, errors } = raw as { field?: unknown; errors?: unknown };
+    if (typeof field === 'string' && Array.isArray(errors)) {
+      return {
+        field,
+        errors: errors.flatMap(e =>
+          e && typeof e.path === 'string' && typeof e.message === 'string'
+            ? [{ path: e.path, message: e.message }]
+            : [],
+        ),
+      };
     }
   } catch {
     // property access threw (e.g. a getter) — omit cause

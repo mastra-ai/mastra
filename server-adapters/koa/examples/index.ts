@@ -199,7 +199,7 @@ const planActivities = createStep({
     activities: z.string(),
   }),
   execute: async ({ getInitData, inputData, mastra }) => {
-    const { city } = getInitData<typeof weatherWorkflow>();
+    const { city } = getInitData<{ city: string }>();
     const forecast = inputData;
 
     const prompt = `Based on the following weather forecast for ${city}, suggest appropriate activities:
