@@ -1292,9 +1292,6 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         messageList: registryEntry.messageList,
         outputProcessors: registryEntry.outputProcessors,
         processorStates: registryEntry.processorStates,
-        // Inngest delivers step-start over pubsub after the worker's processors may
-        // have released the step's held parts (#28231).
-        skipOutputProcessorsOnStepStart: true,
         requestContext: registryEntry.requestContext,
         onChunk: chunk => {
           // A parked segment is resumable; its observer's signal must not abort the next segment.
@@ -1674,9 +1671,6 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         messageList: existingEntry.messageList,
         outputProcessors: existingEntry.outputProcessors,
         processorStates: existingEntry.processorStates,
-        // Inngest delivers step-start over pubsub after the worker's processors may
-        // have released the step's held parts (#28231).
-        skipOutputProcessorsOnStepStart: true,
         requestContext: callbackOptions.requestContext,
         onChunk: chunk => {
           resumedChunkSeen = true;

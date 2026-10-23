@@ -247,13 +247,6 @@ export interface DurableAgentStreamOptions<OUTPUT = undefined> {
   outputProcessors?: OutputProcessorOrWorkflow[];
   /** Processor state map shared with the durable workflow's producer-side processing. */
   processorStates?: Map<string, ProcessorState>;
-  /**
-   * When true, `step-start` chunks skip this stream's output processors.
-   * For engines whose step-start reaches the consumer asynchronously: a processor
-   * that holds parts would otherwise hold a step-start that arrives after the
-   * producer already released the step's text, and the step text resolves empty.
-   */
-  skipOutputProcessorsOnStepStart?: boolean;
   /** When true, `getFullOutput()` includes `scoringData` assembled from the MessageList. */
   returnScorerData?: boolean;
   /** Run context passed to output processors for every streamed chunk. */
@@ -333,7 +326,6 @@ export function createDurableAgentStream<OUTPUT = undefined>(
     structuredOutput,
     outputProcessors,
     processorStates,
-    skipOutputProcessorsOnStepStart = false,
     returnScorerData,
     requestContext,
     tracingContext,
@@ -571,7 +563,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           // Step start - enqueue if it's a chunk type
           const chunk = streamEvent.data as ChunkType<OUTPUT>;
           if (chunk && 'type' in chunk) {
-            if (skipOutputProcessorsOnStepStart) markChunkOutputProcessed(chunk);
+            if (streamEvent.outputProcessed) markChunkOutputProcessed(chunk);
             safeEnqueue(controller, chunk);
           }
           break;
@@ -1050,8 +1042,20 @@ export async function emitStepStartEvent(
     request?: StepStartPayload['request'];
     warnings?: StepStartPayload['warnings'];
   },
+  outputProcessed?: boolean,
 ): Promise<void> {
-  const chunk: Extract<ChunkType, { type: 'step-start' }> = {
+  await publishStepStartChunk(pubsub, runId, createStepStartChunk(runId, data), outputProcessed);
+}
+
+/**
+ * Build the `step-start` chunk `emitStepStartEvent` publishes, so a producer
+ * can run it through output processors before publishing it.
+ */
+export function createStepStartChunk(
+  runId: string,
+  data: Parameters<typeof emitStepStartEvent>[2],
+): Extract<ChunkType, { type: 'step-start' }> {
+  return {
     type: 'step-start',
     runId,
     from: ChunkFrom.AGENT,
@@ -1063,10 +1067,23 @@ export async function emitStepStartEvent(
       warnings: data.warnings ?? [],
     },
   };
+}
+
+/**
+ * Publish a `step-start` chunk. `outputProcessed` marks a chunk the producer
+ * already ran through output processors, so consumers don't run them again.
+ */
+export async function publishStepStartChunk(
+  pubsub: PubSub,
+  runId: string,
+  chunk: ChunkType,
+  outputProcessed?: boolean,
+): Promise<void> {
   await pubsub.publish(AGENT_STREAM_TOPIC(runId), {
     type: AgentStreamEventTypes.STEP_START,
     runId,
     data: chunk,
+    ...(outputProcessed ? { outputProcessed } : {}),
     ...generationTag(runId),
   });
 }
