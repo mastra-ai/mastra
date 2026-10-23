@@ -36,11 +36,19 @@ export interface TargetFieldProps {
   target?: TargetOption;
   onTargetValueChange: (targetValue: string) => void;
   container: FieldPopupContainer;
+  className?: string;
 }
 
-export function TargetField({ options, isLoading, target, onTargetValueChange, container }: TargetFieldProps) {
+export function TargetField({
+  options,
+  isLoading,
+  target,
+  onTargetValueChange,
+  container,
+  className,
+}: TargetFieldProps) {
   return (
-    <Field>
+    <Field className={className}>
       <FieldLabel required info="What runs on each item: an agent, a workflow, or a scorer you want to test.">
         Target
       </FieldLabel>
