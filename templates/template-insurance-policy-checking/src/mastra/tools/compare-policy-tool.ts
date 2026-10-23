@@ -1,5 +1,5 @@
 import { createTool } from '@mastra/core/tools';
-import type { CaseService } from '../domain/case-service.js';
+import type { CaseService } from '../services/case-service.js';
 import { compareRequestSchema, type ComparisonRunner } from '../domain/reconciliation-contracts.js';
 import { safely } from '../domain/errors.js';
 import { operationContext } from './tool-context.js';

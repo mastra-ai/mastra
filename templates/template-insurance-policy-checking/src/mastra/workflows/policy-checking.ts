@@ -7,8 +7,8 @@ import {
   type ComparisonRunner,
 } from '../domain/reconciliation-contracts.js';
 import { failureSchema, IntakeError, safely } from '../domain/errors.js';
-import type { CaseService } from '../domain/case-service.js';
-import type { ReconciliationService } from '../domain/reconciliation-service.js';
+import type { CaseService } from '../services/case-service.js';
+import type { ReconciliationService } from '../services/reconciliation-service.js';
 import { operationContext } from '../tools/tool-context.js';
 
 export function createPolicyCheckingWorkflow(service: ReconciliationService, cases: CaseService, operatorId: string) {

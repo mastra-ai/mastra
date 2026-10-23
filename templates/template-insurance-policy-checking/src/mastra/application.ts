@@ -6,7 +6,7 @@ import { inputLimits, inputLimitsSchema } from './config/limits.js';
 import { insuranceConfiguration, insuranceConfigurationSchema } from './config/insurance.js';
 import { createRegistry } from './providers/provider-registry.js';
 import { CaseRepository } from './storage/cases.js';
-import { createCaseService } from './domain/case-service.js';
+import { createCaseService } from './services/case-service.js';
 import { createPolicyCheckingAgent } from './agents/policy-checking.js';
 import { createLocalServer, resolveControlledProviderEndpoint } from './runtime/server.js';
 import { workingMemorySchema } from './processors/document-intake-processor.js';
@@ -15,7 +15,7 @@ import { projectRoot, ensurePrivateDirectory } from './runtime/paths.js';
 import { processingConfiguration } from './config/processing.js';
 import { ReconciliationRepository } from './storage/reconciliation.js';
 import { createOpenAIProcessingModel } from './providers/openai-processing.js';
-import { createReconciliationService } from './domain/reconciliation-service.js';
+import { createReconciliationService } from './services/reconciliation-service.js';
 import { createPolicyCheckingWorkflow } from './workflows/policy-checking.js';
 
 export async function createApplication() {

@@ -1,6 +1,6 @@
 import { Agent } from '@mastra/core/agent';
 import type { Memory } from '@mastra/memory';
-import type { CaseService } from '../domain/case-service.js';
+import type { CaseService } from '../services/case-service.js';
 import { createCaseStatusTool } from '../tools/case-status-tool.js';
 import { createClarifyCaseTool } from '../tools/clarify-case-tool.js';
 import { createSourceEvidenceTool } from '../tools/source-evidence-tool.js';

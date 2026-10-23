@@ -6,10 +6,10 @@ import {
   extractionSchema,
   semanticSchema,
   type CompareRequest,
-} from './reconciliation-contracts.js';
-import { contextSchema, type OperationContext } from './contracts.js';
-import { IntakeError } from './errors.js';
-import { equalValues, normalizeText, reconcile, verifyEvidence, verifyExtraction } from './reconciliation.js';
+} from '../domain/reconciliation-contracts.js';
+import { contextSchema, type OperationContext } from '../domain/contracts.js';
+import { IntakeError } from '../domain/errors.js';
+import { equalValues, normalizeText, reconcile, verifyEvidence, verifyExtraction } from '../domain/reconciliation.js';
 import type { StructuredProcessingModel } from '../providers/openai-processing.js';
 import type { AnalysisInput, ReconciliationRepository } from '../storage/reconciliation.js';
 

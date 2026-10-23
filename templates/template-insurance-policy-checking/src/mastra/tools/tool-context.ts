@@ -1,6 +1,6 @@
 import { parseMemoryRequestContext } from '@mastra/core/memory';
 import type { RequestContext } from '@mastra/core/request-context';
-import type { CaseService } from '../domain/case-service.js';
+import type { CaseService } from '../services/case-service.js';
 
 export function operationContext(caseService: CaseService, operatorId: string, requestContext?: RequestContext) {
   const threadId =

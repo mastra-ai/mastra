@@ -4,7 +4,7 @@ import type { Memory } from '@mastra/memory';
 import { parseMemoryRequestContext } from '@mastra/core/memory';
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
-import type { CaseService } from '../domain/case-service.js';
+import type { CaseService } from '../services/case-service.js';
 import { failureText, IntakeError } from '../domain/errors.js';
 import type { ComparisonRunner } from '../domain/reconciliation-contracts.js';
 
