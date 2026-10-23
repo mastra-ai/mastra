@@ -42,8 +42,12 @@ import {
 import type { ForeachProgress } from '../utils';
 import type { ExecuteStepParams } from './step';
 
-/** Minimum spacing between two foreach progress checkpoints of the same foreach. */
-const FOREACH_CHECKPOINT_INTERVAL_MS = 1000;
+/**
+ * Minimum spacing between two foreach progress checkpoints of the same foreach.
+ * Mutable only so tests can shorten it.
+ * @internal
+ */
+export const foreachCheckpointTiming = { intervalMs: 1000 };
 
 /**
  * Whether finished parallel arms and foreach items are checkpointed while their block is
@@ -1120,7 +1124,7 @@ export async function executeForeach(
 
   // Finished items are checkpointed on one serialized chain per foreach: at most one
   // write in flight, items that finish meanwhile are folded into the next write, and
-  // writes are spaced at least FOREACH_CHECKPOINT_INTERVAL_MS apart so a long foreach
+  // writes are spaced at least `foreachCheckpointTiming.intervalMs` apart so a long foreach
   // does not rewrite the snapshot once per item (#26214).
   const checkpointProgress = checkpointsMidBlockProgress(engine);
   let checkpointDirty = false;
@@ -1134,7 +1138,7 @@ export async function executeForeach(
   const runCheckpointChain = async () => {
     try {
       while (checkpointDirty && !checkpointClosed) {
-        const wait = lastCheckpointAt + FOREACH_CHECKPOINT_INTERVAL_MS - Date.now();
+        const wait = lastCheckpointAt + foreachCheckpointTiming.intervalMs - Date.now();
         if (wait > 0) {
           await new Promise<void>(resolve => {
             const timer = setTimeout(resolve, wait);
@@ -1312,11 +1316,6 @@ export async function executeForeach(
 
       engine.applyMutableContext(executionContext, stepExecResult.mutableContext);
       Object.assign(stepResults, stepExecResult.stepResults);
-      if (checkpointProgress && Object.keys(foreachProgress).length > 0) {
-        // The item's own result just replaced the foreach entry; put the progress back
-        // before any await so items starting meanwhile carry it into their writes.
-        stepResults[stepId] = runningWithProgress();
-      }
 
       const result = stepExecResult.result as ForeachStepResult;
 
@@ -1376,6 +1375,10 @@ export async function executeForeach(
   };
 
   const queue = fastq(worker, concurrency);
+
+  // Items skip their own start writes while progress is checkpointed, so the foreach
+  // records itself as running once, before any item starts.
+  scheduleCheckpoint();
 
   // Enqueue all items, skipping already-completed ones (resume case)
   for (let k = 0; k < prevOutput.length; k++) {

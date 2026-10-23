@@ -13,11 +13,12 @@
  * into fresh storage with a freshly built workflow and restarts.
  */
 
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Mastra } from '../mastra';
 import { MockStore } from '../storage/mock';
 import { createWorkflow } from './create';
+import { foreachCheckpointTiming } from './handlers/control-flow';
 import type { WorkflowRunState } from './types';
 import { createStep } from './workflow';
 
@@ -92,6 +93,10 @@ async function crashAndRestart(
 }
 
 describe('restart after a crash inside a parallel or foreach block (issue #26214)', () => {
+  afterEach(() => {
+    foreachCheckpointTiming.intervalMs = 1000;
+  });
+
   it('does not re-run a parallel arm that finished before the crash', async () => {
     const build = (crash?: Crash): Built => {
       let fastDone!: () => void;
@@ -206,7 +211,12 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
   it.each([1, 3])(
     'does not re-run foreach items that finished before the crash (concurrency %i)',
     async concurrency => {
-      const { original, restarted, stored, fns } = await crashAndRestart(foreachBuild(concurrency), [0, 1, 2, 3, 4]);
+      // Progress writes are throttled, so the crash waits for the one that records item 1.
+      const { original, restarted, stored, fns } = await crashAndRestart(
+        foreachBuild(concurrency),
+        [0, 1, 2, 3, 4],
+        latest => progressCount(latest, 'item') === 2,
+      );
 
       const ranItems = fns.item.mock.calls.map(call => call[0].inputData).sort();
       expect(ranItems).toEqual([2, 3, 4]);
@@ -222,9 +232,8 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
   );
 
   it('checkpoints items that finish after the last item start (deferred progress write)', async () => {
-    // Concurrency 5: every item starts up front, so no later item-start write can carry
-    // the finished items. Only the foreach's own progress checkpoints record item 1,
-    // and that write is deferred by the minimum checkpoint interval.
+    // Concurrency 5: every item starts up front and items 0 and 1 finish within one
+    // checkpoint interval, so the write that records item 1 is deferred.
     const { original, restarted, fns } = await crashAndRestart(
       foreachBuild(5, 'mid-foreach-deferred'),
       [0, 1, 2, 3, 4],
@@ -236,7 +245,8 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
     expect(restarted.result).toEqual(original.result);
   });
 
-  it('never lands an older checkpoint over a newer one when storage latency varies', async () => {
+  it('never lands an older foreach checkpoint over a newer one when storage latency varies', async () => {
+    foreachCheckpointTiming.intervalMs = 0;
     // Writes are copied when called and land after a seeded random delay, like a remote
     // store. If writes for the run were not kept in call order, an older snapshot would
     // land after a newer one and drop finished items from the persisted progress.
@@ -272,6 +282,7 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
   });
 
   it('fails the foreach, instead of hanging or succeeding, when a progress checkpoint cannot be written', async () => {
+    foreachCheckpointTiming.intervalMs = 0;
     const item = step('item', async ({ inputData }) => ({ doubled: inputData * 2 }));
     const after = step('after', async () => ({ ran: true }));
     const workflow = createWorkflow({ id: 'foreach-write-fails', inputSchema: anySchema, outputSchema: anySchema })
@@ -293,5 +304,85 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
 
     expect(result.status).toBe('failed');
     expect(after.fn).not.toHaveBeenCalled();
+  });
+
+  it('never lands an older parallel checkpoint over a newer one when storage latency varies', async () => {
+    // Each arm's start write carries the other arms as still running. If it landed after a
+    // sibling's arm-end write, the finished sibling would look unfinished again.
+    let seed = 11;
+    const random = () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;
+    const ids = ['a', 'b', 'c', 'd', 'e', 'f'];
+    const arms = ids.map((id, i) =>
+      step(id, async () => {
+        await new Promise(resolve => setTimeout(resolve, i * 3));
+        return { [id]: i };
+      }),
+    );
+    const workflow = createWorkflow({ id: 'parallel-latency', inputSchema: anySchema, outputSchema: anySchema })
+      .parallel(arms.map(arm => arm.step))
+      .commit();
+    const storage = new MockStore();
+    new Mastra({ logger: false, storage, workflows: { wf: workflow } });
+    const store = (await storage.getStore('workflows'))!;
+    const persist = store.persistWorkflowSnapshot.bind(store);
+    const landed: number[] = [];
+    vi.spyOn(store, 'persistWorkflowSnapshot').mockImplementation(async (args: any) => {
+      const copy = JSON.parse(JSON.stringify(args));
+      await new Promise(resolve => setTimeout(resolve, Math.floor(random() * 20)));
+      landed.push(ids.filter(id => copy.snapshot.context[id]?.status === 'success').length);
+      return persist(copy);
+    });
+
+    const result = await (await workflow.createRun()).start({ inputData: {} });
+
+    expect(result.status).toBe('success');
+    const shrunk = landed.filter((count, i) => i > 0 && count < landed[i - 1]!);
+    expect(shrunk, `landed finished-arm counts: ${landed.join(',')}`).toEqual([]);
+  });
+
+  it('restarts every item when the crash comes before any item finished', async () => {
+    const build = (crash?: Crash): Built => {
+      const item = step('item', async ({ inputData }) => {
+        if (crash && inputData === 0) await crash();
+        return { doubled: inputData * 2 };
+      });
+      const workflow = createWorkflow({ id: 'foreach-no-progress', inputSchema: anySchema, outputSchema: anySchema })
+        .foreach(item.step, { concurrency: 1 })
+        .commit();
+      return { workflow, fns: { item: item.fn } };
+    };
+
+    const { original, restarted, fns } = await crashAndRestart(build, [0, 1, 2]);
+
+    expect(fns.item.mock.calls.map(call => call[0].inputData)).toEqual([0, 1, 2]);
+    expect(restarted.status).toBe('success');
+    expect(restarted.result).toEqual(original.result);
+  });
+
+  it('writes a bounded number of snapshots for a foreach much longer than its concurrency', async () => {
+    // Without throttling, every item rewrote the whole snapshot with all progress so far,
+    // so bytes grew with the square of the item count.
+    const payload = 'x'.repeat(200);
+    const item = step('item', async ({ inputData }) => ({ index: inputData, payload }));
+    const workflow = createWorkflow({ id: 'foreach-volume', inputSchema: anySchema, outputSchema: anySchema })
+      .foreach(item.step, { concurrency: 8 })
+      .commit();
+    const storage = new MockStore();
+    new Mastra({ logger: false, storage, workflows: { wf: workflow } });
+    const store = (await storage.getStore('workflows'))!;
+    const persist = store.persistWorkflowSnapshot.bind(store);
+    const sizes: number[] = [];
+    vi.spyOn(store, 'persistWorkflowSnapshot').mockImplementation(async (args: any) => {
+      sizes.push(JSON.stringify(args.snapshot).length);
+      return persist(args);
+    });
+
+    const items = Array.from({ length: 400 }, (_, i) => i);
+    const result = await (await workflow.createRun()).start({ inputData: items });
+
+    expect(result.status).toBe('success');
+    const totalBytes = sizes.reduce((sum, size) => sum + size, 0);
+    expect(sizes.length, `writes: ${sizes.length}`).toBeLessThanOrEqual(10);
+    expect(totalBytes, `bytes: ${totalBytes}, final: ${sizes.at(-1)}`).toBeLessThan(5 * sizes.at(-1)!);
   });
 });

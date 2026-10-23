@@ -32,7 +32,6 @@ import {
   validateStepInput,
   createDeprecationProxy,
   defineLazyWriter,
-  getForeachProgress,
   omitForeachProgress,
   omitPriorCompletionFields,
   runCountDeprecationMessage,
@@ -236,26 +235,28 @@ export async function executeStep(
     skipEmits,
   });
 
-  // For a foreach item, carry over the progress that sibling items checkpointed while this
-  // item was starting, so this write cannot drop items that already finished (#26214).
-  const foreachProgress =
-    executionContext.foreachIndex !== undefined ? getForeachProgress(stepResults[step.id]) : undefined;
+  // Foreach items do not write their own start snapshot when the foreach checkpoints its
+  // progress: the foreach writes it once, throttled, instead of one growing full snapshot
+  // per item (#26214). Engines that replay durable operations (Inngest) keep the write.
+  const skipStartWrite = executionContext.foreachIndex !== undefined && !engine.requiresDurableContextSerialization();
 
-  await engine.persistStepUpdate({
-    workflowId,
-    runId,
-    resourceId,
-    serializedStepGraph,
-    stepResults: {
-      ...stepResults,
-      [step.id]: foreachProgress ? { ...stepInfo, metadata: { ...stepInfo.metadata, foreachProgress } } : stepInfo,
-    } as Record<string, StepResult<any, any, any, any>>,
-    executionContext,
-    workflowStatus: 'running',
-    requestContext,
-    phase: 'start',
-    recordResumedStepStart: resumeDataToUse !== undefined && executionContext.foreachIndex === undefined,
-  });
+  if (!skipStartWrite) {
+    await engine.persistStepUpdate({
+      workflowId,
+      runId,
+      resourceId,
+      serializedStepGraph,
+      stepResults: {
+        ...stepResults,
+        [step.id]: stepInfo,
+      } as Record<string, StepResult<any, any, any, any>>,
+      executionContext,
+      workflowStatus: 'running',
+      requestContext,
+      phase: 'start',
+      recordResumedStepStart: resumeDataToUse !== undefined && executionContext.foreachIndex === undefined,
+    });
+  }
 
   // Check if this is a nested workflow that requires special handling
   if (engine.isNestedWorkflowStep(step)) {
