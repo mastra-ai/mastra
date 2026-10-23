@@ -19,6 +19,7 @@ import { MessageList } from '../../message-list';
 import { DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import { globalRunRegistry } from '../run-registry';
+import { consumeText, createGate, createRestartScenario } from './restart-harness';
 
 const findOrder = createTool({
   id: 'find-order',
@@ -83,6 +84,95 @@ function snapshot(runId: string, value: Record<string, unknown> = {}): WorkflowR
 }
 
 describe('DurableAgent.recover() with ToolSearchProcessor (#26437)', () => {
+  it.each(['durable', 'evented'] as const)(
+    'replays an interrupted search-loaded tool with its original call id on %s (#28171)',
+    async kind => {
+      const gate = createGate();
+      const calls: { generation: number; toolCallId: string | undefined }[] = [];
+      const resultsSeen: unknown[] = [];
+      const scenario = createRestartScenario({
+        kind,
+        runId: `search-recovery-${kind}`,
+        build: ({ core, generation }) => {
+          const stamp = core.createTool({
+            id: 'stamp',
+            description: 'Stamp a marker',
+            inputSchema: z.object({ marker: z.string() }),
+            execute: async ({ marker }, context) => {
+              calls.push({ generation, toolCallId: context?.agent?.toolCallId });
+              if (generation === 1) await gate.wait();
+              return { stamped: marker };
+            },
+          });
+          return new core.Agent({
+            id: 'searched',
+            name: 'searched',
+            instructions: 'Search for stamp, stamp m1, then answer done.',
+            inputProcessors: [new ToolSearchProcessor({ tools: { stamp }, search: { autoLoad: true } })],
+            model: new MockLanguageModelV2({
+              doStream: async ({ prompt }) => {
+                const results = prompt.flatMap(message =>
+                  Array.isArray(message.content) ? message.content.filter(part => part.type === 'tool-result') : [],
+                );
+                const stampResult = results.find(part => part.toolName === 'stamp');
+                if (generation > 1 && stampResult) resultsSeen.push(stampResult);
+                const next = !results.some(part => part.toolName === 'search_tools')
+                  ? { toolName: 'search_tools', toolCallId: 'search-1', input: '{"query":"stamp"}' }
+                  : !stampResult
+                    ? { toolName: 'stamp', toolCallId: 'stamp-2', input: '{"marker":"m1"}' }
+                    : undefined;
+                return {
+                  stream: convertArrayToReadableStream([
+                    { type: 'stream-start', warnings: [] },
+                    ...(next
+                      ? [{ type: 'tool-call' as const, ...next }]
+                      : [
+                          { type: 'text-start' as const, id: 'text' },
+                          { type: 'text-delta' as const, id: 'text', delta: 'done' },
+                          { type: 'text-end' as const, id: 'text' },
+                        ]),
+                    {
+                      type: 'finish',
+                      finishReason: next ? 'tool-calls' : 'stop',
+                      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                    },
+                  ]),
+                };
+              },
+            }),
+          });
+        },
+      });
+      let originalText: Promise<string> | undefined;
+      try {
+        const original = await scenario.start(async ({ agent, runId }) => {
+          originalText = consumeText(await agent.stream('stamp m1', { runId }));
+          return originalText;
+        });
+        await gate.reached;
+        const recovered = await scenario.restart(await original.checkpoint());
+        expect(recovered.executionError).toBeUndefined();
+        expect(recovered.streamErrors).toEqual([]);
+        expect(recovered.text).toBe('done');
+        expect(resultsSeen).toEqual([
+          expect.objectContaining({
+            toolCallId: 'stamp-2',
+            toolName: 'stamp',
+            output: { type: 'json', value: { stamped: 'm1' } },
+          }),
+        ]);
+        expect(calls).toEqual([
+          { generation: 1, toolCallId: 'stamp-2' },
+          { generation: 2, toolCallId: 'stamp-2' },
+        ]);
+      } finally {
+        gate.release();
+        await originalText;
+        await scenario.stop();
+      }
+    },
+  );
+
   it('restores tools the processor loaded during the run', async () => {
     const store = new InMemoryStore();
     const agent = createDurableAgent({
