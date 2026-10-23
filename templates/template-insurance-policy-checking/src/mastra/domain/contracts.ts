@@ -67,7 +67,8 @@ export type Clarification = z.infer<typeof clarifySchema>;
 export type CaseRecord = {
   id: string;
   revision: number;
-  state: 'CREATED';
+  state: 'CREATED' | 'PROCESSING' | 'FAILED';
+  latestAnalysisId?: string;
   createdAt: string;
   identity: z.infer<typeof identitySchema>;
   clarification: Clarification | null;

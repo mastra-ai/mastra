@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import type { CaseService } from '../domain/case-service.js';
 import { failureText, IntakeError } from '../domain/errors.js';
+import type { ComparisonRunner } from '../domain/reconciliation-contracts.js';
 
 export const workingMemorySchema = z.object({
   activeCaseId: z.string().nullable(),
@@ -24,6 +25,7 @@ export function createDocumentIntakeProcessor(
   memory: Memory,
   operatorId: string,
   allowControlledModel: boolean,
+  comparison?: ComparisonRunner,
 ): InputProcessor {
   return {
     id: 'private-document-intake',
@@ -66,6 +68,25 @@ export function createDocumentIntakeProcessor(
           await caseService.clarify(context, clarification);
         }
         let evidence = '';
+        if (text.startsWith('/compare ')) {
+          if (!comparison)
+            throw new IntakeError(
+              'COMPARISON_UNAVAILABLE',
+              'Comparison is not configured.',
+              'Check the application workflow registration.',
+            );
+          let input: unknown;
+          try {
+            input = JSON.parse(text.slice('/compare '.length));
+          } catch {
+            throw new IntakeError(
+              'COMPARISON_FORMAT',
+              'The comparison request is not valid JSON.',
+              'Use /compare with the documented case revision, profile, asOf date and retryAttemptId.',
+            );
+          }
+          evidence = JSON.stringify(await comparison.compare(context, input));
+        }
         if (text.startsWith('/evidence ')) {
           const match = /^\/evidence ([a-f0-9-]{36}) ([1-9]\d*)$/.exec(text.trim());
           if (!match)

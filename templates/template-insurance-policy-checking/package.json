@@ -17,6 +17,7 @@
     "format:check": "oxfmt --check .",
     "test:unit": "vitest run tests/unit.test.ts",
     "test:integration": "vitest run tests/intake.integration.test.ts",
+    "test:reconciliation": "vitest run tests/reconciliation.integration.test.ts",
     "test:studio": "playwright test"
   },
   "dependencies": {

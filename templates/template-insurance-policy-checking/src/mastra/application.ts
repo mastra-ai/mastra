@@ -12,6 +12,11 @@ import { createLocalServer, resolveControlledProviderEndpoint } from './runtime/
 import { workingMemorySchema } from './processors/document-intake-processor.js';
 import { applicationConfigurationSchema } from './domain/contracts.js';
 import { projectRoot, ensurePrivateDirectory } from './runtime/paths.js';
+import { processingConfiguration } from './config/processing.js';
+import { ReconciliationRepository } from './storage/reconciliation.js';
+import { createOpenAIProcessingModel } from './providers/openai-processing.js';
+import { createReconciliationService } from './domain/reconciliation-service.js';
+import { createPolicyCheckingWorkflow } from './workflows/policy-checking.js';
 
 export async function createApplication() {
   const limits = inputLimitsSchema.parse(inputLimits);
@@ -26,6 +31,15 @@ export async function createApplication() {
   await ensurePrivateDirectory(root);
   const repository = new CaseRepository(root);
   await repository.initialize();
+  const reconciliationRepository = new ReconciliationRepository(repository);
+  await reconciliationRepository.initialize();
+  const processingModel = createOpenAIProcessingModel(reconciliationRepository, { endpoint: testEndpoint });
+  const reconciliation = createReconciliationService(
+    reconciliationRepository,
+    processingModel,
+    processingConfiguration,
+    insuranceConfiguration,
+  );
   const storage = new LibSQLStore({ id: 'insurance-history', url: `file:${resolve(root, 'history.db')}` });
   const memory = new Memory({
     storage,
@@ -37,10 +51,19 @@ export async function createApplication() {
     },
   });
   const registry = createRegistry(registrations, registrations.providerDefaults);
-  const caseService = createCaseService(repository, registry.resolve('input', undefined, 'pdf-attachments'), limits);
+  const caseService = createCaseService(
+    repository,
+    registry.resolve('input', undefined, 'pdf-attachments'),
+    limits,
+    reconciliation.status,
+  );
+  const comparison = createPolicyCheckingWorkflow(reconciliation, caseService, operatorId);
   return {
     storage,
-    agents: { policyCheckingAgent: createPolicyCheckingAgent(caseService, memory, operatorId, testEndpoint) },
+    agents: {
+      policyCheckingAgent: createPolicyCheckingAgent(caseService, memory, operatorId, testEndpoint, comparison.runner),
+    },
+    workflows: { policyCheckingWorkflow: comparison.workflow },
     server: createLocalServer(port, limits),
   };
 }

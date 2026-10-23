@@ -7,6 +7,7 @@ export function createCaseService(
   repository: CaseRepository,
   inputProvider: InputProvider,
   configuredLimits: InputLimits,
+  comparisonStatus?: (context: OperationContext) => Promise<unknown>,
 ) {
   const limits = inputLimitsSchema.parse(configuredLimits);
   return {
@@ -29,7 +30,12 @@ export function createCaseService(
     async status(context: OperationContext) {
       contextSchema.parse(context);
       const record = await repository.active(context);
-      if (!record) return { case: null, message: 'No case is selected. Attach textual PDFs to create a case.' };
+      if (!record)
+        return {
+          case: null,
+          sources: undefined,
+          message: 'No case is selected. Attach textual PDFs to create a case.',
+        };
       const sources = await repository.sources(context);
       const clarifications = [];
       if (sources.length < 2) clarifications.push('Attach at least two documents for a future comparison.');
@@ -54,7 +60,9 @@ export function createCaseService(
         sources: metadata,
         clarifications,
         recovery: await repository.recovery(),
-        message: 'Documents are captured. Comparison and report generation are not available in this intake version.',
+        ...(comparisonStatus ? { reconciliation: await comparisonStatus(context) } : {}),
+        message:
+          'Documents are captured. Evidence-backed comparison requires explicit clarification and approved processing budgets. Reports and broker review are not available.',
       };
     },
     async clarify(context: OperationContext, input: unknown) {

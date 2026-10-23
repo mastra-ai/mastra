@@ -6,9 +6,23 @@ export const insuranceProfileSchema = z
     version: z.string().min(1),
     categories: z.array(z.string().min(1)),
     terminology: z.record(z.string(), z.string().min(1)),
-    rules: z.array(z.object({ id: z.string().min(1), description: z.string().min(1) }).strict()),
+    rules: z.array(
+      z
+        .object({
+          id: z.string().min(1),
+          description: z.string().min(1),
+          category: z.string().min(1),
+          key: z.string().min(1),
+          requirement: z.enum(['required', 'review']),
+        })
+        .strict(),
+    ),
   })
-  .strict();
+  .strict()
+  .refine(
+    profile => new Set(profile.rules.map(rule => rule.id)).size === profile.rules.length,
+    'Rule IDs must be unique within a profile.',
+  );
 export const insuranceProfiles = [
   { id: 'generic', version: '1', categories: [], terminology: {}, rules: [] },
 ] satisfies z.infer<typeof insuranceProfileSchema>[];

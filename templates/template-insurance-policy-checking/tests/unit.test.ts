@@ -2,6 +2,15 @@ import { describe, it, expect } from 'vitest';
 import { inputLimits, inputLimitsSchema } from '../src/mastra/config/limits.js';
 import { applicationConfigurationSchema, clarifySchema } from '../src/mastra/domain/contracts.js';
 import { insuranceConfiguration, insuranceConfigurationSchema } from '../src/mastra/config/insurance.js';
+import {
+  compareDecimals,
+  equalValues,
+  normalizeDecimal,
+  valueSupported,
+  verifyEvidence,
+} from '../src/mastra/domain/reconciliation.js';
+import { termValueSchema, processingBudgetSchema } from '../src/mastra/domain/reconciliation-contracts.js';
+import { propertyMoney } from './reconciliation-fixtures.js';
 import { resolveControlledProviderEndpoint } from '../src/mastra/runtime/server.js';
 import { failureText } from '../src/mastra/domain/errors.js';
 import { sourceBundleSchema } from '../src/mastra/domain/contracts.js';
@@ -112,5 +121,66 @@ describe('Intake contract invariants', () => {
     expect(failureText(new Error(secret))).not.toContain(secret);
     const result = inputLimitsSchema.safeParse({ [secret]: secret });
     if (!result.success) expect(failureText(result.error)).not.toContain(secret);
+  });
+});
+
+describe('Typed insurance comparison boundaries', () => {
+  it('compares exact decimal amounts without rounding away money or comparison dimensions', () => {
+    expect(equalValues(propertyMoney('9007199254740993.0100'), propertyMoney('9007199254740993.01'))).toBe(true);
+    expect(equalValues(propertyMoney('9007199254740993.01'), propertyMoney('9007199254740993.02'))).toBe(false);
+    expect(equalValues(propertyMoney('2500'), propertyMoney('2500', 'CAD'))).toBe(false);
+    expect(equalValues(propertyMoney('5'), propertyMoney('5', 'USD', 'percentage'))).toBe(false);
+    const money = propertyMoney('2500');
+    if (money.type !== 'money') throw new Error('Money fixture');
+    expect(equalValues(money, { ...money, unit: 'each claim' })).toBe(false);
+    expect(equalValues(money, { ...money, minimum: '100' })).toBe(false);
+    expect(normalizeDecimal('-0.0000')).toBe('0');
+    expect(normalizeDecimal('-100.00010')).toBe('-100.0001');
+    expect(compareDecimals('9007199254740993.0100000000000001', '9007199254740993.01')).toBe(1);
+    expect(compareDecimals('-0.0000000000000002', '-0.0000000000000001')).toBe(-1);
+    expect(compareDecimals('2500000.00', '2500000')).toBe(0);
+    expect(
+      termValueSchema.safeParse({ ...money, minimum: '999999999999999999.02', maximum: '999999999999999999.01' })
+        .success,
+    ).toBe(false);
+    expect(termValueSchema.safeParse({ ...money, amount: 2500 }).success).toBe(false);
+    expect(termValueSchema.safeParse({ ...money, amount: '2.5e3' }).success).toBe(false);
+  });
+  it('preserves calendar granularity and distinct entities, addresses and units', () => {
+    expect(termValueSchema.safeParse({ type: 'date', value: '2026-02-29', granularity: 'day' }).success).toBe(false);
+    expect(termValueSchema.safeParse({ type: 'date', value: '2024-02-29', granularity: 'day' }).success).toBe(true);
+    expect(termValueSchema.safeParse({ type: 'date', value: '2026-01', granularity: 'day' }).success).toBe(false);
+    expect(
+      equalValues(
+        { type: 'date', value: '2026', granularity: 'year' },
+        { type: 'date', value: '2026-01-01', granularity: 'day' },
+      ),
+    ).toBe(false);
+    const entity = { type: 'entity' as const, name: 'Warehouse A', address: '18 Cedar Lane', unit: 'Unit 1' };
+    expect(equalValues(entity, { ...entity, name: ' warehouse   a ' })).toBe(true);
+    expect(equalValues(entity, { ...entity, name: 'Warehouse B' })).toBe(false);
+    expect(equalValues(entity, { ...entity, address: '18 Cedar Road' })).toBe(false);
+    expect(equalValues(entity, { ...entity, unit: 'Unit 2' })).toBe(false);
+  });
+  it('rejects normalization unsupported by original values and forged record citations', async () => {
+    expect(valueSupported(propertyMoney('5000'), 'Deductible: USD 2500 each occurrence, fixed.')).toBe(false);
+    expect(valueSupported(propertyMoney('5'), 'Deductible: USD 5 percent each occurrence.')).toBe(false);
+    expect(valueSupported(propertyMoney('2500'), 'Deductible: USD 2,500.00 each occurrence, fixed.')).toBe(true);
+    const bundle = await recordProvider().capture({}, { threadId: 'one', operatorId: 'broker' }, inputLimits);
+    const source = bundle.sources[0]!;
+    const evidence = {
+      sourceId: source.sourceId,
+      version: source.version,
+      hash: source.hash,
+      physicalPage: null,
+      recordId: 'contract',
+      field: 'limit',
+      excerpt: 'USD 250000',
+    };
+    expect(() => verifyEvidence(evidence, [source])).not.toThrow();
+    expect(() => verifyEvidence({ ...evidence, field: 'invented' }, [source])).toThrow();
+    expect(() => verifyEvidence({ ...evidence, excerpt: 'USD 999999' }, [source])).toThrow();
+    expect(() => verifyEvidence({ ...evidence, hash: '0'.repeat(64) }, [source])).toThrow();
+    expect(processingBudgetSchema.safeParse({ maxRequests: 10 }).success).toBe(false);
   });
 });

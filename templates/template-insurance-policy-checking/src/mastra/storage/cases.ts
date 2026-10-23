@@ -15,7 +15,7 @@ import {
 import { IntakeError } from '../domain/errors.js';
 import { ensurePrivateDirectory } from '../runtime/paths.js';
 
-type SavedSource =
+export type SavedSource =
   | Omit<Extract<CapturedSource, { kind: 'pdf' }>, 'bytes'>
   | Extract<CapturedSource, { kind: 'records' }>;
 
@@ -82,7 +82,15 @@ export class CaseRepository {
     newCase = false,
   ): Promise<CaseRecord> {
     return this.serial(async () => {
-      const existing = newCase ? null : await this.active(context);
+      const active = await this.active(context);
+      if (active?.state === 'PROCESSING')
+        throw new IntakeError(
+          'CASE_PROCESSING',
+          'Comparison is processing this immutable source revision.',
+          'Wait for processing to finish before changing the case.',
+          409,
+        );
+      const existing = newCase ? null : active;
       const id = existing?.id ?? randomUUID();
       const oldSources = existing ? await this.sources(context) : [];
       const hashes = new Set(oldSources.map(source => source.hash));
@@ -149,13 +157,31 @@ export class CaseRepository {
         sourceIds: [...(existing?.sourceIds ?? []), ...additions.map(source => source.sourceId)],
         limits: structuredClone(limits),
         providerId,
+        ...(!additions.length && existing?.latestAnalysisId ? { latestAnalysisId: existing.latestAnalysisId } : {}),
       };
       const transaction = await this.client.transaction('write');
       try {
-        await transaction.execute({
-          sql: 'INSERT INTO insurance_cases(id,data) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET data=excluded.data',
-          args: [id, JSON.stringify(record)],
+        const selected = await transaction.execute({
+          sql: 'SELECT c.data FROM insurance_threads t JOIN insurance_cases c ON c.id=t.case_id WHERE t.operator_id=? AND t.thread_id=?',
+          args: [context.operatorId, context.threadId],
         });
+        if ((selected.rows[0] ? String(selected.rows[0].data) : null) !== (active ? JSON.stringify(active) : null))
+          throw new IntakeError(
+            'STALE_CASE',
+            'The selected case changed during intake.',
+            'Read status and submit again after current processing finishes.',
+            409,
+          );
+        const write = await transaction.execute(
+          existing
+            ? {
+                sql: 'UPDATE insurance_cases SET data=? WHERE id=? AND data=?',
+                args: [JSON.stringify(record), id, JSON.stringify(existing)],
+              }
+            : { sql: 'INSERT INTO insurance_cases(id,data) VALUES(?,?)', args: [id, JSON.stringify(record)] },
+        );
+        if (write.rowsAffected !== 1)
+          throw new IntakeError('STALE_CASE', 'The case changed during intake.', 'Read status and submit again.', 409);
         for (const { source, artifact, descriptor } of saved)
           await transaction.execute({
             sql: 'INSERT INTO insurance_sources(id,case_id,hash,artifact,data) VALUES(?,?,?,?,?)',
@@ -243,6 +269,13 @@ export class CaseRepository {
     const request = clarifySchema.parse(input);
     return this.serial(async () => {
       const record = await this.requireCase(context, request.caseId);
+      if (record.state === 'PROCESSING')
+        throw new IntakeError(
+          'CASE_PROCESSING',
+          'The case is being compared.',
+          'Wait for processing before clarifying this case.',
+          409,
+        );
       if (record.revision !== request.expectedRevision)
         throw new IntakeError(
           'STALE_CASE',
@@ -269,7 +302,13 @@ export class CaseRepository {
           'Reference and target both need an explicit document role.',
           'Identify each document role before proceeding.',
         );
-      const updated = { ...record, revision: record.revision + 1, identity: request.identity, clarification: request };
+      const updated = {
+        ...record,
+        state: 'CREATED' as const,
+        revision: record.revision + 1,
+        identity: request.identity,
+        clarification: request,
+      };
       const result = await this.client.execute({
         sql: 'UPDATE insurance_cases SET data=? WHERE id=? AND data=?',
         args: [JSON.stringify(updated), record.id, JSON.stringify(record)],
