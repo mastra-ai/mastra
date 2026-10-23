@@ -6,9 +6,9 @@ import type { UserEvent } from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
-import { server } from '../../../../../../e2e/ui/msw-server';
-import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
-import type { FactoryProjectPayload } from '../../../workspaces/services/github';
+import { server } from '../../../../../../../../e2e/ui/msw-server';
+import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../../../e2e/ui/render';
+import type { FactoryProjectPayload } from '../../../../../workspaces/services/github';
 import { FactoryThinkingControl } from '../FactoryThinkingControl';
 
 const FACTORY_URL = `${TEST_BASE_URL}/web/factory/projects/fp-1`;

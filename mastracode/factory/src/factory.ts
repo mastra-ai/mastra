@@ -124,7 +124,7 @@ import { migrateSessionResources, privatizeOwnerResourceSessions } from './sessi
 import { observeSessionRunEnd } from './session/run-audit.js';
 import { sessionMemoryResourceId, sessionStampCounts } from './session/session-threads.js';
 import { createSourceControlTools } from './session/source-control-tools.js';
-import { readFactoryThinkingLevel, resolveFactoryThinkingLevel } from './session/thinking-default.js';
+import { resolveFactoryThinkingLevel } from './session/thinking-default.js';
 import { observeSessionThreadStamp } from './session/thread-session-stamp.js';
 import { observeSessionThreadTitle } from './session/thread-title-mirror.js';
 import { createSpaStaticMiddleware, resolveUiDistDir } from './spa-static.js';
@@ -1147,13 +1147,21 @@ export class MastraFactory {
         layerPersonalMemorySettings(record, personal) satisfies MemorySettingsRecord | null,
       );
     };
+    // Thinking defaults come from the session's defaults set, never the host's settings.json.
+    const resolveDefaultThinkingLevel = (requestContext: RequestContext | undefined) =>
+      resolveFactoryThinkingLevel(requestContext, {
+        projects: factoryProjectsStorage,
+        sourceControl: sourceControlSessions,
+        workItems: workItemsStorage,
+        modelDefaults: modelDefaultsStorage,
+      });
     const factoryProcessor = workItemsReady
       ? new FactoryPhaseStateProcessor({
           configVersion,
           storage: workItemsStorage,
           boards: this.#boards,
           loadMemorySettings,
-          factoryThinkingLevel: factoryProjectId => readFactoryThinkingLevel(factoryProjectsStorage, factoryProjectId),
+          defaultThinkingLevel: resolveDefaultThinkingLevel,
           ...(transitionService ? { transitionService } : {}),
           ...(githubIntegration
             ? {
@@ -1233,12 +1241,7 @@ export class MastraFactory {
         modes: false,
         // Subagents are disabled, matching the Mastra Code TUI default.
         subagents: [],
-        // Thinking defaults are stored per Factory, not in the host's settings.json.
-        resolveDefaultThinkingLevel: ({ requestContext }) =>
-          resolveFactoryThinkingLevel(requestContext, {
-            projects: factoryProjectsStorage,
-            sourceControl: sourceControlSessions,
-          }),
+        resolveDefaultThinkingLevel: ({ requestContext }) => resolveDefaultThinkingLevel(requestContext),
         workspace: createWorkspaceFactory({
           ...(sandboxConfig ? { sandbox: sandboxConfig } : {}),
           ...(this.#config.sandboxStart ? { sandboxStart: this.#config.sandboxStart } : {}),

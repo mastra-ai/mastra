@@ -880,7 +880,7 @@ describe('default model routes with a tenant', () => {
   it('returns null when the user has no default model', async () => {
     const res = await buildApp(userA).request('/web/config/default-model');
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual({ modelId: null });
+    expect(await res.json()).toEqual({ modelId: null, thinkingLevel: null });
   });
 
   it('validates and persists a default model per user', async () => {
@@ -904,8 +904,40 @@ describe('default model routes with a tenant', () => {
 
     const userAResponse = await buildApp(userA).request('/web/config/default-model');
     const userBResponse = await buildApp(userB).request('/web/config/default-model');
-    expect(await userAResponse.json()).toEqual({ modelId: 'openai/gpt-5.6' });
-    expect(await userBResponse.json()).toEqual({ modelId: null });
+    expect(await userAResponse.json()).toEqual({ modelId: 'openai/gpt-5.6', thinkingLevel: null });
+    expect(await userBResponse.json()).toEqual({ modelId: null, thinkingLevel: null });
+  });
+
+  it('saves a personal thinking level only next to a personal default model', async () => {
+    const putThinking = (body: unknown) =>
+      buildApp(userA).request('/web/config/default-model/thinking', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    const getDefaults = async (user: typeof userA) =>
+      (await buildApp(user).request('/web/config/default-model')).json();
+
+    const withoutModel = await putThinking({ thinkingLevel: 'high' });
+    expect(withoutModel.status).toBe(400);
+    expect(await withoutModel.json()).toEqual({ error: 'default_model_not_set' });
+
+    await putDefault(buildApp(userA), { modelId: 'openai/gpt-5.6' });
+    const saved = await putThinking({ thinkingLevel: 'high' });
+    expect(saved.status).toBe(200);
+    expect(await saved.json()).toEqual({ ok: true, thinkingLevel: 'high' });
+    expect(await getDefaults(userA)).toEqual({ modelId: 'openai/gpt-5.6', thinkingLevel: 'high' });
+    expect(await getDefaults(userB)).toEqual({ modelId: null, thinkingLevel: null });
+
+    const invalid = await putThinking({ thinkingLevel: 'enormous' });
+    expect(invalid.status).toBe(400);
+    expect(await invalid.json()).toEqual({ error: 'Invalid thinkingLevel' });
+    expect(await getDefaults(userA)).toEqual({ modelId: 'openai/gpt-5.6', thinkingLevel: 'high' });
+
+    const reset = await putThinking({ thinkingLevel: null });
+    expect(reset.status).toBe(200);
+    expect(await reset.json()).toEqual({ ok: true, thinkingLevel: null });
+    expect(await getDefaults(userA)).toEqual({ modelId: 'openai/gpt-5.6', thinkingLevel: null });
   });
 
   it('clears a personal default model', async () => {

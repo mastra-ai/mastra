@@ -1,5 +1,4 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 
 import {
   useFactoryProjectQuery,
@@ -7,7 +6,6 @@ import {
 } from '../../../../../../hooks/useFactoryDefaultModel';
 import { SkeletonRows } from '../../../../../ui/SkeletonRows';
 import type { FactoryModelScope } from '../../../../workspaces/services/github';
-import { FactoryThinkingControl } from '../../FactoryThinkingControl';
 import { SettingsSubsection } from '../../SettingsSubsection';
 import { ModelRoutingMap } from './ModelRoutingMap';
 import { ModelRoutingSwitch } from './ModelRoutingSwitch';
@@ -44,14 +42,6 @@ export function ModelRoutingSection({ factoryId }: { factoryId: string }) {
         )}
         {projectQuery.isPending && <SkeletonRows label="Loading model routing" rows={2} rowClassName="h-36 w-full" />}
         {modelScope && <ModelRoutingMap factoryId={factoryId} modelScope={modelScope} />}
-        <SettingsContainer>
-          <SettingsRow
-            label="Thinking"
-            description="Every chat and work-item run in this Factory starts at this level."
-          >
-            <FactoryThinkingControl factoryId={factoryId} />
-          </SettingsRow>
-        </SettingsContainer>
       </div>
     </SettingsSubsection>
   );
