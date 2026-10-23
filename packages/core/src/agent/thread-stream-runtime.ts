@@ -2314,113 +2314,126 @@ export class AgentThreadStreamRuntime {
       releaseMessageIdentity(`Claimed thread owner acceptance expired for ${describeThreadKey(key)}`);
       return { runId, error: `Claimed thread owner acceptance expired for ${describeThreadKey(key)}` };
     }
-    // Resolving the owner's stream options can reject. A later retry of the same
-    // logical message must be free to route instead of being told this message was
-    // already accepted, so release the reservation before propagating.
-    let ownerStreamOptions: AgentExecutionOptions<any> | undefined;
-    try {
-      ownerStreamOptions =
-        typeof owner.streamOptions === 'function' ? await owner.streamOptions() : owner.streamOptions;
-    } catch (error) {
-      releaseMessageIdentity(getErrorFromUnknown(error));
-      throw error;
-    }
-    // The run executes inside the claiming owner's session, so the owner's
-    // options stay authoritative for everything that shapes the run — memory,
-    // toolsets, provider options. Only `requestContext` crosses over: it
-    // identifies the caller this wake acts for rather than the shape of the run.
-    // A dispatcher waking a session on behalf of an authenticated caller needs
-    // that identity visible downstream, or the run starts anonymously and a
-    // workspace resolver that requires a caller rejects it.
-    //
-    // Deliberately narrower than the no-owner path below, which spreads the whole
-    // incoming `streamOptions` because there is no owner configuration to keep.
-    //
-    // Scopes cross over with the request context for the same reason: they say
-    // what the caller acts as. They are unioned with any owner scopes.
-    let streamOptions: AgentExecutionOptions<any> | undefined =
-      incomingStreamOptions?.requestContext === undefined
-        ? ownerStreamOptions
-        : { ...ownerStreamOptions, requestContext: incomingStreamOptions.requestContext };
-    if (incomingStreamOptions?.scopes?.length) {
-      streamOptions = {
-        ...streamOptions,
-        scopes: unionScopes(ownerStreamOptions?.scopes, incomingStreamOptions.scopes),
-      };
-    }
+    // Only a wake or a queued run uses the owner's stream options, so they are resolved after the joins below,
+    // which never read them: a slow or failing options factory must not hold up input joining a run.
+    // Resolving them can reject. A later retry of the same logical message must be free to route instead of
+    // being told this message was already accepted, so release the reservation before propagating.
+    let streamOptions: AgentExecutionOptions<any> | undefined;
+    let streamOptionsResolved = false;
+    const resolveStreamOptions = async () => {
+      let ownerStreamOptions: AgentExecutionOptions<any> | undefined;
+      try {
+        ownerStreamOptions =
+          typeof owner.streamOptions === 'function' ? await owner.streamOptions() : owner.streamOptions;
+      } catch (error) {
+        releaseMessageIdentity(getErrorFromUnknown(error));
+        throw error;
+      }
+      // The run executes inside the claiming owner's session, so the owner's
+      // options stay authoritative for everything that shapes the run — memory,
+      // toolsets, provider options. Only `requestContext` crosses over: it
+      // identifies the caller this wake acts for rather than the shape of the run.
+      // A dispatcher waking a session on behalf of an authenticated caller needs
+      // that identity visible downstream, or the run starts anonymously and a
+      // workspace resolver that requires a caller rejects it.
+      //
+      // Deliberately narrower than the no-owner path below, which spreads the whole
+      // incoming `streamOptions` because there is no owner configuration to keep.
+      //
+      // Scopes cross over with the request context for the same reason: they say
+      // what the caller acts as. They are unioned with any owner scopes.
+      streamOptions =
+        incomingStreamOptions?.requestContext === undefined
+          ? ownerStreamOptions
+          : { ...ownerStreamOptions, requestContext: incomingStreamOptions.requestContext };
+      if (incomingStreamOptions?.scopes?.length) {
+        streamOptions = {
+          ...streamOptions,
+          scopes: unionScopes(ownerStreamOptions?.scopes, incomingStreamOptions.scopes),
+        };
+      }
+      streamOptionsResolved = true;
+    };
     let control: ThreadControlSubscription | undefined;
     try {
-      const subscription = this.#ensureThreadControlSubscription(state, pubsub, key);
-      control = subscription;
-      subscription.references++;
-      await subscription.ready;
-      if (!isOwnerActive()) {
-        releaseMessageIdentity(`Claimed thread owner was released for ${describeThreadKey(key)}`);
-        return { runId, error: `Claimed thread owner was released for ${describeThreadKey(key)}` };
-      }
-      if (Date.now() >= expiresAt) {
-        releaseMessageIdentity(`Claimed thread owner acceptance expired for ${describeThreadKey(key)}`);
-        return { runId, error: `Claimed thread owner acceptance expired for ${describeThreadKey(key)}` };
-      }
-
-      let activeRunId = state.activeThreadRunIds.get(key);
-      let activeRecord = activeRunId ? state.threadRunsById.get(activeRunId) : undefined;
-      // Queued input waits for the thread to go idle; only a send joins a run in flight.
-      const pendingAdmission =
-        activeRunId && !activeRecord && !waitForIdle ? state.pendingThreadAdmissions.get(key) : undefined;
-      if (pendingAdmission && pendingAdmission.runId === activeRunId && pendingAdmission.agentId === owner.agent.id) {
-        // The owner has reserved the thread for a run that has not started yet. Hand
-        // it the input for its first model request, as a local send does.
-        const queue = state.preRunSignalsByThread.get(key) ?? [];
-        queue.push(signal);
-        state.preRunSignalsByThread.set(key, queue);
-        const queued: ClaimedQueuedMessage = { identity: messageIdentity };
-        state.claimedQueuedMessages.set(claimedQueuedMessageKey(key, signal.id), queued);
-        this.#recordLocallyQueuedSignal(state, key, signal.id);
-        this.#notifyPendingSignals(state, key);
-        const admission = await pendingAdmission.outcome.catch(() => undefined);
-        if (queued.cancelled) {
-          // Cancelled while waiting. It was admitted like queued input on an idle owner, so
-          // this attempt is accepted; the message is ended so a retry learns it was cancelled.
-          const cancelledRunId = admission?.action === 'local' ? admission.runId : runId;
-          settleMessageIdentity?.({ runId: cancelledRunId, terminalReason: CANCELLED_BEFORE_RUN });
-          return { runId: cancelledRunId };
+      let activeRunId: string | undefined;
+      let activeRecord: AgentThreadRunRecord<any> | undefined;
+      for (;;) {
+        activeRunId = state.activeThreadRunIds.get(key);
+        activeRecord = activeRunId ? state.threadRunsById.get(activeRunId) : undefined;
+        // Queued input waits for the thread to go idle; only a send joins a run in flight.
+        const pendingAdmission =
+          activeRunId && !activeRecord && !waitForIdle ? state.pendingThreadAdmissions.get(key) : undefined;
+        if (pendingAdmission && pendingAdmission.runId === activeRunId && pendingAdmission.agentId === owner.agent.id) {
+          // The owner has reserved the thread for a run that has not started yet. Hand
+          // it the input for its first model request, as a local send does.
+          const queue = state.preRunSignalsByThread.get(key) ?? [];
+          queue.push(signal);
+          state.preRunSignalsByThread.set(key, queue);
+          const queued: ClaimedQueuedMessage = { identity: messageIdentity };
+          state.claimedQueuedMessages.set(claimedQueuedMessageKey(key, signal.id), queued);
+          this.#recordLocallyQueuedSignal(state, key, signal.id);
+          this.#notifyPendingSignals(state, key);
+          const admission = await pendingAdmission.outcome.catch(() => undefined);
+          if (queued.cancelled) {
+            // Cancelled while waiting. It was admitted like queued input on an idle owner, so
+            // this attempt is accepted; the message is ended so a retry learns it was cancelled.
+            const cancelledRunId = admission?.action === 'local' ? admission.runId : runId;
+            settleMessageIdentity?.({ runId: cancelledRunId, terminalReason: CANCELLED_BEFORE_RUN });
+            return { runId: cancelledRunId };
+          }
+          if (admission?.action === 'local') {
+            queued.runId = admission.runId;
+            settleMessageIdentity?.({ runId: admission.runId });
+            return { runId: admission.runId };
+          }
+          // That run never started here, so it will not take the input; route it again.
+          state.claimedQueuedMessages.delete(claimedQueuedMessageKey(key, signal.id));
+          this.#discardQueuedPreRunSignal(state, key, signal.id);
+          if (!isOwnerActive()) {
+            releaseMessageIdentity(`Claimed thread owner was released for ${describeThreadKey(key)}`);
+            return { runId, error: `Claimed thread owner was released for ${describeThreadKey(key)}` };
+          }
+          activeRunId = state.activeThreadRunIds.get(key);
+          activeRecord = activeRunId ? state.threadRunsById.get(activeRunId) : undefined;
         }
-        if (admission?.action === 'local') {
-          queued.runId = admission.runId;
-          settleMessageIdentity?.({ runId: admission.runId });
-          return { runId: admission.runId };
+        if (
+          !waitForIdle &&
+          activeRecord &&
+          activeRecord.agent.id === owner.agent.id &&
+          this.#isThreadBlockingRun(state, activeRecord)
+        ) {
+          // The sender asked for an idle wake only because it cannot see this run from
+          // its process. Hand the input to the run in flight, the way a local send does,
+          // so it reaches the next model request instead of waiting for the run to end.
+          // Tracked before it is queued: queuing can cut the run's request short at once, and
+          // whatever cancels the input from there must find it.
+          const queued: ClaimedQueuedMessage = { identity: messageIdentity, runId: activeRecord.runId };
+          state.claimedQueuedMessages.set(claimedQueuedMessageKey(key, signal.id), queued);
+          this.#queueForActiveRun(state, pubsub, key, activeRecord, signal);
+          settleMessageIdentity?.(
+            queued.cancelled
+              ? { runId: activeRecord.runId, terminalReason: CANCELLED_BEFORE_RUN }
+              : { runId: activeRecord.runId },
+          );
+          return { runId: activeRecord.runId };
         }
-        // That run never started here, so it will not take the input; route it again.
-        state.claimedQueuedMessages.delete(claimedQueuedMessageKey(key, signal.id));
-        this.#discardQueuedPreRunSignal(state, key, signal.id);
+        if (streamOptionsResolved) break;
+        // No join applies: this wakes or queues a run, which needs the owner's options and the thread's
+        // control subscription. The thread may change while they settle, so look at it again after.
+        await resolveStreamOptions();
+        const subscription = this.#ensureThreadControlSubscription(state, pubsub, key);
+        control = subscription;
+        subscription.references++;
+        await subscription.ready;
         if (!isOwnerActive()) {
           releaseMessageIdentity(`Claimed thread owner was released for ${describeThreadKey(key)}`);
           return { runId, error: `Claimed thread owner was released for ${describeThreadKey(key)}` };
         }
-        activeRunId = state.activeThreadRunIds.get(key);
-        activeRecord = activeRunId ? state.threadRunsById.get(activeRunId) : undefined;
-      }
-      if (
-        !waitForIdle &&
-        activeRecord &&
-        activeRecord.agent.id === owner.agent.id &&
-        this.#isThreadBlockingRun(state, activeRecord)
-      ) {
-        // The sender asked for an idle wake only because it cannot see this run from
-        // its process. Hand the input to the run in flight, the way a local send does,
-        // so it reaches the next model request instead of waiting for the run to end.
-        // Tracked before it is queued: queuing can cut the run's request short at once, and
-        // whatever cancels the input from there must find it.
-        const queued: ClaimedQueuedMessage = { identity: messageIdentity, runId: activeRecord.runId };
-        state.claimedQueuedMessages.set(claimedQueuedMessageKey(key, signal.id), queued);
-        this.#queueForActiveRun(state, pubsub, key, activeRecord, signal);
-        settleMessageIdentity?.(
-          queued.cancelled
-            ? { runId: activeRecord.runId, terminalReason: CANCELLED_BEFORE_RUN }
-            : { runId: activeRecord.runId },
-        );
-        return { runId: activeRecord.runId };
+        if (Date.now() >= expiresAt) {
+          releaseMessageIdentity(`Claimed thread owner acceptance expired for ${describeThreadKey(key)}`);
+          return { runId, error: `Claimed thread owner acceptance expired for ${describeThreadKey(key)}` };
+        }
       }
       if (activeRunId && (!activeRecord || this.#isThreadBlockingRun(state, activeRecord))) {
         const idleQueue = state.pendingIdleSignalsByThread.get(key) ?? [];
