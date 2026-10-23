@@ -5,7 +5,8 @@ import pg from 'pg';
 import { PgFactoryStorage, PgVector, PostgresStore } from '../../index';
 import { resolvePgConfig } from '../../storage/db';
 
-const connectionString = process.env.POSTGRES_CONNECTION_STRING ?? 'postgresql://postgres:postgres@localhost:5434/mastra';
+const connectionString =
+  process.env.POSTGRES_CONNECTION_STRING ?? 'postgresql://postgres:postgres@localhost:5434/mastra';
 const url = new URL(connectionString);
 const hostConfig = {
   host: url.hostname,

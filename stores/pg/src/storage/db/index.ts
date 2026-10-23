@@ -22,6 +22,7 @@ import type {
 import { parseSqlIdentifier } from '@mastra/core/utils';
 import { Pool } from 'pg';
 import { buildConnectionStringPoolConfig } from '../../shared/pool-config';
+import { guardCheckedOutClientErrors } from '../../shared/pool-error-guard';
 import { parseSchemaName, schemaNamePrefix } from '../../shared/schema-name';
 import type { DbClient, QueryValues, TxClient } from '../client';
 import { PoolAdapter } from '../client';
@@ -171,6 +172,8 @@ export function resolvePgConfig(config: PgDomainConfig): {
       `resolvePgConfig: idle pool client error (pool discards the client and reconnects on next checkout): ${err instanceof Error ? err.message : String(err)}`,
     );
   });
+
+  guardCheckedOutClientErrors(pool);
 
   const client = new PoolAdapter(pool);
   return {
