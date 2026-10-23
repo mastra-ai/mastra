@@ -34,6 +34,33 @@ function stubFactory() {
   );
 }
 
+function stubRepository() {
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
+      HttpResponse.json({
+        connections: [
+          {
+            id: 'conn-1',
+            installationId: 'inst-1',
+            repositories: [
+              {
+                id: 'repo-1',
+                branch: 'main',
+                sandboxWorkdir: '/workspace/acme',
+                repository: { slug: 'acme/app', defaultBranch: 'main' },
+              },
+            ],
+          },
+        ],
+      }),
+    ),
+  );
+}
+
+function sidebarIsCollapsed() {
+  return screen.getByRole('separator', { name: /^Resize sidebar/ }).getAttribute('aria-valuetext') === 'collapsed';
+}
+
 function PageA() {
   return (
     <main>
@@ -86,7 +113,7 @@ function renderApp(initialPath = `/factories/${FACTORY_ID}/a`) {
     ],
     { initialEntries: [initialPath] },
   );
-  return renderWithProviders(<RouterProvider router={router} />);
+  return { router, ...renderWithProviders(<RouterProvider router={router} />) };
 }
 
 describe('AppLayout', () => {
@@ -117,23 +144,41 @@ describe('AppLayout', () => {
     }
   });
 
-  it('shows one sidebar toggle: next to search while expanded, in the page header once collapsed', async () => {
+  it('shows the sidebar toggle only in the page header, once the handle collapses the sidebar', async () => {
     stubFactory();
     renderApp(`/factories/${FACTORY_ID}/slots`);
 
-    const sidebar = await screen.findByRole('complementary', { name: 'Main sidebar' });
     await screen.findByRole('heading', { name: 'Slots page' });
-    const [expandedToggle, ...extraWhileExpanded] = screen.getAllByRole('button', { name: 'Toggle sidebar' });
-    expect(extraWhileExpanded).toHaveLength(0);
-    expect(sidebar).toContainElement(expandedToggle);
-    expect(expandedToggle).toHaveAttribute('aria-expanded', 'true');
+    expect(screen.queryByRole('button', { name: 'Toggle sidebar' })).not.toBeInTheDocument();
 
-    await userEvent.click(expandedToggle);
+    await userEvent.click(screen.getByRole('separator', { name: /^Resize sidebar/ }));
 
-    await waitFor(() => expect(within(sidebar).queryByRole('button', { name: 'Toggle sidebar' })).toBeNull());
-    const [collapsedToggle, ...extraWhileCollapsed] = screen.getAllByRole('button', { name: 'Toggle sidebar' });
-    expect(extraWhileCollapsed).toHaveLength(0);
-    expect(collapsedToggle).toHaveAttribute('aria-expanded', 'false');
+    const toggle = await screen.findByRole('button', { name: 'Toggle sidebar' });
+    expect(screen.getByRole('complementary', { name: 'Main sidebar' })).not.toContainElement(toggle);
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+
+    await userEvent.click(toggle);
+
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Toggle sidebar' })).not.toBeInTheDocument());
+  });
+
+  it('opens a fresh draft from the sidebar header on every click', async () => {
+    stubFactory();
+    stubRepository();
+    const { router } = renderApp();
+    const draftPath = new RegExp(`^/factories/${FACTORY_ID}/user/new/[0-9a-f-]{36}$`);
+
+    const sidebar = await screen.findByRole('complementary', { name: 'Main sidebar' });
+    await userEvent.click(await within(sidebar).findByRole('button', { name: 'New session' }));
+
+    await screen.findByRole('heading', { name: 'Draft' });
+    const firstDraftPath = router.state.location.pathname;
+    expect(firstDraftPath).toMatch(draftPath);
+
+    await userEvent.click(within(sidebar).getByRole('button', { name: 'New session' }));
+
+    await waitFor(() => expect(router.state.location.pathname).not.toBe(firstDraftPath));
+    expect(router.state.location.pathname).toMatch(draftPath);
   });
 
   it('toggles the sidebar with [ but not on key repeat or while typing in a field', async () => {
@@ -141,25 +186,23 @@ describe('AppLayout', () => {
     renderApp(`/factories/${FACTORY_ID}/slots`);
 
     await screen.findByRole('heading', { name: 'Slots page' });
-    // The toggle moves between the sidebar and the page header, so look it up each time.
-    const expanded = () => screen.getByRole('button', { name: 'Toggle sidebar' }).getAttribute('aria-expanded');
-    expect(expanded()).toBe('true');
+    expect(sidebarIsCollapsed()).toBe(false);
 
     await userEvent.keyboard('[[');
-    await waitFor(() => expect(expanded()).toBe('false'));
+    await waitFor(() => expect(sidebarIsCollapsed()).toBe(true));
 
     // Holding the key must not flip it back on auto-repeat.
     fireEvent.keyDown(document.body, { key: '[', repeat: true });
-    expect(expanded()).toBe('false');
+    expect(sidebarIsCollapsed()).toBe(true);
 
     await userEvent.keyboard('[[');
-    await waitFor(() => expect(expanded()).toBe('true'));
+    await waitFor(() => expect(sidebarIsCollapsed()).toBe(false));
 
     const field = document.createElement('input');
     document.body.append(field);
     await userEvent.type(field, '[[');
     expect(field).toHaveValue('[');
-    expect(expanded()).toBe('true');
+    expect(sidebarIsCollapsed()).toBe(false);
     field.remove();
   });
 
