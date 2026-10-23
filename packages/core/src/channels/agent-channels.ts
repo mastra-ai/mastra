@@ -544,13 +544,26 @@ export class AgentChannels {
         let failure: { err: unknown } | undefined;
         for (const run of runs) {
           const runMessage = run[run.length - 1]!;
-          const { defaultHandler, handlerContext } = beginMessage(
-            run.slice(0, -1),
-            batchIds,
-            thread.isDM ? 'message' : eventType,
-          );
+          let runHandler = handler;
+          let runEventType: ChannelContext['eventType'] = thread.isDM ? 'message' : eventType;
+          // The SDK selects one handler for the whole batch if any message is
+          // a mention. Preserve DM/subscription precedence, but route each new
+          // sender run independently so unmentioned messages cannot bypass the
+          // opt-in handler's filter (or its disabled default).
+          if (!thread.isDM && eventType !== 'subscribed') {
+            if (run.some(m => m.isMention)) {
+              if (onMention === false) continue;
+              runHandler = onMention;
+              runEventType = 'mention';
+            } else {
+              if (typeof onMessage !== 'function') continue;
+              runHandler = onMessage;
+              runEventType = 'message';
+            }
+          }
+          const { defaultHandler, handlerContext } = beginMessage(run.slice(0, -1), batchIds, runEventType);
           try {
-            if (typeof handler === 'function') await handler(thread, runMessage, defaultHandler, handlerContext);
+            if (typeof runHandler === 'function') await runHandler(thread, runMessage, defaultHandler, handlerContext);
             else await defaultHandler(thread, runMessage);
           } catch (err) {
             // A host handler that throws for one sender must not silence later
