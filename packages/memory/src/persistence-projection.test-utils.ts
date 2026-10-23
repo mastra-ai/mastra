@@ -248,6 +248,28 @@ export function testPersistenceProjection(createStorage: () => Promise<MastraCom
         expect(vector.upsert.mock.calls[0]![0]).toMatchObject({ documents: ['Edited parts'] });
       });
 
+      it('removes vectors when an edit clears the patched text', async () => {
+        const { memory, vector } = await setup();
+        await memory.updateMessages({ messages: [{ id: 'assistant', content: { format: 2, parts: [] } }] });
+        expect(vector.upsert).not.toHaveBeenCalled();
+        expect(vector.deleteVectors).toHaveBeenCalledWith(
+          expect.objectContaining({ filter: { message_id: { $in: ['assistant'] } } }),
+        );
+      });
+
+      it('indexes each edited message once when an update repeats its id', async () => {
+        const { memory, vector } = await setup();
+        await memory.updateMessages({
+          messages: [
+            { id: 'assistant', content: { format: 2, parts: [{ type: 'text', text: 'First edit' }] } },
+            // @ts-expect-error Storage supports nested partial content patches at runtime.
+            { id: 'assistant', content: { format: 2, metadata: { edited: true } } },
+          ],
+        });
+        expect(vector.upsert).toHaveBeenCalledTimes(1);
+        expect(vector.upsert.mock.calls[0]![0]).toMatchObject({ documents: ['First edit'] });
+      });
+
       it('keeps vectors when an edit does not touch text', async () => {
         const { memory, vector } = await setup();
         await memory.updateMessages({

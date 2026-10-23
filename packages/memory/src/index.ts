@@ -3160,6 +3160,26 @@ Notes:
     // Text to index per edited message, read from the projected effective content so a
     // sparse patch does not hide stored text. Fields the patch sets take priority.
     const textForEmbeddingById = new Map<string, string | null>();
+    const textFields = ['content', 'parts'] as const;
+    const textOf = (
+      content: Partial<Pick<MastraDBMessage['content'], (typeof textFields)[number]>>,
+      fields: readonly (typeof textFields)[number][],
+    ): string | null => {
+      for (const field of fields) {
+        const text =
+          field === 'content'
+            ? content.content?.trim()
+              ? content.content
+              : null
+            : (content.parts ?? [])
+                .filter((part): part is TextPart => part?.type === 'text')
+                .map(part => part.text)
+                .join(' ')
+                .trim();
+        if (text) return text;
+      }
+      return null;
+    };
     messages = messages.flatMap(update => {
       const stored = existingById.get(update.id);
       if (!stored) return [];
@@ -3188,21 +3208,15 @@ Notes:
         ...(update.content.toolInvocations !== undefined ? { toolInvocations: projected.content.toolInvocations } : {}),
       };
       existingById.set(update.id, { ...effective, content: { ...effective.content, ...content } });
-      if (update.content.content !== undefined || update.content.parts !== undefined) {
-        const fromContent = () =>
-          typeof projected.content.content === 'string' && projected.content.content.trim() !== ''
-            ? projected.content.content
-            : null;
-        const fromParts = () =>
-          (projected.content.parts ?? [])
-            .filter((part): part is TextPart => part?.type === 'text')
-            .map(part => part.text)
-            .join(' ')
-            .trim() || null;
-        textForEmbeddingById.set(
-          update.id,
-          update.content.content === undefined ? (fromParts() ?? fromContent()) : (fromContent() ?? fromParts()),
-        );
+      const patched = textFields.filter(field => update.content?.[field] !== undefined);
+      if (patched.length > 0) {
+        const omitted = textFields.filter(field => !patched.includes(field));
+        // Fall back to stored text only when the projection hid the patched text, not
+        // when the edit cleared it.
+        const text =
+          textOf(projected.content, patched) ??
+          (textOf(update.content, patched) ? textOf(projected.content, omitted) : null);
+        textForEmbeddingById.set(update.id, text);
       }
       return [{ ...update, content }];
     });
@@ -3210,9 +3224,9 @@ Notes:
 
     // Update vector database if semantic recall is enabled and any messages have text updates
     if (this.vector && config.semanticRecall) {
-      const messagesWithContent = messages.filter(m => textForEmbeddingById.has(m.id));
+      const messagesWithTextUpdates = [...textForEmbeddingById.keys()].map(id => ({ id }));
 
-      if (messagesWithContent.length > 0) {
+      if (messagesWithTextUpdates.length > 0) {
         // Reuse the pre-update rows for vector metadata.
         const existingMessagesMap = new Map(existing.messages.map(m => [m.id, m]));
 
@@ -3237,7 +3251,7 @@ Notes:
 
         // Prepare new embeddings and track which messages need vector operations
         await Promise.all(
-          messagesWithContent.map(async message => {
+          messagesWithTextUpdates.map(async message => {
             const existingMessage = existingMessagesMap.get(message.id);
             if (!existingMessage) return;
 
