@@ -919,16 +919,12 @@ export class AgentThreadStreamRuntime {
    * identical. Also stops the renewal timer if one is running for
    * this run.
    */
-  #releaseThreadLease(pubsub: PubSub | undefined, key: string, runId: string, options?: { keepLease?: boolean }): void {
+  #releaseThreadLease(pubsub: PubSub | undefined, key: string, runId: string): void {
     const resolved = this.#getPubSub(pubsub);
     this.#stopLeaseRenewal(resolved, runId);
-    // A retake that gave up while its handoff was in flight may have installed this run id on the lease after
-    // this execution stopped renewing it, and the holder may be a successor's. Leave that one to expire.
-    if (!options?.keepLease) {
-      void this.#getLeaseProvider(resolved)
-        .releaseLease(key, runId)
-        .catch(() => {});
-    }
+    void this.#getLeaseProvider(resolved)
+      .releaseLease(key, runId)
+      .catch(() => {});
     this.#releaseUnusedThreadControlSubscription(this.#getState(resolved), key);
   }
 
@@ -4237,10 +4233,18 @@ export class AgentThreadStreamRuntime {
             }
             this.#releaseUnusedThreadControlSubscription(state, key);
           }
+        } else if (record.lateRetakeHandoff) {
+          // This record may no longer own the lease it holds the run id under: a handoff that landed after the
+          // retake gave up installed that id on a lease nothing here renews, and a successor can hold it. Neither
+          // release it nor drain through it — a drain transfers the lease from the run id to its own run. Hand the
+          // queued work off like the ownership-lost path does, and leave the lease to expire.
+          this.#stopLeaseRenewal(this.#getPubSub(pubsub), record.runId);
+          this.#handOffQueuedSignals(state, pubsub, key, record.runId, record.streamId);
+          this.#releaseUnusedThreadControlSubscription(state, key);
         } else if (this.#hasPendingThreadWork(state, key)) {
           void this.#drainPendingSignals(state, pubsub, key, record);
         } else {
-          this.#releaseThreadLease(pubsub, key, record.runId, { keepLease: record.lateRetakeHandoff });
+          this.#releaseThreadLease(pubsub, key, record.runId);
         }
       });
     });
