@@ -1069,9 +1069,9 @@ export class SandboxFilesystem implements WorkspaceFilesystem {
     // BSD/macOS stat (local sandbox hosts) rejects `-c`; fall back to its
     // `-f` format with the same field order (%HT=type, %z=size, %m=mtime,
     // %B=birth). Delimit with `|` — neither stat interprets `\t` escapes in
-    // its format string.
+    // its format string. `-L` reports the symlink target, like LocalFilesystem.
     const result = await this.exec(
-      `stat -c '%F|%s|%Y|%W' ${shellQuote(abs)} 2>/dev/null || stat -f '%HT|%z|%m|%B' ${shellQuote(abs)}`,
+      `stat -L -c '%F|%s|%Y|%W' ${shellQuote(abs)} 2>/dev/null || stat -L -f '%HT|%z|%m|%B' ${shellQuote(abs)}`,
     );
     if (result.exitCode !== 0) {
       throw new FileNotFoundError(path);

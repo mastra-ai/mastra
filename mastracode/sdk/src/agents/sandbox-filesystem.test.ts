@@ -236,9 +236,9 @@ describe('SandboxFilesystem', () => {
   it('falls back to BSD stat when GNU stat is unavailable', async () => {
     const { fs } = makeFs(script => {
       if (isContainmentCheck(script)) return realpathResult(`${WORKDIR}/dir`);
-      // Simulate macOS: the `stat -c || stat -f` compound runs BSD output.
-      if (script.includes('stat -c')) {
-        expect(script).toContain('stat -f');
+      // Simulate macOS: the `stat -L -c || stat -L -f` compound runs BSD output.
+      if (script.includes('stat -L -c')) {
+        expect(script).toContain('stat -L -f');
         return { exitCode: 0, stdout: 'Directory|128|1700000000|1690000000\n', stderr: '' };
       }
       return { exitCode: 0, stdout: '', stderr: '' };

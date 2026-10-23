@@ -9,7 +9,7 @@
  */
 
 import { execFile, execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, realpathSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -138,6 +138,19 @@ describe('read_file media output (local shell)', () => {
     expect((await filesystem.stat('image.webp')).mimeType).toBe('image/webp');
     expect((await filesystem.stat('doc.pdf')).mimeType).toBe('application/pdf');
     expect((await filesystem.stat('assets.png')).mimeType).toBeUndefined();
+  });
+
+  it('stat follows in-workspace symlinks to their target', async () => {
+    const filesystem = createSandboxFilesystem();
+    await filesystem.writeFile('page.png', png);
+    await filesystem.mkdir('assets');
+    symlinkSync('page.png', join(filesystem.basePath, 'link.png'));
+    symlinkSync('assets', join(filesystem.basePath, 'dir-link.png'));
+
+    expect(await filesystem.stat('link.png')).toMatchObject({ type: 'file', size: png.length, mimeType: 'image/png' });
+    const dirLink = await filesystem.stat('dir-link.png');
+    expect(dirLink.type).toBe('directory');
+    expect(dirLink.mimeType).toBeUndefined();
   });
 
   it('returns a PNG as native media the model can view', async () => {
