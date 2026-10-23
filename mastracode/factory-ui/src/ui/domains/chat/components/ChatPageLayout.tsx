@@ -5,13 +5,11 @@ import type { ReactNode } from 'react';
 import { useSidebarHeaderSlots } from './useSidebarHeaderSlots';
 
 interface ChatPageLayoutProps {
-  /** `Crumb` elements; the last one is the current page. */
   crumbs?: ReactNode;
   headerActions?: ReactNode;
   children: ReactNode;
 }
 
-/** `PageLayout` for chat pages (new session, thread) with a crumb trail. */
 export function ChatPageLayout({ crumbs, headerActions, children }: ChatPageLayoutProps) {
   const slots = useSidebarHeaderSlots({
     breadcrumbs: crumbs && (
@@ -19,10 +17,11 @@ export function ChatPageLayout({ crumbs, headerActions, children }: ChatPageLayo
         {crumbs}
       </Breadcrumb>
     ),
+    headerActions,
   });
 
   return (
-    <PageLayout variant="fit" {...slots} headerActions={headerActions}>
+    <PageLayout variant="fit" {...slots}>
       {children}
     </PageLayout>
   );
