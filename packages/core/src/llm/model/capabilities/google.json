@@ -95,26 +95,10 @@
     "gemma-4-31b-it"
   ],
   "reasoning": {
-    "gemini-2.5-flash-lite": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 512,
-        "max": 24576
-      }
-    ],
-    "gemini-3.1-flash-lite": [
+    "gemini-3.1-flash-live-preview": [
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "gemini-flash-latest": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
       }
     ],
     "gemini-3.1-flash-lite-image": [
@@ -123,42 +107,13 @@
         "values": ["minimal", "high"]
       }
     ],
-    "gemini-3.1-flash-live-preview": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "gemini-3-flash-preview": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "gemini-3.5-flash-lite": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "gemma-4-26b-a4b-it": [
-      {
-        "type": "toggle"
-      }
-    ],
     "gemini-3.1-flash-lite-preview": [
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
       }
     ],
-    "gemini-3-pro-image": [
-      {
-        "type": "effort",
-        "values": ["low", "high"]
-      }
-    ],
-    "gemini-pro-latest": [
+    "gemini-3.1-pro-preview": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -168,6 +123,64 @@
       {
         "type": "effort",
         "values": ["minimal", "high"]
+      }
+    ],
+    "gemini-flash-lite-latest": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "gemini-3.1-pro-preview-customtools": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "gemini-3.8-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "gemini-3.1-flash-image": [
+      {
+        "type": "effort",
+        "values": ["minimal", "high"]
+      }
+    ],
+    "gemini-4-argon": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "gemini-3-flash-preview": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "gemma-4-31b-it": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "gemma-4-26b-a4b-it": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "gemini-flash-latest": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "gemini-3.7-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "gemini-2.5-flash": [
@@ -180,16 +193,16 @@
         "max": 24576
       }
     ],
-    "gemini-flash-lite-latest": [
+    "gemini-3.5-flash-lite": [
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
       }
     ],
-    "gemini-3.8-flash": [
+    "gemini-3-pro-image": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["low", "high"]
       }
     ],
     "gemini-2.5-pro": [
@@ -199,16 +212,10 @@
         "max": 32768
       }
     ],
-    "gemini-3.6-flash": [
+    "gemini-pro-latest": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "gemini-3.1-flash-image": [
-      {
-        "type": "effort",
-        "values": ["minimal", "high"]
+        "values": ["low", "medium", "high"]
       }
     ],
     "gemini-3.5-flash": [
@@ -217,33 +224,26 @@
         "values": ["minimal", "low", "medium", "high"]
       }
     ],
-    "gemini-4-argon": [
+    "gemini-3.6-flash": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["minimal", "low", "medium", "high"]
       }
     ],
-    "gemma-4-31b-it": [
+    "gemini-3.1-flash-lite": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "gemini-2.5-flash-lite": [
       {
         "type": "toggle"
-      }
-    ],
-    "gemini-3.7-flash": [
+      },
       {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "gemini-3.1-pro-preview-customtools": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "gemini-3.1-pro-preview": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "type": "budget_tokens",
+        "min": 512,
+        "max": 24576
       }
     ]
   }

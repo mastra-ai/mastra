@@ -24,7 +24,8 @@
     "pixtral-large-latest",
     "voxtral-mini-latest",
     "voxtral-small-2507",
-    "voxtral-small-latest"
+    "voxtral-small-latest",
+    "zai-glm-5-3-flash"
   ],
   "temperature": [
     "codestral-2508",
@@ -62,7 +63,8 @@
     "voxtral-small-2507",
     "voxtral-small-latest",
     "zai-glm-5-2",
-    "zai-glm-5-3"
+    "zai-glm-5-3",
+    "zai-glm-5-3-flash"
   ],
   "structuredOutput": [
     "codestral-2508",
@@ -84,34 +86,17 @@
     "voxtral-small-2507",
     "voxtral-small-latest",
     "zai-glm-5-2",
-    "zai-glm-5-3"
+    "zai-glm-5-3",
+    "zai-glm-5-3-flash"
   ],
   "reasoning": {
-    "zai-glm-5-2": [
+    "magistral-medium-latest": [
       {
         "type": "effort",
-        "values": ["none", "high", "max"]
+        "values": ["none", "high"]
       }
     ],
     "mistral-small-2603": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "mistral-large-4": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "mistral-medium-2604": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "magistral-medium-latest": [
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -123,19 +108,43 @@
         "values": ["none", "high", "max"]
       }
     ],
-    "zai-glm-5-3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "mistral-small-latest": [
       {
         "type": "effort",
         "values": ["none", "high"]
       }
     ],
+    "mistral-medium-2604": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "zai-glm-5-2": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "zai-glm-5-3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "labs-leanstral-1-5-1": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "zai-glm-5-3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "mistral-large-4": [
       {
         "type": "effort",
         "values": ["none", "high"]

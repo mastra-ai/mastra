@@ -13,6 +13,7 @@ import {
   isSafeObjectKey,
   isZodError,
   normalizeQueryParams,
+  propagateRequestAbort,
   redactStreamChunk,
   serializeStreamChunk,
 } from '@mastra/server/server-adapter';
@@ -295,11 +296,13 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
             'Content-Type': 'text/plain',
           };
 
+    const readableStream = result instanceof ReadableStream ? result : result.fullStream;
+    const reader = readableStream.getReader();
+    // Set when the client disconnects; the controller is closed from then on, so nothing may be enqueued.
+    let cancelled = false;
+
     const stream = new ReadableStream({
       start: async controller => {
-        const readableStream = result instanceof ReadableStream ? result : result.fullStream;
-        const reader = readableStream.getReader();
-
         try {
           if (streamFormat === 'sse' && route.sseFlushOnConnect) {
             controller.enqueue(encoder.encode(': connected\n\n'));
@@ -307,7 +310,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
 
           while (true) {
             const { done, value } = await reader.read();
-            if (done) break;
+            if (done || cancelled) break;
 
             if (value) {
               // SSE comment passthrough — strings starting with ':' are written as-is
@@ -337,11 +340,13 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
             }
           }
 
+          if (cancelled) return;
           if (streamFormat === 'sse') {
             controller.enqueue(encoder.encode('data: [DONE]\n\n'));
           }
           controller.close();
         } catch (error) {
+          if (cancelled) return;
           this.mastra.getLogger()?.error('Error in stream processing', {
             error: error instanceof Error ? { message: error.message, stack: error.stack } : error,
           });
@@ -349,6 +354,10 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
         } finally {
           await reader.cancel();
         }
+      },
+      cancel: async reason => {
+        cancelled = true;
+        await reader.cancel(reason);
       },
     });
 
@@ -517,6 +526,10 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
             error: e instanceof Error ? { message: e.message, stack: e.stack } : e,
           });
         });
+
+      // `createForwardRequest` rebuilds the Request without a signal, so listen on the
+      // original one: a client disconnect must abort the in-flight MCP request.
+      propagateRequestAbort((request.request as Request).signal, res);
 
       const mcpResponse = await toFetchResponse(res);
       const headers = new Headers(mcpResponse.headers);

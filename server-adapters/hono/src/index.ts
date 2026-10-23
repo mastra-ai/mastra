@@ -16,6 +16,7 @@ import {
   isSafeObjectKey,
   isZodError,
   normalizeQueryParams,
+  propagateRequestAbort,
   redactStreamChunk,
   serializeStreamChunk,
 } from '@mastra/server/server-adapter';
@@ -434,6 +435,9 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             // Response stream already closed or destroyed - nothing more to do
           }
         });
+
+      // Client disconnect before any response bytes: abort the in-flight MCP request.
+      propagateRequestAbort(response.req.raw.signal, res);
 
       return propagateClientDisconnect(await toFetchResponse(res), res);
     } else if (route.responseType === 'mcp-sse') {
