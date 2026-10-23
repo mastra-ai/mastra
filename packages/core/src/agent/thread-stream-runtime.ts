@@ -4236,11 +4236,19 @@ export class AgentThreadStreamRuntime {
         } else if (record.lateRetakeHandoff) {
           // This record may no longer own the lease it holds the run id under: a handoff that landed after the
           // retake gave up installed that id on a lease nothing here renews, and a successor can hold it. Neither
-          // release it nor drain through it — a drain transfers the lease from the run id to its own run. Hand the
-          // queued work off like the ownership-lost path does, and leave the lease to expire.
-          this.#stopLeaseRenewal(this.#getPubSub(pubsub), record.runId);
-          this.#handOffQueuedSignals(state, pubsub, key, record.runId, record.streamId);
-          this.#releaseUnusedThreadControlSubscription(state, key);
+          // release it nor drain through it — a drain transfers the lease from the run id to its own run. Mirror
+          // the ownership-lost sibling and leave the lease to expire.
+          if (!state.threadRunsById.has(record.runId)) {
+            this.#stopLeaseRenewal(this.#getPubSub(pubsub), record.runId);
+            if (record.registeredElsewhere) {
+              this.#handOffQueuedSignals(state, pubsub, key, record.runId, record.streamId);
+            } else if (this.#hasPendingThreadWork(state, key)) {
+              // Nothing has taken the run yet; its registration takes the queues. Handing off now would publish
+              // to a run id no execution holds and drop the local copies with it.
+              state.lostRunsByThread.set(key, record);
+            }
+            this.#releaseUnusedThreadControlSubscription(state, key);
+          }
         } else if (this.#hasPendingThreadWork(state, key)) {
           void this.#drainPendingSignals(state, pubsub, key, record);
         } else {
