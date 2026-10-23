@@ -13,6 +13,7 @@ import {
   emptyEnvironments,
   emptySpans,
   noSpanQueryCapabilities,
+  spanAndThreadRowsCapabilities,
   spanDetailById,
   spanQueryCapabilities,
   spanQueryCoreOnlyCapabilities,
@@ -280,6 +281,29 @@ describe('Spans page', () => {
       fireEvent.click(views.getByRole('tab', { name: 'Traces' }));
 
       await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/traces'));
+    });
+  });
+
+  describe('when the store does not return thread rows', () => {
+    it('does not offer the Threads view', async () => {
+      setSpansHandlers(spanQueryCapabilities, { first: spansFirstPage });
+
+      renderPage();
+
+      const views = within(await screen.findByRole('navigation', { name: 'Observability views' }));
+      expect(views.queryByRole('tab', { name: 'Threads' })).toBeNull();
+    });
+  });
+
+  describe('when Threads is clicked in the view switch', () => {
+    it('navigates to the threads page', async () => {
+      setSpansHandlers(spanAndThreadRowsCapabilities, { first: spansFirstPage });
+
+      renderPage();
+      const views = within(await screen.findByRole('navigation', { name: 'Observability views' }));
+      fireEvent.click(await views.findByRole('tab', { name: 'Threads' }));
+
+      await waitFor(() => expect(screen.getByTestId('location').textContent).toBe('/threads'));
     });
   });
 

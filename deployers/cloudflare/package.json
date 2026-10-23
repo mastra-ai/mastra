@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-cloudflare",
-  "version": "1.2.38",
+  "version": "1.2.39-alpha.0",
   "description": "",
   "type": "module",
   "files": [
@@ -46,11 +46,12 @@
     "@mastra/deployer": "workspace:^",
     "@rollup/plugin-virtual": "3.0.2",
     "cloudflare": "^5.2.0",
-    "rollup": "^4.61.1",
+    "rollup": "^4.64.10",
     "rollup-plugin-esbuild": "^6.2.1"
   },
   "devDependencies": {
     "@babel/types": "^8.0.4",
+    "@copilotkit/aimock": "^1.29.0",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",

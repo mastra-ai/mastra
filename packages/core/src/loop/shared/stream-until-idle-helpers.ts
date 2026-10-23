@@ -254,26 +254,26 @@ export function getScopeStreamSlot(
 
 /** Register the active wrapper for a memory scope, aborting the prior wrapper for that scope. */
 export function acquireStreamSlot(
-  activeStreams: Map<string, () => void>,
+  activeStreams: Map<string, (reason?: 'replaced') => void>,
   scopeKey: string | null,
-  closer: () => void,
+  closer: (reason?: 'replaced') => void,
 ): void {
   if (!scopeKey) return;
   const priorClose = activeStreams.get(scopeKey);
-  priorClose?.();
+  priorClose?.('replaced');
   activeStreams.set(scopeKey, closer);
 }
 
 /** Register the active wrapper under its caller-visible run ID, replacing an older wrapper for that ID. */
 export function acquireRunStreamSlot(
-  activeStreams: Map<string, () => void>,
+  activeStreams: Map<string, (reason?: 'replaced') => void>,
   runId: string | undefined,
-  closer: () => void,
+  closer: (reason?: 'replaced') => void,
 ): void {
   if (!runId) return;
   const key = runStreamSlotKey(runId);
   const priorClose = activeStreams.get(key);
-  priorClose?.();
+  priorClose?.('replaced');
   activeStreams.set(key, closer);
 }
 
@@ -310,6 +310,8 @@ export interface IdleLoopDeps {
  * Durable agents use this to track cleanup/abort handles.
  */
 export interface PostPipeHooks {
+  /** Durable readers own their subscription, not the underlying execution. */
+  detachOnCancel?: boolean;
   /** Called with each inner result after `firstTurn` or continuation. */
   onInnerResult?: (inner: any) => void;
   /** Abort the currently active inner stream before the wrapper closes. */
@@ -325,6 +327,7 @@ export interface PostPipeHooks {
 export interface IdleLoopContext {
   combinedStream: ReadableStream<any>;
   forceClose: () => void;
+  abort: () => void;
   threadId: string | undefined;
   resourceId: string | undefined;
 }
@@ -422,6 +425,8 @@ export async function runIdleLoop<
   let activeInnerRunId: string | undefined;
   let continuationAbort: AbortController | undefined;
   let aborting = false;
+  let detached = false;
+  let observerDetached = false;
   // Set once the active inner run parks on a tool approval or a tool
   // suspend(). A parked run is waiting for resumeStreamUntilIdle(), so a reader
   // that stops reading (break / request disconnect) must only detach;
@@ -429,16 +434,25 @@ export async function runIdleLoop<
   let parked = false;
   let innerReader: ReadableStreamDefaultReader<any> | undefined;
   const outerAbort = new AbortController();
+  const continuationRunIds = new Set<string>();
+  const releaseWrapperSlots = () => {
+    releaseStreamSlot(deps.activeStreams, scopeKey, wrapperRunId, abortWrapper);
+    for (const runId of continuationRunIds) {
+      releaseStreamSlot(deps.activeStreams, null, runId, abortWrapper);
+    }
+    continuationRunIds.clear();
+  };
 
   // --- Close / idle timer ---
   const forceClose = (opts?: { keepInnerRuns?: boolean }) => {
     if (closed) return;
+    detached = opts?.keepInnerRuns === true;
     closed = true;
     if (idleTimer) {
       clearTimeout(idleTimer);
       idleTimer = undefined;
     }
-    releaseStreamSlot(deps.activeStreams, scopeKey, wrapperRunId, abortWrapper);
+    releaseWrapperSlots();
     outerAbort.abort();
     try {
       outerController.close();
@@ -454,15 +468,21 @@ export async function runIdleLoop<
     }
   };
 
-  const abortWrapper = () => {
-    if (closed || aborting) return;
+  const abortWrapper = (reason?: 'replaced') => {
+    if ((closed && !detached) || aborting) return;
+    if (reason === 'replaced' && hooks?.detachOnCancel && parked) {
+      forceClose({ keepInnerRuns: true });
+      return;
+    }
     aborting = true;
-    releaseStreamSlot(deps.activeStreams, scopeKey, wrapperRunId, abortWrapper);
+    // External engines route abortRunStream back through this registry; release before forwarding.
+    releaseWrapperSlots();
     initialAbort.abort();
     continuationAbort?.abort();
     hooks?.onAbortActive?.();
     if (activeInnerRunId) agent.abortRunStream?.(activeInnerRunId);
-    forceClose();
+    // Let durable execution unwind its abort before cleaning up run state.
+    forceClose(hooks?.detachOnCancel ? { keepInnerRuns: true } : undefined);
   };
 
   const detachOrAbort = () => (parked ? forceClose({ keepInnerRuns: true }) : abortWrapper());
@@ -472,7 +492,8 @@ export async function runIdleLoop<
     if (isProcessing) return;
     if (runningTaskIds.size > 0) return;
     if (pendingCompletions.length > 0) return;
-    forceClose();
+    // Detached observers may reattach after completion; retain the inner run's replay cache.
+    forceClose(observerDetached ? { keepInnerRuns: true } : undefined);
   };
 
   const clearIdleTimer = () => {
@@ -508,10 +529,12 @@ export async function runIdleLoop<
         if (value && typeof value === 'object' && PARKING_CHUNKS.has((value as any).type)) {
           parked = true;
         }
-        try {
-          outerController.enqueue(value);
-        } catch {
-          break;
+        if (!observerDetached) {
+          try {
+            outerController.enqueue(value);
+          } catch {
+            break;
+          }
         }
         if (value && typeof value === 'object' && (value as any).type === 'background-task-started') {
           const taskId = (value as any).payload?.taskId;
@@ -554,9 +577,21 @@ export async function runIdleLoop<
       activeInnerRunId = inner.runId;
       hooks?.onInnerResult?.(inner);
       if (closed) {
-        hooks?.onAbortActive?.();
-        if (activeInnerRunId) agent.abortRunStream?.(activeInnerRunId);
+        if (detached && !aborting) {
+          await inner.fullStream.cancel();
+        } else {
+          hooks?.onAbortActive?.();
+          if (activeInnerRunId) agent.abortRunStream?.(activeInnerRunId);
+        }
         return;
+      }
+      if (
+        hooks?.detachOnCancel &&
+        activeInnerRunId &&
+        getRunStreamSlot(deps.activeStreams, activeInnerRunId) !== abortWrapper
+      ) {
+        acquireRunStreamSlot(deps.activeStreams, activeInnerRunId, abortWrapper);
+        continuationRunIds.add(activeInnerRunId);
       }
       await pipeInner(inner.fullStream);
       if (continuationAbort === segmentAbort) continuationAbort = undefined;
@@ -591,7 +626,10 @@ export async function runIdleLoop<
       outerController = controller;
     },
     cancel() {
-      detachOrAbort();
+      if (hooks?.detachOnCancel && !parked) {
+        // Keep draining segments and scheduling background continuations without an observer.
+        observerDetached = true;
+      } else detachOrAbort();
     },
   });
 
@@ -632,10 +670,12 @@ export async function runIdleLoop<
 
         updateIdleTimer();
 
-        try {
-          outerController.enqueue(chunk);
-        } catch {
-          break;
+        if (!observerDetached) {
+          try {
+            outerController.enqueue(chunk);
+          } catch {
+            break;
+          }
         }
 
         if (!taskId) continue;
@@ -746,5 +786,11 @@ export async function runIdleLoop<
     }
   })();
 
-  return buildResult(first, { combinedStream, forceClose: () => forceClose(), threadId, resourceId });
+  return buildResult(first, {
+    combinedStream,
+    forceClose: () => forceClose(),
+    abort: () => abortWrapper(),
+    threadId,
+    resourceId,
+  });
 }

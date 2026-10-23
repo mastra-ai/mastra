@@ -4,7 +4,6 @@ import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 
 import { SidebarUserMenu } from './domains/auth/components/SidebarUserMenu';
 import { FactorySection } from './domains/factory/components/FactorySection';
-import { SidebarActivityLink } from './domains/factory/components/SidebarActivityLink';
 import { SidebarGlobalSearchButton } from './domains/search/components/SidebarGlobalSearchButton';
 import { SettingsNavigation } from './domains/settings/components/SettingsNavigation';
 import { useSettingsOpen } from './domains/settings/hooks/useSettingsOpen';
@@ -77,9 +76,8 @@ export function AppSidebar() {
           </div>
         )}
       </Sidebar.Nav>
-      <Sidebar.Footer aria-label="Activity, account, and settings">
+      <Sidebar.Footer aria-label="Account and settings">
         <Sidebar.NavList>
-          <SidebarActivityLink />
           <SidebarUserMenu />
         </Sidebar.NavList>
       </Sidebar.Footer>

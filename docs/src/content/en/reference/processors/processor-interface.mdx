@@ -71,6 +71,13 @@ interface Processor<TId extends string = string, TTripwireMetadata = unknown> {
     | void
     | undefined
 
+  /** State lane id for `computeStateSignal`. Defaults to the processor id. */
+  stateId?: string
+
+  computeStateSignal?(
+    args: ComputeStateSignalArgs<TTripwireMetadata>,
+  ): Promise<ComputeStateSignalResult> | ComputeStateSignalResult
+
   processLLMRequest?(
     args: ProcessLLMRequestArgs<TTripwireMetadata>,
   ): Promise<ProcessLLMRequestResult> | ProcessLLMRequestResult
@@ -367,6 +374,7 @@ processInputStep?<TTripwireMetadata = unknown>(
 1. `processInput` (once at start)
 1. `processInputStep` from inputProcessors (at each step, before LLM call)
 1. `prepareStep` callback (runs as part of the processInputStep pipeline, after inputProcessors)
+1. `computeStateSignal` from inputProcessors (after `processInputStep`, before the LLM request)
 1. `processLLMRequest` from inputProcessors (after prompt conversion, before the provider call)
 1. LLM execution
 1. `processOutputStream` from outputProcessors (on each streaming chunk)
@@ -586,6 +594,106 @@ System messages are **reset to their original values** at the start of each step
 - Adding step-specific system instructions
 - Adjusting provider options per step (e.g., cache control)
 - Modifying structured output schema based on step context
+
+---
+
+### `computeStateSignal`
+
+Computes a thread-scoped state signal once per model input step, after `processInputStep()` and before the LLM request is finalized. This method requires an agent with memory and an active `resourceId` and `threadId`.
+
+```typescript oxfmt:false
+computeStateSignal?(
+  args: ComputeStateSignalArgs,
+): Promise<ProcessorStateSignal | undefined | void> | ProcessorStateSignal | undefined | void;
+```
+
+Return a state signal to store it, or `undefined` or `void` when nothing changed. The returned `id` defaults to the processor's `stateId`, which itself defaults to the processor `id`. `mode` defaults to `snapshot`.
+
+#### `ComputeStateSignalArgs`
+
+<PropertiesTable
+  content={[
+  {
+    name: 'stepNumber',
+    type: 'number',
+    description: 'Current step number (0-indexed).',
+    isOptional: false,
+  },
+  {
+    name: 'steps',
+    type: 'StepResult[]',
+    description: 'Results from previous steps.',
+    isOptional: false,
+  },
+  {
+    name: 'state',
+    type: 'Record<string, unknown>',
+    description: 'Per-processor state that persists across method calls within the request.',
+    isOptional: false,
+  },
+  {
+    name: 'resourceId',
+    type: 'string',
+    description: 'Memory resource ID for the active thread.',
+    isOptional: false,
+  },
+  {
+    name: 'threadId',
+    type: 'string',
+    description: 'Memory thread ID that scopes the state lane.',
+    isOptional: false,
+  },
+  {
+    name: 'activeStateSignals',
+    type: 'ProcessorActiveStateSignal[]',
+    description: 'Active state signals for this processor and thread that the runtime currently knows about.',
+    isOptional: false,
+  },
+  {
+    name: 'contextWindow',
+    type: '{ hasSnapshot: boolean }',
+    description: 'Whether the active message window already contains a snapshot for this lane.',
+    isOptional: false,
+  },
+  {
+    name: 'lastSnapshot',
+    type: 'ProcessorActiveStateSignal | undefined',
+    description:
+      'Latest snapshot for this lane, resolved from message history when the current message list does not contain it.',
+    isOptional: true,
+  },
+  {
+    name: 'deltasSinceSnapshot',
+    type: 'ProcessorActiveStateSignal[]',
+    description: 'Delta signals accepted after the latest snapshot.',
+    isOptional: false,
+  },
+  {
+    name: 'tracking',
+    type: 'ProcessorStateSignalTracking | undefined',
+    description:
+      'Last persisted tracking metadata for this lane, including the current cache key, mode, version, and active copies.',
+    isOptional: true,
+  },
+  {
+    name: 'sendStateSignal',
+    type: '(signal: AgentStateSignalInput) => Promise<CreatedAgentSignal | ApplyStateSignalResult>',
+    description:
+      'Adds another state signal from inside the method. Returns a skip result when the same cache key and mode are already current.',
+    isOptional: true,
+  },
+]}
+/>
+
+#### Deduplication
+
+Mastra stores tracking metadata under `metadata.mastra.stateSignals[stateId]` on the thread. When a returned state signal has the same `cacheKey` and mode as the current state and a copy is still in the active message window, Mastra skips it instead of storing a duplicate. If the matching copy has left the active window, Mastra stores it again so the model keeps seeing the state. State signals can't be transient because this tracking is rebuilt from persisted history.
+
+#### Use cases
+
+- Sync browser, editor, or background-watcher state into a lane the model can see
+- Emit a fresh snapshot after older state messages leave the context window
+- Keep working memory or goal state outside the system prompt
 
 ---
 

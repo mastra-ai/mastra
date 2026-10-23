@@ -41,8 +41,8 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
   }: LoopRun<Tools, OUTPUT>,
   finalization?: { register: (cleanup: () => Promise<void>) => void },
 ) {
-  return new ReadableStream<ChunkType<OUTPUT>>({
-    start: async streamController => {
+  const loopSource = {
+    start: async (streamController: ReadableStreamDefaultController<ChunkType<OUTPUT>>) => {
       // Stamp chunks when the loop produces them; consumers may read them much later.
       const controller: ReadableStreamDefaultController<ChunkType<OUTPUT>> = {
         enqueue: chunk => {
@@ -567,6 +567,23 @@ export function workflowLoopStream<Tools extends ToolSet = ToolSet, OUTPUT = und
           rest.mastra?.__unregisterInternalWorkflow(agenticLoopWorkflow.id, runId);
         }
       }
+    },
+  };
+
+  // A rejected `start` would error the stream at once, and erroring a ReadableStream discards every
+  // chunk still queued for a reader that has not caught up (e.g. one that began reading late). Hold
+  // the failure until `pull` runs, which only happens once the queue is empty.
+  let failure: { error: unknown } | undefined;
+  return new ReadableStream<ChunkType<OUTPUT>>({
+    start: async streamController => {
+      try {
+        await loopSource.start(streamController);
+      } catch (error) {
+        failure = { error };
+      }
+    },
+    pull: streamController => {
+      if (failure) streamController.error(failure.error);
     },
   });
 }

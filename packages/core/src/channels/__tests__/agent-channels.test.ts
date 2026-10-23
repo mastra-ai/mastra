@@ -999,6 +999,7 @@ describe('AgentChannels', () => {
         {
           contents: 'hello from discord',
           attributes: {
+            platform: 'discord',
             messageId: 'message-1',
             authorName: 'Tyler Barnes',
             authorId: 'user-1',
@@ -3372,6 +3373,7 @@ describe('thread history', () => {
       expect(s.attributes.source).toBe('thread-history');
     }
     expect(signals[0].attributes).toEqual({
+      platform: 'slack',
       messageId: 'h0',
       authorName: 'Alice',
       authorId: 'U1',
@@ -3379,7 +3381,7 @@ describe('thread history', () => {
       source: 'thread-history',
     });
     expect(signals[0].createdAt).toEqual(new Date(BASE_TIME));
-    expect(signals[1].attributes).toEqual({ source: 'thread-history', kind: 'gap', omitted: '5' });
+    expect(signals[1].attributes).toEqual({ platform: 'slack', source: 'thread-history', kind: 'gap', omitted: '5' });
     expect(signals[1].createdAt).toEqual(new Date(BASE_TIME + 1));
     // Platform badge without an author, so clients can tag the marker as channel context.
     expect(signals[1].providerOptions).toEqual({ mastra: { channels: { slack: {} } } });

@@ -33,7 +33,7 @@ export function ItemPageToolbar({ onBack, onEdit, onDelete, isEditing = false }:
 
             <Popover open={open} onOpenChange={setOpen}>
               <PopoverTrigger asChild>
-                <Button size="md" aria-label="Actions menu">
+                <Button size="icon-md" aria-label="Actions menu">
                   <ChevronDownIcon />
                 </Button>
               </PopoverTrigger>
@@ -47,10 +47,10 @@ export function ItemPageToolbar({ onBack, onEdit, onDelete, isEditing = false }:
                     onClick={onDelete}
                     icon={<Trash2 />}
                   >
-                    Delete Item
+                    Delete item
                   </Button>
                   <Button variant="ghost" size="sm" className="w-full justify-start" disabled icon={<Copy />}>
-                    Duplicate Item (Coming Soon)
+                    Duplicate item (coming soon)
                   </Button>
                 </div>
               </PopoverContent>

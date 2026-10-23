@@ -886,6 +886,13 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
    * continuation from outside the loop.
    */
   _skipBgTaskWait?: boolean;
+
+  /**
+   * @internal
+   * HTTP observers detach on reader cancellation without aborting durable
+   * execution. In-process readers retain cancel-aborts behavior by default.
+   */
+  _detachObserverOnCancel?: boolean;
 } & Partial<ObservabilityContext>;
 
 /**

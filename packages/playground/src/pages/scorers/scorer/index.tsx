@@ -195,13 +195,13 @@ export default function Scorer() {
   const scorerActionsMenu = isStoredScorer ? (
     <DropdownMenu>
       <DropdownMenu.Trigger asChild>
-        <Button size="lg" aria-label="Scorer actions menu">
+        <Button size="icon-lg" aria-label="Scorer actions menu">
           <MoreVertical />
         </Button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end" className="w-48">
         <DropdownMenu.Item onSelect={() => void navigate(`/cms/scorers/${scorerId}/edit`)}>
-          <Pencil /> Edit Scorer
+          <Pencil /> Edit scorer
         </DropdownMenu.Item>
       </DropdownMenu.Content>
     </DropdownMenu>

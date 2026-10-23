@@ -42,26 +42,13 @@ Cards on the **Work** and **Review** boards show the last person recorded in the
 
 Factory stores actor names and profile images in audit event metadata when events are written. For older events without that metadata, Factory resolves actor profiles through the configured authentication provider and falls back to the stored actor ID and an initial.
 
-## Activity
+## Navigation
 
-**Activity** sits at the bottom of the sidebar, just above your account menu. Its badge counts unread failures, supervisor findings, waiting agents, and mentions; a dot marks anything still open, proposed runs included. Failures are reconciled against canonical Factory state before they become queryable: an accepted transition is `succeeded`, obsolete work is `superseded`, and only unresolved `failed` decisions remain.
+Opening a Factory lands on its first board. The retired Activity, Overview, Attention, Metrics, and Audit URLs also open that Factory's board landing. Activity and Audit log are no longer offered in the sidebar or global search.
 
-The **Activity** page (`/factories/:factoryId/activity`) opens with **Needs you**: open failures, supervisor findings, waiting agents, mentions, and proposed runs. Discussions you follow that moved on get their own list underneath, so older failures never sort in among them. Hovering a row swaps its kind and age for its actions (ask supervisor, retry, run, dismiss, mark read, archive); on touch screens they share a line under the title. **Mark all read** clears the unread count, and the properties menu switches between open and archived items. Opening a row goes to the failed decision's matching role session; if that role has no session, it opens the correct Work or Review board and highlights the linked card. Retry appears only for typed failures whose policy allows it.
+Activity's unread badge, open-item dot, and attention chime are retired, including alerts for failed runs, mentions, and waiting agents. The Needs you and followed-discussion lists and their inbox read, archive, and restore actions are also removed. Board cards still offer failed-decision retries and proposal approval and dismissal.
 
-Below it, the **Timeline** tells what moved, who moved it, and flags cards that need you. Its properties menu shapes the stream:
-
-- **Group**: **Similar** folds one hand's run of the same deed into one sentence; **None** lists every audit event on its own line, with a details toggle for its recorded metadata.
-- **Filter**: limits the stream to work items, runs, git, agent, or intake events.
-- **Compact view**: tighter rows without avatars; grouped cards fold behind their count.
-- **Open audit log in WorkOS**, when the deployment has an audit portal.
-
-The **Codebase** view lists the linked repository's recent commits by day. The old Overview, Attention, and Metrics URLs redirect to Activity; the old Audit URL opens it ungrouped (`?events=all`).
-
-Read and archive are per-user. Retry, reconciliation, approval, and dismissal update canonical decision state for every member. A later terminal failure increments the decision's occurrence and reappears unread without allowing a delayed receipt from the previous occurrence to hide it.
-
-Successful run completions continue to use the live Ready indicator and completion sound on sidebar session rows. Failure sounds establish a silent initial baseline and use a cross-tab lock so one occurrence plays once.
-
-Opening a Factory lands on its first board; **Boards** lead the sidebar, followed by Supervisor and Knowledge.
+Successful run completions continue to use the live Ready indicator and completion sound on sidebar session rows.
 
 ## Session titles
 
@@ -71,9 +58,9 @@ Owners can choose **Regenerate title** from a web or Slack session's sidebar men
 
 ## User menu and settings
 
-The sidebar footer shows your profile picture (or an initial), name, and email. It opens a user menu with shortcuts to **My account**, **Preferences**, **Your models**, **Your memory**, and **Connections**. **Settings** opens the shared Factory model settings, the theme control switches between system, light, and dark appearance, and **Log out** ends the current session. Deployments without authentication show a **Settings** menu without account or logout actions.
+The sidebar footer shows your profile picture (or an initial), name, and email. It opens a user menu with shortcuts to **My account**, **Preferences**, and **Connections**. **Settings** opens **Models**, the theme control switches between system, light, and dark appearance, and **Log out** ends the current session. Deployments without authentication show a **Settings** menu without account or logout actions.
 
-Settings pages keep their existing URLs and searchable navigation. **Back to app** returns to the page where settings was opened, including its filters, even after switching sections through the user menu.
+Settings navigation groups pages by topic: **Account**, **Agent** (Models, Memory, Skills, Behavior), and **Factory**. **Models** picks the Factory's routing (`user`, `hybrid`, or `factory`) and shows the personal and Factory defaults side by side; the defaults the routing leaves unused fold behind a **Settings** toggle, which `#personal-defaults` / `#factory-defaults` links open, because chats with no personal default still fall back to the Factory default. **Memory** holds personal and Factory observational memory. Retired `personal-models` and `factory-memory` URLs redirect to Models and Memory, and navigation stays searchable. **Back to app** returns to the page where settings was opened, including its filters, even after switching sections through the user menu.
 
 ## Tests
 

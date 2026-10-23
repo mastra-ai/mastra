@@ -48,7 +48,7 @@ export interface TraceDataPanelViewProps {
   /** Keep the panel mounted and pass `undefined` to close it, so the drawer animates out. */
   traceId?: string;
   /** Lightweight spans for the trace. Caller fetches via useTraceLightSpans. */
-  spans: LightSpanRecord[] | undefined;
+  spans: (LightSpanRecord & { signalLabel?: string })[] | undefined;
   isLoading?: boolean;
   onClose: () => void;
   onSpanSelect?: (spanId: string | undefined) => void;
@@ -508,6 +508,7 @@ export function TraceDataPanelView({
                     />
                     <ButtonsGroup size="sm" className="shrink-0">
                       <Button
+                        size="icon-md"
                         variant={isTimeline ? 'default' : 'primary'}
                         aria-pressed={!isTimeline}
                         tooltip="Span tree"
@@ -517,6 +518,7 @@ export function TraceDataPanelView({
                         <ListTreeIcon />
                       </Button>
                       <Button
+                        size="icon-md"
                         variant={isTimeline ? 'primary' : 'default'}
                         aria-pressed={isTimeline}
                         tooltip="Timeline"
