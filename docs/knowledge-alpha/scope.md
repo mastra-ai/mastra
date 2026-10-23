@@ -1,4 +1,4 @@
-# Knowledge alpha scope, v12 (report 20261023T223907)
+# Knowledge alpha scope, v13 (report 20261023T223907)
 
 Everything here was checked against main `b1244bd3bc0`.
 
@@ -8,6 +8,8 @@ v12 follows Tyler's comment on Kayle's dogfood plan (v45), which supersedes v5�
 - Knowledge tools take a `scope` argument, bounded by the scopes the agent threads through.
 - A scope can own other scopes (org owns teams) through the structure.
 - Everything Knowledge leaves Memory for core, including the pins state-signal provider, and pins work without Memory.
+
+v13 adds the Director dogfood gap list (Kayle): a scope per message on long-lived sessions, many processes on one LibSQL file, an explicit off switch, and undeclared tag types (D12).
 
 Carried from earlier versions: Knowledge reads the run's tagged scopes; `organizationId` and `knowledgeResourceId` are deleted; pins stay a prompt-cacheable state signal; Knowledge ships its own usage instructions (section 3b).
 
@@ -81,7 +83,7 @@ Tyler's direction (comment on Kayle's dogfood plan v45): scopes are never hard-c
   - `BUILT_IN_SCOPE_TYPES` (`reconcile.ts:45-50`) lists `org:$orgId`. It keeps only `resource:$resourceId`, `thread:$threadId` and `custom`.
   - `IDENTITY_SCOPE_PATTERNS` (`reconcile.ts:195`) lists `org:$orgId`. It keeps only resource and thread.
   - In the store: `KnowledgeScopeLevel = 'org'|'resource'|'thread'` (`storage/domains/knowledge/base.ts:6`), `SCOPE_ORDER` (`:680`), the level check and throw in `canonicalizeKnowledgeScope` (`:693`), one-entry-per-level (`:697-700`), the ancestor rules (`:706-711`), `expandKnowledgeScope` (`:748`). All removed (section 3a).
-- Any tag a run holds is usable. A tag whose type the structure doesn't declare falls to `custom` (main's existing fallback), so declaring a type is never required to use it. Declaring one adds what the structure can say about it: a description, `children` templates, and **who owns it** (below).
+- **Undeclared tags work.** A run can read and write a tag type the structure doesn't declare. It falls to `custom` (main's existing fallback, `reconcile.ts:135-150`), which gives the holder owner rights over its own tag and nothing more. Declaring a type adds what the structure can say about it: a description, `children` templates, and **who owns it** (below). Only ownership needs a declaration: an undeclared type can't be owned by another scope. D12 offers a strict mode instead.
 - **Wildcards.** `matchPattern` (`reconcile.ts:224-240`) understands only `$param` captures and literal segments. The alpha adds `*`: a segment that matches any non-empty value and captures nothing. `assertPattern` (`:257-271`) accepts it, and `patternsOverlap` treats it like `$param`. So `'org:*'` and `'project:*'` are valid type patterns.
 
 **Ownership: a scope can own other scopes.**
@@ -107,11 +109,24 @@ Tyler's direction (comment on Kayle's dogfood plan v45): scopes are never hard-c
 - **Who supplies it.** "Threaded through from the agent": the run's tags arrive through the agent (`scopes` config, per-call `scopes`, `mastra__scopes`) and bound what `scope` may name, so a model can never reach outside its run and what the run owns. Within that bound the model fills `scope`, because the model is what decides whether a fact is team-wide or private. An app that wants to fix it passes `knowledge.createTools({ scope })`, and then the argument is not exposed. D10 asks Tyler whether he meant the model or only the harness.
 - Tool schemas list the run's held and owned scope *patterns* in the description, not values, so they stay stable across runs with the same tag types.
 
+**A scope per message, for long-lived sessions.** A Director member is one Mastra Code session for life, and tasks arrive as messages (`session.sendMessage({ content })`, `agent-controller/session.ts:5380`). Scopes fixed at `createMastraCode` can carry `org:self`, `team:…` and `agent:<name>`, but not `request:<rN>`, which changes per task. Recreating the session per task would lose the conversation.
+- `session.sendMessage` gains `scopes?: string[]` and passes them to `sendSignal`, whose idle path already takes `scopes` for the run the signal starts (`agent/types.ts:207-230`, unioned into the run's per-call scopes).
+- A run's scopes are fixed when it starts (the active-run `scopes` is validated but not applied, `types.ts:214-217`). So a message whose `scopes` differ from the active run's doesn't join that run: the session waits for it to end and starts the message's own run, the way it already waits on a blocked thread (`session.ts:5398-5415`). Same scopes, or none, keep today's behaviour.
+- The remote Factory session (`sdk/src/factory/remote-session.ts:391`) passes `scopes` through to the same call.
+- Knowledge then sees the message's tags through `getRunAgentScopes`, like any per-call scope. The Director harness sets `scopes: ['request:r25']` on each task message and nothing else changes.
+
 **Session tags in Mastra Code.** The API is `createMastraCode({ knowledge: { instance, scopes? } })`; the `key` goes with Memory's `knowledge` option (D4).
 - The SDK sets the agent's `scopes` to the caller's `scopes`. Session tags are passed to the Knowledge attachment as `defaultScopes` (Factory: `requiredScopes`), and Knowledge applies them right after `getRunAgentScopes`, on the union of all three sources (an Agent-level resolver can't see the per-call option).
 - A default is added for each tag *type* the union lacks. Local TUI/studio sessions default `org:local`, so existing local Knowledge stays visible; a caller passing `org:self` gets exactly `org:self`.
 - Factory sessions require `org:<factoryOrg>` and `project:<projectId>`; a different `org:` or `project:` from any source refuses the run with an error naming the tag. The project used to sit in the resource slot through `knowledgeResourceId`; a `resource:` tag must equal the Memory resource (`resolveAgentScopes` throws otherwise), so it becomes its own tag. A Factory session whose org can't be resolved gets no Knowledge, as today.
 - Factory Knowledge already written under `resource:<projectId>` goes out of view (D9).
+- **Off means off.** Knowledge is off when no instance is passed and `MASTRACODE_EXPERIMENTAL_KNOWLEDGE` is unset. `createMastraCode({ knowledge: false })` turns it off even when the flag is set, so a session can deliberately run without Knowledge. Off means no tools, no pins, no instructions block and no store opened.
+
+**Many processes on one LibSQL file** (the Director dogfood: ~15 processes, Tyler's pick of LibSQL).
+- Writes: each process opens the file with WAL and the default `busy_timeout` that main already applies to local files (`stores/libsql/src/storage/busy-timeout.test.ts`), so a writer waits for another process's lock rather than failing. The in-process file-transaction gate (`shared/file-transaction-gate.ts:27-34`) covers clients in one process; other processes rely on `busy_timeout`.
+- Startup: every process reconciles the structure when it registers (`knowledge/index.ts:60-66`). Only a declared `structure` triggers this, and a lost race only logs a warning, so tagged reads and writes don't depend on it. The alpha makes reconcile retry once after a conflict and stay quiet when the other process already wrote the same plan.
+- Outbox: one row per write, never drained without a vector store. At dogfood write rates that's small rows growing linearly; pruning stays out of the alpha (section 3b, Search).
+- Proof: a test that spawns 4 Node processes on one LibSQL file, each writing 50 records and reconciling at startup at the same time, then checks all 200 records and one structure are present and no process errored.
 
 **Tenant isolation.** With no ancestor rule, the store no longer forces an org into a scope, so a record at `[team:director]` is visible to any run holding `team:director`. The guard is the caller: Factory routes and Factory sessions require their org tag (above), with a test. Tenant-bound ownership uses patterns that carry the org (`team:$orgId:$teamId`). Single-tenant apps may leave the org out.
 
@@ -234,7 +249,15 @@ For each, a red control showing the test fails without the change.
 - `scope` naming a tag the run neither holds nor owns is refused, for read and write.
 - Mastra Code: a local session reads Knowledge written before the change under `org:local`. For each of the three sources (Agent config, `mastra__scopes`, per-call `scopes`): a local session given `org:self` holds exactly `org:self` and gets its tools, and a Factory session given a different `org:` or `project:` is refused with an error naming the tag (six cases). A Factory session writes under `org:<org>` + `project:<id>`.
 
+**Per-message scopes and off switch**
+- `session.sendMessage({ content, scopes: ['request:r1'] })` then `{ scopes: ['request:r2'] }` on one session: each run's writes carry its own request tag, and the conversation continues across both. A message with different scopes sent during an active run starts its own run after that one ends.
+- No instance and no flag: no Knowledge tools, pins or instructions. `knowledge: false` with the flag set: the same.
+
+**Many processes**
+- 4 processes on one LibSQL file, 50 writes each, concurrent startup reconcile: 200 records, one structure, no errors.
+
 **Structure and ownership**
+- An undeclared type (`request:r25`, no structure entry) can be read and written by a run holding it, and can't be named through ownership.
 - No `org` is built in: a structure without `org:` types still accepts `org:x` tags (as `custom`), and `materializeKnowledgeScopePlan` accepts an `org:` child template.
 - `*` matches: `'project:*'` matches `project:p`, not `project` or `project:a:b`; `org:*` and `org:$orgId` are reported as overlapping.
 - Ownership: with `'team:$orgId:$teamId'` owned by `org:$orgId`, a run holding `org:acme` reads and writes `team:acme:director` through `scope`, and is refused `team:other:director`. With `'project:*'` owned by `org:*` at role `edit`, a run holding any `org:` tag can rescope a project record; with role `readonly` it can read but its write is refused.
@@ -273,6 +296,7 @@ For each, a red control showing the test fails without the change.
 | D7 | Pins without Memory | settled by Tyler: the pins provider moves to core and pins work without Memory, through an opt-in in-run state-signal path (snapshot every call) | |
 | D9 | Rows written only with the experimental Subconscious flag on: Factory Knowledge under `resource:<projectId>`, and rows with `:uncurated` companion entries | accept that they go out of view | migrate them: `resource:<projectId>` → `project:<id>`, strip `:uncurated` entries |
 | D10 | Who fills the tools' `scope` argument | the model, bounded by the run's tags and what they own; an app can fix it with `createTools({ scope })` | only the harness/agent; the model never chooses placement or enters an owned scope |
+| D12 | Tags whose type the structure doesn't declare | allowed (main's `custom` fallback); only ownership needs a declaration | strict: refuse undeclared types, so every scope type is in the structure |
 | D11 | The 8-tag throw in `canonicalizeKnowledgeScope` | keep it: a storage-safety cap, not a level rule (uncapped lookups build `IN ()` or hang) | move the cap to the Knowledge layer only, leaving explicit-scope API calls unguarded |
 | D8 | Leftovers in existing threads | keep three small protections: OM strip of old signals, `deleteThread` remind cleanup, TUI skips old activity signals | drop them and accept raw signals or orphaned remind threads in old threads |
 
