@@ -312,7 +312,7 @@ function DatasetItemPanelBody({ datasetId, item, items, onItemChange, onClose }:
                 </DropdownMenu.Item>
                 <DropdownMenu.Item onSelect={() => setShowDeleteConfirm(true)} variant="destructive">
                   <Trash2 />
-                  Delete Item
+                  Delete item
                 </DropdownMenu.Item>
               </DropdownMenu.Content>
             </DropdownMenu>
@@ -364,7 +364,7 @@ function DatasetItemPanelBody({ datasetId, item, items, onItemChange, onClose }:
           <AlertDialog.Footer>
             <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
             <AlertDialog.Action onClick={handleDeleteConfirm}>
-              {deleteItem.isPending ? 'Deleting...' : 'Yes, Delete'}
+              {deleteItem.isPending ? 'Deleting...' : 'Yes, delete'}
             </AlertDialog.Action>
           </AlertDialog.Footer>
         </AlertDialog.Content>

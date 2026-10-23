@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import type { DatasetRecord, GetScoresScorers_Response } from '@mastra/client-js';
+import type { BuilderSettingsResponse, DatasetRecord, GetScoresScorers_Response } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -10,6 +10,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { datasetVersionsResponse } from '../../__tests__/fixtures/dataset-versions';
 import { buildDataset, buildListDatasetsResponse } from '../../__tests__/fixtures/datasets';
 import { itemScorers } from '../../__tests__/fixtures/item-scorers';
+import {
+  lockedModelPolicySettings,
+  modelProviders,
+  openModelPolicySettings,
+} from '../../__tests__/fixtures/model-providers';
 import { targetAgents } from '../../__tests__/fixtures/target-agents';
 import { ExperimentTriggerDialog } from '../experiment-trigger-dialog';
 import type { ExperimentTriggerDialogProps } from '../experiment-trigger-dialog';
@@ -43,7 +48,12 @@ const emptyVersionsResponse = { versions: [], pagination: { total: 0, page: 0, p
 function setupHandlers({
   datasets = defaultDatasets,
   scorers = {},
-}: { datasets?: DatasetRecord[]; scorers?: GetScoresScorers_Response } = {}) {
+  builderSettings = openModelPolicySettings,
+}: {
+  datasets?: DatasetRecord[];
+  scorers?: GetScoresScorers_Response;
+  builderSettings?: BuilderSettingsResponse;
+} = {}) {
   const triggerCalls: Array<{ datasetId: string; body: Record<string, unknown> }> = [];
 
   server.use(
@@ -61,6 +71,9 @@ function setupHandlers({
     http.get(`${BASE_URL}/api/agents`, () => HttpResponse.json(targetAgents)),
     http.get(`${BASE_URL}/api/workflows`, () => HttpResponse.json({})),
     http.get(`${BASE_URL}/api/scores/scorers`, () => HttpResponse.json(scorers)),
+    http.get(`${BASE_URL}/api/agents/providers`, () => HttpResponse.json(modelProviders)),
+    http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json(builderSettings)),
+    http.get(`${BASE_URL}/api/editor/builder/models/available`, () => HttpResponse.json({ providers: [] })),
     http.post<{ datasetId: string }, Record<string, unknown>>(
       `${BASE_URL}/api/datasets/:datasetId/experiments`,
       async ({ params, request }) => {
@@ -130,7 +143,7 @@ async function pickAgentOne() {
 
 async function openAdvanced() {
   fireEvent.click(advancedToggle());
-  return screen.findByLabelText<HTMLInputElement>('Experiment name');
+  return screen.findByLabelText<HTMLTextAreaElement>('Description');
 }
 
 describe('ExperimentTriggerDialog', () => {
@@ -247,7 +260,7 @@ describe('ExperimentTriggerDialog', () => {
       renderDialog();
       await waitFor(() => expect(datasetField().value).toBe('Dataset 1'));
 
-      expect(screen.queryByLabelText('Experiment name')).toBeNull();
+      expect(screen.queryByLabelText('Description')).toBeNull();
       expect(advancedToggle().closest('[data-slot=dialog-footer]')).toBeNull();
 
       await openAdvanced();
@@ -269,6 +282,200 @@ describe('ExperimentTriggerDialog', () => {
     });
   });
 
+  describe('model override', () => {
+    const providerField = () => screen.getByRole('combobox', { name: 'Model provider' });
+    const modelField = () => screen.getByRole('combobox', { name: 'Model' });
+
+    /**
+     * The model pickers are buttons, not text inputs, so a click opens them. A provider option's name starts
+     * with its logo and connection status, so options are matched on how their name ends.
+     */
+    async function pick(field: HTMLElement, option: string) {
+      fireEvent.click(field);
+      await pickOpenOption(option);
+    }
+
+    async function pickOpenOption(option: string) {
+      fireEvent.click(await screen.findByRole('option', { name: name => name.endsWith(option) }));
+    }
+
+    /** Picking a provider opens the model list straight away, as in the composer. */
+    async function pickModel(provider: string, model: string) {
+      await pick(providerField(), provider);
+      await pickOpenOption(model);
+      await waitFor(() => expect(modelField().textContent).toContain(model));
+    }
+
+    async function openModelOverride() {
+      await pickAgentOne();
+      await screen.findByRole('combobox', { name: 'Model provider' });
+    }
+
+    describe('when an agent is the target', () => {
+      it("shows the agent's own provider and model without opening Advanced", async () => {
+        setupHandlers();
+        renderDialog();
+        await openModelOverride();
+
+        expect(advancedToggle().getAttribute('aria-expanded')).toBe('false');
+        await waitFor(() => expect(providerField().textContent).toContain('OpenAI'));
+        expect(modelField().textContent).toContain('gpt-4o-mini');
+        expect(screen.queryByRole('button', { name: "Use the agent's model" })).toBeNull();
+      });
+
+      it('runs the agent on the picked provider and model', async () => {
+        const { triggerCalls } = setupHandlers();
+        renderDialog();
+        await openModelOverride();
+
+        await pickModel('Anthropic', 'claude-haiku-4-5');
+        fireEvent.click(runButton());
+
+        await waitFor(() => expect(triggerCalls).toHaveLength(1));
+        expect(triggerCalls[0].body.agentModel).toEqual({ provider: 'anthropic', modelId: 'claude-haiku-4-5' });
+      });
+
+      it('names the run after the agent and the picked model, so runs on different models can be told apart', async () => {
+        const { triggerCalls } = setupHandlers();
+        renderDialog();
+        await openModelOverride();
+
+        await pickModel('Anthropic', 'claude-haiku-4-5');
+
+        await waitFor(() => expect(nameInput().placeholder).toMatch(/^agent-one-claude-haiku-4-5-[0-9a-f]{4}$/));
+        fireEvent.click(runButton());
+        await waitFor(() => expect(triggerCalls).toHaveLength(1));
+        expect(triggerCalls[0].body.name).toBe(nameInput().placeholder);
+      });
+
+      it("keeps a gateway provider's prefix", async () => {
+        const { triggerCalls } = setupHandlers();
+        renderDialog();
+        await openModelOverride();
+
+        await pickModel('Acme Gateway', 'acme-mini');
+        fireEvent.click(runButton());
+
+        await waitFor(() => expect(triggerCalls).toHaveLength(1));
+        expect(triggerCalls[0].body.agentModel).toEqual({ provider: 'acme/gateway', modelId: 'acme-mini' });
+      });
+
+      it("uses the agent's own model when nothing is picked", async () => {
+        const { triggerCalls } = setupHandlers();
+        renderDialog();
+        await openModelOverride();
+
+        fireEvent.click(runButton());
+
+        await waitFor(() => expect(triggerCalls).toHaveLength(1));
+        expect(triggerCalls[0].body).not.toHaveProperty('agentModel');
+      });
+
+      it('sends no override when only a provider is picked', async () => {
+        const { triggerCalls } = setupHandlers();
+        renderDialog();
+        await openModelOverride();
+
+        await pick(providerField(), 'Anthropic');
+        fireEvent.click(runButton());
+
+        await waitFor(() => expect(triggerCalls).toHaveLength(1));
+        expect(triggerCalls[0].body).not.toHaveProperty('agentModel');
+      });
+
+      it("drops the picked model when the provider changes, so it never pairs with another provider's model", async () => {
+        const { triggerCalls } = setupHandlers();
+        renderDialog();
+        await openModelOverride();
+
+        await pickModel('OpenAI', 'gpt-4o');
+        await pick(providerField(), 'Anthropic');
+        fireEvent.click(runButton());
+
+        await waitFor(() => expect(triggerCalls).toHaveLength(1));
+        expect(triggerCalls[0].body).not.toHaveProperty('agentModel');
+      });
+
+      it("goes back to the agent's own model on reset", async () => {
+        const { triggerCalls } = setupHandlers();
+        renderDialog();
+        await openModelOverride();
+
+        await pickModel('OpenAI', 'gpt-4o');
+        fireEvent.click(screen.getByRole('button', { name: "Use the agent's model" }));
+        await waitFor(() => expect(modelField().textContent).toContain('gpt-4o-mini'));
+        fireEvent.click(runButton());
+
+        await waitFor(() => expect(triggerCalls).toHaveLength(1));
+        expect(triggerCalls[0].body).not.toHaveProperty('agentModel');
+      });
+
+      it("sends no override when the agent's own model is picked back", async () => {
+        const { triggerCalls } = setupHandlers();
+        renderDialog();
+        await openModelOverride();
+
+        await pickModel('Anthropic', 'claude-haiku-4-5');
+        await pickModel('OpenAI', 'gpt-4o-mini');
+        expect(screen.queryByRole('button', { name: "Use the agent's model" })).toBeNull();
+        fireEvent.click(runButton());
+
+        await waitFor(() => expect(triggerCalls).toHaveLength(1));
+        expect(triggerCalls[0].body).not.toHaveProperty('agentModel');
+        expect(triggerCalls[0].body.name).toMatch(/^agent-one-[0-9a-f]{4}$/);
+      });
+
+      it("drops the picked model when another agent is picked, so it runs on that agent's own model", async () => {
+        const { triggerCalls } = setupHandlers();
+        renderDialog();
+        await openModelOverride();
+
+        await pickModel('Anthropic', 'claude-haiku-4-5');
+        await choose(targetField(), 'Agent Two');
+        await waitFor(() => expect(providerField().textContent).toContain('OpenAI'));
+        expect(modelField().textContent).toContain('gpt-4o-mini');
+        fireEvent.click(runButton());
+
+        await waitFor(() => expect(triggerCalls).toHaveLength(1));
+        expect(triggerCalls[0].body).toMatchObject({ targetType: 'agent', targetId: 'agent-2' });
+        expect(triggerCalls[0].body).not.toHaveProperty('agentModel');
+      });
+    });
+
+    describe('when the target is not an agent', () => {
+      it('offers no model and sends none', async () => {
+        const { triggerCalls } = setupHandlers({ scorers: itemScorers });
+        renderDialog();
+        await openModelOverride();
+        await pickModel('OpenAI', 'gpt-4o');
+
+        await choose(targetField(), 'Quality scorer');
+        await waitFor(() => expect(screen.queryByRole('combobox', { name: 'Model provider' })).toBeNull());
+        fireEvent.click(runButton());
+
+        await waitFor(() => expect(triggerCalls).toHaveLength(1));
+        expect(triggerCalls[0].body).toMatchObject({ targetType: 'scorer', targetId: 'quality' });
+        expect(triggerCalls[0].body).not.toHaveProperty('agentModel');
+        expect(triggerCalls[0].body.name).toMatch(/^quality-scorer-[0-9a-f]{4}$/);
+      });
+    });
+
+    describe('when an admin has hidden the model picker', () => {
+      it('shows the model as locked and sends no override', async () => {
+        const { triggerCalls } = setupHandlers({ builderSettings: lockedModelPolicySettings });
+        renderDialog();
+        await pickAgentOne();
+
+        expect(await screen.findByText('Locked by admin')).toBeDefined();
+        expect(screen.queryByRole('combobox', { name: 'Model provider' })).toBeNull();
+        fireEvent.click(runButton());
+
+        await waitFor(() => expect(triggerCalls).toHaveLength(1));
+        expect(triggerCalls[0].body).not.toHaveProperty('agentModel');
+      });
+    });
+  });
+
   describe('when reopened', () => {
     it('starts from a fresh form', async () => {
       setupHandlers();
@@ -281,18 +488,25 @@ describe('ExperimentTriggerDialog', () => {
 
       await waitFor(() => expect(datasetField().value).toBe('Dataset 1'));
       expect(targetField().value).toBe('');
-      expect(screen.queryByLabelText('Experiment name')).toBeNull();
-      await openAdvanced();
       expect(nameInput().value).toBe('');
+      expect(screen.queryByLabelText('Description')).toBeNull();
     });
   });
 
   describe('experiment name and description', () => {
+    it('shows the name first, above the target, without opening Advanced', async () => {
+      setupHandlers();
+      renderDialog();
+      await waitFor(() => expect(datasetField().value).toBe('Dataset 1'));
+
+      expect(advancedToggle().getAttribute('aria-expanded')).toBe('false');
+      expect(nameInput().compareDocumentPosition(targetField()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
     it('shows the target name plus a short id as the placeholder and runs with it', async () => {
       const { triggerCalls } = setupHandlers();
       renderDialog();
       await pickAgentOne();
-      await openAdvanced();
 
       expect(nameInput().value).toBe('');
       expect(nameInput().placeholder).toMatch(/^agent-one-[0-9a-f]{4}$/);
@@ -306,7 +520,6 @@ describe('ExperimentTriggerDialog', () => {
       setupHandlers();
       renderDialog();
       await pickAgentOne();
-      await openAdvanced();
       const suffix = nameInput().placeholder.slice(-4);
 
       await choose(targetField(), 'Agent Two');
@@ -318,7 +531,6 @@ describe('ExperimentTriggerDialog', () => {
       renderDialog();
       await waitFor(() => expect(targetField().disabled).toBe(false));
       await choose(targetField(), 'agent-unnamed');
-      await openAdvanced();
 
       expect(nameInput().placeholder).toMatch(/^agent-unnamed-[0-9a-f]{4}$/);
     });
@@ -337,14 +549,14 @@ describe('ExperimentTriggerDialog', () => {
       expect(triggerCalls[0].body).not.toHaveProperty('description');
     });
 
-    it('pre-fills name and description from a rerun behind a closed Advanced', async () => {
+    it('pre-fills name, and description behind a closed Advanced, from a rerun', async () => {
       const { triggerCalls } = setupHandlers();
       renderDialog({ initialName: 'Baseline', initialDescription: 'First pass' });
 
       await waitFor(() => expect(datasetField().value).toBe('Dataset 1'));
+      expect(nameInput().value).toBe('Baseline');
       expect(advancedToggle().getAttribute('aria-expanded')).toBe('false');
       await openAdvanced();
-      expect(nameInput().value).toBe('Baseline');
       expect(descriptionInput().value).toBe('First pass');
 
       await pickAgentOne();

@@ -14,6 +14,7 @@ export {
 } from './use-trace-or-branch-spans';
 export * from './use-trace-query';
 export * from './use-query-spans';
+export * from './use-query-threads';
 export * from './use-trace-spans';
 export * from './use-trace-usage';
 export * from './use-traces';

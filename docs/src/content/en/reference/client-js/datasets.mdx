@@ -258,7 +258,7 @@ Submitting to an experiment that has a target returns a `400`. Submitting after 
 
 ## finalizeExperiment()
 
-Marks a caller-driven experiment completed. The server computes per-item counts from the persisted result rows, so the caller keeps no bookkeeping: `succeededCount` (at least one attempt without an error), `failedCount` (every attempt errored), and `skippedCount` (never submitted). Idempotent: finalizing an already-completed experiment returns the stored record.
+Marks a caller-driven experiment completed. The server handles bookkeeping for the caller by computing per-item counts from the persisted result rows: `succeededCount` (at least one attempt without an error), `failedCount` (every attempt errored), and `skippedCount` (never submitted). Idempotent: finalizing an already-completed experiment returns the stored record.
 
 <PropertiesTable
   content={[

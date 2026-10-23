@@ -15,6 +15,7 @@ import { AgentCmsFormShell } from '@/domains/agents/components/agent-cms-form-sh
 import { getCodeAgentOverrideSections } from '@/domains/agents/components/agent-cms-sidebar/agent-cms-sections';
 import { AgentVersionPanel } from '@/domains/agents/components/agent-version-panel';
 import { useAgentCmsForm } from '@/domains/agents/hooks/use-agent-cms-form';
+import { isCodeBackedAgent } from '@/domains/agents/utils/agent-source';
 import { mapAgentResponseToDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import type { AgentDataSource } from '@/domains/agents/utils/compute-agent-initial-values';
 import { getEditorOwnership } from '@/domains/agents/utils/editor-ownership';
@@ -81,7 +82,7 @@ function EditFormContent({
           onClick={() => void handlePublish(selectedVersionId ?? undefined)}
           disabled={selectedVersionId === activeVersionId}
         >
-          Publish This Version
+          Publish this version
         </Button>
       </div>
     </Notice>
@@ -160,9 +161,9 @@ function EditLayoutWrapper() {
     queryOptions: { enabled: Boolean(agentId) && hasVersions },
   });
 
-  // A code agent override is when the underlying agent is code-defined,
+  // A code agent override is when the underlying agent is defined in code or in an agent folder,
   // regardless of whether a stored override record already exists
-  const isCodeAgentOverride = codeAgent?.source === 'code';
+  const isCodeAgentOverride = isCodeBackedAgent(codeAgent);
   const codeAgentOverrideSections = useMemo(
     () => (isCodeAgentOverride ? getCodeAgentOverrideSections(codeAgent?.editor) : []),
     [codeAgent?.editor, isCodeAgentOverride],
@@ -329,7 +330,7 @@ function EditLayoutWrapper() {
             ) : (
               <>
                 <Check />
-                {isViewingPreviousVersion ? 'Publish This Version' : 'Publish'}
+                {isViewingPreviousVersion ? 'Publish this version' : 'Publish'}
               </>
             )}
           </Button>

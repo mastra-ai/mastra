@@ -168,6 +168,7 @@ export interface S3FilesystemOptions extends MastraFilesystemOptions {
    * - Cloudflare R2: 'https://{accountId}.r2.cloudflarestorage.com'
    * - MinIO: 'http://localhost:9000'
    * - DigitalOcean Spaces: 'https://{region}.digitaloceanspaces.com'
+   * - Neon Object Storage: 'https://{branchId}.storage.{cell}.{region}.aws.neon.tech'
    */
   endpoint?: string;
   /** Force path-style URLs (required for some S3-compatible services) */
@@ -206,6 +207,20 @@ export interface S3FilesystemOptions extends MastraFilesystemOptions {
  *   accessKeyId: process.env.R2_ACCESS_KEY_ID!,
  *   secretAccessKey: process.env.R2_SECRET_ACCESS_KEY!,
  *   endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+ * });
+ * ```
+ *
+ * @example Neon Object Storage
+ * ```typescript
+ * import { S3Filesystem } from '@mastra/s3';
+ *
+ * // Values come from `neon env pull` (branch-scoped credentials)
+ * const fs = new S3Filesystem({
+ *   bucket: 'my-bucket',
+ *   region: process.env.AWS_REGION!,
+ *   accessKeyId: process.env.AWS_ACCESS_KEY_ID!,
+ *   secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY!,
+ *   endpoint: process.env.AWS_ENDPOINT_URL_S3!,
  * });
  * ```
  *
@@ -432,6 +447,10 @@ export class S3Filesystem extends MastraFilesystem {
       return 'azure';
     }
 
+    if (hostname.endsWith('.neon.tech') && hostname.includes('.storage.')) {
+      return 'neon';
+    }
+
     if (hostname.includes('minio')) {
       return 'minio';
     }
@@ -460,6 +479,8 @@ export class S3Filesystem extends MastraFilesystem {
         return 'Azure Blob';
       case 'minio':
         return 'MinIO';
+      case 'neon':
+        return 'Neon Object Storage';
       case 's3':
         return 'S3';
       default:

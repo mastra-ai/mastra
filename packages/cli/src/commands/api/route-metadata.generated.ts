@@ -242,6 +242,21 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /agents/:agentId/runs/:runId/abort": {
+    "method": "POST",
+    "path": "/agents/:agentId/runs/:runId/abort",
+    "pathParams": [
+      "agentId",
+      "runId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /agents/:agentId/threads/abort": {
     "method": "POST",
     "path": "/agents/:agentId/threads/abort",
@@ -5624,6 +5639,7 @@ export const API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
+      "agentModel",
       "agentVersion",
       "description",
       "grouping",
