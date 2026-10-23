@@ -60,7 +60,7 @@ const manifest = {
       display_name: values.name,
       always_online: true,
     },
-    // Slack retires `assistant_view` in February 2027, and its DM threads keep
+    // Slack says it will deprecate `assistant_view`, and its DM threads keep
     // the composer locked while a status shows. Slack rejects a manifest that
     // declares both views.
     agent_view: {

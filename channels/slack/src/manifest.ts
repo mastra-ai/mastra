@@ -108,8 +108,8 @@ export function buildManifest(options: BuildManifestOptions): SlackAppManifest {
         display_name: name,
         always_online: true,
       },
-      // Required by Slack when `assistant:write` scope is present. Slack
-      // retires `assistant_view` in February 2027, and its DM threads keep the
+      // Required by Slack when `assistant:write` scope is present. Slack says
+      // it will deprecate `assistant_view`, and its DM threads keep the
       // composer locked while a status shows. `agent_view` lets users reply
       // mid-run. Slack rejects a manifest that declares both.
       agent_view: {
