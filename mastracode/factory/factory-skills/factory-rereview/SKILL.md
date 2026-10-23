@@ -185,10 +185,11 @@ Next, publish the re-review on the PR itself — this is part of every pass, not
 
 - The latest is a PR comment and you are publishing as a comment (misconfiguration or fallback below): edit it with `gh api -X PATCH repos/<owner>/<repo>/issues/comments/<id> -F body=@<file>`.
 - The latest is an `APPROVED` review on an older `commit_id`: post a new review matching your current verdict (`--approve` for approve, `--request-changes` for request changes). Never edit it, because editing only changes the body and the approval would stay pinned to the old commit.
+- Your verdict is request changes and the PR author (REST `.user.login`) is not `<factory-app>[bot]`: post a new verdict. Edits send no notification and do not complete a pending re-review request, so a human author would never learn the pass finished.
 - The latest is a review in the same state as your verdict (`CHANGES_REQUESTED` for request changes, or `APPROVED` for approve when its `commit_id` equals the head you reviewed): edit it with `gh api -X PUT repos/<owner>/<repo>/pulls/<number>/reviews/<id> -F body=@<file>`.
 - Otherwise (no earlier verdict, the verdict flipped, or the form changed), post a new one as described below. GitHub cannot change the state of a submitted review, so a flipped verdict always needs a new review.
 
-If an edit is refused, post a new verdict as described below and report it under **Verification**. Editing a request-changes verdict wakes the PR author the same way a new one does. The body file must not contain a `> Opened by` line; the proxy adds it. Report under **Verification** whether you edited or created the verdict.
+If an edit is refused, post a new verdict as described below and report it under **Verification**. On a Factory-authored PR, editing a request-changes verdict wakes the authoring Work item the same way a new one does. The body file must not contain a `> Opened by` line; the proxy adds it. Report under **Verification** whether you edited or created the verdict.
 
 When you are not editing, submit a PR review matching the verdict:
 
