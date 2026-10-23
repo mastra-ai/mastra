@@ -130,7 +130,7 @@ overrides:
   fflate@>=0.4.5 <0.4.9: 0.4.9
   browserslist@<=4.28.6: 4.28.7
   deepmerge-ts@<8.0.0: 8.0.0
-  toml@<4.1.2: 4.2.0
+  toml@<5.0.1: 5.0.1
   postcss-selector-parser@>=6.1.0 <6.1.3: 7.1.6
   postcss-selector-parser@>=7.1.0 <7.1.6: 7.1.6
   '@tailwindcss/typography>postcss-selector-parser': 7.1.6
@@ -30833,8 +30833,8 @@ packages:
   tokenx@1.6.0:
     resolution: {integrity: sha512-CKTjk345ajvBAUp5xUI9a5KKN0zU0lBueVHQbCskH1Hp6WkUKsPW2qGCYNs0pxNyfzxfo+IIjdt2W4sMbw/qBw==}
 
-  toml@4.2.0:
-    resolution: {integrity: sha512-TvAJjbHZlYmI323+srtqHQFyJsoWy6mI09ppkuj9+iRsqsVKG9fvTcOP7FHF2UCb0QSYtjEavffrKzdd0XgClg==}
+  toml@5.0.1:
+    resolution: {integrity: sha512-EqYNA/YvUNndrA2B3O2ojzLQoTQrBxeZ9UIjQwk8t10oe6n7dwclBwd9IdZQTOKwe6vWX+AXtl6IntXRbepdxQ==}
     engines: {node: '>=20'}
 
   totalist@3.0.1:
@@ -48187,7 +48187,7 @@ snapshots:
       kubernetes-types: 1.30.0
       msgpackr: 1.11.12
       multipasta: 0.2.7
-      toml: 4.2.0
+      toml: 5.0.1
       uuid: 13.0.1
       yaml: 2.9.1
 
@@ -56717,7 +56717,7 @@ snapshots:
 
   tokenx@1.6.0: {}
 
-  toml@4.2.0: {}
+  toml@5.0.1: {}
 
   totalist@3.0.1: {}
 

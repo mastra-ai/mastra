@@ -411,7 +411,10 @@ overrides:
   fflate@>=0.4.5 <0.4.9: 0.4.9
   browserslist@<=4.28.6: 4.28.7
   deepmerge-ts@<8.0.0: 8.0.0
-  toml@<4.1.2: 4.2.0
+  # Vanta 2026-10-23: CVE-2026-114141/-114143/-114144 (toml <=5.0.0, fixed only in 5.0.1). Sole consumer is
+  # effect 4.0.0-beta (via @opencode-ai/plugin, dev-only in integrations/opencode), which declares ^4.1.1 on every
+  # beta; 5.x keeps the same parse(input) API (new opt-in options only). Floor raised from <4.1.2 -> 4.2.0.
+  toml@<5.0.1: 5.0.1
   postcss-selector-parser@>=6.1.0 <6.1.3: 7.1.6
   postcss-selector-parser@>=7.1.0 <7.1.6: 7.1.6
   # Vanta 2026-10-20 (CVE-2026-104844 / GHSA-rj75-hqrm-r3gf, fixed only in 7.1.6): these parents are on their
