@@ -9,7 +9,7 @@ The panel header is now one line: the scope picker, the panel's total `+N −N`,
 - **Branch changes** (default): everything the session changed since it left the base branch, committed or not (as before).
 - **Uncommitted changes**: only the work not yet committed.
 - **Jump to file** opens the folder tree and scrolls to the file you pick.
-- **… → Diff layout** picks **Unified** (default) or **Split**. The choice is remembered in this browser.
+- **… → Diff layout** picks **Unified** (default) or **Split**. The choice is remembered in this browser. In both, a long line stays on one row and scrolls sideways instead of wrapping.
 - **… → Refresh** reloads the diffs, for edits made outside an agent run. Diffs already reload when a run ends.
 
 A file without a diff says why in its header: "Diff too large to show" when its own diff is over 512 KB, "Too many changes to show" once its repository's diffs pass 8 MB, and "Diff unavailable" when git could not diff it, for example in a repository without a commit yet. In that last case git's error appears once above the files. The file list stays visible in every case.

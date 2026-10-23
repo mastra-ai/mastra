@@ -101,6 +101,23 @@ export const WithFileHeader: Story = {
   },
 };
 
+export const ScrollingLongLines: Story = {
+  args: {
+    patch: [
+      'diff --git a/src/agent.ts b/src/agent.ts',
+      '--- a/src/agent.ts',
+      '+++ b/src/agent.ts',
+      '@@ -1,2 +1,2 @@',
+      " export const instructions = 'You are a support agent. Answer billing questions, escalate refunds over $500, and never share account details with anyone but the owner.';",
+      "-export const model = { provider: 'openai', name: 'gpt-4o-mini', temperature: 0.2, maxOutputTokens: 1024 };",
+      "+export const model = { provider: 'openai', name: 'gpt-4o-mini', temperature: 0.4, maxOutputTokens: 2048 };",
+      '',
+    ].join('\n'),
+    layout: 'split',
+    overflow: 'scroll',
+  },
+};
+
 export const FileList: Story = {
   render: () => (
     <CodeDiffList className="h-[480px] rounded-md border border-border">

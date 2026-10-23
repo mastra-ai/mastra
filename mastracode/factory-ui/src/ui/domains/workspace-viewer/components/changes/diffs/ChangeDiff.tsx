@@ -24,5 +24,5 @@ export function ChangeDiff({ change, patch, omission, layout, ref }: ChangeDiffP
   };
 
   if (patch === undefined || !hasTextChanges(change)) return <CodeDiff ref={ref} header={header} />;
-  return <CodeDiff ref={ref} header={header} patch={patch} layout={layout} />;
+  return <CodeDiff ref={ref} header={header} patch={patch} layout={layout} overflow="scroll" />;
 }

@@ -10,7 +10,7 @@ Added `CodeDiffList`, a scroll container for many `CodeDiff`s. It stacks them ed
 import { CodeDiff, CodeDiffList } from '@mastra/playground-ui/components/CodeDiff';
 
 <CodeDiffList className="h-[640px]">
-  <CodeDiff patch={agentPatch} header={{ path: 'src/agent.ts', meta: <span>+4 −1</span> }} />
+  <CodeDiff patch={agentPatch} overflow="scroll" header={{ path: 'src/agent.ts', meta: <span>+4 −1</span> }} />
   <CodeDiff
     header={{
       path: 'src/agents/helper.ts',
@@ -20,3 +20,5 @@ import { CodeDiff, CodeDiffList } from '@mastra/playground-ui/components/CodeDif
   />
 </CodeDiffList>;
 ```
+
+`CodeDiff` also takes `overflow`. `wrap` (default, as before) breaks long lines, which suits prose. `scroll` keeps each line on one row behind a horizontal scroll, which suits source code; in the split layout each side scrolls on its own.

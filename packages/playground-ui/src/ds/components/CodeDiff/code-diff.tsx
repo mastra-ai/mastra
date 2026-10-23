@@ -19,6 +19,8 @@ type NoCodeDiffSource = { patch?: never; codeA?: never; codeB?: never; filename?
 export type CodeDiffProps = {
   className?: string;
   layout?: 'split' | 'unified';
+  /** `wrap` (default) breaks long lines — best for prose. `scroll` keeps columns behind a horizontal scroll — best for source code. */
+  overflow?: 'wrap' | 'scroll';
   ref?: Ref<HTMLDivElement>;
 } & (({ header?: CodeDiffFileHeader } & CodeDiffSource) | ({ header: CodeDiffFileHeader } & NoCodeDiffSource));
 
@@ -76,7 +78,7 @@ function DiffContent({
   );
 }
 
-export function CodeDiff({ className, layout, header, ref, ...source }: CodeDiffProps) {
+export function CodeDiff({ className, layout, overflow = 'wrap', header, ref, ...source }: CodeDiffProps) {
   const { resolvedTheme } = useTheme();
   const [collapsed, setCollapsed] = useState(false);
   const isPatch = source.patch !== undefined;
@@ -87,7 +89,7 @@ export function CodeDiff({ className, layout, header, ref, ...source }: CodeDiff
     diffStyle: layout ?? (isPatch ? 'unified' : 'split'),
     diffIndicators: 'classic',
     disableFileHeader: true,
-    overflow: 'wrap',
+    overflow,
   };
 
   return (
