@@ -1,14 +1,19 @@
 /**
- * Monorepo workspace discovery.
+ * Vendored from find-workspaces@0.3.1 (https://github.com/joshuajaco/find-workspaces),
+ * MIT licensed, Copyright (c) 2021 Joshua Jacobowitz. See ./LICENSE.
  *
- * Replaces the `find-workspaces` package with the same API, so that the
- * production dependency tree no longer carries `fast-glob` → `micromatch` →
- * `braces` (GHSA-vfj7-8cjw-p6xm, no patched release). Globbing goes through
- * `tinyglobby`, which the deployer already uses for bundling.
+ * Changes from upstream:
+ * - Globs with `tinyglobby` instead of `fast-glob`, so the production dependency
+ *   tree no longer carries `fast-glob` → `micromatch` → `braces`
+ *   (GHSA-vfj7-8cjw-p6xm, no patched release).
+ * - `findWorkspaces` is async.
+ * - Globs each pattern's `package.json` so symlinked workspace directories still
+ *   match, and adds the root explicitly when a pattern declares it, matching what
+ *   upstream's `fast-glob` directory glob returned.
  *
- * Root detection order matches `find-workspaces`: `lerna.json`, then
- * `pnpm-workspace.yaml`, then `package.json` (`workspaces` array,
- * `workspaces.packages`, or `bolt.workspaces`).
+ * Root detection order is unchanged: `lerna.json`, then `pnpm-workspace.yaml`,
+ * then `package.json` (`workspaces` array, `workspaces.packages`, or
+ * `bolt.workspaces`).
  */
 
 import { readFileSync } from 'node:fs';

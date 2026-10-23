@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { createWorkspacesCache, findWorkspaces, findWorkspacesRoot } from './find-workspaces';
+import { createWorkspacesCache, findWorkspaces, findWorkspacesRoot } from './index';
 
 let root: string;
 
