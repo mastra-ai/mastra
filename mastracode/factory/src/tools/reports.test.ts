@@ -253,6 +253,29 @@ describe('sendRunEndReport', () => {
     expect(env.deliveries.map(entry => entry.notification.kind)).toEqual(['failed', 'done']);
   });
 
+  it('says a session finished again after progress that coalesced into an older report', async () => {
+    vi.useFakeTimers({ toFake: ['Date'], now: 0 });
+    onTestFinished(() => void vi.useRealTimers());
+    const tick = () => vi.setSystemTime(Date.now() + 1000);
+    const env = reporting();
+    // An unread progress report, then "done", then new progress folds into the first record.
+    tick();
+    await env.agentReport('progress');
+    tick();
+    await env.agentReport('done');
+    tick();
+    await env.agentReport('progress');
+    tick();
+    await sendRunEndReport(env.reporting, {
+      sender: SENDER,
+      recipients: [PARENT],
+      since: new Date(),
+      outcome: { status: 'done' },
+      subject: 'The work session for #7',
+    });
+    expect(env.deliveries.map(entry => entry.notification.kind)).toEqual(['done']);
+  });
+
   it('still reports a repeat failure when the earlier one was read after a newer report', async () => {
     vi.useFakeTimers({ toFake: ['Date'], now: 0 });
     onTestFinished(() => void vi.useRealTimers());

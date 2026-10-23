@@ -109,14 +109,21 @@ async function lastReport(
     source: FACTORY_SESSION_NOTIFICATION_SOURCE,
     limit: FINAL_REPORT_SCAN,
   });
-  // Storage orders by `updatedAt`, which moves when a report is read; the
-  // newest report is the one created last.
   return records
     .filter(record => record.attributes?.['from-session'] === senderSessionId)
     .reduce<(typeof records)[number] | undefined>(
-      (newest, record) => (!newest || record.createdAt > newest.createdAt ? record : newest),
+      (newest, record) => (!newest || reportedAt(record) > reportedAt(newest) ? record : newest),
       undefined,
     );
+}
+
+/**
+ * When a report last said something. `updatedAt` also moves when a report is
+ * read, so it only counts once a later report has coalesced into this one;
+ * otherwise the report says what it said when it was created.
+ */
+function reportedAt(record: { createdAt: Date; updatedAt: Date; coalescedCount?: number }): Date {
+  return (record.coalescedCount ?? 1) > 1 ? record.updatedAt : record.createdAt;
 }
 
 /**
