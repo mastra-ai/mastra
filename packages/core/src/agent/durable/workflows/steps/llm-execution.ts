@@ -42,6 +42,7 @@ import type {
   SpanType,
 } from '../../../../observability';
 import { EntityType, createObservabilityContext } from '../../../../observability';
+import { extractUsageMetrics } from '../../../../observability/usage';
 import { executeWithContextSync, getRootExportSpan } from '../../../../observability/utils';
 import type { CachedLLMStepResponse } from '../../../../processors';
 import { PrepareStepProcessor } from '../../../../processors/processors/prepare-step';
@@ -2802,7 +2803,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       toolCalls: [],
                     },
                     attributes: {
-                      usage: pendingPayload.output?.usage,
+                      usage: extractUsageMetrics(
+                        pendingPayload.output?.usage,
+                        pendingPayload.metadata?.providerMetadata,
+                      ),
                       finishReason: pendingPayload.stepResult?.reason,
                       isContinued: pendingPayload.stepResult?.isContinued,
                     },
