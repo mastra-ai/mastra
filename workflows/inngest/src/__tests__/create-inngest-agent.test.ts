@@ -219,7 +219,7 @@ describe('createInngestAgent factory function', () => {
 
       const result = await mastra.recoverAllDurableAgents();
 
-      expect(result).toEqual({ agents: 1, recovered: 0, succeeded: 0, failed: 0 });
+      expect(result).toEqual({ agents: 1, recovered: 0, succeeded: 0, failed: 0, skipped: 0 });
       expect(errorSpy).not.toHaveBeenCalled();
     });
   });
@@ -1431,6 +1431,7 @@ describe('InngestAgent parity surface', () => {
             requestContext: {
               userId: 'user-1',
               organizationId: 'org-1',
+              mastra__scopes: [],
             },
           }),
         }),
