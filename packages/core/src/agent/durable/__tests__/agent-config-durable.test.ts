@@ -382,13 +382,52 @@ describe('AgentConfig.durable', () => {
     try {
       // Registration must preserve durability on the application's original reference (#28189).
       const output = await raw.stream('hi');
-      expect(await output.getFullOutput()).toMatchObject({ text: 'hi' });
+      const types: string[] = [];
+      for await (const chunk of output.fullStream) types.push(chunk.type);
+      expect(types).toContain('text-delta');
       expect(spy).toHaveBeenCalledTimes(1);
     } finally {
       spy.mockRestore();
       await mastra.shutdown({ drainTimeout: 1000 });
     }
   });
+
+  it.each(['standalone-first', 'concurrent-first-calls', 'registration-during-init'] as const)(
+    'reuses one durable wrapper for %s',
+    async mode => {
+      const { DurableAgent } = await import('../durable-agent');
+      const raw = new Agent({
+        id: 'reuse',
+        name: 'Reuse',
+        instructions: 'test',
+        model: makeMockModel(),
+        durable: true,
+      });
+      const spy = vi.spyOn(DurableAgent.prototype, 'stream');
+      let mastra: Mastra | undefined;
+      const consume = async (output: Awaited<ReturnType<typeof raw.stream>>) => {
+        const types: string[] = [];
+        for await (const chunk of output.fullStream) types.push(chunk.type);
+        expect(types).toContain('text-delta');
+      };
+      try {
+        const first = raw.stream('hi');
+        if (mode === 'standalone-first') await consume(await first);
+        if (mode === 'concurrent-first-calls') {
+          await Promise.all([first.then(consume), raw.stream('hi again').then(consume)]);
+        }
+        mastra = new Mastra({ agents: { alias: raw }, logger: false });
+        if (mode === 'registration-during-init') await consume(await first);
+        await consume(await raw.stream('hi after registration'));
+        const registered = mastra.getAgent('alias');
+        expect(spy.mock.contexts).toHaveLength(mode === 'concurrent-first-calls' ? 3 : 2);
+        for (const wrapper of spy.mock.contexts) expect(wrapper).toBe(registered);
+      } finally {
+        spy.mockRestore();
+        await mastra?.shutdown({ drainTimeout: 1000 });
+      }
+    },
+  );
 
   describe('durable-only delegator methods on standalone Agent', () => {
     const durableMethods = [

@@ -47,19 +47,46 @@ describe('The original durable Agent stays durable after registration (#28189)',
       const storage = new InMemoryStore();
       const mastra = new Mastra({ agents: { payments: raw }, storage, logger: false });
       mastra.addAgent(raw, 'anotherAlias');
+      let finishOriginalStream: (() => Promise<void>) | undefined;
+      let releaseReader: (() => void) | undefined;
       try {
-        const options = { runId: `payment-${method}`, maxSteps: 4, closeOnSuspend: true };
-        const opening =
-          method === 'stream'
-            ? await (await raw.stream('Confirm payment', options)).getFullOutput()
-            : await raw.generate('Confirm payment', options);
+        const options = { runId: `payment-${method}`, maxSteps: 4 };
+        if (method === 'stream') {
+          const opening = await raw.stream('Confirm payment', options);
+          const types: string[] = [];
+          const reader = opening.fullStream.getReader();
+          releaseReader = () => reader.releaseLock();
+          while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            types.push(value.type);
+            if (value.type === 'tool-call-suspended') break;
+          }
+          expect(types).toContain('tool-call-suspended');
+          // The original stream must stay open across suspension by default.
+          finishOriginalStream = async () => {
+            const remaining: string[] = [];
+            while (true) {
+              const { value, done } = await reader.read();
+              if (done) break;
+              remaining.push(value.type);
+            }
+            expect(remaining).toContain('finish');
+          };
+        } else {
+          await raw.generate('Confirm payment', options);
+        }
         expect(committed).toEqual([]);
         const workflows = await storage.getStore('workflows');
-        const saved = await workflows?.getWorkflowRunById({
-          workflowName: 'durable-agentic-loop',
-          runId: opening.runId,
-        });
-        expect(saved?.snapshot).toMatchObject({ status: 'suspended' });
+        await expect
+          .poll(async () => {
+            const saved = await workflows?.getWorkflowRunById({
+              workflowName: 'durable-agentic-loop',
+              runId: options.runId,
+            });
+            return saved?.snapshot;
+          })
+          .toMatchObject({ status: 'suspended' });
         expect(mastra.getAgent('anotherAlias')).toBe(mastra.getAgent('payments'));
         const resumed =
           method === 'stream'
@@ -69,13 +96,19 @@ describe('The original durable Agent stays durable after registration (#28189)',
             : await raw.resumeGenerate({ code: '1234' }, { ...options, toolCallId: 'call_confirm' });
         expect(resumed.text).toBe('Payment confirmed.');
         expect(committed).toEqual(['1234']);
-        const finished = await workflows?.getWorkflowRunById({
-          workflowName: 'durable-agentic-loop',
-          runId: options.runId,
-        });
-        expect(finished?.snapshot).toMatchObject({ status: 'success' });
+        await finishOriginalStream?.();
+        await expect
+          .poll(async () => {
+            const finished = await workflows?.getWorkflowRunById({
+              workflowName: 'durable-agentic-loop',
+              runId: options.runId,
+            });
+            return finished?.snapshot;
+          })
+          .toBeUndefined();
         expect(JSON.stringify(llm.getRequests().at(-1)?.body)).toContain('confirmed');
       } finally {
+        releaseReader?.();
         await mastra.shutdown({ drainTimeout: 1000 });
       }
     },

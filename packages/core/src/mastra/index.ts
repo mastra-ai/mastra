@@ -1,5 +1,5 @@
 import type { Agent } from '../agent';
-import { createDurableAgent } from '../agent/durable/create-durable-agent';
+import { createDurableAgent, isDurableAgent } from '../agent/durable/create-durable-agent';
 import { abandonDurableAgentExecutions, getActiveDurableAgentWorkflowExecutions } from '../agent/durable/run-registry';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { DurableAgentLike } from '../agent/types';
@@ -2836,7 +2836,8 @@ export class Mastra<
     if (!isRealDurableWrapper && (agent as Agent).durable) {
       const durableOption = (agent as Agent).durable;
       const opts = durableOption === true ? {} : { ...(durableOption as object) };
-      agent = createDurableAgent({ agent: agent as Agent, ...opts }) as unknown as A;
+      agent = ((agent as Agent).__getDurableAgent() ??
+        createDurableAgent({ agent: agent as Agent, ...opts })) as unknown as A;
     }
 
     // Handle durable agent wrappers (e.g., InngestAgent)
@@ -2852,6 +2853,12 @@ export class Mastra<
         const logger = this.getLogger();
         logger.debug(`Agent with key ${agentKey} already exists. Skipping addition.`);
         return;
+      }
+
+      // External calls on the original opt-in Agent must use this exact wrapper.
+      // The wrapper keeps its private preparation path to the inner agent.
+      if (isDurableAgent(durableAgent) && underlyingAgent.durable) {
+        underlyingAgent.__setDurableAgent(durableAgent);
       }
 
       // Set the Mastra instance on the durable agent for observability
