@@ -1103,6 +1103,9 @@ export class AgentThreadStreamRuntime {
     const state = this.#getState(pubsub);
     const inFlight = state.leaseRetakes.get(runId);
     if (inFlight) return inFlight;
+    // The record this attempt belongs to. A later run can register under the same id while this attempt is in
+    // flight, so the marking below must use this reference and never a fresh lookup that could land on it.
+    const record = state.threadRunsById.get(runId);
     const sentAt = Date.now();
     const leaseProvider = this.#getLeaseProvider(pubsub);
     const token = `${runId}${RETAKE_LEASE_MARKER}${globalThis.crypto.randomUUID()}`;
@@ -1153,12 +1156,13 @@ export class AgentThreadStreamRuntime {
         if (handedOver === gaveUp) {
           // The run stops now. A handoff that lands after this installs the run id on a lease this execution no
           // longer renews, so this record's end must leave that lease to expire instead of releasing it. The flag
-          // sits on the record because the id can be reused by a later execution that owns its lease again.
-          const ending = state.threadRunsById.get(runId);
-          if (ending) ending.lateRetakeHandoff = true;
+          // sits on this record, captured when the attempt began: a run that registered under the same id since
+          // then owns its own lease and must not inherit the exemption.
+          if (record) record.lateRetakeHandoff = true;
           releaseToken();
           void transferring.then(late => {
-            if (!late && ending && state.threadRunsById.get(runId) === ending) ending.lateRetakeHandoff = false;
+            // Only the attempt that set the flag clears it, and only while that same record still holds the id.
+            if (!late && record && state.threadRunsById.get(runId) === record) record.lateRetakeHandoff = false;
           });
           return false;
         }
