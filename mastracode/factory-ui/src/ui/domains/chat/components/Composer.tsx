@@ -14,7 +14,7 @@ import {
 import type { ComposerInputProps } from '@mastra/playground-ui/components/Composer';
 import { useOptionalMessageScroller } from '@mastra/playground-ui/components/MessageScroller';
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowUp, ImagePlus, Square } from 'lucide-react';
+import { ImagePlus } from 'lucide-react';
 import type { KeyboardEvent } from 'react';
 import { useMatch, useNavigate, useParams } from 'react-router';
 
@@ -39,6 +39,7 @@ import { commandRequiresReadySession } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ComposerConnectionNotice } from './ComposerConnectionNotice';
 import { ComposerImageAttachments } from './ComposerImageAttachments';
+import { ComposerPrimaryAction } from './ComposerPrimaryAction';
 import { StatusLine } from './StatusLine';
 import { useComposerImages } from './useComposerImages';
 import { useInitializingPlaceholder } from './useInitializingPlaceholder';
@@ -89,6 +90,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   });
   const composerDisabled = createDraftSessionMutation.isPending || blocked || planFeedback.isSubmitting;
   const sendDisabled = composerDisabled || draftConfigNotReady || chatPreparing || planFeedback.loading;
+  const draftImagesCanBeSent = !planFeedback.pending && !liveRun;
+  const hasSubmittableDraft = draft.trim().length > 0 || (images.length > 0 && draftImagesCanBeSent);
   const textareaDisabled = composerDisabled && !chatPreparing;
   const initializingPlaceholder = useInitializingPlaceholder(chatPreparing, draft.length === 0);
   const normalPlaceholder = planFeedback.pending
@@ -179,10 +182,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   const onSubmit = (e: { preventDefault: () => void }) => {
     e.preventDefault();
-    if (sendDisabled) return;
-    const text = draft.trim();
-    if ((!text && images.length === 0) || (planFeedback.pending && !text)) return;
-    submitInput(text);
+    if (sendDisabled || !hasSubmittableDraft) return;
+    submitInput(draft.trim());
   };
 
   const commandMenu = useComposerCommands({
@@ -283,27 +284,12 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
               >
                 <ImagePlus size={14} />
               </Button>
-              {liveRun && (
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  onClick={() => void abortMutation.mutateAsync()}
-                  aria-label="Abort"
-                >
-                  <Square size={14} />
-                </Button>
-              )}
-              <Button
-                type="submit"
-                size="icon-sm"
-                disabled={
-                  sendDisabled || (!draft.trim() && images.length === 0) || (planFeedback.pending && !draft.trim())
-                }
-                aria-label="Send message"
-                title={sendTitle}
-              >
-                <ArrowUp size={16} />
-              </Button>
+              <ComposerPrimaryAction
+                showAbort={liveRun && !hasSubmittableDraft}
+                sendDisabled={sendDisabled || !hasSubmittableDraft}
+                sendTitle={sendTitle}
+                onAbort={() => void abortMutation.mutateAsync()}
+              />
             </ButtonsGroup>
           </ComposerActions>
         </ComposerBox>
