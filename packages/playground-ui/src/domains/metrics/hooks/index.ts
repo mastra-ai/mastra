@@ -1,6 +1,8 @@
 export { MetricsProvider, useMetrics, isValidPreset, DATE_PRESETS } from './use-metrics';
-export type { DatePreset, DateRange } from './use-metrics';
+export type { DatePreset, DateRange, MetricsScope } from './use-metrics';
 export { useMetricsFilters } from './use-metrics-filters';
+export { useMetricsScope } from './use-metrics-scope';
+export { useMetricsLayout, type MetricsLayout } from './use-metrics-layout';
 export { useAgentRunsKpiMetrics } from '@mastra/react/hooks/metrics';
 export { useModelCostKpiMetrics } from '@mastra/react/hooks/metrics';
 export { useTotalTokensKpiMetrics } from '@mastra/react/hooks/metrics';
