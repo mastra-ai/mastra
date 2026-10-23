@@ -463,6 +463,9 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       // Recover requires both a durable agent and a persisted workflow run.
       // Its stateful behavior is covered by packages/server/src/server/handlers/agents.test.ts.
       '/agents/:agentId/recover',
+      // Run-scoped abort returns 501 for the suite's non-durable agent by design.
+      // Durable behavior is covered by packages/server/src/server/handlers/agents.test.ts.
+      '/agents/:agentId/runs/:runId/abort',
       // Reading a submitted plan requires an agent exposing the core submit_plan tool
       // and a workspace filesystem containing the plan. The generic agent has neither;
       // capability, path, and filesystem behavior are covered by plans.test.ts.

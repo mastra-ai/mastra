@@ -314,26 +314,22 @@ export class RailwaySandbox extends MastraSandbox {
    */
   private async _createNewSandbox(createOptions: ReturnType<RailwaySandbox['_createOptions']>): Promise<Sandbox> {
     this.logger.debug(`${LOG_PREFIX} Creating Railway sandbox for: ${this.id}`);
-    try {
-      let checkpointToRestore: string | undefined;
-      if (this._checkpointName || this._seedCheckpointName) {
-        const checkpoints = await Sandbox.checkpoints(this._clientConfig());
-        const checkpointNames = new Set(checkpoints.map(checkpoint => checkpoint.key));
-        checkpointToRestore = checkpointNames.has(this._checkpointName ?? '')
-          ? this._checkpointName
-          : checkpointNames.has(this._seedCheckpointName ?? '')
-            ? this._seedCheckpointName
-            : undefined;
-      }
-
-      const sandbox = checkpointToRestore
-        ? await Sandbox.create(checkpointToRestore, createOptions)
-        : await Sandbox.create(createOptions);
-      this._restoredCheckpointName = checkpointToRestore;
-      return sandbox;
-    } catch (error) {
-      throw error;
+    let checkpointToRestore: string | undefined;
+    if (this._checkpointName || this._seedCheckpointName) {
+      const checkpoints = await Sandbox.checkpoints(this._clientConfig());
+      const checkpointNames = new Set(checkpoints.map(checkpoint => checkpoint.key));
+      checkpointToRestore = checkpointNames.has(this._checkpointName ?? '')
+        ? this._checkpointName
+        : checkpointNames.has(this._seedCheckpointName ?? '')
+          ? this._seedCheckpointName
+          : undefined;
     }
+
+    const sandbox = checkpointToRestore
+      ? await Sandbox.create(checkpointToRestore, createOptions)
+      : await Sandbox.create(createOptions);
+    this._restoredCheckpointName = checkpointToRestore;
+    return sandbox;
   }
 
   /**

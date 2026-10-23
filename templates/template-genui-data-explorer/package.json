@@ -54,7 +54,7 @@
     "mastra": "latest",
     "oxfmt": "0.59.0",
     "typescript": "5.9.3",
-    "vitest": "4.1.11"
+    "vitest": "4.1.12"
   },
   "overrides": {
     "@graphql-tools/utils@<12.0.1": "12.0.3",

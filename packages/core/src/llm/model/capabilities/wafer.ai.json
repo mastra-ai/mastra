@@ -22,7 +22,7 @@
         "type": "toggle"
       }
     ],
-    "MiniMax-M3": [
+    "glm5.2-fast": [
       {
         "type": "toggle"
       },
@@ -31,7 +31,7 @@
         "values": ["none", "low", "medium", "high", "max"]
       }
     ],
-    "glm5.2-fast": [
+    "MiniMax-M3": [
       {
         "type": "toggle"
       },

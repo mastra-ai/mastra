@@ -43,12 +43,19 @@ function replayedCall(body: any) {
 describeForAllEngines('AIMock scenario: tool call with arguments that are not valid JSON', engine => {
   const getMock = useLoopScenarioAimock();
 
-  async function sendTruncatedToolCall() {
-    const tool = { executions: 0 };
+  async function sendToolCall({
+    requireApproval = false,
+    args = TRUNCATED_ARGS,
+  }: { requireApproval?: boolean; args?: string | Record<string, unknown> } = {}) {
+    const tool = { executions: 0, beforeApproval: 0 };
     const updateStatus = createTool({
       id: 'update_status',
       description: 'Update your status',
       inputSchema: z.object({ note: z.string().optional() }),
+      requireApproval,
+      beforeApproval: async () => {
+        tool.beforeApproval++;
+      },
       execute: async () => {
         tool.executions++;
         return { ok: true };
@@ -67,11 +74,12 @@ describeForAllEngines('AIMock scenario: tool call with arguments that are not va
       model: chatModel(getMock()),
       prompt: 'Update your status',
       ...thread,
+      collectChunks: true,
       stopWhen: stepCountIs(5),
       fixtures: llm => {
         llm.on(
           { endpoint: 'chat', hasToolResult: false },
-          { toolCalls: [{ id: 'call-status', name: 'update_status', arguments: TRUNCATED_ARGS }] },
+          { toolCalls: [{ id: 'call-status', name: 'update_status', arguments: args }] },
         );
         llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'I could not update it.' });
       },
@@ -80,7 +88,7 @@ describeForAllEngines('AIMock scenario: tool call with arguments that are not va
   }
 
   it('replays the call with arguments so the thread keeps working', async () => {
-    const { first, thread } = await sendTruncatedToolCall();
+    const { first, thread } = await sendToolCall();
 
     expect(first.requests).toHaveLength(2);
     expect(await first.output.text).toBe('I could not update it.');
@@ -111,17 +119,42 @@ describeForAllEngines('AIMock scenario: tool call with arguments that are not va
     expect(replayedCall(second.requests[0]!.body)).toEqual(
       expect.objectContaining({ function: { name: 'update_status', arguments: '{}' } }),
     );
+    const storedResult = (second.requests[0]!.body as any).messages.find(
+      (m: any) => m.role === 'tool' && m.tool_call_id === 'call-status',
+    );
+    expect(storedResult.content).toContain('received invalid arguments');
   });
 
-  // The durable and evented engines run the tool with `{}` instead of returning the
-  // invalid-arguments error. Not yet investigated.
-  const itFailsOnDurableEngines = engine === 'durable' || engine === 'evented' ? it.fails : it;
-
-  itFailsOnDurableEngines('does not run the tool', async () => {
-    const { first, tool } = await sendTruncatedToolCall();
+  it('does not run the tool', async () => {
+    const { first, tool } = await sendToolCall();
 
     expect(tool.executions).toBe(0);
     const toolMessage = (first.requests[1]!.body as any).messages.find((m: any) => m.role === 'tool');
     expect(toolMessage.content).toContain('received invalid arguments');
+    expect(first.chunks?.some(chunk => chunk.type === 'tool-error')).toBe(true);
+  });
+
+  // Normal/fs check for unparsed arguments after beforeApproval. Moving that guard is
+  // outside the durable/evented follow-up's scope and awaits separate approval.
+  const itFailsOnNormalEngines = engine === 'normal' || engine === 'fs' ? it.fails : it;
+  itFailsOnNormalEngines('returns malformed arguments to the model without asking for approval', async () => {
+    const { first, tool } = await sendToolCall({ requireApproval: true });
+
+    expect(tool.executions).toBe(0);
+    expect(tool.beforeApproval).toBe(0);
+    expect(first.chunks?.some(chunk => chunk.type === 'tool-call-approval')).toBe(false);
+    expect(first.requests).toHaveLength(2);
+    const toolMessage = (first.requests[1]!.body as any).messages.find((m: any) => m.role === 'tool');
+    expect(toolMessage.content).toMatch(/invalid arguments|validation/i);
+    expect(await first.output.text).toBe('I could not update it.');
+  });
+
+  it('executes when the model actually supplied an empty object', async () => {
+    const { first, tool } = await sendToolCall({ args: {} });
+
+    expect(tool.executions).toBe(1);
+    expect(first.requests).toHaveLength(2);
+    const toolMessage = (first.requests[1]!.body as any).messages.find((m: any) => m.role === 'tool');
+    expect(JSON.parse(toolMessage.content)).toEqual({ ok: true });
   });
 });

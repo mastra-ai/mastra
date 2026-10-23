@@ -1,3 +1,5 @@
+import { createOpenAI } from '@ai-sdk/openai-v5';
+import { LLMock } from '@copilotkit/aimock';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it, vi } from 'vitest';
 import z from 'zod';
@@ -9,6 +11,7 @@ import { createMockWorkspace } from '../../agent-controller/test-utils';
 import type { AgentControllerEvent } from '../../agent-controller/types';
 import { FGADeniedError } from '../../auth/ee/fga-check';
 import type { IFGAProvider } from '../../auth/ee/interfaces/fga';
+import type { MastraModelConfig } from '../../llm';
 import { MockMemory } from '../../memory/mock';
 import { RequestContext } from '../../request-context';
 import { InMemoryStore } from '../../storage/mock';
@@ -142,7 +145,7 @@ async function createSetup({
   platform?: string;
   responseText?: string;
   instructions?: () => Promise<string>;
-  model?: MockLanguageModelV2;
+  model?: MastraModelConfig;
   tools?: Record<string, any>;
   toolDisplay?: 'text';
   stateSchema?: z.ZodTypeAny;
@@ -332,6 +335,50 @@ describe('AgentControllerChannels', () => {
     expect(sessionAgain!.thread.getId()).toBe(boundThreadId);
     const threads = await getChannelThreads(mastra, 'chan-1:t-1');
     expect(threads).toHaveLength(1);
+  }, 30_000);
+
+  it('posts the provider explanation, not just the HTTP status text, when the model call is rejected', async () => {
+    // A provider 400 whose body the AI SDK cannot parse leaves only the status
+    // text ("Bad Request") in the error message; the explanation is in the body.
+    const llm = new LLMock({ port: 0 });
+    await llm.start();
+    try {
+      llm.onMessage(/.*/, {
+        error: { message: 'PROVIDER_REJECTED_THIS_REQUEST', type: 'invalid_request_error' },
+        status: 400,
+      });
+      const model = createOpenAI({
+        apiKey: 'aimock-test-key',
+        baseURL: `${llm.url.replace(/\/+$/, '')}/v1`,
+        // Reshape the error body so it no longer matches the provider's error
+        // schema — the shape of the production failures this guards against.
+        fetch: async (input, init) => {
+          const response = await fetch(input, init);
+          const { error } = (await response.json()) as { error: { message: string } };
+          return new Response(JSON.stringify({ message: error.message }), {
+            status: response.status,
+            statusText: response.statusText,
+            headers: { 'content-type': 'application/json', 'x-request-id': 'req_provider_400' },
+          });
+        },
+      }).chat('gpt-4o-mini');
+      const { adapter, mastra, channels } = await createSetup({ model });
+      const chatThread = createChatThread(adapter, 'chan-1:t-provider-400');
+
+      await (channels as any).processChatMessage(
+        chatThread,
+        createMessage('m-1', 'hello'),
+        mastra,
+        new RequestContext(),
+      );
+
+      await waitFor(() => postedText(chatThread).includes('❌ Error:'), { what: 'error posted to chat thread' });
+      expect(postedText(chatThread)).toContain(
+        '❌ Error: Bad Request (HTTP 400): PROVIDER_REJECTED_THIS_REQUEST (request id req_provider_400)',
+      );
+    } finally {
+      await llm.stop();
+    }
   }, 30_000);
 
   /**

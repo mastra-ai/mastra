@@ -35,6 +35,12 @@ if (!Element.prototype.scrollIntoView) {
 }
 
 const AGENT_CONTROLLER_API = `${TEST_BASE_URL}/api/agent-controller/code`;
+const THREAD_IDS_THE_CHAT_MUST_LIST_TO_STAY_MOUNTED = [
+  'thread-work-linked',
+  'thread-review-linked',
+  'session-unlinked',
+  'session-user',
+];
 
 interface SearchRequestState {
   abortRequests: number;
@@ -50,7 +56,6 @@ interface SearchRequestState {
 interface StubSearchOptions {
   activeRepositories?: LinkedRepositoryPayload[];
   activeFactoryHasRepositories?: boolean;
-  /** The Factory sessions request fails this many times before succeeding. */
   failSessionAttempts?: number;
   failIntake?: boolean;
   failWorkItems?: boolean;
@@ -243,11 +248,9 @@ function stubSearchApi(options: StubSearchOptions = {}): SearchRequestState {
     http.get(`${AGENT_CONTROLLER_API}/sessions/:resourceId/permissions`, () =>
       HttpResponse.json({ categories: { read: 'ask' }, tools: {} }),
     ),
-    // Every thread a test routes to must be listed, or the chat falls back to another one and
-    // remounts the page frame under the open dialog.
     http.get(`${AGENT_CONTROLLER_API}/sessions/:resourceId/threads`, () =>
       HttpResponse.json({
-        threads: ['thread-work-linked', 'thread-review-linked', 'session-unlinked', 'session-user'].map(id => ({
+        threads: THREAD_IDS_THE_CHAT_MUST_LIST_TO_STAY_MOUNTED.map(id => ({
           id,
           title: id,
           updatedAt: '2026-07-29T12:00:00.000Z',
@@ -312,6 +315,10 @@ async function openWithShortcut() {
   await screen.findByRole('complementary', { name: 'Main sidebar' }, { timeout: 5_000 });
   await userEvent.keyboard('{Control>}k{/Control}');
   return screen.findByRole('dialog', { name: 'Global search' }, { timeout: 5_000 });
+}
+
+async function waitForTheChatFrameToSettleOnALiveRun() {
+  await screen.findByRole('button', { name: 'Abort' }, { timeout: 5_000 });
 }
 
 function expectOriginPathname(locationState: unknown, expectedPathname: string) {
@@ -431,6 +438,22 @@ describe('Global search', () => {
     await waitFor(() => expect(focusedBeforeSearch).toHaveFocus());
   });
 
+  it('opens from the sidebar search button and hands focus back to it on close', async () => {
+    stubSearchApi();
+    const user = userEvent.setup();
+    renderSearchRoute();
+
+    const sidebar = await screen.findByRole('complementary', { name: 'Main sidebar' }, { timeout: 5_000 });
+    const trigger = within(sidebar).getByRole('button', { name: 'Search and navigate' });
+    await user.click(trigger);
+    await screen.findByRole('dialog', { name: 'Global search' });
+    expect(screen.getByRole('combobox', { name: 'Search MastraCode' })).toHaveFocus();
+
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('dialog', { name: 'Global search' })).not.toBeInTheDocument();
+    await waitFor(() => expect(trigger).toHaveFocus());
+  });
+
   it.each(['activity', 'overview', 'attention', 'metrics', 'audit'])(
     'opens the same Factory board from the retired %s URL',
     async page => {
@@ -468,8 +491,8 @@ describe('Global search', () => {
     expect(within(results).getByText('Work Sessions')).toBeInTheDocument();
     expect(within(results).getByText('Review Sessions')).toBeInTheDocument();
     expect(within(results).getByText('User Sessions')).toBeInTheDocument();
-    expect(screen.getByText('Mastra Factory')).toBeInTheDocument();
-    expect(screen.getByText('Docs Factory')).toBeInTheDocument();
+    expect(within(results).getByText('Mastra Factory')).toBeInTheDocument();
+    expect(within(results).getByText('Docs Factory')).toBeInTheDocument();
     for (const label of [
       'Work',
       'Review',
@@ -601,10 +624,10 @@ describe('Global search', () => {
     const requests = stubSearchApi({ failSessionAttempts: 2 });
     const user = userEvent.setup();
     renderSearchRoute();
-    await openWithShortcut();
+    const dialog = await openWithShortcut();
 
     expect(await screen.findByText('Sessions could not be loaded.')).toBeInTheDocument();
-    expect(screen.getByText('Mastra Factory')).toBeInTheDocument();
+    expect(within(dialog).getByText('Mastra Factory')).toBeInTheDocument();
     expect(requests.sessionRequests[ACTIVE_FACTORY_ID]).toBe(2);
 
     await user.click(screen.getByRole('button', { name: /Retry/ }));
@@ -1092,9 +1115,7 @@ describe('Global search', () => {
     const user = userEvent.setup();
     renderSearchRoute(`/factories/${ACTIVE_FACTORY_ID}/workspaces/session-work/threads/thread-work-linked`);
 
-    // Abort renders once the run reports itself live, so it also marks the point where the chat
-    // route has stopped swapping its frame — and a trigger captured mid-swap can never take focus.
-    await screen.findByRole('button', { name: 'Abort' }, { timeout: 5_000 });
+    await waitForTheChatFrameToSettleOnALiveRun();
 
     const sidebar = screen.getByRole('complementary', { name: 'Main sidebar' });
     const focusedBeforeSearch = await within(sidebar).findByRole('link', { name: /^Work/ });
