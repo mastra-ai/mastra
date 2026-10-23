@@ -173,6 +173,12 @@ describe('PostgresStore pool error listeners', () => {
       const obsPool = errorRegistrations[0]!.instance;
       expect(obsPool).not.toBe(userPool);
       expect(obsPool.listenerCount('error')).toBe(1);
+      // A pool error listener only covers idle clients. Exercise the separate
+      // observability pool's checked-out client guard as well (#28234).
+      const client = new pg.Client();
+      obsPool.emit('connect', client);
+      obsPool.emit('acquire', client);
+      expect(() => client.emit('error', new Error('Connection terminated unexpectedly'))).not.toThrow();
       for (const event of ['connect', 'acquire', 'release']) {
         expect(obsPool.listenerCount(event)).toBe(1);
         expect(userPool.listenerCount(event)).toBe(0);
