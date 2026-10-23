@@ -1,5 +1,6 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { createSignal } from '@mastra/core/signals';
+import type { ModelCatalogEntry } from '@mastra/factory/routes/config';
 import { SESSION_OWNER_SIGNAL_TAG } from '@mastra/factory/session-owner-signal';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
@@ -47,10 +48,39 @@ function takeoverSignal(name: string): MastraDBMessage {
   }).toDBMessage({ threadId: SESSION_ID, resourceId: SESSION_ID });
 }
 
-async function confirmTakeover(user: ReturnType<typeof userEvent.setup>) {
+const openAIKeyModel: ModelCatalogEntry = {
+  id: 'openai/gpt-4o-mini',
+  provider: 'openai',
+  modelName: 'gpt-4o-mini',
+  hasApiKey: true,
+  credentialLabel: 'OpenAI API key',
+  credentialHolder: 'personal',
+};
+
+function serveModelCatalogs({
+  sessionScope,
+  viewerModels,
+}: {
+  sessionScope: 'factory' | 'user';
+  viewerModels: ModelCatalogEntry[];
+}) {
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/config/models`, ({ request }) => {
+      const query = new URL(request.url).searchParams;
+      if (query.get('scope') === 'user') return HttpResponse.json({ models: viewerModels });
+      return HttpResponse.json({ modelScope: sessionScope, defaultModelId: null, models: [openAIKeyModel] });
+    }),
+  );
+}
+
+async function openTakeoverDialog(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByRole('button', { name: 'Take ownership' }));
-  expect(await screen.findByText(/Its next turn runs as you, and a running agent stops\./)).toBeInTheDocument();
-  await user.click(screen.getByRole('button', { name: 'Take ownership' }));
+  return screen.findByRole('alertdialog', { name: 'Take Ward Peeters’s session?' });
+}
+
+async function confirmTakeover(user: ReturnType<typeof userEvent.setup>) {
+  const dialog = await openTakeoverDialog(user);
+  await user.click(within(dialog).getByRole('button', { name: 'Take ownership' }));
 }
 
 function openWardSessionAs(
@@ -59,10 +89,12 @@ function openWardSessionAs(
     session = wardSession,
     path = USER_THREAD_PATH,
     threadMessages = [],
+    agentRunning = false,
   }: {
     session?: typeof wardSession | typeof wardSessionWithoutProfile;
     path?: string;
     threadMessages?: MastraDBMessage[];
+    agentRunning?: boolean;
   } = {},
 ) {
   server.use(
@@ -115,9 +147,17 @@ function openWardSessionAs(
     http.get(
       `${AC}/sessions/:resourceId/stream`,
       () =>
-        new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
-          headers: { 'content-type': 'text/event-stream' },
-        }),
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              if (agentRunning) controller.enqueue(new TextEncoder().encode('data: {"type":"agent_start"}\n\n'));
+            },
+            cancel() {},
+          }),
+          {
+            headers: { 'content-type': 'text/event-stream' },
+          },
+        ),
     ),
     http.get(`${AC}/sessions/:resourceId/permissions`, () => HttpResponse.json({})),
     http.get(`${AC}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads: [] })),
@@ -201,10 +241,11 @@ describe("a teammate's Factory session", () => {
       openWardSessionAs('user-damien');
       const user = userEvent.setup();
 
-      await user.click(await screen.findByRole('button', { name: 'Take ownership' }));
-      await user.click(screen.getByRole('button', { name: 'Cancel' }));
+      const dialog = await openTakeoverDialog(user);
+      await user.click(within(dialog).getByRole('button', { name: 'Cancel' }));
 
-      expect(await screen.findByText('You’re steering Ward Peeters’s session')).toBeInTheDocument();
+      await waitFor(() => expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument());
+      expect(screen.getByText('You’re steering Ward Peeters’s session')).toBeInTheDocument();
       expect(transfers).toEqual([]);
     });
 
@@ -226,6 +267,65 @@ describe("a teammate's Factory session", () => {
 
       expect(await screen.findByText('You’re steering Caleb’s session')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Take ownership' })).toBeEnabled();
+    });
+  });
+
+  describe('before a teammate confirms the takeover', () => {
+    it('says the Factory keeps paying when it pays for its sessions', async () => {
+      serveModelCatalogs({ sessionScope: 'factory', viewerModels: [] });
+      openWardSessionAs('user-damien');
+
+      const dialog = await openTakeoverDialog(userEvent.setup());
+
+      expect(
+        await within(dialog).findByText('The Factory keeps paying, and the model stays the same.'),
+      ).toBeInTheDocument();
+      expect(within(dialog).queryByText(/cached/)).not.toBeInTheDocument();
+    });
+
+    it('names the viewer’s own credential and the model the session keeps when each owner pays', async () => {
+      serveModelCatalogs({ sessionScope: 'user', viewerModels: [openAIKeyModel] });
+      openWardSessionAs('user-damien');
+
+      const dialog = await openTakeoverDialog(userEvent.setup());
+
+      expect(
+        await within(dialog).findByText(
+          'Your OpenAI API key pays from your next message, on the same GPT-4o Mini. This session is cached on Ward Peeters’s account, so that reply re-reads all of it and costs more.',
+        ),
+      ).toBeInTheDocument();
+    });
+
+    it('asks the viewer to connect the session’s provider first when they have none', async () => {
+      serveModelCatalogs({ sessionScope: 'user', viewerModels: [] });
+      openWardSessionAs('user-damien');
+
+      const dialog = await openTakeoverDialog(userEvent.setup());
+
+      expect(
+        await within(dialog).findByText(/You have no OpenAI connection, so GPT-4o Mini can’t run for you\./),
+      ).toBeInTheDocument();
+      expect(within(dialog).getByRole('link', { name: 'Models' })).toHaveAttribute(
+        'href',
+        `/factories/${FACTORY_ID}/settings/models#personal-defaults`,
+      );
+      expect(within(dialog).getByRole('button', { name: 'Take ownership' })).toBeEnabled();
+    });
+
+    it('says the running agent stops only while one is running', async () => {
+      openWardSessionAs('user-damien', { agentRunning: true });
+
+      const dialog = await openTakeoverDialog(userEvent.setup());
+
+      expect(await within(dialog).findByText(/The running agent stops\./)).toBeInTheDocument();
+    });
+
+    it('says nothing about stopping an agent when none is running', async () => {
+      openWardSessionAs('user-damien');
+
+      const dialog = await openTakeoverDialog(userEvent.setup());
+
+      expect(within(dialog).queryByText(/The running agent stops/)).not.toBeInTheDocument();
     });
   });
 

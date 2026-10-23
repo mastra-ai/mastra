@@ -38,25 +38,7 @@
     "zai-org/glm-5.3-flash"
   ],
   "reasoning": {
-    "openai/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
     "google/gemma-4-31b-it": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
-    "qwen/qwen3.8-27b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
-    "qwen/qwen3.6-27b": [
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -78,18 +60,6 @@
       {
         "type": "effort",
         "values": ["none", "high", "max"]
-      }
-    ],
-    "moonshotai/kimi-k2.7-code": [
-      {
-        "type": "effort",
-        "values": ["high"]
-      }
-    ],
-    "moonshotai/kimi-k3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ],
     "motif-technologies/motif-3": [
@@ -114,6 +84,36 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "qwen/qwen3.8-27b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
+      }
+    ],
+    "qwen/qwen3.6-27b": [
+      {
+        "type": "effort",
+        "values": ["none", "high"]
+      }
+    ],
+    "moonshotai/kimi-k2.7-code": [
+      {
+        "type": "effort",
+        "values": ["high"]
+      }
+    ],
+    "moonshotai/kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ]
   }

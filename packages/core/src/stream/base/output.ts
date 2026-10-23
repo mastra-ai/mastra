@@ -590,7 +590,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     finishReason: undefined,
   };
   #bufferedText: LLMStepResult<OUTPUT>['text'][] = [];
-  /** Length of `#bufferedText` when the current step began; a retried step is cut back to it. */
+  /** Length of `#bufferedText` when the current step began; rejected or retried steps are cut back to it. */
   #bufferedTextAtStepStart = 0;
   #bufferedObject: OUTPUT | undefined;
   #usedFallbackValue = false;
@@ -658,6 +658,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
    * serialized so a resumed tool that suspends again still reports it, and cleared on step-finish.
    */
   #suspendedStepUsage: LanguageModelUsage | undefined = undefined;
+  #suspendedUsageIsProvisional = false;
   /**
    * Cumulative usage the MODEL_GENERATION spans of earlier suspended legs of this run already
    * recorded. Resumed legs report cumulative totals, so their generation span subtracts this to
@@ -1084,6 +1085,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 self.#finishCallbackSent = true;
                 await options?.onFinish?.(self.#createSuspendedOnFinishPayload(chunk));
               }
+              // A plain stream ends here, so flush settles usage. A durable stream stays open
+              // across the suspension, so settle the same numbers now. The next finish replaces them.
+              self.#settleSuspendedUsage();
               break;
             case 'abort':
               self.#status = 'canceled';
@@ -1331,12 +1335,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               const currentPayloadStep = payloadSteps[payloadSteps.length - 1];
               const stepTripwire = currentPayloadStep?.tripwire;
 
-              // A retried attempt is thrown away (a processor rejected it, or an error processor
-              // answered its API error with a retry), so it contributes no text: neither to
-              // this step nor to the run's text, which would otherwise begin with the failed
-              // attempt's partial output (#26081).
+              // Rejected and retried attempts contribute no text to the step or run,
+              // including onFinish. Preserve text from earlier accepted steps (#26081, COR-1464).
               const isRetriedStep = (chunk.payload.stepResult.reason as string) === 'retry';
-              if (isRetriedStep) {
+              if (stepTripwire || isRetriedStep) {
                 self.#bufferedText.length = Math.min(self.#bufferedText.length, self.#bufferedTextAtStepStart);
               }
 
@@ -2117,6 +2119,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   }
 
   private resolvePromise<KEY extends keyof PromiseResults<OUTPUT>>(key: KEY, value: PromiseResults<OUTPUT>[KEY]) {
+    if (this.#suspendedUsageIsProvisional && (key === 'usage' || key === 'totalUsage' || key === 'finishReason')) {
+      this.#suspendedUsageIsProvisional = false;
+    }
     if (!(key in this.#delayedPromises)) {
       throw new MastraError({
         id: 'MASTRA_MODEL_OUTPUT_INVALID_PROMISE_KEY',
@@ -2133,6 +2138,16 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       const key = keyString as keyof PromiseResults<OUTPUT>;
       this.resolvePromise(key, data[key]);
     }
+  }
+
+  // Same numbers flush would settle when a plain stream ends on suspension. A durable
+  // stream stays open, so callers waiting on usage would otherwise hang until resume.
+  #settleSuspendedUsage() {
+    const usage = this.#getUsageCountWithSuspendedStep();
+    this.#delayedPromises.usage.resolve(usage);
+    this.#delayedPromises.totalUsage.resolve(this.#getTotalUsage(usage));
+    this.#delayedPromises.finishReason.resolve('suspended');
+    this.#suspendedUsageIsProvisional = true;
   }
 
   #closeTransportIfNeeded() {
@@ -2820,6 +2835,16 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     // removeAllListeners() here would silently kill every other subscriber
     // (see #19743).
     let detach: (() => void) | undefined;
+    // Erroring a ReadableStream discards the chunks still queued for its reader, so a failure that
+    // arrives while this subscriber is behind waits in `pendingError` until `pull` sees the queue empty.
+    let pendingError: { error: unknown } | undefined;
+    const fail = (controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>, error: unknown) => {
+      if ((controller.desiredSize ?? 0) > 0) {
+        controller.error(error);
+      } else {
+        pendingError = { error };
+      }
+    };
 
     return new ReadableStream<ChunkType<OUTPUT>>({
       start(controller) {
@@ -2831,7 +2856,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
         // If stream already finished, close immediately
         if (self.#streamFinished) {
           if (self.#consumeStreamErrored) {
-            controller.error(self.#consumeStreamError);
+            fail(controller, self.#consumeStreamError);
           } else {
             controller.close();
           }
@@ -2854,7 +2879,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
         };
         const errorHandler = (error: unknown) => {
           detachListeners();
-          controller.error(error);
+          fail(controller, error);
         };
 
         self.#emitter.on('chunk', chunkHandler);
@@ -2864,7 +2889,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
         detach = detachListeners;
       },
 
-      pull(_controller) {
+      pull(controller) {
+        if (pendingError) {
+          controller.error(pendingError.error);
+          return;
+        }
         // Only start consumption when someone is actively reading the stream
         if (!self.#consumptionStarted) {
           self.consumeStream().catch(error => {

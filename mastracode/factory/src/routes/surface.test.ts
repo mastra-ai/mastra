@@ -164,7 +164,7 @@ describe('prepareFactoryRuleBinding', () => {
     const { sessionId, userId } = prepare.mock.calls[0]![0] as unknown as { sessionId: string; userId: string };
     expect(userId).toBe('user-1');
     await expect(sourceControl.sessions.getBySessionId(sessionId)).resolves.toEqual(
-      expect.objectContaining({ branch: 'factory/issue-49', baseBranch: 'main', userId: 'user-1' }),
+      expect.objectContaining({ branch: 'factory/issue-49-item1', baseBranch: 'main', userId: 'user-1' }),
     );
   });
 

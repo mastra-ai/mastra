@@ -35,7 +35,8 @@ const DIMENSION_SQL: Record<string, string> = {
   environment: 'r.environment',
   status: TRACE_STATUS_SQL,
   serviceName: 'r.serviceName',
-  executionSource: 'r.executionSource',
+  // Spans persist execution provenance in `source`.
+  executionSource: 'r.source',
   threadId: 'r.threadId',
   resourceId: 'r.resourceId',
   userId: 'r.userId',

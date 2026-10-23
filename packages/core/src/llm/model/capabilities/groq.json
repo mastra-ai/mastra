@@ -22,13 +22,19 @@
     "qwen/qwen3.8-27b"
   ],
   "reasoning": {
-    "openai/gpt-oss-safeguard-20b": [
+    "qwen/qwen3.8-27b": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "default", "low", "medium", "high"]
       }
     ],
-    "openai/gpt-oss-20b": [
+    "qwen/qwen3.6-27b": [
+      {
+        "type": "effort",
+        "values": ["none", "default"]
+      }
+    ],
+    "openai/gpt-oss-safeguard-20b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -40,16 +46,10 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "qwen/qwen3.8-27b": [
+    "openai/gpt-oss-20b": [
       {
         "type": "effort",
-        "values": ["none", "default", "low", "medium", "high"]
-      }
-    ],
-    "qwen/qwen3.6-27b": [
-      {
-        "type": "effort",
-        "values": ["none", "default"]
+        "values": ["low", "medium", "high"]
       }
     ]
   }

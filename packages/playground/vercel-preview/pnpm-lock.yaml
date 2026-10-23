@@ -28,13 +28,13 @@ importers:
         version: 4.6.7
     devDependencies:
       '@types/node':
-        specifier: 22.19.15
-        version: 22.19.15
+        specifier: 22.20.5
+        version: 22.20.5
       mastra:
         specifier: link:../../../packages/cli
         version: link:../../cli
       turbo:
-        specifier: ^2.9.12
+        specifier: ^2.11.9
         version: 2.11.9
       typescript:
         specifier: ^6.0.3
@@ -72,8 +72,8 @@ packages:
     cpu: [arm64]
     os: [win32]
 
-  '@types/node@22.19.15':
-    resolution: {integrity: sha512-F0R/h2+dsy5wJAUe3tAU6oqa2qbWY5TpNfL/RGmo1y38hiyO1w3x2jPtt76wmuaJI4DQnOBu21cNXQ2STIUUWg==}
+  '@types/node@22.20.5':
+    resolution: {integrity: sha512-U2+DNr+wSjpsTS/wZGYHq7GcwfuSmKiKvoPvK22zwTlRhU91yOniN4qRR5KhIjvif7ysw/dz/hKmfDH0Ris4aA==}
 
   hono@4.13.13:
     resolution: {integrity: sha512-CQ46U0ZkAGmbT/4UxdzzGJpacP2IeKgY4a5/tOI9AABbpOMfK739wfDXmv1usCk+3RkKj1hQy4/fjhiwa2xlrA==}
@@ -114,7 +114,7 @@ snapshots:
   '@turbo/windows-arm64@2.11.9':
     optional: true
 
-  '@types/node@22.19.15':
+  '@types/node@22.20.5':
     dependencies:
       undici-types: 6.21.0
 

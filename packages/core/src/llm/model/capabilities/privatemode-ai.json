@@ -17,7 +17,6 @@
     "gpt-oss-120b",
     "kimi-k2.6",
     "kimi-latest",
-    "qwen3-embedding-4b",
     "voxtral-mini-3b",
     "whisper-large-v3"
   ],
@@ -31,13 +30,19 @@
     "kimi-latest"
   ],
   "reasoning": {
-    "glm-flash-latest": [
+    "glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.3-flash": [
+    "gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "glm-5.3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -59,13 +64,7 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "glm-5.3": [
+    "glm-flash-latest": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]

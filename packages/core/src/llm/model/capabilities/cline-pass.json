@@ -50,15 +50,16 @@
         "type": "toggle"
       }
     ],
-    "cline-pass/mimo-v2.6-flash": [
+    "cline-pass/mimo-v2.6-pro": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
-    "cline-pass/mimo-v2.5": [
+    "cline-pass/qwen3.8-max": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
       }
     ],
     "cline-pass/minimax-m3": [
@@ -66,19 +67,7 @@
         "type": "toggle"
       }
     ],
-    "cline-pass/mimo-v2.6-pro": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "cline-pass/deepseek-v4.1-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "cline-pass/mimo-v2.5-pro": [
+    "cline-pass/mimo-v2.5": [
       {
         "type": "toggle"
       }
@@ -89,21 +78,9 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "cline-pass/deepseek-v4-pro": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
     "cline-pass/qwen3.7-plus": [
       {
         "type": "toggle"
-      }
-    ],
-    "cline-pass/deepseek-v4-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
       }
     ],
     "cline-pass/glm-5.2": [
@@ -112,18 +89,7 @@
         "values": ["none", "high", "max"]
       }
     ],
-    "cline-pass/kimi-k2.6": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "cline-pass/qwen3.8-max": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
-    "cline-pass/kimi-k3": [
+    "cline-pass/deepseek-v4.1-flash": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
@@ -139,6 +105,40 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
+      }
+    ],
+    "cline-pass/deepseek-v4-pro": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "cline-pass/kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "cline-pass/kimi-k2.6": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "cline-pass/mimo-v2.6-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "cline-pass/deepseek-v4-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "cline-pass/mimo-v2.5-pro": [
+      {
+        "type": "toggle"
       }
     ]
   }

@@ -68,7 +68,8 @@ describe('ComparisonSideCell', () => {
     it('renders the raw output as JSON', () => {
       renderCell(makeColumn({ targetType: 'workflow', output: { text: 'not an agent response' } }));
 
-      expect(outputRegion().querySelector('pre')?.textContent).toContain('"text": "not an agent response"');
+      const lines = Array.from(outputRegion().querySelectorAll('.cm-line'), line => line.textContent);
+      expect(lines).toContain('  "text": "not an agent response"');
     });
   });
 
