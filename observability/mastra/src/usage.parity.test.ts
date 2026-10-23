@@ -52,6 +52,17 @@ describe('extractUsageMetrics parity with @mastra/core', () => {
       } as LanguageModelUsage,
     },
     {
+      name: 'raw v3 cached totals with Anthropic providerMetadata',
+      usage: {
+        inputTokens: 1000,
+        outputTokens: 10,
+        raw: { inputTokens: { total: 1000, noCache: 100, cacheRead: 800, cacheWrite: 100 } },
+      } as LanguageModelUsage,
+      providerMetadata: {
+        anthropic: { cacheReadInputTokens: 800, cacheCreationInputTokens: 100 },
+      } as ProviderMetadata,
+    },
+    {
       name: 'reasoning tokens only',
       usage: { inputTokens: 10, outputTokens: 50, reasoningTokens: 20 },
     },
