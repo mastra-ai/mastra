@@ -1,4 +1,4 @@
-# Knowledge alpha scope, v16 (report 20261023T223907)
+# Knowledge alpha scope, v17 (report 20261023T223907)
 
 Everything here was checked against main `b1244bd3bc0`.
 
@@ -9,7 +9,7 @@ v12 follows Tyler's comment on Kayle's dogfood plan (v45), which supersedes v5�
 - A scope can own other scopes (org owns teams) through the structure.
 - Everything Knowledge leaves Memory for core, including the pins state-signal provider, and pins work without Memory.
 
-v16 drops the `*` wildcard (Tyler approved `$param` only). v15 folded Fayth's v12 review (ownership binding, runner in-run path, remaining Factory readers). v14 removes the built-in project scope (Tyler) and adds D13, how org-owns-team is held. v13 added the Director dogfood gap list (Kayle): a scope per message on long-lived sessions, many processes on one LibSQL file, an explicit off switch, and undeclared tag types (D12).
+v17 folds Fayth's v13 review (atomic per-message scope admission, own-run wait, FIFO, host-authorized remote scopes, LibSQL timeout limits). v16 drops the `*` wildcard (Tyler approved `$param` only). v15 folded Fayth's v12 review (ownership binding, runner in-run path, remaining Factory readers). v14 removes the built-in project scope (Tyler) and adds D13, how org-owns-team is held. v13 added the Director dogfood gap list (Kayle): a scope per message on long-lived sessions, many processes on one LibSQL file, an explicit off switch, and undeclared tag types (D12).
 
 Carried from earlier versions: Knowledge reads the run's tagged scopes; `organizationId` and `knowledgeResourceId` are deleted; pins stay a prompt-cacheable state signal; Knowledge ships its own usage instructions (section 3b).
 
@@ -83,7 +83,7 @@ Tyler's direction (comment on Kayle's dogfood plan v45): scopes are never hard-c
   - `BUILT_IN_SCOPE_TYPES` (`reconcile.ts:45-50`) lists `org:$orgId`. It keeps only `resource:$resourceId`, `thread:$threadId` and `custom`.
   - `IDENTITY_SCOPE_PATTERNS` (`reconcile.ts:195`) lists `org:$orgId`. It keeps only resource and thread.
   - In the store: `KnowledgeScopeLevel = 'org'|'resource'|'thread'` (`storage/domains/knowledge/base.ts:6`), `SCOPE_ORDER` (`:680`), the level check and throw in `canonicalizeKnowledgeScope` (`:693`), one-entry-per-level (`:697-700`), the ancestor rules (`:706-711`), `expandKnowledgeScope` (`:748`). All removed (section 3a).
-- **Undeclared tags work.** A run can read and write a tag type the structure doesn't declare. It falls to `custom` (main's existing fallback, `reconcile.ts:135-150`), which gives the holder owner rights over its own tag and nothing more. Declaring a type adds what the structure can say about it: a description, `children` templates, and **who owns it** (below). Only ownership needs a declaration: an undeclared type can't be owned by another scope. D12 offers a strict mode instead.
+- **Undeclared tags work.** (`custom` is read only when materializing nodes, `materializeKnowledgeScopePlan`, `reconcile.ts:134-150`; the runtime ownership check never reads it: an undeclared tag is usable only by a run holding it.) A run can read and write a tag type the structure doesn't declare. It falls to `custom` (main's existing fallback, `reconcile.ts:135-150`), which gives the holder owner rights over its own tag and nothing more. Declaring a type adds what the structure can say about it: a description, `children` templates, and **who owns it** (below). Only ownership needs a declaration: an undeclared type can't be owned by another scope. D12 offers a strict mode instead.
 - **Patterns are `$param` only** (Tyler). `matchPattern` (`reconcile.ts:224-240`), `assertPattern` (`:257-271`) and `patternsOverlap` are unchanged: no `*` wildcard is added.
 
 **Ownership: a scope can own other scopes.**
@@ -118,8 +118,12 @@ Tyler's direction (comment on Kayle's dogfood plan v45): scopes are never hard-c
 
 **A scope per message, for long-lived sessions.** A Director member is one Mastra Code session for life, and tasks arrive as messages (`session.sendMessage({ content })`, `agent-controller/session.ts:5380`). Scopes fixed at `createMastraCode` can carry `org:self`, `team:…` and `agent:<name>`, but not `request:<rN>`, which changes per task. Recreating the session per task would lose the conversation.
 - `session.sendMessage` gains `scopes?: string[]` and passes them to `sendSignal`, whose idle path already takes `scopes` for the run the signal starts (`agent/types.ts:207-230`, unioned into the run's per-call scopes).
-- A run's scopes are fixed when it starts (the active-run `scopes` is validated but not applied, `types.ts:214-217`). So a message whose `scopes` differ from the active run's doesn't join that run: the session waits for it to end and starts the message's own run, the way it already waits on a blocked thread (`session.ts:5398-5415`). Same scopes, or none, keep today's behaviour.
-- The remote Factory session (`sdk/src/factory/remote-session.ts:391`) passes `scopes` through to the same call.
+- A run's scopes are fixed when it starts (the active-run `scopes` is validated but not applied, `types.ts:214-217`). So a message whose `scopes` differ from the active run's must not join it.
+- **Where that's decided.** In signal admission in `thread-stream-runtime.ts` (the code that already returns `{ action: 'blocked' }`, `:6635-7036`), where the active run is known. Each run records its resolved scopes (the `AgentScopesSnapshot` from `resolveAgentScopes`) on its admission record when it starts. A signal carrying `scopes` that differ from the active run's gets a new reply `{ action: 'blocked', reason: 'scope-mismatch', runId }`. Check and delivery are one step, so there's no race with the run ending or starting.
+- **The wait.** On `scope-mismatch`, `sendMessage` waits for **its own session's** run `runId` to end, not on `#waitForOtherAgentRun` (that waits for another agent's run on the thread). Then it resends; if a new run started meanwhile, admission decides again. The loop's existing abort/stop handling still applies. A run kept open by `untilIdle` or background work counts as active, so the message waits for the idle end. There's no timeout; the Director sends a task only after the previous one finishes.
+- **Order.** Scoped `sendMessage` calls on one session go through a per-session FIFO, so r2 then r3 sent during r1 start in send order.
+- **Only `sendMessage` carries scopes.** The other `sendSignal` callers (`session.ts:4988, 5136, 5253`: follow-ups, notifications) send none, so they join the active run and work under its tags (an `r1` notification stays `r1` work). Same scopes, or none, keep today's behaviour.
+- The remote Factory session (`sdk/src/factory/remote-session.ts:391`) passes `scopes` through, but **the host authorizes them first**: tags are authority, so the server accepts per-message scopes only of tag types the host allows (`allowedMessageScopeTypes`, empty by default) and refuses the message otherwise. Factory's `requiredScopes` check still applies on top.
 - Knowledge then sees the message's tags through `getRunAgentScopes`, like any per-call scope. The Director harness sets `scopes: ['request:r25']` on each task message and nothing else changes.
 
 **Session tags in Mastra Code.** The API is `createMastraCode({ knowledge: { instance, scopes? } })`; the `key` goes with Memory's `knowledge` option (D4).
@@ -130,10 +134,11 @@ Tyler's direction (comment on Kayle's dogfood plan v45): scopes are never hard-c
 - **Off means off.** Knowledge is off when no instance is passed and `MASTRACODE_EXPERIMENTAL_KNOWLEDGE` is unset. `createMastraCode({ knowledge: false })` turns it off even when the flag is set, so a session can deliberately run without Knowledge. Off means no tools, no pins, no instructions block and no store opened.
 
 **Many processes on one LibSQL file** (the Director dogfood: ~15 processes, Tyler's pick of LibSQL).
-- Writes: each process opens the file with WAL and the default `busy_timeout` that main already applies to local files (`stores/libsql/src/storage/busy-timeout.test.ts`), so a writer waits for another process's lock rather than failing. The in-process file-transaction gate (`shared/file-transaction-gate.ts:27-34`) covers clients in one process; other processes rely on `busy_timeout`.
-- Startup: every process reconciles the structure when it registers (`knowledge/index.ts:60-66`). Only a declared `structure` triggers this, and a lost race only logs a warning, so tagged reads and writes don't depend on it. The alpha makes reconcile retry once after a conflict and stay quiet when the other process already wrote the same plan.
+- Writes: built from `{ url: 'file:…' }` (no `syncUrl`), the store sets WAL and `busy_timeout` = `connectionTimeoutMs`, default 5000 ms (`storage/index.ts:236-241, 327-331`, `db/index.ts:73`). Every Knowledge transaction is `transaction('write')` (`BEGIN IMMEDIATE`, `domains/knowledge/index.ts:1265`), so there's no read-to-write upgrade failure. A writer waits for another process's lock **up to 5 s**; after that the write fails with `SQLITE_BUSY`, which reaches the agent as a tool error (no retry). A longer `connectionTimeoutMs` is the knob.
+- A store built from an injected `{ client }` (`storage/index.ts:257-258`) gets no timeout or pragmas, and the in-process file-transaction gate (`shared/file-transaction-gate.ts:27-34`) covers only clients in one process. **The Director must build the store from the URL**, and a test pins that.
+- Startup: every process reconciles the structure when it registers (`knowledge/index.ts:60-66`). Only a declared `structure` triggers this, and a lost race only logs a warning. Tagged reads and writes never depend on it. The alpha makes reconcile retry once after a conflict and stay quiet when the other process already wrote the same plan.
 - Outbox: one row per write, never drained without a vector store. At dogfood write rates that's small rows growing linearly; pruning stays out of the alpha (section 3b, Search).
-- Proof: a test that spawns 4 Node processes on one LibSQL file, each writing 50 records and reconciling at startup at the same time, then checks all 200 records and one structure are present and no process errored.
+- Proof: a smoke test that spawns 4 Node processes on one LibSQL file, each writing 50 records and reconciling at startup at the same time, then checks all 200 records and one structure are present and no process errored. A contention variant holds a write lock in one process longer than the timeout and asserts the other's write fails cleanly with `SQLITE_BUSY`, with no hang and no lost or corrupt rows.
 
 **Tenant isolation.** With no ancestor rule, the store no longer forces an org into a scope, so a record at `[team:director]` is visible to any run holding `team:director`. The guard is the caller: Factory routes and Factory sessions require their org tag (above), with a test. Tenant-bound ownership uses patterns that carry the org (`team:$orgId:$teamId`). Single-tenant apps may leave the org out.
 
@@ -268,10 +273,17 @@ For each, a red control showing the test fails without the change.
 
 **Per-message scopes and off switch**
 - `session.sendMessage({ content, scopes: ['request:r1'] })` then `{ scopes: ['request:r2'] }` on one session: each run's writes carry its own request tag, and the conversation continues across both. A message with different scopes sent during an active run starts its own run after that one ends.
+- r2 then r3 sent during r1 start in that order.
+- A follow-up or notification with no scopes during a scoped run joins it and writes under the run's tags.
+- A message with different scopes during an `untilIdle` run waits for the idle end.
+- A remote message with a tag type the host doesn't allow is refused.
+- The mismatch decision is atomic: a run ending at the same moment as the send never lets the message join a run with other scopes.
 - No instance and no flag: no Knowledge tools, pins or instructions. `knowledge: false` with the flag set: the same.
 
 **Many processes**
 - 4 processes on one LibSQL file, 50 writes each, concurrent startup reconcile: 200 records, one structure, no errors.
+- A lock held past the timeout: the other process's write fails with `SQLITE_BUSY`, no hang, no corruption.
+- A store built from an injected `{ client }` is flagged by the test as having no busy timeout; the Director builds from the URL.
 
 **Structure and ownership**
 - An undeclared type (`request:r25`, no structure entry) can be read and written by a run holding it, and can't be named through ownership.
