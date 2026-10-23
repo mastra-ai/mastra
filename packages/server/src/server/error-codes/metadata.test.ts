@@ -57,7 +57,8 @@ function requiredKeys(schema: z.ZodType): string[] | undefined {
 
 describe('SERVER_ERROR_METADATA_SCHEMAS', () => {
   // Handlers forward a core error id as the business code and its `details` as metadata, so a
-  // core throw must carry every field the code's metadata requires.
+  // core throw must carry every field the code's metadata requires. (Older cores in the peer
+  // range don't; dataset handlers cover that by filling the ids from the route.)
   it('core errors thrown with a server code carry the metadata the code requires', () => {
     const throws = coreThrows();
     expect(throws.length).toBeGreaterThan(0);

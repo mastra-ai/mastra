@@ -1,16 +1,4 @@
 ---
-'@mastra/server-adapters-test-suite': patch
-'@mastra/tanstack-start': patch
-'@mastra/express': patch
-'@mastra/fastify': patch
-'@mastra/elysia': patch
-'@mastra/nestjs': patch
-'@mastra/client-js': patch
-'@mastra/hono': patch
-'@mastra/next': patch
-'@mastra/koa': patch
-'@mastra/deployer': patch
-'@mastra/server': patch
 '@mastra/core': patch
 ---
 

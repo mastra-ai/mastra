@@ -22999,8 +22999,6 @@ export interface PatchDatasetsDatasetIdItemsItemId_RouteContract {
   response: PatchDatasetsDatasetIdItemsItemId_Response;
   responseType: 'json';
   errorCode:
-    | 'DATASET_ITEM_EXTERNAL_ID_INVALID'
-    | 'DATASET_ITEM_IDENTITY_CONFLICT'
     | 'DATASET_ITEM_NOT_FOUND'
     | 'DATASET_ITEM_PAYLOAD_NOT_SERIALIZABLE'
     | 'DATASET_ITEM_SCHEMA_VALIDATION_FAILED'
@@ -28598,10 +28596,12 @@ export interface ServerErrorMetadataMap {
   PROCESSOR_PROVIDER_NOT_FOUND: {
     providerId: string;
   };
-  PROCESSOR_WORKFLOW_FAILED: {
-    processorId: string;
-    status?: ('failed' | 'suspended' | 'paused') | undefined;
-  };
+  PROCESSOR_WORKFLOW_FAILED:
+    | {
+        processorId: string;
+        status?: ('failed' | 'suspended' | 'paused') | undefined;
+      }
+    | undefined;
   PROMPT_BLOCK_REFERENCE_UNPUBLISHED: {
     promptBlockIds: string[];
   };

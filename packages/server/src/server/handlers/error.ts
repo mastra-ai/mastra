@@ -188,12 +188,21 @@ function getErrorDetails(error: unknown): Record<string, unknown> | undefined {
 /**
  * Metadata for a `code` taken from a core error id. Core puts the ids the code declares in the
  * error's `details`; only details matching the code's schema are sent, stripped of other keys.
+ * `fallbackDetails` (ids the handler already knows) is used when core's details don't match,
+ * which is the case for cores released before they carried the ids.
  */
-export function getForwardedMetadata(code: ServerErrorCode, error: unknown): Record<string, unknown> | undefined {
+export function getForwardedMetadata(
+  code: ServerErrorCode,
+  error: unknown,
+  fallbackDetails?: Record<string, unknown>,
+): Record<string, unknown> | undefined {
   const schema = SERVER_ERROR_METADATA_SCHEMAS[code as keyof typeof SERVER_ERROR_METADATA_SCHEMAS];
   if (!schema) return undefined;
-  const parsed = schema.safeParse(getErrorDetails(error));
-  return parsed.success ? (parsed.data as Record<string, unknown> | undefined) : undefined;
+  for (const details of [getErrorDetails(error), fallbackDetails]) {
+    const parsed = schema.safeParse(details);
+    if (parsed.success && parsed.data !== undefined) return parsed.data as Record<string, unknown>;
+  }
+  return undefined;
 }
 
 function mergeMetadata(...parts: Array<Record<string, unknown> | undefined>): Record<string, unknown> | undefined {

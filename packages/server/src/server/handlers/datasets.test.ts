@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { coreFeatures } from '@mastra/core/features';
 import { Mastra } from '@mastra/core/mastra';
 import { SpanType } from '@mastra/core/observability';
@@ -126,6 +127,35 @@ describe('Datasets Handlers', () => {
       const { status, body } = formatErrorResponse(error);
 
       // Then the wire body carries the code and the experiment id its metadata declares
+      expect(status).toBe(404);
+      expect(body.code).toBe('EXPERIMENT_NOT_FOUND');
+      expect(body.metadata).toEqual({ experimentId: 'missing' });
+      expect(SERVER_ERROR_METADATA_SCHEMAS.EXPERIMENT_NOT_FOUND.safeParse(body.metadata).success).toBe(true);
+    });
+
+    it('fills the experiment id from the route when an older core throws EXPERIMENT_NOT_FOUND without details', async () => {
+      // Given a core release that throws EXPERIMENT_NOT_FOUND without `details`
+      const dataset = await mastra.datasets.create({ name: 'Rename DS' });
+      const updateExperiment = vi.fn().mockRejectedValue(
+        new MastraError({
+          id: 'EXPERIMENT_NOT_FOUND',
+          text: 'Experiment not found: missing',
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+        }),
+      );
+      vi.spyOn(mastra.datasets, 'get').mockResolvedValue({ updateExperiment } as any);
+
+      // When the route forwards that error
+      const error = await UPDATE_EXPERIMENT_ROUTE.handler({
+        ...createTestServerContext({ mastra }),
+        datasetId: dataset.id,
+        experimentId: 'missing',
+        name: 'after',
+      } as any).catch((e: unknown) => e);
+      const { status, body } = formatErrorResponse(error);
+
+      // Then the body still carries the metadata its code declares
       expect(status).toBe(404);
       expect(body.code).toBe('EXPERIMENT_NOT_FOUND');
       expect(body.metadata).toEqual({ experimentId: 'missing' });

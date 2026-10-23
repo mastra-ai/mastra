@@ -151,13 +151,20 @@ function isSchemaUpdateValidationError(error: unknown): error is SchemaUpdateVal
  * Converts a dataset MastraError into an HTTPException. Core dataset error ids that are
  * catalog codes are kept as the business code, with the core error's details as metadata;
  * anything else uses the operation fallback.
+ *
+ * `routeIds` fills the metadata when core leaves its details out (cores released before they
+ * carried the ids), so `EXPERIMENT_NOT_FOUND` / `DATASET_ITEM_NOT_FOUND` always send it.
  */
-function toDatasetHttpException(error: MastraError, fallbackCode: ServerErrorCode): HTTPException {
+function toDatasetHttpException(
+  error: MastraError,
+  fallbackCode: ServerErrorCode,
+  routeIds?: { experimentId?: string; itemId?: string },
+): HTTPException {
   if (isServerErrorCode(error.id)) {
     return new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, {
       message: error.message,
       code: error.id,
-      metadata: getForwardedMetadata(error.id, error),
+      metadata: getForwardedMetadata(error.id, error, routeIds),
     });
   }
   return new HTTPException(getHttpStatusForMastraError(error.id) as StatusCode, {
@@ -618,7 +625,7 @@ export const GET_ITEM_ROUTE = createRoute({
       return item as any;
     } catch (error) {
       if (error instanceof MastraError) {
-        throw toDatasetHttpException(error, SERVER_ERROR_CODES.DATASET_ITEM_GET_FAILED);
+        throw toDatasetHttpException(error, SERVER_ERROR_CODES.DATASET_ITEM_GET_FAILED, { itemId });
       }
       return handleError(error, {
         message: 'Error getting dataset item',
@@ -640,8 +647,6 @@ export const UPDATE_ITEM_ROUTE = createRoute({
   tags: ['Datasets'],
   requiresAuth: true,
   errors: [
-    'DATASET_ITEM_EXTERNAL_ID_INVALID',
-    'DATASET_ITEM_IDENTITY_CONFLICT',
     'DATASET_ITEM_NOT_FOUND',
     'DATASET_ITEM_PAYLOAD_NOT_SERIALIZABLE',
     'DATASET_ITEM_SCHEMA_VALIDATION_FAILED',
@@ -703,7 +708,7 @@ export const UPDATE_ITEM_ROUTE = createRoute({
         });
       }
       if (error instanceof MastraError) {
-        throw toDatasetHttpException(error, SERVER_ERROR_CODES.DATASET_ITEM_UPDATE_FAILED);
+        throw toDatasetHttpException(error, SERVER_ERROR_CODES.DATASET_ITEM_UPDATE_FAILED, { itemId });
       }
       return handleError(error, {
         message: 'Error updating dataset item',
@@ -753,7 +758,7 @@ export const PURGE_ITEM_ROUTE = createRoute({
       return { success: true };
     } catch (error) {
       if (error instanceof MastraError) {
-        throw toDatasetHttpException(error, SERVER_ERROR_CODES.DATASET_ITEM_PURGE_FAILED);
+        throw toDatasetHttpException(error, SERVER_ERROR_CODES.DATASET_ITEM_PURGE_FAILED, { itemId });
       }
       return handleError(error, {
         message: 'Error purging dataset item data',
@@ -795,7 +800,7 @@ export const DELETE_ITEM_ROUTE = createRoute({
       return { success: true };
     } catch (error) {
       if (error instanceof MastraError) {
-        throw toDatasetHttpException(error, SERVER_ERROR_CODES.DATASET_ITEM_DELETE_FAILED);
+        throw toDatasetHttpException(error, SERVER_ERROR_CODES.DATASET_ITEM_DELETE_FAILED, { itemId });
       }
       return handleError(error, {
         message: 'Error deleting dataset item',
@@ -946,7 +951,7 @@ export const GET_ANY_EXPERIMENT_ROUTE = createRoute({
       return experiment;
     } catch (error) {
       if (error instanceof MastraError) {
-        throw toDatasetHttpException(error, SERVER_ERROR_CODES.EXPERIMENT_GET_FAILED);
+        throw toDatasetHttpException(error, SERVER_ERROR_CODES.EXPERIMENT_GET_FAILED, { experimentId });
       }
       return handleError(error, {
         message: 'Error getting experiment',
@@ -997,7 +1002,7 @@ export const DELETE_ANY_EXPERIMENT_ROUTE = createRoute({
       return { success: true };
     } catch (error) {
       if (error instanceof MastraError) {
-        throw toDatasetHttpException(error, SERVER_ERROR_CODES.EXPERIMENT_DELETE_FAILED);
+        throw toDatasetHttpException(error, SERVER_ERROR_CODES.EXPERIMENT_DELETE_FAILED, { experimentId });
       }
       return handleError(error, {
         message: 'Error deleting experiment',
@@ -1228,7 +1233,7 @@ export const RUN_EXPERIMENT_ITEM_ROUTE = createRoute({
       return { ...run, result: withTargetType(run.result, experiment?.targetType) };
     } catch (error) {
       if (error instanceof MastraError) {
-        throw toDatasetHttpException(error, SERVER_ERROR_CODES.EXPERIMENT_ITEM_RUN_FAILED);
+        throw toDatasetHttpException(error, SERVER_ERROR_CODES.EXPERIMENT_ITEM_RUN_FAILED, { experimentId, itemId });
       }
       return handleError(error, {
         message: 'Error running experiment item',
@@ -1259,28 +1264,26 @@ export const SUBMIT_EXPERIMENT_RESULT_ROUTE = createRoute({
     'EXPERIMENT_RESULT_SUBMIT_FAILED',
     'MASTRA_CORE_VERSION_UNSUPPORTED',
   ],
-  handler: async ({ mastra, datasetId, experimentId, ...params }) => {
+  handler: async ({ mastra, datasetId, experimentId, itemId, ...params }) => {
     assertDatasetsAvailable();
     try {
-      const { itemId, attempt, input, output, groundTruth, error, startedAt, completedAt, traceId, scores } =
-        params as {
-          itemId: string;
-          attempt?: number;
-          input?: unknown;
-          output?: unknown;
-          groundTruth?: unknown;
-          error?: { message: string; stack?: string; code?: string } | null;
-          startedAt?: Date;
-          completedAt?: Date;
-          traceId?: string;
-          scores?: {
-            scorerId: string;
-            scorerName?: string;
-            score: number;
-            reason?: string;
-            metadata?: Record<string, unknown>;
-          }[];
-        };
+      const { attempt, input, output, groundTruth, error, startedAt, completedAt, traceId, scores } = params as {
+        attempt?: number;
+        input?: unknown;
+        output?: unknown;
+        groundTruth?: unknown;
+        error?: { message: string; stack?: string; code?: string } | null;
+        startedAt?: Date;
+        completedAt?: Date;
+        traceId?: string;
+        scores?: {
+          scorerId: string;
+          scorerName?: string;
+          score: number;
+          reason?: string;
+          metadata?: Record<string, unknown>;
+        }[];
+      };
       const ds = await mastra.datasets.get({ id: datasetId });
       const experiment = await ds.getExperiment({ experimentId });
       const submitted = await ds.submitExperimentResult({
@@ -1299,7 +1302,10 @@ export const SUBMIT_EXPERIMENT_RESULT_ROUTE = createRoute({
       return withTargetType(submitted, experiment?.targetType);
     } catch (error) {
       if (error instanceof MastraError) {
-        throw toDatasetHttpException(error, SERVER_ERROR_CODES.EXPERIMENT_RESULT_SUBMIT_FAILED);
+        throw toDatasetHttpException(error, SERVER_ERROR_CODES.EXPERIMENT_RESULT_SUBMIT_FAILED, {
+          experimentId,
+          itemId,
+        });
       }
       return handleError(error, {
         message: 'Error submitting experiment result',
@@ -1333,7 +1339,7 @@ export const FINALIZE_EXPERIMENT_ROUTE = createRoute({
       return await ds.finalizeExperiment({ experimentId });
     } catch (error) {
       if (error instanceof MastraError) {
-        throw toDatasetHttpException(error, SERVER_ERROR_CODES.EXPERIMENT_FINALIZE_FAILED);
+        throw toDatasetHttpException(error, SERVER_ERROR_CODES.EXPERIMENT_FINALIZE_FAILED, { experimentId });
       }
       return handleError(error, {
         message: 'Error finalizing experiment',
@@ -1369,7 +1375,7 @@ export const GET_EXPERIMENT_ROUTE = createRoute({
       return run;
     } catch (error) {
       if (error instanceof MastraError) {
-        throw toDatasetHttpException(error, SERVER_ERROR_CODES.EXPERIMENT_GET_FAILED);
+        throw toDatasetHttpException(error, SERVER_ERROR_CODES.EXPERIMENT_GET_FAILED, { experimentId });
       }
       return handleError(error, {
         message: 'Error getting experiment',
@@ -1407,7 +1413,7 @@ export const DELETE_EXPERIMENT_ROUTE = createRoute({
       return { success: true };
     } catch (error) {
       if (error instanceof MastraError) {
-        throw toDatasetHttpException(error, SERVER_ERROR_CODES.EXPERIMENT_DELETE_FAILED);
+        throw toDatasetHttpException(error, SERVER_ERROR_CODES.EXPERIMENT_DELETE_FAILED, { experimentId });
       }
       return handleError(error, {
         message: 'Error deleting experiment',
@@ -1436,7 +1442,7 @@ export const UPDATE_EXPERIMENT_ROUTE = createRoute({
       return await ds.updateExperiment({ experimentId, name, description, metadata });
     } catch (error) {
       if (error instanceof MastraError) {
-        throw toDatasetHttpException(error, SERVER_ERROR_CODES.EXPERIMENT_UPDATE_FAILED);
+        throw toDatasetHttpException(error, SERVER_ERROR_CODES.EXPERIMENT_UPDATE_FAILED, { experimentId });
       }
       return handleError(error, {
         message: 'Error updating experiment',
@@ -1492,7 +1498,7 @@ export const LIST_EXPERIMENT_RESULTS_ROUTE = createRoute({
       };
     } catch (error) {
       if (error instanceof MastraError) {
-        throw toDatasetHttpException(error, SERVER_ERROR_CODES.EXPERIMENT_RESULTS_LIST_FAILED);
+        throw toDatasetHttpException(error, SERVER_ERROR_CODES.EXPERIMENT_RESULTS_LIST_FAILED, { experimentId });
       }
       return handleError(error, {
         message: 'Error listing experiment results',
@@ -1551,7 +1557,7 @@ export const UPDATE_EXPERIMENT_RESULT_ROUTE = createRoute({
       return withTargetType(result, experiment?.targetType);
     } catch (error) {
       if (error instanceof MastraError) {
-        throw toDatasetHttpException(error, SERVER_ERROR_CODES.EXPERIMENT_RESULT_UPDATE_FAILED);
+        throw toDatasetHttpException(error, SERVER_ERROR_CODES.EXPERIMENT_RESULT_UPDATE_FAILED, { experimentId });
       }
       return handleError(error, {
         message: 'Error updating experiment result',
@@ -1667,7 +1673,7 @@ export const LIST_ITEM_VERSIONS_ROUTE = createRoute({
       return { history: rows };
     } catch (error) {
       if (error instanceof MastraError) {
-        throw toDatasetHttpException(error, SERVER_ERROR_CODES.DATASET_ITEM_HISTORY_LIST_FAILED);
+        throw toDatasetHttpException(error, SERVER_ERROR_CODES.DATASET_ITEM_HISTORY_LIST_FAILED, { itemId });
       }
       return handleError(error, {
         message: 'Error listing item history',
@@ -1716,7 +1722,7 @@ export const GET_ITEM_VERSION_ROUTE = createRoute({
       return item as any;
     } catch (error) {
       if (error instanceof MastraError) {
-        throw toDatasetHttpException(error, SERVER_ERROR_CODES.DATASET_ITEM_VERSION_GET_FAILED);
+        throw toDatasetHttpException(error, SERVER_ERROR_CODES.DATASET_ITEM_VERSION_GET_FAILED, { itemId });
       }
       return handleError(error, {
         message: 'Error getting item version',
