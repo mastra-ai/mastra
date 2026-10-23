@@ -64,7 +64,6 @@ import type {
   ObserveHooks,
   ObserveTransformHooks,
   ObserveTrigger,
-  ReflectionCommittedContext,
   ResolvedObservationConfig,
   ResolvedReflectionConfig,
   ThresholdRange,
@@ -253,7 +252,6 @@ export class ReflectorRunner {
   ) => Promise<boolean>;
   private readonly getCompressionStartLevel: (requestContext?: RequestContext) => Promise<CompressionLevel>;
   private readonly memory?: Memory;
-  private readonly onReflectionCommitted?: (context: ReflectionCommittedContext) => Promise<void>;
   private readonly hooks?: ObserveTransformHooks;
   private mastra?: Mastra;
 
@@ -300,7 +298,6 @@ export class ReflectorRunner {
     resolveModel: ReflectionModelResolver;
     mastra?: Mastra;
     memory?: Memory;
-    onReflectionCommitted?: (context: ReflectionCommittedContext) => Promise<void>;
     hooks?: ObserveTransformHooks;
     /** Registers background work so `settled()` can join it. */
     trackBackgroundWork?: (work: Promise<unknown>, lockKey: string) => void;
@@ -318,7 +315,6 @@ export class ReflectorRunner {
     this.getCompressionStartLevel = opts.getCompressionStartLevel;
     this.mastra = opts.mastra;
     this.memory = opts.memory;
-    this.onReflectionCommitted = opts.onReflectionCommitted;
     this.hooks = opts.hooks;
     this.trackBackgroundWork = opts.trackBackgroundWork;
   }
@@ -1003,7 +999,6 @@ export class ReflectorRunner {
       previousModel?: string;
       currentModel?: string;
     },
-    committedContext?: Omit<ReflectionCommittedContext, 'observations'>,
   ): Promise<TryActivateResult> {
     const bufferKey = this.buffering.getReflectionBufferKey(lockKey);
 
@@ -1125,14 +1120,6 @@ export class ReflectorRunner {
       );
       return { status: 'not-applied' };
     }
-    if (committedContext) {
-      await this.notifyReflectionCommitted({
-        ...committedContext,
-        observations: allLines.slice(0, reflectedLineCount).join('\n').trim(),
-        writer,
-      });
-    }
-
     BufferingCoordinator.lastBufferedBoundary.delete(bufferKey);
 
     const afterRecord = await this.storage.getObservationalMemory(record.threadId, record.resourceId);
@@ -1179,15 +1166,6 @@ export class ReflectorRunner {
     BufferingCoordinator.reflectionBufferCycleIds.delete(bufferKey);
 
     return { status: 'activated' };
-  }
-
-  private async notifyReflectionCommitted(context: ReflectionCommittedContext): Promise<void> {
-    if (!this.onReflectionCommitted || !context.parentThreadId || !context.resourceId) return;
-    try {
-      await this.onReflectionCommitted(context);
-    } catch (error) {
-      omDebug(`[OM:reflect] post-commit reflection agent failed: ${error}`);
-    }
   }
 
   /**
@@ -1330,15 +1308,6 @@ export class ReflectorRunner {
         writer,
         messageList,
         activationMetadata,
-        {
-          parentThreadId: requestedThreadId ?? record.threadId ?? '',
-          resourceId: record.resourceId ?? '',
-          requestContext,
-          mainAgent,
-          sendStateSignal,
-          abortSignal,
-          observabilityContext,
-        },
       );
       if (activationResult.status === 'activated' || activationResult.status === 'not-applied') {
         return;
@@ -1539,18 +1508,6 @@ export class ReflectorRunner {
       } else {
         this.syncReflectionSuppression.delete(lockKey);
       }
-      await this.notifyReflectionCommitted({
-        parentThreadId: requestedThreadId ?? record.threadId ?? '',
-        resourceId: record.resourceId ?? '',
-        observations: record.activeObservations ?? '',
-        requestContext,
-        mainAgent,
-        sendStateSignal,
-        writer,
-        abortSignal,
-        observabilityContext,
-      });
-
       if (writer && streamContext) {
         const endMarker = createObservationEndMarker({
           cycleId: streamContext.cycleId,
