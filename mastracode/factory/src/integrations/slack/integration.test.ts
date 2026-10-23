@@ -262,6 +262,7 @@ describe('SlackIntegration.postToolObserver', () => {
   function setup(platform: string | null) {
     const post = vi.fn(async () => ({ id: 'reply-ts' }));
     const addReaction = vi.fn(async () => {});
+    const create = vi.fn(async () => ({}));
     const channels = {
       buildChannelContextForThread: vi.fn(async () => (platform ? { channel: { platform } } : null)),
       buildRenderContextForThread: vi.fn(async () =>
@@ -270,16 +271,25 @@ describe('SlackIntegration.postToolObserver', () => {
     };
     const integration = new SlackIntegration({ signingSecret: 'secret' });
     integration.initialize({ channels: () => channels as any });
-    const requestContext = new Map<string, unknown>([['controller', { threadId: 'thread-1' }]]);
-    return { integration, requestContext: requestContext as any, post, addReaction };
+    integration.channels({
+      storage: { generic: { subscriptions: { create } }, projects: {} },
+      runtime: { workItems: {} },
+    } as any);
+    const requestContext = new Map<string, unknown>([
+      ['controller', { threadId: 'thread-1', sessionId: 'session-1' }],
+      ['user', { id: 'user-1', organizationId: 'org-1' }],
+    ]);
+    return { integration, requestContext: requestContext as any, post, addReaction, create };
   }
 
-  it('posts the pull request link into the linked Slack thread when a run opens one', async () => {
-    const { integration, requestContext, post, addReaction } = setup('slack');
+  it('posts the pull request link into the linked Slack thread and remembers the session opened one', async () => {
+    const { integration, requestContext, post, addReaction, create } = setup('slack');
 
     await integration.postToolObserver({ toolContext: prTool, requestContext });
 
     expect(post).toHaveBeenCalledWith({ markdown: 'Pull request opened: https://github.com/mastra-ai/mastra/pull/123' });
+    expect(create).toHaveBeenCalledWith(expect.objectContaining({ orgId: 'org-1', sessionId: 'session-1' }));
+    // Opening a pull request does not close the thread out; its merge does.
     expect(addReaction).not.toHaveBeenCalled();
   });
 
@@ -287,6 +297,7 @@ describe('SlackIntegration.postToolObserver', () => {
     const unlinked = setup(null);
     await unlinked.integration.postToolObserver({ toolContext: prTool, requestContext: unlinked.requestContext });
     expect(unlinked.post).not.toHaveBeenCalled();
+    expect(unlinked.create).not.toHaveBeenCalled();
 
     const linked = setup('slack');
     await linked.integration.postToolObserver({
@@ -294,5 +305,37 @@ describe('SlackIntegration.postToolObserver', () => {
       requestContext: linked.requestContext,
     });
     expect(linked.post).not.toHaveBeenCalled();
+  });
+});
+
+describe('SlackIntegration.onStageChange', () => {
+  function setup() {
+    const adapter = { addReaction: vi.fn(async () => {}), removeReaction: vi.fn(async () => {}) };
+    const integration = new SlackIntegration({ signingSecret: 'secret' });
+    integration.initialize({ channels: () => ({ adapters: { slack: adapter } }) as any });
+    return { integration, adapter };
+  }
+  const card = (externalSource: unknown) => ({ id: 'wi-1', externalSource }) as any;
+  const thread = 'slack:C123:1792771853.363419';
+
+  it('swaps the reaction on the Slack thread a card was filed from to match its new stage', async () => {
+    const { integration, adapter } = setup();
+
+    await integration.onStageChange({
+      item: card({ integrationId: 'slack', type: 'slack-thread', workspaceId: 'T1', externalId: thread }),
+      fromStage: 'triage',
+      toStage: 'planning',
+    });
+
+    expect(adapter.removeReaction).toHaveBeenCalledWith(thread, '1792771853.363419', 'eyes');
+    expect(adapter.addReaction).toHaveBeenCalledWith(thread, '1792771853.363419', 'memo');
+  });
+
+  it('leaves cards that did not come from a Slack thread alone', async () => {
+    const { integration, adapter } = setup();
+
+    await integration.onStageChange({ item: card(null), fromStage: 'triage', toStage: 'done' });
+
+    expect(adapter.addReaction).not.toHaveBeenCalled();
   });
 });

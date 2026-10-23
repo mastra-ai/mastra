@@ -3,7 +3,7 @@ import type { MountedMastraCode } from '@mastra/code-sdk';
 import type { NotificationPriority } from '@mastra/core/notifications';
 import type { Context } from 'hono';
 import { requestsChangesVerdict } from '../../review-verdict.js';
-import { announcePullRequestMilestone } from '../channel-thread-announcements.js';
+import { announcePullRequest } from '../slack/thread-status.js';
 import { resolveSubscriptionSession, subscriptionRunContext } from '../subscription-session.js';
 import type { FactorySessionOwner } from '../subscription-session.js';
 import type { GithubAppIdentity } from './app-identity.js';
@@ -484,22 +484,20 @@ async function isAuthorizedGithubSender(
 }
 
 /**
- * Tell the chat thread that asked for this work that its pull request merged.
- * Best effort: the agent already has the notification, so a chat failure must
- * not turn a delivered signal into a redelivery.
+ * Tell the Slack thread that asked for this work that its pull request merged,
+ * which closes the thread out. Best effort: the agent already has the
+ * notification, so a Slack failure must not turn it into a redelivery.
  */
-async function announceMerged(
+function announceMerged(
   dependencies: GithubWebhookDispatchDependencies,
   subscription: GithubSignalSubscriptionRow,
   url: string | undefined,
-): Promise<void> {
+): void {
   if (!subscription.threadId) return;
   const target = url ?? `https://github.com/${subscription.data.repositorySlug}/pull/${subscription.data.changeRequestId}`;
-  try {
-    await announcePullRequestMilestone(dependencies.controller.getChannels?.(), subscription.threadId, 'merged', target);
-  } catch (error) {
-    console.warn('[GitHub Webhook] merged announcement failed', { subscriptionId: subscription.id, error });
-  }
+  void announcePullRequest(dependencies.controller.getChannels?.(), subscription.threadId, 'merged', target).catch(
+    error => console.warn('[GitHub Webhook] merged announcement failed', { subscriptionId: subscription.id, error }),
+  );
 }
 
 export async function dispatchGithubWebhook(
@@ -600,7 +598,7 @@ export async function dispatchGithubWebhook(
       }
       delivered += 1;
       if (notification.kind === 'pull-request-merged' && isFactoryManagedAuthoringSubscription(subscription)) {
-        await announceMerged(dependencies, subscription, notificationTargetUrl(parsed.event, parsed.payload));
+        announceMerged(dependencies, subscription, notificationTargetUrl(parsed.event, parsed.payload));
       }
     } catch (error) {
       failed += 1;

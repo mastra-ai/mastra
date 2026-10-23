@@ -635,6 +635,9 @@ describe('dispatchGithubWebhook', () => {
 
     expect(result).toEqual({ delivered: 2, failed: 0, skipped: 0, ignored: false });
     // Only the session that opened the pull request announces it.
+    await vi.waitFor(() =>
+      expect(addReaction).toHaveBeenCalledWith('slack:C123:1792771853.363419', '1792771853.363419', 'white_check_mark'),
+    );
     expect(buildRenderContextForThread).toHaveBeenCalledOnce();
     expect(post).toHaveBeenCalledWith({ markdown: 'Pull request merged: https://github.com/octo/hello/pull/34' });
     expect(addReaction).toHaveBeenCalledWith('slack:C123:1792771853.363419', '1792771853.363419', 'white_check_mark');
@@ -667,7 +670,9 @@ describe('dispatchGithubWebhook', () => {
 
     expect(result).toEqual({ delivered: 1, failed: 0, skipped: 0, ignored: false });
     expect(retire).toHaveBeenCalledWith('a', 'merged');
-    expect(warn).toHaveBeenCalledWith('[GitHub Webhook] merged announcement failed', expect.anything());
+    await vi.waitFor(() =>
+      expect(warn).toHaveBeenCalledWith('[GitHub Webhook] merged announcement failed', expect.anything()),
+    );
     warn.mockRestore();
   });
 

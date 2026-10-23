@@ -18,7 +18,6 @@
  * capabilities by implementing `FactoryIntegration` from outside the package.
  */
 
-import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { AgentChannels, TypingStatusFn } from '@mastra/core/channels';
 import type { InputProcessor, OutputProcessor } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -28,7 +27,6 @@ import type { SlackAdapterChannelConfig } from '@mastra/slack';
 import type { WorkItemFeedPublisher } from '../../storage/domains/comments/feed-sync.js';
 
 import type { FactoryChannelsConfig, FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
-import { announcePullRequestMilestone } from '../channel-thread-announcements.js';
 import { parseCreatedPullRequest } from '../github/session-subscriptions.js';
 import { FactoryChannelReplyProcessor } from './channel-reply-processor.js';
 import { FactoryChannelSessionLinkProcessor } from './channel-session-link-processor.js';
@@ -39,6 +37,14 @@ import { createReplyTool, FactoryReplyStreamProcessor, REPLY_TOOL_NAME } from '.
 import { createShareFileTool, isSlackThread } from './share-file-tool.js';
 import type { ShareFileToolDeps } from './share-file-tool.js';
 import { createSlackChannelsConfig } from './slack.js';
+import {
+  announcePullRequest,
+  FactoryThreadDoneProcessor,
+  rememberOpenedPullRequest,
+  STAGE_REACTIONS,
+  swapThreadReaction,
+} from './thread-status.js';
+import type { ThreadDoneDeps } from './thread-status.js';
 
 /**
  * Slack app credentials, read from env ONCE by the deploy entry. `signingSecret`
@@ -166,7 +172,14 @@ export class SlackIntegration implements FactoryIntegration {
   readonly #adapterOptions: SlackAdapterChannelConfig;
   /** Bound in `initialize()`; the controller mounts after integrations are built. */
   #channels: ShareFileToolDeps['channels'];
-  readonly #deps: ShareFileToolDeps = { channels: () => this.#channels?.() };
+  /** Bound in `channels()`, which runs once at boot. */
+  #workItems: ReturnType<NonNullable<ThreadDoneDeps['workItems']>>;
+  #markers: ReturnType<NonNullable<ThreadDoneDeps['markers']>>;
+  readonly #deps: ThreadDoneDeps = {
+    channels: () => this.#channels?.(),
+    workItems: () => this.#workItems,
+    markers: () => this.#markers,
+  };
   /**
    * With reply text hidden (the Factory default) the agent speaks through
    * `reply_in_thread`, so the prompt, reminder and live streaming for that
@@ -197,7 +210,7 @@ export class SlackIntegration implements FactoryIntegration {
       ],
       output: [
         new FactoryChannelSessionLinkProcessor(),
-        ...(textHidden ? [new FactoryReplyStreamProcessor(this.#deps)] : []),
+        ...(textHidden ? [new FactoryReplyStreamProcessor(this.#deps), new FactoryThreadDoneProcessor(this.#deps)] : []),
       ],
     };
   }
@@ -224,18 +237,35 @@ export class SlackIntegration implements FactoryIntegration {
   }
 
   /**
-   * When a run opens a pull request, post its link into the Slack thread the
-   * session is linked to, so the thread hears about it whatever the agent says.
+   * When a run opens a pull request, post its link into the session's Slack
+   * thread and remember it, so later replies don't mark the thread done
+   * before the pull request merges.
    */
   async postToolObserver({
     toolContext,
     requestContext,
   }: Parameters<NonNullable<FactoryIntegration['postToolObserver']>>[0]): Promise<void> {
     const url = parseCreatedPullRequest(toolContext);
-    if (!url || !requestContext) return;
-    const threadId = (requestContext.get('controller') as AgentControllerRequestContext | undefined)?.threadId;
-    if (!threadId || !(await isSlackThread(requestContext, this.#deps))) return;
-    await announcePullRequestMilestone(this.#channels?.(), threadId, 'opened', url);
+    const threadId = (requestContext?.get('controller') as { threadId?: string } | undefined)?.threadId;
+    if (!url || !requestContext || !threadId || !(await isSlackThread(requestContext, this.#deps))) return;
+    if (this.#markers) await rememberOpenedPullRequest(this.#markers, requestContext, url);
+    await announcePullRequest(this.#channels?.(), threadId, 'opened', url);
+  }
+
+  /** Shows a card's stage as a reaction on the Slack thread it was filed from. */
+  async onStageChange({
+    item,
+    fromStage,
+    toStage,
+  }: Parameters<NonNullable<FactoryIntegration['onStageChange']>>[0]): Promise<void> {
+    const source = item.externalSource;
+    if (source?.integrationId !== 'slack' || source.type !== 'slack-thread') return;
+    const adapter = this.#channels?.()?.adapters.slack;
+    if (!adapter) return;
+    await swapThreadReaction(adapter, source.externalId, {
+      remove: fromStage ? STAGE_REACTIONS[fromStage] : undefined,
+      add: STAGE_REACTIONS[toStage],
+    });
   }
 
   channels(ctx: IntegrationContext): FactoryChannelsConfig {
@@ -244,6 +274,8 @@ export class SlackIntegration implements FactoryIntegration {
     const sourceControls =
       ctx.storage.sourceControls ?? (ctx.storage.sourceControlOwner ? [ctx.storage.sourceControlOwner] : []);
     this.#repoBackedSessions = sourceControls.length > 0;
+    this.#workItems = ctx.runtime?.workItems;
+    this.#markers = ctx.storage?.generic?.subscriptions;
     return createSlackChannelsConfig({
       slack: {
         clientId: this.#config.clientId,
