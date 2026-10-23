@@ -27,6 +27,7 @@ const scenarioGlob = process.env.AIMOCK_SCENARIOS ?? '*';
 export default defineConfig({
   test: {
     projects: [
+      'src/__tests__/unit/vitest.config.ts',
       {
         test: {
           // e2e: these tests spawn an external `inngest-cli dev` server, so they
@@ -34,6 +35,7 @@ export default defineConfig({
           name: 'e2e:workflows/inngest',
           globals: true,
           include: ['src/**/*.test.ts'],
+          exclude: ['src/__tests__/unit/**'],
           pool: 'forks',
           testTimeout: 60000, // Some tests call execute() multiple times, each takes ~15s
           hookTimeout: 30000, // Allow more time for beforeAll to setup Inngest

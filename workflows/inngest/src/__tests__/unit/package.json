@@ -1,0 +1,5 @@
+{
+  "name": "@internal/inngest-lifecycle-tests",
+  "private": true,
+  "type": "module"
+}
