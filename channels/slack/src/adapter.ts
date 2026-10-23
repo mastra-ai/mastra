@@ -8,6 +8,10 @@ import type { SlackAdapter, SlackAdapterConfig } from '@chat-adapter/slack';
  */
 export function createSlackAdapter(config?: SlackAdapterConfig): SlackAdapter {
   const adapter = createBaseSlackAdapter(config);
+  // EXPERIMENT (revert before merge): on an `agent_view` app a text status may
+  // open the session on its own, keeping custom status text. Set
+  // MASTRA_SLACK_SKIP_SESSION_BRIDGE=1 to compare against the bridge.
+  if (process.env.MASTRA_SLACK_SKIP_SESSION_BRIDGE === '1') return adapter;
   // The adapter reports turn cancellation exactly when `agentView` is on.
   return adapter.supportsTurnCancellation ? withAgentSessionTyping(adapter) : adapter;
 }
