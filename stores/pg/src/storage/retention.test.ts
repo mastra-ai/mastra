@@ -342,22 +342,13 @@ describe('PG retention', () => {
     async function seedRun(runId: string, ageDays: number, storageVersion: 1 | 2 = 2) {
       const workflows = store.stores.workflows!;
       const context: Record<string, unknown> = { input: {}, a: step(1) };
-      await workflows.persistWorkflowSnapshot({
-        workflowName: 'wf',
-        runId,
-        snapshot: snapshotFor(runId, context),
-        storageVersion,
-      });
-      if (storageVersion === 2) {
+      if (storageVersion === 1) {
+        await workflows.persistWorkflowSnapshot({ workflowName: 'wf', runId, snapshot: snapshotFor(runId, context) });
+      } else {
+        const { context: steps, value: state, ...header } = snapshotFor(runId, context);
+        await workflows.writeWorkflowRunCheckpoint({ workflowName: 'wf', runId, header, steps, state });
         for (const id of ['b', 'c']) {
-          context[id] = step(id);
-          await workflows.persistWorkflowSnapshot({
-            workflowName: 'wf',
-            runId,
-            snapshot: snapshotFor(runId, context),
-            storageVersion: 2,
-            changes: { stepIds: [id], state: false },
-          });
+          await workflows.appendWorkflowRunEntries({ workflowName: 'wf', runId, header, steps: { [id]: step(id) } });
         }
       }
       const at = new Date(Date.now() - ageDays * DAY);
@@ -416,21 +407,20 @@ describe('PG retention', () => {
       expect(await runIds(ENTRIES)).toEqual([]);
     });
 
-    it('recreates a pruned run from the next append as a checkpoint', async () => {
+    it('recreates a pruned run from the next append, with only what it carries', async () => {
       await seedRun('v2-revived', 40);
       await store.stores.workflows!.prune({ workflowSnapshot: { maxAge: '30d' } });
 
-      const context = { input: {}, a: step(1), d: step('d') };
-      await store.stores.workflows!.persistWorkflowSnapshot({
+      const { context: _context, value: _value, ...header } = snapshotFor('v2-revived', {});
+      await store.stores.workflows!.appendWorkflowRunEntries({
         workflowName: 'wf',
         runId: 'v2-revived',
-        snapshot: snapshotFor('v2-revived', context),
-        storageVersion: 2,
-        changes: { stepIds: ['d'], state: false },
+        header,
+        steps: { d: step('d') },
       });
 
       expect(await store.stores.workflows!.loadWorkflowSnapshot({ workflowName: 'wf', runId: 'v2-revived' })).toEqual(
-        snapshotFor('v2-revived', context),
+        snapshotFor('v2-revived', { d: step('d') }),
       );
     });
   });

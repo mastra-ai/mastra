@@ -1,9 +1,9 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
-  getSnapshotMemoryInfo,
   materializeWorkflowRun,
   mergeWorkflowStepResult,
   normalizePerPage,
+  STEP_RESULT_SUMMARY_FIELDS,
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_WORKFLOW_RUN_OWNERS,
   TABLE_WORKFLOW_RUNS,
@@ -26,8 +26,9 @@ import type {
   RunOwnershipRecord,
   UpdateWorkflowStateOptions,
   StorageListWorkflowRunsInput,
+  StoredWorkflowRun,
+  StoredWorkflowRunHeader,
   WorkflowRun,
-  WorkflowRunChanges,
   WorkflowRunEntry,
   WorkflowRunHeader,
   WorkflowRuns,
@@ -175,32 +176,27 @@ interface EntryRow {
   payload: unknown;
   /** The payload was undefined when written (SQL NULL), as opposed to JSON null. */
   absent: boolean;
+  /** Read in summary mode, and `payload` is the step's summary. */
+  summarized?: boolean;
 }
 
-/** The header columns of a storage v2 write. */
+/** The header row fields of a storage v2 write. */
 interface RunWrite {
   workflowName: string;
   runId: string;
   resourceId?: string;
-  threadId: string | null;
-  status: string;
-  header: string;
-  createdAt: Date;
-  updatedAt: Date;
+  threadId?: string;
+  header: WorkflowRunHeader;
 }
 
-/**
- * The entries a storage v2 write adds: the listed steps and, when it changed, the state.
- * A checkpoint (no `changes`) adds every `context` key and the state.
- */
-function journalEntries(snapshot: WorkflowRunState, changes?: WorkflowRunChanges): EntryInput[] {
-  const stepIds = changes ? changes.stepIds : Object.keys(snapshot.context);
-  const entries: EntryInput[] = stepIds.map(stepId => ({
+/** The entries a storage v2 write adds: one per step, in order, then the state when given. */
+function journalEntries(steps: Record<string, StepResult<any, any, any, any>>, state?: Record<string, any>) {
+  const entries: EntryInput[] = Object.entries(steps).map(([stepId, result]) => ({
     kind: 'step',
     step_id: stepId,
-    payload: snapshot.context[stepId],
+    payload: result,
   }));
-  if (!changes || changes.state) entries.push({ kind: 'state', step_id: null, payload: snapshot.value });
+  if (state !== undefined) entries.push({ kind: 'state', step_id: null, payload: state });
   return entries;
 }
 
@@ -554,10 +550,22 @@ export class WorkflowsPG extends WorkflowsStorage {
    * A jsonb array of {@link EntryRow} for the storage v2 run `alias` refers to: each step's
    * latest entry and the latest state entry, ordered by when each was first written so
    * `context` keys keep their write order.
+   *
+   * With `summaryFieldsParam` (the parameter holding `STEP_RESULT_SUMMARY_FIELDS`), successful
+   * steps other than `input` come back as their summary, built here so their data is never sent.
+   * Like `summarizeStepResult`, it keeps a field that is JSON null and leaves out one that is absent.
    */
-  #entriesSql(alias: string): string {
+  #entriesSql(alias: string, summaryFieldsParam?: string): string {
+    let payload = 'x.payload';
+    if (summaryFieldsParam) {
+      const summarized = `(x.kind = 'step' AND x.step_id <> 'input' AND x.payload ->> 'status' = 'success')`;
+      payload = `CASE WHEN ${summarized} THEN (
+          SELECT COALESCE(jsonb_object_agg(f.key, f.value), '{}'::jsonb)
+          FROM jsonb_each(x.payload) f WHERE f.key = ANY(${summaryFieldsParam}::text[])
+        ) ELSE x.payload END, 'summarized', ${summarized}`;
+    }
     return `(SELECT COALESCE(jsonb_agg(jsonb_build_object(
-          'seq', x.seq, 'kind', x.kind, 'step_id', x.step_id, 'payload', x.payload, 'absent', x.payload IS NULL
+          'seq', x.seq, 'kind', x.kind, 'step_id', x.step_id, 'absent', x.payload IS NULL, 'payload', ${payload}
         ) ORDER BY x.first_seq), '[]'::jsonb)
       FROM (
         SELECT e.seq, e.kind, e.step_id, e.payload,
@@ -626,101 +634,235 @@ export class WorkflowsPG extends WorkflowsStorage {
     return { ...this.parseWorkflowRun({ ...row, snapshot }), storageVersion: 2 };
   }
 
-  /**
-   * Writes a storage v2 run. An append is one statement: it bumps the header's `lastSeq` by
-   * the number of entries (holding the header's row lock until commit, so entries commit in
-   * `seq` order) and inserts the entries numbered up to it. It writes a checkpoint instead when
-   * the run has no header (never written, deleted or pruned).
-   */
-  async #persistRun(
-    run: RunWrite,
-    snapshot: WorkflowRunState,
-    changes: WorkflowRunChanges | undefined,
-    fence: RunFence | undefined,
-  ): Promise<void> {
-    if (changes) {
-      const appended = await withRunFence(
-        this.#db.client,
-        this.#runOwnersTable(),
-        fence,
-        'persistWorkflowSnapshot',
-        q => this.#appendRun(q, run, journalEntries(snapshot, changes)),
-      );
-      if (appended) return;
-    }
-    await this.#db.client.tx(async t => {
-      if (fence) await assertRunFence(t, this.#runOwnersTable(), fence, 'persistWorkflowSnapshot');
-      await this.#checkpointRun(t, run, journalEntries(snapshot));
-    });
-  }
-
-  async #appendRun(q: Queryable, run: RunWrite, entries: EntryInput[]): Promise<boolean> {
-    const { found } = await q.one<{ found: number }>(
-      `WITH h AS (
-         UPDATE ${this.#runsTable()}
-         SET "resourceId" = COALESCE($3, "resourceId"), "threadId" = $4, status = $5, header = $6::jsonb,
-             "lastSeq" = "lastSeq" + $7::int, "updatedAt" = $8, "updatedAtZ" = $9
-         WHERE workflow_name = $1 AND run_id = $2
-         RETURNING "lastSeq"
-       ), ins AS (
-         INSERT INTO ${this.#entriesTable()} (workflow_name, run_id, seq, kind, step_id, payload)
-         SELECT $1, $2, h."lastSeq" - $7::int + e.ord, ${ENTRY_VALUES}
-         FROM h, ${entryRows('$10')}
-       )
-       SELECT count(*)::int AS found FROM h`,
-      [
-        run.workflowName,
-        run.runId,
-        run.resourceId,
-        run.threadId,
-        run.status,
-        run.header,
-        entries.length,
-        run.updatedAt,
-        run.updatedAt,
-        toPgJson(entries),
-      ],
+  #runError(operation: string, workflowName: string, runId: string, error: unknown): MastraError {
+    return new MastraError(
+      {
+        id: createStorageErrorId('PG', operation, 'FAILED'),
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.THIRD_PARTY,
+        details: { workflowName, runId },
+      },
+      error,
     );
-    return found > 0;
   }
 
-  /** Replaces a storage v2 run's entries. Must run in a transaction. */
-  async #checkpointRun(t: Queryable, run: RunWrite, entries: EntryInput[]): Promise<void> {
-    const { lastSeq } = await t.one<{ lastSeq: number }>(
-      `INSERT INTO ${this.#runsTable()} AS r
+  async loadWorkflowRunHeader({
+    workflowName,
+    runId,
+  }: {
+    workflowName: string;
+    runId: string;
+  }): Promise<StoredWorkflowRunHeader | null> {
+    try {
+      return await this.#db.client.oneOrNone<StoredWorkflowRunHeader>(
+        `SELECT header, "lastSeq" FROM ${this.#runsTable()} WHERE workflow_name = $1 AND run_id = $2`,
+        [workflowName, runId],
+      );
+    } catch (error) {
+      throw this.#runError('LOAD_WORKFLOW_RUN_HEADER', workflowName, runId, error);
+    }
+  }
+
+  async loadWorkflowRun({
+    workflowName,
+    runId,
+    successfulSteps,
+  }: {
+    workflowName: string;
+    runId: string;
+    successfulSteps: 'full' | 'summary';
+  }): Promise<StoredWorkflowRun | null> {
+    try {
+      const summary = successfulSteps === 'summary';
+      const run = await this.#db.client.oneOrNone<StoredWorkflowRunHeader & { entries: EntryRow[] }>(
+        `SELECT r.header, r."lastSeq", ${this.#entriesSql('r', summary ? '$3' : undefined)} AS entries
+         FROM ${this.#runsTable()} r WHERE r.workflow_name = $1 AND r.run_id = $2`,
+        summary ? [workflowName, runId, STEP_RESULT_SUMMARY_FIELDS] : [workflowName, runId],
+      );
+      if (!run) return null;
+
+      let state: Record<string, any> = {};
+      const steps: StoredWorkflowRun['steps'] = {};
+      const summarizedStepIds: string[] = [];
+      for (const row of run.entries) {
+        const payload = row.absent ? undefined : (row.payload as any);
+        if (row.kind === 'state') {
+          state = payload;
+          continue;
+        }
+        steps[row.step_id!] = payload;
+        if (row.summarized) summarizedStepIds.push(row.step_id!);
+      }
+      return { header: run.header, lastSeq: run.lastSeq, state, steps, summarizedStepIds };
+    } catch (error) {
+      throw this.#runError('LOAD_WORKFLOW_RUN', workflowName, runId, error);
+    }
+  }
+
+  async loadWorkflowRunSteps({
+    workflowName,
+    runId,
+    stepIds,
+  }: {
+    workflowName: string;
+    runId: string;
+    stepIds: string[];
+  }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    if (!stepIds.length) return {};
+    try {
+      const rows = await this.#db.client.any<{ step_id: string; payload: StepResult<any, any, any, any> }>(
+        `SELECT DISTINCT ON (step_id) step_id, payload
+         FROM ${this.#entriesTable()}
+         WHERE workflow_name = $1 AND run_id = $2 AND kind = 'step' AND step_id = ANY($3::text[])
+         ORDER BY step_id, seq DESC`,
+        [workflowName, runId, stepIds],
+      );
+      return Object.fromEntries(rows.map(row => [row.step_id, row.payload]));
+    } catch (error) {
+      throw this.#runError('LOAD_WORKFLOW_RUN_STEPS', workflowName, runId, error);
+    }
+  }
+
+  async updateWorkflowRunHeader({
+    workflowName,
+    runId,
+    opts,
+    fence: explicitFence,
+  }: {
+    workflowName: string;
+    runId: string;
+    opts: UpdateWorkflowStateOptions;
+    fence?: RunFence;
+  }): Promise<StoredWorkflowRunHeader | undefined> {
+    const fence = resolveRunFence(this, explicitFence, runId);
+    try {
+      return await this.#db.client.tx(async t => {
+        if (fence) await assertRunFence(t, this.#runOwnersTable(), fence, 'updateWorkflowRunHeader');
+        const run = await t.oneOrNone<{ header: WorkflowRunHeader }>(
+          `SELECT header FROM ${this.#runsTable()} WHERE workflow_name = $1 AND run_id = $2 FOR UPDATE`,
+          [workflowName, runId],
+        );
+        if (!run) return undefined;
+        const { expectedStatus, ...patch } = opts;
+        if (!matchesExpectedWorkflowStatus(run.header.status, expectedStatus)) return undefined;
+        const header = { ...run.header, ...patch };
+        const now = new Date();
+        return await t.one<StoredWorkflowRunHeader>(
+          `UPDATE ${this.#runsTable()}
+           SET header = $3::jsonb, status = $4, "updatedAt" = $5, "updatedAtZ" = $6
+           WHERE workflow_name = $1 AND run_id = $2
+           RETURNING header, "lastSeq"`,
+          [workflowName, runId, toPgJson(header), header.status, now, now],
+        );
+      });
+    } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
+      throw this.#runError('UPDATE_WORKFLOW_RUN_HEADER', workflowName, runId, error);
+    }
+  }
+
+  /**
+   * Upserts a storage v2 run's header from `$1`–`$11` ({@link #headerParams}), adds `$7` (the
+   * number of entries the write adds) to `lastSeq`, and returns the new `lastSeq`. The header's
+   * row lock is held until commit, so the writes to one run commit in `seq` order.
+   */
+  #upsertHeaderSql(): string {
+    return `INSERT INTO ${this.#runsTable()} AS r
          (workflow_name, run_id, "resourceId", "threadId", status, header, "lastSeq", "createdAt", "updatedAt", "createdAtZ", "updatedAtZ")
        VALUES ($1, $2, $3, $4, $5, $6::jsonb, $7::int, $8, $9, $10, $11)
        ON CONFLICT (workflow_name, run_id) DO UPDATE
        SET "resourceId" = COALESCE(EXCLUDED."resourceId", r."resourceId"), "threadId" = EXCLUDED."threadId",
            status = EXCLUDED.status, header = EXCLUDED.header, "lastSeq" = r."lastSeq" + EXCLUDED."lastSeq",
            "updatedAt" = EXCLUDED."updatedAt", "updatedAtZ" = EXCLUDED."updatedAtZ"
-       RETURNING "lastSeq"`,
-      [
-        run.workflowName,
-        run.runId,
-        run.resourceId,
-        run.threadId,
-        run.status,
-        run.header,
-        entries.length,
-        run.createdAt,
-        run.updatedAt,
-        run.createdAt,
-        run.updatedAt,
-      ],
-    );
-    // A new statement under READ COMMITTED: with the header locked above, it sees every
-    // append that committed before this checkpoint, so none of their entries survive it.
-    await t.none(`DELETE FROM ${this.#entriesTable()} WHERE workflow_name = $1 AND run_id = $2`, [
+       RETURNING "lastSeq"`;
+  }
+
+  #headerParams(run: RunWrite, entryCount: number): unknown[] {
+    const now = new Date();
+    return [
       run.workflowName,
       run.runId,
-    ]);
-    await t.none(
-      `INSERT INTO ${this.#entriesTable()} (workflow_name, run_id, seq, kind, step_id, payload)
-       SELECT $1, $2, $3::int - $4::int + e.ord, ${ENTRY_VALUES}
-       FROM ${entryRows('$5')}`,
-      [run.workflowName, run.runId, lastSeq, entries.length, toPgJson(entries)],
-    );
+      run.resourceId,
+      run.threadId ?? null,
+      run.header.status,
+      toPgJson(run.header),
+      entryCount,
+      now,
+      now,
+      now,
+      now,
+    ];
+  }
+
+  async writeWorkflowRunCheckpoint({
+    fence: explicitFence,
+    steps,
+    state,
+    ...run
+  }: RunWrite & {
+    steps: Record<string, StepResult<any, any, any, any>>;
+    state: Record<string, any>;
+    fence?: RunFence;
+  }): Promise<void> {
+    const entries = journalEntries(steps, state);
+    const fence = resolveRunFence(this, explicitFence, run.runId);
+    try {
+      await this.#db.client.tx(async t => {
+        if (fence) await assertRunFence(t, this.#runOwnersTable(), fence, 'writeWorkflowRunCheckpoint');
+        const { lastSeq } = await t.one<{ lastSeq: number }>(
+          this.#upsertHeaderSql(),
+          this.#headerParams(run, entries.length),
+        );
+        // A new statement under READ COMMITTED: with the header locked above, it sees every
+        // append that committed before this checkpoint, so none of their entries survive it.
+        await t.none(`DELETE FROM ${this.#entriesTable()} WHERE workflow_name = $1 AND run_id = $2`, [
+          run.workflowName,
+          run.runId,
+        ]);
+        await t.none(
+          `INSERT INTO ${this.#entriesTable()} (workflow_name, run_id, seq, kind, step_id, payload)
+           SELECT $1, $2, $3::int - $4::int + e.ord, ${ENTRY_VALUES}
+           FROM ${entryRows('$5')}`,
+          [run.workflowName, run.runId, lastSeq, entries.length, toPgJson(entries)],
+        );
+      });
+    } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
+      throw this.#runError('WRITE_WORKFLOW_RUN_CHECKPOINT', run.workflowName, run.runId, error);
+    }
+  }
+
+  /** One statement: the header upsert numbers the entries inserted after it. */
+  async appendWorkflowRunEntries({
+    fence,
+    steps,
+    state,
+    ...run
+  }: RunWrite & {
+    steps: Record<string, StepResult<any, any, any, any>>;
+    state?: Record<string, any>;
+    fence?: RunFence;
+  }): Promise<void> {
+    const entries = journalEntries(steps, state);
+    try {
+      await withRunFence(
+        this.#db.client,
+        this.#runOwnersTable(),
+        resolveRunFence(this, fence, run.runId),
+        'appendWorkflowRunEntries',
+        q =>
+          q.none(
+            `WITH h AS (${this.#upsertHeaderSql()})
+             INSERT INTO ${this.#entriesTable()} (workflow_name, run_id, seq, kind, step_id, payload)
+             SELECT $1, $2, h."lastSeq" - $7::int + e.ord, ${ENTRY_VALUES}
+             FROM h, ${entryRows('$12')}`,
+            [...this.#headerParams(run, entries.length), toPgJson(entries)],
+          ),
+      );
+    } catch (error) {
+      if (isRunFenceConflictError(error)) throw error;
+      throw this.#runError('APPEND_WORKFLOW_RUN_ENTRIES', run.workflowName, run.runId, error);
+    }
   }
 
   // Ownership reads and writes always go to the primary client: a replica's
@@ -1031,8 +1173,6 @@ export class WorkflowsPG extends WorkflowsStorage {
     createdAt,
     updatedAt,
     fence,
-    storageVersion,
-    changes,
   }: {
     workflowName: string;
     runId: string;
@@ -1041,32 +1181,11 @@ export class WorkflowsPG extends WorkflowsStorage {
     createdAt?: Date;
     updatedAt?: Date;
     fence?: RunFence;
-    storageVersion?: 1 | 2;
-    changes?: WorkflowRunChanges;
   }): Promise<void> {
     try {
       const now = new Date();
       const createdAtValue = createdAt ? createdAt : now;
       const updatedAtValue = updatedAt ? updatedAt : now;
-      if (storageVersion === 2) {
-        const { context, value, ...header } = snapshot;
-        await this.#persistRun(
-          {
-            workflowName,
-            runId,
-            resourceId,
-            threadId: getSnapshotMemoryInfo(snapshot)?.threadId ?? null,
-            status: snapshot.status,
-            header: toPgJson(header),
-            createdAt: createdAtValue,
-            updatedAt: updatedAtValue,
-          },
-          snapshot,
-          changes,
-          resolveRunFence(this, fence, runId),
-        );
-        return;
-      }
       // Sanitize the snapshot JSON to remove problematic Unicode sequences
       const sanitizedSnapshot = toPgJson(snapshot);
       await withRunFence(
