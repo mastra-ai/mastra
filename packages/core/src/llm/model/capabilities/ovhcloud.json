@@ -8,6 +8,8 @@
     "qwen3.8-27b"
   ],
   "temperature": [
+    "gpt-oss-120b",
+    "gpt-oss-20b",
     "meta-llama-3_3-70b-instruct",
     "mistral-nemo-instruct-2407",
     "mistral-small-3.2-24b-instruct-2506",
@@ -32,6 +34,12 @@
     "qwen3.8-27b"
   ],
   "reasoning": {
+    "qwen3.5-397b-a17b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
     "qwen3.8-27b": [
       {
         "type": "effort",
@@ -44,22 +52,16 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "qwen3.5-9b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
-    "qwen3.5-397b-a17b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
-      }
-    ],
     "qwen3.6-27b": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high"]
+      }
+    ],
+    "qwen3.5-9b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
       }
     ],
     "gpt-oss-120b": [

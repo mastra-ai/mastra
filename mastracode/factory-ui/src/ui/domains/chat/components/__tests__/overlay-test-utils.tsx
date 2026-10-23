@@ -6,7 +6,6 @@ import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
 import { ChatSessionTestProvider as ChatSessionProvider } from '../../context/ChatSessionTestProvider';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL } from '../../../../../../e2e/ui/render';
-import { thinkingConfig } from '../../../../__tests__/fixtures/thinkingConfig';
 import { OverlaysProvider } from '../../../../lib/overlays';
 
 if (typeof globalThis.ResizeObserver === 'undefined') {
@@ -73,6 +72,7 @@ export function useOverlayControllerHandlers() {
           projectRepositoryId: OVERLAY_PROJECT_REPOSITORY_ID,
           orgId: 'org-overlay',
           userId: 'user-overlay',
+          resourceId: 'user-overlay',
           branch: 'overlay-workspace',
           baseBranch: 'main',
           sandboxId: 'sandbox-overlay',
@@ -98,23 +98,23 @@ export function useOverlayControllerHandlers() {
         ],
       }),
     ),
-    http.get(`${API}/sessions/:resourceId`, ({ params }) =>
+    http.get(`${API}/sessions/:sessionId`, ({ params }) =>
       HttpResponse.json({
         controllerId: 'code',
-        resourceId: params.resourceId,
+        sessionId: params.sessionId,
         modeId: 'build',
         modelId: 'openai/gpt-4o-mini',
         threadId: 'thread-test',
         settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
       }),
     ),
-    http.get(`${API}/sessions/:resourceId/permissions`, () =>
+    http.get(`${API}/sessions/:sessionId/permissions`, () =>
       HttpResponse.json({ categories: { read: 'ask' }, tools: {} }),
     ),
-    http.get(`${API}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads: [] })),
-    http.get(`${API}/sessions/:resourceId/threads/thread-test/messages`, () => HttpResponse.json({ messages: [] })),
+    http.get(`${API}/sessions/:sessionId/threads`, () => HttpResponse.json({ threads: [] })),
+    http.get(`${API}/sessions/:sessionId/threads/thread-test/messages`, () => HttpResponse.json({ messages: [] })),
     http.get(
-      `${API}/sessions/:resourceId/stream`,
+      `${API}/sessions/:sessionId/stream`,
       () =>
         new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
           headers: { 'content-type': 'text/event-stream' },
@@ -124,18 +124,23 @@ export function useOverlayControllerHandlers() {
     http.get(`${TEST_BASE_URL}/web/fs/list`, () =>
       HttpResponse.json({ root: '/tmp', path: '/tmp', parent: null, entries: [] }),
     ),
-    http.put(`${API}/sessions/:resourceId/state`, () => HttpResponse.json({})),
-    http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: null })),
-    http.get(`${TEST_BASE_URL}/web/config/thinking`, () => HttpResponse.json(thinkingConfig)),
+    http.put(`${API}/sessions/:sessionId/state`, () => HttpResponse.json({})),
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+      HttpResponse.json({ modelId: null, thinkingLevel: null }),
+    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${OVERLAY_FACTORY_ID}`, () =>
+      HttpResponse.json({ project: { id: OVERLAY_FACTORY_ID, name: 'Overlay', defaultThinkingLevel: 'medium' } }),
+    ),
   );
 }
 
 /** Renders where a command navigated and the location it carries back, so tests can assert both. */
 function NavigatedPath() {
-  const { pathname, state } = useLocation();
+  const { pathname, hash, state } = useLocation();
   return (
     <span data-testid="navigated-path" data-return-to={JSON.stringify(state)}>
       {pathname}
+      {hash}
     </span>
   );
 }

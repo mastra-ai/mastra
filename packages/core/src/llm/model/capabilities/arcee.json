@@ -1,22 +1,55 @@
 {
+  "attachment": ["deepseek/deepseek-v4.1-flash", "deepseek/deepseek-v4.1-flash-1017", "zai-org/glm-5.3-flash"],
   "temperature": [
     "deepseek/deepseek-v4-flash-latest",
     "deepseek/deepseek-v4-pro",
     "deepseek/deepseek-v4-pro-0813",
+    "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash-1017",
     "moonshotai/kimi-k3",
     "thinkingmachines/inkling-small",
     "trinity-large-thinking",
-    "zai-org/glm-5.2"
+    "zai-org/glm-5.2",
+    "zai-org/glm-5.3",
+    "zai-org/glm-5.3-flash"
   ],
   "structuredOutput": [
     "deepseek/deepseek-v4-flash-latest",
     "deepseek/deepseek-v4-pro",
     "deepseek/deepseek-v4-pro-0813",
+    "deepseek/deepseek-v4.1-flash",
+    "deepseek/deepseek-v4.1-flash-1017",
     "moonshotai/kimi-k3",
-    "zai-org/glm-5.2"
+    "zai-org/glm-5.2",
+    "zai-org/glm-5.3",
+    "zai-org/glm-5.3-flash"
   ],
   "reasoning": {
+    "zai-org/glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "zai-org/glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "zai-org/glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
     "deepseek/deepseek-v4-pro-0813": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "deepseek/deepseek-v4.1-flash": [
       {
         "type": "effort",
         "values": ["high", "max"]
@@ -34,16 +67,16 @@
         "values": ["high", "max"]
       }
     ],
+    "deepseek/deepseek-v4.1-flash-1017": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
     "moonshotai/kimi-k3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "zai-org/glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
       }
     ]
   }

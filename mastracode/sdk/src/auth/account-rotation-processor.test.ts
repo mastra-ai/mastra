@@ -758,6 +758,31 @@ describe('model-route fallback parts', () => {
     });
   });
 
+  it('does not ask the host for a thinking default when the session picked its own level', async () => {
+    const seeded = await makeTwoAccountStorage();
+    const route = makeRouteContext({
+      modelId: 'anthropic/claude-fable-5',
+      entries: [
+        { id: 'anthropic', label: 'Anthropic', modelId: 'anthropic/claude-fable-5', accountId: seeded.accountA.id },
+        { id: 'openai', label: 'OpenAI', modelId: 'openai/gpt-5.6-sol' },
+      ],
+    });
+    route.state.thinkingLevel = 'medium';
+    const resolveDefaultThinkingLevel = vi.fn(async () => {
+      throw new Error('lookup failed');
+    });
+    const processor = new AccountRotationProcessor({
+      credentialStore: seeded.storage,
+      maxProcessorRetries: 22,
+      resolveDefaultThinkingLevel,
+    });
+
+    const args = makeArgs({ error: apiError(429), requestContext: route.requestContext });
+    expect(await processor.processAPIError(args as never)).toEqual({ retry: false });
+    expect(route.state[MODEL_FALLBACK_STATE_KEY]).toMatchObject({ toEntryId: 'openai' });
+    expect(resolveDefaultThinkingLevel).not.toHaveBeenCalled();
+  });
+
   it('advances through multiple route entries in one request', async () => {
     const seeded = await makeTwoAccountStorage();
     const route = makeRouteContext({

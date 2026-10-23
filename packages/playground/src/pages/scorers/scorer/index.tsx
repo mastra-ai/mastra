@@ -30,7 +30,7 @@ const crumbs = [navCrumb('/scorers'), scorerCrumb];
 const SCORES_SORT_KEYS: readonly ScoresSortKey[] = ['date', 'score'];
 
 export default function Scorer() {
-  const { scorerId } = useParams()! as { scorerId: string };
+  const { scorerId } = useParams() as { scorerId: string };
   const [searchParams, setSearchParams] = useSearchParams();
   const scoreIdFromUrl = searchParams.get('scoreId') ?? undefined;
   const [selectedScoreId, setSelectedScoreId] = useState<string | undefined>(scoreIdFromUrl);
@@ -42,7 +42,7 @@ export default function Scorer() {
     type: 'ALL' as const,
   });
 
-  const { scorer, error: scorerError } = useScorer(scorerId!);
+  const { scorer, error: scorerError } = useScorer(scorerId);
   const columnsState = useScoresColumns();
 
   const { data: agents = {}, isLoading: isLoadingAgents, error: agentsError } = useAgents();
@@ -195,13 +195,13 @@ export default function Scorer() {
   const scorerActionsMenu = isStoredScorer ? (
     <DropdownMenu>
       <DropdownMenu.Trigger asChild>
-        <Button size="lg" aria-label="Scorer actions menu">
+        <Button size="icon-lg" aria-label="Scorer actions menu">
           <MoreVertical />
         </Button>
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="end" className="w-48">
         <DropdownMenu.Item onSelect={() => void navigate(`/cms/scorers/${scorerId}/edit`)}>
-          <Pencil /> Edit Scorer
+          <Pencil /> Edit scorer
         </DropdownMenu.Item>
       </DropdownMenu.Content>
     </DropdownMenu>

@@ -6,8 +6,13 @@ import { loadMessageHistory, parseMemoryRequestContext } from '../../memory';
 import { getMemoryTokenBoundary, isAfterMemoryTokenBoundary } from '../../memory/message-history-config';
 import { SpanType } from '../../observability';
 import type { ObservabilityContext, MemoryOperationAttributes } from '../../observability';
+import { MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY } from '../../request-context';
 import type { RequestContext } from '../../request-context';
 import type { MemoryStorage } from '../../storage';
+
+// Bounds the newest-first scan for continuation tool-call messages that fall outside the history window.
+const CONTINUATION_SCAN_PAGE_SIZE = 100;
+const CONTINUATION_SCAN_MAX_PAGES = 10;
 
 /**
  * Options for the MessageHistory processor
@@ -107,6 +112,78 @@ export class MessageHistory implements Processor {
     return observabilityContext?.tracingContext?.currentSpan;
   }
 
+  private async loadContinuationToolCallMessages(
+    requestContext: RequestContext | undefined,
+    threadId: string,
+    resourceId: string | undefined,
+    loaded: MastraDBMessage[],
+  ): Promise<MastraDBMessage[]> {
+    const ids = requestContext?.get(MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY);
+    if (!Array.isArray(ids) || ids.length === 0) return [];
+
+    const missing = new Set<string>(ids.filter((id): id is string => typeof id === 'string'));
+    for (const msg of loaded) {
+      for (const id of toolCallIdsOf(msg)) missing.delete(id);
+    }
+    if (missing.size === 0) return [];
+
+    // Scan newest-first in bounded pages so a long thread is never read in full.
+    const loadedIds = new Set(loaded.map(msg => msg.id));
+    const found: MastraDBMessage[] = [];
+    for (let page = 0; page < CONTINUATION_SCAN_MAX_PAGES && missing.size > 0; page++) {
+      const { messages, hasMore } = await this.storage.listMessages({
+        threadId,
+        resourceId,
+        page,
+        perPage: CONTINUATION_SCAN_PAGE_SIZE,
+        orderBy: { field: 'createdAt', direction: 'DESC' },
+        includeTotal: false,
+      });
+      for (const msg of messages) {
+        if (msg.role === 'system' || loadedIds.has(msg.id)) continue;
+        const ids = toolCallIdsOf(msg).filter(id => missing.has(id));
+        if (!ids.length) continue;
+        found.push(msg);
+        loadedIds.add(msg.id);
+        for (const id of ids) missing.delete(id);
+      }
+      if (!hasMore || messages.length < CONTINUATION_SCAN_PAGE_SIZE) break;
+    }
+    return found;
+  }
+
+  /**
+   * Keep pinned messages inside the token budget: drop the oldest unpinned history first,
+   * and skip any pinned message that cannot fit on its own.
+   */
+  private async fitPinnedMessages(
+    history: MastraDBMessage[],
+    pinned: MastraDBMessage[],
+  ): Promise<{ history: MastraDBMessage[]; pinned: MastraDBMessage[] }> {
+    if (!this.tokenLimit || !this.tokenCounter || !pinned.length) return { history, pinned };
+    const maxTokens = this.tokenLimit.maxTokens - this.tokenLimit.atMaxRemoveTokens;
+    // Keep each pinned result that fits on its own, then give the rest of the budget to history.
+    const fittedPinned: MastraDBMessage[] = [];
+    let pinnedTokens = 0;
+    for (const msg of pinned) {
+      const tokens = await this.tokenCounter.countMessage(msg);
+      if (pinnedTokens + tokens > maxTokens) continue;
+      pinnedTokens += tokens;
+      fittedPinned.push(msg);
+    }
+    if (!fittedPinned.length) return { history, pinned: [] };
+    // history is newest-first; keep the newest messages that still fit next to the pinned ones.
+    const kept: MastraDBMessage[] = [];
+    let total = pinnedTokens;
+    for (const msg of history) {
+      const tokens = await this.tokenCounter.countMessage(msg);
+      if (total + tokens > maxTokens) break;
+      total += tokens;
+      kept.push(msg);
+    }
+    return { history: kept, pinned: fittedPinned };
+  }
+
   async processInput(
     args: {
       messages: MastraDBMessage[];
@@ -174,6 +251,21 @@ export class MessageHistory implements Processor {
         return msg.role !== 'system' && (!boundary || isAfterMemoryTokenBoundary(msg, boundary));
       });
 
+      // A background task's result is written into its original tool-call message, which keeps
+      // its dispatch-time createdAt. The continuation turn that reports the result must still see
+      // it, so load those messages even when they fall outside the history window.
+      const pinnedMessages = await this.loadContinuationToolCallMessages(
+        requestContext,
+        threadId,
+        resourceId,
+        filteredMessages,
+      );
+      if (pinnedMessages.length) {
+        const fitted = await this.fitPinnedMessages(filteredMessages, pinnedMessages);
+        filteredMessages.splice(0, filteredMessages.length, ...fitted.history, ...fitted.pinned);
+        filteredMessages.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      }
+
       // 3. Add stored history in chronological order. MessageList layers any matching
       // input copy onto the stored message so memory remains the authoritative base.
       const chronologicalMessages = filteredMessages.reverse();
@@ -215,15 +307,16 @@ export class MessageHistory implements Processor {
 
     const { threadId, resourceId } = context;
 
-    const newInput = messageList.get.input.db();
-    const newOutput = messageList.get.response.db();
+    const persistenceMessageList = messageList.cloneForPersistence();
+    const newInput = persistenceMessageList.get.input.db();
+    const newOutput = persistenceMessageList.get.response.db();
     // Apply transcript redaction before persisting: this path bypasses
     // drainUnsavedMessages(), and a background tool result may sit in the
     // list as a raw payload whose transcript transform lives only in
     // providerMetadata. Persisting it untransformed would leak the raw
     // payload to storage whenever this save lands after the redacting
     // save-queue flush (last-writer-wins on the message id).
-    const messagesToSave = messageList.transformMessagesForTranscript([...newInput, ...newOutput]);
+    const messagesToSave = persistenceMessageList.transformMessagesForTranscript([...newInput, ...newOutput]);
 
     if (messagesToSave.length === 0) {
       return messageList;
@@ -294,4 +387,13 @@ export class MessageHistory implements Processor {
     await this.storage.saveMessages({ messages: filtered });
     noteThreadMessagesSaved({ threadId, resourceId, savedAt });
   }
+}
+
+function toolCallIdsOf(msg: MastraDBMessage): string[] {
+  const parts = msg.content?.parts ?? [];
+  const ids: string[] = [];
+  for (const part of parts) {
+    if (part.type === 'tool-invocation') ids.push(part.toolInvocation.toolCallId);
+  }
+  return ids;
 }

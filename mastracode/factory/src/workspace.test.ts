@@ -103,6 +103,9 @@ const mocks = vi.hoisted(() => ({
   runBindingRole: null as string | null,
   runBindingStatus: 'active' as 'active' | 'revoked',
   runBindingThreadId: null as string | null,
+  /** Whether the session has any binding row, even one the active lookup cannot resolve. */
+  everBound: false,
+  hasRunBindingForSession: vi.fn(async () => mocks.everBound || mocks.runBindingRole !== null),
   findActiveRunBindingForSession: vi.fn(async ({ sessionId }: { sessionId: string }) =>
     mocks.runBindingRole
       ? {
@@ -111,6 +114,7 @@ const mocks = vi.hoisted(() => ({
           orgId: 'org-1',
           threadId: mocks.runBindingThreadId ?? sessionId,
           resourceId: sessionId,
+          sessionId,
         }
       : null,
   ),
@@ -200,7 +204,9 @@ afterEach(async () => {
   mocks.runBindingRole = null;
   mocks.runBindingStatus = 'active';
   mocks.runBindingThreadId = null;
+  mocks.everBound = false;
   mocks.findActiveRunBindingForSession.mockClear();
+  mocks.hasRunBindingForSession.mockClear();
 });
 
 function createRequestContext(projectPath: string) {
@@ -227,7 +233,9 @@ function createGithubRequestContext(
   const state: Record<string, unknown> = { factoryProjectId: projectId };
   requestContext.set('controller', {
     modeId: 'build',
-    resourceId: sessionId,
+    // Factory sessions run under the Factory resource and are addressed by their own id.
+    resourceId: projectId,
+    sessionId,
     threadId: sessionId,
     getState: () => state,
     setState: async (updates: Record<string, unknown>) => {
@@ -249,6 +257,7 @@ function createUnscopedGithubRequestContext(projectId: string, projectPath: stri
   requestContext.set('controller', {
     modeId: 'build',
     resourceId: projectId,
+    sessionId: projectId,
     getState,
     session: { id: projectId, state: { get: getState } },
   });
@@ -379,6 +388,7 @@ describe('bundled Factory skill assets', () => {
       'factory-plan',
       'factory-rereview',
       'factory-review',
+      'factory-self-review',
       'factory-triage',
     ]);
     await Promise.all(
@@ -1014,7 +1024,10 @@ describe('GitHub session workspace preparation', () => {
     const resolver = createWorkspaceFactory({
       sandbox: new CallbackFactorySandbox(mocks.createSandbox as any),
       github: github as any,
-      workItems: { findActiveRunBindingForSession: mocks.findActiveRunBindingForSession } as any,
+      workItems: {
+        findActiveRunBindingForSession: mocks.findActiveRunBindingForSession,
+        hasRunBindingForSession: mocks.hasRunBindingForSession,
+      } as any,
       ...(workspaceRegistry ? { workspaceRegistry } : {}),
     });
     return {
@@ -1272,6 +1285,54 @@ describe('GitHub session workspace preparation', () => {
     expect(await workspace.skills?.get('factory-review')).toBeFalsy();
     expect(await workspace.skills?.get('factory-rereview')).toBeFalsy();
     expect((await workspace.skills?.get('factory-plan'))?.instructions).toContain('# Factory Plan');
+  });
+
+  it('exposes review skills to an unbound side session a user session started', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a', originSessionId: 'user-session', originThreadId: 'user-thread' });
+
+    const workspace = (await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') }))!;
+    await workspace.skills?.maybeRefresh();
+
+    expect((await workspace.skills?.get('factory-review'))?.instructions).toBeTruthy();
+    expect((await workspace.skills?.get('factory-rereview'))?.instructions).toBeTruthy();
+  });
+
+  it('keeps review skills hidden from a side session bound to a work role', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a', originSessionId: 'user-session', originThreadId: 'user-thread' });
+    mocks.runBindingRole = 'work';
+
+    const workspace = (await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') }))!;
+    await workspace.skills?.maybeRefresh();
+
+    expect(await workspace.skills?.get('factory-review')).toBeFalsy();
+  });
+
+  it('keeps review skills hidden from a side session whose active binding is ambiguous', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a', originSessionId: 'user-session', originThreadId: 'user-thread' });
+    // Several active bindings: the active lookup returns null, but the session is bound.
+    mocks.everBound = true;
+
+    const workspace = (await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') }))!;
+    await workspace.skills?.maybeRefresh();
+
+    expect(await workspace.skills?.get('factory-review')).toBeFalsy();
+  });
+
+  it('keeps review skills hidden from an unbound user session', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    const workspace = (await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') }))!;
+    await workspace.skills?.maybeRefresh();
+
+    expect(await workspace.skills?.get('factory-review')).toBeFalsy();
   });
 
   it('exposes review skills to a review session before it has a live thread', async () => {
@@ -1556,26 +1617,20 @@ describe('GitHub session workspace preparation', () => {
     expect(sandbox.executeCommand).toHaveBeenCalled();
   });
 
-  it('authorizes a workspace-free supervisor session before controller session creation', async () => {
-    const projects = { get: vi.fn().mockResolvedValue({ id: 'project-1', orgId: 'org-1' }) };
-    const resolver = createWorkspaceFactory({ projects: projects as any });
-    const requestContext = createGithubRequestContext('project-1', 'factory-supervisor:project-1');
+  it('opens no workspace for a project-keyed resourceId from a retired session kind', async () => {
+    const projects = { get: vi.fn() };
+    const sourceControl = fakeGithubIntegration().sourceControlStorage;
+    const getBySessionId = vi.spyOn(sourceControl.sessions, 'getBySessionId');
+    const resolver = createWorkspaceFactory({
+      projects: projects as any,
+      sourceControls: [{ id: 'github', versionControl: {} as any, storage: sourceControl as any }],
+    });
+    const requestContext = createGithubRequestContext('project-1', 'factory-retired-kind:project-1');
 
     await expect(resolver({ requestContext } as any)).resolves.toBeUndefined();
-    expect(projects.get).toHaveBeenCalledWith({ orgId: 'org-1', id: 'project-1' });
-  });
-
-  it('refuses a workspace-free supervisor session outside the caller organization', async () => {
-    const projects = { get: vi.fn().mockResolvedValue(null) };
-    const resolver = createWorkspaceFactory({ projects: projects as any });
-    const requestContext = createGithubRequestContext('project-1', 'factory-supervisor:project-1', {
-      organizationId: 'org-2',
-      workosId: 'user-1',
-    });
-
-    await expect(resolver({ requestContext } as any)).rejects.toThrow(
-      'Factory supervisor project-1 is not available to the current user',
-    );
+    expect(getBySessionId).toHaveBeenCalledWith('factory-retired-kind:project-1');
+    expect(projects.get).not.toHaveBeenCalled();
+    expect(mocks.materializeRepo).not.toHaveBeenCalled();
   });
 
   it('opens the session for a session-shaped auth user, whose org lives on the session half', async () => {
@@ -3169,6 +3224,7 @@ describe('FactorySkillSource layering', () => {
       'factory-plan',
       'factory-rereview',
       'factory-review',
+      'factory-self-review',
       'factory-triage',
     ]);
     expect(await source.exists(path.join(mount, 'my-custom-skill', 'SKILL.md'))).toBe(false);

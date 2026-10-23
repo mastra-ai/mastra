@@ -34,7 +34,7 @@ export function SpanTypeLegend({ spans }: { spans: UISpan[] }) {
 
   // Bleeds past the panel's `px-2` so the bottom border reaches the container edges.
   return (
-    <div data-slot="span-type-legend" className="flex flex-wrap items-center gap-1.5 py-3">
+    <div data-slot="span-type-legend" className="flex flex-wrap items-center gap-1.5 pb-3">
       {usedSpanTypes.map(type => {
         const spanUI = getSpanTypeUi(type);
         return (
@@ -42,7 +42,7 @@ export function SpanTypeLegend({ spans }: { spans: UISpan[] }) {
             key={type}
             size="sm"
             emphasis="subtle"
-            icon={<span className="inline-block size-1.5 rounded-full" style={{ backgroundColor: spanUI?.color }} />}
+            icon={<span className="block size-1.5 rounded-full" style={{ backgroundColor: spanUI?.color }} />}
           >
             {spanUI?.label || type}
           </Badge>

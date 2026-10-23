@@ -21,20 +21,17 @@ describe('contextual onboarding previews', () => {
     renderWithProviders(
       <OnboardingPreview
         step="review"
+        modelScope="user"
         personalProviderId="anthropic"
         personalModel="anthropic/claude-fable-5"
         personalConnectionMethod="api_key"
       />,
     );
-    const personalScene = screen.getByLabelText('Personal access preview');
+    const personalScene = screen.getByLabelText('Account setup preview');
     expect(personalScene.closest('[data-active]')).toHaveAttribute('data-active', 'true');
     const personal = within(personalScene);
     expect(within(personal.getByLabelText('Factory work model')).getByText('anthropic/claude-fable-5')).toBeVisible();
     expect(await personal.findByText('Connected · your account')).toBeVisible();
-    expect(screen.getByLabelText('Default model preview').closest('[data-active]')).toHaveAttribute(
-      'data-active',
-      'false',
-    );
     expect(screen.queryByRole('complementary')).not.toBeInTheDocument();
   });
 
@@ -81,21 +78,25 @@ describe('contextual onboarding previews', () => {
       ),
     );
     const { client, rerender } = renderWithProviders(
-      <OnboardingPreview step="personal-provider" model="openai/gpt-5.6-sol" personalProviderId="anthropic" />,
+      <OnboardingPreview
+        step="personal-provider"
+        modelScope="hybrid"
+        model="openai/gpt-5.6-sol"
+        personalProviderId="anthropic"
+      />,
     );
     const shared = within(screen.getByLabelText('Factory work model'));
-    const personal = within(screen.getByLabelText('Personal sessions provider'));
+    const personal = within(screen.getByLabelText('Session model'));
     expect(shared.getByText('openai/gpt-5.6-sol')).toBeInTheDocument();
     expect(await personal.findByText('Connect your account')).toBeInTheDocument();
-    expect(personal.getByText('Anthropic')).toBeInTheDocument();
 
     saved = true;
     await client.invalidateQueries({ queryKey: queryKeys.providers() });
     expect(await personal.findByText('Connected · your account')).toBeInTheDocument();
     expect(shared.getByText('openai/gpt-5.6-sol')).toBeInTheDocument();
 
-    rerender(<OnboardingPreview step="personal-provider" model="openai/gpt-5.6-sol" />);
-    expect(personal.getByText('Shared access available')).toBeInTheDocument();
+    rerender(<OnboardingPreview step="personal-provider" modelScope="hybrid" model="openai/gpt-5.6-sol" />);
+    expect(personal.getByText('Connect your account')).toBeInTheDocument();
     expect(shared.getByText('openai/gpt-5.6-sol')).toBeInTheDocument();
   });
 });

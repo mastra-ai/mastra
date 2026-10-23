@@ -1,12 +1,14 @@
 'use client';
 
-import { useRef, useState, useCallback, useEffect, type Dispatch, type RefObject, type SetStateAction } from 'react';
+import { useRef, useState, useCallback, useEffect } from 'react';
+import type { Dispatch, RefObject, SetStateAction } from 'react';
 
 export interface ItemRect {
   top: number;
   height: number;
   left: number;
   width: number;
+  radius: string;
 }
 
 export interface UseFluidHoverOptions {
@@ -316,18 +318,26 @@ export function useFluidHover<T extends HTMLElement>(
         height: element.offsetHeight,
         left,
         width: element.offsetWidth,
+        radius: getComputedStyle(element).borderRadius,
       };
     });
     if (itemsRef.current.size > 0 && laidOutItemCount === 0) return false;
-    // Skip the state update when nothing moved (a cheap top/left/width/height
-    // compare) so redundant remeasures don't churn re-renders.
+    // Skip the state update when nothing moved (a cheap per-field compare) so
+    // redundant remeasures don't churn re-renders.
     const prev = itemRectsRef.current;
     let changed = prev.length !== rects.length;
     for (let i = 0; !changed && i < rects.length; i++) {
       const p = prev[i];
       const r = rects[i];
       if (p === r) continue; // both undefined (sparse slot)
-      changed = !p || !r || p.top !== r.top || p.left !== r.left || p.width !== r.width || p.height !== r.height;
+      changed =
+        !p ||
+        !r ||
+        p.top !== r.top ||
+        p.left !== r.left ||
+        p.width !== r.width ||
+        p.height !== r.height ||
+        p.radius !== r.radius;
     }
     if (changed) {
       itemRectsRef.current = rects;

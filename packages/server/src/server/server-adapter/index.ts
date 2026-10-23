@@ -34,6 +34,7 @@ import { getBuiltInRouteFGAConfig } from './routes/fga-manifest';
 export * from './routes';
 export { applyMcpRequestAuth, buildMcpAuthInfoFromRequestContext } from './mcp-auth';
 export type { McpAuthInfo, SetMcpRequestAuth } from './mcp-auth';
+export { propagateRequestAbort } from './mcp-disconnect';
 export { convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
 export { redactStreamChunk } from './redact';
 export { serializeStreamChunk, type SerializedStreamChunk } from './serialize';
@@ -42,6 +43,7 @@ export {
   MASTRA_CLIENT_TYPE_HEADER,
   MASTRA_IS_STUDIO_KEY,
   MASTRA_STUDIO_CLIENT_TYPE,
+  RESERVED_REQUEST_CONTEXT_KEYS,
   isReservedRequestContextKey,
   isStudioClientTypeHeader,
 } from '../constants';
@@ -56,6 +58,82 @@ export function getCustomHTTPExceptionResponse(error: unknown): Response | undef
   }
 
   return error.getResponse();
+}
+
+/**
+ * Response for an HTTPException thrown from a `registerApiRoute` handler, or undefined for
+ * any other error (which callers keep behind a generic 500). Duck-typed so an HTTPException
+ * from `hono/http-exception`, possibly a separate Hono install, is recognised too.
+ */
+export function getCustomRouteHTTPExceptionResponse(error: unknown): Response | undefined {
+  if (!(error instanceof Error)) return undefined;
+  const httpError = error as Error & { status?: unknown; res?: unknown; getResponse?: unknown };
+  const status = httpError.status;
+  if (
+    typeof httpError.getResponse !== 'function' ||
+    typeof status !== 'number' ||
+    !Number.isInteger(status) ||
+    status < 400 ||
+    status > 599
+  ) {
+    return undefined;
+  }
+  if (httpError.res) return (httpError.getResponse as () => Response).call(httpError);
+  return Response.json({ error: httpError.message }, { status });
+}
+
+export interface HTTPErrorResponseBody {
+  error: string;
+  cause?: { failingItems: unknown[] } | { field: string; errors: Array<{ path: string; message: string }> };
+}
+
+/**
+ * Only allowlisted causes are exposed to clients; any other cause stays server-side:
+ * - `cause.failingItems` (dataset schema-update rejections)
+ * - `cause.field` + `cause.errors` (schema validation failures), reduced to each error's path and message
+ */
+function getSafeErrorCause(error: unknown): HTTPErrorResponseBody['cause'] {
+  try {
+    const raw = error instanceof Error ? error.cause : undefined;
+    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+    if (Array.isArray((raw as any).failingItems)) {
+      return { failingItems: (raw as any).failingItems };
+    }
+    const { field, errors } = raw as { field?: unknown; errors?: unknown };
+    if (typeof field === 'string' && Array.isArray(errors)) {
+      return {
+        field,
+        errors: errors.flatMap(e =>
+          e && typeof e.path === 'string' && typeof e.message === 'string'
+            ? [{ path: e.path, message: e.message }]
+            : [],
+        ),
+      };
+    }
+  } catch {
+    // property access threw (e.g. a getter) — omit cause
+  }
+  return undefined;
+}
+
+/**
+ * Maps a handler error to the status and JSON body every adapter sends:
+ * `error.status` (HTTPException) first, then `error.details.status` (MastraError), else 500.
+ */
+export function getHTTPErrorResponse(error: unknown): { status: number; body: HTTPErrorResponseBody } {
+  const message = error instanceof Error ? error.message : 'Unknown error';
+
+  if (error && typeof error === 'object') {
+    if ('status' in error) {
+      const cause = getSafeErrorCause(error);
+      return { status: (error as any).status, body: { error: message, ...(cause ? { cause } : {}) } };
+    }
+    if ('details' in error && error.details && typeof error.details === 'object' && 'status' in error.details) {
+      return { status: (error.details as any).status, body: { error: message } };
+    }
+  }
+
+  return { status: 500, body: { error: message } };
 }
 
 /**
@@ -775,11 +853,11 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     route: ServerRoute,
     userPermissions: string[] | undefined,
     hasPermissionFn: (userPerms: string[], required: string) => boolean,
-    requestContext?: RequestContext,
+    requestContext: RequestContext,
   ): { status: number; error: string; message: string } | null {
     // If RBAC is not configured, skip permission checks entirely
     // Auth-only mode = authenticated users get full access
-    const rbacProvider = requestContext ? this.getEffectiveRBACProvider(requestContext) : this.mastra.getServer()?.rbac;
+    const rbacProvider = this.getEffectiveRBACProvider(requestContext);
 
     if (!rbacProvider) {
       return null;
@@ -1117,6 +1195,8 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       if (serverOnError) {
         return serverOnError(err, c as unknown as Parameters<typeof serverOnError>[1]);
       }
+      const httpExceptionResponse = getCustomRouteHTTPExceptionResponse(err);
+      if (httpExceptionResponse) return httpExceptionResponse;
       // Log before responding — otherwise the error is invisible on the server
       // and the client only ever sees an opaque 500.
       this.mastra.getLogger()?.error(`Custom route handler failed: ${c.req.method} ${c.req.path}`, {
@@ -1289,7 +1369,11 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     // Custom routes are served at root (/), not under the API prefix — add per-path servers override.
     const allCustomRoutes = this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes;
     if (allCustomRoutes && allCustomRoutes.length > 0) {
-      const customPaths = convertCustomRoutesToOpenAPIPaths(allCustomRoutes);
+      const componentSchemas = openApiSpec.components?.schemas ?? Object.create(null);
+      const customPaths = convertCustomRoutesToOpenAPIPaths(allCustomRoutes, componentSchemas);
+      if (Object.keys(componentSchemas).length > 0) {
+        openApiSpec.components = { ...openApiSpec.components, schemas: componentSchemas };
+      }
       if (prefix) {
         for (const pathKey of Object.keys(customPaths)) {
           if (!customPaths[pathKey].servers) {

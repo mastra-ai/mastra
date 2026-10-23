@@ -40,7 +40,7 @@ describe('FactoryProjectsStorage', () => {
     expect((await seed.projects.get({ orgId: 'org-1', id: user.id }))?.modelScope).toBe('user');
   });
 
-  it('round-trips the hybrid scope and reads unknown stored scopes as factory', async () => {
+  it('round-trips the hybrid scope and reads unknown stored scopes as hybrid', async () => {
     const seed = await createFactoryStorageForTests();
     const project = await seed.projects.create({
       orgId: 'org-1',
@@ -53,8 +53,9 @@ describe('FactoryProjectsStorage', () => {
     expect((await seed.projects.getById({ id: project.id }))?.modelScope).toBe('hybrid');
 
     // A value written by an older or newer build must not leak through as an unknown scope.
+    await seed.projects.update({ orgId: 'org-1', id: project.id, input: { modelScope: 'factory' } });
     await seed.projects.update({ orgId: 'org-1', id: project.id, input: { modelScope: 'org' as never } });
-    expect((await seed.projects.get({ orgId: 'org-1', id: project.id }))?.modelScope).toBe('factory');
+    expect((await seed.projects.get({ orgId: 'org-1', id: project.id }))?.modelScope).toBe('hybrid');
   });
 
   it('lists, updates, and deletes projects within their organization', async () => {
@@ -120,6 +121,25 @@ describe('FactoryProjectsStorage', () => {
       activeTemplateHeads: null,
     };
     expect(await seed.projects.update({ orgId: 'org-1', id: project.id, input: cleared })).toMatchObject(cleared);
+  });
+
+  it('keeps review test checks off by default and lets a project toggle them', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'P' } });
+    expect(project.reviewTestChecksEnabled).toBe(false);
+    const enabled = await seed.projects.update({
+      orgId: 'org-1',
+      id: project.id,
+      input: { reviewTestChecksEnabled: true },
+    });
+    expect(enabled?.reviewTestChecksEnabled).toBe(true);
+    const disabled = await seed.projects.update({
+      orgId: 'org-1',
+      id: project.id,
+      input: { reviewTestChecksEnabled: false },
+    });
+    expect(disabled?.reviewTestChecksEnabled).toBe(false);
+    expect((await seed.projects.get({ orgId: 'org-1', id: project.id }))?.reviewTestChecksEnabled).toBe(false);
   });
 });
 

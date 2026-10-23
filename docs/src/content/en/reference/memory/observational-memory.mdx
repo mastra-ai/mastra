@@ -22,7 +22,7 @@ export const agent = new Agent({
   id: 'my-agent',
   name: 'my-agent',
   instructions: 'You are a helpful assistant.',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   memory: new Memory({
     options: {
       observationalMemory: true,
@@ -61,7 +61,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
     name: 'autoModels',
     type: 'Record<string, string>',
     description:
-      'Overrides the model automatic selection picks for a provider, keyed by provider ID. For example, `{ openai: "__GATEWAY_OPENAI_MODEL_NANO__" }`. Providers not listed use the built-in pick.',
+      'Overrides the model automatic selection picks for a provider, keyed by provider ID. For example, `{ openai: "__GATEWAY_OPENAI_MODEL_LUNA__" }`. Providers not listed use the built-in pick.',
     isOptional: true,
   },
   {
@@ -199,7 +199,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             name: 'failurePolicy',
             type: "'abort' | 'continue'",
             description:
-              "Terminal policy once Observer retries are exhausted. `'abort'` aborts the agent turn. `'continue'` emits the existing failure diagnostic, keeps the failed input pending for a later cycle, and allows the main agent turn to continue. Persistence, indexing, transform, locking, invariant, and explicit abort failures remain fatal. This setting doesn't prevent the underlying provider error or change `blockAfter` or attachment handling, and it has no backstop for a sustained outage: pending messages keep accruing in the main agent's context until they reach the model's context limit.",
+              "Terminal policy once Observer retries are exhausted in a synchronous observation. Background buffered observation failures are reported as `om_buffering_failed` and never stop the turn. `'abort'` aborts the agent turn. `'continue'` emits the existing failure diagnostic, keeps the failed input pending for a later cycle, and allows the main agent turn to continue. Persistence, indexing, transform, locking, invariant, and explicit abort failures remain fatal. This setting doesn't prevent the underlying provider error or change `blockAfter` or attachment handling, and it has no backstop for a sustained outage: pending messages keep accruing in the main agent's context until they reach the model's context limit.",
             isOptional: true,
             defaultValue: "'abort'",
           },
@@ -353,7 +353,7 @@ OM performs thresholding with fast local token estimation. Text uses `tokenx`, a
             name: 'failurePolicy',
             type: "'abort' | 'continue'",
             description:
-              "Terminal policy once Reflector retries are exhausted. `'abort'` aborts the agent turn. `'continue'` emits the failure diagnostic and allows the turn to continue, leaving already-persisted observations committed and deferring reflection to the next threshold crossing. A provider outage usually takes out both stages, so set the policy on `observation` too if the turn should survive one.",
+              "Terminal policy once Reflector retries are exhausted in a synchronous reflection. Background buffered reflection failures are reported as `om_buffering_failed` and never stop the turn. `'abort'` aborts the agent turn. `'continue'` emits the failure diagnostic and allows the turn to continue, leaving already-persisted observations committed and deferring reflection to the next threshold crossing. A provider outage usually takes out both stages, so set the policy on `observation` too if the turn should survive one.",
             isOptional: true,
             defaultValue: "'abort'",
           },
@@ -486,7 +486,7 @@ import { z } from 'zod'
 const memory = new Memory({
   options: {
     observationalMemory: {
-      model: '__GATEWAY_OPENAI_MODEL_MINI__',
+      model: '__GATEWAY_OPENAI_MODEL_LUNA__',
       observation: {
         extract: [
           new Extractor({
@@ -607,7 +607,7 @@ export const agent = new Agent({
   id: 'my-agent',
   name: 'my-agent',
   instructions: 'You are a helpful assistant.',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   memory: new Memory({
     options: {
       observationalMemory: {
@@ -636,7 +636,7 @@ export const agent = new Agent({
   id: 'my-agent',
   name: 'my-agent',
   instructions: 'You are a helpful assistant.',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   memory: new Memory({
     options: {
       observationalMemory: {
@@ -671,7 +671,7 @@ export const agent = new Agent({
     options: {
       observationalMemory: {
         // highlight-next-line
-        model: '__GATEWAY_OPENAI_MODEL_MINI__',
+        model: '__GATEWAY_OPENAI_MODEL_LUNA__',
       },
     },
   }),
@@ -697,7 +697,7 @@ export const agent = new Agent({
           model: 'google/gemini-2.5-flash',
         },
         reflection: {
-          model: '__GATEWAY_OPENAI_MODEL_MINI__',
+          model: '__GATEWAY_OPENAI_MODEL_LUNA__',
         },
         // highlight-end
       },
@@ -763,7 +763,7 @@ export const agent = new Agent({
   id: 'my-agent',
   name: 'my-agent',
   instructions: 'You are a helpful assistant.',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   memory: new Memory({
     options: {
       observationalMemory: {
@@ -1196,7 +1196,7 @@ export const agent = new Agent({
   id: 'my-agent',
   name: 'my-agent',
   instructions: 'You are a helpful assistant.',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   inputProcessors: [omProcessor],
   outputProcessors: [omProcessor],
 })
@@ -1553,7 +1553,7 @@ import { ModelByInputTokens } from '@mastra/memory'
 const selector = new ModelByInputTokens({
   upTo: {
     10_000: 'google/gemini-2.5-flash', // Fast for small inputs
-    40_000: '__GATEWAY_OPENAI_MODEL_MINI__', // Stronger for medium inputs
+    40_000: '__GATEWAY_OPENAI_MODEL_LUNA__', // Stronger for medium inputs
     1_000_000: '__GATEWAY_OPENAI_MODEL__', // Most capable for large inputs
   },
 })

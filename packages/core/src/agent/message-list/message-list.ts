@@ -121,21 +121,27 @@ function mergeBackgroundTasks(
 /**
  * Returns `live` with every tool part that would not move its stored counterpart forward turned
  * into a bare call. The merger then uses it only to anchor surrounding parts: a stored outcome
- * stays canonical, and a stale or edited echo can't overwrite it. Live state may only fill in a
- * call the stored copy still has pending.
+ * stays canonical, and a stale or edited echo can't overwrite it. Live state may fill in a
+ * pending call or advance a background result from running to completed or failed.
  */
 function withoutStaleToolStates(stored: MastraDBMessage, live: MastraDBMessage): MastraDBMessage {
-  const storedStates = new Map<string, MastraToolInvocation['state']>();
+  const storedParts = new Map<string, MastraToolInvocationPart>();
   for (const part of stored.content.parts) {
-    if (part.type === 'tool-invocation') storedStates.set(part.toolInvocation.toolCallId, part.toolInvocation.state);
+    if (part.type === 'tool-invocation') storedParts.set(part.toolInvocation.toolCallId, part);
   }
-  if (storedStates.size === 0) return live;
+  if (storedParts.size === 0) return live;
 
   let changed = false;
   const parts = live.content.parts.map(part => {
     if (part.type !== 'tool-invocation') return part;
-    const storedState = storedStates.get(part.toolInvocation.toolCallId);
-    if (!storedState || advancesToolInvocationState(storedState, part.toolInvocation.state)) return part;
+    const storedPart = storedParts.get(part.toolInvocation.toolCallId);
+    if (!storedPart || advancesToolInvocationState(storedPart.toolInvocation.state, part.toolInvocation.state))
+      return part;
+    const storedTask = storedPart.providerMetadata?.mastra?.backgroundTask as { status?: string } | undefined;
+    const liveTask = part.providerMetadata?.mastra?.backgroundTask as { status?: string } | undefined;
+    if (storedTask?.status === 'running' && (liveTask?.status === 'completed' || liveTask?.status === 'failed')) {
+      return part;
+    }
     changed = true;
     const { toolCallId, toolName, args } = part.toolInvocation;
     return { type: 'tool-invocation' as const, toolInvocation: { state: 'call' as const, toolCallId, toolName, args } };
@@ -322,6 +328,7 @@ export class MessageList {
   private _agentNetworkAppend = false;
   private filterIncompleteToolCalls: boolean;
   private logger?: IMastraLogger;
+  private responseMessageSplits = new Map<string, string>();
 
   private toAIV5UIMessages(messages: MastraDBMessage[], options?: { transformToolPayloads?: boolean }) {
     return mergeSignalDataParts(messages.map(message => AIV5Adapter.toUIMessage(message, options)));
@@ -626,6 +633,7 @@ export class MessageList {
     this.taggedSystemMessages = data.taggedSystemMessages;
     this.memoryInfo = data.memoryInfo;
     this._agentNetworkAppend = data.agentNetworkAppend;
+    this.responseMessageSplits.clear();
     for (const message of this.messages) {
       this.updateLastCreatedAt(message);
     }
@@ -641,6 +649,31 @@ export class MessageList {
       }
     }
     return this;
+  }
+
+  /** @internal */
+  public clone(): MessageList {
+    return new MessageList({
+      generateMessageId: this.generateMessageId,
+      logger: this.logger,
+      filterIncompleteToolCalls: this.filterIncompleteToolCalls,
+    }).deserialize(this.serialize());
+  }
+
+  /**
+   * Return the transcript view that persistence-oriented output processors should store.
+   * During final output processing, the current loop iteration may temporarily be exposed as a separate response
+   * message so processors can transform it independently. This method coalesces that temporary split while preserving
+   * the original response identity and order.
+   */
+  public cloneForPersistence(): MessageList {
+    if (this.responseMessageSplits.size === 0) return this;
+
+    const clone = this.clone();
+    for (const [currentMessageId, earlierMessageId] of this.responseMessageSplits) {
+      clone.coalesceSplitResponseMessages(earlierMessageId, currentMessageId);
+    }
+    return clone;
   }
 
   /**
@@ -821,6 +854,124 @@ export class MessageList {
       });
     }
     return removed;
+  }
+
+  /**
+   * Split an accumulated response message so result processors can transform the current loop iteration independently.
+   * The original id stays with the earlier, potentially persisted parts so storage and client updates keep resolving
+   * the same row while processors work with the current iteration under a temporary id.
+   * @internal
+   */
+  public splitResponseMessageAtPartOffset(
+    messageId: string,
+    partOffset: number,
+  ): { earlierMessageId: string; currentMessageId: string } | undefined {
+    const messageIndex = this.messages.findIndex(message => message.id === messageId);
+    const message = this.messages[messageIndex];
+    const parts = message?.content.parts;
+    if (
+      !message ||
+      !this.stateManager.isResponseMessage(message) ||
+      !parts ||
+      partOffset <= 0 ||
+      partOffset >= parts.length
+    ) {
+      return undefined;
+    }
+
+    const contentForParts = (selectedParts: MastraMessagePart[]): MastraDBMessage['content'] => {
+      const content = { ...message.content, parts: selectedParts };
+      if (typeof content.content === 'string') {
+        content.content = selectedParts.reduce((text, part) => (part.type === 'text' ? part.text : text), '');
+      }
+      if (Array.isArray(content.toolInvocations)) {
+        const toolCallIds = new Set(
+          selectedParts.flatMap(part =>
+            part.type === 'tool-invocation' && part.toolInvocation ? [part.toolInvocation.toolCallId] : [],
+          ),
+        );
+        content.toolInvocations = content.toolInvocations.filter(invocation => toolCallIds.has(invocation.toolCallId));
+      }
+      return content;
+    };
+
+    const earlierMessageId = messageId;
+    const currentMessageId = this.newMessageId(message.role);
+    const currentMessage: MastraDBMessage = {
+      ...message,
+      id: currentMessageId,
+      content: contentForParts(parts.slice(partOffset)),
+    };
+    message.content = contentForParts(parts.slice(0, partOffset));
+    this.messages.splice(messageIndex, 1, message, currentMessage);
+
+    const prunedResponseMessages = this.#prunedResponseMessages;
+    const state = this.serialize();
+    for (const key of ['newResponseMessages', 'newResponseMessagesPersisted'] as const) {
+      state[key] = state[key].flatMap(id => (id === messageId ? [earlierMessageId, currentMessageId] : [id]));
+    }
+    this.deserialize(state);
+    for (const [id, message] of this.#prunedResponseMessages) {
+      if (message === undefined) this.#prunedResponseMessages.set(id, prunedResponseMessages.get(id));
+    }
+    this.responseMessageSplits.set(currentMessageId, earlierMessageId);
+
+    return { earlierMessageId, currentMessageId };
+  }
+
+  /**
+   * Restore a split processor view to the accumulated response shape used for persistence.
+   * The original response id belongs to the earlier iteration and remains stable unless the
+   * processor removes that half, in which case the current survivor inherits it.
+   * @internal
+   */
+  public coalesceSplitResponseMessages(earlierMessageId: string, currentMessageId: string): void {
+    this.responseMessageSplits.delete(currentMessageId);
+    const earlierIndex = this.messages.findIndex(message => message.id === earlierMessageId);
+    const currentIndex = this.messages.findIndex(message => message.id === currentMessageId);
+    const earlierMessage = this.messages[earlierIndex];
+    const currentMessage = this.messages[currentIndex];
+
+    if (!earlierMessage) {
+      if (currentMessage) currentMessage.id = earlierMessageId;
+      return;
+    }
+
+    if (!currentMessage) return;
+
+    const parts = [...(earlierMessage.content.parts ?? []), ...(currentMessage.content.parts ?? [])];
+    const content = {
+      ...earlierMessage.content,
+      ...currentMessage.content,
+      parts,
+    };
+    if (typeof earlierMessage.content.content === 'string' || typeof currentMessage.content.content === 'string') {
+      content.content = parts.reduce((text, part) => (part.type === 'text' ? part.text : text), '');
+    }
+    if (
+      Array.isArray(earlierMessage.content.toolInvocations) ||
+      Array.isArray(currentMessage.content.toolInvocations)
+    ) {
+      const invocations = [
+        ...(earlierMessage.content.toolInvocations ?? []),
+        ...(currentMessage.content.toolInvocations ?? []),
+      ];
+      const toolCallIds = new Set(
+        parts.flatMap(part =>
+          part.type === 'tool-invocation' && part.toolInvocation ? [part.toolInvocation.toolCallId] : [],
+        ),
+      );
+      content.toolInvocations = invocations.filter(
+        (invocation, index) =>
+          toolCallIds.has(invocation.toolCallId) &&
+          invocations.findIndex(candidate => candidate.toolCallId === invocation.toolCallId) === index,
+      );
+    }
+
+    earlierMessage.content = content;
+    this.messages.splice(Math.max(earlierIndex, currentIndex), 1);
+    this.messages.splice(Math.min(earlierIndex, currentIndex), 1, earlierMessage);
+    this.stateManager.removeMessage(currentMessage);
   }
 
   /**
@@ -1456,10 +1607,30 @@ export class MessageList {
   }
 
   public drainUnsavedMessages(): MastraDBMessage[] {
+    return this.drainUnsavedMessagesForSave().messages;
+  }
+
+  /**
+   * Same as {@link drainUnsavedMessages}, plus `restore`, which marks the drained
+   * messages unsaved again so a later save writes them after this one failed.
+   */
+  public drainUnsavedMessagesForSave(): { messages: MastraDBMessage[]; restore: () => void } {
+    const userMessages = [...this.newUserMessages];
+    const responseMessages = [...this.newResponseMessages];
     const messages = this.messages.filter(m => this.newUserMessages.has(m) || this.newResponseMessages.has(m));
     this.newUserMessages.clear();
     this.newResponseMessages.clear();
-    return messages.map(message => this.transformMessageForTranscript(message));
+    return {
+      messages: messages.map(message => this.transformMessageForTranscript(message)),
+      restore: () => {
+        for (const message of userMessages) {
+          if (this.messages.includes(message)) this.newUserMessages.add(message);
+        }
+        for (const message of responseMessages) {
+          if (this.messages.includes(message)) this.newResponseMessages.add(message);
+        }
+      },
+    };
   }
 
   /**

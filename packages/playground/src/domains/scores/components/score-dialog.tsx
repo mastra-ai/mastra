@@ -105,7 +105,7 @@ export function ScoreDialog({
             onClick={() => setDatasetDialogOpen(true)}
             icon={<SaveIcon />}
           >
-            Save as Dataset Item
+            Save as dataset item
           </Button>
         </SideDialog.Top>
 
@@ -235,7 +235,6 @@ export function ScoreDialog({
         score={score}
         isOpen={datasetDialogOpen && isOpen}
         onClose={() => setDatasetDialogOpen(false)}
-        level={(dialogLevel + 1) as SideDialogRootProps['level']}
       />
     </>
   );

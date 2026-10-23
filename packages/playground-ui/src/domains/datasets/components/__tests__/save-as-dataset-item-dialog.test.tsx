@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { MastraReactProvider } from '@mastra/react';
+import { useDatasetMutations } from '@mastra/react/hooks/datasets';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -7,7 +8,8 @@ import type { ChangeEvent, PropsWithChildren, ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { SaveAsDatasetItemDialog } from '../save-as-dataset-item-dialog';
-import { buildDatasetItem, buildListDatasetsResponse } from './fixtures/datasets';
+import type { CreateDatasetDialogRenderProps } from '../save-as-dataset-item-dialog';
+import { buildDataset, buildDatasetItem, buildListDatasetsResponse } from './fixtures/datasets';
 import { LinkComponentProvider } from '@/lib/framework';
 import { Toaster, toast } from '@/lib/toast';
 import { StubLink, stubLinkPaths } from '@/test/link-provider';
@@ -20,8 +22,8 @@ type CodeEditorProps = {
   onChange?: (value: string) => void;
 };
 
-// @mastra/playground-ui is a heavy presentational dependency (SideDialog,
-// CodeEditor, Select primitives) with its own dedicated tests; stub it as a
+// @mastra/playground-ui is a heavy presentational dependency (CodeEditor,
+// Select primitives) with its own dedicated tests; stub it as a
 // thin seam so this suite can focus on the dialog's async-seeding logic. The
 // data hooks below are driven through the real @mastra/client-js + React Query
 // stack via MSW. Select is a native <select> so tests can pick a dataset.
@@ -42,18 +44,6 @@ vi.mock('@/ds/components/Select', () => ({
   SelectItem: ({ children, value }: PropsWithChildren<{ value: string }>) => <option value={value}>{children}</option>,
 }));
 
-vi.mock('@/ds/components/SideDialog', () => ({
-  SideDialog: Object.assign(
-    ({ isOpen, children }: PropsWithChildren<{ isOpen: boolean }>) => (isOpen ? <div>{children}</div> : null),
-    {
-      Top: ({ children }: PropsWithChildren) => <div>{children}</div>,
-      Content: ({ children }: PropsWithChildren) => <div>{children}</div>,
-      Header: ({ children }: PropsWithChildren) => <div>{children}</div>,
-      Heading: ({ children }: PropsWithChildren) => <h2>{children}</h2>,
-    },
-  ),
-}));
-
 vi.mock('@/ds/components/CodeEditor', () => ({
   CodeEditor: ({ value, onChange }: CodeEditorProps) => (
     <textarea
@@ -61,10 +51,6 @@ vi.mock('@/ds/components/CodeEditor', () => ({
       onChange={(event: ChangeEvent<HTMLTextAreaElement>) => onChange?.(event.target.value)}
     />
   ),
-}));
-
-vi.mock('@/ds/components/Text', () => ({
-  TextAndIcon: ({ children }: PropsWithChildren) => <span>{children}</span>,
 }));
 
 beforeEach(() => {
@@ -108,11 +94,63 @@ function wrap(children: ReactNode) {
   );
 }
 
+// Stands in for the app's create-dataset dialog: creates through the real mutation hook.
+function StubCreateDatasetDialog({ open, onSuccess }: CreateDatasetDialogRenderProps) {
+  const { createDataset } = useDatasetMutations();
+  if (!open) return null;
+  return (
+    <button
+      type="button"
+      onClick={async () => {
+        const dataset = await createDataset.mutateAsync({ name: 'Fresh dataset' });
+        onSuccess(dataset.id);
+      }}
+    >
+      Create dataset
+    </button>
+  );
+}
+
 function getEditors() {
   return screen.getAllByRole('textbox') as HTMLTextAreaElement[];
 }
 
 describe('SaveAsDatasetItemDialog', () => {
+  describe('when the panel is open', () => {
+    it('renders as a side panel dialog that closes from the header close button', async () => {
+      const onClose = vi.fn();
+      renderDialog({ onClose });
+
+      expect(await screen.findByRole('dialog', { name: 'Save as Dataset Item' })).not.toBeNull();
+      fireEvent.click(screen.getByRole('button', { name: 'Close save as dataset item' }));
+
+      expect(onClose).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('when the user creates a dataset from the Dataset select', () => {
+    it('selects the new dataset once the dataset list includes it', async () => {
+      let datasets = [buildDataset()];
+      server.use(
+        http.get(`${BASE_URL}/api/datasets`, () => HttpResponse.json(buildListDatasetsResponse(datasets))),
+        http.post(`${BASE_URL}/api/datasets`, () => {
+          const created = buildDataset({ id: 'dataset-new', name: 'Fresh dataset' });
+          datasets = [created, ...datasets];
+          return HttpResponse.json(created);
+        }),
+      );
+      renderDialog({ renderCreateDatasetDialog: props => <StubCreateDatasetDialog {...props} /> });
+
+      const createOption = (await screen.findByRole('option', { name: 'Create dataset' })) as HTMLOptionElement;
+      const datasetSelect = screen.getByRole('combobox', { name: 'Dataset' }) as HTMLSelectElement;
+      fireEvent.change(datasetSelect, { target: { value: createOption.value } });
+      fireEvent.click(await screen.findByRole('button', { name: 'Create dataset' }));
+
+      await waitFor(() => expect(datasetSelect.value).toBe('dataset-new'));
+      expect((screen.getByRole('button', { name: 'Save item' }) as HTMLButtonElement).disabled).toBe(false);
+    });
+  });
+
   describe('when trace data arrives asynchronously after the dialog is already open', () => {
     it('hydrates the input, ground truth, and trajectory editors with the late values', async () => {
       const { rerender } = renderDialog();
@@ -301,7 +339,7 @@ describe('SaveAsDatasetItemDialog', () => {
 
       await screen.findByRole('option', { name: 'Dataset 1' });
       fireEvent.change(screen.getByRole('combobox', { name: 'Dataset' }), { target: { value: 'dataset-1' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Save Item' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Save item' }));
 
       expect(await screen.findByText('Added to "Dataset 1"')).not.toBeNull();
       fireEvent.click(screen.getByRole('button', { name: 'Go to dataset' }));
@@ -333,7 +371,7 @@ describe('SaveAsDatasetItemDialog', () => {
 
       await screen.findByRole('option', { name: 'Dataset 1' });
       fireEvent.change(screen.getByRole('combobox', { name: 'Dataset' }), { target: { value: 'dataset-1' } });
-      fireEvent.click(screen.getByRole('button', { name: 'Save Item' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Save item' }));
 
       expect(await screen.findByText('Added to "Dataset 1"')).not.toBeNull();
       expect(screen.queryByRole('button', { name: 'Go to dataset' })).toBeNull();

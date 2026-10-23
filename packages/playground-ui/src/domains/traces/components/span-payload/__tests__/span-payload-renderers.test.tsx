@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { EditorView } from '@codemirror/view';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -38,11 +39,10 @@ describe('Span metadata JSON sections', () => {
 
     for (const title of ['Metadata', 'Attributes']) {
       const section = screen.getByText(title).closest('[data-slot="span-payload-section"]');
-      expect(section?.querySelector('[data-slot="span-payload-json"]')).not.toBeNull();
+      expect(section?.querySelector('[data-slot="span-payload-json"] .cm-foldGutter')).not.toBeNull();
       expect(section?.querySelector('[data-slot="span-payload-view-toggle"]')).toBeNull();
       expect(section?.querySelector('button')).not.toBeNull();
     }
-    expect(document.querySelector('.cm-editor')).toBeNull();
     expect(document.body.textContent).toContain('metadata-value');
     expect(document.body.textContent).toContain('attribute-value');
   });
@@ -156,8 +156,10 @@ describe.each(['panel', 'details'] as const)('SpanPayloadSection (%s)', layout =
 
     fireEvent.click(screen.getByRole('button', { name: 'JSON' }));
     expect(slot('span-payload-messages')).toBeNull();
-    expect(slot('span-payload-json')?.textContent).toBe(JSON.stringify(agentRunMessagesSpan.input, null, 2));
-    expect(document.querySelector('.cm-editor')).toBeNull();
+    const editor = slot('span-payload-json')?.querySelector<HTMLElement>('.cm-editor');
+    const view = editor ? EditorView.findFromDOM(editor) : null;
+    expect(view?.state.doc.toString()).toBe(JSON.stringify(agentRunMessagesSpan.input, null, 2));
+    expect(view?.state.readOnly).toBe(true);
     expect(screen.queryByRole('button', { name: 'Expand JSON' })).toBeNull();
 
     fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
@@ -188,7 +190,6 @@ describe.each(['panel', 'details'] as const)('Span %s view', layout => {
       expect(slot('span-error')).not.toBeNull();
       const toggles = screen.getAllByRole('button', { name: 'JSON' });
       expect(toggles).toHaveLength(1);
-      expect(slot('span-input-card')).toBeNull();
       expect(slot('span-payload-json')).not.toBeNull();
       const jsonToggle = toggles[0];
       if (!jsonToggle) throw new Error('Missing error JSON toggle');

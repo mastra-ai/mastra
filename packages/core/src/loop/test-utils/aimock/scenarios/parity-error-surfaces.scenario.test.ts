@@ -1,0 +1,355 @@
+/**
+ * Ported from validation harness case T37 (error-surfaces).
+ *
+ * The harness case has three variants:
+ *   - model-4xx: the model fails before producing any output (an up-front,
+ *     non-retryable provider error).
+ *   - stream-cut: the model streams one text delta, then the stream errors.
+ *   - tool-timeout: the total budget closes a run even if its tool never returns.
+ *
+ * Harness exclusions: error message wording, and retry timing (T27).
+ *
+ * `stream-cut` runs in parity mode (`expectParity`). COR-1417 made a failed run
+ * recordable: the chunks that arrived before the failure are kept and compared,
+ * and the failure itself is compared as `{ name, message }` (never `stack`, which
+ * embeds a checkout-specific path), so the variant needs no declared difference.
+ *
+ * `model-4xx` now runs in parity mode (`expectParity`): COR-1429 makes the stale
+ * check scenario-aware, so its matching `finish.stepResult` does not make the
+ * unrelated COR-1390 finish declaration fail before comparison.
+ */
+
+import { it, expect, vi } from 'vitest';
+import { z } from 'zod/v4';
+import { Agent } from '../../../../agent';
+import { MockMemory } from '../../../../memory/mock';
+import { createTool } from '../../../../tools';
+import { createSharedAgent, describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import {
+  type EngineParityScenario,
+  type EngineParityResults,
+  type ModelScript,
+  type ParityTarget,
+  FAILED_STEP_WARNINGS_DIFFERENCE,
+  describeParity,
+  expectParity,
+} from '../parity';
+
+const THREAD = 'thread-t37';
+const RESOURCE = 'resource-t37';
+
+/** The model fails before producing any output. */
+const MODEL_4XX: ModelScript = {
+  respond: () => {
+    throw new Error('T37 model 400');
+  },
+};
+
+/** The model streams one text delta, then the stream errors. */
+const STREAM_CUT: ModelScript = {
+  respond: () => [
+    { type: 'stream-start', warnings: [] },
+    { type: 'response-metadata', id: 'parity-id-0', modelId: 'parity-model', timestamp: new Date(0) },
+    { type: 'text-start', id: 'text-1' },
+    { type: 'text-delta', id: 'text-1', delta: 'partial ' },
+    { type: 'error', error: new Error('T37 stream cut') },
+  ],
+};
+
+/** One turn of `input` on plain and `target`. */
+function scenario(target: ParityTarget, model: ModelScript): Omit<EngineParityScenario, 'engines'> {
+  return {
+    model,
+    buildAgent: ({ model: recordingModel }) =>
+      new Agent({
+        id: 't37-agent',
+        name: 'T37 Agent',
+        instructions: 'Follow the script.',
+        model: recordingModel,
+        // The case asserts the first failure, not a retry sequence.
+        maxRetries: 0,
+        memory: new MockMemory(),
+      }),
+    input: 'Go.',
+    options: { memory: { thread: THREAD, resource: RESOURCE } },
+    ...(model === MODEL_4XX
+      ? {
+          differences: { [target]: FAILED_STEP_WARNINGS_DIFFERENCE },
+        }
+      : {}),
+  };
+}
+
+/** Plain's and `target`'s snapshot for the scenario's single turn. */
+function turnsByEngine(target: ParityTarget, results: EngineParityResults) {
+  return (['plain', target] as const).map(engine => ({ engine, turn: results[engine]!.turns[0]! }));
+}
+
+describeForAllEngines('error-surfaces: tool-timeout', engine => {
+  const getMock = useLoopScenarioAimock();
+
+  it.each([false, true])(
+    'closes a stuck tool run without flushing unfinished-step memory (save blocked: %s)',
+    async blockSave => {
+      const onError = vi.fn();
+      let toolStarted = false;
+      const memory = new MockMemory();
+      let releaseSave!: () => void;
+      const saveGate = new Promise<void>(resolve => {
+        releaseSave = resolve;
+      });
+      let saveBlocked = false;
+      const saveMessages = memory.saveMessages.bind(memory);
+      const saveSpy = vi.spyOn(memory, 'saveMessages').mockImplementation(async args => {
+        if (blockSave && toolStarted && args.messages.some(message => message.role === 'assistant')) {
+          saveBlocked = true;
+          await saveGate;
+        }
+        return saveMessages(args);
+      });
+      try {
+        const result = await runLoopScenario({
+          engine,
+          memory,
+          threadId: THREAD,
+          resourceId: RESOURCE,
+          llm: getMock(),
+          prompt: 'Call the hanging tool.',
+          tools: {
+            hanging: createTool({
+              id: 'hanging',
+              description: 'A tool that ignores cancellation and never returns.',
+              inputSchema: z.object({}),
+              execute: async () => {
+                toolStarted = true;
+                return new Promise<never>(() => {});
+              },
+            }),
+          },
+          modelSettings: { timeout: { totalMs: 500 } },
+          onError,
+          collectChunks: true,
+          fixtures: llm => {
+            llm.on(
+              { endpoint: 'chat', hasToolResult: false },
+              {
+                toolCalls: [{ id: 'call_hanging', name: 'hanging', arguments: {} }],
+              },
+            );
+            llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Must not reach the model again.' });
+          },
+        });
+
+        expect(toolStarted).toBe(true);
+        const errors = result.chunks!.filter(chunk => chunk.type === 'error');
+        expect(errors).toHaveLength(1);
+        expect(errors[0]!.payload.error).toMatchObject({
+          name: 'MastraTimeoutError',
+          message: 'Agent execution timed out after 500ms (modelSettings.timeout.totalMs)',
+        });
+        await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+        expect(result.chunks!.some(chunk => chunk.type === 'finish')).toBe(false);
+        expect(result.requests).toHaveLength(1);
+        if (blockSave && (engine === 'durable' || engine === 'evented')) {
+          await new Promise(resolve => setTimeout(resolve, 50));
+          expect(saveBlocked).toBe(false);
+        }
+      } finally {
+        releaseSave();
+        saveSpy.mockRestore();
+      }
+    },
+    5_000,
+  );
+
+  it.each([false, true])(
+    'only completed steps reach memory at the deadline (savePerStep: %s)',
+    async savePerStep => {
+      const memory = new MockMemory();
+      const threadId = `deadline-memory-${engine}-${savePerStep}`;
+      const resourceId = RESOURCE;
+      const llm = getMock();
+      let completedTool = false;
+      let hangingTool = false;
+      const result = await runLoopScenario({
+        engine,
+        llm,
+        memory,
+        threadId,
+        resourceId,
+        prompt: 'Look up the order, then check the courier.',
+        maxSteps: 3,
+        savePerStep,
+        modelSettings: { timeout: { totalMs: 500 } },
+        collectChunks: true,
+        tools: {
+          lookup: createTool({
+            id: 'lookup',
+            description: 'Look up an order.',
+            inputSchema: z.object({}),
+            execute: async () => {
+              completedTool = true;
+              return { status: 'shipped' };
+            },
+          }),
+          courier: createTool({
+            id: 'courier',
+            description: 'Check the courier.',
+            inputSchema: z.object({}),
+            execute: async () => {
+              hangingTool = true;
+              return new Promise<never>(() => {});
+            },
+          }),
+        },
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', hasToolResult: false },
+            {
+              content: 'The order lookup is complete.',
+              toolCalls: [{ id: 'call_lookup', name: 'lookup', arguments: {} }],
+            },
+          );
+          llm.on(
+            { endpoint: 'chat', hasToolResult: true },
+            {
+              content: 'Checking the courier now.',
+              toolCalls: [{ id: 'call_courier', name: 'courier', arguments: {} }],
+            },
+          );
+        },
+      });
+
+      expect(completedTool).toBe(true);
+      expect(hangingTool).toBe(true);
+      expect(result.requests).toHaveLength(2);
+      const errors = result.chunks!.filter(chunk => chunk.type === 'error');
+      expect(errors).toHaveLength(1);
+      expect(errors[0]!.payload.error).toMatchObject({ name: 'MastraTimeoutError' });
+      const { messages } = await memory.recall({ threadId, resourceId });
+      const saved = JSON.stringify(messages);
+      expect(saved.includes('Look up the order, then check the courier.')).toBe(
+        savePerStep || engine === 'durable' || engine === 'evented',
+      );
+      expect(saved.includes('The order lookup is complete.')).toBe(savePerStep);
+      expect(saved.includes('Checking the courier now.')).toBe(false);
+    },
+    5_000,
+  );
+
+  it.each(['generate', 'resumeStream', 'resumeGenerate'] as const)(
+    '%s settles at the deadline without waiting for the tool',
+    async method => {
+      const onError = vi.fn();
+      let toolStarted = false;
+      let releaseTool!: () => void;
+      const toolGate = new Promise<void>(resolve => {
+        releaseTool = resolve;
+      });
+      const llm = getMock();
+      llm.on(
+        { endpoint: 'chat', hasToolResult: false },
+        {
+          toolCalls: [{ id: 'call_hanging', name: 'hanging', arguments: {} }],
+        },
+      );
+      llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Must not reach the model again.' });
+      const shared = await createSharedAgent(llm, {
+        engine,
+        memory: new MockMemory(),
+        tools: {
+          hanging: createTool({
+            id: 'hanging',
+            description: 'Waits forever after optional suspension.',
+            inputSchema: z.object({}),
+            resumeSchema: z.object({ proceed: z.boolean() }),
+            suspendSchema: z.object({}),
+            execute: async (_input, context) => {
+              if (method !== 'generate' && !context?.agent?.resumeData) {
+                return context?.agent?.suspend({});
+              }
+              toolStarted = true;
+              await toolGate;
+              return { completed: true };
+            },
+          }),
+        },
+      });
+      const options = { modelSettings: { timeout: { totalMs: 500 } }, onError };
+      try {
+        if (method === 'generate') {
+          await expect(shared.agent.generate('Call the hanging tool.', options)).rejects.toMatchObject({
+            name: 'MastraTimeoutError',
+          });
+        } else {
+          const suspended = await shared.agent.generate('Call the hanging tool.');
+          expect(suspended.finishReason).toBe('suspended');
+          const resumeOptions = { ...options, runId: suspended.runId };
+          if (method === 'resumeGenerate') {
+            await expect(shared.agent.resumeGenerate({ proceed: true }, resumeOptions)).rejects.toMatchObject({
+              name: 'MastraTimeoutError',
+            });
+          } else {
+            const resumed = await shared.agent.resumeStream({ proceed: true }, resumeOptions);
+            const errors = [];
+            for await (const chunk of resumed.fullStream) {
+              if (chunk.type === 'error') errors.push(chunk.payload.error);
+              expect(chunk.type).not.toBe('finish');
+            }
+            expect(errors).toHaveLength(1);
+            expect(errors[0]).toMatchObject({ name: 'MastraTimeoutError' });
+          }
+        }
+        expect(toolStarted).toBe(true);
+        await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
+        expect(llm.getRequests()).toHaveLength(1);
+      } finally {
+        releaseTool();
+      }
+    },
+    5_000,
+  );
+});
+
+describeParity('error-surfaces parity', target => {
+  it('model-4xx: an up-front model failure surfaces the same way on every engine', async () => {
+    const results = await expectParity(target, scenario(target, MODEL_4XX));
+
+    for (const { engine, turn } of turnsByEngine(target, results)) {
+      expect(turn.chunks, `${engine} chunks`).toEqual([
+        'AGENT:start',
+        'AGENT:step-start',
+        'AGENT:error',
+        'AGENT:step-finish',
+        'AGENT:finish',
+      ]);
+      expect(turn.finishReason, `${engine} finishReason`).toBe('error');
+      expect(turn.streamedText, `${engine} streamedText`).toBe('');
+      expect(turn.error, `${engine} error`).toStrictEqual({ name: 'Error', message: 'T37 model 400' });
+      expect(results[engine]?.requests.length, `${engine} model calls`).toBe(1);
+    }
+  });
+
+  it('stream-cut: the partial text survives and the failure surfaces the same way on every engine', async () => {
+    const results = await expectParity(target, scenario(target, STREAM_CUT));
+
+    for (const { engine, turn } of turnsByEngine(target, results)) {
+      // The delta that arrived before the failure is kept, and the failure is
+      // recorded rather than raised.
+      expect(turn.chunks, `${engine} chunks`).toEqual([
+        'AGENT:start',
+        'AGENT:step-start',
+        'AGENT:text-start',
+        'AGENT:text-delta',
+        'AGENT:error',
+        'AGENT:step-finish',
+        'AGENT:finish',
+      ]);
+      expect(turn.streamedText, `${engine} streamedText`).toBe('partial ');
+      expect(turn.text, `${engine} text`).toBe('partial ');
+      expect(turn.finishReason, `${engine} finishReason`).toBe('error');
+      expect(turn.error, `${engine} error`).toStrictEqual({ name: 'Error', message: 'T37 stream cut' });
+      expect(results[engine]?.requests.length, `${engine} model calls`).toBe(1);
+    }
+  });
+});

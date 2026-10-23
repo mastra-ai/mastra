@@ -17,7 +17,10 @@ import { LibSQLStore } from '@mastra/libsql';
 import { describe, it, expect, vi } from 'vitest';
 import z from 'zod';
 
+import { requestSandboxAccessTool } from '../tools/request-sandbox-access.js';
+
 import { createHumanFormatState, formatHuman, formatJsonl, renderJsonResult, renderTextResult } from './format.js';
+import { autoApprovePolicy } from './policy.js';
 import { runMC } from './run-mc.js';
 import type { ResolutionPolicy } from './types.js';
 
@@ -61,12 +64,14 @@ interface HarnessOptions {
   doStream: () => Promise<{ stream: ReadableStream }>;
   withReadFileTool?: boolean;
   readFileNeedsApproval?: boolean;
+  withRequestAccessTool?: boolean;
 }
 
 async function makeHarness(opts: HarnessOptions) {
   const storage = new LibSQLStore({ id: 'test-store', url: 'file::memory:?cache=shared' });
 
   const tools: Record<string, ReturnType<typeof createTool>> = {};
+  if (opts.withRequestAccessTool) tools.request_access = requestSandboxAccessTool;
   if (opts.withReadFileTool) {
     tools.readFile = createTool({
       id: 'readFile',
@@ -114,6 +119,39 @@ async function makeHarness(opts: HarnessOptions) {
 }
 
 describe('headless scenarios', () => {
+  it('auto-approves a request_access suspension and returns the post-resume answer', async () => {
+    let calls = 0;
+    const { controller, session } = await makeHarness({
+      withRequestAccessTool: true,
+      doStream: async () => ({
+        stream:
+          ++calls === 1
+            ? toolCallStream('request_access', '{"path":"/shared","reason":"Read shared notes"}')
+            : textStream('Access granted. I can read the shared notes.'),
+      }),
+    });
+
+    const run = runMC({
+      controller,
+      session,
+      prompt: 'Request access to /shared',
+      policy: autoApprovePolicy,
+    });
+    const events: AgentControllerEvent[] = [];
+    for await (const event of run) events.push(event);
+    const result = await run.result;
+
+    expect(events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: 'tool_suspended', toolName: 'request_access' }),
+        expect.objectContaining({ type: 'agent_end', reason: 'suspended' }),
+      ]),
+    );
+    expect(result.status).toBe('completed');
+    expect(result.text).toBe('Access granted. I can read the shared notes.');
+    expect(calls).toBe(2);
+  });
+
   it('streams a turn to human stdout/stderr and renders a final text result', async () => {
     // A CLI user runs `mastracode --prompt ... --output human`: assistant text
     // streams to stdout as it arrives, then the final result is rendered.

@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import type { ReactNode } from 'react';
-import { useContext } from 'react';
+import { useContext, useMemo } from 'react';
 import { useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
@@ -10,6 +10,7 @@ import { useAgentControllerThreadMessages } from '../../../../hooks/useAgentCont
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 import type { LinkedRepositoryPayload } from '../../workspaces/services/github';
+import type { FactoryUserSession } from '../../workspaces/services/user-sessions';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { ChatCommandsProvider } from './ChatCommandsProvider';
 import { ComposerImagesProvider } from './ComposerImagesProvider';
@@ -23,59 +24,40 @@ import { useChatMessagePreparation } from './useChatMessagePreparation';
 import { SessionPrepareSteps } from '../components/SessionPrepareSteps';
 import { useChatSessionContext } from './useChatSessionContext';
 
+function modelLockedReason(session: FactoryUserSession | undefined): string | undefined {
+  if (session?.capabilities?.switchModel !== false) return undefined;
+  return `Only ${session.owner?.name ?? 'the session owner'} can change this session’s model or thinking level.`;
+}
+
 /** Stable project/API configuration for chat shell consumers such as the sidebar. */
 export function ChatSessionConfigProvider({
   children,
   threadId,
   userScoped = false,
   draftSessionId,
-  supervisor,
 }: {
   children: ReactNode;
   threadId?: string;
   userScoped?: boolean;
   draftSessionId?: string;
-  /**
-   * Bind the chat to the factory's supervisor session instead of a stored
-   * workspace session. The supervisor has no repository or sandbox and no
-   * session row: its resource is addressable straight away, and the server's
-   * session-start hook stamps factory state from the resource id.
-   */
-  supervisor?: { resourceId: string; threadId: string };
 }) {
   const { factoryId, sessionId } = useParams<{ factoryId: string; sessionId: string }>();
   const { baseUrl } = useApiConfig();
   const factoryQuery = useFactoryQuery(factoryId);
   const isUserDraft = userScoped && Boolean(draftSessionId);
-  const sessionQuery = useUserSessionQuery(supervisor ? undefined : userScoped ? threadId : sessionId);
+  const sessionQuery = useUserSessionQuery(userScoped ? threadId : sessionId);
   const factory = factoryQuery.data;
   const storedSession = sessionQuery.data;
+  const owner = useMemo(
+    () =>
+      storedSession && {
+        id: storedSession.userId,
+        name: storedSession.owner?.name,
+        avatarUrl: storedSession.owner?.avatarUrl,
+      },
+    [storedSession],
+  );
 
-  if (supervisor) {
-    return (
-      <ChatSessionContext.Provider
-        value={{
-          resourceId: supervisor.resourceId,
-          sessionEnabled: true,
-          sandboxReady: true,
-          resourceReady: true,
-          sandboxPreparing: false,
-          resourceEnabled: true,
-          sessionError: undefined,
-          retrySession: undefined,
-          projectPath: undefined,
-          sessionThreadId: supervisor.threadId,
-          workspacePending: false,
-          draftSessionId: undefined,
-          factorySessionState: factory ? { factoryProjectId: factory.id } : undefined,
-          baseUrl,
-          kind: 'factory' as const,
-        }}
-      >
-        {children}
-      </ChatSessionContext.Provider>
-    );
-  }
   const repository = storedSession
     ? factory?.repositories.find(
         (repo: LinkedRepositoryPayload) => repo.projectRepositoryId === storedSession.projectRepositoryId,
@@ -85,54 +67,68 @@ export function ChatSessionConfigProvider({
   // first real command. This provider only resolves session metadata.
   const inSession = Boolean(userScoped ? threadId : sessionId);
   const resolvingSession = inSession && sessionQuery.isPending;
-  // Sessions and their threads are provisioned with the session's own id as the
-  // memory resourceId and no scope (see FactoryStartCoordinator.prepare and
-  // useSessionListRows), so the chat surface must address the same
-  // (resourceId, no scope) session to read threads and share the live run.
-  const resourceId = userScoped ? (draftSessionId ?? threadId) : (storedSession?.sessionId ?? sessionId ?? factory?.id);
-  const projectPath = undefined;
-  // A `?resourceId=` query param overrides the resolved factory resource so the
-  // whole chat session (transcript, messages, connection, thread switch) binds
-  // to a thread that lives under a different resource — e.g. a Slack channel
-  // session keyed `channel:slack:...`. This only applies to the non-user-scoped
-  // branch; user-scoped sessions derive identity from their stored session.
+  // The chat addresses its agent-controller session by the session id
+  // (=== the session's thread id). The session runs under a memory resource
+  // shared with other sessions: the Factory for runs and Slack sessions, the
+  // owner for user sessions. The server reports it with the stored session.
+  // Outside any session the Factory chat is its own session on the Factory.
+  //
+  // A `?sessionId=` query param overrides the address so the whole chat
+  // (transcript, messages, connection, thread switch) binds to a session the
+  // route can't name — e.g. a Slack channel session keyed `channel:slack:...`,
+  // which is its own resource. `?resourceId=` is the same override in links
+  // posted before sessions had their own address. Only the non-user-scoped
+  // branch reads it; user-scoped sessions derive identity from their stored session.
   //
   // Read once from the entry URL rather than via the router's `useSearchParams`:
   // this is a deep-link entry param that the session binds to at mount and does
   // not re-read on in-app navigation, and this config provider otherwise has no
   // added router dependency.
-  const resourceOverride = userScoped
-    ? null
-    : new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search).get('resourceId');
+  const entryParams = new URLSearchParams(typeof window === 'undefined' ? '' : window.location.search);
+  const addressOverride = userScoped ? null : (entryParams.get('sessionId') ?? entryParams.get('resourceId'));
+  const routedSessionId = userScoped ? (draftSessionId ?? threadId) : (storedSession?.sessionId ?? sessionId);
+  const chatSessionId = addressOverride ?? routedSessionId ?? factory?.id;
+  const resourceId =
+    addressOverride ?? (inSession ? (storedSession?.resourceId ?? storedSession?.userId) : factory?.id);
+  // A Factory session's threads are stamped with its id; the Factory chat
+  // (no session) and channel sessions list every thread of their own resource.
+  // So does a session still on a resource of its own (a run on untrusted
+  // content, or one not migrated yet), whose older threads carry no stamp.
+  const threadTags =
+    !addressOverride && routedSessionId && resourceId !== routedSessionId
+      ? { factorySessionId: routedSessionId }
+      : undefined;
   // `sandboxReady` — session metadata resolved; safe to run mutations. The
   // server materializes sandboxes lazily on first use (and revives dead ones),
   // so nothing here waits on a sandbox existing.
-  const sandboxReady = resourceOverride ? Boolean(resourceOverride) : Boolean(storedSession) && !resolvingSession;
+  const sandboxReady = addressOverride ? Boolean(addressOverride) : Boolean(storedSession) && !resolvingSession;
   // A denied or missing session (404 from the session query) is fatal and must
   // surface the error state, not the eternal preparing loader.
   const sessionError = sessionQuery.error ?? undefined;
-  // `resourceReady` — safe to address the agent-controller session by
-  // `resourceId` for reads/streaming as soon as server-side session metadata
-  // resolves. The agent-controller endpoints are keyed by resourceId, not by a
-  // live sandbox, so reads and thread lookups never wait on one.
+  // `resourceReady` — safe to address the agent-controller session by its
+  // session id for reads/streaming as soon as server-side session metadata
+  // resolves (that is when its memory resource is known). The endpoints are
+  // keyed by session id, not by a live sandbox, so reads never wait on one.
   const resourceReady = userScoped
     ? Boolean(storedSession) && !resolvingSession
-    : Boolean(resourceOverride) || (Boolean(storedSession) && !resolvingSession);
+    : Boolean(addressOverride) || (Boolean(storedSession) && !resolvingSession);
   // `sandboxPreparing` — true only while session metadata is still resolving
   // for an in-session mount. Distinct from `!sandboxReady`, which is also
   // false outside any session. Track the pending query (not `!sandboxReady`)
   // so a denied/missing session cannot keep the preparing loader up forever.
-  const sandboxPreparing = resolvingSession && !resourceOverride;
+  const sandboxPreparing = resolvingSession && !addressOverride;
   // Outside a session the factory resource is addressable straight away (its id
   // is the factory project id); inside one it becomes addressable as soon as
   // session metadata resolves — same as `resourceReady`.
   const resourceAddressable =
     userScoped || !inSession
-      ? Boolean(resourceId)
-      : Boolean(resourceOverride) || (Boolean(storedSession) && !resolvingSession);
+      ? Boolean(chatSessionId)
+      : Boolean(addressOverride) || (Boolean(storedSession) && !resolvingSession);
   const resourceEnabled = !isUserDraft && resourceAddressable;
   const value = {
-    resourceId: resourceOverride ?? resourceId ?? '',
+    sessionId: chatSessionId ?? '',
+    resourceId: resourceId ?? '',
+    threadTags,
     // `sessionEnabled` retained as an alias for `sandboxReady` so existing
     // mutation/display consumers don't need to be renamed in this change.
     sessionEnabled: sandboxReady,
@@ -146,7 +142,6 @@ export function ChatSessionConfigProvider({
           if (sessionQuery.isError) void sessionQuery.refetch();
         }
       : undefined,
-    projectPath,
     sessionThreadId: storedSession?.sessionId,
     workspacePending: storedSession !== undefined && !storedSession.materializedAt,
     draftSessionId: isUserDraft ? draftSessionId : undefined,
@@ -159,6 +154,8 @@ export function ChatSessionConfigProvider({
         : undefined,
     baseUrl,
     kind: userScoped ? ('user' as const) : ('factory' as const),
+    owner,
+    modelLockedReason: modelLockedReason(storedSession),
   };
 
   return <ChatSessionContext.Provider value={value}>{children}</ChatSessionContext.Provider>;
@@ -177,11 +174,10 @@ export function ChatSessionBoundary({
   threadId?: string;
   deferUntilMessagesReady?: boolean;
 }) {
-  const { resourceId, resourceReady, projectPath, baseUrl, sessionThreadId } = useChatSessionContext();
+  const { sessionId, resourceReady, baseUrl, sessionThreadId } = useChatSessionContext();
   const messagesQuery = useAgentControllerThreadMessages({
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: projectPath,
+    sessionId,
     threadId,
     baseUrl,
     enabled: resourceReady && Boolean(threadId),
@@ -207,7 +203,7 @@ export function ChatSessionBoundary({
       <ChatTranscriptProvider
         // No `isPending` segment: remounting on the pending -> ready flip would drop
         // the live SSE listener. Results merge into the reducer instead.
-        key={`${resourceId}:${threadId ?? 'draft'}`}
+        key={`${sessionId}:${threadId ?? 'draft'}`}
         threadId={threadId}
         initialMessages={messagesQuery.data}
         hasMoreHistory={messagesQuery.hasMore}

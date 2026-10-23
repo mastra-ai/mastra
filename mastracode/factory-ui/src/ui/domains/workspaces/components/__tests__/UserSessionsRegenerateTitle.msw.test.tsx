@@ -83,13 +83,21 @@ async function openTitleAction(user: ReturnType<typeof userEvent.setup>, name: s
   await user.click(await screen.findByRole('menuitem', { name: 'Regenerate title' }));
 }
 
-describe('User session title regeneration', () => {
-  it('renames the row with the title the server generated', async () => {
-    let sessions = [session];
+describe('Session title regeneration', () => {
+  it.each([
+    ['user/my-feature', 'dropdown'],
+    ['user/my-feature', 'context'],
+    ['slack/1791936483-798759', 'dropdown'],
+    ['slack/1791936483-798759', 'context'],
+  ])('renames the owned %s row from the %s menu', async (branch, entry) => {
+    let sessions = [{ ...session, branch }];
     useFactoryFixtures(() => sessions);
     server.use(
+      http.get(`${TEST_BASE_URL}/auth/me`, () =>
+        HttpResponse.json({ authEnabled: true, authenticated: true, user: { userId: session.userId } }),
+      ),
       http.post(`${TEST_BASE_URL}/web/user-sessions/:sessionId/title`, () => {
-        sessions = [{ ...session, title: 'Factory audit log review' }];
+        sessions = [{ ...session, branch, title: 'Factory audit log review' }];
         return HttpResponse.json({ title: 'Factory audit log review' });
       }),
     );
@@ -97,10 +105,18 @@ describe('User session title regeneration', () => {
     const user = userEvent.setup();
     const { client } = renderSection();
 
-    await openTitleAction(user, 'Tell me what have been done in the factory since');
+    if (entry === 'context') {
+      await user.pointer({
+        target: await screen.findByRole('link', { name: session.title }),
+        keys: '[MouseRight]',
+      });
+      await user.click(await screen.findByRole('menuitem', { name: 'Regenerate title' }));
+    } else {
+      await openTitleAction(user, 'Tell me what have been done in the factory since');
+    }
     await waitForMutationsIdle(client);
 
-    expect(await screen.findByRole('button', { name: 'Factory audit log review' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Factory audit log review' })).toBeInTheDocument();
   });
 
   it('keeps a pending session disabled while another session finishes first', async () => {

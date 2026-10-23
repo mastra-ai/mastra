@@ -112,7 +112,7 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: Sc
 
               <div className="my-6 flex justify-end">
                 <Button size="sm" onClick={() => setDatasetDialogOpen(true)} icon={<SaveIcon />}>
-                  Save as Dataset Item
+                  Save as dataset item
                 </Button>
               </div>
 
@@ -189,7 +189,12 @@ export function ScoreDataPanel({ score, onClose, onPrevious, onNext, depth }: Sc
       </DataPanel>
 
       {score && (
-        <ScoreAsItemDialog score={score} isOpen={datasetDialogOpen} onClose={() => setDatasetDialogOpen(false)} />
+        <ScoreAsItemDialog
+          score={score}
+          isOpen={datasetDialogOpen}
+          onClose={() => setDatasetDialogOpen(false)}
+          depth={(depth ?? 1) > 1 ? 3 : 2}
+        />
       )}
     </>
   );

@@ -11,8 +11,10 @@ import type {
   CreateSpanOptions,
   ObservabilityInstance,
   ExportedSpan,
+  SpanSnapshot,
   TraceState,
   IModelSpanTracker,
+  ModelSpanTrackerOptions,
   AIModelGenerationSpan,
   EntityType,
   TracingPolicy,
@@ -385,13 +387,13 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
    * Create a ModelSpanTracker for this span (only works if this is a MODEL_GENERATION span)
    * Returns undefined for non-MODEL_GENERATION spans
    */
-  createTracker(): IModelSpanTracker | undefined {
+  createTracker(options?: ModelSpanTrackerOptions): IModelSpanTracker | undefined {
     // Only create tracker for MODEL_GENERATION spans
     if (this.type !== SpanType.MODEL_GENERATION) {
       return undefined;
     }
 
-    return new ModelSpanTracker(this as Span<SpanType.MODEL_GENERATION>);
+    return new ModelSpanTracker(this as Span<SpanType.MODEL_GENERATION>, options);
   }
 
   /** Returns `TRUE` if the span is the root span of a trace */
@@ -577,6 +579,11 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       // Tags are only included for root spans, and a nested run does not own the trace
       ...(this.isRootSpan && !nestedUnderParent && this.tags?.length ? { tags: this.tags } : {}),
     };
+  }
+
+  /** Returns the span saved for a later `rebuildSpan()`, with its trace state */
+  public snapshot(): SpanSnapshot<TType> {
+    return { ...this.exportSpan(), ...(this.traceState ? { traceState: this.traceState } : {}) };
   }
 
   get externalTraceId(): string | undefined {

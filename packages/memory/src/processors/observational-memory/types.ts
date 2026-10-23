@@ -1090,6 +1090,14 @@ export interface ObservationalMemoryConfig {
   autoModels?: Record<string, string>;
 
   /**
+   * Whether the current request can authenticate with a provider. `'auto'` only prefers Gemini
+   * when this returns `true` for `'google'`. Use this when credentials are scoped per request
+   * (for example per tenant) rather than read from the server's environment.
+   * Defaults to checking `GOOGLE_GENERATIVE_AI_API_KEY`.
+   */
+  canUseProvider?: (providerId: string, context: { requestContext?: RequestContext }) => boolean;
+
+  /**
    * Resolves the model ID `'auto'` picks into a model. Use this when the main agent's models
    * come from your own resolver (custom credentials, gateways, or providers) so observer and
    * reflector calls use the same routing. Receives a concrete ID, never `'auto'`.

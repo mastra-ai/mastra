@@ -20,10 +20,18 @@ const NO_OBSERVABILITY_CAPABILITIES = {
   traceQuery: false,
   traceQueryRootDuration: false,
   traceQueryContextIds: false,
+  traceQueryTimeToFirstChunk: false,
+  traceQueryRootSpanFields: false,
+  traceQueryRootEntityId: false,
+  traceQueryTimeToFirstChunkSort: false,
   traceQueryDiscovery: false,
   traceQueryTenantScope: false,
+  traceAggregate: false,
   threadQuery: false,
+  threadQueryRows: false,
   spanQuery: false,
+  spanQueryContextFields: false,
+  spanAggregate: false,
   feedback: false,
 };
 
@@ -647,6 +655,65 @@ describe('System Handlers', () => {
         });
       });
 
+      it.each([
+        { features: ['span-query', 'span-query-context-fields'], supported: true },
+        { features: ['span-query'], supported: false },
+        { features: ['span-query-context-fields'], supported: false },
+      ] as const)('reports expanded span filters for $features as $supported', async ({ features, supported }) => {
+        class SpanQueryStore extends BaseObservabilityStore {
+          getFeatures() {
+            return features;
+          }
+        }
+
+        expect(await capabilitiesFor(new SpanQueryStore())).toMatchObject({
+          spanQueryContextFields: supported,
+        });
+      });
+
+      it('reports time to first chunk only when the store also serves a trace, thread or span query', async () => {
+        class SpanQueryStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['span-query', 'trace-query-time-to-first-chunk'] as const;
+          }
+        }
+        class NoQueryStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['trace-query-time-to-first-chunk'] as const;
+          }
+        }
+
+        expect(await capabilitiesFor(new SpanQueryStore())).toEqual({
+          ...NO_OBSERVABILITY_CAPABILITIES,
+          spanQuery: true,
+          traceQueryTimeToFirstChunk: true,
+        });
+        expect(await capabilitiesFor(new NoQueryStore())).toEqual(NO_OBSERVABILITY_CAPABILITIES);
+      });
+
+      it('reports the time to first chunk sort only when the store also serves a trace or span query', async () => {
+        class SpanQueryStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['span-query', 'trace-query-time-to-first-chunk-sort'] as const;
+          }
+        }
+        class NoQueryStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['thread-query', 'trace-query-time-to-first-chunk-sort'] as const;
+          }
+        }
+
+        expect(await capabilitiesFor(new SpanQueryStore())).toEqual({
+          ...NO_OBSERVABILITY_CAPABILITIES,
+          spanQuery: true,
+          traceQueryTimeToFirstChunkSort: true,
+        });
+        expect(await capabilitiesFor(new NoQueryStore())).toEqual({
+          ...NO_OBSERVABILITY_CAPABILITIES,
+          threadQuery: true,
+        });
+      });
+
       it('treats a declared feature list as final even when methods are overridden', async () => {
         // e.g. Spanner with metrics disabled: the methods exist but throw.
         class OptOutStore extends BaseObservabilityStore {
@@ -732,6 +799,50 @@ describe('System Handlers', () => {
           ...NO_OBSERVABILITY_CAPABILITIES,
           feedback: true,
         });
+      });
+
+      it('reports trace aggregation only for stores that declare it', async () => {
+        class AggregateStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['trace-aggregate'] as const;
+          }
+        }
+        class UndeclaredAggregateStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['trace-query'] as const;
+          }
+          override async aggregateTraces() {
+            return { rows: [], truncated: false };
+          }
+        }
+
+        expect(await capabilitiesFor(new AggregateStore())).toEqual({
+          ...NO_OBSERVABILITY_CAPABILITIES,
+          traceAggregate: true,
+        });
+        expect(await capabilitiesFor(new UndeclaredAggregateStore())).toMatchObject({ traceAggregate: false });
+      });
+
+      it('reports span aggregation only for stores that declare it', async () => {
+        class AggregateStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['span-aggregate'] as const;
+          }
+        }
+        class UndeclaredAggregateStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['span-query'] as const;
+          }
+          async aggregateSpans() {
+            return { rows: [], truncated: false };
+          }
+        }
+
+        expect(await capabilitiesFor(new AggregateStore())).toEqual({
+          ...NO_OBSERVABILITY_CAPABILITIES,
+          spanAggregate: true,
+        });
+        expect(await capabilitiesFor(new UndeclaredAggregateStore())).toMatchObject({ spanAggregate: false });
       });
 
       it('does not report query refinements for stores without trace or thread queries', async () => {

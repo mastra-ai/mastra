@@ -184,6 +184,11 @@ export interface AgentRunAttributes extends AIBaseAttributes {
     /** Additional metadata */
     metadata?: unknown;
   };
+  /**
+   * When the run's model streamed its first chunk; copied from the first
+   * MODEL_GENERATION of the agent's own loop. Absent when no chunk was streamed.
+   */
+  completionStartTime?: Date;
 }
 
 /**
@@ -360,6 +365,8 @@ export interface ModelStepAttributes extends AIBaseAttributes {
   isContinued?: boolean;
   /** Result warnings */
   warnings?: Record<string, any>;
+  /** When the step's first inference streamed its first chunk. Absent when no chunk was streamed. */
+  completionStartTime?: Date;
 }
 
 /**
@@ -441,6 +448,8 @@ export interface ToolCallAttributes extends AIBaseAttributes {
   toolDescription?: string;
   toolCallId?: string;
   success?: boolean;
+  /** True when a dataset experiment tool mock intercepted the call (served, mismatched, exhausted or denied) and the tool never ran */
+  mocked?: boolean;
 }
 
 /**
@@ -654,8 +663,9 @@ export interface ProcessorPipelineAttributes {
   /**
    * Milliseconds spent inside `processOutputStream`, summed across every
    * chunk of the stream. Only set on output stream processor spans. The
-   * span's own duration covers the whole stream, model latency included, so
-   * this is what separates a slow processor from a slow model.
+   * span's own duration covers its step, from the first chunk to the step's
+   * end with model latency and tool calls included, so this is what separates
+   * a slow processor from the rest of the step.
    */
   hookDurationMs?: number;
   /** MessageList mutations performed by this processor */
@@ -1478,6 +1488,9 @@ export interface Span<TType extends SpanType> extends BaseSpan<TType> {
   /** Returns a lightweight span ready for export */
   exportSpan(includeInternalSpans?: boolean): ExportedSpan<TType> | undefined;
 
+  /** Returns the span saved for a later `rebuildSpan()`, with its trace state */
+  snapshot(): SpanSnapshot<TType> | undefined;
+
   /** Returns the traceId on span, unless NoOpSpan, then undefined */
   get externalTraceId(): string | undefined;
 
@@ -1567,7 +1580,16 @@ export interface BridgeSpanContext {
  */
 export interface AIModelGenerationSpan extends Span<SpanType.MODEL_GENERATION> {
   /** Create a ModelSpanTracker for tracking model execution steps and chunks */
-  createTracker(): IModelSpanTracker | undefined;
+  createTracker(options?: ModelSpanTrackerOptions): IModelSpanTracker | undefined;
+}
+
+export interface ModelSpanTrackerOptions {
+  /**
+   * The AGENT_RUN span that owns this generation. Only the agent's main loop
+   * passes it, so the first chunk's `completionStartTime` lands on that span
+   * and never on an outer agent's run (nested agents, title generation).
+   */
+  agentRunSpan?: Span<SpanType.AGENT_RUN>;
 }
 
 /**
@@ -1608,6 +1630,16 @@ export interface ExportedSpan<TType extends SpanType> extends SpanData<TType> {
 }
 
 /**
+ * A span saved between durable steps, for `rebuildSpan()`. Extends the exported
+ * form with runtime state that exporters do not need, so spans created under
+ * the rebuilt span keep honouring the trace's `requestContextKeys`,
+ * `hideInput` and `hideOutput`.
+ */
+export interface SpanSnapshot<TType extends SpanType> extends ExportedSpan<TType> {
+  traceState?: TraceState;
+}
+
+/**
  * Options for ending a model generation span
  */
 export interface EndGenerationOptions extends EndSpanOptions<SpanType.MODEL_GENERATION> {
@@ -1639,6 +1671,12 @@ export interface IModelSpanTracker {
   reportGenerationError(options: ErrorSpanOptions<SpanType.MODEL_GENERATION>): void;
   endGeneration(options?: EndGenerationOptions): void;
   updateGeneration(options: UpdateSpanOptions<SpanType.MODEL_GENERATION>): void;
+  /**
+   * When the first inference seen by this tracker streamed its first chunk.
+   * Durable execution reads it per step and carries it to the final
+   * `endGeneration`, since that step uses a fresh tracker.
+   */
+  getCompletionStartTime?(): Date | undefined;
   wrapStream<T extends { pipeThrough: Function }>(stream: T): T;
   startStep(payload?: StepStartPayload): void;
   updateStep?(payload?: StepStartPayload): void;
@@ -1647,6 +1685,7 @@ export interface IModelSpanTracker {
    * Open the MODEL_INFERENCE span for the current step. Call this immediately
    * before invoking the model so the span's startTime excludes input processor
    * work (and `setInferenceContext` reflects the post-processor tool set).
+   * Pass the prompt (`inputMessages`) so the span records what this call sent.
    * Falls back to auto-creation on first chunk if the caller forgets.
    */
   startInference?(payload?: StepStartPayload): void;
@@ -1677,7 +1716,7 @@ export interface IModelSpanTracker {
    * Export the current step span for later rebuilding (durable execution).
    * Returns undefined if no step span is active.
    */
-  exportCurrentStep(): ExportedSpan<SpanType.MODEL_STEP> | undefined;
+  exportCurrentStep(): SpanSnapshot<SpanType.MODEL_STEP> | undefined;
 
   /**
    * Get the pending step finish payload (captured when defer mode is enabled).

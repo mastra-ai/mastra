@@ -618,6 +618,23 @@ describe('MastraSandbox Base Class', () => {
   });
 
   describe('Built-in executeCommand', () => {
+    it('applies a subclass foreground default without limiting background spawns', async () => {
+      class TimedSandbox extends ProcessBackedSandbox {
+        protected defaultCommandTimeout = 300;
+      }
+      const manager = new ExecuteCommandProcessManager('ok');
+      const sandbox = new TimedSandbox(manager);
+
+      await sandbox.executeCommand!('echo ok');
+      expect(manager.lastOptions?.timeout).toBe(300);
+      await sandbox.executeCommand!('echo ok', [], { timeout: 0 });
+      expect(manager.lastOptions?.timeout).toBe(0);
+      await sandbox.processes!.spawn('echo ok');
+      expect(manager.lastOptions?.timeout).toBeUndefined();
+      await new ProcessBackedSandbox(manager).executeCommand!('echo ok');
+      expect(manager.lastOptions?.timeout).toBeUndefined();
+    });
+
     it('bounds retained command output by default', async () => {
       const output = 'a'.repeat(5) + 'x'.repeat(DEFAULT_MAX_RETAINED_PROCESS_OUTPUT_BYTES);
       const manager = new ExecuteCommandProcessManager(output);

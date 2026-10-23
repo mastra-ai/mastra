@@ -1,4 +1,4 @@
-import { emitErrorEvent } from '@mastra/core/agent/durable';
+import { DURABLE_STOP_WHEN_ERROR_ID, emitErrorEvent } from '@mastra/core/agent/durable';
 import { RequestContext } from '@mastra/core/di';
 import { getErrorFromUnknown } from '@mastra/core/error';
 import { PubSub } from '@mastra/core/events';
@@ -33,6 +33,46 @@ import type {
   InngestFlowCronConfig,
   InngestWorkflowConfig,
 } from './types';
+
+function durableAgentWorkflowError(error: unknown): { error: Error; delivery?: 'reject' } {
+  const serialized = error as {
+    code?: unknown;
+    id?: unknown;
+    name?: unknown;
+    message?: unknown;
+    stepId?: unknown;
+    details?: { name?: unknown; message?: unknown };
+    cause?: { name?: unknown; message?: unknown };
+  };
+  const isMarkedStopWhenError =
+    serialized?.code === DURABLE_STOP_WHEN_ERROR_ID || serialized?.id === DURABLE_STOP_WHEN_ERROR_ID;
+  // Inngest's serve transport serializes predicate failures as StepErrors and drops
+  // the MastraError id/details. Keep this prefix in sync with the memoized step id
+  // in create-inngest-agentic-workflow.ts; any failure in that step is classified
+  // as a stopWhen failure.
+  const isStopWhenStepError = typeof serialized?.stepId === 'string' && serialized.stepId.startsWith('stop-when-');
+  if (isMarkedStopWhenError || isStopWhenStepError) {
+    const normalized = new Error(
+      typeof serialized.details?.message === 'string'
+        ? serialized.details.message
+        : typeof serialized.cause?.message === 'string'
+          ? serialized.cause.message
+          : typeof serialized.message === 'string'
+            ? serialized.message
+            : 'Workflow execution failed',
+    );
+    normalized.name =
+      typeof serialized.details?.name === 'string'
+        ? serialized.details.name
+        : typeof serialized.cause?.name === 'string'
+          ? serialized.cause.name
+          : typeof serialized.name === 'string'
+            ? serialized.name
+            : 'Error';
+    return { error: normalized, delivery: 'reject' };
+  }
+  return { error: getErrorFromUnknown(error, { fallbackMessage: 'Workflow execution failed' }) };
+}
 
 /**
  * Resolves the nested `InngestWorkflow` wrapped by a graph entry, if any.
@@ -515,7 +555,7 @@ export class InngestWorkflow<
             requestContext,
           });
 
-          return span?.exportSpan();
+          return span?.snapshot?.() ?? span?.exportSpan();
         });
 
         const engine = new InngestExecutionEngine(this.#mastra, step, attempt, this.options, parentStream);
@@ -597,9 +637,9 @@ export class InngestWorkflow<
             // For durable agent workflows, emit error event on failure so the
             // client's stream can receive the error and close properly.
             if (result.status === 'failed' && inputData?.__workflowKind === 'durable-agent' && inputData?.runId) {
-              const error = getErrorFromUnknown(result.error, { fallbackMessage: 'Workflow execution failed' });
+              const { error, delivery } = durableAgentWorkflowError(result.error);
               try {
-                await emitErrorEvent(pubsub, inputData.runId, error);
+                await emitErrorEvent(pubsub, inputData.runId, error, undefined, delivery);
               } catch (e) {
                 this.logger.debug?.('Failed to emit error event:', e);
               }

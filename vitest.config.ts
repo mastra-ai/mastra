@@ -21,6 +21,7 @@ const EXCLUDED_DIRS = new Set([
 // Directories to scan for vitest configs
 const PROJECT_GLOBS = [
   'packages/*/vitest.config.ts',
+  'packages/_internals/*/vitest.config.ts',
   'packages/playground/vercel-preview/vitest.config.ts',
   'stores/*/vitest.config.ts',
   'deployers/*/vitest.config.ts',

@@ -58,6 +58,24 @@ function renderBoard(board = 'boards/release', workItems: unknown[] = [], boards
 }
 
 describe('custom-only board routing', () => {
+  it.each(['list', 'board'])('offers intake setup in a custom initial phase in the %s layout', async layout => {
+    const { client } = renderBoard();
+    const user = userEvent.setup();
+    if (layout === 'board') await saveKanbanView(user);
+    await waitForMutationsIdle(client);
+
+    const queued = await screen.findByTestId('board-column-queued');
+    expect(within(queued).getByText(/No intake sources/)).toBeVisible();
+    expect(within(queued).getByRole('link', { name: 'Connect issue source' })).toHaveAttribute(
+      'href',
+      '/factories/fp-1/settings/intake',
+    );
+    expect(screen.getAllByRole('link', { name: 'Connect issue source' })).toHaveLength(1);
+
+    await user.click(within(queued).getByRole('button', { name: 'Create card' }));
+    expect(await screen.findByRole('textbox', { name: 'Work item title' })).toHaveFocus();
+  });
+
   it('renders declaration-ordered custom groups without built-in intake or automation', async () => {
     const { intakeRequest, client } = renderBoard();
     const columns = await screen.findByLabelText('Board stages');

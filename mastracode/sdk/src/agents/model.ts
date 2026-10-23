@@ -31,6 +31,7 @@ import {
   MASTRACODE_GATEWAY_ID,
   MastraCodeGateway,
   getGlobalAuthStorage,
+  hasProviderEnvironmentKey,
   reloadAuthStorage,
   stripMastraGatewayPrefix,
 } from './mastracode-gateway.js';
@@ -296,8 +297,8 @@ function resolveModelForRequest(modelId: string, options?: Parameters<typeof res
     // personal sign-in can't tell why an organization-scoped Factory fails.
     throw new ProviderAuthRequiredError(
       resolveCredentialScope(options?.requestContext) === 'factory'
-        ? `No usable ${providerId} credential is available. This Factory uses organization credentials only, so personal provider sign-ins don't apply. Add an organization credential, then try again.`
-        : `No usable ${providerId} credential is available. This Factory uses personal credentials only, so organization credentials don't apply. Connect the provider, then try again.`,
+        ? `No usable ${providerId} credential is available for ${normalizedModelId}. This Factory uses organization credentials only, so personal provider sign-ins don't apply. Add an organization credential, then try again.`
+        : `No usable ${providerId} credential is available for ${normalizedModelId}. This Factory uses personal credentials only, so organization credentials don't apply. Connect the provider, then try again.`,
     );
   }
 
@@ -307,6 +308,32 @@ function resolveModelForRequest(modelId: string, options?: Parameters<typeof res
     apiKey: auth?.apiKey ?? '',
     headers,
   });
+}
+
+/**
+ * Whether `resolveModel` can authenticate a provider for this request, using the
+ * same credential lookup: the tenant store in deployed Factory (no environment
+ * keys), otherwise local auth and then the provider's environment keys.
+ */
+export function canUseProvider(providerId: string, options?: { requestContext?: RequestContext }): boolean {
+  reloadAuthStorage();
+  const baseCredentialStore = resolveCredentialStore(options?.requestContext) ?? getGlobalAuthStorage();
+  const credentialStore = createRequestScopedCredentialStore(baseCredentialStore, options?.requestContext);
+  const gateway = createMastraCodeGateway({
+    mastraGatewayBaseUrl: '',
+    routeThroughMastraGateway: false,
+    customProviders: resolveCustomProviders(options?.requestContext) ?? loadSettings().customProviders,
+    credentialStore,
+  });
+  const auth = gateway.resolveAuth({
+    gatewayId: MASTRACODE_GATEWAY_ID,
+    providerId,
+    modelId: '',
+    routerId: `${MASTRACODE_GATEWAY_ID}/${providerId}`,
+  });
+  if (auth) return true;
+  // resolveModel lets the models.dev gateway read environment keys only when the store allows it.
+  return credentialStore.allowEnvironmentFallback !== false && hasProviderEnvironmentKey(providerId);
 }
 
 export interface ThinkingRequestContext {
@@ -319,9 +346,11 @@ export interface ThinkingRequestContext {
  * Precedence:
  *   1. Session override (`state.thinkingLevel`, set via /think or the session
  *      settings panel).
- *   2. Per-mode default from settings (`models.modeThinkingDefaults[mode]`),
+ *   2. The host's default for this request (`hostDefault`), when the host
+ *      stores thinking defaults itself (the Factory keeps one per Factory).
+ *   3. Per-mode default from settings (`models.modeThinkingDefaults[mode]`),
  *      only when the context carries a session mode.
- *   3. Global default (`preferences.thinkingLevel`).
+ *   4. Global default (`preferences.thinkingLevel`).
  *
  * Resolved per-request (not seeded at session start) so configuration changes
  * apply to the next request of every session — including automated
@@ -330,9 +359,11 @@ export interface ThinkingRequestContext {
 export function resolveRequestThinkingLevel(
   agentControllerContext: ThinkingRequestContext | undefined,
   settingsPath?: string,
+  hostDefault?: ThinkingLevelSetting,
 ): ThinkingLevelSetting {
   const override = agentControllerContext?.state?.thinkingLevel;
   if (isThinkingLevelSetting(override)) return override;
+  if (hostDefault) return hostDefault;
   const modeId = agentControllerContext?.session?.modeId;
   return resolveDefaultThinkingLevel(loadSettings(settingsPath), modeId).level;
 }
@@ -346,7 +377,7 @@ export function resolveRequestThinkingLevel(
 export function getDynamicModel(
   { requestContext }: { requestContext: RequestContext },
   settingsPath?: string,
-  { modeless = false }: { modeless?: boolean } = {},
+  { modeless = false, defaultThinkingLevel }: { modeless?: boolean; defaultThinkingLevel?: ThinkingLevelSetting } = {},
 ): IdentifiedModelConfig | ModelWithRetries[] {
   const controller = requestContext.get('controller') as AgentControllerRequestContext<any> | undefined;
   const state = controller?.getState?.() as
@@ -378,7 +409,11 @@ export function getDynamicModel(
     throw new Error('No model selected. Use /models to select a model first.');
   }
 
-  const thinkingLevel = resolveRequestThinkingLevel(modeless ? { state: controller?.state } : controller, settingsPath);
+  const thinkingLevel = resolveRequestThinkingLevel(
+    modeless ? { state: controller?.state } : controller,
+    settingsPath,
+    defaultThinkingLevel,
+  );
   const resolveOptions = { thinkingLevel, remapForCodexOAuth: true, requestContext } as const;
   // Label each resolved model with its full ID: the resolved gateway model only
   // knows its bare provider model, and Memory's `'auto'` reads this label.

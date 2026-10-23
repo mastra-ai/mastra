@@ -146,7 +146,7 @@ Rotation applies to **Automatic** routes only. A model pinned to a specific acco
 
 Rotation and transient retries share one retry budget, so after a rotation the remaining accounts may see fewer transient retries each — the next account is always preferred over further retries on a failing one.
 
-Every switch is shown in the transcript as a one-line notice (for example, `Switched Kimi account: Work → Personal (rate limit)`) and is persisted in the thread history, so it also appears when you reopen the thread later. When a request starts on an account that isn't the first one in the pool, a `Starting on …` notice marks that too. When a pinned account can't serve a request, the notice names that account (`Pinned Anthropic account unavailable (pool exhausted)`) rather than reporting the whole pool as unavailable.
+Every switch is shown in the transcript as a one-line notice (for example, `Switched Kimi account: Work → Personal (rate limit)`) and is persisted in the thread history, so it also appears when you reopen the thread later. A request that begins on a preferred account produces no separate notice; only switches and failures are announced. When a pinned account can't serve a request, the notice names that account (`Pinned Anthropic account unavailable (pool exhausted)`) rather than reporting the whole pool as unavailable.
 
 When you select **ChatGPT Plus/Pro (Codex Subscription)** in `/connect` or during onboarding, Mastra Code asks how you want to sign in:
 
@@ -753,15 +753,15 @@ Configure the scope through:
 
 The observer and reflector default to **Auto**. Each role follows the active main model's provider, using that provider's built-in low-cost memory model when available and otherwise using the active main model. Changing the main model changes the effective model for automatic roles without changing their saved selection.
 
-Use the `/om` panel to select a concrete model or reset either role to **Auto** independently. Concrete selections remain pinned when the main model changes.
+Use the `/memory` panel to select a concrete model or reset either role to **Auto** independently. Concrete selections remain pinned when the main model changes.
 
-Observer and Reflector selections saved before Auto existed stay pinned after upgrading. Choose **Auto** in `/om` to switch a role back.
+Observer and Reflector selections saved before Auto existed stay pinned after upgrading. Choose **Auto** in `/memory` to switch a role back.
 
-Custom model packs can also set a memory model in `/models`. The pack's memory model is more specific than `/om`, so while the pack is active it applies to both roles, including roles pinned in `/om`. The `/om` panel and status line show the model the pack selects:
+Custom model packs can also set a memory model in `/models`. The pack's memory model is more specific than `/memory`, so while the pack is active it applies to both roles, including roles pinned in `/memory`. The `/memory` panel and status line show the model the pack selects:
 
 | Pack memory model | Behavior |
 | - | - |
-| Not set (default) | Each role uses its `/om` selection |
+| Not set (default) | Each role uses its `/memory` selection |
 | **Auto** | Both roles use automatic selection |
 | Concrete model | Both roles use that model. If its provider is unavailable, the role uses the next fallback pack's memory model |
 
@@ -848,6 +848,71 @@ Resource IDs determine how threads are grouped. By default, Mastra Code generate
 ```
 
 You can also set `MASTRA_RESOURCE_ID` as an environment variable. Two users who set the same resource ID share threads and observations for that resource.
+
+## Cross-agent communication
+
+Cross-agent communication is experimental and off by default.
+
+### Enable cross-agent communication
+
+Enable it in Mastra Code with the `/settings` toggle "Experimental cross-agent communication" and restart. Embedded clients can set `crossAgentSignals: true` when calling `createMastraCode()`. The setting enables thread ownership advertisements and peer discovery. It also makes the agent connection tools available, and lets peer discovery reach instances in other projects on the same machine (see [Discover agents in other projects](#discover-agents-in-other-projects)).
+
+```typescript
+import { createMastraCode } from 'mastracode'
+
+const mastraCode = await createMastraCode({
+  crossAgentSignals: true,
+})
+```
+
+### Discover and connect to peers
+
+Mastra Code can use notification signals to communicate between agent threads. A peer is an exact `{ agentId, resourceId, threadId }` endpoint. Discovery is a point-in-time advertisement that the exact endpoint is available now. It isn't a durable connection or a guarantee that delivery will succeed.
+
+`agent_connections_list` returns one `peers` collection. Each peer includes:
+
+- `relationship`: `none` or `saved`. This is the authoritative durable state for the current sender thread.
+- `presence`: `advertised` or `absent`. This reflects the current discovery pass.
+- `displayStatus`: A derived, presentational value: `discovered`, `connected`, or `saved`.
+- `canAttemptSend`: `true` only when the peer is both saved and currently advertised.
+
+The displayed statuses mean:
+
+| Status | Meaning | Can attempt a send? |
+| - | - | - |
+| `[discovered]` | Advertised now, but not saved by the current sender thread. | No |
+| `[connected]` | Saved by the current sender thread and advertised now. | Yes |
+| `[saved]` | Saved by the current sender thread, but not advertised now. | No |
+
+Use the connection tools for distinct operations:
+
+- `agent_connect` saves a freshly discovered exact peer in the current sender thread.
+- `agent_disconnect` removes a saved peer from the current sender thread. The peer doesn't need to be currently advertised, and repeated disconnects are safe.
+- `agent_signal_send` requires the exact peer to remain saved and freshly advertised at send time. A previously discovered or recently seen peer that's absent from the current discovery pass isn't sendable.
+
+Saved connections remain in the sender thread until explicitly disconnected. Every send independently refreshes discovery and verifies the exact endpoint before routing begins. A saved connection therefore records collaboration intent. It doesn't indicate current presence.
+
+### Send and receive signals
+
+After a send attempt reaches Core routing, the routing result is authoritative. The result can be `wake`, `deliver`, `persist`, `blocked`, or `discard`, depending on the target thread and notification policy. A send that fails a direct delivery because no thread owner acknowledged it isn't lost: the signal stays pending in the target's notification inbox and the send reports `persist` instead of claiming delivery. The notification dispatcher retries that delivery on its own, so the sender doesn't need to resend it. The `messageId` isn't recorded in sent history and isn't rejected as a duplicate, although the pending notification still matches on it. A resend with the same `messageId` merges into that notification while it's pending, and delivers a second copy once the retry has succeeded. A send made with `expectsReply: true` returns an error there, because the reply obligation isn't established until the signal is delivered.
+
+When the delivery policy routes a signal to a notification summary rather than delivering it directly, the send records the `messageId`, so retrying with the same id reports a duplicate instead of routing again. A low-priority send always takes this route and reports `persist`. A high- or medium-priority send to an active thread takes it too, but there the summary signal is emitted immediately, so the send reports that signal's routing result (`wake`, `deliver`, or `persist`) and records the `messageId` the same way, including when `expectsReply: true`. Only when the policy schedules a summary without emitting a signal at send time does an `expectsReply: true` send fail to establish its reply obligation: it returns an error and doesn't record the send in sent history, so establishing the reply obligation takes a new signal at a priority that routes directly.
+
+### Discover agents in other projects
+
+With cross-agent communication on, `agent_connections_list` lists Mastra Code instances in every project on the same machine, including the current one. An instance can connect to and message an instance in another project, and receive its replies. This needs Unix socket pub/sub. The Mastra Code CLI turns it on by default. Embedded clients pass `unixSocketPubSub: true` alongside `crossAgentSignals: true` to `createMastraCode()`. It doesn't apply in these cases:
+
+- On Windows.
+- When you pass your own `pubsub`.
+- When the resource ID, set through `MASTRA_RESOURCE_ID` or `resourceId` in `.mastracode/database.json`, can't be used as a directory name. That covers IDs that are empty, are longer than 128 characters, contain `/`, `\` or control characters, or equal `.`, `..` or `_shared`. Mastra Code logs one warning at startup, and the instance only lists instances that share its resource ID.
+
+Mastra Code routes a thread's messages and run leases to the socket directory of the thread's project. Thread-owner lookup and peer discovery, which lists the threads you can connect to, both run in a shared `/tmp/mc/_shared` directory. Instances running versions before this change can't see or be seen by updated instances, so restart every instance after updating.
+
+### Security and socket isolation
+
+Any local process running as your user can list the threads your instances advertise and message them, so only turn on cross-agent communication on machines and accounts you trust.
+
+To isolate an instance or a test from the shared `/tmp/mc` directory, set `MASTRACODE_SIGNALS_SOCKET_ROOT` to another absolute path. Relative paths are ignored. Keep the path short, because macOS limits Unix socket paths to 104 bytes. The root also holds every thread's run and ownership leases. An instance with a different root doesn't coordinate threads with instances that use the default root.
 
 ## Telemetry
 

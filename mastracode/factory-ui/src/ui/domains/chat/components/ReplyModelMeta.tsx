@@ -8,14 +8,22 @@ import { ALL_THINKING_LEVEL_OPTIONS, THINKING_LEVEL_LABELS } from '../services/t
 
 interface ReplyModelMetaProps {
   modelId: string;
+  credentialLabel: string | undefined;
   thinkingLevel: ThinkingLevelSetting | undefined;
 }
 
-export function ReplyModelMeta({ modelId, thinkingLevel }: ReplyModelMetaProps) {
+export function ReplyModelMeta({ modelId, credentialLabel, thinkingLevel }: ReplyModelMetaProps) {
   return (
     <>
       <Tooltip>
-        <TooltipTrigger render={<MessageMetadata tabIndex={0}>{formatModelName(modelId)}</MessageMetadata>} />
+        <TooltipTrigger
+          render={
+            <MessageMetadata tabIndex={0}>
+              {formatModelName(modelId)}
+              {credentialLabel && ` · ${credentialLabel}`}
+            </MessageMetadata>
+          }
+        />
         <TooltipContent>{modelId}</TooltipContent>
       </Tooltip>
       {thinkingLevel && <ReplyThinkingLevel level={thinkingLevel} />}

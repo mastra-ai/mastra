@@ -17,6 +17,7 @@ import type { WorkflowResult, WorkflowRunStartOptions, StepResult } from '../../
 import type { AnyWorkflow } from '../../workflows/workflow';
 import { Workflow } from '../../workflows/workflow';
 import type { MastraScorer } from '../base';
+import { flushBeforeTraceRead } from '../flush-before-trace-read';
 import { snapshotRequestContextForScore } from '../request-context-snapshot';
 import { checkThresholdPassed, isScorerWithThreshold, validateThresholdConfig } from '../thresholds';
 import type {
@@ -359,6 +360,10 @@ export async function runEvals(config: RunEvalsAnyConfig): Promise<RunEvalsResul
     async (item: RunEvalsDataItem<any>) => {
       const targetResult = await executeTarget(target, item, targetOptions);
 
+      // Store the trace before gates and scorers read it, and before each
+      // scorer's addScore() looks it up.
+      await flushBeforeTraceRead(mastra, targetResult.traceId);
+
       // Run gates first
       if (gates) {
         // A scorer created with `type: 'trajectory'` is typed by
@@ -368,7 +373,7 @@ export async function runEvals(config: RunEvalsAnyConfig): Promise<RunEvalsResul
         // it will not receive. Extract once per item, only when needed.
         const gateTrajectory = gates.some(gate => gate.type === 'trajectory')
           ? await resolveTrajectory(
-              storage,
+              mastra,
               targetResult.traceId,
               targetResult.spanId,
               targetResult.scoringData,
@@ -405,7 +410,7 @@ export async function runEvals(config: RunEvalsAnyConfig): Promise<RunEvalsResul
         }
       }
 
-      const scorerResults = await runScorers(bareScorers, targetResult, item, storage);
+      const scorerResults = await runScorers(bareScorers, targetResult, item, mastra);
       scoreAccumulator.addScores(scorerResults);
 
       // Track threshold scores. A not-scorable result has no `score` key and
@@ -425,7 +430,7 @@ export async function runEvals(config: RunEvalsAnyConfig): Promise<RunEvalsResul
         for (let ti = 0; ti < turns.length; ti++) {
           const record = perTurn[ti];
           if (!record) continue;
-          const { rawResults, notScorable, ...scored } = await scoreTurn(turns[ti]!, record, item, storage, mastra);
+          const { rawResults, notScorable, ...scored } = await scoreTurn(turns[ti]!, record, item, mastra);
           itemTurnResults.push({ index: ti, ...scored });
           notScorable.forEach(countNotScorable);
 
@@ -569,13 +574,13 @@ export async function runEvals(config: RunEvalsAnyConfig): Promise<RunEvalsResul
  * messages.
  */
 async function resolveTrajectory(
-  storage: MastraCompositeStore | undefined,
+  mastra: any,
   traceId: string | undefined,
   spanId: string | undefined,
   scoringData: { output?: any; stepResults?: any; stepExecutionPath?: string[] } | undefined,
   isWorkflowTarget: boolean,
 ): Promise<Trajectory> {
-  const traceTrajectory = await extractTrajectoryFromTraceStore(storage, traceId, spanId);
+  const traceTrajectory = await extractTrajectoryFromTraceStore(mastra, traceId, spanId);
   if (traceTrajectory) return traceTrajectory;
 
   // A workflow's `scoringData.output` is the workflow's own result, not an
@@ -613,7 +618,6 @@ async function scoreTurn(
   turn: EvalTurn,
   record: PerTurnRecord,
   item: RunEvalsDataItem<any>,
-  storage?: MastraCompositeStore,
   mastra?: any,
 ): Promise<Omit<ScoredTurn, 'index'> & { rawResults: Record<string, any>; notScorable: string[] }> {
   const gates: Array<{ id: string; score: number }> = [];
@@ -627,7 +631,7 @@ async function scoreTurn(
     const gateTrajectory = turn.gates.some(gate => gate.type === 'trajectory')
       ? // Per-turn records are produced only by the agent turn runner, never by
         // `executeWorkflow`, so the agent fallback is the only reachable one here.
-        await resolveTrajectory(storage, record.traceId, record.spanId, { output: record.output }, false)
+        await resolveTrajectory(mastra, record.traceId, record.spanId, { output: record.output }, false)
       : undefined;
 
     for (const gate of turn.gates) {
@@ -1204,15 +1208,19 @@ async function executeAgentTurns(agent: Agent, item: RunEvalsDataItem<any>, targ
   };
 }
 
+const TRACE_FALLBACK = 'trajectory scorers get a flat trajectory from the run output instead';
+
 /**
  * Attempts to extract a hierarchical trajectory from observability traces.
  * Falls back to undefined if storage is not available or trace cannot be fetched.
+ * Expects the caller to have flushed observability first.
  */
 async function extractTrajectoryFromTraceStore(
-  storage: MastraCompositeStore | undefined,
+  mastra: any,
   traceId: string | undefined,
   spanId: string | undefined,
 ): Promise<ReturnType<typeof extractTrajectoryFromTrace> | undefined> {
+  const storage: MastraCompositeStore | undefined = mastra?.getStorage?.();
   if (!storage || !traceId) return undefined;
 
   try {
@@ -1220,11 +1228,16 @@ async function extractTrajectoryFromTraceStore(
     if (!observabilityStore) return undefined;
 
     const trace = await observabilityStore.getTrace({ traceId });
-    if (!trace?.spans?.length) return undefined;
+    if (!trace?.spans?.length) {
+      // Normal when no exporter writes to storage (for example, Langfuse only).
+      mastra?.getLogger?.()?.debug?.(`Trace ${traceId} was not found in observability storage; ${TRACE_FALLBACK}.`);
+      return undefined;
+    }
 
     return extractTrajectoryFromTrace(trace.spans, spanId);
-  } catch {
+  } catch (error) {
     // Trace-based extraction is best-effort; fall back to existing extraction
+    mastra?.getLogger?.()?.warn?.(`Failed to read trace ${traceId}; ${TRACE_FALLBACK}:`, error);
     return undefined;
   }
 }
@@ -1234,7 +1247,7 @@ async function runScorers(
   scorers: MastraScorer<any, any, any, any>[] | WorkflowScorerConfig | AgentScorerConfig,
   targetResult: any,
   item: RunEvalsDataItem<any>,
-  storage?: MastraCompositeStore,
+  mastra?: any,
 ): Promise<Record<string, any>> {
   const scorerResults: Record<string, any> = {};
   const targetTraceId = targetResult.traceId;
@@ -1315,7 +1328,7 @@ async function runScorers(
       const trajectoryScorerResults: Record<string, any> = {};
 
       // Prefer hierarchical trace-based extraction when storage + traceId are available
-      const traceTrajectory = await extractTrajectoryFromTraceStore(storage, targetResult.traceId, targetResult.spanId);
+      const traceTrajectory = await extractTrajectoryFromTraceStore(mastra, targetResult.traceId, targetResult.spanId);
 
       // Fall back to flat extraction from MastraDBMessage[] tool invocations
       const rawOutput = targetResult.scoringData?.output;
@@ -1430,7 +1443,7 @@ async function runScorers(
       const trajectoryScorerResults: Record<string, any> = {};
 
       // Prefer hierarchical trace-based extraction when storage + traceId are available
-      const traceTrajectory = await extractTrajectoryFromTraceStore(storage, targetResult.traceId, targetResult.spanId);
+      const traceTrajectory = await extractTrajectoryFromTraceStore(mastra, targetResult.traceId, targetResult.spanId);
 
       // Fall back to flat extraction from step results
       let trajectory = traceTrajectory;
@@ -1622,8 +1635,10 @@ async function saveSingleScore({
   turn?: { index: number; traceId?: string; spanId?: string; threadId?: string };
 }): Promise<void> {
   try {
-    // Get scorer information
-    let scorer = mastra?.getScorerById?.(scorerId);
+    // A runEvals scorer may not be registered on the Mastra instance.
+    let scorer: RunEvalsScorer | undefined = (Object.values(mastra?.listScorers?.() ?? {}) as RunEvalsScorer[]).find(
+      entry => entry.id === scorerId,
+    );
 
     if (!scorer) {
       // Try to get from target's scorers

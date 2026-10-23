@@ -57,12 +57,12 @@ import CmsPromptBlocksCreatePage from './pages/cms/prompt-blocks/create';
 import CmsPromptBlocksEditPage from './pages/cms/prompt-blocks/edit';
 import CmsScorersCreatePage from './pages/cms/scorers/create';
 import CmsScorersEditPage from './pages/cms/scorers/edit';
+import ConnectionsPage from './pages/connections';
 import Datasets from './pages/datasets';
 import DatasetPage from './pages/datasets/dataset';
 import EditDatasetPage from './pages/datasets/dataset/edit';
 import DatasetItemVersionsComparePage from './pages/datasets/dataset/item/versions';
 import DatasetCompareDatasetVersions from './pages/datasets/dataset/versions';
-import CreateDatasetPage from './pages/datasets/new';
 import Experiments from './pages/experiments';
 import CompareExperimentsPage from './pages/experiments/compare';
 import ExperimentPage from './pages/experiments/experiment';
@@ -79,8 +79,10 @@ import Scorers from './pages/scorers';
 import Scorer from './pages/scorers/scorer';
 import { StudioSettingsPage } from './pages/settings';
 import { SignUp } from './pages/signup';
+import Spans from './pages/spans';
 import Templates from './pages/templates';
 import Template from './pages/templates/template';
+import Threads from './pages/threads';
 import Traces from './pages/traces';
 import Workflows from './pages/workflows';
 import SchedulePage from './pages/workflows/schedule';
@@ -314,6 +316,8 @@ export const routes: RouteObject[] = [
         element: <SignalsEntityDetailPage />,
       },
       { path: '/traces', element: <Traces /> },
+      { path: '/spans', element: <Spans /> },
+      { path: '/threads', element: <Threads /> },
       {
         path: '/traces/:traceId',
         loader: ({ params, request }: LoaderFunctionArgs) => {
@@ -391,6 +395,11 @@ export const routes: RouteObject[] = [
         element: <IntegrationsPage />,
       },
 
+      {
+        path: '/connections',
+        element: <ConnectionsPage />,
+      },
+
       { path: '/processors', element: <Processors /> },
       {
         path: '/processors/:processorId',
@@ -445,10 +454,6 @@ export const routes: RouteObject[] = [
       ...(isExperimentalFeatures
         ? [
             { path: '/datasets', element: <Datasets /> },
-            {
-              path: '/datasets/new',
-              element: <CreateDatasetPage />,
-            },
             {
               path: '/datasets/:datasetId',
               element: <DatasetPage />,

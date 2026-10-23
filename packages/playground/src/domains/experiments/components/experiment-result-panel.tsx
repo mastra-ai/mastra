@@ -197,7 +197,7 @@ function ExperimentResultPanelBody({
           <span className="font-mono" title={result.itemId}>
             {getShortId(result.itemId)}
           </span>
-          <CopyButton content={result.itemId} tooltip="Copy Item Id to clipboard" variant="link" />
+          <CopyButton content={result.itemId} tooltip="Copy item ID to clipboard" variant="link" />
         </span>
       ),
       delta: null,
@@ -300,21 +300,20 @@ function ExperimentResultPanelBody({
   return (
     <>
       <DataPanel.Header>
-        <DataPanel.Heading>Experiment result</DataPanel.Heading>
+        {canFlag && (
+          <Button size="sm" variant="primary" onClick={() => onFlagForReview(result.id)} icon={<ClipboardPlus />}>
+            Request review
+          </Button>
+        )}
+        {onComplete && result.status === 'needs-review' && (
+          <Button size="sm" variant="primary" onClick={onComplete} icon={<CheckCircle />}>
+            Mark as reviewed
+          </Button>
+        )}
         <DataPanel.HeaderActions>
-          {canFlag && (
-            <Button size="sm" variant="primary" onClick={() => onFlagForReview!(result.id)} icon={<ClipboardPlus />}>
-              Request review
-            </Button>
-          )}
-          {onComplete && result.status === 'needs-review' && (
-            <Button size="sm" variant="primary" onClick={onComplete} icon={<CheckCircle />}>
-              Mark as reviewed
-            </Button>
-          )}
           {experimentLink && (
             <Button
-              size="sm"
+              size="icon-sm"
               variant="ghost"
               render={<Link href={experimentLink} />}
               tooltip="See experiment"
@@ -324,7 +323,7 @@ function ExperimentResultPanelBody({
             </Button>
           )}
           {result.traceId && onShowTrace && (
-            <Button size="sm" variant="ghost" onClick={onShowTrace} tooltip="See trace" aria-label="See trace">
+            <Button size="icon-sm" variant="ghost" onClick={onShowTrace} tooltip="See trace" aria-label="See trace">
               <TraceIcon />
             </Button>
           )}

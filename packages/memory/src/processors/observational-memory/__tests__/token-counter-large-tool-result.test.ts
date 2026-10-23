@@ -2,7 +2,7 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import { describe, expect, it } from 'vitest';
 
 import { TokenCounter } from '../token-counter';
-import { DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS } from '../tool-result-helpers';
+import { DEFAULT_OBSERVER_TOOL_RESULT_MAX_TOKENS, serializeToolResultForTokenCounting } from '../tool-result-helpers';
 
 function messageWithInvocation(
   invocation: Record<string, unknown>,
@@ -109,8 +109,8 @@ describe('TokenCounter with oversized tool results', () => {
         counter.countString('assistant') + counter.countString(outcome) + 3.8 + 3.8,
       );
       expect(outcomeOnlyBaseline).toBe(11);
-      expect(actual).toBe(33);
-      expect(actual - outcomeOnlyBaseline).toBe(22);
+      expect(actual).toBe(32);
+      expect(actual - outcomeOnlyBaseline).toBe(21);
     }
   });
 
@@ -209,7 +209,7 @@ describe('TokenCounter with oversized tool results', () => {
       counter.countString('assistant') +
         counter.countString('lookup') +
         counter.countString(JSON.stringify(args)) +
-        counter.countString(JSON.stringify(result)) +
+        counter.countString(serializeToolResultForTokenCounting(result)) +
         3.8 +
         3.8 -
         12 -
@@ -238,7 +238,7 @@ describe('TokenCounter with oversized tool results', () => {
       counter.countString('assistant') +
         counter.countString('lookup') +
         counter.countString(JSON.stringify(args)) +
-        counter.countString(JSON.stringify(modelOutput)) +
+        counter.countString(serializeToolResultForTokenCounting(modelOutput)) +
         3.8 +
         3.8 -
         12 -
@@ -296,7 +296,7 @@ describe('TokenCounter with oversized tool results', () => {
 
   it('keeps standalone countMessage accounting message-local for malformed split histories', () => {
     const counter = new TokenCounter();
-    const args = { query: 'split' };
+    const args = { query: 'split history lookup query with more words' };
     const callMessage = messageWithInvocation({
       state: 'call',
       toolCallId: 'split-history',

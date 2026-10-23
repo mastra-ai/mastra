@@ -169,6 +169,43 @@ describe('ProjectRoutes', () => {
     expect((await seed.projects.getById({ id: project.id }))?.modelScope).toBe('hybrid');
   });
 
+  it('requires an organization admin to change the thinking default and rejects unknown levels', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({ orgId: 'org-1', userId: 'user-1', input: { name: 'Shared' } });
+    expect(project.defaultThinkingLevel).toBe('medium');
+    const isOrganizationAdmin = vi.fn(async () => false);
+    const app = new Hono();
+    app.use('*', async (context, next) => {
+      context.set('factoryAuthUser' as never, { workosId: 'member', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(
+      app as never,
+      projectRoutes(seed, undefined, undefined, undefined, { auth: fakeRouteAuth({ isOrganizationAdmin }) }),
+    );
+    const patch = (body: Record<string, unknown>) =>
+      app.request(`/web/factory/projects/${project.id}`, {
+        method: 'PATCH',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    const denied = await patch({ defaultThinkingLevel: 'high' });
+    expect(denied.status).toBe(403);
+    expect(await denied.json()).toMatchObject({
+      error: 'forbidden',
+      message: 'Organization administrator access is required to change the thinking default.',
+    });
+    expect((await seed.projects.getById({ id: project.id }))?.defaultThinkingLevel).toBe('medium');
+
+    isOrganizationAdmin.mockResolvedValue(true);
+    expect((await patch({ defaultThinkingLevel: 'enormous' })).status).toBe(400);
+    const saved = await patch({ defaultThinkingLevel: 'high' });
+    expect(saved.status).toBe(200);
+    expect(await saved.json()).toMatchObject({ project: { defaultThinkingLevel: 'high' } });
+    expect((await seed.projects.getById({ id: project.id }))?.defaultThinkingLevel).toBe('high');
+  });
+
   it('creates a project in the requested model scope and rejects unknown scopes', async () => {
     const seed = await createFactoryStorageForTests();
     const app = new Hono();
@@ -288,7 +325,7 @@ describe('ProjectRoutes', () => {
       const failingSetSettingOn = vi.fn().mockRejectedValue(new Error('write failed'));
       const sessions = new Map([
         [
-          'resource-applied',
+          'session-thread-applied',
           {
             thread: {
               getById: vi.fn().mockResolvedValue({ metadata: { currentModeId: 'plan' } }),
@@ -296,10 +333,13 @@ describe('ProjectRoutes', () => {
             },
           },
         ],
-        ['resource-thread-missing', { thread: { getById: vi.fn().mockResolvedValue(null), setSettingOn } }],
-        ['resource-mode-unknown', { thread: { getById: vi.fn().mockResolvedValue({ metadata: {} }), setSettingOn } }],
+        ['session-thread-missing', { thread: { getById: vi.fn().mockResolvedValue(null), setSettingOn } }],
         [
-          'resource-apply-failed',
+          'session-thread-mode-unknown',
+          { thread: { getById: vi.fn().mockResolvedValue({ metadata: {} }), setSettingOn } },
+        ],
+        [
+          'session-thread-apply-failed',
           {
             thread: {
               getById: vi.fn().mockResolvedValue({ metadata: { currentModeId: 'plan' } }),
@@ -313,7 +353,7 @@ describe('ProjectRoutes', () => {
         get: vi.fn(async ({ id }: { id: string }) => items.get(id) ?? null),
       } as unknown as NonNullable<ConstructorParameters<typeof ProjectRoutes>[0]['workItems']>;
       const controller = {
-        getSessionByResource: vi.fn(async (resourceId: string) => sessions.get(resourceId) ?? null),
+        getSession: vi.fn(async (sessionId: string) => sessions.get(sessionId) ?? null),
       } as NonNullable<ConstructorParameters<typeof ProjectRoutes>[0]['controller']>;
 
       const response = await mount(seed, { workItems, controller }).request(

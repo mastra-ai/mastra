@@ -316,30 +316,33 @@ const result = await run.timeTravel({
 
 ## Concurrent time travel calls
 
-`timeTravel()` doesn't claim the run before it executes. It only rejects runs whose stored status is `running`. If two `timeTravel()` calls target the same run at the same time, both can proceed, and the target step and every step after it run once per call.
+Only one `timeTravel()` call can run for a workflow run at a time. Before it runs anything, `timeTravel()` atomically claims the run by moving its stored status from the status it loaded (for example `suspended` or `success`) to `running`. If another caller already claimed it, this call throws `WORKFLOW_TIME_TRAVEL_ALREADY_CLAIMED` and executes no steps. A call that loads the run while it's already `running` throws `WORKFLOW_TIME_TRAVEL_RUN_RUNNING`.
 
-This matters whenever time travel can be triggered more than once for the same run, such as a "retry from step" button pressed twice or a retried API request. Make sure only one call proceeds per run in your application, for example with a per-run lock or an idempotency key:
+This matters whenever time travel can be triggered more than once for the same run, such as a "retry from step" button pressed twice or a retried API request.
 
 ```typescript
-const inFlight = new Set<string>()
-
-async function retryFromStep(runId: string, step: string) {
-  if (inFlight.has(runId)) {
-    throw new Error(`Time travel already in progress for run ${runId}`)
-  }
-  inFlight.add(runId)
-  try {
-    const run = await workflow.createRun({ runId })
-    return await run.timeTravel({ step })
-  } finally {
-    inFlight.delete(runId)
+try {
+  await run.timeTravel({ step: 'step2' })
+} catch (error) {
+  if (
+    error.id === 'WORKFLOW_TIME_TRAVEL_ALREADY_CLAIMED' ||
+    error.id === 'WORKFLOW_TIME_TRAVEL_RUN_RUNNING'
+  ) {
+    // Another caller is already re-running this workflow. Re-read the run
+    // state instead of time travelling again.
   }
 }
 ```
 
-The in-memory set above only protects a single process. If several server instances can handle the same run, use a shared lock instead, such as a database row lock.
+Over HTTP, `POST /api/workflows/:workflowId/time-travel-async` returns `409 Conflict` for a losing call. The `time-travel` and `time-travel-stream` endpoints respond before the time travel finishes, so a losing call doesn't change their status code.
 
-Unlike [`resume()`](./resume#concurrent-resume-calls), `timeTravel()` has no `WORKFLOW_RESUME_ALREADY_CLAIMED` equivalent, and the HTTP endpoint doesn't return `409 Conflict` for concurrent calls.
+Calling `timeTravel()` again after the previous call finished is still allowed and re-runs the target step.
+
+:::note
+
+The claim is enforced atomically by storage adapters that report `supportsConcurrentUpdates()`. Adapters without atomic read-modify-write support (such as ClickHouse, Cloudflare D1, Cloudflare KV, Cloudflare Durable Objects, LanceDB, and Redis) can't enforce it, and the claim is also skipped when `shouldPersistSnapshot` excludes the `running` status. The Inngest workflow runner doesn't claim the run yet.
+
+:::
 
 ## Notes
 

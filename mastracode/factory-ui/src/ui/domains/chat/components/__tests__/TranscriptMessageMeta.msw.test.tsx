@@ -1,4 +1,5 @@
 import type { AgentControllerEvent, MastraDBMessage } from '@mastra/core/agent-controller';
+import type { ThreadOwner } from '../../services/reply-credential';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
@@ -184,5 +185,74 @@ describe('message meta', () => {
 
     expect(screen.getByText('GPT-5')).toBeInTheDocument();
     expect(screen.queryByRole('img', { name: /^Thinking:/ })).toBeNull();
+  });
+
+  const ward = { id: 'ward', name: 'Ward Peeters' };
+  const opus = { modelId: 'claude-opus-4-6', provider: 'anthropic.messages' };
+  const ownerCases: Array<{
+    case: string;
+    owner?: ThreadOwner;
+    viewerId: string;
+    metadata: Record<string, unknown>;
+    label: string;
+  }> = [
+    {
+      case: 'the thread owner’s credential to a teammate',
+      owner: ward,
+      viewerId: 'damien',
+      metadata: { ...opus, credentialLabel: 'Claude Pro/Max', credentialOwnerId: 'ward' },
+      label: 'Claude Opus 4.6 · Ward Peeters’s Claude Pro/Max',
+    },
+    {
+      case: 'the viewer’s own credential',
+      owner: ward,
+      viewerId: 'ward',
+      metadata: { ...opus, credentialLabel: 'Claude Pro/Max', credentialOwnerId: 'ward' },
+      label: 'Claude Opus 4.6 · Your Claude Pro/Max',
+    },
+    {
+      case: 'a personal credential whose owner is not named',
+      viewerId: 'damien',
+      metadata: { modelId: 'gpt-5', credentialLabel: 'OpenAI API key', credentialOwnerId: 'ward' },
+      label: 'GPT-5 · Personal OpenAI API key',
+    },
+    {
+      case: 'the organization’s credential',
+      owner: ward,
+      viewerId: 'damien',
+      metadata: { modelId: 'grok-4', credentialLabel: 'SuperGrok/X Premium+' },
+      label: 'Grok 4 · Organization SuperGrok/X Premium+',
+    },
+    {
+      case: 'a reply stamped before credentials were recorded',
+      owner: ward,
+      viewerId: 'damien',
+      metadata: opus,
+      label: 'Claude Opus 4.6',
+    },
+  ];
+  it.each(ownerCases)('labels a reply answered by $case as “$label”', ({ owner, viewerId, metadata, label }) => {
+    const reply: TimelineEntry = {
+      kind: 'message',
+      id: 'assistant-1',
+      message: {
+        id: 'assistant-1',
+        role: 'assistant',
+        createdAt: CREATED_AT,
+        content: { format: 2, parts: [{ type: 'text', text: 'shipped' }], metadata },
+      },
+    };
+
+    renderWithProviders(
+      <TranscriptEntries
+        entries={[reply]}
+        viewerId={viewerId}
+        owner={owner}
+        onApprove={() => {}}
+        onRespond={() => {}}
+      />,
+    );
+
+    expect(screen.getByText(label, { exact: true })).toBeVisible();
   });
 });

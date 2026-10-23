@@ -419,6 +419,8 @@ export class MongoDBDatasetsStorage extends DatasetsStorage {
       const collection = await this.getCollection(TABLE_DATASETS);
 
       const filter: Record<string, any> = {};
+      // `$in: []` matches nothing, so an empty list returns no datasets.
+      if (args.filters?.datasetIds !== undefined) filter.id = { $in: args.filters.datasetIds };
       if (args.filters?.organizationId !== undefined) filter.organizationId = args.filters.organizationId;
       if (args.filters?.projectId !== undefined) filter.projectId = args.filters.projectId;
       if (args.filters?.candidateKey !== undefined) filter.candidateKey = args.filters.candidateKey;

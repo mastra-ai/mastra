@@ -66,7 +66,6 @@ const AgentBuilderSkillViewPage = ({ skill }: PageProps) => {
           size="icon-sm"
           variant="ghost"
           onClick={() => navigate('/agent-builder/skills', { viewTransition: true })}
-          className="rounded-full"
           tooltip="Skills list"
           data-testid="skill-view-back-button"
         >

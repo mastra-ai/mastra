@@ -1,4 +1,4 @@
-import { CornerDownRightIcon, DatabaseIcon, ListTreeIcon, RouteIcon } from 'lucide-react';
+import { CornerDownRightIcon, DatabaseIcon, ListTreeIcon, RouteIcon, SplitIcon } from 'lucide-react';
 import type { ComponentType, SVGProps } from 'react';
 import { DataListCell, DataListTextCell } from '../data-list-cells';
 import { Badge } from '@/ds/components/Badge';
@@ -64,6 +64,27 @@ export function TracesDataListInputCell({ input }: TracesDataListInputCellProps)
 }
 
 // ---------------------------------------------------------------------------
+// OutputCell
+// ---------------------------------------------------------------------------
+
+export interface TracesDataListOutputCellProps {
+  output?: string;
+  /** Shown instead of `output`, in the error color, when `status` is `'error'`. */
+  error?: string;
+  status?: string | null;
+}
+
+export function TracesDataListOutputCell({ output, error, status }: TracesDataListOutputCellProps) {
+  const failed = status === 'error';
+  const errorColor = failed ? 'text-destructive-foreground' : undefined;
+  return (
+    <DataListTextCell font="mono" className={errorColor}>
+      {(failed ? error : output) || '-'}
+    </DataListTextCell>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // TypeCell
 // ---------------------------------------------------------------------------
 
@@ -77,6 +98,7 @@ const ENTITY_TYPE_DISPLAY: Record<string, EntityTypeDisplay> = {
   workflow_step: { label: 'Step', Icon: WorkflowIcon },
   tool: { label: 'Tool', Icon: ToolsIcon },
   scorer: { label: 'Scorer', Icon: ScorersIcon },
+  classifier: { label: 'Classifier', Icon: SplitIcon },
   memory: { label: 'Memory', Icon: MemoryIcon },
   mcp_server: { label: 'MCP Server', Icon: McpServerIcon },
   input_processor: { label: 'Processor', Icon: ProcessorIcon },

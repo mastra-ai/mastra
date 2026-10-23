@@ -1,6 +1,6 @@
 {
   "name": "@mastra/gcs",
-  "version": "0.3.3",
+  "version": "0.3.5-alpha.0",
   "description": "Google Cloud Storage filesystem provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",
@@ -28,24 +28,23 @@
     "test": "GCS_ENDPOINT=http://localhost:4443 TEST_GCS_BUCKET=test-bucket vitest run ./src/**/*.integration.test.ts",
     "posttest": "docker compose down -v",
     "test:cloud": "vitest run ./src/**/*.integration.test.ts",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix ."
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@google-cloud/storage": "^7.21.0"
+    "@google-cloud/storage": "^7.22.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@internal/workspace-test-utils": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.20.5",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "dotenv": "^17.4.2",
-    "eslint": "^10.7.0",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
