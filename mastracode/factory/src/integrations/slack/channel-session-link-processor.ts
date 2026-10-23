@@ -1,9 +1,11 @@
 import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
+import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '@mastra/core/channels';
+import type { ChatChannelRenderContext } from '@mastra/core/channels';
 import type { Processor, ProcessOutputStepArgs, ProcessOutputStreamArgs } from '@mastra/core/processors';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { ChunkType } from '@mastra/core/stream';
 
-import { readFactorySessionScope } from '../rules/binding-context.js';
+import { readFactorySessionScope } from '../../rules/binding-context.js';
 import { SESSION_LINK_LABEL, sessionLink } from './channel-reply-processor.js';
 
 /**
@@ -55,7 +57,7 @@ export class FactoryChannelSessionLinkProcessor implements Processor {
   readonly id = 'factory-channel-session-link';
 
   async processOutputStream({ part, state, requestContext }: ProcessOutputStreamArgs): Promise<ChunkType> {
-    if (state.linked || !requestContext?.get(NEW_CHANNEL_SESSION_KEY)) return part;
+    if (state.linked || !linksThisRun(requestContext)) return part;
     if (part.type === 'text-delta') {
       state.textStarted = true;
       return part;
@@ -74,7 +76,7 @@ export class FactoryChannelSessionLinkProcessor implements Processor {
   }
 
   processOutputStep({ messageList, requestContext }: ProcessOutputStepArgs) {
-    if (!requestContext?.get(NEW_CHANNEL_SESSION_KEY)) return messageList;
+    if (!linksThisRun(requestContext)) return messageList;
     const link = sessionLinkFromRequest(requestContext);
     if (!link) return messageList;
     const suffix = linkSuffix(link);
@@ -90,6 +92,16 @@ export class FactoryChannelSessionLinkProcessor implements Processor {
     }
     return messageList;
   }
+}
+
+/**
+ * With reply text hidden the reply text never reaches the thread, and
+ * `reply_in_thread` appends the link to its own first post instead.
+ */
+function linksThisRun(requestContext: RequestContext | undefined): requestContext is RequestContext {
+  if (!requestContext?.get(NEW_CHANNEL_SESSION_KEY)) return false;
+  const render = requestContext.get(CHAT_CHANNEL_RENDER_CONTEXT_KEY) as ChatChannelRenderContext | undefined;
+  return render?.textDisplay !== 'hidden';
 }
 
 function linkSuffix(link: string): string {

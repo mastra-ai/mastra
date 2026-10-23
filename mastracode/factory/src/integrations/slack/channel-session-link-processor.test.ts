@@ -1,4 +1,5 @@
 import { Agent } from '@mastra/core/agent';
+import { CHAT_CHANNEL_RENDER_CONTEXT_KEY } from '@mastra/core/channels';
 import { MockMemory } from '@mastra/core/memory';
 import { ProcessorRunner } from '@mastra/core/processors';
 import type { Processor } from '@mastra/core/processors';
@@ -185,6 +186,13 @@ describe('FactoryChannelSessionLinkProcessor', () => {
     const out = await render(requestContext, [...textBlock('Hi'), stepFinish()]);
     expect(texts(out)).toEqual(['Hi']);
     expect(out).toHaveLength(3);
+  });
+
+  it('adds no link when reply text is hidden, since the reply tool links its own first post', async () => {
+    const requestContext = newSessionContext();
+    requestContext.set(CHAT_CHANNEL_RENDER_CONTEXT_KEY, { textDisplay: 'hidden' });
+    const out = await render(requestContext, [...textBlock('\u200b'), stepFinish()]);
+    expect(texts(out)).toEqual(['\u200b']);
   });
 
   it('passes text through untouched without a public origin', async () => {

@@ -13,8 +13,12 @@ const NOT_FOUND_HEADER = 'x-mastra-custom-route-not-found';
 
 type HonoApiRoute = Exclude<ApiRoute, { readonly _mastraSchemaRoute: true }>;
 
-/** Authenticates a matched custom route. Throws to reject the request. */
-export type CustomRouteAuthenticate = (requiresAuth: boolean) => Promise<void>;
+/** Authenticates and authorizes a matched custom route. Throws to reject the request. */
+export type CustomRouteAuthenticate = (
+  route: ApiRoute,
+  requiresAuth: boolean,
+  pathParams: Record<string, string>,
+) => Promise<void>;
 
 type CustomRouteEnv = { requestContext: RequestContext; authenticate: CustomRouteAuthenticate; authError?: unknown };
 
@@ -55,7 +59,7 @@ export class CustomRouteService {
    * Runs a matched custom route and writes its response.
    * Returns false if no custom route handled the request.
    *
-   * `authenticate` runs after Hono's router selects the route, so auth is enforced
+   * `authenticate` runs after Hono's router selects the route, so auth, RBAC, and FGA are enforced
    * for exactly the routes Hono dispatches (including regex-constrained params).
    */
   async handle(
@@ -156,11 +160,15 @@ export class CustomRouteService {
         : [];
       const requiresAuth = this.authConfig.get(`${route.method}:${route.path}`) ?? route.requiresAuth !== false;
       const authMiddleware = async (
-        c: { env: CustomRouteEnv; body: (data: null, status: 401) => Response },
+        c: {
+          env: CustomRouteEnv;
+          req: { param: () => Record<string, string> };
+          body: (data: null, status: 401) => Response;
+        },
         next: () => Promise<void>,
       ) => {
         try {
-          await c.env.authenticate(requiresAuth);
+          await c.env.authenticate(route, requiresAuth, c.req.param());
         } catch (err) {
           // Surface Nest HTTP exceptions (401/403) to the caller instead of Hono's onError.
           c.env.authError = err;

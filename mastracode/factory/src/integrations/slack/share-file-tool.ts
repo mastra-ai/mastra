@@ -5,7 +5,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
-import type { IntegrationTools } from '../integrations/base.js';
+import type { IntegrationTools } from '../base.js';
 
 /** Slack rejects larger uploads well before this; keep the sandbox read bounded too. */
 export const SHARE_FILE_MAX_BYTES = 50 * 1024 * 1024;
@@ -44,11 +44,11 @@ function missingScopeError(error: unknown, platform: string): Error | undefined 
  * such entry even though its thread is still channel-backed — and that is
  * exactly the run that ends a long job with a file to hand back. Rebuild the
  * context from the thread's persisted channel coordinates the same way
- * `ChatChannelOutputProcessor` does, so the tool is offered on both kinds of
- * run. A forked subagent's thread carries no channel metadata, so forks get
+ * `ChatChannelOutputProcessor` does, so the tools post on both kinds of run.
+ * A forked subagent's thread carries no channel metadata, so forks get
  * nothing here and never post to the platform.
  */
-async function resolveRenderContext(
+export async function resolveRenderContext(
   requestContext: RequestContext,
   deps: ShareFileToolDeps,
 ): Promise<ChatChannelRenderContext | undefined> {
@@ -61,19 +61,40 @@ async function resolveRenderContext(
 }
 
 /**
+ * Whether this run's thread is a Slack thread, so the channel tools have
+ * somewhere to post. A run started from Slack says so on `requestContext`; a
+ * web prompt or a woken run on a Slack-linked session costs one thread read.
+ * Plain web sessions get `false` and no channel tools.
+ */
+export async function isSlackThread(requestContext: RequestContext, deps: ShareFileToolDeps): Promise<boolean> {
+  const channel = requestContext.get('channel') as { platform?: string } | undefined;
+  if (channel) return channel.platform === 'slack';
+  const controller = requestContext.get('controller') as AgentControllerRequestContext | undefined;
+  const threadId = controller?.threadId;
+  if (!threadId) return false;
+  const linked = await deps.channels?.()?.buildChannelContextForThread(threadId);
+  return linked?.channel.platform === 'slack';
+}
+
+/** The thread a channel tool posts into, resolved when the tool runs. */
+export async function postTarget(
+  requestContext: RequestContext,
+  deps: ShareFileToolDeps,
+): Promise<ChatChannelRenderContext> {
+  const render = await resolveRenderContext(requestContext, deps);
+  if (!render) throw new Error('This session is no longer linked to a chat thread.');
+  return render;
+}
+
+/**
  * Lets a channel-triggered run hand a workspace file back to the thread it
  * came from. The agent's reply stream can only carry text, so a report it
  * generated in the sandbox would otherwise be described by path and left
- * there. Only offered when the run has a chat thread to post to; the file is
- * read through the session's workspace filesystem so sandbox confinement
- * still applies.
+ * there. Offered only on runs whose thread is linked to a chat thread (see
+ * `isSlackThread`); the file is read through the session's workspace
+ * filesystem so sandbox confinement still applies.
  */
-export async function createShareFileTool(
-  requestContext: RequestContext,
-  deps: ShareFileToolDeps = {},
-): Promise<IntegrationTools> {
-  const render = await resolveRenderContext(requestContext, deps);
-  if (!render) return {};
+export function createShareFileTool(requestContext: RequestContext, deps: ShareFileToolDeps = {}): IntegrationTools {
   return {
     attach_file: createTool({
       id: 'attach_file',
@@ -101,6 +122,7 @@ export async function createShareFileTool(
           throw new Error(`${path} is ${data.length} bytes; the limit is ${SHARE_FILE_MAX_BYTES} bytes.`);
         }
         const filename = path.split('/').pop() || 'file';
+        const render = await postTarget(requestContext, deps);
         // File only. The Slack adapter posts any non-empty text as a second
         // message after the upload, so a comment would land as its own bubble
         // between the reply and the file; an empty body returns after the upload.

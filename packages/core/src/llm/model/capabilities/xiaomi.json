@@ -13,26 +13,6 @@
   ],
   "structuredOutput": ["mimo-v2.6-flash", "mimo-v2.6-pro", "mimo-v2.6-pro-ultraspeed"],
   "reasoning": {
-    "mimo-v2-omni": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "mimo-v2-pro": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "mimo-v2.5": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "mimo-v2-flash": [
-      {
-        "type": "toggle"
-      }
-    ],
     "mimo-v2.6-pro": [
       {
         "type": "toggle"
@@ -48,7 +28,27 @@
         "type": "toggle"
       }
     ],
+    "mimo-v2.5": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "mimo-v2-pro": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "mimo-v2-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
     "mimo-v2.6-flash": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "mimo-v2-omni": [
       {
         "type": "toggle"
       }
