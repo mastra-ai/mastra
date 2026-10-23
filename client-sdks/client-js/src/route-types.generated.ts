@@ -20828,6 +20828,13 @@ export type PostDatasetsDatasetIdExperiments_Body = {
   version?: number | undefined;
   /** Agent version ID to use for experiment */
   agentVersion?: string | undefined;
+  /** Model to run an agent target on for this experiment only, instead of the model the agent is configured with. Passed per call; the agent itself is not changed and the model is not stored on the experiment. */
+  agentModel?:
+    | {
+        provider: string;
+        modelId: string;
+      }
+    | undefined;
   /** Maximum concurrent executions */
   maxConcurrency?: number | undefined;
   /** Caller-provided provenance claims for the experiment execution */
