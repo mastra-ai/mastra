@@ -1334,10 +1334,23 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         const loadSnapshot = async (): Promise<any> =>
           workflowsStore.loadWorkflowSnapshot({ workflowName: InngestDurableStepIds.AGENTIC_LOOP, runId });
         const toolCallId = resumeOptions?.toolCallId;
-        const isReady = (s: any) => s?.status === 'suspended' && (!toolCallId || !!s.resumeLabels?.[toolCallId]);
+        // After a second suspension the nested execution snapshot can persist
+        // before the outer one, leaving the outer snapshot `suspended` on the
+        // previous call. Wait until the nested snapshot carries the outer labels.
+        const isReady = async (s: any) => {
+          if (s?.status !== 'suspended' || (toolCallId && !s.resumeLabels?.[toolCallId])) return false;
+          const labelIds = Object.keys(s.resumeLabels ?? {});
+          if (labelIds.length === 0) return true;
+          const nested = await workflowsStore.loadWorkflowSnapshot({
+            workflowName: InngestDurableStepIds.AGENTIC_EXECUTION,
+            runId:
+              s.context?.[InngestDurableStepIds.AGENTIC_EXECUTION]?.suspendPayload?.__workflow_meta?.runId ?? runId,
+          });
+          return !nested || labelIds.every(id => !!nested.resumeLabels?.[id]);
+        };
         let snapshot: any = await loadSnapshot();
         const deadline = Date.now() + RESUME_SNAPSHOT_WAIT_MS;
-        while (!isReady(snapshot) && Date.now() < deadline) {
+        while (!(await isReady(snapshot)) && Date.now() < deadline) {
           await new Promise(resolve => setTimeout(resolve, RESUME_SNAPSHOT_POLL_MS));
           snapshot = await loadSnapshot();
         }
