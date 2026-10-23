@@ -1,24 +1,14 @@
 import { randomUUID } from 'node:crypto';
 import { Cron } from 'croner';
 import type { IMastraLogger } from '../../logger';
-import {
-  knowledgeImporterBindingKey,
-  parseKnowledgeImporterBindingKey,
-} from '../../storage/domains/knowledge';
-import type {
-  KnowledgeImportRun,
-  KnowledgeImportTriggerKind,
-} from '../../storage/domains/knowledge';
+import { knowledgeImporterBindingKey, parseKnowledgeImporterBindingKey } from '../../storage/domains/knowledge';
+import type { KnowledgeImportRun, KnowledgeImportTriggerKind } from '../../storage/domains/knowledge';
 import type { Knowledge } from '../index';
 import { runAgenticKnowledgeImport } from './agent-importer';
 import { KnowledgeCitationResolver } from './citations';
 import { createStaticKnowledgeImporterOperations, matchAddressPattern } from './static-importer';
 import { KNOWLEDGE_IMPORT_INTERNAL_STATE_PREFIX } from './types';
-import type {
-  KnowledgeCitationRef,
-  KnowledgeImporterBindingInput,
-  KnowledgeImporterHandle,
-} from './types';
+import type { KnowledgeCitationRef, KnowledgeImporterBindingInput, KnowledgeImporterHandle } from './types';
 
 const PAYLOAD_KEY_PREFIX = `${KNOWLEDGE_IMPORT_INTERNAL_STATE_PREFIX}import-payload/`;
 const LEASE_KEY_PREFIX = `${KNOWLEDGE_IMPORT_INTERNAL_STATE_PREFIX}import-lease/`;
