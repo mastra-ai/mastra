@@ -861,8 +861,10 @@ export function createDurableAgentStream<OUTPUT = undefined>(
         })
         .catch(error => {
           logError(`[DurableAgentStream] Failed to subscribe to ${topic}:`, error);
-          markTerminated();
           rejectReady(error);
+          // Replay may already have ended the stream; keep its terminal outcome.
+          if (terminated) return;
+          markTerminated();
           // Replay may have queued chunks before the subscription failed; keep them.
           if ((ctrl.desiredSize ?? 0) > 0) safeError(ctrl, error);
           else pendingRejection = error;
