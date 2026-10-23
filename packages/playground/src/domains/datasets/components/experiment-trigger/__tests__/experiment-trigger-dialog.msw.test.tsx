@@ -424,6 +424,22 @@ describe('ExperimentTriggerDialog', () => {
         expect(triggerCalls[0].body).not.toHaveProperty('agentModel');
         expect(triggerCalls[0].body.name).toMatch(/^agent-one-[0-9a-f]{4}$/);
       });
+
+      it("drops the picked model when another agent is picked, so it runs on that agent's own model", async () => {
+        const { triggerCalls } = setupHandlers();
+        renderDialog();
+        await openModelOverride();
+
+        await pickModel('Anthropic', 'claude-haiku-4-5');
+        await choose(targetField(), 'Agent Two');
+        await waitFor(() => expect(providerField().textContent).toContain('OpenAI'));
+        expect(modelField().textContent).toContain('gpt-4o-mini');
+        fireEvent.click(runButton());
+
+        await waitFor(() => expect(triggerCalls).toHaveLength(1));
+        expect(triggerCalls[0].body).toMatchObject({ targetType: 'agent', targetId: 'agent-2' });
+        expect(triggerCalls[0].body).not.toHaveProperty('agentModel');
+      });
     });
 
     describe('when the target is not an agent', () => {
