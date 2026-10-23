@@ -4984,9 +4984,17 @@ export class AgentThreadStreamRuntime {
       if (state.activeThreadRunIds.get(key) === pendingIdle.runId) {
         state.activeThreadRunIds.delete(key);
       }
-      this.#releaseThreadLease(pubsub, key, pendingIdle.runId);
       this.#notifyThreadEvents(state);
-      void this.#drainPendingIdleSignals(state, pubsub, key);
+      // Input that joined this reservation was acknowledged as delivered, so it still needs a run. The pending
+      // drain starts one for it (and then the next queued wake) under the lease this reservation holds, or
+      // releases the lease when nothing is left.
+      void this.#drainPendingSignals(state, pubsub, key, {
+        agent: pendingIdle.agent,
+        runId: pendingIdle.runId,
+        resourceId: pendingIdle.resourceId,
+        threadId: pendingIdle.threadId,
+        streamOptions: pendingIdle.streamOptions ?? {},
+      });
       return true;
     }
 
