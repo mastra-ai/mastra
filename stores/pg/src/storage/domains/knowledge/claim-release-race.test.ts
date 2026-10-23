@@ -59,7 +59,7 @@ describe('PG importer claims under a concurrent release', () => {
   });
 
   it.each([
-    ['node', /UPDATE .*mastra_knowledge_nodes.*SET version=version\+1/],
+    ['node', /DELETE FROM .*mastra_knowledge_import_state/],
     ['record', /DELETE FROM .*mastra_knowledge_records/],
   ] as const)('keeps a concurrent %s claim consistent with the release', async (mode, pause) => {
     const schemaName = `claim_race_${mode}_${randomUUID().slice(0, 8)}`;
