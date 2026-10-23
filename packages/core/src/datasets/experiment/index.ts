@@ -3,6 +3,7 @@ import type { MastraScorer } from '../../evals/base';
 import type { TrajectoryExpectation } from '../../evals/types';
 import type { Mastra } from '../../mastra';
 import type { DatasetRecord } from '../../storage/types';
+import { assertAgentModelTarget, withAgentModelMetadata } from './agent-model';
 import { ExperimentEventDispatcher, createItemCompletedEvent, toExperimentJsonValue } from './events';
 import { executeTarget } from './executor';
 import type { ExecutionResult } from './executor';
@@ -19,7 +20,6 @@ import {
 import { TOOL_MOCK_MISMATCH, TOOL_MOCK_EXHAUSTED, TOOL_MOCK_NOT_DECLARED } from './tool-mocks';
 import type { ItemToolMock, UnmockedToolPolicy } from './tool-mocks';
 import type { ExperimentConfig, ExperimentSummary, ItemWithScores, ItemResult } from './types';
-import { assertAgentModelTarget } from './validate-agent-model';
 
 /** Error code recorded on an item whose `beforeEach` hook threw. */
 export const EXPERIMENT_ITEM_BEFORE_EACH_FAILED = 'EXPERIMENT_ITEM_BEFORE_EACH_FAILED';
@@ -420,7 +420,7 @@ export async function runExperiment(mastra: Mastra, config: ExperimentConfig): P
         id: experimentId,
         name,
         description,
-        metadata,
+        metadata: withAgentModelMetadata(metadata, config.agentModel),
         provenance,
         experimentSetId: grouping?.experimentSetId,
         comparisonId: grouping?.comparisonId,

@@ -65,15 +65,18 @@ export function NewExperimentDialog({
   const datasetChoice = useDatasetChoice({ initialDatasetId, initialDatasetVersion });
   const scorerChoice = useScorerChoice({ datasetId: datasetChoice.datasetId, initialScorerIds });
   const requestContextInput = useRequestContextInput(datasetChoice.datasetId);
-  const experimentName = useExperimentName({ initialName, targetLabel: targetChoice.target?.label });
   const agentModelChoice = useAgentModelChoice();
+  const { target } = targetChoice;
+  const isAgentTarget = target?.type === 'agent';
+  const agentModel = isAgentTarget ? agentModelChoice.agentModel : undefined;
+  // Runs on different models would otherwise share a name, so the picked model joins the default one.
+  const nameLabel = agentModel && target ? `${target.label} ${agentModel.modelId}` : target?.label;
+  const experimentName = useExperimentName({ initialName, targetLabel: nameLabel });
   const [description, setDescription] = useState(initialDescription ?? '');
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const { triggerExperiment } = useDatasetMutations();
 
-  const { target } = targetChoice;
   const { datasetId } = datasetChoice;
-  const isAgentTarget = target?.type === 'agent';
   const isRunning = triggerExperiment.isPending;
   // The schema form converts its schema once per mount, so it remounts for each dataset; the JSON editor stays.
   const requestContextKey = requestContextInput.schema ? datasetId : undefined;
@@ -102,7 +105,7 @@ export function NewExperimentDialog({
         description: optionalText(description),
         targetType: target.type,
         targetId: target.id,
-        agentModel: isAgentTarget ? agentModelChoice.agentModel : undefined,
+        agentModel,
         scorerIds: optionalList(scorerChoice.scorerIds),
         version: datasetChoice.version,
         requestContext: requestContext.requestContext,

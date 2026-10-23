@@ -278,7 +278,7 @@ export interface ExperimentConfig<I = unknown, O = unknown, E = unknown> {
   /**
    * Model override for agent targets, passed per call to `agent.generate()`. The agent
    * version, instructions, tools and sub-agent models stay exactly as they would without it.
-   * Not persisted on the experiment record.
+   * Recorded as a `provider/modelId` label in the experiment's `metadata.agentModel`.
    */
   agentModel?: MastraModelConfig;
   /** Version overrides for sub-agent delegation during experiment execution */

@@ -325,6 +325,19 @@ describe('ExperimentTriggerDialog', () => {
         expect(triggerCalls[0].body.agentModel).toEqual({ provider: 'anthropic', modelId: 'claude-haiku-4-5' });
       });
 
+      it('names the run after the agent and the picked model, so runs on different models can be told apart', async () => {
+        const { triggerCalls } = setupHandlers();
+        renderDialog();
+        await openModelOverride();
+
+        await pickModel('Anthropic', 'claude-haiku-4-5');
+
+        await waitFor(() => expect(nameInput().placeholder).toMatch(/^agent-one-claude-haiku-4-5-[0-9a-f]{4}$/));
+        fireEvent.click(runButton());
+        await waitFor(() => expect(triggerCalls).toHaveLength(1));
+        expect(triggerCalls[0].body.name).toBe(nameInput().placeholder);
+      });
+
       it("keeps a gateway provider's prefix", async () => {
         const { triggerCalls } = setupHandlers();
         renderDialog();
@@ -403,6 +416,7 @@ describe('ExperimentTriggerDialog', () => {
         await waitFor(() => expect(triggerCalls).toHaveLength(1));
         expect(triggerCalls[0].body).toMatchObject({ targetType: 'scorer', targetId: 'quality' });
         expect(triggerCalls[0].body).not.toHaveProperty('agentModel');
+        expect(triggerCalls[0].body.name).toMatch(/^quality-scorer-[0-9a-f]{4}$/);
       });
     });
 

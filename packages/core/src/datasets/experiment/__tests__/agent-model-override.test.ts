@@ -211,6 +211,37 @@ describe('experiment agentModel override', () => {
     });
   });
 
+  describe('records the override on the experiment so runs on different models can be told apart', () => {
+    it.each([
+      {
+        path: 'startExperiment',
+        start: (dataset: Awaited<ReturnType<typeof setup>>['dataset'], config: Record<string, unknown>) =>
+          dataset.startExperiment({ targetType: 'agent', targetId: 'eval-agent', ...config }),
+      },
+      {
+        path: 'startExperimentAsync',
+        start: (dataset: Awaited<ReturnType<typeof setup>>['dataset'], config: Record<string, unknown>) =>
+          dataset.startExperimentAsync({ targetType: 'agent', targetId: 'eval-agent', ...config }),
+      },
+    ])('$path', async ({ start }) => {
+      const { dataset } = await setup();
+
+      const withOverride = await start(dataset, {
+        agentModel: { model: textModel('x'), id: 'anthropic/claude-haiku-5-5' },
+        metadata: { owner: 'evals', agentModel: 'stale-label' },
+      });
+      const withoutOverride = await start(dataset, { metadata: { owner: 'evals' } });
+
+      expect((await dataset.getExperiment({ experimentId: withOverride.experimentId }))?.metadata).toEqual({
+        owner: 'evals',
+        agentModel: 'anthropic/claude-haiku-5-5',
+      });
+      expect((await dataset.getExperiment({ experimentId: withoutOverride.experimentId }))?.metadata).toEqual({
+        owner: 'evals',
+      });
+    });
+  });
+
   describe('only the model changes compared to the same run without an override', () => {
     it.each<{
       scenario: string;

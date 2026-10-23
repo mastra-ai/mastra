@@ -11,6 +11,7 @@ import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '..
 import type { TargetType } from '../../storage/types';
 import type { MastraToolInvocationOptions, ToolHookContext, ToolHooks } from '../../tools/types';
 import type { StepResult, Workflow } from '../../workflows';
+import { agentModelLabel } from './agent-model';
 import type { ItemToolMock, ToolMockReport, UnmockedToolPolicy } from './tool-mocks';
 import { ToolMockMatcher } from './tool-mocks';
 import type { AgentExperimentOutput, ScorerExperimentOutput } from './types';
@@ -225,17 +226,6 @@ function raceWithSignal<T>(promise: Promise<T>, signal: AbortSignal): Promise<T>
   });
 }
 
-/** A `provider/modelId` label for trace metadata. Reads only identifying fields, never credentials. */
-function modelLabel(model: MastraModelConfig): string {
-  if (typeof model === 'string') return model;
-  const m = model as { id?: unknown; providerId?: unknown; provider?: unknown; modelId?: unknown };
-  if (typeof m.id === 'string') return m.id;
-  const provider = m.providerId ?? m.provider;
-  return typeof provider === 'string' && typeof m.modelId === 'string'
-    ? `${provider}/${m.modelId}`
-    : String(m.modelId ?? 'unknown');
-}
-
 /**
  * Execute a dataset item against an agent.
  * Uses generate() for both v1 and v2 models.
@@ -329,7 +319,7 @@ async function executeAgent(
       ? {
           metadata: {
             ...(experimentId ? { experimentId } : {}),
-            ...(agentModel ? { agentModel: modelLabel(agentModel) } : {}),
+            ...(agentModel ? { agentModel: agentModelLabel(agentModel) } : {}),
           },
         }
       : {}),
