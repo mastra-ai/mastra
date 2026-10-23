@@ -14,10 +14,16 @@ import { listProjectConnections, proxyRequest, resolveClient } from '@mastra/con
 
 const client = resolveClient({ projectId: 'proj_123' })
 const connections = await listProjectConnections(client, 'proj_123')
-const wiki = connections.find(connection => connection.integrationId === 'notion' && connection.status === 'active')
+const wiki = connections.find(
+  connection => connection.integrationId === 'notion' && connection.status === 'active',
+)
 
 if (wiki) {
-  const results = await proxyRequest(client, wiki.id, { method: 'POST', path: 'v1/search', body: {} })
+  const results = await proxyRequest(client, wiki.id, {
+    method: 'POST',
+    path: 'v1/search',
+    body: {},
+  })
 }
 ```
 
@@ -46,7 +52,7 @@ Builds a client from options and environment variables.
     name: 'options',
     type: 'ConnectClientOptions',
     description:
-      'accessToken, orgId, projectId, resourceId, baseUrl and fetch. Each falls back to its environment variable (MASTRA_PLATFORM_ACCESS_TOKEN, MASTRA_ORG_ID, MASTRA_PROJECT_ID, MASTRA_INTEGRATIONS_API_URL). Pass resourceId only to include one end user\'s connections alongside the project-wide ones.',
+      "accessToken, orgId, projectId, resourceId, baseUrl and fetch. Each falls back to its environment variable (MASTRA_PLATFORM_ACCESS_TOKEN, MASTRA_ORG_ID, MASTRA_PROJECT_ID, MASTRA_INTEGRATIONS_API_URL). Pass resourceId only to include one end user's connections alongside the project-wide ones.",
     isOptional: true,
   },
 ]}
@@ -130,24 +136,36 @@ import {
   resolveClient,
 } from '@mastra/connect'
 
-async function wikiImporters(projectId: string, scope: string): Promise<KnowledgeImporterDefinition[]> {
+async function wikiImporters(
+  projectId: string,
+  scope: string,
+): Promise<KnowledgeImporterDefinition[]> {
   const client = resolveClient({ projectId })
   const connections = await listProjectConnections(client, projectId)
 
   return connections
-    .filter(connection => connection.integrationId === 'acme-wiki' && connection.status === 'active')
+    .filter(
+      connection => connection.integrationId === 'acme-wiki' && connection.status === 'active',
+    )
     .map(connection => ({
       id: `acme-wiki:${connection.id}`,
       access: { [scope]: 'owner' },
       triggers: { webhook: { bindings: [{ source: `acme-wiki:${connection.id}`, scope }] } },
       handler: async ctx => {
         const importer = await ctx.importer()
-        const { data } = await proxyRequestWithResponse(client, connection.id, { method: 'GET', path: 'pages' })
+        const { data } = await proxyRequestWithResponse(client, connection.id, {
+          method: 'GET',
+          path: 'pages',
+        })
         const seen = new Set<string>()
-        for (const page of (data as { pages: { id: string; title: string; body: string }[] }).pages) {
+        for (const page of (data as { pages: { id: string; title: string; body: string }[] })
+          .pages) {
           const address = `acme-wiki:page:${page.id}`
           seen.add(address)
-          const node = await importer.upsertNode(address, { name: page.title, metadata: { pageId: page.id } })
+          const node = await importer.upsertNode(address, {
+            name: page.title,
+            metadata: { pageId: page.id },
+          })
           if (!(await node.listKnowledge()).some(record => record.text === page.body)) {
             await node.appendKnowledge({ text: page.body })
           }
@@ -163,7 +181,12 @@ async function wikiImporters(projectId: string, scope: string): Promise<Knowledg
             }))
           } catch (error) {
             // A provider 404/403 is ambiguous: keep the knowledge. Platform and network errors fail the run.
-            if (error instanceof MastraConnectError && error.code === 'proxy_error' && [403, 404].includes(error.status ?? 0)) continue
+            if (
+              error instanceof MastraConnectError &&
+              error.code === 'proxy_error' &&
+              [403, 404].includes(error.status ?? 0)
+            )
+              continue
             throw error
           }
           // Only the provider's explicit deleted state removes the page's knowledge.
