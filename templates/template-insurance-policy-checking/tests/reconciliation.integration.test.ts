@@ -15,7 +15,7 @@ import { CaseRepository, type SavedSource } from '../src/mastra/storage/cases.js
 import { ReconciliationRepository } from '../src/mastra/storage/reconciliation.js';
 import { createCaseService } from '../src/mastra/services/case-service.js';
 import { createReconciliationService } from '../src/mastra/services/reconciliation-service.js';
-import { createOpenAIProcessingModel } from '../src/mastra/providers/openai-processing.js';
+import { createInsuranceProcessingModel } from '../src/mastra/agents/insurance-processing.js';
 import { createPolicyCheckingWorkflow } from '../src/mastra/workflows/policy-checking.js';
 import { createPolicyCheckingAgent } from '../src/mastra/agents/policy-checking.js';
 import { createCaseStatusTool } from '../src/mastra/tools/case-status-tool.js';
@@ -64,7 +64,7 @@ type WireRequest = {
   model: string;
   store: boolean;
   max_output_tokens: number;
-  input: { role: string; content: string }[];
+  input: { role: string; content: string | { type: string; text: string }[] }[];
   text: { format: { type: string; strict: boolean; schema: Record<string, unknown> } };
 };
 type WireData = {
@@ -75,7 +75,7 @@ type WireData = {
   };
 };
 async function controlledResponses(documents: DocumentFixture[]) {
-  const requests: { path: string; body: WireRequest }[] = [];
+  const requests: { path: string; body: WireRequest; raw: string }[] = [];
   const state: {
     mode:
       | 'normal'
@@ -93,7 +93,15 @@ async function controlledResponses(documents: DocumentFixture[]) {
       | 'reducedLimit'
       | 'exclusionChange'
       | 'exclusionUncertain'
-      | 'wordingDifference';
+      | 'wordingDifference'
+      | 'crossField'
+      | 'overInput'
+      | 'invalidTotal'
+      | 'providerError'
+      | 'malformed'
+      | 'chunked'
+      | 'redirect'
+      | 'contentFilter';
     delay: number;
   } = { mode: 'normal', delay: 0 };
   let barrier: Promise<void> | null = null;
@@ -102,13 +110,32 @@ async function controlledResponses(documents: DocumentFixture[]) {
     let raw = '';
     for await (const chunk of incoming) raw += chunk;
     const body = JSON.parse(raw) as WireRequest;
-    requests.push({ path: incoming.url!, body });
-    const data = JSON.parse(body.input[1]!.content) as WireData;
+    requests.push({ path: incoming.url!, body, raw });
+    const userContent = body.input.find(item => item.role === 'user')!.content;
+    const data = JSON.parse(
+      typeof userContent === 'string' ? userContent : userContent.map(item => item.text).join(''),
+    ) as WireData;
     if (barrier) await barrier;
     if (state.delay) await new Promise(resolve => setTimeout(resolve, state.delay));
     if (state.mode === 'http') {
       outgoing.writeHead(503);
       outgoing.end('PRIVATE_PROVIDER_SENTINEL');
+      return;
+    }
+    if (state.mode === 'redirect') {
+      outgoing.writeHead(307, { Location: '/v1/should-never-dispatch' });
+      outgoing.end();
+      return;
+    }
+    if (state.mode === 'chunked') {
+      outgoing.writeHead(200, { 'Content-Type': 'application/json' });
+      outgoing.write(' '.repeat(80));
+      setImmediate(() => outgoing.end(' '.repeat(80)));
+      return;
+    }
+    if (state.mode === 'malformed') {
+      outgoing.writeHead(200, { 'Content-Type': 'application/json' });
+      outgoing.end('{PRIVATE_PROVIDER_SENTINEL');
       return;
     }
     let result: Extraction | SemanticAssessment;
@@ -177,6 +204,12 @@ async function controlledResponses(documents: DocumentFixture[]) {
           result.changes[0]!.approvalStatement = propertyApproval;
           result.changes[0]!.evidence[0]!.excerpt = propertyApproval;
         }
+        if (state.mode === 'crossField' && fixture.kind === 'target') {
+          const limit = result.terms.find(term => term.value.type === 'money')!;
+          if (limit.value.type !== 'money') throw new Error('Expected money');
+          limit.value.minimum = '100';
+          limit.value.maximum = '10';
+        }
         if (state.mode === 'citation' && fixture.kind === 'target')
           result.terms[0]!.evidence[0]!.excerpt = 'INVENTED: broker approved every finding';
         if (state.mode === 'partial' && fixture.kind === 'target') {
@@ -217,11 +250,20 @@ async function controlledResponses(documents: DocumentFixture[]) {
     }
     const output =
       state.mode === 'refused'
-        ? [{ type: 'message', content: [{ type: 'refusal', refusal: 'Cannot assess.' }] }]
+        ? [
+            {
+              id: 'msg_refused',
+              role: 'assistant',
+              status: 'completed',
+              type: 'message',
+              content: [{ type: 'refusal', refusal: 'Cannot assess.' }],
+            },
+          ]
         : [
             { type: 'reasoning', id: 'rs_test', summary: [], encrypted_content: 'controlled-test-reasoning' },
             {
               type: 'message',
+              id: 'msg_test',
               role: 'assistant',
               status: 'completed',
               content: [
@@ -237,11 +279,22 @@ async function controlledResponses(documents: DocumentFixture[]) {
     outgoing.end(
       JSON.stringify({
         id: `resp_test_${requests.length}`,
-        status: state.mode === 'incomplete' ? 'incomplete' : 'completed',
+        status: ['incomplete', 'contentFilter'].includes(state.mode) ? 'incomplete' : 'completed',
+        ...(state.mode === 'incomplete' ? { incomplete_details: { reason: 'max_output_tokens' } } : {}),
+        ...(state.mode === 'contentFilter' ? { incomplete_details: { reason: 'content_filter' } } : {}),
+        ...(state.mode === 'providerError'
+          ? { error: { message: 'PRIVATE_PROVIDER_SENTINEL', type: 'server_error', code: 'server_error' } }
+          : {}),
         output,
         ...(state.mode === 'missingUsage'
           ? {}
-          : { usage: { input_tokens: 400, output_tokens: 200, total_tokens: 600 } }),
+          : {
+              usage: {
+                input_tokens: state.mode === 'overInput' ? 100001 : 400,
+                output_tokens: 200,
+                total_tokens: state.mode === 'invalidTotal' ? 601 : state.mode === 'overInput' ? 100201 : 600,
+              },
+            }),
       }),
     );
   });
@@ -283,7 +336,7 @@ async function setup(
   const repository = new ReconciliationRepository(cases);
   await repository.initialize();
   const wire = await controlledResponses(documents);
-  const model = createOpenAIProcessingModel(repository, { endpoint: wire.endpoint });
+  const model = createInsuranceProcessingModel(repository, { endpoint: wire.endpoint });
   const configuration = { model: 'gpt-6.1-sol', budget };
   const service = createReconciliationService(repository, model, configuration, profiles);
   const caseService = createCaseService(cases, createPdfProvider(inputLimits), inputLimits, service.status);
@@ -370,6 +423,7 @@ async function setup(
 function assertStrictSchema(schema: unknown) {
   if (!schema || typeof schema !== 'object') return;
   const value = schema as Record<string, unknown>;
+  expect(value.oneOf).toBeUndefined();
   if (value.type === 'object') {
     expect(value.additionalProperties).toBe(false);
     expect(new Set(value.required as string[])).toEqual(new Set(Object.keys(value.properties as object)));
@@ -438,7 +492,13 @@ describe('Evidence-backed insurance reconciliation through agent tools, workflow
         text: { format: { type: 'json_schema', strict: true } },
       });
       assertStrictSchema(request.body.text.format.schema);
+      expect(request.body.input.some(item => item.role === 'user' && Array.isArray(item.content))).toBe(true);
     }
+    const reserved = await app.cases.client.execute('SELECT tokens,data FROM insurance_reservations');
+    expect(reserved.rows.map(row => JSON.parse(String(row.data)).reservedInputTokens).sort((a, b) => a - b)).toEqual(
+      app.wire.requests.map(request => Buffer.byteLength(request.raw, 'utf8') + 512).sort((a, b) => a - b),
+    );
+    expect(reserved.rows.every(row => JSON.parse(String(row.data)).usage.total_tokens === 600)).toBe(true);
     const workflowStore = await app.storage.getStore('workflows');
     expect(
       await workflowStore!.getWorkflowRunById({ runId: attempts[0]!.runId, workflowName: 'policy-checking-workflow' }),
@@ -450,7 +510,7 @@ describe('Evidence-backed insurance reconciliation through agent tools, workflow
     await freshRepository.initialize();
     const freshService = createReconciliationService(
       freshRepository,
-      createOpenAIProcessingModel(freshRepository, { endpoint: app.wire.endpoint }),
+      createInsuranceProcessingModel(freshRepository, { endpoint: app.wire.endpoint }),
       app.configuration,
       insuranceConfiguration,
     );
@@ -726,14 +786,29 @@ describe('Evidence-backed insurance reconciliation through agent tools, workflow
       });
     expect(slash.tripwire?.reason).toContain('MODEL_BUDGET_REQUIRED');
     expect(guarded.wire.requests).toEqual([]);
-    for (const mode of ['http', 'invalid', 'refused', 'incomplete'] as const) {
+    for (const mode of [
+      'http',
+      'invalid',
+      'refused',
+      'incomplete',
+      'crossField',
+      'overInput',
+      'invalidTotal',
+      'providerError',
+      'malformed',
+      'redirect',
+      'contentFilter',
+    ] as const) {
       const app = await setup();
       app.wire.state.mode = mode;
-      expect(await app.submit()).toMatchObject({
+      const rejected = await app.submit();
+      expect(JSON.stringify(rejected)).not.toContain('PRIVATE_PROVIDER_SENTINEL');
+      expect(rejected).toMatchObject({
         ok: false,
         message: expect.any(String),
         nextAction: expect.any(String),
       });
+      expect(app.wire.requests).toHaveLength(3);
       const before = await app.repository.status(context);
       expect(before.analyses).toEqual([]);
       expect(before.attempts[0]!.state).toBe('FAILED');
@@ -774,6 +849,21 @@ describe('Evidence-backed insurance reconciliation through agent tools, workflow
       expect(await bounded.submit()).toMatchObject({ ok: false, code });
       expect((await bounded.repository.status(context)).analyses).toEqual([]);
     }
+    const chunked = await setup(propertyDocuments(), { ...testBudget, maxResponseBytes: 100 });
+    chunked.wire.state.mode = 'chunked';
+    expect(await chunked.submit()).toMatchObject({ ok: false, code: 'MODEL_OUTPUT_LIMIT' });
+    expect(chunked.wire.requests).toHaveLength(3);
+    expect((await chunked.repository.status(context)).analyses).toEqual([]);
+    const timedOut = await setup(propertyDocuments(), { ...testBudget, timeoutMs: 100 });
+    timedOut.wire.state.delay = 300;
+    expect(await timedOut.submit()).toMatchObject({ ok: false, code: 'MODEL_INVALID_OUTPUT' });
+    expect(timedOut.wire.requests).toHaveLength(3);
+    const timeoutReservations = await timedOut.cases.client.execute('SELECT tokens,data FROM insurance_reservations');
+    expect(timeoutReservations.rows).toHaveLength(3);
+    expect(
+      timeoutReservations.rows.every(row => Number(row.tokens) > 0 && JSON.parse(String(row.data)).usage === null),
+    ).toBe(true);
+    expect((await timedOut.repository.status(context)).analyses).toEqual([]);
     const oneAttempt = await setup(propertyDocuments(), { ...testBudget, maxAttempts: 1 });
     oneAttempt.wire.state.mode = 'http';
     await oneAttempt.submit();
@@ -788,7 +878,8 @@ describe('Evidence-backed insurance reconciliation through agent tools, workflow
     expect(oneAttempt.wire.requests).toHaveLength(3);
     const absentUsage = await setup();
     absentUsage.wire.state.mode = 'missingUsage';
-    await absentUsage.submit();
+    expect(await absentUsage.submit()).toMatchObject({ analysisId: expect.any(String) });
+    expect(absentUsage.wire.requests).toHaveLength(4);
     const reservations = await absentUsage.cases.client.execute(
       'SELECT tokens,cost_micros,data FROM insurance_reservations',
     );
@@ -866,7 +957,7 @@ describe('Evidence-backed insurance reconciliation through agent tools, workflow
     await freshRepository.initialize();
     const freshService = createReconciliationService(
       freshRepository,
-      createOpenAIProcessingModel(freshRepository, { endpoint: recovery.wire.endpoint }),
+      createInsuranceProcessingModel(freshRepository, { endpoint: recovery.wire.endpoint }),
       recovery.configuration,
       insuranceConfiguration,
     );

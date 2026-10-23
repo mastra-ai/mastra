@@ -14,7 +14,7 @@ import { applicationConfigurationSchema } from './domain/contracts.js';
 import { projectRoot, ensurePrivateDirectory } from './runtime/paths.js';
 import { processingConfiguration } from './config/processing.js';
 import { ReconciliationRepository } from './storage/reconciliation.js';
-import { createOpenAIProcessingModel } from './providers/openai-processing.js';
+import { createInsuranceProcessingModel } from './agents/insurance-processing.js';
 import { createReconciliationService } from './services/reconciliation-service.js';
 import { createPolicyCheckingWorkflow } from './workflows/policy-checking.js';
 
@@ -33,7 +33,7 @@ export async function createApplication() {
   await repository.initialize();
   const reconciliationRepository = new ReconciliationRepository(repository);
   await reconciliationRepository.initialize();
-  const processingModel = createOpenAIProcessingModel(reconciliationRepository, { endpoint: testEndpoint });
+  const processingModel = createInsuranceProcessingModel(reconciliationRepository, { endpoint: testEndpoint });
   const reconciliation = createReconciliationService(
     reconciliationRepository,
     processingModel,

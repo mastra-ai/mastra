@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import type { OperationContext } from './contracts.js';
+import type { ProcessingAttempt } from '../storage/reconciliation.js';
 
 const text = z.string().min(1).max(2000);
 const decimal = z
@@ -218,4 +220,14 @@ export const comparisonResultSchema = z
   .strict();
 export interface ComparisonRunner {
   compare(context: import('./contracts.js').OperationContext, input: unknown): Promise<unknown>;
+}
+
+export interface StructuredProcessingModel {
+  generate<T>(
+    context: OperationContext,
+    attempt: ProcessingAttempt,
+    stage: string,
+    schema: z.ZodType<T>,
+    data: unknown,
+  ): Promise<T>;
 }

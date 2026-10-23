@@ -5,7 +5,7 @@ import { CaseRepository } from '../src/mastra/storage/cases.js';
 import { ReconciliationRepository } from '../src/mastra/storage/reconciliation.js';
 import { createCaseService } from '../src/mastra/services/case-service.js';
 import { createReconciliationService } from '../src/mastra/services/reconciliation-service.js';
-import { createOpenAIProcessingModel } from '../src/mastra/providers/openai-processing.js';
+import { createInsuranceProcessingModel } from '../src/mastra/agents/insurance-processing.js';
 import { createPolicyCheckingWorkflow } from '../src/mastra/workflows/policy-checking.js';
 import { createPdfProvider } from '../src/mastra/providers/pdf.js';
 import { inputLimits } from '../src/mastra/config/limits.js';
@@ -18,7 +18,7 @@ const repository = new ReconciliationRepository(cases);
 await repository.initialize();
 const service = createReconciliationService(
   repository,
-  createOpenAIProcessingModel(repository, { endpoint: input.endpoint }),
+  createInsuranceProcessingModel(repository, { endpoint: input.endpoint }),
   input.configuration,
   insuranceConfiguration,
 );

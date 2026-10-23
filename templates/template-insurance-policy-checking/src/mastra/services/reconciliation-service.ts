@@ -10,7 +10,7 @@ import {
 import { contextSchema, type OperationContext } from '../domain/contracts.js';
 import { IntakeError } from '../domain/errors.js';
 import { equalValues, normalizeText, reconcile, verifyEvidence, verifyExtraction } from '../domain/reconciliation.js';
-import type { StructuredProcessingModel } from '../providers/openai-processing.js';
+import type { StructuredProcessingModel } from '../domain/reconciliation-contracts.js';
 import type { AnalysisInput, ReconciliationRepository } from '../storage/reconciliation.js';
 
 export function createReconciliationService(
