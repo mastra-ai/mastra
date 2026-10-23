@@ -39,6 +39,7 @@ import type {
   AgentThreadSubscription,
   AgentUpdateThreadPeerOptions,
   DiscoverAgentThreadPeersOptions,
+  DurableAgentLike,
   CancelQueuedAgentMessagesOptions,
   CancelQueuedAgentMessagesResult,
   AgentThreadEventListener,
@@ -1395,7 +1396,8 @@ export class AgentThreadStreamRuntime {
 
   /**
    * Reads the persisted state of an agent run from the regular or durable agent
-   * loop row. Returns 'missing' when storage was read but holds no row for the
+   * loop row, including the namespaced loop name a durable engine advertises
+   * (e.g. Inngest). Returns 'missing' when storage was read but holds no row for the
    * run (both loops delete the row once a run finishes), and undefined when the
    * agent has no storage or the read fails, so callers keep the event-derived view.
    */
@@ -1406,7 +1408,11 @@ export class AgentThreadStreamRuntime {
     try {
       const workflowsStore = await agent.getMastraInstance?.()?.getStorage?.()?.getStore('workflows');
       if (!workflowsStore) return undefined;
-      for (const workflowName of [AGENTIC_LOOP_WORKFLOW_ID, DurableStepIds.AGENTIC_LOOP]) {
+      const workflowNames = new Set([AGENTIC_LOOP_WORKFLOW_ID, DurableStepIds.AGENTIC_LOOP]);
+      const advertisedLoopWorkflowName = (agent as Partial<Pick<DurableAgentLike, 'durableLoopWorkflowName'>>)
+        .durableLoopWorkflowName;
+      if (typeof advertisedLoopWorkflowName === 'string') workflowNames.add(advertisedLoopWorkflowName);
+      for (const workflowName of workflowNames) {
         const run = await workflowsStore.getWorkflowRunById({ runId, workflowName });
         if (!run) continue;
         const snapshot = typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot;
