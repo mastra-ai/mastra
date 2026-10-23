@@ -202,6 +202,12 @@ describe('Knowledge tools with Subconscious', () => {
         .sort(),
     ).toEqual([...READ_TOOLS, ...WRITE_TOOLS].sort());
   });
+
+  it('keeps the flag off the Subconscious agents’ own Memory, which carries its fixed tools', () => {
+    const memory = memoryWith(knowledgeOf({ read: true, write: true }), new Subconscious());
+    expect(Object.keys(memory.listTools()).filter(id => id.startsWith('knowledge_'))).toHaveLength(13);
+    expect(memory.createSubconsciousMemory().listTools()).toEqual({});
+  });
 });
 
 describe('createKnowledgeTools', () => {
