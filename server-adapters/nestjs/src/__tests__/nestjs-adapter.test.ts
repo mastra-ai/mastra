@@ -25,8 +25,6 @@ type NestJSTestApp = Application & {
 describe('NestJS Server Adapter', () => {
   createRouteAdapterTestSuite({
     suiteName: 'NestJS Adapter Integration Tests',
-    // NestJS does not enforce route `requiresPermission` (no RBAC support yet).
-    supportsRBAC: false,
     emptyBodyNormalization: {
       withoutContentType: 'empty-object',
       withJsonContentType: 'empty-object',

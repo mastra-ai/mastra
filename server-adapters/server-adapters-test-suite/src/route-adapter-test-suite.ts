@@ -943,7 +943,7 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       });
     });
 
-    describe.skipIf(config.supportsRBAC === false)('Studio-only RBAC', () => {
+    describe('Studio-only RBAC', () => {
       // RBAC lives only under `studio`; `server.rbac` is unset. Studio requests must
       // still be checked against `studio.rbac` on both built-in and custom API routes.
       const rolePermissions: Record<string, string[]> = {
@@ -1342,6 +1342,72 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
         const text = await bodyText(response);
         expect(text).toContain('Internal Server Error');
         expect(text).not.toContain('do-not-leak');
+      });
+    });
+
+    describe('Dataset item rejected by the input schema', () => {
+      it('returns the failing field paths and messages without the submitted values', async () => {
+        const context = await createDefaultTestContext();
+        const dataset = await context.mastra.datasets.create({
+          name: 'item-schema-parity',
+          inputSchema: {
+            type: 'object',
+            properties: { question: { type: 'string' } },
+            required: ['question'],
+          },
+        });
+        const setup = await setupAdapter(context);
+
+        const response = await executeHttpRequest(setup.app, {
+          method: 'POST',
+          path: `/api/datasets/${dataset.id}/items`,
+          body: { input: { question: { marker: 'rejected-secret-value' }, note: 'submitted-secret-value' } },
+        });
+
+        expect(response.status).toBe(400);
+        const cause = (response.data as any)?.cause;
+        expect(cause?.field).toBe('input');
+        expect(cause?.errors).toEqual([{ path: '/question', message: expect.any(String) }]);
+        expect(JSON.stringify(response.data)).not.toContain('submitted-secret-value');
+        expect(JSON.stringify(response.data)).not.toContain('rejected-secret-value');
+      });
+
+      it('strips anything but path and message from validation errors', async () => {
+        const route: ServerRoute<any, any, any> = {
+          method: 'GET',
+          path: '/custom/http-error-validation-cause',
+          responseType: 'json',
+          handler: async () => {
+            throw new HTTPException(400, {
+              message: 'Validation failed for input',
+              cause: {
+                field: 'input',
+                errors: [{ path: '/question', code: 'invalid_type', message: 'Expected string', received: 'leak-me' }],
+                rawInput: 'leak-me-too',
+              },
+            });
+          },
+        };
+        const mutableServerRoutes = SERVER_ROUTES as ServerRoute[];
+        const originalLength = mutableServerRoutes.length;
+        mutableServerRoutes.push(route);
+        let app: any;
+        try {
+          app = (await setupAdapter(await createDefaultTestContext())).app;
+        } finally {
+          mutableServerRoutes.splice(originalLength);
+        }
+
+        const response = await executeHttpRequest(app, {
+          method: 'GET',
+          path: '/api/custom/http-error-validation-cause',
+        });
+
+        expect(response.status).toBe(400);
+        expect(response.data).toEqual({
+          error: 'Validation failed for input',
+          cause: { field: 'input', errors: [{ path: '/question', message: 'Expected string' }] },
+        });
       });
     });
 

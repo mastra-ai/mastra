@@ -1341,7 +1341,7 @@ describe('Express Server Adapter', () => {
 
   createBodyLimitTestSuite({
     suiteName: 'Body Size Limit',
-    // The Express adapter never reads non-JSON bodies; they are left to host-level parsers.
+    // The Express adapter never reads text/plain or octet-stream bodies; they are left to host-level parsers.
     skipNonJsonStreamedBody: true,
 
     createApp: () => {
