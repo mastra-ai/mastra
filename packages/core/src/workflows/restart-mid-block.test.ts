@@ -36,12 +36,28 @@ function step(id: string, execute: (params: { inputData: any }) => Promise<any>)
 /** Lets pending persists settle so the captured checkpoint reflects everything written so far. */
 const settle = () => new Promise(resolve => setTimeout(resolve, 50));
 
-async function crashAndRestart(build: (crash?: Crash) => Built, inputData: unknown) {
+/** Finished foreach items recorded on a checkpoint. */
+function progressCount(snapshot: WorkflowRunState | undefined, stepId: string) {
+  return Object.keys((snapshot?.context?.[stepId] as any)?.metadata?.foreachProgress ?? {}).length;
+}
+
+/**
+ * @param ready When given, the crash waits (up to 3s) until the latest checkpoint
+ * satisfies it, so a deferred progress checkpoint can land first. Without the fix it
+ * never does and the crash goes ahead, so the test fails on its assertions, not a hang.
+ */
+async function crashAndRestart(
+  build: (crash?: Crash) => Built,
+  inputData: unknown,
+  ready?: (latest: WorkflowRunState | undefined) => boolean,
+) {
   const storage = new MockStore();
   let crashSnapshot: WorkflowRunState | undefined;
   let latest: WorkflowRunState | undefined;
   const crash: Crash = async () => {
     await settle();
+    const deadline = Date.now() + 3_000;
+    while (ready && !ready(latest) && Date.now() < deadline) await settle();
     crashSnapshot = JSON.parse(JSON.stringify(latest));
   };
 
@@ -148,7 +164,7 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
   });
 
   const foreachBuild =
-    (concurrency: number) =>
+    (concurrency: number, id = `mid-foreach-${concurrency}`) =>
     (crash?: Crash): Built => {
       let finished = 0;
       let twoDone!: () => void;
@@ -177,7 +193,7 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
         total: inputData.reduce((sum: number, r: any) => sum + r.doubled, 0),
       }));
       const workflow = createWorkflow({
-        id: `mid-foreach-${concurrency}`,
+        id,
         inputSchema: anySchema,
         outputSchema: anySchema,
       })
@@ -204,4 +220,78 @@ describe('restart after a crash inside a parallel or foreach block (issue #26214
       expect(JSON.stringify(stored)).not.toContain('foreachProgress');
     },
   );
+
+  it('checkpoints items that finish after the last item start (deferred progress write)', async () => {
+    // Concurrency 5: every item starts up front, so no later item-start write can carry
+    // the finished items. Only the foreach's own progress checkpoints record item 1,
+    // and that write is deferred by the minimum checkpoint interval.
+    const { original, restarted, fns } = await crashAndRestart(
+      foreachBuild(5, 'mid-foreach-deferred'),
+      [0, 1, 2, 3, 4],
+      latest => progressCount(latest, 'item') === 2,
+    );
+
+    expect(fns.item.mock.calls.map(call => call[0].inputData).sort()).toEqual([2, 3, 4]);
+    expect(restarted.status).toBe('success');
+    expect(restarted.result).toEqual(original.result);
+  });
+
+  it('never lands an older checkpoint over a newer one when storage latency varies', async () => {
+    // Writes are copied when called and land after a seeded random delay, like a remote
+    // store. If writes for the run were not kept in call order, an older snapshot would
+    // land after a newer one and drop finished items from the persisted progress.
+    let seed = 7;
+    const random = () => (seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31;
+    const item = step('item', async ({ inputData }) => {
+      await new Promise(resolve => setTimeout(resolve, Math.floor(random() * 15)));
+      return { doubled: inputData * 2 };
+    });
+    const workflow = createWorkflow({ id: 'foreach-latency', inputSchema: anySchema, outputSchema: anySchema })
+      .foreach(item.step, { concurrency: 4 })
+      .commit();
+    const storage = new MockStore();
+    new Mastra({ logger: false, storage, workflows: { wf: workflow } });
+    const store = (await storage.getStore('workflows'))!;
+    const persist = store.persistWorkflowSnapshot.bind(store);
+    const landed: number[] = [];
+    vi.spyOn(store, 'persistWorkflowSnapshot').mockImplementation(async (args: any) => {
+      const copy = JSON.parse(JSON.stringify(args));
+      await new Promise(resolve => setTimeout(resolve, Math.floor(random() * 20)));
+      // Only while the foreach runs; its final result drops the progress record.
+      if (copy.snapshot.context.item?.status === 'running') landed.push(progressCount(copy.snapshot, 'item'));
+      return persist(copy);
+    });
+
+    const items = Array.from({ length: 20 }, (_, i) => i);
+    const result = await (await workflow.createRun()).start({ inputData: items });
+
+    expect(result.status).toBe('success');
+    expect(Math.max(...landed)).toBeGreaterThan(0);
+    const shrunk = landed.filter((count, i) => i > 0 && count < landed[i - 1]!);
+    expect(shrunk, `landed progress counts: ${landed.join(',')}`).toEqual([]);
+  });
+
+  it('fails the foreach, instead of hanging or succeeding, when a progress checkpoint cannot be written', async () => {
+    const item = step('item', async ({ inputData }) => ({ doubled: inputData * 2 }));
+    const after = step('after', async () => ({ ran: true }));
+    const workflow = createWorkflow({ id: 'foreach-write-fails', inputSchema: anySchema, outputSchema: anySchema })
+      .foreach(item.step, { concurrency: 3 })
+      .then(after.step)
+      .commit();
+    const storage = new MockStore();
+    new Mastra({ logger: false, storage, workflows: { wf: workflow } });
+    const store = (await storage.getStore('workflows'))!;
+    const persist = store.persistWorkflowSnapshot.bind(store);
+    vi.spyOn(store, 'persistWorkflowSnapshot').mockImplementation(async (args: any) => {
+      if (args.snapshot.status === 'running' && progressCount(args.snapshot, 'item') > 0) {
+        throw new Error('storage unavailable');
+      }
+      return persist(args);
+    });
+
+    const result = await (await workflow.createRun()).start({ inputData: [0, 1, 2, 3, 4] });
+
+    expect(result.status).toBe('failed');
+    expect(after.fn).not.toHaveBeenCalled();
+  });
 });
