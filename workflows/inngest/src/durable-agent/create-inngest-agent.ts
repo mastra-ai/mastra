@@ -831,8 +831,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     const suspendedToolCallIds = Object.keys(suspendedSnapshot?.resumeLabels ?? {});
     if (suspendedToolCallIds.length === 0) return [];
     const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
-    if (!workflowsStore)
-      throw new Error(`Inngest workflows store unavailable while loading tool calls for run ${runId}`);
+    if (!workflowsStore) return [];
     const nestedRunId =
       suspendedSnapshot?.context?.[InngestDurableStepIds.AGENTIC_EXECUTION]?.suspendPayload?.__workflow_meta?.runId ??
       runId;
@@ -850,11 +849,16 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       snapshot = await load();
     }
     if (!snapshot || !isCurrent(snapshot)) {
-      throw new Error(`Inngest nested snapshot for run ${runId} did not contain the suspended tool calls`);
+      throw new Error(
+        `Cannot resume run ${runId}: the nested iteration snapshot does not contain suspended tool calls ` +
+          `${suspendedToolCallIds.join(', ')}.`,
+      );
     }
     const llmStep = snapshot.context?.[DurableStepIds.LLM_EXECUTION];
     if (llmStep?.status !== 'success') {
-      throw new Error(`Inngest nested snapshot for run ${runId} did not contain completed LLM tool calls`);
+      throw new Error(
+        `Cannot resume run ${runId}: the nested iteration snapshot does not contain completed LLM tool calls.`,
+      );
     }
     // The nested input holds completed iterations; the LLM output holds the
     // current iteration, which has not reached the accumulator yet.

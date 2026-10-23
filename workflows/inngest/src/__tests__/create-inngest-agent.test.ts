@@ -1564,9 +1564,24 @@ describe('InngestAgent parity surface', () => {
     try {
       vi.useFakeTimers();
       const pending = durableAgent.resume(runId, { approved: true }, { toolCallId: 'purchase-1' });
-      const failure = expect(pending).rejects.toThrow('did not contain the suspended tool calls');
+      const failure = expect(pending).rejects.toThrow(
+        'Cannot resume run resume-tool-history-retry-run: the nested iteration snapshot does not contain suspended tool calls purchase-1.',
+      );
       await vi.advanceTimersByTimeAsync(10_100);
       await failure;
+      expect(sendSpy).not.toHaveBeenCalled();
+      expect(globalRunRegistry.has(runId)).toBe(false);
+
+      const pendingUntilIdle = durableAgent.resume(
+        runId,
+        { approved: true },
+        { toolCallId: 'purchase-1', untilIdle: true },
+      );
+      const untilIdleFailure = expect(pendingUntilIdle).rejects.toThrow(
+        'the nested iteration snapshot does not contain suspended tool calls purchase-1.',
+      );
+      await vi.advanceTimersByTimeAsync(10_100);
+      await untilIdleFailure;
       expect(sendSpy).not.toHaveBeenCalled();
       expect(globalRunRegistry.has(runId)).toBe(false);
       vi.useRealTimers();
@@ -1579,7 +1594,7 @@ describe('InngestAgent parity surface', () => {
         },
       };
       await expect(durableAgent.resume(runId, { approved: true }, { toolCallId: 'purchase-1' })).rejects.toThrow(
-        'did not contain completed LLM tool calls',
+        'Cannot resume run resume-tool-history-retry-run: the nested iteration snapshot does not contain completed LLM tool calls.',
       );
       expect(sendSpy).not.toHaveBeenCalled();
       expect(globalRunRegistry.has(runId)).toBe(false);
