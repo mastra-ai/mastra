@@ -6405,12 +6405,9 @@ export class Session<TState = unknown> {
    * Re-supplies the shared run budget so the resumed run doesn't stop mid-task
    * on the agent's small default maxSteps.
    *
-   * Interactive builtins (`ask_user`, `request_access`) are exempted from the
-   * approval re-check on resume: their resume schema is `z.string()` /
-   * `z.array(z.string())` which cannot carry the `{ approved }` field the
-   * approval gate demands, so re-entering the approval branch would always
-   * reject the answer. The caller already handled approval (setForTool policy,
-   * yolo mode, or a prior explicit approval gate).
+   * The resumed call is an execution suspension, not an approval suspension, so
+   * the tool-call step delivers the answer without an approval re-check. Tools
+   * the model calls afterward in the same turn keep the normal approval policy.
    */
   async resumeToolCall({
     resumeData,
