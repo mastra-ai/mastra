@@ -45,6 +45,12 @@ export const previousAgentCost: BreakdownResponse = {
   groups: [{ dimensions: { entityName: 'Code Agent' }, value: 200, estimatedCost: 2.5, costUnit: 'USD' }],
 };
 
+/** An error rate that moved by 0.02 points. */
+export const tinyErrorRateChange: { current: AggregateSpansResponse; previous: AggregateSpansResponse } = {
+  current: { rows: [entity('agent_run', 'Busy', 100_000, 0.0003, 100)], truncated: false },
+  previous: { rows: [entity('agent_run', 'Busy', 100_000, 0.0001, 100)], truncated: false },
+};
+
 const project = (projectId: string, count: number) => ({
   dimensions: { projectId },
   measures: { count, errorRate: 0, 'duration.p95': 100, 'countDistinct.resourceId': 1, 'countDistinct.threadId': 1 },

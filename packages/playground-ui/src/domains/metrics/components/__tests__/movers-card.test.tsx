@@ -12,6 +12,7 @@ import {
   previousAgentCost,
   previousEntityRuns,
   previousProjectTraces,
+  tinyErrorRateChange,
 } from './fixtures/movers';
 import { aggregateCapabilities, traceAggregateCapabilities } from './fixtures/trace-aggregate';
 import { renderInMetrics, serveCapabilities, serveSpanAggregate } from './metrics-msw';
@@ -142,6 +143,18 @@ describe('MoversCard', () => {
 
       fireEvent.click(await screen.findByRole('tab', { name: 'Errors' }));
       expect(moverRows()[0]).toEqual(['Code AgentAgent', '7.00%', '2.00%', '+5.0 pt']);
+    });
+
+    it('says a change under 0.05 points is under 0.1, not +0.0', async () => {
+      serveCapabilities(aggregateCapabilities);
+      serveSpanAggregate(request =>
+        isCurrent(request.timeRange.to) ? tinyErrorRateChange.current : tinyErrorRateChange.previous,
+      );
+      serveMetrics();
+      renderInMetrics(<MoversCard />);
+
+      fireEvent.click(await screen.findByRole('tab', { name: 'Errors' }));
+      expect(moverRows()[0]?.[3]).toBe('+<0.1 pt');
     });
   });
 

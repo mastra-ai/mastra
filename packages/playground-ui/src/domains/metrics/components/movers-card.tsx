@@ -269,7 +269,9 @@ function formatChange(mover: Mover, metric: MoverMetric) {
   if (mover.change === null) return mover.previous === null ? 'New' : DASH;
   const sign = mover.change > 0 ? '+' : '−';
   const size = Math.abs(mover.change);
-  return metric === 'errorRate' ? `${sign}${(size * 100).toFixed(1)} pt` : `${sign}${formatPercent(size)}`;
+  if (metric !== 'errorRate') return `${sign}${formatPercent(size)}`;
+  // Under 0.05 points rounds to "+0.0 pt", which reads as no change.
+  return size < 0.0005 ? `${sign}<0.1 pt` : `${sign}${(size * 100).toFixed(1)} pt`;
 }
 
 function EntityLabel({ entityKey }: { entityKey: string }) {
