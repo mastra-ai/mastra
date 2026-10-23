@@ -39,6 +39,35 @@ it('failed_evaluation_retains_safe_workflow_failure_and_saved_partial_extraction
     expect(result.metrics.field_extraction).toMatchObject({ denominator: 36, failed: 1, unknown: 11 });
     expect(evaluateCase(test, actual).measurements.field_extraction.numerator).toBeGreaterThan(0);
     expect(result.metrics.report_completeness).toMatchObject({ numerator: 0, denominator: 96 });
+    const property = evaluationCases[0]!;
+    const grounding = await reportWire(property.documents, 'invalid-grounding-parallel');
+    try {
+      const failed = await runEvaluationCase(property, join(root, 'grounding'), grounding.endpoint);
+      expect(failed).toMatchObject({
+        state: 'failed',
+        caseState: 'FAILED',
+        failure: { code: 'INVALID_COMPARISON_EVIDENCE' },
+      });
+      expect(failed.failure!.nextAction).toContain('excerpt_not_exact');
+      expect(failed.failure!.nextAction).toContain('terms.0.evidence.0.excerpt');
+      expect(failed.failure!.nextAction).toContain(failed.sources[0]!.sourceId);
+      expect(failed.extractions.map(e => e.sourceId)).toEqual([failed.sources[2]!.sourceId]);
+      expect(grounding.requests).toHaveLength(3);
+      const saved = await reportRuntime(join(root, 'grounding'), grounding.endpoint);
+      try {
+        const status = await saved.reconciliationRepository.status(reportContext);
+        expect(status.attempts[0]!.failure).toEqual(failed.failure);
+        expect(status.analyses).toEqual([]);
+        expect(await saved.reconciliationRepository.extractions(reportContext, status.attempts[0]!.id)).toEqual(
+          failed.extractions,
+        );
+      } finally {
+        await saved.close();
+      }
+      expect(JSON.stringify(failed.failure)).not.toContain('SENTINEL_PRIVATE');
+    } finally {
+      await grounding.close();
+    }
   } finally {
     await wire.close();
     await rm(root, { recursive: true, force: true });

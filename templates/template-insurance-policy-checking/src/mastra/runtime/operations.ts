@@ -1,5 +1,6 @@
 import { ConsoleLogger } from '@mastra/core/logger';
 import { z } from 'zod';
+import { groundingDiagnosticSchema } from '../domain/errors.js';
 
 export const privateFrameworkLogger = new ConsoleLogger({ name: 'insurance-framework', filter: () => false });
 const logger = new ConsoleLogger({ name: 'insurance-policy', level: 'info' });
@@ -12,6 +13,7 @@ export const processingFailurePhaseSchema = z.enum([
   'deadline',
   'transport_interruption',
   'transport_request',
+  'evidence_validation',
 ]);
 export const finishReasonSchema = z.enum([
   'stop',
@@ -200,6 +202,7 @@ const metadataSchema = z
     nativeErrorShape: z.enum(['error', 'object', 'string', 'other']).optional(),
     nativeErrorCode: nativeErrorCodeSchema.optional(),
     issues: z.array(issueSchema).max(8).optional(),
+    grounding: groundingDiagnosticSchema.optional(),
     recovery: z.enum(['read_status', 'read_report', 'retry_publication']).optional(),
     estimatedCostMicros: z.number().int().nonnegative().nullable().optional(),
     inputTokens: z.number().int().nonnegative().nullable().optional(),

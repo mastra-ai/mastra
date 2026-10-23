@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import { canonicalJson } from './contracts.js';
-import { IntakeError } from './errors.js';
+import { EvidenceValidationError, type GroundingPath } from './errors.js';
 import type {
   Comparison,
   Evidence,
@@ -65,98 +65,106 @@ export function equalValues(left: TermValue, right: TermValue): boolean {
   };
   return canonicalJson(normalized(left)) === canonicalJson(normalized(right));
 }
-const invalidEvidence = () =>
-  new IntakeError(
-    'INVALID_COMPARISON_EVIDENCE',
-    'The model returned evidence or a normalized value that cannot be verified in the captured source.',
-    'Inspect source evidence and retry only after correcting the extraction.',
-  );
-export function verifyEvidence(evidence: Evidence, sources: SavedSource[]) {
+export function verifyEvidence(
+  evidence: Evidence,
+  sources: SavedSource[],
+  path: GroundingPath = [],
+  trustedSourceId?: string,
+) {
   const source = sources.find(source => source.sourceId === evidence.sourceId);
-  if (!source || source.version !== evidence.version || source.hash !== evidence.hash) throw invalidEvidence();
+  const invalid = (
+    reason: ConstructorParameters<typeof EvidenceValidationError>[0]['reason'],
+    field: GroundingPath[number],
+  ) => new EvidenceValidationError({ reason, path: [...path, field] }, trustedSourceId ?? source?.sourceId);
+  if (!source) throw invalid('source_id_mismatch', 'sourceId');
+  if (source.version !== evidence.version) throw invalid('source_version_mismatch', 'version');
+  if (source.hash !== evidence.hash) throw invalid('source_hash_mismatch', 'hash');
   if (source.kind === 'pdf') {
     const page = source.pages.find(page => page.physicalPage === evidence.physicalPage);
-    if (!page || !page.text.includes(evidence.excerpt)) throw invalidEvidence();
+    if (!page) throw invalid('physical_page_missing', 'physicalPage');
+    if (!page.text.includes(evidence.excerpt)) throw invalid('excerpt_not_exact', 'excerpt');
   } else {
     const captured = source.evidence.find(item => item.recordId === evidence.recordId && item.field === evidence.field);
+    if (!captured) throw invalid('record_locator_missing', 'recordId');
     if (
-      !captured ||
       !(typeof captured.value === 'string' ? captured.value : canonicalJson(captured.value)).includes(evidence.excerpt)
     )
-      throw invalidEvidence();
+      throw invalid('excerpt_not_exact', 'excerpt');
   }
 }
-export function valueSupported(value: TermValue, original: string): boolean {
+function unsupportedValueField(value: TermValue, original: string): GroundingPath[number] | undefined {
   const contains = (text: string) => normalizeText(original).includes(normalizeText(text));
   const numbers = original.replace(/,/g, '').match(/-?\d+(?:\.\d+)?/g) ?? [];
   const hasNumber = (amount: string) => numbers.some(number => normalizeDecimal(number) === normalizeDecimal(amount));
+  const basisSupported = (basis: string) =>
+    basis === 'fixed'
+      ? !/%|\bpercent(?:age)?\b/i.test(original)
+      : basis === 'percentage'
+        ? /%|\bpercent(?:age)?\b/i.test(original)
+        : contains(basis);
   switch (value.type) {
     case 'money':
-      return (
-        hasNumber(value.amount) &&
-        contains(value.currency) &&
-        contains(value.unit) &&
-        (value.basis === 'fixed'
-          ? !/%|\bpercent(?:age)?\b/i.test(original)
-          : value.basis === 'percentage'
-            ? /%|\bpercent(?:age)?\b/i.test(original)
-            : contains(value.basis)) &&
-        (value.minimum === null || hasNumber(value.minimum)) &&
-        (value.maximum === null || hasNumber(value.maximum))
-      );
+      if (!hasNumber(value.amount)) return 'amount';
+      if (!contains(value.currency)) return 'currency';
+      if (!contains(value.unit)) return 'unit';
+      if (!basisSupported(value.basis)) return 'basis';
+      if (value.minimum !== null && !hasNumber(value.minimum)) return 'minimum';
+      if (value.maximum !== null && !hasNumber(value.maximum)) return 'maximum';
+      return;
     case 'number':
-      return (
-        hasNumber(value.amount) &&
-        contains(value.unit) &&
-        (value.basis === 'fixed'
-          ? !/%|\bpercent(?:age)?\b/i.test(original)
-          : value.basis === 'percentage'
-            ? /%|\bpercent(?:age)?\b/i.test(original)
-            : contains(value.basis))
-      );
+      if (!hasNumber(value.amount)) return 'amount';
+      if (!contains(value.unit)) return 'unit';
+      if (!basisSupported(value.basis)) return 'basis';
+      return;
     case 'date':
-      return contains(value.value);
+      return contains(value.value) ? undefined : 'value';
     case 'entity':
-      return (
-        contains(value.name) &&
-        (value.address === null || contains(value.address)) &&
-        (value.unit === null || contains(value.unit))
-      );
+      if (!contains(value.name)) return 'name';
+      if (value.address !== null && !contains(value.address)) return 'address';
+      if (value.unit !== null && !contains(value.unit)) return 'unit';
+      return;
     case 'text':
-      return contains(value.value);
+      return contains(value.value) ? undefined : 'value';
     case 'clause':
-      return (
-        contains(value.wording) && contains(value.heading) && (value.clauseId === null || contains(value.clauseId))
-      );
+      if (!contains(value.wording)) return 'wording';
+      if (!contains(value.heading)) return 'heading';
+      if (value.clauseId !== null && !contains(value.clauseId)) return 'clauseId';
+      return;
   }
 }
+export function valueSupported(value: TermValue, original: string): boolean {
+  return unsupportedValueField(value, original) === undefined;
+}
 export function verifyExtraction(extraction: Extraction, source: SavedSource) {
-  if (extraction.sourceId !== source.sourceId) throw invalidEvidence();
-  const verify = (evidence: Evidence[]) => {
-    for (const item of evidence) {
-      if (item.sourceId !== source.sourceId) throw invalidEvidence();
-      verifyEvidence(item, [source]);
+  const invalid = (reason: ConstructorParameters<typeof EvidenceValidationError>[0]['reason'], path: GroundingPath) =>
+    new EvidenceValidationError({ reason, path }, source.sourceId);
+  if (extraction.sourceId !== source.sourceId) throw invalid('source_id_mismatch', ['sourceId']);
+  const verify = (evidence: Evidence[], path: GroundingPath) => {
+    for (const [index, item] of evidence.entries()) {
+      const location: GroundingPath = [...path, 'evidence', index];
+      if (item.sourceId !== source.sourceId) throw invalid('source_id_mismatch', [...location, 'sourceId']);
+      verifyEvidence(item, [source], location, source.sourceId);
     }
   };
-  for (const term of extraction.terms) {
-    verify(term.evidence);
-    if (!term.evidence.some(item => item.excerpt.includes(term.original)) || !valueSupported(term.value, term.original))
-      throw invalidEvidence();
+  for (const [index, term] of extraction.terms.entries()) {
+    verify(term.evidence, ['terms', index]);
+    if (!term.evidence.some(item => item.excerpt.includes(term.original)))
+      throw invalid('original_not_in_excerpt', ['terms', index, 'original']);
+    const unsupported = unsupportedValueField(term.value, term.original);
+    if (unsupported !== undefined) throw invalid('typed_value_unsupported', ['terms', index, 'value', unsupported]);
   }
-  for (const change of extraction.changes) verify(change.evidence);
+  for (const [index, change] of extraction.changes.entries()) verify(change.evidence, ['changes', index]);
   if (source.kind === 'pdf') {
-    if (
-      extraction.reviewedRecords.length ||
-      extraction.reviewedPages.some(page => !source.pages.some(saved => saved.physicalPage === page))
-    )
-      throw invalidEvidence();
-  } else if (
-    extraction.reviewedPages.length ||
-    extraction.reviewedRecords.some(
+    if (extraction.reviewedRecords.length) throw invalid('review_locator_kind_mismatch', ['reviewedRecords']);
+    const index = extraction.reviewedPages.findIndex(page => !source.pages.some(saved => saved.physicalPage === page));
+    if (index !== -1) throw invalid('reviewed_locator_missing', ['reviewedPages', index]);
+  } else {
+    if (extraction.reviewedPages.length) throw invalid('review_locator_kind_mismatch', ['reviewedPages']);
+    const index = extraction.reviewedRecords.findIndex(
       locator => !source.evidence.some(item => item.recordId === locator.recordId && item.field === locator.field),
-    )
-  )
-    throw invalidEvidence();
+    );
+    if (index !== -1) throw invalid('reviewed_locator_missing', ['reviewedRecords', index]);
+  }
 }
 export function completeScope(extraction: Extraction, source: SavedSource): boolean {
   if (!extraction.complete || extraction.limitations.length || source.limitations.length) return false;

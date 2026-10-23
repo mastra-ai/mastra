@@ -7,7 +7,7 @@ import { runEvaluationCase } from '../scripts/evaluation-runtime.js';
 import { operation } from '../src/mastra/runtime/operations.js';
 const input = JSON.parse(process.argv[2]);
 await mkdir(input.root, { recursive: true, mode: 0o700 });
-if (['failure', 'invalid-output', 'incomplete', 'interrupted'].includes(input.mode)) {
+if (['failure', 'invalid-output', 'incomplete', 'interrupted', 'grounding'].includes(input.mode)) {
   const result = await runEvaluationCase(
     evaluationCases[0],
     input.root,
@@ -23,9 +23,12 @@ if (['failure', 'invalid-output', 'incomplete', 'interrupted'].includes(input.mo
         'invalid-output': 'MODEL_INVALID_OUTPUT',
         incomplete: 'MODEL_INCOMPLETE',
         interrupted: 'MODEL_REQUEST_INTERRUPTED',
+        grounding: 'INVALID_COMPARISON_EVIDENCE',
       }[input.mode] ||
     result.unauthorizedFinal ||
-    (input.mode === 'invalid-output' && result.extractions.length !== 2)
+    (input.mode === 'invalid-output' && result.extractions.length !== 2) ||
+    (input.mode === 'grounding' &&
+      (result.extractions.length !== 1 || !result.failure.nextAction.includes('excerpt_not_exact')))
   )
     process.exitCode = 1;
 } else if (input.mode === 'create') {

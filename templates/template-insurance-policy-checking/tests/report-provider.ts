@@ -15,6 +15,7 @@ export async function reportWire(
     | 'partial'
     | 'match'
     | 'invalid-structured-target'
+    | 'invalid-grounding-parallel'
     | 'incomplete'
     | 'interrupted' = 'normal',
   evaluation?: EvaluationCase,
@@ -114,6 +115,10 @@ export async function reportWire(
           result.reviewedPages.push(result.reviewedPages[0]!);
           result.limitations.push('SENTINEL_PRIVATE_INVALID_OUTPUT');
         }
+        if (mode === 'invalid-grounding-parallel' && fixture.kind === 'reference')
+          result.terms[0]!.evidence[0]!.excerpt = 'SENTINEL_PRIVATE_UNGROUNDED_EXCERPT';
+        if (mode === 'invalid-grounding-parallel' && fixture.kind === 'target')
+          result.terms[0]!.original = 'SENTINEL_PRIVATE_UNGROUNDED_ORIGINAL';
       }
     } else
       result = {

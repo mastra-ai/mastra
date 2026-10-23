@@ -100,6 +100,8 @@ async function controlledResponses(documents: DocumentFixture[]) {
       | 'exclusionUncertain'
       | 'wordingDifference'
       | 'crossField'
+      | 'unsupportedUnit'
+      | 'unsupportedAmount'
       | 'overInput'
       | 'overReservation'
       | 'bodyStall'
@@ -217,6 +219,12 @@ async function controlledResponses(documents: DocumentFixture[]) {
           if (limit.value.type !== 'money') throw new Error('Expected money');
           limit.value.minimum = '100';
           limit.value.maximum = '10';
+        }
+        if (['unsupportedUnit', 'unsupportedAmount'].includes(state.mode) && fixture.kind === 'target') {
+          const value = result.terms.find(term => term.value.type === 'money')!.value;
+          if (value.type !== 'money') throw new Error('Expected money');
+          if (state.mode === 'unsupportedUnit') value.unit = 'SENTINEL_PRIVATE_UNSUPPORTED_UNIT';
+          else value.amount = '999999999';
         }
         if (state.mode === 'citation' && fixture.kind === 'target')
           result.terms[0]!.evidence[0]!.excerpt = 'INVENTED: broker approved every finding';
@@ -842,6 +850,8 @@ describe('Evidence-backed insurance reconciliation through agent tools, workflow
       'refused',
       'incomplete',
       'crossField',
+      'unsupportedUnit',
+      'unsupportedAmount',
       'overInput',
       'overReservation',
       'invalidTotal',
@@ -863,6 +873,13 @@ describe('Evidence-backed insurance reconciliation through agent tools, workflow
       const before = await app.repository.status(context);
       expect(before.analyses).toEqual([]);
       expect(before.attempts[0]!.state).toBe('FAILED');
+      if (mode === 'unsupportedUnit' || mode === 'unsupportedAmount') {
+        expect(rejected).toMatchObject({
+          code: 'INVALID_COMPARISON_EVIDENCE',
+          nextAction: expect.stringContaining(`terms.3.value.${mode === 'unsupportedUnit' ? 'unit' : 'amount'}`),
+        });
+        expect(JSON.stringify(rejected)).not.toContain('SENTINEL_PRIVATE_UNSUPPORTED_UNIT');
+      }
       if (['incomplete', 'contentFilter'].includes(mode)) {
         const charged = await app.cases.client.execute('SELECT tokens,cost_micros,data FROM insurance_reservations');
         expect(charged.rows).toHaveLength(3);

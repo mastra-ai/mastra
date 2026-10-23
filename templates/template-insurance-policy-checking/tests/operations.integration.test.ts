@@ -16,10 +16,21 @@ it('operational_traces_correlate_without_exposing_documents', async () => {
   const invalid = await reportWire(documents, 'invalid-structured-target');
   const incomplete = await reportWire(documents, 'incomplete');
   const interrupted = await reportWire(documents, 'interrupted');
+  const grounding = await reportWire(documents, 'invalid-grounding-parallel');
   const logs: string[] = [];
   let invalidLogs = '';
+  let groundingLogs = '';
   try {
-    for (const mode of ['create', 'revise', 'approve', 'failure', 'invalid-output', 'incomplete', 'interrupted']) {
+    for (const mode of [
+      'create',
+      'revise',
+      'approve',
+      'failure',
+      'invalid-output',
+      'incomplete',
+      'interrupted',
+      'grounding',
+    ]) {
       const result = await promisify(execFile)(
         process.execPath,
         [
@@ -28,7 +39,10 @@ it('operational_traces_correlate_without_exposing_documents', async () => {
           './tests/operations-worker.mjs',
           JSON.stringify({
             mode,
-            root: join(root, ['failure', 'invalid-output', 'incomplete', 'interrupted'].includes(mode) ? mode : 'case'),
+            root: join(
+              root,
+              ['failure', 'invalid-output', 'incomplete', 'interrupted', 'grounding'].includes(mode) ? mode : 'case',
+            ),
             endpoint:
               mode === 'failure'
                 ? failed.endpoint
@@ -38,7 +52,9 @@ it('operational_traces_correlate_without_exposing_documents', async () => {
                     ? incomplete.endpoint
                     : mode === 'interrupted'
                       ? interrupted.endpoint
-                      : wire.endpoint,
+                      : mode === 'grounding'
+                        ? grounding.endpoint
+                        : wire.endpoint,
           }),
         ],
         {
@@ -48,6 +64,7 @@ it('operational_traces_correlate_without_exposing_documents', async () => {
       );
       logs.push(result.stdout, result.stderr);
       if (mode === 'invalid-output') invalidLogs = result.stdout + result.stderr;
+      if (mode === 'grounding') groundingLogs = result.stdout + result.stderr;
     }
     const captured = logs.join('\n');
     expect(captured).toContain('insurance.operation');
@@ -88,6 +105,31 @@ it('operational_traces_correlate_without_exposing_documents', async () => {
     expect(schemaFailures).toHaveLength(1);
     expect(schemaFailures[0]).toContain(`sourceId: '${rejectedSource.sourceId}'`);
     expect(invalidSources).toHaveLength(3);
+    const groundingEvents = (groundingLogs.match(/insurance\.operation \{[\s\S]*?\n\}/g) ?? []).filter(event =>
+      event.includes("failurePhase: 'evidence_validation'"),
+    );
+    expect(groundingEvents).toHaveLength(2);
+    const groundingSources = grounding.requests.map(request => {
+      const input = (request as { input: { role: string; content: { text: string }[] }[] }).input;
+      return JSON.parse(
+        input
+          .find(item => item.role === 'user')!
+          .content.map(item => item.text)
+          .join(''),
+      ).data.source;
+    });
+    for (const [document, reason, path] of [
+      [documents[0]!, 'excerpt_not_exact', "'terms', 0, 'evidence', 0, 'excerpt'"],
+      [documents[1]!, 'original_not_in_excerpt', "'terms', 0, 'original'"],
+    ] as const) {
+      const source = groundingSources.find(source => source.displayName === document.name)!;
+      const event = groundingEvents.find(event => event.includes(`sourceId: '${source.sourceId}'`))!;
+      expect(event).toContain(`reason: '${reason}'`);
+      expect(event).toContain(path);
+    }
+    expect(groundingLogs.lastIndexOf("failurePhase: 'evidence_validation'")).toBeLessThan(
+      groundingLogs.lastIndexOf("recovery: 'read_status'"),
+    );
     for (const secret of [
       'SENTINEL_PRIVATE',
       'data:application/pdf',
@@ -110,6 +152,7 @@ it('operational_traces_correlate_without_exposing_documents', async () => {
     await invalid.close();
     await incomplete.close();
     await interrupted.close();
+    await grounding.close();
     await rm(root, { recursive: true, force: true });
   }
 });

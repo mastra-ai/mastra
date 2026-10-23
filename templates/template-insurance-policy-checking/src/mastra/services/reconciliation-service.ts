@@ -9,7 +9,7 @@ import {
   type CompareRequest,
 } from '../domain/reconciliation-contracts.js';
 import { contextSchema, canonicalJson, type OperationContext } from '../domain/contracts.js';
-import { IntakeError, safeFailure } from '../domain/errors.js';
+import { EvidenceValidationError, IntakeError, safeFailure } from '../domain/errors.js';
 import { equalValues, normalizeText, reconcile, verifyEvidence, verifyExtraction } from '../domain/reconciliation.js';
 import type { StructuredProcessingModel } from '../domain/reconciliation-contracts.js';
 import type { Analysis, AnalysisInput, ReconciliationRepository } from '../storage/reconciliation.js';
@@ -127,7 +127,24 @@ export function createReconciliationService(
                 attempt.input.clarification.roles.find(role => role.sourceId === source.sourceId)?.role ?? source.role,
               identity: attempt.input.identity,
             });
-            verifyExtraction(extraction, source);
+            try {
+              verifyExtraction(extraction, source);
+            } catch (error) {
+              if (error instanceof EvidenceValidationError)
+                operation({
+                  stage: 'processing',
+                  outcome: 'failed',
+                  caseId: record.id,
+                  runId,
+                  attemptId: attempt.id,
+                  sourceId: source.sourceId,
+                  failurePhase: 'evidence_validation',
+                  grounding: error.grounding,
+                  errorCode: error.code,
+                  costMicros: null,
+                });
+              throw error;
+            }
             await repository.saveExtraction(context, attempt.id, extraction);
             return extraction;
           }),
@@ -173,7 +190,7 @@ export function createReconciliationService(
           ? await model.generate(context, attempt, 'semantic', semanticSchema, { clauses })
           : { assessments: [] };
         const assessmentKeys = new Set<string>();
-        for (const assessment of semantic.assessments) {
+        for (const [assessmentIndex, assessment] of semantic.assessments.entries()) {
           const pair = clauses.find(
             pair =>
               pair.reference.key === assessment.key &&
@@ -196,7 +213,13 @@ export function createReconciliationService(
               'Review clause evidence before retrying.',
             );
           assessmentKeys.add(key);
-          for (const evidence of assessment.evidence) verifyEvidence(evidence, attempt.input.sources);
+          for (const [evidenceIndex, evidence] of assessment.evidence.entries())
+            verifyEvidence(evidence, attempt.input.sources, [
+              'assessments',
+              assessmentIndex,
+              'evidence',
+              evidenceIndex,
+            ]);
         }
         const analysis = reconcile(attempt.input, extractions, semantic, attempt.id);
         analysis.inputHash = attempt.inputHash;
@@ -230,6 +253,7 @@ export function createReconciliationService(
           attemptId: attempt.id,
           durationMs: Date.now() - started,
           errorCode: safeFailure(error).code,
+          ...(error instanceof EvidenceValidationError ? { sourceId: error.sourceId, grounding: error.grounding } : {}),
           recovery: 'read_status',
           costMicros: null,
         });

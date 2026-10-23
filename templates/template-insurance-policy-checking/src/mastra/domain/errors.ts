@@ -18,6 +18,73 @@ export class IntakeError extends Error {
     super(message);
   }
 }
+export const groundingDiagnosticSchema = z
+  .object({
+    reason: z.enum([
+      'source_id_mismatch',
+      'source_version_mismatch',
+      'source_hash_mismatch',
+      'physical_page_missing',
+      'record_locator_missing',
+      'excerpt_not_exact',
+      'original_not_in_excerpt',
+      'typed_value_unsupported',
+      'review_locator_kind_mismatch',
+      'reviewed_locator_missing',
+    ]),
+    path: z
+      .array(
+        z.union([
+          z.number().int().min(0).max(1000),
+          z.enum([
+            'sourceId',
+            'version',
+            'hash',
+            'physicalPage',
+            'recordId',
+            'field',
+            'excerpt',
+            'terms',
+            'changes',
+            'evidence',
+            'original',
+            'value',
+            'reviewedPages',
+            'reviewedRecords',
+            'assessments',
+            'amount',
+            'currency',
+            'unit',
+            'basis',
+            'minimum',
+            'maximum',
+            'name',
+            'address',
+            'wording',
+            'heading',
+            'clauseId',
+          ]),
+        ]),
+      )
+      .max(8),
+  })
+  .strict();
+export type GroundingPath = z.infer<typeof groundingDiagnosticSchema>['path'];
+export class EvidenceValidationError extends IntakeError {
+  readonly grounding: z.infer<typeof groundingDiagnosticSchema>;
+  readonly sourceId?: string;
+  constructor(grounding: z.input<typeof groundingDiagnosticSchema>, trustedSourceId?: string) {
+    const diagnostic = groundingDiagnosticSchema.parse(grounding);
+    const sourceId = trustedSourceId === undefined ? undefined : z.uuid().parse(trustedSourceId);
+    super(
+      'INVALID_COMPARISON_EVIDENCE',
+      'The model returned evidence or a normalized value that cannot be verified in the captured source.',
+      `Inspect captured source ${sourceId ?? 'for this request'}: ${diagnostic.reason} at ${diagnostic.path.join('.') || 'evidence'}. Correct the extraction before an explicit retry; exact grounding remains required.`,
+    );
+    this.grounding = diagnostic;
+    this.sourceId = sourceId;
+  }
+}
 export function safeFailure(error: unknown): Failure {
   if (error instanceof IntakeError)
     return failureSchema.parse({
