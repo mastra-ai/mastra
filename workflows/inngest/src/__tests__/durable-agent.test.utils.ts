@@ -6,6 +6,7 @@
  * so test isolation is achieved through unique agent IDs and run IDs
  * rather than separate Inngest apps.
  */
+import type { InngestWorkflow } from '../workflow';
 import type { ChildProcess } from 'node:child_process';
 import { spawn } from 'node:child_process';
 import crypto from 'node:crypto';
@@ -242,7 +243,8 @@ export async function setupSharedTestInfrastructure({
   // shadows each agent's own copy. Wire it the way `createInngestAgent` wires
   // that copy: agent stream events go through a CachingPubSub over the shared
   // server cache, so `observe()` and resume offsets can replay run history.
-  workflow.__setPubsubFactory(
+  // The chained `.commit()` builder loses the InngestWorkflow subtype, so cast back.
+  (workflow as unknown as InngestWorkflow).__setPubsubFactory(
     defaultPubsub =>
       new CachingPubSub(defaultPubsub, getSharedMastra().serverCache, {
         shouldCache: topic => topic.startsWith('agent.stream.'),
