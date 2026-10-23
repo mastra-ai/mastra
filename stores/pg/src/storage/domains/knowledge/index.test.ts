@@ -459,15 +459,15 @@ describe('KnowledgePG published v1 layout', () => {
       await cursorRow(rowsSchema);
 
       await new KnowledgePG({ pool: searchPathPool, schemaName: emptySchema }).init();
-      expect(await marker(emptySchema)).toBe(1);
+      expect(await marker(emptySchema)).toBe(3);
       expect(await tableExists(emptySchema, TABLE_KNOWLEDGE_CURSORS)).toBe(false);
 
       const rowsStore = new KnowledgePG({ pool: searchPathPool, schemaName: rowsSchema });
       await rowsStore.init();
-      expect(await marker(rowsSchema)).toBe(1);
+      expect(await marker(rowsSchema)).toBe(3);
       expect(await tableExists(rowsSchema, TABLE_KNOWLEDGE_CURSORS)).toBe(false);
       await rowsStore.dangerouslyReset();
-      expect(await marker(rowsSchema)).toBe(1);
+      expect(await marker(rowsSchema)).toBe(3);
       expect(await tableExists(rowsSchema, TABLE_KNOWLEDGE_CURSORS)).toBe(false);
 
       const otherCursors = await pool.query(
