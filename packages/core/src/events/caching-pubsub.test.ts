@@ -1604,6 +1604,39 @@ describe('CachingPubSub', () => {
       expect(warn.mock.calls[0]![0]).toContain('restarted at 0');
     });
 
+    it('delivers the new segment from the log when a stale copy of the old frame 0 signals the restart', async () => {
+      const inner = new RetainingPubSub();
+      const shared = new InMemoryServerCache();
+      const warn = vi.fn();
+      const oldFrame0 = await append(shared, 0);
+      inner.retained.set(topic, [oldFrame0]);
+
+      const subscriber = new CachingPubSub(inner, shared, { logger: { warn } as unknown as IMastraLogger });
+      const received: Event[] = [];
+      await subscriber.subscribeFromOffset(topic, 5, event => {
+        received.push(event);
+      });
+      await flush();
+      expect(received).toEqual([]);
+
+      // The log expires and the new segment caches its frame 0, but a delayed
+      // transport copy of the old frame 0 arrives before the new one is published.
+      await shared.delete(`pubsub:${topic}`);
+      await shared.delete(`pubsub:${topic}:counter`);
+      const newFrame0 = await append(shared, 0, 'segment-2-0');
+      await inner.publish(topic, oldFrame0);
+      await flush();
+
+      expect(received.map(event => [event.index, event.id])).toEqual([[0, 'segment-2-0']]);
+      expect(warn).toHaveBeenCalledTimes(1);
+
+      // The new frame 0's own transport copy is a duplicate; frame 1 continues the segment.
+      await inner.publish(topic, newFrame0);
+      await inner.publish(topic, await append(shared, 1, 'segment-2-1'));
+      await flush();
+      expect(received.map(event => event.index)).toEqual([0, 1]);
+    });
+
     it('resumes from an offset inside a short log without resyncing from the start', async () => {
       const inner = new RetainingPubSub();
       const shared = new InMemoryServerCache();

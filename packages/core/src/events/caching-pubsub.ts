@@ -342,7 +342,12 @@ export class CachingPubSub extends PubSub {
               `[CachingPubSub] Log for ${topic} restarted at 0 while the subscriber cursor was at ${next}; ` +
                 `the retained log expired or was cleared. Resyncing from the start of the new segment.`,
             );
+            // The frame in hand may be a delayed copy of the old log's frame 0,
+            // so deliver the new segment from the log rather than from it.
             next = 0;
+            await backfill(Number.POSITIVE_INFINITY);
+            if (closed) return ack?.();
+            if (next > 0) return ack?.();
             await emit(event, ack, nack);
             return;
           }
