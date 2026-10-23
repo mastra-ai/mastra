@@ -95,6 +95,7 @@ describe('DurableAgent.recover() with ToolSearchProcessor (#26437)', () => {
         storageMode: 'serializing',
         runId: `search-recovery-${kind}`,
         build: ({ core, generation }) => {
+          let modelCalls = 0;
           const stamp = core.createTool({
             id: 'stamp',
             description: 'Stamp a marker',
@@ -112,15 +113,17 @@ describe('DurableAgent.recover() with ToolSearchProcessor (#26437)', () => {
             inputProcessors: [new ToolSearchProcessor({ tools: { stamp }, search: { autoLoad: true } })],
             model: new MockLanguageModelV2({
               doStream: async ({ prompt }) => {
+                // Re-running the model after recovery must not disguise a new call as the interrupted one.
+                const callId = `${generation}-${++modelCalls}`;
                 const results = prompt.flatMap(message =>
                   Array.isArray(message.content) ? message.content.filter(part => part.type === 'tool-result') : [],
                 );
                 const stampResult = results.find(part => part.toolName === 'stamp');
                 if (generation > 1 && stampResult) resultsSeen.push(stampResult);
                 const next = !results.some(part => part.toolName === 'search_tools')
-                  ? { toolName: 'search_tools', toolCallId: 'search-1', input: '{"query":"stamp"}' }
+                  ? { toolName: 'search_tools', toolCallId: `search-${callId}`, input: '{"query":"stamp"}' }
                   : !stampResult
-                    ? { toolName: 'stamp', toolCallId: 'stamp-2', input: '{"marker":"m1"}' }
+                    ? { toolName: 'stamp', toolCallId: `stamp-${callId}`, input: '{"marker":"m1"}' }
                     : undefined;
                 return {
                   stream: convertArrayToReadableStream([
@@ -157,14 +160,14 @@ describe('DurableAgent.recover() with ToolSearchProcessor (#26437)', () => {
         expect(recovered.text).toBe('done');
         expect(resultsSeen).toEqual([
           expect.objectContaining({
-            toolCallId: 'stamp-2',
+            toolCallId: 'stamp-1-2',
             toolName: 'stamp',
             output: { type: 'json', value: { stamped: 'm1' } },
           }),
         ]);
         expect(calls).toEqual([
-          { generation: 1, toolCallId: 'stamp-2' },
-          { generation: 2, toolCallId: 'stamp-2' },
+          { generation: 1, toolCallId: 'stamp-1-2' },
+          { generation: 2, toolCallId: 'stamp-1-2' },
         ]);
       } finally {
         gate.release();
