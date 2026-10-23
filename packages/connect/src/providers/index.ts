@@ -18,6 +18,7 @@ import { incidentIoProvider } from './incident-io/index.js';
 import { jiraProvider } from './jira/index.js';
 import { linearProvider } from './linear/index.js';
 import { microsoftTeamsProvider } from './microsoft-teams/index.js';
+import { microsoftWordProvider } from './microsoft-word/index.js';
 import { notionProvider } from './notion/index.js';
 import { openaiProvider } from './openai/index.js';
 import { posthogProvider } from './posthog/index.js';
@@ -46,6 +47,7 @@ export const PROVIDERS: readonly ProviderRegistration[] = [
   jiraProvider,
   linearProvider,
   microsoftTeamsProvider,
+  microsoftWordProvider,
   notionProvider,
   openaiProvider,
   posthogProvider,
