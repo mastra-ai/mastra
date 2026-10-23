@@ -75,7 +75,7 @@ type WireData = {
   };
 };
 async function controlledResponses(documents: DocumentFixture[]) {
-  const requests: { path: string; body: WireRequest; raw: string }[] = [];
+  const requests: { path: string; body: WireRequest; raw: string; canceled: Promise<boolean> }[] = [];
   const state: {
     mode:
       | 'normal'
@@ -96,6 +96,8 @@ async function controlledResponses(documents: DocumentFixture[]) {
       | 'wordingDifference'
       | 'crossField'
       | 'overInput'
+      | 'overReservation'
+      | 'bodyStall'
       | 'invalidTotal'
       | 'providerError'
       | 'malformed'
@@ -110,13 +112,14 @@ async function controlledResponses(documents: DocumentFixture[]) {
     let raw = '';
     for await (const chunk of incoming) raw += chunk;
     const body = JSON.parse(raw) as WireRequest;
-    requests.push({ path: incoming.url!, body, raw });
+    const canceled = new Promise<boolean>(resolve => outgoing.once('close', () => resolve(!outgoing.writableFinished)));
+    requests.push({ path: incoming.url!, body, raw, canceled });
     const userContent = body.input.find(item => item.role === 'user')!.content;
     const data = JSON.parse(
       typeof userContent === 'string' ? userContent : userContent.map(item => item.text).join(''),
     ) as WireData;
     if (barrier) await barrier;
-    if (state.delay) await new Promise(resolve => setTimeout(resolve, state.delay));
+    if (state.delay && state.mode !== 'bodyStall') await new Promise(resolve => setTimeout(resolve, state.delay));
     if (state.mode === 'http') {
       outgoing.writeHead(503);
       outgoing.end('PRIVATE_PROVIDER_SENTINEL');
@@ -276,27 +279,36 @@ async function controlledResponses(documents: DocumentFixture[]) {
             },
           ];
     outgoing.writeHead(200, { 'Content-Type': 'application/json' });
-    outgoing.end(
-      JSON.stringify({
-        id: `resp_test_${requests.length}`,
-        status: ['incomplete', 'contentFilter'].includes(state.mode) ? 'incomplete' : 'completed',
-        ...(state.mode === 'incomplete' ? { incomplete_details: { reason: 'max_output_tokens' } } : {}),
-        ...(state.mode === 'contentFilter' ? { incomplete_details: { reason: 'content_filter' } } : {}),
-        ...(state.mode === 'providerError'
-          ? { error: { message: 'PRIVATE_PROVIDER_SENTINEL', type: 'server_error', code: 'server_error' } }
-          : {}),
-        output,
-        ...(state.mode === 'missingUsage'
-          ? {}
-          : {
-              usage: {
-                input_tokens: state.mode === 'overInput' ? 100001 : 400,
-                output_tokens: 200,
-                total_tokens: state.mode === 'invalidTotal' ? 601 : state.mode === 'overInput' ? 100201 : 600,
-              },
-            }),
-      }),
-    );
+    const inputTokens =
+      state.mode === 'overInput'
+        ? 100001
+        : state.mode === 'overReservation'
+          ? Buffer.byteLength(raw, 'utf8') + 513
+          : 400;
+    const payload = JSON.stringify({
+      id: `resp_test_${requests.length}`,
+      status: ['incomplete', 'contentFilter'].includes(state.mode) ? 'incomplete' : 'completed',
+      ...(state.mode === 'incomplete' ? { incomplete_details: { reason: 'max_output_tokens' } } : {}),
+      ...(state.mode === 'contentFilter' ? { incomplete_details: { reason: 'content_filter' } } : {}),
+      ...(state.mode === 'providerError'
+        ? { error: { message: 'PRIVATE_PROVIDER_SENTINEL', type: 'server_error', code: 'server_error' } }
+        : {}),
+      output,
+      ...(state.mode === 'missingUsage'
+        ? {}
+        : {
+            usage: {
+              input_tokens: inputTokens,
+              output_tokens: 200,
+              total_tokens: state.mode === 'invalidTotal' ? 601 : inputTokens + 200,
+            },
+          }),
+    });
+    if (state.mode === 'bodyStall') {
+      outgoing.write(payload.slice(0, 20));
+      await new Promise(resolve => setTimeout(resolve, state.delay));
+      outgoing.end(payload.slice(20));
+    } else outgoing.end(payload);
   });
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
@@ -793,6 +805,7 @@ describe('Evidence-backed insurance reconciliation through agent tools, workflow
       'incomplete',
       'crossField',
       'overInput',
+      'overReservation',
       'invalidTotal',
       'providerError',
       'malformed',
@@ -812,6 +825,18 @@ describe('Evidence-backed insurance reconciliation through agent tools, workflow
       const before = await app.repository.status(context);
       expect(before.analyses).toEqual([]);
       expect(before.attempts[0]!.state).toBe('FAILED');
+      if (['overInput', 'overReservation', 'invalidTotal'].includes(mode)) {
+        expect(rejected).toMatchObject({ code: 'MODEL_USAGE_LIMIT' });
+        const charged = await app.cases.client.execute('SELECT tokens,cost_micros,data FROM insurance_reservations');
+        expect(charged.rows).toHaveLength(3);
+        for (const row of charged.rows) {
+          const saved = JSON.parse(String(row.data));
+          expect(saved.usage).toMatchObject({ output_tokens: 200 });
+          expect(Number(row.tokens)).toBe(saved.reservedInputTokens + testBudget.maxOutputTokensPerRequest);
+          expect(Number(row.cost_micros)).toBe(saved.reservedInputTokens + 2 * testBudget.maxOutputTokensPerRequest);
+        }
+      }
+
       app.wire.state.mode = 'normal';
       const current = (await app.cases.active(context))!;
       const retry = { ...app.request, expectedRevision: current.revision, retryAttemptId: before.attempts[0]!.id };
@@ -854,16 +879,31 @@ describe('Evidence-backed insurance reconciliation through agent tools, workflow
     expect(await chunked.submit()).toMatchObject({ ok: false, code: 'MODEL_OUTPUT_LIMIT' });
     expect(chunked.wire.requests).toHaveLength(3);
     expect((await chunked.repository.status(context)).analyses).toEqual([]);
-    const timedOut = await setup(propertyDocuments(), { ...testBudget, timeoutMs: 100 });
-    timedOut.wire.state.delay = 300;
-    expect(await timedOut.submit()).toMatchObject({ ok: false, code: 'MODEL_INVALID_OUTPUT' });
-    expect(timedOut.wire.requests).toHaveLength(3);
-    const timeoutReservations = await timedOut.cases.client.execute('SELECT tokens,data FROM insurance_reservations');
-    expect(timeoutReservations.rows).toHaveLength(3);
-    expect(
-      timeoutReservations.rows.every(row => Number(row.tokens) > 0 && JSON.parse(String(row.data)).usage === null),
-    ).toBe(true);
-    expect((await timedOut.repository.status(context)).analyses).toEqual([]);
+    // Native timeouts must cancel both pending headers and a stalled response body.
+    for (const mode of ['normal', 'bodyStall'] as const) {
+      const timedOut = await setup(propertyDocuments(), { ...testBudget, timeoutMs: 100 });
+      timedOut.wire.state.mode = mode;
+      timedOut.wire.state.delay = 1000;
+      expect(await timedOut.submit()).toMatchObject({ ok: false, code: 'MODEL_INVALID_OUTPUT' });
+      expect(timedOut.wire.requests).toHaveLength(3);
+      expect(await Promise.all(timedOut.wire.requests.map(request => request.canceled))).toEqual([true, true, true]);
+      const timeoutReservations = await timedOut.cases.client.execute(
+        'SELECT tokens,cost_micros,data FROM insurance_reservations',
+      );
+      expect(timeoutReservations.rows).toHaveLength(3);
+      for (const row of timeoutReservations.rows) {
+        const saved = JSON.parse(String(row.data));
+        expect(saved.usage).toBeNull();
+        expect(Number(row.tokens)).toBe(saved.reservedInputTokens + testBudget.maxOutputTokensPerRequest);
+        expect(Number(row.cost_micros)).toBe(saved.reservedInputTokens + 2 * testBudget.maxOutputTokensPerRequest);
+        expect(
+          timedOut.wire.requests.some(
+            request => Buffer.byteLength(request.raw, 'utf8') + 512 === saved.reservedInputTokens,
+          ),
+        ).toBe(true);
+      }
+      expect((await timedOut.repository.status(context)).analyses).toEqual([]);
+    }
     const oneAttempt = await setup(propertyDocuments(), { ...testBudget, maxAttempts: 1 });
     oneAttempt.wire.state.mode = 'http';
     await oneAttempt.submit();
