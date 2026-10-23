@@ -158,9 +158,13 @@ export function groupSessionRows(
   });
 }
 
-export function collapsedRowsKeepingActive(rows: readonly SessionListRow[]): SessionListRow[] {
+/** `isOpen` decides which row holds the open session — an origin row counts when one of its side sessions is open. */
+export function collapsedRowsKeepingActive(
+  rows: readonly SessionListRow[],
+  isOpen: (row: SessionListRow) => boolean = row => row.active,
+): SessionListRow[] {
   const visible = rows.slice(0, COLLAPSED_GROUP_ROW_COUNT);
-  const open = rows.find(row => row.active);
+  const open = rows.find(isOpen);
   if (open && !visible.includes(open)) visible.push(open);
   return visible;
 }

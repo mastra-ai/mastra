@@ -1,4 +1,6 @@
+import { Button } from '@mastra/playground-ui/components/Button';
 import { ContextMenu } from '@mastra/playground-ui/components/ContextMenu';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { HoverCard, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
 import { Sidebar, useMaybeSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
@@ -52,6 +54,8 @@ export function SessionNavRow({
   visibility,
   onVisibilityChange,
   changingVisibility,
+  level,
+  sideSessions,
 }: {
   name: string;
   /** Hover tooltip, typically the branch name. */
@@ -85,6 +89,10 @@ export function SessionNavRow({
   onVisibilityChange?: (visibility: 'org' | 'private') => void;
   /** Disables the visibility item while a change is in flight, so overlapping requests cannot land out of order. */
   changingVisibility?: boolean;
+  /** Nesting depth, indenting side sessions under the session that started them. */
+  level?: number;
+  /** Side sessions this session started: shows a chevron that expands or collapses them. */
+  sideSessions?: { count: number; expanded: boolean; onExpandedChange: (expanded: boolean) => void };
 }) {
   const anchor = useRef<HTMLLIElement>(null);
   // Selecting a session navigates away, so the mobile nav drawer must close.
@@ -138,6 +146,18 @@ export function SessionNavRow({
   const action = (
     <>
       {belt ? <ActivityBelt status={belt} label={beltLabel(belt, name)} /> : null}
+      {sideSessions ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          aria-expanded={sideSessions.expanded}
+          aria-label={`${sideSessions.count} side ${sideSessions.count === 1 ? 'session' : 'sessions'} of ${name}`}
+          onClick={() => sideSessions.onExpandedChange(!sideSessions.expanded)}
+        >
+          <DisclosureChevron direction="right" className="size-3.5" />
+        </Button>
+      ) : null}
       {visibility === 'private' ? (
         <SessionSharingPopover
           name={name}
@@ -180,6 +200,7 @@ export function SessionNavRow({
             ref={anchor}
             link={{ name, url }}
             isActive={active}
+            level={level}
             className="group/session"
             // 0ms both ways — each row owns its card, so a close delay leaves the previous one up while the next opens
             render={preview ? <HoverCardTrigger delay={0} closeDelay={0} render={link} /> : link}

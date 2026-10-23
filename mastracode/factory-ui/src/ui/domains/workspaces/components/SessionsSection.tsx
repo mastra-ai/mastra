@@ -3,6 +3,7 @@ import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { ArrowUpDown, CircleDashed, Clock, UserRound } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { useParams } from 'react-router';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
@@ -26,7 +27,9 @@ import {
   sessionGroupHeadings,
 } from '../services/sessionGroups';
 import type { SessionGroupContext } from '../services/sessionGroups';
+import { nestSideSessions, sideSessionDescendants } from '../services/sessionNesting';
 import { pullRequestMergeTargets } from '../services/sessionRows';
+import type { SessionListRow } from '../services/sessionRows';
 import { SESSION_SORT_OPTIONS, compareSessionRows } from '../services/sessionSort';
 import { DeleteSessionDialog } from './DeleteSessionDialog';
 import { SessionGroupList } from './SessionGroupList';
@@ -58,11 +61,19 @@ export function SessionsSection() {
   const groupContext: SessionGroupContext = { boards: catalog.data, viewerUserId };
   const defaultHeadings = sessionGroupHeadings(sortedRows, view.groupBy, groupContext);
   const menuGroups = orderGroupHeadings(defaultHeadings, groupOrderKeys);
-  const groups = groupSessionRows(filteredRows, view.groupBy, menuGroups, hiddenGroupKeys);
+  // Side sessions follow their origin session, whatever group they would sort into on their own.
+  const nested = nestSideSessions(filteredRows);
+  const holdsOpenSession = (row: SessionListRow) =>
+    row.active || sideSessionDescendants(row, nested.sideSessions).some(sideSession => sideSession.active);
+  const groups = groupSessionRows(nested.rows, view.groupBy, menuGroups, hiddenGroupKeys);
   const chatSessionOpen = sessionEnabled && Boolean(routeSessionId) && Boolean(sessionId);
   const mergedBySessionId = useWorkspacePullRequestMerges({
     baseUrl,
-    targets: pullRequestMergeTargets(groups.flatMap(group => collapsedRowsKeepingActive(group.rows))),
+    targets: pullRequestMergeTargets(
+      groups
+        .flatMap(group => collapsedRowsKeepingActive(group.rows, holdsOpenSession))
+        .flatMap(row => [row, ...sideSessionDescendants(row, nested.sideSessions)]),
+    ),
     enabled: chatSessionOpen,
   });
 
@@ -74,6 +85,20 @@ export function SessionsSection() {
 
   const nothingToList = !hasRepositories && rows.length === 0 && !loadFailed;
   if (!factoryId || nothingToList) return null;
+
+  const renderRow = (row: SessionListRow, level = 0): ReactNode => (
+    <SessionListItem
+      factoryId={factoryId}
+      row={row}
+      level={level}
+      sideSessions={nested.sideSessions.get(row.session.sessionId)}
+      holdsOpenSideSession={sideSessionDescendants(row, nested.sideSessions).some(sideSession => sideSession.active)}
+      renderSideSession={sideSession => renderRow(sideSession, level + 1)}
+      disabled={deletion.deleting}
+      merged={mergedBySessionId[row.session.sessionId] ?? row.pullRequest?.knownMerged}
+      onDelete={deletion.requestDeletion}
+    />
+  );
 
   return (
     <section className="flex flex-col gap-2" aria-label="Sessions">
@@ -136,15 +161,8 @@ export function SessionsSection() {
             key={group.key}
             group={group}
             showHeader={view.groupBy !== 'none'}
-            renderRow={row => (
-              <SessionListItem
-                factoryId={factoryId}
-                row={row}
-                disabled={deletion.deleting}
-                merged={mergedBySessionId[row.session.sessionId] ?? row.pullRequest?.knownMerged}
-                onDelete={deletion.requestDeletion}
-              />
-            )}
+            renderRow={row => renderRow(row)}
+            isOpen={holdsOpenSession}
           />
         ))}
       </div>

@@ -21,13 +21,16 @@ export function SessionGroupList({
   group,
   showHeader,
   renderRow,
+  isOpen,
 }: {
   group: SessionGroup;
   showHeader: boolean;
   renderRow: (row: SessionListRow) => ReactNode;
+  /** Which row holds the open session, so the collapsed list keeps it. Defaults to the active row. */
+  isOpen?: (row: SessionListRow) => boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const collapsedRows = collapsedRowsKeepingActive(group.rows);
+  const collapsedRows = collapsedRowsKeepingActive(group.rows, isOpen);
 
   return (
     <section className="flex flex-col gap-1" aria-label={`${group.label} sessions`}>
