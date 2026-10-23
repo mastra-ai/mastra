@@ -106,7 +106,8 @@ Tyler's direction (comment on Kayle's dogfood plan v45): scopes are never hard-c
   - Tags with extra `:` in the value (`resource:x:uncurated`) don't match a pattern by segment count and fall to `custom`.
   - Run tags plus named owned scopes can exceed the 8-entry cap. The tool reports that as a tool error naming the cap rather than letting the store throw.
 - **No stored grants.** Ownership is computed from the instance's config at call time, so it works on LibSQL and PG today. Main's materialized structure (scope nodes and grants in storage) is only implemented on InMemory (`supportsV2`), and the alpha doesn't use it. Wave 2's stored grants build on the same `access` config later.
-- **Director dogfood:** the director's run holds `org:self`; members hold `org:self` + `team:self:<team>`. With `'team:$orgId:$teamId'` owned by `org:$orgId`, the director can read and write every team's Knowledge by naming the team scope (next).
+- **Director dogfood:** the director's run holds `org:self` + `team:self:director`; members hold only `team:self:<team>` (plus `agent:`, `project:`, `request:` and Memory's `resource:`/`thread:`), never `org:self`. With `'team:$orgId:$teamId'` owned by `org:$orgId`, the director can read and write every team's Knowledge by naming the team scope (next); a member reaches only its own team. Shared seed content lives at the team scope, not at `org:self`.
+- **Holding an owner tag is a capability.** A run holding a principal tag reaches every scope that tag owns, so a host stamps an owner tag (here `org:`) only on runs meant to have that reach. An org tag is not a general shared-read level once it owns other scopes.
 
 **The `scope` argument on Knowledge tools.**
 - Every read, write and pin tool takes `scope?: string[]`. Knowledge builds the call's scope from it:
@@ -253,7 +254,7 @@ Counted with `estimateTokenCount` from tokenx, which is already a core dependenc
 | Token limits | Alpha | Recheck importers that write long record text against the 250-token limit |
 | Factory Knowledge routes (rungs removed, `selectedView` by tag type, subset containment, org-tag refusal) | Alpha | Wave 2's Factory routes and UI scope lens rebase onto them |
 
-**Kayle's Director dogfood plan.** The alpha is meant to carry everything it needs. Each run passes its tags through `scopes` (`org:self`, `team:self:<team>`, `agent:<name>`, `request:r25`) and the store accepts them. The director's `org:self` owns the team scopes through the structure and reaches them with the tools' `scope` argument. LibSQL (Tyler's pick) needs no adapter change. Pins work with or without Memory. Kayle is sending a gap list through the director; anything on it not covered here is added before Build it.
+**Kayle's Director dogfood plan.** The alpha is meant to carry everything it needs. Each member run passes its tags through `scopes` (`team:self:<team>`, `agent:<name>`, `request:r25`; only the director session also holds `org:self`) and the store accepts them. The director's `org:self` owns the team scopes through the structure and reaches them with the tools' `scope` argument. LibSQL (Tyler's pick) needs no adapter change. Pins work with or without Memory. Kayle is sending a gap list through the director; anything on it not covered here is added before Build it.
 
 ## 6. Tests to add
 
