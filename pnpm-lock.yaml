@@ -6380,6 +6380,9 @@ importers:
       '@mastra/libsql':
         specifier: workspace:*
         version: link:../../stores/libsql
+      '@mastra/pg':
+        specifier: workspace:*
+        version: link:../../stores/pg
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15

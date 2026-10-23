@@ -97,11 +97,12 @@ import { MinimalLayout } from '@/components/minimal-layout';
 import { AgentBuilderEditionLayout, AgentBuilderLayout } from '@/domains/agent-builder/layouts/agent-builder-layout';
 import { AgentLayout } from '@/domains/agents/agent-layout';
 import { RoleImpersonationProvider } from '@/domains/auth/context/role-impersonation-context';
-
 import { PlaygroundConfigGuard } from '@/domains/configuration/components/playground-config-guard';
+
 import { StudioConfigProvider } from '@/domains/configuration/context/studio-config-context';
 import { useStudioConfig } from '@/domains/configuration/context/studio-config-state';
 import { GlobalShortcuts } from '@/domains/navigation/components/global-shortcuts';
+import { ObservabilityLayout } from '@/domains/observability/observability-layout';
 import { PlaygroundQueryClient } from '@/lib/tanstack-query';
 import { Processors } from '@/pages/processors';
 import { Processor } from '@/pages/processors/processor';
@@ -315,9 +316,18 @@ export const routes: RouteObject[] = [
         path: '/intelligence/entities/:entityType/:entityId',
         element: <SignalsEntityDetailPage />,
       },
-      { path: '/traces', element: <Traces /> },
-      { path: '/spans', element: <Spans /> },
-      { path: '/threads', element: <Threads /> },
+      {
+        element: (
+          <ObservabilityLayout>
+            <Outlet />
+          </ObservabilityLayout>
+        ),
+        children: [
+          { path: '/traces', element: <Traces /> },
+          { path: '/spans', element: <Spans /> },
+          { path: '/threads', element: <Threads /> },
+        ],
+      },
       {
         path: '/traces/:traceId',
         loader: ({ params, request }: LoaderFunctionArgs) => {
