@@ -1,5 +1,4 @@
 ---
-'@mastra/server-adapters-test-suite': patch
 '@mastra/core': patch
 ---
 
