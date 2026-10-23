@@ -3,7 +3,7 @@ import { EntityType } from '@mastra/core/observability';
 import { serializeTraceColumnPreferences } from '@mastra/playground-ui/domains/traces/trace-list-columns';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { delay, http, HttpResponse } from 'msw';
-import { useLocation } from 'react-router';
+import { Outlet, Route, Routes, useLocation } from 'react-router';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import TracesPage from '..';
 import {
@@ -44,6 +44,7 @@ import {
   traceUsageBreakdown,
 } from './fixtures/traces';
 import { buildListDatasetsResponse } from '@/domains/datasets/components/__tests__/fixtures/datasets';
+import { ObservabilityLayout } from '@/domains/observability/observability-layout';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -107,7 +108,22 @@ const LocationProbe = () => {
 const renderPage = (initialEntry = '/traces', props: React.ComponentProps<typeof TracesPage> = {}) =>
   renderWithProviders(
     <TestLinkProvider>
-      <TracesPage {...props} />
+      {props.scopedEntityId ? (
+        // Scoped traces live inside an agent/workflow tab, which owns its own header.
+        <TracesPage {...props} />
+      ) : (
+        <Routes>
+          <Route
+            element={
+              <ObservabilityLayout>
+                <Outlet />
+              </ObservabilityLayout>
+            }
+          >
+            <Route path="/traces" element={<TracesPage {...props} />} />
+          </Route>
+        </Routes>
+      )}
       <LocationProbe />
     </TestLinkProvider>,
     { router: { initialEntries: [initialEntry] } },

@@ -18,6 +18,15 @@ export function withoutAuthToken<T extends Record<string, any> | undefined>(requ
   return rest as T;
 }
 
+export function restoreLiveRequestContext(
+  stored: Record<string, unknown> | undefined,
+  live: Record<string, unknown>,
+): Record<string, unknown> {
+  const restored = { ...withoutAuthToken(stored ?? live) };
+  if (MASTRA_AUTH_TOKEN_KEY in live) restored[MASTRA_AUTH_TOKEN_KEY] = live[MASTRA_AUTH_TOKEN_KEY];
+  return restored;
+}
+
 const NON_REDELIVERABLE = Symbol.for('mastra.evented.nonRedeliverable');
 
 /**
