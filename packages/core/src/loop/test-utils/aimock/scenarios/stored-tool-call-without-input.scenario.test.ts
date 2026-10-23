@@ -13,7 +13,7 @@ import { SCENARIO_MODEL_ID } from '../types';
  * without `function.arguments`. Providers reject that (Anthropic: `tool_use.input` required;
  * OpenAI-compatible: "function.arguments must be defined"), so the thread could not be used again.
  *
- * Whatever shape the missing input takes in storage, the outbound call must carry `{}` and keep its
+ * Whatever shape the missing input takes in storage (absent or null), the outbound call must carry `{}` and keep its
  * error result. The stored row is never rewritten.
  */
 
@@ -39,7 +39,6 @@ function replayedCall(body: any) {
 const MISSING_INPUTS: [string, Record<string, unknown>][] = [
   ['no args key', {}],
   ['null args', { args: null }],
-  ['empty-string args', { args: '' }],
 ];
 
 describeForAllEngines('AIMock scenario: stored tool call without input', engine => {

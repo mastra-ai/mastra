@@ -540,7 +540,7 @@ describe('toolCallEmptyInput', () => {
       result,
     ] as unknown as LanguageModelV2Prompt;
 
-  it.each([undefined, null, ''])('sends a call with input %j as {}, keeping its paired result', input => {
+  it.each([undefined, null])('sends a call with input %j as {}, keeping its paired result', input => {
     const next = toolCallEmptyInput.applyToPrompt!({ prompt: promptWith(input), model: { provider: 'vllm.chat' } });
     expect(next).toEqual(promptWith({}));
   });
@@ -553,8 +553,8 @@ describe('toolCallEmptyInput', () => {
     }
   });
 
-  it('leaves real input, including an empty object, unchanged', () => {
-    for (const input of [{}, { note: 'hi' }]) {
+  it('leaves real input, including an empty object and an empty string, unchanged', () => {
+    for (const input of [{}, { note: 'hi' }, '']) {
       expect(toolCallEmptyInput.applyToPrompt!({ prompt: promptWith(input), model: {} })).toBeUndefined();
     }
   });

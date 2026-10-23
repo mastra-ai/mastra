@@ -1175,12 +1175,13 @@ export const chatCompletionsSingleSystemMessage: CompatRule = {
 // ---------------------------------------------------------------------------
 
 /**
- * Sends an assistant tool call that has no input (`undefined`, `null` or `''`) as `{}`.
+ * Sends an assistant tool call that has no input (`undefined` or `null`) as `{}`.
  *
  * A call whose arguments could not be parsed is stored as an `output-error` tool part with no
  * `args`. Replayed as-is, providers reject every later request on the thread (Anthropic:
  * `tool_use.input: Field required`; OpenAI-compatible: `function.arguments must be defined`).
- * The error result stays paired with the call; only the call's input is filled in.
+ * The error result stays paired with the call; only the call's input is filled in. An empty string
+ * is a real stored input, not a missing one, and is left as it is.
  *
  * Applies to every provider, runs in `processLLMRequest` so the stored message keeps its shape.
  */
@@ -1188,7 +1189,7 @@ export const toolCallEmptyInput: CompatRule = {
   name: 'tool-call-empty-input',
   applyToPrompt({ prompt }) {
     const isEmpty = (part: { type: string; input?: unknown }) =>
-      part.type === 'tool-call' && (part.input === undefined || part.input === null || part.input === '');
+      part.type === 'tool-call' && (part.input === undefined || part.input === null);
     if (!prompt.some(m => m.role === 'assistant' && m.content.some(isEmpty))) return undefined;
 
     return prompt.map(message =>
@@ -1278,7 +1279,7 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
  *   message. Skipped when an earlier one carries its own `providerOptions`.
  *   Preemptive.
  * - **tool-call-empty-input** — sends an assistant tool call whose input is
- *   `undefined`, `null` or `''` as `{}`, keeping its paired result, so a stored
+ *   `undefined` or `null` as `{}`, keeping its paired result, so a stored
  *   call with unparseable arguments can't make every later request fail.
  *   Preemptive; the stored message keeps its shape.
  * - **ensure-user-first-turn** — inserts a `.` user turn ahead of a leading
