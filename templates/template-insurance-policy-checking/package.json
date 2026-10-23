@@ -20,7 +20,11 @@
     "test:reconciliation": "vitest run tests/reconciliation.integration.test.ts",
     "test:reports": "vitest run tests/reports.integration.test.ts",
     "test:studio": "playwright test",
-    "test:review": "vitest run tests/review.integration.test.ts"
+    "test:review": "vitest run tests/review.integration.test.ts",
+    "test:evaluation": "vitest run tests/evaluation.integration.test.ts tests/operations.integration.test.ts tests/live-authorization.test.ts",
+    "evaluate:live": "node --env-file-if-exists=.env --import ./tests/source-loader.mjs scripts/evaluate-live.ts",
+    "test:use-cases": "playwright test tests/use-cases.studio.test.ts",
+    "prepare:use-cases": "node --import ./tests/source-loader.mjs scripts/prepare-use-cases.ts"
   },
   "dependencies": {
     "@ai-sdk/openai": "3.0.130",

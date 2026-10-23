@@ -1,3 +1,4 @@
+import { operation, privateFrameworkLogger } from './runtime/operations.js';
 import { ReviewRepository } from './storage/reviews.js';
 import { FinalizationRepository } from './storage/finalizations.js';
 import { createReviewService } from './services/review-service.js';
@@ -24,6 +25,7 @@ import { createReconciliationService } from './services/reconciliation-service.j
 import { createPolicyCheckingWorkflow } from './workflows/policy-checking.js';
 
 export async function createApplication() {
+  operation({ stage: 'startup', outcome: 'started', costMicros: null });
   const limits = inputLimitsSchema.parse(inputLimits);
   insuranceConfigurationSchema.parse(insuranceConfiguration);
   const { port, operatorId, dataDirectory } = applicationConfigurationSchema.parse({
@@ -82,13 +84,14 @@ export async function createApplication() {
   );
   const comparison = createPolicyCheckingWorkflow(reconciliation, caseService, operatorId, reports);
   return {
+    logger: privateFrameworkLogger,
     storage,
     agents: {
       policyCheckingAgent: createPolicyCheckingAgent(
         caseService,
         memory,
         operatorId,
-        testEndpoint,
+        process.env.NODE_ENV === 'test' && process.env.POLICY_TEST_PROCESSING_ONLY === '1' ? undefined : testEndpoint,
         comparison.runner,
         comparison.report,
         comparison.review,

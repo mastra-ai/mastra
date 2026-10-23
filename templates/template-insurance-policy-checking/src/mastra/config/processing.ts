@@ -11,7 +11,7 @@ export const processingConfigurationSchema = z
   .strict();
 export const processingConfiguration = processingConfigurationSchema.parse({
   model: process.env.POLICY_EXTRACTION_MODEL ?? 'gpt-6.1-sol',
-  budget: null,
+  budget: process.env.POLICY_PROCESSING_BUDGET ? JSON.parse(process.env.POLICY_PROCESSING_BUDGET) : null,
 });
 
 export function processingEndpoint(endpoint = 'https://api.openai.com/v1') {

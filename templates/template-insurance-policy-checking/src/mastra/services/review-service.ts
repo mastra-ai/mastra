@@ -1,3 +1,4 @@
+import { operation } from '../runtime/operations.js';
 import { hashBytes, outputArtifactSchema, type OperationContext, type OutputProvider } from '../domain/contracts.js';
 import { reportOutputRequestSchema, correctionOutputRequestSchema } from '../domain/output-contracts.js';
 import { IntakeError, safeFailure } from '../domain/errors.js';
@@ -13,6 +14,7 @@ export function createReviewService(
 ) {
   const providers = { reportOutput: reportProvider.id, correctionOutput: correctionProvider.id };
   async function finalize(context: OperationContext, reportId: string) {
+    const started = Date.now();
     const { publication, approval } = await finalizations.authority(context, reportId);
     const finalization = await finalizations.prepare(context, reportId);
     try {
@@ -61,7 +63,18 @@ export function createReviewService(
           );
         await finalizations.save(context, reportId, artifact.id, descriptor, bytes);
       }
-      return await finalizations.finish(context, reportId);
+      const saved = await finalizations.finish(context, reportId);
+      operation({
+        stage: 'finalization',
+        outcome: 'completed',
+        caseId: publication.snapshot.caseId,
+        runId: publication.snapshot.workflowRunId,
+        reportId,
+        version: publication.snapshot.version,
+        durationMs: Date.now() - started,
+        costMicros: null,
+      });
+      return saved;
     } catch (error) {
       const failure =
         error instanceof IntakeError
@@ -73,6 +86,13 @@ export function createReviewService(
               503,
             );
       await finalizations.fail(context, reportId, failure);
+      operation({
+        stage: 'finalization',
+        outcome: 'failed',
+        caseId: publication.snapshot.caseId,
+        reportId,
+        costMicros: null,
+      });
       throw failure;
     }
   }
@@ -80,8 +100,33 @@ export function createReviewService(
     repository,
     finalizations,
     finalize,
-    record: (context: OperationContext, input: unknown, origin: { messageId: string; text: string }) =>
-      repository.record(context, input, origin, providers),
+    async record(context: OperationContext, input: unknown, origin: { messageId: string; text: string }) {
+      const started = Date.now();
+      const receipt = await repository.record(context, input, origin, providers);
+      const publication = await repository.reports.get(context, receipt.reportId);
+      operation({
+        stage: 'review',
+        outcome:
+          receipt.state === 'REVISION_REQUESTED'
+            ? 'revised'
+            : receipt.approvalId
+              ? 'approved'
+              : receipt.state === 'REJECTED'
+                ? 'rejected'
+                : 'recorded',
+        caseId: receipt.caseId,
+        reportId: receipt.reportId,
+        version: publication!.snapshot.version,
+        turnaroundMs: Math.max(0, Date.now() - Date.parse(publication!.snapshot.createdAt)),
+        overrides: (await repository.events(context)).filter(
+          e => e.reportId === receipt.reportId && e.disposition?.severityOverride,
+        ).length,
+        revision: (await repository.reports.reconciliation.cases.requireCase(context)).revision,
+        durationMs: Date.now() - started,
+        costMicros: null,
+      });
+      return receipt;
+    },
     async status(context: OperationContext, reportId: string) {
       const approval = await repository.approval(context, reportId);
       const events = (await repository.events(context)).filter(e => e.reportId === reportId);

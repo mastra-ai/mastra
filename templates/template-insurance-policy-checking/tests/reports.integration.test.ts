@@ -482,8 +482,23 @@ describe('Immutable review drafts across real workflow, database, file and HTTP 
     const secondReady = join(interruptedDirectory, 'second-ready');
     const secondPublisher = worker(secondReady);
     await ready(secondReady);
+    // An overlapping local write can outlast the native busy timeout.
+    // Failed BEGIN statements must not poison the connection used for the later commit.
+    const lockReady = join(interruptedDirectory, 'lock-ready');
+    const lockHolder = execute(
+      process.execPath,
+      [
+        '--import',
+        './tests/source-loader.mjs',
+        './tests/reports-worker.mjs',
+        JSON.stringify({ mode: 'holdWriteLock', root: partialRuntime.root, readyFile: lockReady, holdMs: 1400 }),
+      ],
+      { cwd: process.cwd(), maxBuffer: 8 * 1024 * 1024 },
+    );
+    await ready(lockReady);
     await writeFile(releaseFile, 'publish');
     const competingProcesses = await Promise.all([firstPublisher, secondPublisher]);
+    await lockHolder;
     const concurrentResults = competingProcesses.map(p => JSON.parse(p.stdout.trim().split('\n').at(-1)!));
     expect(
       concurrentResults.some(p => p.state === 'PUBLISHED'),

@@ -1,3 +1,4 @@
+import { operation } from '../runtime/operations.js';
 import type { ReviewDecision } from '../domain/reviews.js';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { RequestContext } from '@mastra/core/request-context';
@@ -210,6 +211,17 @@ export function createPolicyCheckingWorkflow(
         });
     }
     const current = await reports.current(context, request);
+    if (request.retryPublication)
+      operation({
+        stage: 'draft',
+        outcome: 'recovered',
+        caseId: current.report.caseId,
+        reportId: current.report.id,
+        runId: current.workflowRunId,
+        version: current.report.version,
+        recovery: 'retry_publication',
+        costMicros: null,
+      });
     const checkpoint = await workflow.getWorkflowRunById(current.workflowRunId);
     return {
       ...current,

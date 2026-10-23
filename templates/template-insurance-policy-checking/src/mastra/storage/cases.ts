@@ -12,7 +12,7 @@ import {
   type OperationContext,
   type SourceBundle,
 } from '../domain/contracts.js';
-import { IntakeError } from '../domain/errors.js';
+import { IntakeError, isDatabaseBusy } from '../domain/errors.js';
 import { ensurePrivateDirectory } from '../runtime/paths.js';
 
 export type SavedSource =
@@ -25,7 +25,9 @@ export class CaseRepository {
   private tail: Promise<unknown> = Promise.resolve();
   constructor(readonly root: string) {
     this.artifactRoot = resolve(root, 'sources');
-    this.client = createClient({ url: `file:${resolve(root, 'cases.db')}` });
+    // Every pooled connection waits briefly for competing local readers/writers,
+    // including commit. Immediate busy failures can strand both publication attempts.
+    this.client = createClient({ url: `file:${resolve(root, 'cases.db')}`, timeout: 1000 });
   }
   async initialize() {
     await ensurePrivateDirectory(this.root);
@@ -203,7 +205,11 @@ export class CaseRepository {
         providerId,
         ...(!additions.length && existing?.latestAnalysisId ? { latestAnalysisId: existing.latestAnalysisId } : {}),
       };
-      const transaction = await this.client.transaction('write');
+      const transaction = await this.client.transaction('write').catch(async error => {
+        // Keep the failed intake failed, but discard a rejected BEGIN before an explicit retry.
+        if (isDatabaseBusy(error)) await this.client.reconnect();
+        throw error;
+      });
       try {
         const selected = await transaction.execute({
           sql: 'SELECT c.data FROM insurance_threads t JOIN insurance_cases c ON c.id=t.case_id WHERE t.operator_id=? AND t.thread_id=?',

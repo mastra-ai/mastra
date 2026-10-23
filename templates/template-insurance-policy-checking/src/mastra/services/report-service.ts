@@ -1,3 +1,4 @@
+import { operation } from '../runtime/operations.js';
 import type { ReviewService } from './review-service.js';
 import { outputArtifactSchema, hashBytes, type OperationContext, type OutputProvider } from '../domain/contracts.js';
 import { draftOutputRequestSchema } from '../domain/output-contracts.js';
@@ -11,6 +12,7 @@ export function createReportService(
   review?: ReviewService,
 ) {
   async function publish(publication: Publication) {
+    const started = Date.now();
     if (publication.state === 'PUBLISHED') {
       await repository.bytes(publication);
       return publication;
@@ -44,7 +46,18 @@ export function createReportService(
         );
       await repository.stage(publication, artifact, bytes);
       await repository.bytes(publication, artifact);
-      return await repository.update(publication, artifact);
+      const saved = await repository.update(publication, artifact);
+      operation({
+        stage: 'draft',
+        outcome: 'completed',
+        caseId: publication.snapshot.caseId,
+        runId: publication.snapshot.workflowRunId,
+        reportId: publication.snapshot.id,
+        version: publication.snapshot.version,
+        durationMs: Date.now() - started,
+        costMicros: null,
+      });
+      return saved;
     } catch (error) {
       const failure =
         error instanceof IntakeError
@@ -56,6 +69,15 @@ export function createReportService(
               503,
             );
       await repository.update(publication, null, failure);
+      operation({
+        stage: 'draft',
+        outcome: 'failed',
+        caseId: publication.snapshot.caseId,
+        reportId: publication.snapshot.id,
+        version: publication.snapshot.version,
+        durationMs: Date.now() - started,
+        costMicros: null,
+      });
       throw failure;
     }
   }

@@ -4,7 +4,7 @@ import type { Transaction } from '@libsql/client';
 import type { z } from 'zod';
 import type { insuranceProfileSchema } from '../config/insurance.js';
 import { canonicalJson, hashBytes, type CaseRecord, type OperationContext } from '../domain/contracts.js';
-import { IntakeError, safeFailure, type Failure } from '../domain/errors.js';
+import { IntakeError, isDatabaseBusy, safeFailure, type Failure } from '../domain/errors.js';
 import type {
   CompareRequest,
   Comparison,
@@ -54,15 +54,6 @@ export type ProcessingAttempt = {
   analysisId: string | null;
 };
 
-export function isDatabaseBusy(error: unknown) {
-  return Boolean(
-    error &&
-    typeof error === 'object' &&
-    'code' in error &&
-    ['SQLITE_BUSY', 'SQLITE_LOCKED'].includes(String(error.code)),
-  );
-}
-
 export class ReconciliationRepository {
   constructor(readonly cases: CaseRepository) {}
   async initialize() {
@@ -82,7 +73,11 @@ export class ReconciliationRepository {
         try {
           transaction = await this.cases.client.transaction('write');
         } catch (error) {
-          if (!isDatabaseBusy(error) || attempt >= 6) throw error;
+          if (!isDatabaseBusy(error)) throw error;
+          // A failed native BEGIN can leave its statement active on a pooled connection.
+          // No callback has run yet; discard that pool before another acquisition.
+          await this.cases.client.reconnect();
+          if (attempt >= 6) throw error;
           await delay(10 * 2 ** attempt);
         }
       }

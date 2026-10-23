@@ -34,7 +34,17 @@ const provider =
     : undefined;
 const runtime = await reportRuntime(input.root, undefined, provider);
 try {
-  if (input.mode === 'publishDeterministic') {
+  if (input.mode === 'holdWriteLock') {
+    const transaction = await runtime.cases.client.transaction('write');
+    try {
+      await writeFile(input.readyFile, 'locked');
+      await delay(input.holdMs);
+    } finally {
+      await transaction.rollback();
+      transaction.close();
+    }
+    console.log(JSON.stringify({ released: true }));
+  } else if (input.mode === 'publishDeterministic') {
     if (input.readyFile) {
       await writeFile(input.readyFile, 'ready');
       const deadline = Date.now() + 15000;

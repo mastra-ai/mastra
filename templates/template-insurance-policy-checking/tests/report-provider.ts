@@ -4,15 +4,26 @@ import { z } from 'zod';
 import { canonicalJson, hashBytes, type InputProvider } from '../src/mastra/domain/contracts.js';
 import type { Extraction, SemanticAssessment } from '../src/mastra/domain/reconciliation-contracts.js';
 import type { SavedSource } from '../src/mastra/storage/cases.js';
+import type { EvaluationCase } from './evaluation-cases.js';
 import { fixtureExtraction, type DocumentFixture } from './reconciliation-fixtures.js';
 export async function reportWire(
   documents: DocumentFixture[],
   mode: 'normal' | 'long' | 'zero' | 'partial' | 'match' = 'normal',
+  evaluation?: EvaluationCase,
 ) {
   const requests: unknown[] = [];
+  const encodedInputUnits: number[] = [];
   const server = createServer(async (incoming, outgoing) => {
     let raw = '';
     for await (const chunk of incoming) raw += chunk;
+    encodedInputUnits.push(Buffer.byteLength(raw, 'utf8') + 512);
+    if (evaluation?.behavior === 'unavailable') {
+      outgoing.writeHead(400, { 'Content-Type': 'application/json' });
+      outgoing.end(
+        JSON.stringify({ error: { message: 'SENTINEL_PRIVATE_PROVIDER_SECRET', type: 'invalid_request_error' } }),
+      );
+      return;
+    }
     const body = JSON.parse(raw) as { input: { role: string; content: string | { text: string }[] }[] };
     requests.push(body);
     const content = body.input.find(item => item.role === 'user')!.content;
@@ -56,7 +67,10 @@ export async function reportWire(
         };
       } else {
         const fixture = documents.find(d => d.name === source.displayName)!;
-        result = fixtureExtraction(source, mode === 'match' ? { ...fixture, kind: 'reference' } : fixture);
+        result = fixtureExtraction(
+          source,
+          mode === 'match' || evaluation?.behavior === 'clean' ? { ...fixture, kind: 'reference' } : fixture,
+        );
         if (mode === 'long' && source.pages.length > 4) {
           const page = source.pages[4]!;
           for (let i = 0; i < 12; i++)
@@ -81,7 +95,9 @@ export async function reportWire(
               uncertainty: [],
             });
         }
-        if (mode === 'partial') {
+        if (evaluation?.behavior === 'invalid-evidence' && result.terms[0])
+          result.terms[0].evidence[0]!.physicalPage = 49;
+        if (mode === 'partial' || evaluation?.behavior === 'incomplete') {
           result.complete = false;
           result.limitations = ['The captured comparison scope was not fully evaluated.'];
         }
@@ -126,6 +142,7 @@ export async function reportWire(
   if (!address || typeof address === 'string') throw Error('Missing test socket');
   return {
     requests,
+    encodedInputUnits,
     endpoint: `http://127.0.0.1:${address.port}/v1`,
     close: () => new Promise<void>((resolve, reject) => server.close(error => (error ? reject(error) : resolve()))),
   };

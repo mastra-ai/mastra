@@ -1,3 +1,4 @@
+import { operation } from '../runtime/operations.js';
 import type { InputProcessor } from '@mastra/core/processors';
 import { z } from 'zod';
 import { IntakeError } from '../domain/errors.js';
@@ -23,6 +24,7 @@ export function createProcessingUsageProcessor(
   repository: ReconciliationRepository,
   budget: ProcessingBudget,
   reservation: () => ProcessingReservation | undefined,
+  correlation?: { caseId: string; attemptId: string; runId: string },
 ): InputProcessor {
   return {
     id: 'processing-usage',
@@ -39,6 +41,17 @@ export function createProcessingUsageProcessor(
         );
       const usage = metadata.data.usage ?? null;
       await repository.usage(reserved.id, usage);
+      operation({
+        ...correlation,
+        stage: 'provider',
+        outcome: 'completed',
+        inputTokens: usage?.input_tokens ?? null,
+        outputTokens: usage?.output_tokens ?? null,
+        costMicros: null,
+        estimatedCostMicros: usage
+          ? usage.input_tokens * budget.inputMicrosPerToken + usage.output_tokens * budget.outputMicrosPerToken
+          : null,
+      });
       abortSignal?.throwIfAborted();
       if (
         usage &&

@@ -1,3 +1,4 @@
+import { privateFrameworkLogger } from '../runtime/operations.js';
 import { Agent } from '@mastra/core/agent';
 import { createOpenAI } from '@ai-sdk/openai';
 import type { z } from 'zod';
@@ -34,7 +35,11 @@ export function createInsuranceProcessingModel(
         );
       const startedAt = Date.now();
       const transport = createBoundedModelTransport(repository, context, attempt, stage, endpoint);
-      const usageProcessor = createProcessingUsageProcessor(repository, attempt.input.budget, transport.reservation);
+      const usageProcessor = createProcessingUsageProcessor(repository, attempt.input.budget, transport.reservation, {
+        caseId: attempt.caseId,
+        attemptId: attempt.id,
+        runId: attempt.runId,
+      });
       // The public model router cannot inject fetch; the supported SDK provider supplies only that extension.
       const provider = createOpenAI({ baseURL: endpoint, apiKey, fetch: transport.fetch });
       const agent = new Agent({
@@ -48,6 +53,9 @@ export function createInsuranceProcessingModel(
         errorProcessorDefaults: false,
         maxProcessorRetries: 0,
       });
+      // This internal agent is created per attempt, outside Mastra composition.
+      // The inherited native logger setter applies the same private framework filter.
+      agent.__setLogger(privateFrameworkLogger);
       try {
         const result = await agent.generate(
           JSON.stringify({ stage, promptVersion: attempt.input.promptVersion, data }),

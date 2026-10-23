@@ -25,7 +25,7 @@ Paid model dispatch remains disabled until explicit processing budgets are appro
 
 ## Try it out
 
-- Send `/status` to see the selected case, source IDs and missing clarification.
+- Run `npm run prepare:use-cases` for realistic property and professional-liability PDFs in `.runtime/use-cases`. Read the manifest, upload one set in Studio, then send `/status` for its case and source IDs.
 - Send `/evidence SOURCE_ID 2` to read physical PDF page 2, using a saved source ID.
 - Attach documents with `/new` to start another case in the same conversation. Use [`/clarify` and the operating guide](./docs/usage.md) to declare document roles and reference choices.
 - After clarification and budget configuration, send [`/compare`](./docs/usage.md#compare-documents) to run **policyCheckingWorkflow**. Send `/report` for the immutable PDF draft and its evidence.
@@ -33,7 +33,8 @@ Paid model dispatch remains disabled until explicit processing budgets are appro
 
 ## Customization
 
-Ask your coding agent to explore `src/mastra/providers.ts` and propose a plan for adding a structured-record input provider.
+- Ask your coding agent to explore the provider contracts and propose a plan for adding a structured-record input provider in `src/mastra/providers.ts`.
+- Adjust input capacities in `src/mastra/config/limits.ts`, or register company terminology and review rules in `src/mastra/config/insurance.ts`. See the [operating and evaluation guide](./docs/usage.md).
 
 ## About Mastra templates
 

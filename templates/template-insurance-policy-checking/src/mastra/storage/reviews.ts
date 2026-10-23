@@ -1,4 +1,3 @@
-import { isDatabaseBusy } from './reconciliation.js';
 import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import { canonicalJson, hashBytes, type OperationContext } from '../domain/contracts.js';
@@ -9,7 +8,7 @@ import {
   type Approval,
   type ReviewEvent,
 } from '../domain/reviews.js';
-import { IntakeError } from '../domain/errors.js';
+import { IntakeError, isDatabaseBusy } from '../domain/errors.js';
 import type { ReportRepository } from './reports.js';
 
 export class ReviewRepository {

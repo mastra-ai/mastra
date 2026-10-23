@@ -1,3 +1,4 @@
+import { operation } from '../runtime/operations.js';
 import { z } from 'zod';
 import { insuranceConfigurationSchema } from '../config/insurance.js';
 import { processingConfigurationSchema } from '../config/processing.js';
@@ -8,7 +9,7 @@ import {
   type CompareRequest,
 } from '../domain/reconciliation-contracts.js';
 import { contextSchema, canonicalJson, type OperationContext } from '../domain/contracts.js';
-import { IntakeError } from '../domain/errors.js';
+import { IntakeError, safeFailure } from '../domain/errors.js';
 import { equalValues, normalizeText, reconcile, verifyEvidence, verifyExtraction } from '../domain/reconciliation.js';
 import type { StructuredProcessingModel } from '../domain/reconciliation-contracts.js';
 import type { Analysis, AnalysisInput, ReconciliationRepository } from '../storage/reconciliation.js';
@@ -92,7 +93,7 @@ export function createReconciliationService(
         throw new IntakeError(
           'MODEL_BUDGET_REQUIRED',
           'Processing requires explicitly approved request, token, retry and cost budgets.',
-          'Configure the approved Q-004 processing values in src/mastra/config/processing.ts before paid execution.',
+          'Configure an explicitly approved processing budget in src/mastra/config/processing.ts or POLICY_PROCESSING_BUDGET before paid execution.',
         );
       const input: AnalysisInput = {
         schemaVersion: 'reconciliation-1',
@@ -108,6 +109,15 @@ export function createReconciliationService(
         budget: structuredClone(settings.budget),
       };
       const attempt = await repository.claim(context, request, input, runId);
+      const started = Date.now();
+      operation({
+        stage: 'processing',
+        outcome: 'started',
+        caseId: record.id,
+        runId,
+        attemptId: attempt.id,
+        costMicros: null,
+      });
       try {
         const results = await Promise.allSettled(
           attempt.input.sources.map(async source => {
@@ -191,9 +201,38 @@ export function createReconciliationService(
         const analysis = reconcile(attempt.input, extractions, semantic, attempt.id);
         analysis.inputHash = attempt.inputHash;
         await repository.finish(context, attempt.id, analysis, undefined, awaitPublication);
+        operation({
+          stage: 'processing',
+          outcome: 'completed',
+          caseId: record.id,
+          runId,
+          attemptId: attempt.id,
+          durationMs: Date.now() - started,
+          checked: analysis.comparisons.length,
+          classifications: {
+            match: analysis.comparisons.filter(f => f.classification === 'MATCH').length,
+            discrepancy: analysis.comparisons.filter(f => f.classification === 'DISCREPANCY').length,
+            authorized: analysis.comparisons.filter(f => f.classification === 'AUTHORIZED_CHANGE').length,
+            unresolved: analysis.comparisons.filter(f =>
+              ['MISSING_EVIDENCE', 'REQUIRES_REVIEW'].includes(f.classification),
+            ).length,
+          },
+          costMicros: null,
+        });
         return savedResult(analysis, runId);
       } catch (error) {
         await repository.finish(context, attempt.id, null, error);
+        operation({
+          stage: 'processing',
+          outcome: 'failed',
+          caseId: record.id,
+          runId,
+          attemptId: attempt.id,
+          durationMs: Date.now() - started,
+          errorCode: safeFailure(error).code,
+          recovery: 'read_status',
+          costMicros: null,
+        });
         throw error;
       }
     },

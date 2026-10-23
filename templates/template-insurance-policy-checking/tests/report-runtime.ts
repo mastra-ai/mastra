@@ -1,3 +1,4 @@
+import { privateFrameworkLogger } from '../src/mastra/runtime/operations.js';
 import { ReviewRepository } from '../src/mastra/storage/reviews.js';
 import { FinalizationRepository } from '../src/mastra/storage/finalizations.js';
 import { createReviewService } from '../src/mastra/services/review-service.js';
@@ -46,6 +47,7 @@ export async function reportRuntime(
   input: InputProvider = createPdfProvider(inputLimits),
   final: OutputProvider<'reportOutput'> = createApprovedOutputProvider('reportOutput'),
   correction: OutputProvider<'correctionOutput'> = createApprovedOutputProvider('correctionOutput'),
+  budget: ProcessingBudget = reportTestBudget,
 ) {
   const cases = new CaseRepository(root);
   await cases.initialize();
@@ -56,7 +58,7 @@ export async function reportRuntime(
   const reconciliation = createReconciliationService(
     reconciliationRepository,
     createInsuranceProcessingModel(reconciliationRepository, { endpoint }),
-    { model: 'gpt-6.1-sol', budget: reportTestBudget },
+    { model: 'gpt-6.1-sol', budget },
     insuranceConfiguration,
   );
   const reviewRepository = new ReviewRepository(reportRepository);
@@ -90,6 +92,7 @@ export async function reportRuntime(
     comparison.review,
   );
   const mastra = new Mastra({
+    logger: privateFrameworkLogger,
     storage,
     agents: { policyCheckingAgent: agent },
     workflows: { policyCheckingWorkflow: comparison.workflow },

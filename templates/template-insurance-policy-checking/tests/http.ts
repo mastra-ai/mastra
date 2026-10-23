@@ -80,7 +80,7 @@ export async function freePort() {
   await closeServer(server);
   return port;
 }
-export async function startStudio(dataRoot: string, providerUrl?: string) {
+export async function startStudio(dataRoot: string, providerUrl?: string, processingBudget?: unknown) {
   const port = await freePort();
   // The installed CLI selects child NODE_ENV from its env-file map, not the parent environment.
   const environmentFile = resolve(dataRoot, 'studio-test.env');
@@ -97,6 +97,8 @@ export async function startStudio(dataRoot: string, providerUrl?: string) {
         PORT: String(port),
         POLICY_DATA_DIR: dataRoot,
         POLICY_TEST_PROVIDER_URL: providerUrl ?? '',
+        POLICY_PROCESSING_BUDGET: processingBudget ? JSON.stringify(processingBudget) : '',
+        POLICY_TEST_PROCESSING_ONLY: processingBudget ? '1' : '',
         PATH: `${resolve(process.execPath, '..')}:${process.env.PATH}`,
       },
       stdio: ['ignore', 'pipe', 'pipe'],

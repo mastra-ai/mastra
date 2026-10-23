@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { chmod, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { access, chmod, mkdtemp, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { randomUUID } from 'node:crypto';
@@ -170,6 +170,80 @@ describe('Durable insurance intake across real boundaries', () => {
     expect(result.evidence.hash).toBe(firstSources[0]?.hash);
     expect(result.evidence.text).toContain('Physical source sheet 2');
     expect(result.denied).toBe(true);
+  });
+  it('failed_intake_lock_does_not_poison_explicit_source_retry', async () => {
+    const pdf = createPdfProvider(inputLimits);
+    let contend = false;
+    let lockHolder: ReturnType<typeof executeFile> | undefined;
+    let root: string;
+    const provider: InputProvider = {
+      ...pdf,
+      async capture(request, context, limits) {
+        const bundle = await pdf.capture(request, context, limits);
+        if (contend) {
+          contend = false;
+          const readyFile = join(root, 'intake-lock-ready');
+          lockHolder = executeFile(
+            process.execPath,
+            [
+              '--import',
+              './tests/source-loader.mjs',
+              './tests/reports-worker.mjs',
+              JSON.stringify({ mode: 'holdWriteLock', root, readyFile, holdMs: 1400 }),
+            ],
+            { cwd: process.cwd(), maxBuffer: 8 * 1024 * 1024 },
+          );
+          await expect
+            .poll(
+              async () => {
+                try {
+                  await access(readyFile);
+                  return true;
+                } catch {
+                  return false;
+                }
+              },
+              { timeout: 15_000 },
+            )
+            .toBe(true);
+        }
+        return bundle;
+      },
+    };
+    const runtime = await setup(inputLimits, provider);
+    root = runtime.root;
+    const firstBytes = await policyPdf('Original accepted proposal');
+    const first = await runtime.service.capture(context, fileInput(firstBytes));
+    const secondBytes = await policyPdf('Issued target retained after explicit retry');
+    contend = true;
+    let failure: unknown;
+    try {
+      await runtime.service.capture(context, fileInput(secondBytes));
+    } catch (error) {
+      failure = error;
+    }
+    await lockHolder;
+    expect(failure).toBeTruthy();
+    expect(safeFailure(failure)).toMatchObject({
+      ok: false,
+      code: 'SERVICE_UNAVAILABLE',
+      message: expect.any(String),
+      nextAction: expect.any(String),
+    });
+    expect(await runtime.repository.requireCase(context)).toEqual(first);
+    expect(await runtime.repository.sources(context)).toHaveLength(1);
+    const retried = await runtime.service.capture(context, fileInput(secondBytes));
+    expect(retried.id).toBe(first.id);
+    expect(retried.sourceIds).toHaveLength(2);
+    const sources = await runtime.repository.sources(context);
+    for (const [index, source] of sources.entries()) {
+      expect(await readFile(join(runtime.repository.artifactRoot, source.sourceId + '.pdf'))).toEqual(
+        index === 0 ? firstBytes : secondBytes,
+      );
+    }
+    expect(
+      JSON.stringify(await runtime.service.evidence(context, sources[1]!.sourceId, { physicalPage: 1 })),
+    ).toContain('Issued target retained after explicit retry');
   });
   it('input_adapter_preserves_structured_source_provenance', async () => {
     const records = { contract: { limit: 'USD 250000', insured: 'Elm Harbor Fabrication LLC' } };

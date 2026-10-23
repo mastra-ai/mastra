@@ -86,3 +86,12 @@ export function failureText(error: unknown): string {
   const failure = safeFailure(error);
   return `${failure.message}${failure.nextAction ? ` ${failure.nextAction}` : ''} (${failure.code})`;
 }
+
+export function isDatabaseBusy(error: unknown) {
+  return Boolean(
+    error &&
+    typeof error === 'object' &&
+    'code' in error &&
+    ['SQLITE_BUSY', 'SQLITE_LOCKED'].includes(String(error.code)),
+  );
+}
