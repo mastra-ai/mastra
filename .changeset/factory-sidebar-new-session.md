@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-Added a **New session** button to the top of the Factory sidebar. It opens an empty session draft, the same as the **+** next to Sessions. Removed the search and collapse buttons from the top of the open sidebar. Open search with Cmd+K (Ctrl+K on Windows and Linux). Collapse the sidebar with its resize handle or `[`. The sidebar toggle still shows in the page header while the sidebar is collapsed.
+Reworked the top of the Factory sidebar. The factory switcher is now a compact dropdown in the top-left corner, with search and the collapse toggle on its right. Below it, a **New session** row opens an empty session draft. It replaces the **+** next to Sessions. Removed the Mastra logo and the Beta label from the top of the sidebar.
