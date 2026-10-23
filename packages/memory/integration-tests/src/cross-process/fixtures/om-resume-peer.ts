@@ -246,7 +246,7 @@ if (isMain) {
                   p.type === 'text'
                     ? `text:${p.text}`
                     : p.type === 'tool-invocation'
-                      ? `tool:${p.toolInvocation.toolCallId}:${p.toolInvocation.state}${JSON.stringify(p.toolInvocation.result).includes('BACKGROUND_RESULT_MARKER') ? ':BACKGROUND_RESULT_MARKER' : ''}`
+                      ? `tool:${p.toolInvocation.toolCallId}:${p.toolInvocation.state}${p.toolInvocation.result !== undefined && JSON.stringify(p.toolInvocation.result).includes('BACKGROUND_RESULT_MARKER') ? ':BACKGROUND_RESULT_MARKER' : ''}`
                       : p.type,
                 ),
             })),

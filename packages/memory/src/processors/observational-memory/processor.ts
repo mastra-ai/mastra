@@ -334,9 +334,24 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
             for (const stored of storedMessages) {
               const snapshot = snapshotMessages.get(stored.id);
               if (!snapshot) continue;
-              const seenKeys = getPartKeys(snapshot);
-              if (getPartKeys(stored).some(key => !seenKeys.includes(key))) {
-                this.turn.drainedPartKeys.set(stored.id, new Set(seenKeys));
+              const snapshotTools = snapshot.content.parts.filter(part => part.type === 'tool-invocation');
+              const storedHasNewResult = stored.content.parts.some(part => {
+                if (part.type !== 'tool-invocation' || part.toolInvocation.state !== 'result') return false;
+                const previous = snapshotTools.find(
+                  candidate => candidate.toolInvocation.toolCallId === part.toolInvocation.toolCallId,
+                );
+                if (!previous || previous.toolInvocation.state !== 'result') return true;
+                const previousTask = previous.providerMetadata?.mastra?.backgroundTask as
+                  | { status?: string }
+                  | undefined;
+                const storedTask = part.providerMetadata?.mastra?.backgroundTask as { status?: string } | undefined;
+                return (
+                  previousTask?.status === 'running' &&
+                  (storedTask?.status === 'completed' || storedTask?.status === 'failed')
+                );
+              });
+              if (storedHasNewResult) {
+                this.turn.drainedPartKeys.set(stored.id, new Set(getPartKeys(snapshot)));
                 messageList.add(stored, 'memory');
               }
             }
