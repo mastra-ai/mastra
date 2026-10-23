@@ -6,8 +6,8 @@ import { useUserSessionQuery } from '../../../../hooks/useWorkspaces';
 import type { WorkspacePanelSize } from '../layout';
 import { WorkItemFeedPanel } from '../../factory/components/feed/WorkItemFeedPanel';
 import type { WorkItem } from '../../factory/services/workItems';
+import type { RepositoryProviders } from './changes/tree/change-tree';
 import { WorkspaceChangesPanel } from './WorkspaceChangesPanel';
-import type { RepositoryProviders } from './WorkspaceChangesPanel';
 import { WorkspaceFileBrowser } from './WorkspaceFileBrowser';
 import { WorkspaceFileViewer } from './WorkspaceFileViewer';
 import { WorkspaceOverview } from './WorkspaceOverview';
@@ -79,12 +79,7 @@ export function WorkspaceViewerPanel({
       <WorkspaceChangesPanel
         workspacePath={workspacePath}
         visible={visible}
-        changes={changes.data}
         repositoryProviders={repositoryProviders}
-        isLoading={changes.isLoading}
-        isRefreshing={changes.isFetching}
-        error={changes.error ?? undefined}
-        onRefresh={() => changes.refetch()}
         onBack={showOverview}
       />
     );

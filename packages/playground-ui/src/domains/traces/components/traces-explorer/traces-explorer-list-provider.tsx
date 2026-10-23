@@ -26,13 +26,14 @@ export const TracesListProvider = memo(function TracesListProvider({
   onSortChange,
   children,
 }: TracesListProviderProps) {
-  const { withQueryTrace, withRootDuration, isCapabilitiesLoading } = useTracesConfig();
+  const { withQueryTrace, withRootDuration, withDeltaPolling, isCapabilitiesLoading } = useTracesConfig();
   const { filters, dateFrom, dateTo } = useTracesFilters();
   const list = useTracesListSource({
     rolling: !dateTo,
     query: now => buildTracesQueryRequest({ filters, dateFrom, dateTo, withRootDuration, now }),
     orderBy: [{ field: 'startedAt', direction: sortDirection }],
     withQueryTrace,
+    withDeltaPolling,
     enabled: !isCapabilitiesLoading,
     legacyFilters: buildTracesLegacyFilters({ filters, dateFrom, dateTo }),
   });
@@ -47,7 +48,6 @@ export const TracesListProvider = memo(function TracesListProvider({
     refetch,
     isFetching,
     autoRefetch,
-    setAutoRefetch,
   } = list;
   const value = useMemo<TracesListContextValue>(
     () => ({
@@ -59,7 +59,6 @@ export const TracesListProvider = memo(function TracesListProvider({
       error,
       refetch,
       autoRefetch,
-      setAutoRefetch,
       sortDirection,
       onSortChange,
     }),
@@ -72,7 +71,6 @@ export const TracesListProvider = memo(function TracesListProvider({
       error,
       refetch,
       autoRefetch,
-      setAutoRefetch,
       sortDirection,
       onSortChange,
     ],

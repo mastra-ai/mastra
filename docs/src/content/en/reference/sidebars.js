@@ -206,7 +206,6 @@ const sidebars = {
         { type: 'doc', id: 'connect/credential', label: 'credential()' },
         { type: 'doc', id: 'connect/providers', label: 'Provider toolsets' },
         { type: 'doc', id: 'connect/tools', label: 'tools()' },
-        { type: 'doc', id: 'connect/user-connect-routes', label: 'userConnectRoutes()' },
       ],
     },
     {
@@ -709,8 +708,10 @@ const sidebars = {
           id: 'signals/create-notification-inbox-tool',
           label: 'createNotificationInboxTool()',
         },
+        { type: 'doc', id: 'signals/notifications', label: 'Notifications' },
         { type: 'doc', id: 'signals/signal-provider', label: 'SignalProvider' },
         { type: 'doc', id: 'signals/task-signal-provider', label: 'TaskSignalProvider' },
+        { type: 'doc', id: 'signals/thread-events', label: 'Thread events' },
         { type: 'doc', id: 'signals/webhook-signal-provider', label: 'WebhookSignalProvider' },
       ],
     },

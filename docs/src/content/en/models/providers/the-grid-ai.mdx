@@ -7,7 +7,7 @@ description: "Browse The Grid AI model IDs, capabilities, and context windows. L
 
 # <img src="https://models.dev/logos/the-grid-ai.svg" alt="The Grid AI logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />The Grid AI
 
-Access 16 The Grid AI models through Mastra's model router. Authentication is handled automatically using the `THEGRID_API_KEY` environment variable.
+Access 17 The Grid AI models through Mastra's model router. Authentication is handled automatically using the `THEGRID_API_KEY` environment variable.
 
 Learn more in the [The Grid AI documentation](https://thegrid.ai/docs).
 
@@ -172,8 +172,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1000000,
-    "maxOutput": 128000,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
     "inputCost": null,
     "outputCost": null
   },
@@ -186,6 +186,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 128000,
+    "inputCost": null,
+    "outputCost": null
+  },
+  {
+    "model": "the-grid-ai/kimi-latest",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 943718,
     "inputCost": null,
     "outputCost": null
   },

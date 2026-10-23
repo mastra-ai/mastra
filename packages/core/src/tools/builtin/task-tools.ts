@@ -299,8 +299,8 @@ function formatAvailableTaskIds(tasks: TaskItemSnapshot[]): string {
 // Task list read/write through the thread-scoped `threadState` store
 // -----------------------------------------------------------------------------
 //
-// The `tasks` storage domain is the source of truth for the task list. It is
-// thread-scoped and read/written synchronously within a run, so a `task_update`
+// The `threadState` storage domain is the source of truth for the task list. It
+// is thread-scoped and read/written synchronously within a run, so a `task_update`
 // observes exactly the tasks a prior `task_write` produced in the same turn
 // (the store survives the per-step serialization that drops RequestContext
 // mutations). The task state processor projects this list onto the state-signal

@@ -4,6 +4,7 @@ import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEffect, useState } from 'react';
+import { McpServerEventsList } from './mcp-server-events-list';
 import { McpServerToolsList } from './mcp-server-tools-list';
 
 export interface MCPDetailProps {
@@ -80,7 +81,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
       label: 'CLI',
       description: 'Use for local command-line access via npx and mcp-remote.',
       content: commandLineConfig,
-      tooltip: 'Copy Command Line Config',
+      tooltip: 'Copy command line config',
     },
   ];
 
@@ -118,6 +119,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
       </Card>
 
       <McpServerToolsList server={server} />
+      {server.events_capability && <McpServerEventsList server={server} />}
     </div>
   );
 };

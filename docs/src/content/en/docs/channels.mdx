@@ -172,7 +172,7 @@ channels: {
 },
 ```
 
-Setting `onAction: false` disables action handling entirely, including the built-in tool approval buttons. To register more Chat SDK handlers after the channels start, use `agent.channels.sdk`.
+Setting `onAction: false` disables action handling entirely, including the built-in tool approval buttons. To register more Chat SDK handlers after the channels start, use `agent.getChannels()?.sdk`.
 
 ## Reply formatting
 
@@ -192,6 +192,33 @@ channels: {
 ```
 
 Use this escape hatch if your agent is prompted to emit a platform-specific dialect, such as Slack mrkdwn, instead of standard markdown. If you added such prompt instructions to work around markdown rendering literally, remove them instead. The default now renders standard markdown natively. `textFormat` affects final reply text only. Tool cards, error messages, and natively streamed text are unaffected.
+
+### Reply only through a tool
+
+Set `textDisplay: 'hidden'` to stop posting the agent's reply text. The agent's own messages then reach the thread only through tools you give it, for example a tool that posts to the thread. This keeps intermediate narration such as "Running the tests now" out of the thread, and lets the agent decide when to post:
+
+```typescript title="src/mastra/agents/your-agent.ts" oxfmt:false
+channels: {
+  adapters: {
+    slack: {
+      adapter: createSlackAdapter(),
+      textDisplay: 'hidden',
+    },
+  },
+},
+```
+
+Tool display, approval prompts, error messages, and typing status are unaffected. The reply text still reaches the agent's stream and memory.
+
+The channel instructions Mastra adds to the agent's prompt follow this setting: with text hidden, the agent is told that only what it posts with tools reaches the conversation, and that it can skip a message by not posting anything.
+
+## Runs that don't start from a message
+
+A thread that started in a channel can also run from elsewhere, such as a schedule, a Studio prompt, or a signal waking the agent. Those runs get the same channel instructions as a run started by a message. The agent knows its identity in the channel and whether its text replies are posted there. Because the system prompt is identical for both kinds of run, it stays cached.
+
+Messages that come in over a channel carry a `platform` attribute (for example `platform="slack"`), so the agent can tell them apart from a prompt sent from somewhere else.
+
+Replies on those runs go through the same adapter path as replies to a message. Mastra remembers the last person who wrote in the thread, so adapters that need a recipient, like Slack's native streaming, work the same way.
 
 ## Multi-user awareness
 
@@ -334,7 +361,7 @@ Vercel and AWS Lambda require `waitUntil`, since they freeze the function as soo
 
 ### Coordinate instances with a shared pub/sub
 
-Channels route messages through the agent's [signal pipeline](/docs/harness/signals), and each run acquires a lease on its thread so one run owns the conversation at a time.
+Channels route messages through the agent's [signal pipeline](/docs/signals/overview), and each run acquires a lease on its thread so one run owns the conversation at a time.
 
 The default in-memory pub/sub can't cross instance boundaries, so on serverless a follow-up message can be routed to a different instance than the one running the agent.
 

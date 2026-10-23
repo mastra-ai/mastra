@@ -9,10 +9,10 @@ on:
       has_code:
         required: true
         type: string
-      unit_test_files:
+      has_unit_tests:
         required: false
         type: string
-        default: ''
+        default: 'false'
       e2e_test_files:
         required: false
         type: string
@@ -83,7 +83,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: vitest-blob-unit-${{ matrix.shard }}
           path: .vitest-reports/
@@ -92,7 +92,7 @@ jobs:
 
   affected-unit-test:
     name: Affected UNIT Test
-    if: inputs.has_code == 'true' && inputs.run_full == 'false' && inputs.unit_test_files != ''
+    if: inputs.has_code == 'true' && inputs.run_full == 'false' && inputs.has_unit_tests == 'true'
     runs-on: starsling-ubuntu-26.04
     timeout-minutes: 20
     env:
@@ -127,21 +127,24 @@ jobs:
         run: pnpm turbo build --filter "!./examples/**/*" --filter "!./docs/" --filter "!./explorations/**/*"
 
       - name: Download affected tests
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           name: affected-tests-outputs
           path: /tmp/affected-outputs
 
       - name: Run affected tests
+        # One vitest run for the whole list. xargs would split a long list into several runs
+        # that overwrite each other's blob report.
         run: |
-          tr '\n' '\0' < /tmp/affected-outputs/unit_test_files.txt \
-            | xargs -0 pnpm vitest run \
-                --project 'unit:*' --project 'typecheck:*' \
-                --reporter=blob \
-                --reporter=verbose \
-                --reporter=github-actions \
-                --outputFile.blob=.vitest-reports/blob-unit-affected.json \
-                --passWithNoTests
+          mapfile -t test_files < /tmp/affected-outputs/unit_test_files.txt
+          pnpm vitest run \
+            --project 'unit:*' --project 'typecheck:*' \
+            --reporter=blob \
+            --reporter=verbose \
+            --reporter=github-actions \
+            --outputFile.blob=.vitest-reports/blob-unit-affected.json \
+            --passWithNoTests \
+            "${test_files[@]}"
 
       - name: Upload test results
         if: always()
@@ -220,7 +223,7 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
           name: vitest-blob-e2e-${{ steps.normalize.outputs.project_id }}
           path: .vitest-reports/
@@ -238,11 +241,11 @@ jobs:
 
     steps:
       - name: Skip tests when no test selection is needed
-        if: inputs.has_code != 'true' || (inputs.run_full == 'false' && inputs.unit_test_files == '' && inputs.e2e_test_files == '')
+        if: inputs.has_code != 'true' || (inputs.run_full == 'false' && inputs.has_unit_tests != 'true' && inputs.e2e_test_files == '')
         run: echo "No unit or E2E tests selected; skipping report merge."
 
       - name: Checkout repo
-        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.unit_test_files != '' || inputs.e2e_test_files != '')
+        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '')
         uses: actions/checkout@e8d4307400f9427dba7cb98e488d6ab85f1cec5f
         timeout-minutes: 20
         with:
@@ -250,17 +253,17 @@ jobs:
           ref: ${{ inputs.head_sha }}
 
       - name: Setup pnpm and Node.js
-        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.unit_test_files != '' || inputs.e2e_test_files != '')
+        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '')
         uses: ./.github/actions/setup-pnpm-node
 
       - name: Download test results
-        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.unit_test_files != '' || inputs.e2e_test_files != '')
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '')
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
         with:
           pattern: vitest-blob-*
           path: .vitest-reports
           merge-multiple: true
 
       - name: Merge reports
-        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.unit_test_files != '' || inputs.e2e_test_files != '')
+        if: inputs.has_code == 'true' && (inputs.run_full != 'false' || inputs.has_unit_tests == 'true' || inputs.e2e_test_files != '')
         run: pnpm vitest --merge-reports --reporter=default --reporter=github-actions --passWithNoTests

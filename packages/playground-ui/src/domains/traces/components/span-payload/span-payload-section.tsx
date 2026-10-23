@@ -84,14 +84,14 @@ export function SpanPayloadSection({
     <div
       data-slot="span-payload-section"
       data-view={showJson ? 'raw' : 'rich'}
-      className={cn('flex flex-col gap-2', className)}
+      className={cn('flex min-w-0 flex-col gap-2', className)}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
         <DataPanelSectionHeading icon={icon} className={layout === 'details' ? 'text-meta' : undefined}>
           {title}
         </DataPanelSectionHeading>
         <div className="ml-auto flex items-center gap-2">
-          <CopyButton content={JSON.stringify(raw, null, 2)} size="sm" variant="ghost" />
+          <CopyButton content={JSON.stringify(raw, null, 2)} variant="ghost" />
           {hasRich && <ViewToggle view={view} onChange={setView} />}
         </div>
       </div>

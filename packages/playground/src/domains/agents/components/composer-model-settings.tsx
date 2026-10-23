@@ -323,7 +323,7 @@ export const ComposerModelSettings = ({ agentId }: ComposerModelSettingsProps) =
                   disabled={!canEditSettings}
                   onClick={() => setAdvancedOpen(true)}
                 >
-                  Advanced Settings
+                  Advanced settings
                 </Button>
               </div>
             </section>

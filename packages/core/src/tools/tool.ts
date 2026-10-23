@@ -239,6 +239,9 @@ export class Tool<
     ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContext>['execute']
   >;
 
+  /** Whether this tool only displays its call and receives a server acknowledgement. */
+  renderOnly?: boolean;
+
   /** Parent Mastra instance for accessing shared resources */
   mastra?: Mastra;
 
@@ -403,6 +406,7 @@ export class Tool<
     this.suspendSchema = opts.suspendSchema ? toStandardSchema(opts.suspendSchema) : undefined;
     this.resumeSchema = opts.resumeSchema ? toStandardSchema(opts.resumeSchema) : undefined;
     this.requestContextSchema = opts.requestContextSchema;
+    this.renderOnly = opts.renderOnly;
     this.mastra = opts.mastra;
     this.requireApproval = opts.requireApproval || false;
     this.beforeApproval = opts.beforeApproval;
@@ -423,8 +427,11 @@ export class Tool<
     // Tools receive two parameters:
     // 1. input - The raw, validated input data
     // 2. context - Execution metadata (mastra, suspend, etc.)
-    if (opts.execute) {
-      const originalExecute = opts.execute;
+    if (opts.renderOnly && opts.execute) {
+      throw new Error('A render-only tool cannot also define execute');
+    }
+    const originalExecute = opts.renderOnly ? async () => ({ acknowledged: true }) : opts.execute;
+    if (originalExecute) {
       this.execute = async (inputData: TSchemaIn, context?: any) => {
         // When a tool is being resumed (resumeData present in context), skip input
         // validation. The original args were already validated during the initial

@@ -39,7 +39,7 @@
     "@mastra/memory": "latest",
     "@mastra/observability": "latest",
     "echarts": "6.1.0",
-    "next": "16.3.8",
+    "next": "16.4.2",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "rxjs": "7.8.1",
@@ -54,11 +54,12 @@
     "mastra": "latest",
     "oxfmt": "0.59.0",
     "typescript": "5.9.3",
-    "vitest": "4.1.11"
+    "vitest": "4.1.12"
   },
   "overrides": {
     "@graphql-tools/utils@<12.0.1": "12.0.3",
     "@whatwg-node/fetch@<0.12.1": "0.12.1",
+    "dompurify@<3.4.17": "3.4.17",
     "katex@<0.18.2": "0.18.2",
     "tinypool@<2.1.2": "2.1.2",
     "undici@<6.29.1": "6.29.1"

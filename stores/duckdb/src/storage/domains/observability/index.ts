@@ -87,17 +87,19 @@ import type {
   QueryThreadsResult,
   RetentionTablesDescriptor,
   TableRetentionPolicy,
+  SpanAggregateResponse,
   TraceAggregateResponse,
   TraceQueryObservedFieldsResult,
   TraceQueryResponse,
   TrustedThreadQueryPlan,
+  TrustedSpanAggregatePlan,
   TrustedTraceAggregatePlan,
   TrustedTraceQueryObservedFieldsPlan,
   TrustedTraceQueryPlan,
   TrustedTraceQueryValuesPlan,
 } from '@mastra/core/storage';
 import type { DuckDBConnection } from '../../db/index';
-import { spanQueryFeatures, timeToFirstChunkFeatures } from '../../features';
+import { spanAggregateFeatures, spanQueryFeatures, timeToFirstChunkFeatures } from '../../features';
 import { resolveTargets, runPrune } from '../../retention';
 import { ALL_DDL, ALL_MIGRATIONS } from './ddl';
 import * as discoveryOps from './discovery';
@@ -268,6 +270,7 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
         'trace-query',
         'trace-aggregate',
         ...spanQueryFeatures,
+        ...spanAggregateFeatures,
         ...(typeof coreStorage.planThreadRowsQuery === 'function' ? (['thread-query-rows'] as const) : []),
         'trace-query-root-duration',
         'trace-query-discovery',
@@ -294,6 +297,7 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
       'trace-query',
       'trace-aggregate',
       ...spanQueryFeatures,
+      ...spanAggregateFeatures,
       ...(typeof coreStorage.planThreadRowsQuery === 'function' ? (['thread-query-rows'] as const) : []),
       'trace-query-root-duration',
       'trace-query-discovery',
@@ -345,6 +349,10 @@ export class ObservabilityStorageDuckDB extends ObservabilityStorage {
   }
   override async aggregateTraces(plan: TrustedTraceAggregatePlan): Promise<TraceAggregateResponse> {
     return traceAggregateOps.aggregateTraces(this.db, plan, { metricIdsUnique: this.metricIdsUnique });
+  }
+
+  override async aggregateSpans(plan: TrustedSpanAggregatePlan): Promise<SpanAggregateResponse> {
+    return traceAggregateOps.aggregateSpans(this.db, plan, { metricIdsUnique: this.metricIdsUnique });
   }
   override async getTraceQueryObservedFields(
     plan: TrustedTraceQueryObservedFieldsPlan,

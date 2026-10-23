@@ -242,6 +242,21 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "POST /agents/:agentId/runs/:runId/abort": {
+    "method": "POST",
+    "path": "/agents/:agentId/runs/:runId/abort",
+    "pathParams": [
+      "agentId",
+      "runId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "POST /agents/:agentId/threads/abort": {
     "method": "POST",
     "path": "/agents/:agentId/threads/abort",
@@ -2113,6 +2128,28 @@ export const API_ROUTE_METADATA = {
       "listProperty": "rows"
     }
   },
+  "POST /observability/spans/aggregate": {
+    "method": "POST",
+    "path": "/observability/spans/aggregate",
+    "pathParams": [],
+    "queryParams": [],
+    "bodyParams": [
+      "groupBy",
+      "having",
+      "interval",
+      "limit",
+      "measures",
+      "orderBy",
+      "timeRange",
+      "where"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "rows"
+    }
+  },
   "POST /observability/threads/query": {
     "method": "POST",
     "path": "/observability/threads/query",
@@ -3544,6 +3581,57 @@ export const API_ROUTE_METADATA = {
     "responseShape": {
       "kind": "object-property",
       "listProperty": "contents"
+    }
+  },
+  "GET /mcp/:serverId/events": {
+    "method": "GET",
+    "path": "/mcp/:serverId/events",
+    "pathParams": [
+      "serverId"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "events"
+    }
+  },
+  "POST /mcp/:serverId/events/:eventName/poll": {
+    "method": "POST",
+    "path": "/mcp/:serverId/events/:eventName/poll",
+    "pathParams": [
+      "serverId",
+      "eventName"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "arguments",
+      "cursor",
+      "maxEvents"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /mcp/:serverId/events/:eventName/emit": {
+    "method": "POST",
+    "path": "/mcp/:serverId/events/:eventName/emit",
+    "pathParams": [
+      "serverId",
+      "eventName"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "data"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
     }
   },
   "GET /stored/agents": {
@@ -5551,6 +5639,7 @@ export const API_ROUTE_METADATA = {
     ],
     "queryParams": [],
     "bodyParams": [
+      "agentModel",
       "agentVersion",
       "description",
       "grouping",

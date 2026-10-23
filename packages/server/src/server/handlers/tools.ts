@@ -149,13 +149,10 @@ export const LIST_TOOLS_ROUTE = createRoute({
         allTools[key] = tool;
       }
 
-      const serializedTools = Object.entries(allTools).reduce(
-        (acc, [id, _tool]) => {
-          acc[id] = serializeTool(_tool);
-          return acc;
-        },
-        {} as Record<string, any>,
-      );
+      const serializedTools = Object.entries(allTools).reduce<Record<string, any>>((acc, [id, _tool]) => {
+        acc[id] = serializeTool(_tool);
+        return acc;
+      }, {});
 
       // Filter tools by FGA if configured
       const fgaProvider = mastra.getServer?.()?.fga;

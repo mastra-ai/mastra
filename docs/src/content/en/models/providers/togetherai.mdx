@@ -40,18 +40,6 @@ for await (const chunk of stream) {
 <ProviderModelsTable
   models={[
   {
-    "model": "togetherai/deepseek-ai/DeepSeek-V4-Flash-0731",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 1048576,
-    "maxOutput": 384000,
-    "inputCost": 0.14,
-    "outputCost": 0.28
-  },
-  {
     "model": "togetherai/deepseek-ai/DeepSeek-V4-Pro-0813",
     "imageInput": false,
     "audioInput": false,
@@ -76,30 +64,6 @@ for await (const chunk of stream) {
     "outputCost": 1.2
   },
   {
-    "model": "togetherai/LiquidAI/LFM2-24B-A2B",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 32768,
-    "maxOutput": 32768,
-    "inputCost": 0.03,
-    "outputCost": 0.12
-  },
-  {
-    "model": "togetherai/meta-llama/Llama-3.3-70B-Instruct-Turbo",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 131072,
-    "inputCost": 1.04,
-    "outputCost": 1.04
-  },
-  {
     "model": "togetherai/meta-models/Muse-Spark-Open-816B-A42B",
     "imageInput": true,
     "audioInput": false,
@@ -112,26 +76,14 @@ for await (const chunk of stream) {
     "outputCost": 4.25
   },
   {
-    "model": "togetherai/MiniMaxAI/MiniMax-M2.7",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 196608,
-    "maxOutput": 131072,
-    "inputCost": 0.3,
-    "outputCost": 1.2
-  },
-  {
     "model": "togetherai/MiniMaxAI/MiniMax-M3",
     "imageInput": true,
     "audioInput": false,
-    "videoInput": false,
+    "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 524288,
-    "maxOutput": 250000,
+    "maxOutput": 524288,
     "inputCost": 0.3,
     "outputCost": 1.2
   },
@@ -139,25 +91,13 @@ for await (const chunk of stream) {
     "model": "togetherai/moonshotai/Kimi-K3",
     "imageInput": true,
     "audioInput": false,
-    "videoInput": true,
+    "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 131072,
     "inputCost": 3,
     "outputCost": 15
-  },
-  {
-    "model": "togetherai/nvidia/nemotron-3-ultra-550b-a55b",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 512300,
-    "maxOutput": 512300,
-    "inputCost": 0.6,
-    "outputCost": 3.6
   },
   {
     "model": "togetherai/nvidia/NVIDIA-Nemotron-3.5-Super-VL",
@@ -184,22 +124,10 @@ for await (const chunk of stream) {
     "outputCost": 0.6
   },
   {
-    "model": "togetherai/Qwen/Qwen2.5-7B-Instruct-Turbo",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 32768,
-    "maxOutput": 32768,
-    "inputCost": 0.3,
-    "outputCost": 0.3
-  },
-  {
     "model": "togetherai/Qwen/Qwen3.5-9B",
     "imageInput": true,
     "audioInput": false,
-    "videoInput": false,
+    "videoInput": true,
     "toolUsage": true,
     "reasoning": true,
     "contextWindow": 262144,
@@ -225,11 +153,11 @@ for await (const chunk of stream) {
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
-    "reasoning": false,
+    "reasoning": true,
     "contextWindow": 1000000,
     "maxOutput": 131072,
-    "inputCost": 1.25,
-    "outputCost": 3.75
+    "inputCost": 2.5,
+    "outputCost": 7.5
   },
   {
     "model": "togetherai/reflection/Beam-1.0-501B-A23B",
@@ -274,7 +202,7 @@ for await (const chunk of stream) {
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1048576,
+    "contextWindow": 1048575,
     "maxOutput": 262144,
     "inputCost": 1.4,
     "outputCost": 4.4

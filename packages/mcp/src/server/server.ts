@@ -5,6 +5,8 @@ import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { MCPServerBase } from '@mastra/core/mcp';
 import type {
   MCPServerConfig as CoreMCPServerConfig,
+  MCPServerEventInfo,
+  MCPServerEventsInspector,
   MCPServerFGAConfig,
   MCPToolExecutionResultV2,
   ServerDetailInfo,
@@ -63,6 +65,7 @@ import type { CallerTraceContext } from '../shared/trace-context';
 import { ServerPromptActions, ServerResourceActions, ServerToolActions } from './actions';
 import { ServerEventActions } from './events/actions';
 import { registerEventHandlers } from './events/handlers';
+import { createEventsInspector, listEventsInfo } from './events/inspector';
 import { ServerEventRegistry, toDescriptor } from './events/registry';
 import type { MCPServerEventDefinition, MCPServerEventsOptions } from './events/types';
 import { WebhookDispatcher } from './events/webhook-dispatcher';
@@ -110,6 +113,16 @@ export interface MCPServerConfig extends CoreMCPServerConfig {
    * @experimental SEP-3415 is a draft; this API may change.
    */
   eventsOptions?: MCPServerEventsOptions;
+  /**
+   * How requests from 2025-era clients (those that open with `initialize`) are served
+   * over HTTP.
+   *
+   * - `'reject'` (default): they get the unsupported-protocol-version error.
+   * - `'stateless'`: each one is answered by a fresh server instance without a session.
+   *   `GET` and `DELETE` session operations get `405`. Features that need 2026-07-28
+   *   (suspend/resume, `subscriptions/listen`, events) are not available to these clients.
+   */
+  legacy?: 'reject' | 'stateless';
 }
 
 export interface MCPServerHTTPOptions {
@@ -199,7 +212,9 @@ export class MCPServer extends MCPServerBase {
   private readonly requestStateCodec: RequestStateCodec<ContinuationEnvelope>;
   private readonly eventRegistry: ServerEventRegistry;
   private readonly eventsOptions: MCPServerEventsOptions;
+  private eventsInspector: MCPServerEventsInspector | undefined;
   private readonly webhooks?: WebhookDispatcher;
+  private readonly legacy: 'reject' | 'stateless';
 
   private httpHandler?: McpHttpHandler;
   private nodeHandler?: NodeMcpRequestHandler;
@@ -217,6 +232,7 @@ export class MCPServer extends MCPServerBase {
     this.loadAppResources(config.appResources);
     this.requestStateCodec = this.createRequestStateCodec(config.requestState);
     this.eventsOptions = config.eventsOptions ?? {};
+    this.legacy = config.legacy ?? 'reject';
     const webhook = this.eventsOptions.webhook;
     this.eventRegistry = new ServerEventRegistry(config.events, { webhook: webhook !== undefined });
     if (webhook && this.eventRegistry.size > 0) {
@@ -865,7 +881,11 @@ export class MCPServer extends MCPServerBase {
             resumeSchema: execution.resumeSchema,
           });
         }
-        const result = this.toCallToolResult(name, tool, execution.output);
+        // 2025-era clients need non-object structured results wrapped as `{ result }`; the codec decides per era.
+        const result = server.projectCallToolResult(
+          this.toCallToolResult(name, tool, execution.output),
+          this.toolInfo(name, tool).outputSchema,
+        );
         this.logger.info(`Tool '${name}' finished in ${Date.now() - startedAt}ms.`);
         return result;
       } catch (error) {
@@ -1188,7 +1208,7 @@ export class MCPServer extends MCPServerBase {
   private getNodeHandler(): NodeMcpRequestHandler {
     if (!this.nodeHandler) {
       this.httpHandler = createMcpHandler(() => this.createServerInstance(), {
-        legacy: 'reject',
+        legacy: this.legacy,
         onerror: error => this.logger.error('MCP handler error', { error: error.toString() }),
       });
       this.nodeHandler = toNodeHandler(this.httpHandler, {
@@ -1215,7 +1235,8 @@ export class MCPServer extends MCPServerBase {
 
   /**
    * Handles one Streamable HTTP request at `httpPath`. Every request is
-   * self-contained; requests without a 2026-07-28 envelope are rejected.
+   * self-contained; requests without a 2026-07-28 envelope are rejected unless
+   * `legacy: 'stateless'` is configured.
    */
   async startHTTP({ url, httpPath, req, res, options }: MCPServerHTTPOptions): Promise<void> {
     if (url.pathname !== httpPath) {
@@ -1400,6 +1421,36 @@ export class MCPServer extends MCPServerBase {
   /** Lists `ui://` app resources; application resources require a protocol request. */
   async listResources(): Promise<{ resources: Resource[] }> {
     return { resources: [...this.appResourceList] };
+  }
+
+  /**
+   * The declared event types as Studio shows them, or `undefined` when the server has none.
+   * @experimental
+   */
+  getEventsInfo(): { events: MCPServerEventInfo[] } | undefined {
+    if (this.eventRegistry.size === 0) return undefined;
+    return { events: listEventsInfo(this.eventsDeps()) };
+  }
+
+  /**
+   * Polls, streams and test-emits events in-process through the `events/poll` and
+   * `events/stream` code paths, or `undefined` when the server has none. Used by Studio.
+   * @experimental
+   */
+  getEventsInspector(): MCPServerEventsInspector | undefined {
+    if (this.eventRegistry.size === 0) return undefined;
+    this.eventsInspector ??= createEventsInspector(this.eventsDeps());
+    return this.eventsInspector;
+  }
+
+  private eventsDeps() {
+    return {
+      registry: this.eventRegistry,
+      heartbeatIntervalMs: this.eventsOptions.heartbeatIntervalMs ?? DEFAULT_EVENTS_HEARTBEAT_INTERVAL_MS,
+      maxStreams: this.eventsOptions.maxStreams,
+      getLogger: () => this.logger,
+      jsonSchema: (schema: unknown, options: { io: 'input' | 'output' }) => this.jsonSchema(schema, options),
+    };
   }
 }
 

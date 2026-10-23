@@ -7,7 +7,7 @@ description: "Browse Groq model IDs, capabilities, context windows, and pricing.
 
 # <img src="https://models.dev/logos/groq.svg" alt="Groq logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Groq
 
-Access 16 Groq models through Mastra's model router. Authentication is handled automatically using the `GROQ_API_KEY` environment variable.
+Access 14 Groq models through Mastra's model router. Authentication is handled automatically using the `GROQ_API_KEY` environment variable.
 
 Learn more in the [Groq documentation](https://console.groq.com/docs/models).
 
@@ -76,54 +76,6 @@ for await (const chunk of stream) {
     "outputCost": null
   },
   {
-    "model": "groq/groq/compound",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "groq/groq/compound-mini",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": null,
-    "outputCost": null
-  },
-  {
-    "model": "groq/llama-3.1-8b-instant",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 131072,
-    "inputCost": 0.05,
-    "outputCost": 0.08
-  },
-  {
-    "model": "groq/llama-3.3-70b-versatile",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 32768,
-    "inputCost": 0.59,
-    "outputCost": 0.79
-  },
-  {
     "model": "groq/meta-llama/llama-prompt-guard-2-22m",
     "imageInput": false,
     "audioInput": false,
@@ -184,25 +136,13 @@ for await (const chunk of stream) {
     "outputCost": 0.3
   },
   {
-    "model": "groq/qwen/qwen3.6-27b",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 16384,
-    "inputCost": 0.6,
-    "outputCost": 3
-  },
-  {
     "model": "groq/qwen/qwen3.8-27b",
     "imageInput": true,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 131042,
+    "contextWindow": 131072,
     "maxOutput": 16384,
     "inputCost": 0.8,
     "outputCost": 4
@@ -214,8 +154,8 @@ for await (const chunk of stream) {
     "videoInput": false,
     "toolUsage": false,
     "reasoning": false,
-    "contextWindow": null,
-    "maxOutput": null,
+    "contextWindow": 448,
+    "maxOutput": 448,
     "inputCost": null,
     "outputCost": null
   },
@@ -226,8 +166,8 @@ for await (const chunk of stream) {
     "videoInput": false,
     "toolUsage": false,
     "reasoning": false,
-    "contextWindow": null,
-    "maxOutput": null,
+    "contextWindow": 448,
+    "maxOutput": 448,
     "inputCost": null,
     "outputCost": null
   }

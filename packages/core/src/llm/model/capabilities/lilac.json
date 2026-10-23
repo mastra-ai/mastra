@@ -3,9 +3,13 @@
   "temperature": ["google/gemma-4-31b-it", "minimaxai/minimax-m3", "moonshotai/kimi-k2.6", "zai-org/glm-5.2"],
   "structuredOutput": ["google/gemma-4-31b-it", "minimaxai/minimax-m3", "moonshotai/kimi-k2.6", "zai-org/glm-5.2"],
   "reasoning": {
-    "google/gemma-4-31b-it": [
+    "zai-org/glm-5.2": [
       {
         "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["high", "max"]
       }
     ],
     "moonshotai/kimi-k2.6": [
@@ -18,13 +22,9 @@
         "type": "toggle"
       }
     ],
-    "zai-org/glm-5.2": [
+    "google/gemma-4-31b-it": [
       {
         "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["high", "max"]
       }
     ]
   }

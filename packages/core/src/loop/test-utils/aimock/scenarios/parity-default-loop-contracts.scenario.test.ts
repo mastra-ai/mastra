@@ -35,7 +35,6 @@ import { Agent } from '../../../../agent';
 import type { IterationCompleteContext, IterationCompleteResult } from '../../../../agent/agent.types';
 import { createDurableAgent } from '../../../../agent/durable/create-durable-agent';
 import { createEventedAgent } from '../../../../agent/durable/create-evented-agent';
-import { EventEmitterPubSub } from '../../../../events/event-emitter';
 import { Mastra } from '../../../../mastra';
 import { MockMemory } from '../../../../memory/mock';
 import { InMemoryStore } from '../../../../storage';
@@ -216,12 +215,11 @@ async function runThrowingVariantOnEngine(variant: ThrowingVariant, engine: Pari
     },
   });
 
-  const pubsub = new EventEmitterPubSub();
   const wrapper =
     engine === 'durable'
-      ? createDurableAgent({ agent, pubsub })
+      ? createDurableAgent({ agent })
       : engine === 'evented'
-        ? createEventedAgent({ agent, pubsub })
+        ? createEventedAgent({ agent })
         : undefined;
   const host = new Mastra({
     agents: { [agent.id]: wrapper ?? agent },
@@ -251,7 +249,7 @@ async function runThrowingVariantOnEngine(variant: ThrowingVariant, engine: Pari
       if (chunk.type === 'text-delta') finalText += String(chunk.payload?.text ?? '');
       chunks.push({
         type: chunk.type,
-        message: String(chunk.payload?.error?.message ?? '').slice(0, 120),
+        message: String(chunk.payload?.error?.message ?? chunk.payload?.message ?? '').slice(0, 120),
       });
     }
     result.cleanup?.();
@@ -259,7 +257,6 @@ async function runThrowingVariantOnEngine(variant: ThrowingVariant, engine: Pari
     threw = String((error as { message?: string })?.message ?? error).slice(0, 200);
   } finally {
     await host.shutdown();
-    await pubsub.close();
   }
 
   return {
@@ -310,6 +307,8 @@ describeParity('default-loop-contracts parity', target => {
       const turn = results[engine]!.turns.at(-1)!;
       expectTurnSettled(turn);
       expect(results[engine]!.requests).toHaveLength(2);
+      expect(JSON.stringify(results[engine]!.requests[0]!.prompt)).not.toContain(FEEDBACK);
+      expect(JSON.stringify(results[engine]!.requests[1]!.prompt)).toContain(FEEDBACK);
       // Unprocessed feedback text must agree on the wire and in the final output.
       expect(turn.streamedText).toBe('firstMORE');
       expect(turn.fullOutput.text).toBe('firstMORE');
@@ -355,11 +354,15 @@ describeParity('default-loop-contracts parity', target => {
     expect(other).toEqual(plain);
   });
 
-  it('mapper-throws: a throwing toModelOutput settles the run one way or another on every engine', async () => {
+  it('mapper-throws: a failed tool-output mapper reaches the caller instead of a successful answer (#25762)', async () => {
     const plain = await runThrowingVariantOnEngine('mapper-throws', 'plain');
-    expect(plain.finish === 1 || plain.errors.length > 0 || plain.threw !== null).toBe(true);
     const other = await runThrowingVariantOnEngine('mapper-throws', target);
-    expect(other.finish === 1 || other.errors.length > 0 || other.threw !== null).toBe(true);
+    for (const result of [plain, other]) {
+      expect([result.threw, ...result.errors].join(' ')).toContain('T18 mapper failure');
+      expect(result.commits).toBe(1);
+      expect(result.modelCalls).toBe(1);
+      expect(result.finalText).toBe('');
+    }
     expect(other).toEqual(plain);
   });
 });

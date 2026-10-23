@@ -12,5 +12,7 @@ export function useThreadWorkspacePath() {
     workspacePath: isUserThreadRoute ? userSession.data?.sessionId : sessionId,
     threadId,
     isPending: isUserThreadRoute && userSession.isPending,
+    error: isUserThreadRoute ? (userSession.error ?? undefined) : undefined,
+    retry: () => void userSession.refetch(),
   };
 }
