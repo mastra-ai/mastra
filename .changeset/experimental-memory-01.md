@@ -2,6 +2,7 @@
 '@mastra/agent-builder': patch
 '@mastra/clickhouse': patch
 '@mastra/code-sdk': minor
+'@mastra/connect': minor
 '@mastra/core': minor
 '@mastra/editor': patch
 '@mastra/factory': minor
