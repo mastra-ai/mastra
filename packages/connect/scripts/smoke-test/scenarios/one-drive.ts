@@ -33,8 +33,24 @@ export const oneDriveScenario: Scenario = {
     );
     const missing = requireTools(tools, [
       'one_drive_get_drive',
+      'one_drive_list_drives',
+      'one_drive_list_recent_items',
+      'one_drive_list_shared_items',
       'one_drive_create_folder',
       'one_drive_upload_small_file',
+      'one_drive_get_item',
+      'one_drive_list_children',
+      'one_drive_search_items',
+      'one_drive_update_item',
+      'one_drive_list_versions',
+      'one_drive_create_sharing_link',
+      'one_drive_list_permissions',
+      'one_drive_get_permission',
+      'one_drive_delete_permission',
+      'one_drive_invite_recipients',
+      'one_drive_create_upload_session',
+      'one_drive_copy_item',
+      'one_drive_move_item',
       'one_drive_delete_item',
     ]);
     if (missing) {
@@ -133,7 +149,8 @@ export const oneDriveScenario: Scenario = {
         const listed = await call<{ permissions: Array<{ id: string }> }>('one_drive_list_permissions', {
           itemId: fileId,
         });
-        permissionId ??= listed.permissions.find(permission => permission.id)?.id;
+        // Only the permission created by this scenario (the sharing link above) may be
+        // deleted; listed permissions are not identifiable as scenario-owned.
         steps.push(
           makeStep('list permissions', 'one_drive_list_permissions', 'pass', `${listed.permissions.length} returned`),
         );
