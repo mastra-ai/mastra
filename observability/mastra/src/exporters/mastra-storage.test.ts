@@ -1,3 +1,4 @@
+import { Mastra } from '@mastra/core';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { SpanType, TracingEventType, EntityType } from '@mastra/core/observability';
 import type {
@@ -9,9 +10,12 @@ import type {
   LogEvent,
   ScoreEvent,
   FeedbackEvent,
+  ObservabilityDropEvent,
 } from '@mastra/core/observability';
-import { serializeSpanAttributes } from '@mastra/core/storage';
+import { InMemoryStore, serializeSpanAttributes } from '@mastra/core/storage';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { Observability } from '../default';
+import { BaseExporter } from './base';
 import { MastraStorageExporter } from './mastra-storage';
 
 // Mock Mastra and logger
@@ -1791,3 +1795,182 @@ describe('MastraStorageExporter', () => {
     }
   });
 });
+
+/** Collects the exporter pipeline's drop events, like a user's monitoring exporter would. */
+class DropRecorder extends BaseExporter {
+  name = 'drop-recorder';
+  drops: ObservabilityDropEvent[] = [];
+
+  protected async _exportTracingEvent(): Promise<void> {}
+
+  onDroppedEvent(event: ObservabilityDropEvent): void {
+    this.drops.push(event);
+  }
+}
+
+// Issue #27479: under update-based strategies, a span started by one exporter instance
+// couldn't be ended by another. Durable-agent crash recovery hits this: the recovering
+// process rebuilds the crashed run's spans and ends them as interrupted, but its exporter
+// never saw SPAN_STARTED, so it deferred the end until retries ran out and dropped it.
+describe.each(['batch-with-updates', 'realtime'] as const)(
+  'MastraStorageExporter spans from another process (%s)',
+  strategy => {
+    function openProcess(storage: InMemoryStore, maxRetries = 0) {
+      const dropRecorder = new DropRecorder();
+      const observability = new Observability({
+        configs: {
+          default: {
+            serviceName: 'span-recovery',
+            exporters: [new MastraStorageExporter({ strategy, maxRetries, maxBatchWaitMs: 60_000 }), dropRecorder],
+          },
+        },
+      });
+      const mastra = new Mastra({ storage, observability, logger: false });
+      return { mastra, tracing: observability.getDefaultInstance()!, drops: dropRecorder.drops };
+    }
+
+    async function getStoredSpan(storage: InMemoryStore, span: { traceId: string; id: string }) {
+      const observabilityStore = await storage.getStore('observability');
+      const stored = await observabilityStore?.getSpan({ traceId: span.traceId, spanId: span.id });
+      return stored?.span ?? null;
+    }
+
+    it('ends a span that a crashed process started and flushed', async () => {
+      const storage = new InMemoryStore();
+      const crashed = openProcess(storage);
+      const recovering = openProcess(storage);
+      try {
+        const span = crashed.tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent run before crash' });
+        const snapshot = structuredClone(span.exportSpan());
+        await crashed.tracing.flush();
+        expect((await getStoredSpan(storage, span))?.endedAt).toBeNull();
+
+        const rebuilt = recovering.tracing.rebuildSpan(snapshot);
+        rebuilt.update({ attributes: { recovered: true } });
+        rebuilt.end({ output: { status: 'interrupted', reason: 'run recovered after its process stopped' } });
+        await recovering.tracing.flush();
+
+        const stored = await getStoredSpan(storage, span);
+        expect(stored?.endedAt).toBeInstanceOf(Date);
+        expect(stored?.output).toEqual({ status: 'interrupted', reason: 'run recovered after its process stopped' });
+        expect(stored?.attributes).toMatchObject({ recovered: true });
+        expect(recovering.drops).toEqual([]);
+      } finally {
+        await recovering.mastra.shutdown();
+        await crashed.mastra.shutdown();
+      }
+    });
+
+    it('leaves an ended span unchanged and reports the second end as dropped', async () => {
+      const storage = new InMemoryStore();
+      const first = openProcess(storage);
+      const second = openProcess(storage);
+      try {
+        const span = first.tracing.startSpan({ type: SpanType.GENERIC, name: 'finished operation' });
+        const snapshot = structuredClone(span.exportSpan());
+        span.end({ output: 'original result' });
+        await first.tracing.flush();
+        const endedAt = (await getStoredSpan(storage, span))?.endedAt;
+        expect(endedAt).toBeInstanceOf(Date);
+
+        // Ending an ended span is caller error: the stored span must not change.
+        second.tracing.rebuildSpan(snapshot).end({ output: 'second result' });
+        await second.tracing.flush();
+
+        const stored = await getStoredSpan(storage, span);
+        expect(stored?.output).toBe('original result');
+        expect(stored?.endedAt).toEqual(endedAt);
+        expect(second.drops).toEqual([
+          expect.objectContaining({ signal: 'tracing', reason: 'span-not-updatable', count: 1 }),
+        ]);
+      } finally {
+        await second.mastra.shutdown();
+        await first.mastra.shutdown();
+      }
+    });
+
+    it('does not create a span that was never stored', async () => {
+      const storage = new InMemoryStore();
+      const recovering = openProcess(storage);
+      try {
+        // Known limit: the original process crashed before its create was flushed, so there's
+        // no row to end. Build the snapshot from a span whose create never reached this store.
+        const unstored = openProcess(new InMemoryStore());
+        const source = unstored.tracing.startSpan({ type: SpanType.GENERIC, name: 'never flushed' });
+        const snapshot = structuredClone(source.exportSpan());
+        await unstored.mastra.shutdown();
+
+        recovering.tracing.rebuildSpan(snapshot).end({ output: { status: 'interrupted' } });
+        await recovering.tracing.flush();
+
+        expect(await getStoredSpan(storage, source)).toBeNull();
+        expect(recovering.drops).toEqual([
+          expect.objectContaining({ signal: 'tracing', reason: 'span-not-updatable', count: 1 }),
+        ]);
+      } finally {
+        await recovering.mastra.shutdown();
+      }
+    });
+
+    it('holds back an end until its own create is stored', async () => {
+      const storage = new InMemoryStore();
+      const { mastra, tracing, drops } = openProcess(storage, 3);
+      const observabilityStore = (await storage.getStore('observability'))!;
+      const createSpans = observabilityStore.batchCreateSpans.bind(observabilityStore);
+      let releaseCreate!: () => void;
+      const createGate = new Promise<void>(resolve => {
+        releaseCreate = resolve;
+      });
+      let createStarted!: () => void;
+      const createInFlight = new Promise<void>(resolve => {
+        createStarted = resolve;
+      });
+      const slowCreate = vi.spyOn(observabilityStore, 'batchCreateSpans').mockImplementation(async args => {
+        createStarted();
+        await createGate;
+        await createSpans(args);
+      });
+      try {
+        const span = tracing.startSpan({ type: SpanType.GENERIC, name: 'slow create' });
+        if (strategy === 'batch-with-updates') void tracing.flush();
+        await createInFlight;
+
+        // The end is flushed while the create is still being written.
+        span.end({ output: 'done' });
+        void tracing.flush();
+        await new Promise(resolve => setImmediate(resolve));
+        releaseCreate();
+        await tracing.flush();
+        await tracing.flush();
+
+        const stored = await getStoredSpan(storage, span);
+        expect(stored?.endedAt).toBeInstanceOf(Date);
+        expect(stored?.output).toBe('done');
+        expect(drops).toEqual([]);
+      } finally {
+        slowCreate.mockRestore();
+        await mastra.shutdown();
+      }
+    });
+
+    it('keeps ending its own spans when the store has no conditional update', async () => {
+      const storage = new InMemoryStore();
+      const observabilityStore = (await storage.getStore('observability'))!;
+      // Simulates an older store version that predates batchUpdateUnendedSpans.
+      Object.defineProperty(observabilityStore, 'batchUpdateUnendedSpans', { value: undefined });
+      const { mastra, tracing, drops } = openProcess(storage);
+      try {
+        const span = tracing.startSpan({ type: SpanType.GENERIC, name: 'older store' });
+        span.end({ output: 'done' });
+        await tracing.flush();
+
+        const stored = await getStoredSpan(storage, span);
+        expect(stored?.endedAt).toBeInstanceOf(Date);
+        expect(stored?.output).toBe('done');
+        expect(drops).toEqual([]);
+      } finally {
+        await mastra.shutdown();
+      }
+    });
+  },
+);
