@@ -1116,7 +1116,11 @@ export class ReflectorRunner {
           (result.activeObservations === combinedObservations ||
             result.activeObservations.startsWith(`${combinedObservations}\n`))
         ) {
-          await publishBufferedReflectionValues(this.storage, this.reflectionConfig.extractors, freshRecord);
+          try {
+            await publishBufferedReflectionValues(this.storage, this.reflectionConfig.extractors, freshRecord);
+          } catch (error) {
+            omError('[OM] Failed to publish buffered reflection values after activation', error);
+          }
         }
         return result;
       },

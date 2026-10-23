@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { getThreadOMMetadata, setThreadOMMetadata } from '@mastra/core/memory';
 import type { MemoryStorage, ObservationalMemoryRecord } from '@mastra/core/storage';
 import { z } from 'zod';
@@ -5,13 +6,26 @@ import { z } from 'zod';
 import { buildThreadMetadataFromExtractedValues } from './extracted-values';
 import type { Extractor } from './extractor';
 
-const pendingValuesSchema = z.object({
+const pendingValuesBaseSchema = z.object({
   recordId: z.string(),
-  reflection: z.string(),
   reflectedObservationLineCount: z.number(),
   values: z.record(z.string(), z.unknown()),
 });
+const pendingValuesSchema = z.union([
+  pendingValuesBaseSchema.extend({
+    reflectionDigest: z.string().regex(/^[a-f0-9]{64}$/),
+    reflection: z.never().optional(),
+  }),
+  pendingValuesBaseSchema.extend({
+    reflection: z.string(),
+    reflectionDigest: z.never().optional(),
+  }),
+]);
 const metadataSchema = z.record(z.string(), z.unknown());
+
+function reflectionDigest(reflection: string): string {
+  return createHash('sha256').update(reflection).digest('hex');
+}
 
 function getMastraMetadata(metadata?: Record<string, unknown>): Record<string, unknown> {
   const parsed = metadataSchema.safeParse(metadata?.mastra);
@@ -25,6 +39,7 @@ export async function stageBufferedReflectionValues(
   values: Record<string, unknown> | undefined,
 ): Promise<void> {
   if (!record.threadId || !record.bufferedReflection) return;
+  const digest = reflectionDigest(record.bufferedReflection);
   await storage.updateThreadMetadata({
     id: record.threadId,
     update: thread => ({
@@ -33,7 +48,7 @@ export async function stageBufferedReflectionValues(
         ...getMastraMetadata(thread.metadata),
         omBufferedReflection: {
           recordId: record.id,
-          reflection: record.bufferedReflection,
+          reflectionDigest: digest,
           reflectedObservationLineCount: record.reflectedObservationLineCount ?? 0,
           values: values ?? {},
         },
@@ -48,7 +63,8 @@ export async function publishBufferedReflectionValues(
   extractors: readonly Extractor<any>[],
   record: ObservationalMemoryRecord,
 ): Promise<void> {
-  if (!record.threadId) return;
+  if (!record.threadId || !record.bufferedReflection) return;
+  const digest = reflectionDigest(record.bufferedReflection);
   await storage.updateThreadMetadata({
     id: record.threadId,
     update: thread => {
@@ -58,7 +74,9 @@ export async function publishBufferedReflectionValues(
       const pending = parsed.data;
       if (
         pending.recordId !== record.id ||
-        pending.reflection !== record.bufferedReflection ||
+        (pending.reflectionDigest !== undefined
+          ? pending.reflectionDigest !== digest
+          : pending.reflection !== record.bufferedReflection) ||
         pending.reflectedObservationLineCount !== (record.reflectedObservationLineCount ?? 0)
       )
         return;
