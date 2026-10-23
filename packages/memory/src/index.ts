@@ -63,9 +63,7 @@ import { Mutex } from 'async-mutex';
 import type { JSONSchema7 } from 'json-schema';
 import { LRUCache } from 'lru-cache';
 import xxhash from 'xxhash-wasm';
-import { z } from 'zod';
 import type { ObservationalMemory, ObservationalMemoryConfig } from './processors/observational-memory';
-import { runOMCommit } from './processors/observational-memory/commit-queue';
 import { KnowledgeSemanticIndexCoordinator, Subconscious } from './processors/observational-memory/subconscious';
 import { createKnowledgeTools } from './processors/observational-memory/subconscious/knowledge-tools';
 import { getRemindThreadId, isOwnedRemindThread } from './processors/observational-memory/subconscious/remind-protocol';
@@ -81,23 +79,6 @@ import { WorkingMemoryExtractor } from './processors/observational-memory/workin
 import { isSystemReminderMessage } from './system-reminders';
 import { recallTool } from './tools/om-tools';
 import { createWorkingMemoryTool, deepMergeWorkingMemory, parseWorkingMemoryJson } from './tools/working-memory';
-
-// Receipts cover only the latest indexed generation/configuration, not the thread's history.
-const observationIndexReceiptSchema = z.object({
-  version: z.literal(1),
-  recordId: z.string(),
-  namespace: z.string(),
-  groups: z.record(
-    z.string(),
-    z.object({
-      fingerprint: z.string(),
-      indexName: z.string(),
-      dimension: z.number().int().positive(),
-      chunkCount: z.number().int().positive(),
-    }),
-  ),
-});
-const OBSERVATION_INDEX_RECEIPT_KEY = 'mastra_om_observation_index';
 
 export {
   ModelByInputTokens,
@@ -2415,7 +2396,7 @@ ${workingMemory}`;
           observedAt?: Date;
           recordId?: string;
         }) => {
-          await this.indexObservationIfChanged(observation);
+          await this.indexObservation(observation);
         }
       : undefined;
 
@@ -2759,102 +2740,18 @@ Notes:
     return { results };
   }
 
-  /** Index the delta against durable acknowledgements, including repairs of failed writes. */
-  private async indexObservationIfChanged(observation: Parameters<Memory['indexObservation']>[0]): Promise<void> {
-    if (!this.vector || !this.embedder) return;
-    const { threadId, resourceId, recordId, groupId, text, range } = observation;
-    if (!recordId) return this.indexObservation(observation);
-    const store = await this.storage.getStore('memory');
-    if (!store) return this.indexObservation(observation);
-
-    const hash = async (value: unknown) =>
-      Buffer.from(
-        await globalThis.crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify(value))),
-      ).toString('hex');
-    // Changing the destination or embedding configuration must rebuild its receipts.
-    const namespace = await hash([
-      this.vector.id,
-      this.observationIndexPrefix,
-      this.embedder.provider,
-      this.embedder.modelId,
-      this.embedder.specificationVersion,
-      this.embedderOptions,
-    ]);
-    // observedAt belongs to the observation's first write. The cycle timestamp passed for
-    // retained groups is not a content change and must not force a rewrite every cycle.
-    const fingerprint = await hash([namespace, resourceId, text, range]);
-
-    // Serialize the vector write and its acknowledgement across Memory instances in this process.
-    await runOMCommit(`observation-index:${resourceId}:${threadId}`, async () => {
-      const thread = await store.getThreadById({ threadId });
-      const receipt = observationIndexReceiptSchema.safeParse(thread?.metadata?.[OBSERVATION_INDEX_RECEIPT_KEY]);
-      const indexed =
-        receipt.success && receipt.data.recordId === recordId && receipt.data.namespace === namespace
-          ? receipt.data.groups[groupId]
-          : undefined;
-      // Metadata can be patched by callers. Derive the destination and query limit locally,
-      // and validate the dimension against the real index before allocating a query vector.
-      const indexName = this.getObservationEmbeddingIndexName(indexed?.dimension);
-      const chunkCount = this.chunkText(text).length;
-      if (
-        indexed?.fingerprint === fingerprint &&
-        indexed.indexName === indexName &&
-        indexed.chunkCount === chunkCount
-      ) {
-        // Receipts and vectors cannot be committed atomically. Check the destination before
-        // skipping: an overlapping writer may have replaced the vector after this receipt.
-        // Use a unit vector only to satisfy stores that require a vector for filtered reads.
-        try {
-          const index = await this.vector!.describeIndex({ indexName });
-          if (index.dimension === indexed.dimension) {
-            const rows = await this.vector!.query({
-              indexName: this.getObservationEmbeddingIndexName(index.dimension),
-              queryVector: Array.from({ length: index.dimension }, (_, i) => (i === 0 ? 1 : 0)),
-              topK: chunkCount,
-              filter: { resource_id: resourceId, thread_id: threadId, group_id: groupId },
-            });
-            if (
-              rows.length === chunkCount &&
-              rows.every(row => row.metadata?.record_id === recordId && row.metadata?.index_revision === fingerprint)
-            )
-              return;
-          }
-        } catch (error) {
-          // Missing indexes and adapters with limited filtered reads conservatively reindex.
-          this.logger.debug('Could not verify observation index receipt; retrying the write', { groupId, error });
-        }
-      }
-
-      const written = await this.writeObservation(observation, fingerprint);
-      if (!written) return;
-      // A crash or metadata failure here leaves no acknowledgement: the next cycle repairs it.
-      await store.updateThreadMetadata({
-        id: threadId,
-        resourceId,
-        update: current => {
-          const latest = observationIndexReceiptSchema.safeParse(current.metadata?.[OBSERVATION_INDEX_RECEIPT_KEY]);
-          const groups =
-            latest.success && latest.data.recordId === recordId && latest.data.namespace === namespace
-              ? latest.data.groups
-              : {};
-          return {
-            ...current.metadata,
-            [OBSERVATION_INDEX_RECEIPT_KEY]: {
-              version: 1,
-              recordId,
-              namespace,
-              groups: { ...groups, [groupId]: { fingerprint, ...written } },
-            },
-          };
-        },
-      });
-    });
-  }
-
   /**
    * Index a single observation group into the observation vector store.
    */
-  public async indexObservation(observation: {
+  public async indexObservation({
+    text,
+    groupId,
+    range,
+    threadId,
+    resourceId,
+    observedAt,
+    recordId,
+  }: {
     text: string;
     groupId: string;
     range: string;
@@ -2864,13 +2761,6 @@ Notes:
     /** Observational memory record holding the group, so paging can read it directly. */
     recordId?: string;
   }): Promise<void> {
-    await this.writeObservation(observation);
-  }
-
-  private async writeObservation(
-    { text, groupId, range, threadId, resourceId, observedAt, recordId }: Parameters<Memory['indexObservation']>[0],
-    indexRevision?: string,
-  ): Promise<{ indexName: string; dimension: number; chunkCount: number } | undefined> {
     if (!this.vector || !this.embedder) return;
 
     const embedResult = await this.embedMessageContent(text);
@@ -2901,7 +2791,6 @@ Notes:
       vectors: embedResult.embeddings,
       metadata: embedResult.chunks.map(chunk => ({
         group_id: groupId,
-        ...(indexRevision ? { index_revision: indexRevision } : {}),
         range,
         thread_id: threadId,
         resource_id: resourceId,
@@ -2910,7 +2799,6 @@ Notes:
         text: chunk,
       })),
     });
-    return { indexName, dimension: embedResult.dimension, chunkCount: embedResult.chunks.length };
   }
 
   /**

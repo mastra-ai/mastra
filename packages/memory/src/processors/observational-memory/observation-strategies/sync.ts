@@ -16,6 +16,7 @@ import {
 } from '../markers';
 import { getLastObservedMessageCursor } from '../message-utils';
 
+import { generateAnchorId, parseObservationGroups } from '../observation-groups';
 import { buildMessageRange } from '../observational-memory';
 import { formatMessagesForObserver } from '../observer-agent';
 import { getLineageHead } from '../record-lineage';
@@ -196,13 +197,19 @@ export class SyncObservationStrategy extends ObservationStrategy {
 
     const lastObservedAt = this.getMaxMessageTimestamp(messages);
     const messageRange = this.retrieval ? buildMessageRange(messages) : undefined;
+    // Name the new group before merging it, so the commit carries exactly what this cycle added.
+    const groupId = messageRange ? generateAnchorId() : undefined;
     const newObservations = await this.wrapObservations(
       output.observations,
       existingObservations,
       threadId,
       lastObservedAt,
       messageRange,
+      groupId,
     );
+    const newObservationGroup = groupId
+      ? parseObservationGroups(newObservations).find(group => group.id === groupId)
+      : undefined;
     const observationTokens = this.tokenCounter.countObservations(newObservations);
     const cycleObservationTokens = this.tokenCounter.countObservations(output.observations);
 
@@ -216,6 +223,7 @@ export class SyncObservationStrategy extends ObservationStrategy {
       cycleObservationTokens,
       observedMessageIds,
       lastObservedAt,
+      newObservationGroup,
       suggestedContinuation: output.suggestedContinuation,
       currentTask: output.currentTask,
       threadTitle: output.threadTitle,
@@ -295,15 +303,17 @@ export class SyncObservationStrategy extends ObservationStrategy {
       }
     }
 
-    // A previous instance may have committed the text but failed its vector write.
-    // The indexer's durable receipts make this safe for both new and covered cycles.
-    await this.indexObservationGroups(
-      processed.observations,
-      threadId,
-      resourceId,
-      processed.lastObservedAt,
-      committed.record.id,
-    );
+    // Index only the group this commit added. Earlier groups were indexed by the cycle that
+    // added them, and reflected groups are not observation output. A covered cycle added nothing.
+    if (!committed.alreadyCovered && processed.newObservationGroup) {
+      await this.indexGroups(
+        [processed.newObservationGroup],
+        threadId,
+        resourceId,
+        processed.lastObservedAt,
+        committed.record.id,
+      );
+    }
 
     return { status: 'committed', processed, record: committed.record, alreadyCovered: committed.alreadyCovered };
   }

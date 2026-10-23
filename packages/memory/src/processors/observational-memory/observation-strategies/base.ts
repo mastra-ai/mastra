@@ -14,6 +14,7 @@ import {
   stripThreadTags,
 } from '../message-utils';
 import { parseObservationGroups, wrapInObservationGroup } from '../observation-groups';
+import type { ObservationGroup } from '../observation-groups';
 import type { ObserverRunner } from '../observer-runner';
 import { getLineageHead } from '../record-lineage';
 import type { ReflectorRunner } from '../reflector-runner';
@@ -331,10 +332,17 @@ export abstract class ObservationStrategy {
    * Wrap observations in a thread attribution tag.
    * In resource scope, thread IDs can be obscured via xxhash.
    */
-  protected async wrapWithThreadTag(threadId: string, observations: string, messageRange?: string): Promise<string> {
+  protected async wrapWithThreadTag(
+    threadId: string,
+    observations: string,
+    messageRange?: string,
+    groupId?: string,
+  ): Promise<string> {
     const cleanObservations = stripThreadTags(observations);
     const groupedObservations =
-      this.retrieval && messageRange ? wrapInObservationGroup(cleanObservations, messageRange) : cleanObservations;
+      this.retrieval && messageRange
+        ? wrapInObservationGroup(cleanObservations, messageRange, groupId)
+        : cleanObservations;
     let displayId = threadId;
     if (this.deps.obscureThreadIds) {
       const hasher = await hasherPromise;
@@ -354,6 +362,7 @@ export abstract class ObservationStrategy {
   /**
    * Wrap raw observations — in resource scope, wraps with thread tag and merges;
    * in thread scope, simply appends with a message boundary delimiter.
+   * `groupId` names the new observation group when retrieval wraps one.
    */
   protected wrapObservations(
     rawObservations: string,
@@ -361,15 +370,16 @@ export abstract class ObservationStrategy {
     threadId: string,
     lastObservedAt?: Date,
     messageRange?: string,
+    groupId?: string,
   ): Promise<string> | string {
     if (this.scope === 'resource') {
       return (async () => {
-        const threadSection = await this.wrapWithThreadTag(threadId, rawObservations, messageRange);
+        const threadSection = await this.wrapWithThreadTag(threadId, rawObservations, messageRange, groupId);
         return this.replaceOrAppendThreadSection(existingObservations, threadId, threadSection, lastObservedAt);
       })();
     }
     const grouped =
-      this.retrieval && messageRange ? wrapInObservationGroup(rawObservations, messageRange) : rawObservations;
+      this.retrieval && messageRange ? wrapInObservationGroup(rawObservations, messageRange, groupId) : rawObservations;
     if (!existingObservations) return grouped;
     const boundary = lastObservedAt ? ObservationStrategy.createMessageBoundary(lastObservedAt) : '\n\n';
     return `${existingObservations}${boundary}${grouped}`;
@@ -500,6 +510,7 @@ export abstract class ObservationStrategy {
             ...processed,
             observations: target.activeObservations ?? '',
             observationTokens: target.observationTokenCount,
+            newObservationGroup: undefined,
           },
           record: target,
           alreadyCovered: true,
@@ -530,12 +541,18 @@ export abstract class ObservationStrategy {
     observedAt: Date | undefined,
     recordId: string,
   ): Promise<void> {
-    if (!resourceId || !this.deps.onIndexObservations) {
-      return;
-    }
+    await this.indexGroups(parseObservationGroups(observations), threadId, resourceId, observedAt, recordId);
+  }
 
-    const groups = parseObservationGroups(observations);
-    if (groups.length === 0) {
+  /** Index specific observation groups, retrying each write. */
+  protected async indexGroups(
+    groups: ObservationGroup[],
+    threadId: string,
+    resourceId: string | undefined,
+    observedAt: Date | undefined,
+    recordId: string,
+  ): Promise<void> {
+    if (!resourceId || !this.deps.onIndexObservations || groups.length === 0) {
       return;
     }
 
