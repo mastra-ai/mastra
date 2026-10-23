@@ -1280,6 +1280,84 @@ describe('Agent signals: claimed thread ownership', () => {
     }
   });
 
+  it('keeps a queued message on one thread accepted when a message with the same id is cancelled on another', async () => {
+    const pubsub = new ControlledLeasePubSub();
+    const ownerRuntime = agentThreadStreamRuntime;
+    const senderRuntime = new AgentThreadStreamRuntime();
+    const senderAgent = new Agent({
+      id: 'same-id-sender',
+      name: 'Same Id Sender',
+      instructions: 'Test',
+      model: createTextStreamModel('sender response'),
+      pubsub,
+    });
+    // Two owners, each holding its own thread busy, receive input with one caller-chosen signal id.
+    const owners = ['a', 'b'].map(name => {
+      const held = createBlockingFirstTextStreamModel(`held ${name}`, `later ${name}`);
+      return {
+        ...held,
+        agent: new Agent({
+          id: `same-id-owner-${name}`,
+          name: `Owner ${name}`,
+          instructions: 'Test',
+          model: held.model,
+          pubsub,
+        }),
+        target: { resourceId: 'same-id-user', threadId: `same-id-thread-${name}` },
+        attributes: { messageId: `same-id-message-${name}`, sourcePeerId: 'same-id-peer' },
+      };
+    });
+    const sendRemote = (
+      owner: (typeof owners)[number],
+      contents: string,
+      attributes: Record<string, string>,
+      id?: string,
+    ) =>
+      senderRuntime.sendSignal(
+        senderAgent,
+        { type: 'user-message', contents, attributes, ...(id ? { id } : {}) },
+        { ...owner.target, ifIdle: { behavior: 'wake', requireClaimedOwner: true } },
+        pubsub,
+      );
+    const subscriptions = await Promise.all(
+      owners.map(owner => ownerRuntime.subscribeToThread(owner.agent, owner.target, pubsub)),
+    );
+    const claims = await Promise.all(
+      owners.map(owner => ownerRuntime.claimThreadOwnership(owner.agent, owner.target, pubsub)),
+    );
+
+    try {
+      for (const owner of owners) {
+        const hold = sendRemote(owner, 'hold the thread', {
+          ...owner.attributes,
+          messageId: `${owner.attributes.messageId}-hold`,
+        });
+        await expect(hold.accepted).resolves.toMatchObject({ action: 'deliver' });
+        await waitForCondition(() => owner.getStreamCount() === 1);
+      }
+      const [a, b] = owners as [(typeof owners)[number], (typeof owners)[number]];
+      const queuedA = sendRemote(a, 'cancel me', a.attributes, 'shared-signal-id');
+      const queuedB = sendRemote(b, 'keep me', b.attributes, 'shared-signal-id');
+      await expect(queuedA.accepted).resolves.toMatchObject({ action: 'deliver' });
+      await expect(queuedB.accepted).resolves.toMatchObject({ action: 'deliver' });
+
+      const cancelled = ownerRuntime.cancelQueuedMessages(
+        a.agent,
+        { ...a.target, signalIds: ['shared-signal-id'] },
+        pubsub,
+      );
+      expect(cancelled.cancelledSignalIds).toEqual(['shared-signal-id']);
+
+      // Thread a's message was cancelled; thread b's, with the same signal id, was not.
+      await expect(sendRemote(a, 'cancel me', a.attributes).accepted).rejects.toThrow('cancelled before it ran');
+      await expect(sendRemote(b, 'keep me', b.attributes).accepted).resolves.toMatchObject({ action: 'deliver' });
+    } finally {
+      for (const owner of owners) owner.releaseFirst();
+      for (const claim of claims) claim.unsubscribe();
+      for (const subscription of subscriptions) subscription.unsubscribe();
+    }
+  });
+
   it('releases the logical message reservation when the owner rejects its stream options, so a retry can route', async () => {
     const pubsub = new ControlledLeasePubSub();
     const ownerRuntime = new AgentThreadStreamRuntime();
