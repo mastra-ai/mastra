@@ -5,7 +5,8 @@ import { describe, expect, it } from 'vitest';
 describe('importing without native libsql bindings (#28201)', () => {
   it.each(['import', 'require'])('supports an injected client via %s', mode => {
     // Preload a real SQLite client, then simulate a platform whose native module
-    // cannot load. The hook covers both ESM imports and CommonJS requires.
+    // cannot load. Separate hooks cover ESM imports and CommonJS requires
+    // on the minimum supported Node version (22.13.0).
     const output = execFileSync(
       process.execPath,
       [
@@ -15,17 +16,25 @@ describe('importing without native libsql bindings (#28201)', () => {
         '-e',
         `
           import assert from 'node:assert/strict';
-          import { createRequire, registerHooks } from 'node:module';
+          import Module, { createRequire, register } from 'node:module';
           import { createClient } from '@libsql/client/sqlite3';
           const client = createClient({ url: ':memory:' });
-          const hook = registerHooks({
-            resolve(specifier, context, nextResolve) {
+          const hookSource = \`
+            export function resolve(specifier, context, nextResolve) {
               if (specifier === '@libsql/client' || specifier === 'libsql') {
                 throw new Error('Native libsql binding unavailable (#28201)');
               }
               return nextResolve(specifier, context);
             }
-          });
+          \`;
+          register('data:text/javascript,' + encodeURIComponent(hookSource), import.meta.url);
+          const originalLoad = Module._load;
+          Module._load = function(specifier, ...args) {
+            if (specifier === '@libsql/client' || specifier === 'libsql') {
+              throw new Error('Native libsql binding unavailable (#28201)');
+            }
+            return originalLoad.call(this, specifier, ...args);
+          };
           try {
             const entry = process.env.LIBSQL_TEST_ENTRY || './src/index.ts';
             const api = ${mode === 'import' ? 'await import(entry)' : 'createRequire(import.meta.url)(entry)'};
@@ -47,7 +56,7 @@ describe('importing without native libsql bindings (#28201)', () => {
             await store.close();
             console.log('Persisted and read a thread with native module loading blocked');
           } finally {
-            hook.deregister();
+            Module._load = originalLoad;
             client.close();
           }
         `,
