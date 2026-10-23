@@ -618,15 +618,21 @@ export abstract class ObservationStrategy {
       pending.set(entry.write.groupId, entry);
     });
     // Bound the in-process backlog; the oldest failed writes are dropped first.
+    let dropped = 0;
     for (const groupId of pending.keys()) {
       if (pending.size <= MAX_UNINDEXED_OBSERVATIONS) break;
-      omDebug(`[OM:index] dropping unindexed observation group ${groupId}: retry backlog is full`);
       pending.delete(groupId);
+      dropped++;
     }
     // The observations are committed, so a failed write must not fail the cycle: that would skip
     // its end markers and reflection. The write stays queued for the next cycle.
     if (failure !== undefined) {
-      omError('[OM] Indexing committed observation groups failed; a later cycle retries them', failure);
+      omError('[OM] Indexing committed observation groups failed', failure);
+      console.warn(
+        `[observational-memory] Storing observation vectors failed (${failure instanceof Error ? failure.message : String(failure)}); ` +
+          `${pending.size} observation group(s) will be retried on the next observation cycle` +
+          (dropped > 0 ? `, and ${dropped} older group(s) were dropped from the retry backlog.` : '.'),
+      );
     }
   }
 

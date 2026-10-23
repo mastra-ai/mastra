@@ -3,7 +3,7 @@ import type { MastraDBMessage } from '@mastra/core/agent';
 import { InMemoryStore } from '@mastra/core/storage';
 import { MastraVector } from '@mastra/core/vector';
 import type { UpsertVectorParams } from '@mastra/core/vector';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { Memory } from '../../../index';
 import { parseObservationGroups } from '../observation-groups';
@@ -207,8 +207,13 @@ describe('synchronous observation indexing delta (#27930)', () => {
   it('retries a committed group whose vector write failed on the next cycle', async () => {
     const { memory, observe, vector, headGroups } = await setup();
     vector.failNextUpsert = true;
-    // The observations committed, so the failed write does not fail the cycle.
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    // The observations committed, so the failed write does not fail the cycle, but it is reported.
     expect((await observe(memory, 1)).observed).toBe(true);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('Storing observation vectors failed (vector store unavailable)'),
+    );
+    warn.mockRestore();
     expect((await headGroups()).groups).toHaveLength(1);
     expect(vector.writes).toHaveLength(0);
     await observe(memory, 2);
