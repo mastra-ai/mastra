@@ -15,6 +15,8 @@ const projectRepositoryId = 'ghp-1';
 const CREATED_AT = '2026-10-23T10:00:00.000Z';
 const TEXT = 'Side sessions you started:\n- "Live review" (session side-live): running';
 
+const minutesAgo = (minutes: number) => new Date(Date.now() - minutes * 60_000).toISOString();
+
 function liveSession(sessionId: string, title: string) {
   return {
     id: `row-${sessionId}`,
@@ -83,7 +85,13 @@ const snapshot = {
   sessions: {
     sideSessions: [
       { sessionId: 'side-live', title: 'Live review', state: 'running', lastReport: null, muted: false },
-      { sessionId: 'side-gone', title: 'Gone session', state: 'running', lastReport: null, muted: false },
+      {
+        sessionId: 'side-gone',
+        title: 'Gone session',
+        state: 'running',
+        lastReport: { kind: 'progress', at: minutesAgo(5) },
+        muted: true,
+      },
     ],
     following: [
       {
@@ -91,8 +99,8 @@ const snapshot = {
         label: 'Issue #42',
         title: 'Fix flaky login',
         stage: 'execute',
-        worker: { role: 'work', sessionId: 'worker-1', state: 'parked', quietSince: null },
-        lastReport: null,
+        worker: { role: 'builder', sessionId: 'worker-1', state: 'parked', quietSince: null },
+        lastReport: { kind: 'blocked', at: minutesAgo(30) },
       },
     ],
     more: 3,
@@ -138,6 +146,7 @@ describe('factory-sessions signal', () => {
     const gone = within(sideSessions).getByRole('link', { name: 'Gone session' });
     expect(gone).toHaveAttribute('href', `/factories/${factoryId}/workspaces/side-gone/threads/side-gone`);
     expect(within(sideSessions).getByRole('status', { name: 'Agent working in Gone session' })).toBeInTheDocument();
+    expect(within(sideSessions).getByText('muted · last report progress 5m')).toBeInTheDocument();
 
     // Until the session list loads the row shows the snapshot state; the live row then reports no active run.
     await waitFor(() =>
@@ -153,7 +162,7 @@ describe('factory-sessions signal', () => {
     renderSignal(sessionsSignal(snapshot));
 
     const followed = screen.getByRole('region', { name: 'Followed work items' });
-    expect(within(followed).getByText('execute · worker waiting')).toBeInTheDocument();
+    expect(within(followed).getByText('execute · builder waiting · last report blocked 30m')).toBeInTheDocument();
     const link = await within(followed).findByRole('link', { name: /Open live session for/ });
     expect(link).toHaveAttribute('href', `/factories/${factoryId}/workspaces/worker-1/threads/worker-1`);
   });

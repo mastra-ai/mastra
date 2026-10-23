@@ -4,6 +4,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Layers } from 'lucide-react';
 import { useParams } from 'react-router';
 
+import { relativeTime } from '../../../../lib/date/relativeTime';
 import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { itemThreadSession } from '../../factory/boardItems';
 import { RelatedWorkItemLink } from '../../factory/components/RelatedWorkItemLink';
@@ -13,6 +14,7 @@ import { SessionListItem } from '../../workspaces/components/SessionListItem';
 import { SessionNavRow } from '../../workspaces/components/SessionNavRow';
 import { setSessionPinned } from '../../workspaces/hooks/usePinnedSessions';
 import { useSessionListRows } from '../../workspaces/hooks/useSessionListRows';
+import type { SessionListRow } from '../../workspaces/services/sessionRows';
 import type { SessionRowStatus } from '../../workspaces/services/sessionStatus';
 import type { MessageEntry } from '../services/transcript';
 import { isRecord } from './transcript-shared';
@@ -21,11 +23,17 @@ export const FACTORY_SESSIONS_STATE_ID = 'factory-sessions';
 
 type RunState = 'running' | 'parked' | 'idle';
 
+interface LastReportView {
+  kind: string;
+  at: string;
+}
+
 interface SideSessionView {
   sessionId: string;
   title: string;
   state: RunState;
   muted: boolean;
+  lastReport: LastReportView | null;
 }
 
 interface FollowedItemView {
@@ -33,7 +41,8 @@ interface FollowedItemView {
   label: string;
   title: string;
   stage: string;
-  worker: { sessionId: string; state: RunState; quiet: boolean } | null;
+  worker: { role: string; sessionId: string; state: RunState; quiet: boolean } | null;
+  lastReport: LastReportView | null;
 }
 
 export interface FactorySessionsView {
@@ -46,6 +55,11 @@ function runState(value: unknown): RunState | undefined {
   return value === 'running' || value === 'parked' || value === 'idle' ? value : undefined;
 }
 
+function lastReport(value: unknown): LastReportView | null {
+  if (!isRecord(value) || typeof value.kind !== 'string' || typeof value.at !== 'string') return null;
+  return { kind: value.kind, at: value.at };
+}
+
 function sideSession(value: unknown): SideSessionView | undefined {
   if (!isRecord(value) || typeof value.sessionId !== 'string') return undefined;
   const state = runState(value.state);
@@ -55,6 +69,7 @@ function sideSession(value: unknown): SideSessionView | undefined {
     title: typeof value.title === 'string' && value.title ? value.title : value.sessionId,
     state,
     muted: value.muted === true,
+    lastReport: lastReport(value.lastReport),
   };
 }
 
@@ -69,8 +84,14 @@ function followedItem(value: unknown): FollowedItemView | undefined {
     stage: typeof value.stage === 'string' ? value.stage : '',
     worker:
       worker && typeof worker.sessionId === 'string' && workerState
-        ? { sessionId: worker.sessionId, state: workerState, quiet: typeof worker.quietSince === 'string' }
+        ? {
+            role: typeof worker.role === 'string' && worker.role ? worker.role : 'worker',
+            sessionId: worker.sessionId,
+            state: workerState,
+            quiet: typeof worker.quietSince === 'string',
+          }
         : null,
+    lastReport: lastReport(value.lastReport),
   };
 }
 
@@ -115,8 +136,14 @@ function summary(view: FactorySessionsView) {
 
 function workerLabel(worker: FollowedItemView['worker']) {
   if (!worker) return 'no worker';
-  if (worker.state === 'running') return worker.quiet ? 'worker quiet' : 'worker running';
-  return worker.state === 'parked' ? 'worker waiting' : 'worker idle';
+  if (worker.state === 'running') return `${worker.role} ${worker.quiet ? 'quiet' : 'running'}`;
+  return `${worker.role} ${worker.state === 'parked' ? 'waiting' : 'idle'}`;
+}
+
+function reportLabel(report: LastReportView | null) {
+  if (!report) return undefined;
+  const when = relativeTime(report.at);
+  return `last report ${report.kind}${when ? ` ${when}` : ''}`;
 }
 
 function workItemHref(item: WorkItem, factoryId: string): { href: string; kind: 'session' | 'external' | 'board' } {
@@ -139,6 +166,35 @@ export function FactorySessionsSignal({ view, mode }: { view: FactorySessionsVie
   const rowById = new Map(rows.map(row => [row.session.sessionId, row]));
   const itemById = new Map((workItems.data ?? []).map(item => [item.id, item]));
 
+  const sessionRow = (session: SideSessionView, row: SessionListRow | undefined) => {
+    // The live row knows the session's current status, owner and links; the snapshot is a moment ago.
+    if (row) {
+      return (
+        <SessionListItem
+          key={session.sessionId}
+          factoryId={factoryId}
+          row={row}
+          disabled={false}
+          merged={row.pullRequest?.knownMerged}
+          state="default"
+        />
+      );
+    }
+    return (
+      <SessionNavRow
+        key={session.sessionId}
+        name={session.title}
+        url={`/factories/${factoryId}/workspaces/${session.sessionId}/threads/${session.sessionId}`}
+        externalLinks={[]}
+        active={false}
+        disabled={false}
+        status={STATUS_BY_RUN_STATE[session.state]}
+        onPinChange={pinned => setSessionPinned(session.sessionId, pinned)}
+        state="default"
+      />
+    );
+  };
+
   return (
     <ActivityItem
       icon={<Layers className="text-badge-purple-indicator" aria-hidden />}
@@ -155,37 +211,22 @@ export function FactorySessionsSignal({ view, mode }: { view: FactorySessionsVie
             <Txt variant="meta" tone="muted">
               Side sessions
             </Txt>
-            <ul className="flex max-w-90 flex-col">
+            <div className="flex max-w-90 flex-col">
               {view.sideSessions.map(session => {
                 const row = rowById.get(session.sessionId);
-                // The live row knows the session's current status, owner and links; the snapshot is a moment ago.
-                if (row) {
-                  return (
-                    <SessionListItem
-                      key={session.sessionId}
-                      factoryId={factoryId}
-                      row={row}
-                      disabled={false}
-                      merged={row.pullRequest?.knownMerged}
-                      state="default"
-                    />
-                  );
-                }
+                const facts = [session.muted ? 'muted' : undefined, reportLabel(session.lastReport)].filter(Boolean);
                 return (
-                  <SessionNavRow
-                    key={session.sessionId}
-                    name={session.title}
-                    url={`/factories/${factoryId}/workspaces/${session.sessionId}/threads/${session.sessionId}`}
-                    externalLinks={[]}
-                    active={false}
-                    disabled={false}
-                    status={STATUS_BY_RUN_STATE[session.state]}
-                    onPinChange={pinned => setSessionPinned(session.sessionId, pinned)}
-                    state="default"
-                  />
+                  <div key={session.sessionId} className="flex flex-col">
+                    <ul className="flex flex-col">{sessionRow(session, row)}</ul>
+                    {facts.length > 0 && (
+                      <Txt variant="meta" tone="muted" className="ps-8">
+                        {facts.join(' · ')}
+                      </Txt>
+                    )}
+                  </div>
                 );
               })}
-            </ul>
+            </div>
           </section>
         )}
         {view.following.length > 0 && (
@@ -196,7 +237,9 @@ export function FactorySessionsSignal({ view, mode }: { view: FactorySessionsVie
             <ul className="flex flex-col gap-1">
               {view.following.map(followed => {
                 const item = itemById.get(followed.workItemId);
-                const status = [followed.stage, workerLabel(followed.worker)].filter(Boolean).join(' · ');
+                const status = [followed.stage, workerLabel(followed.worker), reportLabel(followed.lastReport)]
+                  .filter(Boolean)
+                  .join(' · ');
                 return (
                   <li key={followed.workItemId} className="flex min-w-0 items-center gap-2">
                     {item ? (
