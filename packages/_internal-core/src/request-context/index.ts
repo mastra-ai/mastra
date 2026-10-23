@@ -99,6 +99,18 @@ export const MASTRA_INHERITED_MEMORY_KEY = 'mastra__inheritedMemory';
 export const MASTRA_MESSAGE_AUTHOR_KEY = 'mastra__messageAuthor';
 
 /**
+ * Reserved key holding the authenticated end user, normalized to the
+ * `MastraUser` shape (`{ id, name?, email?, avatarUrl?, role? }`).
+ *
+ * Set by the server auth middleware after an auth provider authenticates the
+ * request (via `MastraAuthProvider.toMastraUser()`). Read at
+ * `DynamicArgument` resolution time so config callbacks receive an optional
+ * `user` argument. The raw provider-specific user object is stored separately
+ * under `mastra__user`.
+ */
+export const MASTRA_NORMALIZED_USER_KEY = 'mastra__normalizedUser';
+
+/**
  * Whether a request-context key is reserved for Mastra itself.
  *
  * Framework keys use the `mastra__` prefix (e.g. `mastra__threadId`,
