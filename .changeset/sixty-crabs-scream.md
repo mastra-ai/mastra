@@ -1,0 +1,143 @@
+---
+'@mastra/core': minor
+'@mastra/server-adapters-test-suite': patch
+'@mastra/mcp-registry-registry': patch
+'@mastra/tanstack-start': patch
+'@mastra/cloudflare-sandbox': patch
+'@mastra/platform-workspace': patch
+'@mastra/otel-exporter': patch
+'@mastra/google-cloud-pubsub': patch
+'@mastra/apple-container': patch
+'@mastra/otel-bridge': patch
+'@mastra/braintrust': patch
+'@mastra/brightdata': patch
+'@mastra/perplexity': patch
+'@mastra/langsmith': patch
+'@mastra/express': patch
+'@mastra/fastify': patch
+'@mastra/google-drive': patch
+'@mastra/browser-viewer': patch
+'@mastra/deepeval': patch
+'@mastra/langfuse': patch
+'@mastra/agent-builder': patch
+'@mastra/playground-ui': patch
+'@mastra/schema-compat': patch
+'@mastra/elysia': patch
+'@mastra/nestjs': patch
+'@mastra/azure-ai-search': patch
+'@mastra/e2b-desktop': patch
+'@mastra/agent-browser': patch
+'@mastra/client-js': patch
+'@mastra/isolated-vm': patch
+'@mastra/parallel': patch
+'@mastra/datadog': patch
+'@mastra/laminar': patch
+'@mastra/posthog': patch
+'@mastra/valkey-streams': patch
+'@mastra/deployer-cloudflare': patch
+'@mastra/livekit': patch
+'@mastra/arthur': patch
+'@mastra/observability': patch
+'@mastra/sentry': patch
+'@mastra/redis-streams': patch
+'@mastra/hono': patch
+'@mastra/next': patch
+'@mastra/cloudflare-d1': patch
+'@mastra/elasticsearch': patch
+'@mastra/agentcore': patch
+'@mastra/files-sdk': patch
+'@mastra/tavily': patch
+'@mastra/arize': patch
+'@mastra/koa': patch
+'@mastra/ai-sdk': patch
+'@mastra/voyageai': patch
+'@mastra/factory': patch
+'@mastra/fastembed': patch
+'@mastra/turbopuffer': patch
+'@mastra/temporal': patch
+'@mastra/agentfs': patch
+'@mastra/daytona': patch
+'@mastra/railway': patch
+'@mastra/sprites': patch
+'@mastra/claude': patch
+'@mastra/cursor': patch
+'@mastra/openai': patch
+'@mastra/browser-firecrawl': patch
+'@mastra/stagehand': patch
+'@mastra/telegram': patch
+'@mastra/react': patch
+'@mastra/quickjs': patch
+'@mastra/deployer-netlify': patch
+'@mastra/deployer-sandbox': patch
+'@mastra/deployer': patch
+'@mastra/clickhouse': patch
+'@mastra/cloudflare': patch
+'@mastra/opensearch': patch
+'@mastra/inngest': patch
+'@mastra/archil': patch
+'@mastra/blaxel': patch
+'@mastra/docker': patch
+'@mastra/vercel': patch
+'@mastra/auth-better-auth': patch
+'@mastra/discord': patch
+'@mastra/deployer-vercel': patch
+'@mastra/connect': patch
+'@mastra/loggers': patch
+'@mastra/couchbase': patch
+'@mastra/s3vectors': patch
+'@mastra/vectorize': patch
+'@mastra/azure': patch
+'@mastra/modal': patch
+'@mastra/deployer-cloud': patch
+'@mastra/editor': patch
+'@mastra/memory': patch
+'@mastra/server': patch
+'@mastra/dynamodb': patch
+'@mastra/oracledb': patch
+'@mastra/pinecone': patch
+'@mastra/weaviate': patch
+'@mastra/mesa': patch
+'@mastra/acp': patch
+'@mastra/slack': patch
+'@mastra/teams': patch
+'@mastra/evals': patch
+'@mastra/github-signals': patch
+'@mastra/mongodb': patch
+'@mastra/spanner': patch
+'@mastra/upstash': patch
+'@mastra/e2b': patch
+'@mastra/gcs': patch
+'@mastra/auth-supabase': patch
+'@mastra/auth': patch
+'@mastra/chroma': patch
+'@mastra/convex': patch
+'@mastra/duckdb': patch
+'@mastra/libsql': patch
+'@mastra/qdrant': patch
+'@mastra/valkey': patch
+'@mastra/s3': patch
+'mastra': patch
+'@mastra/mcp': patch
+'@mastra/rag': patch
+'@mastra/astra': patch
+'@mastra/lance': patch
+'@mastra/mssql': patch
+'@mastra/mysql': patch
+'@mastra/redis': patch
+'@mastra/turso': patch
+'@mastra/dsql': patch
+'@mastra/auth-cloud': patch
+'@mastra/auth-neon': patch
+'@mastra/pg': patch
+---
+
+Added an optional `user` argument to dynamic configuration callbacks. When server authentication is configured, callbacks for `instructions`, `model`, `tools`, `memory`, and other dynamic options receive the authenticated end user normalized to a stable `MastraUser` shape (`id`, `name?`, `email?`, `avatarUrl?`, `role?`), so you can personalize agents without reading auth keys from `requestContext` yourself.
+
+```ts
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  instructions: ({ user }) => (user ? `You are helping ${user.name ?? user.id}.` : 'You are a helpful assistant.'),
+});
+```
+
+`user` is `undefined` for unauthenticated requests. Auth providers can override the new `toMastraUser()` method to control how their user objects are normalized.

@@ -159,6 +159,28 @@ export const weatherAgent = new Agent({
 
 You can also use `requestContext` with other options like `agents`, `workflows`, `scorers`, `inputProcessors`, and `outputProcessors`.
 
+### Accessing the authenticated user
+
+When [server authentication](/docs/auth/overview) is configured, the same configuration callbacks receive an optional `user` argument: the authenticated end user, normalized to a stable `MastraUser` shape (`{ id: string, name?: string, email?: string, avatarUrl?: string, role?: string }`). Use it to personalize instructions, models, or tools without reading auth keys from `requestContext` yourself.
+
+```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
+export const supportAgent = new Agent({
+  id: 'support-agent',
+  name: 'Support Agent',
+  instructions: ({ user }) =>
+    user
+      ? `You are helping ${user.name ?? user.id}. Be personable.`
+      : 'You are a helpful assistant.',
+  model: ({ user }) =>
+    user?.role === 'admin' ? '__GATEWAY_OPENAI_MODEL__' : '__GATEWAY_OPENAI_MODEL_MINI__',
+  tools: ({ user }) => (user ? { accountTool } : {}),
+})
+```
+
+`user` is `undefined` when the request is unauthenticated or no auth provider is configured. The normalized shape is produced by the auth provider's `toMastraUser()` method, which you can [override on custom providers](/docs/auth/custom-auth-provider). The raw provider-specific user object remains available with `requestContext.get('mastra__user')`.
+
 ### Dynamic instructions
 
 Provide agent instructions through an async function to resolve prompts at runtime. Together with `requestContext`, this supports patterns like:
