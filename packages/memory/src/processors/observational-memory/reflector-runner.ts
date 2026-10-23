@@ -931,13 +931,6 @@ export class ReflectorRunner {
     );
 
     abortSignal?.throwIfAborted();
-    await persistThreadExtractedValues(
-      this.storage,
-      this.reflectionConfig.extractors,
-      currentRecord.threadId ?? undefined,
-      reflectResult.extractedValues,
-      abortSignal,
-    );
 
     const reflectionTokenCount = this.tokenCounter.countObservations(reflectResult.observations);
     omDebug(
@@ -972,6 +965,15 @@ export class ReflectorRunner {
     }
     omDebug(
       `[OM:reflect] doAsyncBufferedReflection: bufferedReflection saved with lineCount=${reflectedObservationLineCount}`,
+    );
+    abortSignal?.throwIfAborted();
+    // Only a stored buffered reflection's extracted values belong to the thread.
+    await persistThreadExtractedValues(
+      this.storage,
+      this.reflectionConfig.extractors,
+      currentRecord.threadId ?? undefined,
+      reflectResult.extractedValues,
+      abortSignal,
     );
 
     if (writer) {
@@ -1257,6 +1259,7 @@ export class ReflectorRunner {
       this.reflectionConfig.extractors,
       requestedThreadId ?? record.threadId,
     );
+    abortSignal?.throwIfAborted();
 
     // ════════════════════════════════════════════════════════════════════════
     // ASYNC BUFFERING: Trigger background reflection at bufferActivation ratio

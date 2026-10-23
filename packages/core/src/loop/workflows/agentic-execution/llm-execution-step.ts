@@ -2936,6 +2936,18 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           },
         });
 
+        // A processor cancelled by the run's abort rejects, which the runner reports as no retry.
+        if (options?.abortSignal?.aborted) {
+          cleanupProviderToolSpans(true);
+          await options.onAbort?.({
+            steps: inputData?.output?.steps ?? [],
+            text: runState.state.partialText,
+          });
+          await settleEagerWorkOnAbort(controller);
+          safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
+          return bailFromExecution('abort');
+        }
+
         if (errorResult.retry && canRetryError) {
           apiErrorRetryResult = errorResult;
           // Clear error state for retry

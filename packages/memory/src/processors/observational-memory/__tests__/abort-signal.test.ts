@@ -16,6 +16,7 @@ import { describe, it, expect } from 'vitest';
 
 import { Memory } from '../../../index';
 import { runOMCommit, waitingOMCommits } from '../commit-queue';
+import { Extractor } from '../extractor';
 import { ObservationalMemoryProcessor } from '../processor';
 
 // =============================================================================
@@ -1183,3 +1184,111 @@ it.each(['shared provider', 'post-append commit'] as const)(
     if (mode === 'post-append commit') expect(record?.lastBufferedAtTokens).toBe(0);
   },
 );
+
+async function createReflectionFixture(mode: 'sync' | 'async', reflectorText: string, held = true) {
+  const storage = new PausedThreadStorage({ db: new InMemoryDB() });
+  const store = new InMemoryStore();
+  store.stores.memory = storage;
+  const provider = createLatchedModel(reflectorText, held);
+  const memory = new Memory({
+    storage: store,
+    options: {
+      generateTitle: false,
+      observationalMemory: {
+        enabled: true,
+        observation: { model: provider.model, messageTokens: 100_000, bufferTokens: mode === 'async' ? 10_000 : false },
+        reflection: {
+          model: provider.model,
+          observationTokens: mode === 'async' ? 2000 : 100,
+          bufferActivation: mode === 'async' ? 0.2 : undefined,
+          extract: [new Extractor({ name: 'Priority', instructions: 'Extract the current priority.' })],
+        },
+      },
+    },
+  });
+  const engine = (await memory.omEngine)!;
+  const threadId = `reflect-${mode}-${Math.random().toString(36).slice(2)}`;
+  const resourceId = 'reflect-resource';
+  await storage.saveThread({
+    thread: { id: threadId, resourceId, title: 'Original', metadata: {}, createdAt: new Date(), updatedAt: new Date() },
+  });
+  const created = await engine.getOrCreateRecord(threadId, resourceId);
+  await storage.updateActiveObservations({
+    id: created.id,
+    observations: '- Existing observation.\n'.repeat(30),
+    tokenCount: 1000,
+  });
+  const record = (await engine.getRecord(threadId, resourceId))!;
+  return { storage, provider, engine, threadId, resourceId, record };
+}
+
+it.each(['sync', 'async'] as const)(
+  'does not start %s reflection after an aborted thread-metadata read (#27792)',
+  async mode => {
+    const { storage, provider, engine, threadId, resourceId, record } = await createReflectionFixture(
+      mode,
+      '<observations>\n- Late reflection\n</observations>',
+      false,
+    );
+    const controller = new AbortController();
+    storage.pause = true;
+    const reflection = engine.reflector.maybeReflect({
+      record,
+      observationTokens: 1000,
+      threadId,
+      abortSignal: controller.signal,
+    });
+    try {
+      await storage.readStarted.promise;
+      controller.abort();
+      storage.releaseRead.resolve();
+      await expect(reflection).rejects.toThrow();
+      await engine.settled();
+      expect(provider.calls).toBe(0);
+      const after = await engine.getRecord(threadId, resourceId);
+      expect(after?.isReflecting).toBe(false);
+      expect(after?.isBufferingReflection).toBe(false);
+      expect(after?.generationCount).toBe(record.generationCount);
+    } finally {
+      storage.releaseRead.resolve();
+      await reflection.catch(() => undefined);
+    }
+  },
+);
+
+it('does not persist extracted values from a buffered reflection cancelled before its commit (#27792)', async () => {
+  const { storage, provider, engine, threadId, resourceId, record } = await createReflectionFixture(
+    'async',
+    '<observations>\n- Late reflection\n</observations>\n<extracted-values>\n{"priority":"Late priority"}\n</extracted-values>',
+  );
+  const controller = new AbortController();
+  const key = engine.buffering.getLockKey(threadId, resourceId);
+  const release = Promise.withResolvers<void>();
+  const entered = Promise.withResolvers<void>();
+  const blocker = runOMCommit(key, async () => {
+    entered.resolve();
+    await release.promise;
+  });
+  await entered.promise;
+  try {
+    await engine.reflector.maybeReflect({ record, observationTokens: 1000, threadId, abortSignal: controller.signal });
+    await provider.started;
+    provider.release();
+    // Wait until the buffered reflection is queued behind the held commit.
+    for (let i = 0; i < 100 && waitingOMCommits(key).normal + waitingOMCommits(key).reflection === 0; i++) {
+      await new Promise<void>(resolve => setImmediate(resolve));
+    }
+    expect(waitingOMCommits(key).normal + waitingOMCommits(key).reflection).toBeGreaterThan(0);
+    controller.abort();
+  } finally {
+    controller.abort();
+    release.resolve();
+    provider.release();
+    await blocker;
+    await engine.settled();
+  }
+  const after = await engine.getRecord(threadId, resourceId);
+  expect(after?.bufferedReflection).toBeFalsy();
+  const thread = await storage.getThreadById({ threadId });
+  expect(JSON.stringify(thread?.metadata ?? {})).not.toContain('Late priority');
+});
