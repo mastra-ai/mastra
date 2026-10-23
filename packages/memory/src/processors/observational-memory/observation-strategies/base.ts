@@ -583,6 +583,25 @@ export abstract class ObservationStrategy {
         record: { id, threadId: recordThreadId, resourceId: recordResourceId, generationCount },
       });
     }
+    const dropped = this.trimUnindexedObservations();
+    if (dropped > 0) {
+      console.warn(
+        `[observational-memory] ${dropped} observation group(s) were dropped from the vector retry backlog because it is full.`,
+      );
+    }
+  }
+
+  /** Drop the oldest queued writes beyond the backlog bound, keeping writes in flight. */
+  private trimUnindexedObservations(): number {
+    const pending = this.deps.unindexedObservations;
+    let dropped = 0;
+    for (const [groupId, entry] of pending) {
+      if (pending.size <= MAX_UNINDEXED_OBSERVATIONS) break;
+      if (entry.writing) continue;
+      pending.delete(groupId);
+      dropped++;
+    }
+    return dropped;
   }
 
   /**
@@ -601,20 +620,26 @@ export abstract class ObservationStrategy {
       // Another cycle is already writing it; its outcome decides whether it stays queued.
       if (entry.writing) continue;
       if (entry.record.threadId !== record.threadId || entry.record.resourceId !== record.resourceId) continue;
+      // Claim each entry as soon as it is chosen; the lookup below yields to other cycles.
       if (entry.record.id === record.id) {
+        entry.writing = true;
         entries.push(entry);
         continue;
       }
       const lineageHead = await getLineageHead(this.storage, entry.record).catch(() => undefined);
+      if (entry.writing || pending.get(entry.write.groupId) !== entry) continue;
       // undefined: the lookup failed, so keep the entry for a later cycle.
-      if (lineageHead) entries.push(entry);
-      else if (lineageHead === null) pending.delete(entry.write.groupId);
+      if (lineageHead) {
+        entry.writing = true;
+        entries.push(entry);
+      } else if (lineageHead === null) {
+        pending.delete(entry.write.groupId);
+      }
     }
     if (entries.length === 0) {
       return;
     }
 
-    for (const entry of entries) entry.writing = true;
     const results = await Promise.allSettled(
       entries.map(({ write }) =>
         withRetry(() => this.deps.onIndexObservations!(write), {
@@ -632,14 +657,7 @@ export abstract class ObservationStrategy {
       failure ??= result.reason;
       pending.set(entry.write.groupId, entry);
     });
-    // Bound the in-process backlog; the oldest failed writes are dropped first.
-    let dropped = 0;
-    for (const [groupId, entry] of pending) {
-      if (pending.size <= MAX_UNINDEXED_OBSERVATIONS) break;
-      if (entry.writing) continue;
-      pending.delete(groupId);
-      dropped++;
-    }
+    const dropped = this.trimUnindexedObservations();
     // The observations are committed, so a failed write must not fail the cycle: that would skip
     // its end markers and reflection. The write stays queued for the next cycle.
     if (failure !== undefined) {
