@@ -1,5 +1,5 @@
-import { Button } from '@mastra/playground-ui/components/Button';
-import { SquarePen } from 'lucide-react';
+import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
+import { Plus } from 'lucide-react';
 import { useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../../../hooks/useFactories';
@@ -14,15 +14,15 @@ export function SidebarNewSessionButton() {
   if (!factoryId || !hasRepositories) return null;
 
   return (
-    <Button
-      variant="ghost"
-      size="icon-sm"
-      aria-label="New session"
-      tooltip="New session"
-      tooltipPosition="bottom"
-      onClick={() => openNewUserSession(factoryId)}
-    >
-      <SquarePen />
-    </Button>
+    <Sidebar.NavList>
+      <Sidebar.NavLink
+        render={
+          <button type="button" onClick={() => openNewUserSession(factoryId)}>
+            <Plus />
+            <Sidebar.NavLabel>New session</Sidebar.NavLabel>
+          </button>
+        }
+      />
+    </Sidebar.NavList>
   );
 }
