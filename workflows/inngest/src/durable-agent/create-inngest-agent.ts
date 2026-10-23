@@ -1531,6 +1531,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         }
         steps = suspendedStepIds[0] ? expandToLeafPath(suspendedStepIds[0]) : [];
       }
+      // Load suspended history before the tool rebuild below: it can reject, and
+      // every rejecting check must run before the registry entry is mutated.
+      const initialToolCalls = await loadSuspendedToolCalls(runId, suspendedSnapshot);
       // A warm resume reuses the tools built for the first request, which close
       // over its request context (#25960). Rebuild them for this call and swap in
       // only entries still holding a request-built tool, so tools a processor
@@ -1579,7 +1582,6 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         }
       }
       const resumeOffset = await getPubsubOffset(runId);
-      const initialToolCalls = await loadSuspendedToolCalls(runId, suspendedSnapshot);
 
       // Install a fresh abort controller scoped to the resumed segment and
       // attach it to the run-registry entry so the durable LLM step (when
