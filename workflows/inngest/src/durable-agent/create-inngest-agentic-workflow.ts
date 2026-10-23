@@ -41,6 +41,12 @@ import { z } from 'zod';
 
 import { init } from '../index';
 import type { InngestFlowControlConfig } from '../types';
+import { InngestWorkflow } from '../workflow';
+
+function deferAgentWorkflowLifecycleEvents<T>(workflow: T): T {
+  if (workflow instanceof InngestWorkflow) workflow.__setDeferAgentLifecycleEvents();
+  return workflow;
+}
 
 // Suspended snapshots back human-in-the-loop resume. Terminal statuses are also
 // persisted so a finished run's snapshot replaces its stale suspended one and
@@ -298,7 +304,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
     .commit();
 
   // Create the main agentic loop workflow with dowhile
-  return (
+  return deferAgentWorkflowLifecycleEvents(
     createWorkflow({
       id: InngestDurableStepIds.AGENTIC_LOOP,
       retries,

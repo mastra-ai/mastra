@@ -17,6 +17,13 @@ import type {
 } from '@mastra/core/workflows';
 import type { Inngest, BaseContext } from 'inngest';
 import { NonRetriableError } from 'inngest';
+import {
+  agentEventBuffer,
+  agentLifecycleEventsSchema,
+  unwrapAgentOperation,
+  wrapAgentOperation,
+} from './agent-lifecycle-events';
+import type { DeferredAgentEvent } from './agent-lifecycle-events';
 import type { NestedWorkflowResult } from './nested-workflow-output';
 import { NESTED_WORKFLOW_OUTPUT_MODE } from './nested-workflow-output';
 import { InngestWorkflow } from './workflow';
@@ -59,6 +66,7 @@ const retryCountStorage = new AsyncLocalStorage<number>();
 const BUILTIN_ERROR_TYPES = [TypeError, RangeError, ReferenceError, SyntaxError, EvalError, URIError, AggregateError];
 
 export class InngestExecutionEngine extends DefaultExecutionEngine {
+  readonly pendingAgentEvents: DeferredAgentEvent[] = [];
   private inngestStep: BaseContext<Inngest>['step'];
   private inngestAttempts: number;
 
@@ -68,6 +76,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     inngestAttempts: number = 0,
     options: ExecutionEngineOptions,
     private parentStream?: { workflowId: string; runId: string },
+    private agentEventRunId?: string,
   ) {
     super({ mastra, options });
     this.inngestStep = inngestStep;
@@ -239,8 +248,10 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   ): Promise<T> {
     const result = await this.inngestStep.run(operationId, async () => {
       try {
-        const fnResult = await operationFn();
-        return fnResult;
+        if (!this.agentEventRunId) return await operationFn();
+        const buffer: { runId: string; events: DeferredAgentEvent[] } = { runId: this.agentEventRunId, events: [] };
+        const fnResult = await agentEventBuffer.run(buffer, operationFn);
+        return wrapAgentOperation(fnResult, buffer.events);
       } catch (e) {
         const errorInstance = getErrorFromUnknown(e, {
           serializeStack: true,
@@ -272,7 +283,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         throw wrapped;
       }
     });
-    return result as T;
+    return (this.agentEventRunId ? unwrapAgentOperation(result, this.pendingAgentEvents) : result) as T;
   }
 
   /**
@@ -645,6 +656,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           },
         })) as any;
         result = invokeResp.result;
+        this.pendingAgentEvents.push(...agentLifecycleEventsSchema.parse(invokeResp.agentLifecycleEvents ?? []));
         runId = invokeResp.runId;
         executionContext.state = invokeResp.result.state;
       } else if (isTimeTravel) {
@@ -678,6 +690,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           },
         })) as any;
         result = invokeResp.result;
+        this.pendingAgentEvents.push(...agentLifecycleEventsSchema.parse(invokeResp.agentLifecycleEvents ?? []));
         runId = invokeResp.runId;
         executionContext.state = invokeResp.result.state;
       } else {
@@ -704,6 +717,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
           },
         })) as any;
         result = invokeResp.result;
+        this.pendingAgentEvents.push(...agentLifecycleEventsSchema.parse(invokeResp.agentLifecycleEvents ?? []));
         runId = invokeResp.runId;
         executionContext.state = invokeResp.result.state;
       }
