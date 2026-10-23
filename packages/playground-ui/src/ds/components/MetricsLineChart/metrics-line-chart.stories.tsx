@@ -105,10 +105,10 @@ function TrafficCard(args: ComponentProps<typeof MetricsLineChart>) {
       <MetricsCard.TopBar>
         <MetricsCard.TitleAndDescription title="Traffic" description="Requests, errors and latency." />
         <MetricsCard.Actions>
-          <Button variant="ghost" size="icon-md" tooltip="View in Traces" aria-label="View in Traces">
+          <Button variant="ghost" size="icon-md" tooltip="View in traces" aria-label="View in traces">
             <EyeIcon />
           </Button>
-          <Button variant="ghost" size="icon-md" tooltip="View errors in Logs" aria-label="View errors in Logs">
+          <Button variant="ghost" size="icon-md" tooltip="View errors in logs" aria-label="View errors in logs">
             <LogsIcon />
           </Button>
         </MetricsCard.Actions>

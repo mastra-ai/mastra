@@ -331,6 +331,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     workflows,
     requestContext,
     collectChunks,
+    expectStreamError,
     manualStreamConsumption,
     backgroundTasks,
     startWorkers,
@@ -504,6 +505,8 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
   // before we hand back the captured journal.
   let chunks: ChunkType[] | undefined;
   let suspendedDuringDrain = false;
+  let streamError: unknown;
+  let streamErrored = false;
   if (manualStreamConsumption) {
     // Skip consumption — test will manually drain the stream after publishing events.
   } else if (collectChunks) {
@@ -518,8 +521,9 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
           break;
         }
       }
-    } catch {
-      // Stream may error (e.g. provider errors) — we still want the chunks collected so far
+    } catch (error) {
+      streamError = error;
+      streamErrored = true;
     }
   } else if (isDurable) {
     // Durable: drain via fullStream iteration
@@ -531,22 +535,32 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
           break;
         }
       }
-    } catch {
-      // Stream may error on provider failures — swallow so runLoopScenario still returns
+    } catch (error) {
+      streamError = error;
+      streamErrored = true;
     }
   } else {
-    await output.consumeStream();
+    // consumeStream resolves on a failed drain and only reports it through onError.
+    await output.consumeStream({
+      onError: error => {
+        streamError = error;
+        streamErrored = true;
+      },
+    });
   }
 
   // Clean up durable resources — but NOT when the stream was suspended or
   // the test wants to consume the stream manually (e.g. streamUntilIdle tests
   // that publish bg-task events after runLoopScenario returns).
   if (isDurable && rawResult.cleanup && !suspendedDuringDrain && !manualStreamConsumption) {
-    try {
-      rawResult.cleanup();
-    } catch {
-      // cleanup may race
-    }
+    rawResult.cleanup();
+  }
+
+  if (streamErrored && !expectStreamError) {
+    throw new Error(
+      `runLoopScenario: stream failed while draining (set expectStreamError if the scenario triggers this on purpose): ${String(streamError)}`,
+      { cause: streamError },
+    );
   }
 
   return {
@@ -554,6 +568,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     requests: llm.getRequests(),
     llm,
     ...(chunks ? { chunks } : {}),
+    ...(streamErrored ? { streamError } : {}),
     agent,
     mastra,
   };

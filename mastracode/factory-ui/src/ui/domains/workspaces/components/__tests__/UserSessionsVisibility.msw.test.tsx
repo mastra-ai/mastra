@@ -95,14 +95,18 @@ async function requestedVisibility(request: Request) {
   return body.visibility;
 }
 
-async function openActions(user: ReturnType<typeof userEvent.setup>, name: string) {
+async function openActions(user: ReturnType<typeof userEvent.setup>, name: string, entry = 'menu') {
+  if (entry === 'context') {
+    await user.pointer({ target: await screen.findByRole('link', { name }), keys: '[MouseRight]' });
+    return;
+  }
   await user.click(await screen.findByRole('button', { name: `Session actions for ${name}` }));
 }
 
 const name = 'Tell me what have been done in the factory since';
 
 describe('User session visibility', () => {
-  it.each(['lock', 'menu'])('lets the owner share from the %s and make it private again', async entry => {
+  it.each(['lock', 'menu', 'context'])('lets the owner share from the %s and make it private again', async entry => {
     let sessions = [session];
     const requested: unknown[] = [];
     useFactoryFixtures(() => sessions);
@@ -128,7 +132,7 @@ describe('User session visibility', () => {
       ).toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: 'Share with organization' }));
     } else {
-      await openActions(user, name);
+      await openActions(user, name, entry);
       await user.click(await screen.findByRole('menuitem', { name: 'Share with organization' }));
     }
     await waitForMutationsIdle(client);
@@ -136,7 +140,7 @@ describe('User session visibility', () => {
     expect(screen.queryByRole('button', { name: `Private session: ${name}` })).not.toBeInTheDocument();
     expect(screen.queryByLabelText(`${name} shared with organization`)).not.toBeInTheDocument();
 
-    await openActions(user, name);
+    await openActions(user, name, entry);
     await user.click(await screen.findByRole('menuitem', { name: 'Make private' }));
     await waitForMutationsIdle(client);
     expect(await screen.findByText('Session is now private')).toBeInTheDocument();
@@ -145,7 +149,7 @@ describe('User session visibility', () => {
     expect(requested).toEqual(['org', 'private']);
   });
 
-  it('does not offer visibility changes on a teammate’s shared session', async () => {
+  it.each(['menu', 'context'])('omits owner actions on a teammate’s shared session in the %s', async entry => {
     useFactoryFixtures(() => [{ ...session, userId: 'user-2', visibility: 'org' }]);
 
     const user = userEvent.setup();
@@ -153,26 +157,28 @@ describe('User session visibility', () => {
 
     await screen.findByRole('button', { name: /^Sessions properties/ });
     await pickSessionProperty(user, 'Owner', 'All owners');
-    expect(await screen.findByRole('button', { name })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: `Private session: ${name}` })).not.toBeInTheDocument();
-    await openActions(user, name);
+    await openActions(user, name, entry);
     expect(await screen.findByRole('menuitem', { name: 'Pin session' })).toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: 'Make private' })).not.toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: 'Share with organization' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Delete' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('menuitem', { name: 'Regenerate title' })).not.toBeInTheDocument();
   });
 
-  it('does not offer visibility changes on the owner’s Slack thread session', async () => {
+  it.each(['menu', 'context'])('omits visibility changes on the owner’s Slack thread in the %s', async entry => {
     useFactoryFixtures(() => [{ ...session, branch: 'slack/1700000000-000100', visibility: 'org' }]);
 
     const user = userEvent.setup();
     renderSection();
 
-    await openActions(user, name);
+    await openActions(user, name, entry);
     expect(await screen.findByRole('menuitem', { name: 'Pin session' })).toBeInTheDocument();
     expect(screen.queryByRole('menuitem', { name: 'Make private' })).not.toBeInTheDocument();
   });
 
-  it('disables the visibility change while one is in flight', async () => {
+  it.each(['menu', 'context'])('disables the visibility change in the %s while one is in flight', async entry => {
     let release = () => {};
     const answered = new Promise<void>(resolve => {
       release = resolve;
@@ -196,7 +202,7 @@ describe('User session visibility', () => {
     await user.click(share);
     expect(share).toBeDisabled();
     await user.keyboard('{Escape}');
-    await openActions(user, name);
+    await openActions(user, name, entry);
     const pending = await screen.findByRole('menuitem', { name: 'Share with organization' });
     expect(pending).toHaveAttribute('aria-disabled', 'true');
     await user.click(pending);

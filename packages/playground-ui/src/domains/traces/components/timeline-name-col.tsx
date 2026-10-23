@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react';
 import type { UISpan, UISpanStyle } from '../types';
 import { SPAN_TREE_INDENT, SPAN_TREE_LINE, SPAN_TREE_META_GAP, SPAN_TREE_PAD_Y, SpanTreeRail } from './span-tree-rail';
 import { SpanTypeBadge } from './span-type-badge';
+import { Badge } from '@/ds/components/Badge';
 import { Txt } from '@/ds/components/Txt';
 import { focusRing, focusRingInset } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -123,6 +124,16 @@ export function TimelineNameCol({
                 )}
               </Txt>
             </button>
+            {span.signalLabel && (
+              <Badge
+                size="xs"
+                data-slot="span-signal-badge"
+                title={span.signalLabel}
+                className="mr-1 max-w-1/2 min-w-0 shrink"
+              >
+                <span className="truncate">{span.signalLabel}</span>
+              </Badge>
+            )}
           </div>
 
           {/* Duration always stacks under the name. */}

@@ -937,6 +937,7 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
         maxSteps: 4,
         abortSignal: controller.signal,
         modelSettings: cancellation === 'timeout' ? { timeout: { totalMs: 1_200 } } : undefined,
+        savePerStep: true,
         onFinish,
         onAbort,
         onError,
@@ -981,17 +982,23 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
         expect(history).not.toContain('VISIBLE_DISCARDED');
         expect(history).not.toContain('HELD_DISCARDED');
         expect(chunks.filter(chunk => chunk.type === 'step-finish')).toHaveLength(priorAccepted ? 1 : 0);
-        expect(chunks.filter(chunk => chunk.type === 'finish')).toHaveLength(1);
+        expect(chunks.filter(chunk => chunk.type === 'finish')).toHaveLength(cancellation === 'caller' ? 1 : 0);
+        expect(chunks.filter(chunk => chunk.type === 'error')).toHaveLength(cancellation === 'timeout' ? 1 : 0);
         expect(onFinish).not.toHaveBeenCalled();
         expect(chunks.filter(chunk => chunk.type === 'abort')).toHaveLength(cancellation === 'caller' ? 1 : 0);
         expect(onAbort).toHaveBeenCalledTimes(cancellation === 'caller' ? 1 : 0);
         expect(onError).toHaveBeenCalledTimes(cancellation === 'timeout' ? 1 : 0);
         const finish = chunks.find(chunk => chunk.type === 'finish');
-        expect(finish?.payload.stepResult.reason).toBe(cancellation === 'caller' ? 'abort' : 'error');
-        const totals = await stream.output.totalUsage;
-        if (priorAccepted) expect(totals).toMatchObject({ inputTokens: 5, outputTokens: 3, totalTokens: 8 });
-        else expect(Object.values(totals).every(value => value === undefined || value === 0)).toBe(true);
-        expect(await stream.output.steps).toHaveLength(priorAccepted ? 1 : 0);
+        if (cancellation === 'caller') expect(finish?.payload.stepResult.reason).toBe('abort');
+        if (cancellation === 'timeout') {
+          await expect(stream.output.totalUsage).rejects.toMatchObject({ name: 'MastraTimeoutError' });
+          await expect(stream.output.steps).rejects.toMatchObject({ name: 'MastraTimeoutError' });
+        } else {
+          const totals = await stream.output.totalUsage;
+          if (priorAccepted) expect(totals).toMatchObject({ inputTokens: 5, outputTokens: 3, totalTokens: 8 });
+          else expect(Object.values(totals).every(value => value === undefined || value === 0)).toBe(true);
+          expect(await stream.output.steps).toHaveLength(priorAccepted ? 1 : 0);
+        }
       } finally {
         held.release();
         stream.abort();
@@ -1151,12 +1158,11 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
       await within(entry.workflowExecution);
       expect(drain).not.toHaveBeenCalled();
       expect(chunks.filter(chunk => chunk.type === 'error')).toHaveLength(1);
-      expect(chunks.filter(chunk => chunk.type === 'finish')).toHaveLength(1);
-      expect(chunks.find(chunk => chunk.type === 'finish')?.payload.stepResult.reason).toBe('error');
+      expect(chunks.filter(chunk => chunk.type === 'finish')).toHaveLength(0);
       expect(chunks.filter(chunk => chunk.type === 'step-finish')).toHaveLength(0);
       expect(onStepFinish).not.toHaveBeenCalled();
       expect(onError).toHaveBeenCalledTimes(1);
-      expect(await stream.output.steps).toHaveLength(0);
+      await expect(stream.output.steps).rejects.toMatchObject({ name: 'MastraTimeoutError' });
     } finally {
       if (queuedSignalId) agent.cancelQueuedMessages({ ...scope, signalIds: [queuedSignalId] });
       held.release();

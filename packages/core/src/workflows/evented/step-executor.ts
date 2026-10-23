@@ -480,13 +480,13 @@ export class StepExecutor extends MastraBase {
       }),
     );
 
-    const idxs = results.reduce((acc, result, idx) => {
+    const idxs = results.reduce<number[]>((acc, result, idx) => {
       if (result) {
         acc.push(idx);
       }
 
       return acc;
-    }, [] as number[]);
+    }, []);
 
     return idxs;
   }

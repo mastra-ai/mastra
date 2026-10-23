@@ -15,10 +15,17 @@ export type TracesExplorerScope = { entityId: string; entityType?: EntityType };
 export type TracesMetricsSupport = { supported: boolean; isLoading: boolean };
 
 /**
- * Host switches (e.g. feature flags). Each one can only turn a feature off:
- * it is combined with what the server supports, and defaults to on.
+ * Host switches (e.g. feature flags), combined with what the server supports.
+ * `traceQuery` and `feedback` default to on and can only turn their feature off.
+ * `spanQuery` and `threadQuery` default to off: each view is offered only when its flag is `true`
+ * and the server supports it.
  */
-export type TracesExplorerFeatures = { traceQuery?: boolean; feedback?: boolean };
+export type TracesExplorerFeatures = {
+  traceQuery?: boolean;
+  feedback?: boolean;
+  spanQuery?: boolean;
+  threadQuery?: boolean;
+};
 
 export type TracesConfigContextValue = {
   listId: string;
@@ -26,6 +33,10 @@ export type TracesConfigContextValue = {
   hiddenFieldIds: readonly string[];
   withQueryTrace: boolean;
   withFeedback: boolean;
+  /** The span query API is on, so the host can offer a spans view next to the traces list. */
+  withSpanQuery: boolean;
+  /** The thread rows API is on, so the host can offer a threads view next to the traces list. */
+  withThreadQuery: boolean;
   withRootDuration: boolean;
   /** The server supports delta polling, so auto-refresh merges new traces instead of reloading pages. */
   withDeltaPolling: boolean;
@@ -81,7 +92,6 @@ export type TracesListContextValue = Pick<
   | 'error'
   | 'refetch'
   | 'autoRefetch'
-  | 'setAutoRefetch'
 > & {
   sortDirection: TracesSortDirection;
   onSortChange: (direction: DataListSort) => void;

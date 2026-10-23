@@ -7,7 +7,7 @@ description: "Browse FastRouter model IDs, capabilities, context windows, and pr
 
 # <img src="https://models.dev/logos/fastrouter.svg" alt="FastRouter logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />FastRouter
 
-Access 47 FastRouter models through Mastra's model router. Authentication is handled automatically using the `FASTROUTER_API_KEY` environment variable.
+Access 39 FastRouter models through Mastra's model router. Authentication is handled automatically using the `FASTROUTER_API_KEY` environment variable.
 
 Learn more in the [FastRouter documentation](https://fastrouter.ai/models).
 
@@ -227,7 +227,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   },
   {
     "model": "fastrouter/leonardo-ai/lucid-origin",
-    "imageInput": true,
+    "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": false,
@@ -239,7 +239,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
   },
   {
     "model": "fastrouter/leonardo-ai/lucid-realism",
-    "imageInput": true,
+    "imageInput": false,
     "audioInput": false,
     "videoInput": false,
     "toolUsage": false,
@@ -428,18 +428,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 32768,
     "inputCost": 0.07,
     "outputCost": 0.25
-  },
-  {
-    "model": "fastrouter/openai/gpt-realtime-1.5",
-    "imageInput": true,
-    "audioInput": true,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 32000,
-    "maxOutput": 4096,
-    "inputCost": 4,
-    "outputCost": 16
   },
   {
     "model": "fastrouter/sarvam/sarvam-105b",

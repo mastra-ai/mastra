@@ -152,7 +152,7 @@ describe('User sessions sidebar activity', () => {
     await waitForMutationsIdle(client);
 
     // The belt goes dark on an idle session, not back on (or stuck at) initializing.
-    const row = screen.getByRole('button', { name: 'feature-d' }).closest('li');
+    const row = screen.getByRole('link', { name: 'feature-d' }).closest('li');
     await waitFor(() => expect(row?.querySelector('[role="status"]')).toBeNull());
   });
 
@@ -163,7 +163,7 @@ describe('User sessions sidebar activity', () => {
     const { client } = renderSection();
     await waitForMutationsIdle(client);
 
-    const row = (await screen.findByRole('button', { name: 'feature-c' })).closest('li');
+    const row = (await screen.findByRole('link', { name: 'feature-c' })).closest('li');
     expect(row).not.toBeNull();
     expect(row?.querySelector('[role="status"]')).toBeNull();
   });
