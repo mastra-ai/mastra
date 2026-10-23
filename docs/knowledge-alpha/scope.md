@@ -1,4 +1,4 @@
-# Knowledge alpha scope, v18 (report 20261023T223907)
+# Knowledge alpha scope, v19 (report 20261023T223907)
 
 Everything here was checked against main `b1244bd3bc0`.
 
@@ -9,7 +9,7 @@ v12 follows Tyler's comment on Kayle's dogfood plan (v45), which supersedes v5�
 - A scope can own other scopes (org owns teams) through the structure.
 - Everything Knowledge leaves Memory for core, including the pins state-signal provider, and pins work without Memory.
 
-v18 folds Fayth's v14 review (Factory declares and stamps its own `project:` tag, D14; D9 migrate warning; D13 union with future grants). v17 folds Fayth's v13 review (atomic per-message scope admission, own-run wait, FIFO, host-authorized remote scopes, LibSQL timeout limits). v16 drops the `*` wildcard (Tyler approved `$param` only). v15 folded Fayth's v12 review (ownership binding, runner in-run path, remaining Factory readers). v14 removes the built-in project scope (Tyler) and adds D13, how org-owns-team is held. v13 added the Director dogfood gap list (Kayle): a scope per message on long-lived sessions, many processes on one LibSQL file, an explicit off switch, and undeclared tag types (D12).
+v19 adds Tyler's decision that scopes can carry read/write access (§3c, D15). v18 folds Fayth's v14 review (Factory declares and stamps its own `project:` tag, D14; D9 migrate warning; D13 union with future grants). v17 folds Fayth's v13 review (atomic per-message scope admission, own-run wait, FIFO, host-authorized remote scopes, LibSQL timeout limits). v16 drops the `*` wildcard (Tyler approved `$param` only). v15 folded Fayth's v12 review (ownership binding, runner in-run path, remaining Factory readers). v14 removes the built-in project scope (Tyler) and adds D13, how org-owns-team is held. v13 added the Director dogfood gap list (Kayle): a scope per message on long-lived sessions, many processes on one LibSQL file, an explicit off switch, and undeclared tag types (D12).
 
 Carried from earlier versions: Knowledge reads the run's tagged scopes; `organizationId` and `knowledgeResourceId` are deleted; pins stay a prompt-cacheable state signal; Knowledge ships its own usage instructions (section 3b).
 
@@ -106,7 +106,7 @@ Tyler's direction (comment on Kayle's dogfood plan v45): scopes are never hard-c
   - Tags with extra `:` in the value (`resource:x:uncurated`) don't match a pattern by segment count and fall to `custom`.
   - Run tags plus named owned scopes can exceed the 8-entry cap. The tool reports that as a tool error naming the cap rather than letting the store throw.
 - **No stored grants read at run time.** Ownership is computed from the instance's config at call time. Correction to earlier versions: main already *stores* structure and grants on LibSQL and PG as well as InMemory (`supportsV2: true`, LibSQL `reconcileStructure` `stores/libsql/.../knowledge/index.ts:518`, grants written `:606`; PG `:570-576`); MySQL and MongoDB don't. What main lacks is enforcement: nothing reads stored grants on a read or write (`base.ts:807-812`, "Grant-based write enforcement is not implemented yet"), and grants come only from the structure plan, with no API to add one at run time. Stored grants in the alpha would mean adding that enforcement and an add/revoke API on LibSQL/PG/InMemory, with no schema change; MySQL/Mongo would refuse structures that declare grants.
-- **Director dogfood:** the director's run holds `org:self` + `team:self:director`; members hold only `team:self:<team>` (plus `agent:`, `project:`, `request:` and Memory's `resource:`/`thread:`), never `org:self`. With `'team:$orgId:$teamId'` owned by `org:$orgId`, the director can read and write every team's Knowledge by naming the team scope (next); a member reaches only its own team. Shared seed content lives at the team scope, not at `org:self`.
+- **Director dogfood:** the director's run holds `org:self` + `team:self:director`; members hold `{ tag: 'org:self', access: 'read' }` + `team:self:<team>` (plus `agent:`, `project:`, `request:` and Memory's `resource:`/`thread:`), never `org:self` writable (§3c). With `'team:$orgId:$teamId'` owned by `org:$orgId`, the director can read and write every team's Knowledge by naming the team scope (next); a member reaches only its own team. Shared seed content lives at the team scope, not at `org:self`.
 - **Holding an owner tag is a capability.** A run holding a principal tag reaches every scope that tag owns, so a host stamps an owner tag (here `org:`) only on runs meant to have that reach. An org tag is not a general shared-read level once it owns other scopes.
 
 **The `scope` argument on Knowledge tools.**
@@ -165,6 +165,45 @@ Tyler's direction (comment on Kayle's dogfood plan v45): scopes are never hard-c
 - That is a core processor API addition (one optional flag plus the runner branch). It lands in the alpha because Tyler wants plain Knowledge usable, pins included, without Memory.
 
 **Tools without Memory.** `agent.ts:8731-8745` resolves the thread and resource from call options and the reserved request-context ids, and the tool builder passes them through (`tool-builder/builder.ts:637-644, 739-740`). Write tools need a thread, as on main, because records carry their source thread.
+
+## 3c. Scopes can be read-only
+
+**Settled by Tyler** ("maybe our scopes should be able to define read/write? … ok yeah object is probably better"). An entry in any `scopes` array is a plain string (read and write, as today) or an object:
+
+```ts
+type ScopeEntry = string | { tag: string; access: 'read' };
+scopes: [{ tag: 'org:self', access: 'read' }, 'team:self:director', 'agent:alex']
+```
+
+**No write-only access.** A write-only tag would let a run write records it can't read back, so `knowledge_read` on its own write returns `{found:false}` and the agent loses its own context. No Director or Factory case needs it, and it adds a third state to every check. If a "drop box" is ever needed, a scope owned by someone else does it: the writer holds a write-only right through ownership, not a tag. So `access` takes only `'read'`; leaving it out means read and write.
+
+**What `read` means.**
+- **Visibility: unchanged.** A read-only tag counts in the query scope exactly like a plain one; a record carrying it is visible under the same subset rule (`isKnowledgeScopeVisible`). Hiding nothing on read is the point.
+- **Default writes leave it out.** A write with no `scope` argument lands at every *writable* run tag. A member holding `[{org:self, read}, team:self:director, agent:alex]` writes at `[team:self:director, agent:alex]`.
+- **The model can't write there.** A `scope` argument (D10) naming a read-only tag on a write, append, remove, rescope, merge or pin tool is refused with an error naming the tag ("`org:self` is read-only for this run"). Reads may name it.
+- **Ownership needs write.** A read-only tag never acts as an ownership principal (§3, D13). Otherwise a member holding `org:self` read-only could read every `team:self:*` through org's ownership, which is the team-separation hole Kayle found. A read-only `org:self` makes visible only records that carry `org:self`; it reaches no owned scope.
+- **Identity tags stay plain.** `resource:` and `thread:` are Memory's identity and can't be read-only; an object entry for them is refused by `resolveAgentScopes` with `AGENT_SCOPES_INVALID`.
+
+**Where it goes in the API.** One entry type everywhere a list of scopes is accepted:
+- Agent `scopes` (`types.ts:838-841`, `DynamicArgument<ScopeEntry[]>`), per-call `scopes` (`agent.types.ts:467-472`, `:620-625`), and `SendAgentSignalOptions.scopes` (`types.ts:207-230`).
+- `createMastraCode({ knowledge: { instance, scopes } })` and the session's `defaultScopes`/`requiredScopes`.
+- `session.sendMessage({ content, scopes })`; the remote host check (`allowedMessageScopeTypes`) applies to the tag, and the host may also narrow an entry to read.
+- `knowledge.createTools({ scope })` takes entries too and only narrows: it can fix a tag as read for these tools, never widen one.
+- `parseAgentScope` (`scopes.ts:116`) accepts the object form and normalizes to `{ tag, access: 'read' | 'readwrite' }`; everything downstream uses the normalized form.
+
+**How it's carried in the trusted run context.** `mastra__scopes` stays a `string[]` of tags, so code that reads it today keeps working. Next to it, `setRunAgentScopes` writes `mastra__scopeAccess`, a frozen `Record<tag, 'read'>` listing only the read-only tags, and marks both objects in the same `runScopeValues` WeakSet (`scopes.ts:51-56`). `getRunAgentScopes` returns `{ tag, access }[]` only when both are marked; an unmarked access map is ignored and the run is treated as having no tags at all, so a caller can't forge `readwrite` by dropping the map. `AgentScopesSnapshot` stores the access map, and `restoreRunAgentScopes` (`:68`) re-marks it after a durable resume.
+
+**Combining the three sources** (agent config, `mastra__scopes` request context, per-call option; `resolveAgentScopes` `:201-215`), plus session defaults/required and per-message scopes:
+- Union by tag. If **any** harness source gives a tag as read, it's read. The narrowest wins; nothing widens a read entry into readwrite.
+- The model's `scope` argument only selects from the result and can never widen.
+- Resume: the snapshot is authoritative, as today. A resumed run can narrow a tag to read but not widen it; trying to widen throws `AGENT_SCOPES_CONFLICT`.
+- Per-message: a message whose entries differ from the active run's, by tag **or** by access, is a `scope-mismatch` (§3) and starts its own run.
+
+**The `org:local` default.** This doesn't replace it. The per-type default (line 132) keeps local Knowledge visible when the caller gives no `org:`, and the two-org collision it fixed is about tag types, not access. It does simplify the Director: members hold `{ tag: 'org:self', access: 'read' }` and see the org's shared knowledge without being able to write org-wide or reach the teams org owns. The director session holds `org:self` read/write and decides what's org-wide, plus its team for its own writes.
+
+**Pins.** Pins are records at the pin tags, so pins at a read-only tag are delivered (visible) but not writable. Default pin tags are the writable run tags except `thread`. `knowledge_pin`, `edit_pin` and `unpin` naming a read-only tag are refused, and editing or unpinning a visible pin whose tags include a read-only tag is refused too. A member sees the director's org pins but can't change them.
+
+**Ownership (D13) with access.** The effective right on an owned scope is the role the structure gives the principal, and only if the run holds that principal tag writable. Reaching `team:self:*` from `org:self` needs `org:self` read/write. The director session has it; members holding `org:self` read-only don't.
 
 ## 3a. The store accepts any tag
 
@@ -254,7 +293,7 @@ Counted with `estimateTokenCount` from tokenx, which is already a core dependenc
 | Token limits | Alpha | Recheck importers that write long record text against the 250-token limit |
 | Factory Knowledge routes (rungs removed, `selectedView` by tag type, subset containment, org-tag refusal) | Alpha | Wave 2's Factory routes and UI scope lens rebase onto them |
 
-**Kayle's Director dogfood plan.** The alpha is meant to carry everything it needs. Each member run passes its tags through `scopes` (`team:self:<team>`, `agent:<name>`, `request:r25`; only the director session also holds `org:self`) and the store accepts them. The director's `org:self` owns the team scopes through the structure and reaches them with the tools' `scope` argument. LibSQL (Tyler's pick) needs no adapter change. Pins work with or without Memory. Kayle is sending a gap list through the director; anything on it not covered here is added before Build it.
+**Kayle's Director dogfood plan.** The alpha is meant to carry everything it needs. Each member run passes its tags through `scopes` (`{ tag:'org:self', access:'read' }`, `team:self:<team>`, `agent:<name>`, `request:r25`; only the director session holds `org:self` read/write) and the store accepts them. The director's `org:self` owns the team scopes through the structure and reaches them with the tools' `scope` argument. LibSQL (Tyler's pick) needs no adapter change. Pins work with or without Memory. Kayle is sending a gap list through the director; anything on it not covered here is added before Build it.
 
 ## 6. Tests to add
 
@@ -288,6 +327,16 @@ For each, a red control showing the test fails without the change.
 - 4 processes on one LibSQL file, 50 writes each, concurrent startup reconcile: 200 records, one structure, no errors.
 - A lock held past the timeout: the other process's write fails with `SQLITE_BUSY`, no hang, no corruption.
 - A store built from an injected `{ client }` is flagged by the test as having no busy timeout; the Director builds from the URL.
+
+**Read-only scopes** (§3c)
+- A record at `[org:self]` is visible to a run holding `{ tag:'org:self', access:'read' }`, so a read-only tag hides nothing.
+- That run's default write lands at its writable tags only, without `org:self`.
+- A `scope` argument naming `org:self` on `knowledge_create`/`append`/`remove`/`rescope`/`merge_nodes`/`pin` is refused with the tag named; on `knowledge_search`/`read` it's accepted.
+- Union narrowing: `org:self` readwrite in agent config plus read-only per-call makes it read-only, in all three source orders; a model `scope` arg can't widen it; a resume can't widen it.
+- A forged `mastra__scopes` without a marked access map gives no tags; a marked access map stays read after JSON round-trip and durable resume.
+- `resource:`/`thread:` as object entries are refused.
+- Director shape: a member `[{org:self,read}, team:self:director, agent:alex]` writes at team/agent, sees org records and director org pins, and can't reach `team:self:other`. The director session `[org:self, team:self:director]` sees members' team writes through ownership and writes org-wide. Pins at `org:self` can't be edited by the member.
+- A message with the same tags but different access during an active run gets `scope-mismatch`.
 
 **Structure and ownership**
 - A run tag or `scope` value with a `$`-leading segment (`team:$org:director`, `team:acme:$x-y`) is refused at canonicalize and by the tools' `scope` validator.
@@ -336,6 +385,7 @@ For each, a red control showing the test fails without the change.
 | D7 | Pins without Memory | settled by Tyler: the pins provider moves to core and pins work without Memory, through an opt-in in-run state-signal path (snapshot every call) | |
 | D9 | Rows written only with the experimental Subconscious flag on: Factory Knowledge under `resource:<projectId>`, and rows with `:uncurated` companion entries | accept that they go out of view | migrate them: rewrite `resource:<projectId>` → `project:<projectId>` (keeps project isolation under D14 (a)) and strip `:uncurated` entries. Under D14 (b) the only migration is stripping `resource:<projectId>`, which makes project-private rows visible to every project in the org |
 | D10 | Who fills the tools' `scope` argument | **settled by Tyler:** the harness supplies the run's access, the model picks a scope within it; an app can fix it with `createTools({ scope })` | — |
+| D15 | Read/write access on scopes | **settled by Tyler:** an entry is a string (read and write) or `{ tag, access: 'read' }`. No write-only. The narrowest harness source wins and the model never widens. A read-only tag is never an ownership principal (§3c) | — |
 | D13 | How "org owns team scopes" is held | **settled by Tyler:** computed at call time from the structure's `access`; nothing stored, works on every adapter. When Wave 2's stored grants land they are unioned with this check (config stays the single source for type-level rules) | — |
 | D14 | Project isolation in Factory | (a) Factory declares `project:$projectId` and stamps `project:<id>` as a required tag on its sessions; routes read `project:` instead of `resource:<projectId>`; isolation unchanged from today | (b) no project isolation: every project in an org reads the same org-level Knowledge, a visibility change from today that needs Tyler's explicit yes |
 | D12 | Tags whose type the structure doesn't declare | allowed (main's `custom` fallback); only ownership needs a declaration | strict: refuse undeclared types, so every scope type is in the structure |
