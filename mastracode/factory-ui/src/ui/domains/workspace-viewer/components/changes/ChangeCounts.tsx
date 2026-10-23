@@ -1,7 +1,7 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { pluralize } from '@mastra/playground-ui/utils/string';
 
 import type { WorkspaceChange } from '../../../../../api/types';
-import { pluralize } from './pluralize';
 
 export function ChangeCounts({
   additions,

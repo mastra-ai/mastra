@@ -1,11 +1,11 @@
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { pluralize } from '@mastra/playground-ui/utils/string';
 import { ListTree } from 'lucide-react';
 import { useState } from 'react';
 
 import type { WorkspaceChangesScope } from '../../../../../../api/types';
 import { useWorkspacePatches } from '../../../../../../hooks/use-fs';
-import { pluralize } from '../pluralize';
 import type { RepositoryProviders } from '../tree/change-tree';
 import { ChangeTree } from '../tree/ChangeTree';
 

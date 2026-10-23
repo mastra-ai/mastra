@@ -14,7 +14,11 @@ export function ChangesTotals({ workspacePath, scope, visible }: ChangesTotalsPr
   const patches = useWorkspacePatches(workspacePath, scope, { enabled: visible });
 
   if (patches.isLoading) return null;
-  if (patches.isFetching) return <Spinner size="sm" />;
-  if (patches.error || !patches.data?.changes.length) return null;
-  return <ChangeCounts additions={patches.data.additions} deletions={patches.data.deletions} />;
+  const totals = patches.error ? undefined : patches.data;
+  return (
+    <>
+      {totals?.changes.length ? <ChangeCounts additions={totals.additions} deletions={totals.deletions} /> : null}
+      {patches.isFetching ? <Spinner size="sm" /> : null}
+    </>
+  );
 }
