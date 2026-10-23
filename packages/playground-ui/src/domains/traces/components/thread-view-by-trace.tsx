@@ -19,8 +19,8 @@ import { Icon } from '@/ds/icons/Icon';
 import { ScorersIcon } from '@/ds/icons/ScorersIcon';
 import { useLinkComponent } from '@/lib/framework';
 
-// `queryTraces` requires a time range and rejects ranges over 31 days; the legacy endpoint is left unbounded.
-const THREAD_WINDOW_MS = 31 * 24 * 60 * 60 * 1000;
+// `queryTraces` requires a time range; start at the epoch so it covers the whole thread, like the legacy endpoint.
+const THREAD_WINDOW_FROM = new Date(0).toISOString();
 
 export interface ThreadViewByTraceProps {
   threadId: string;
@@ -53,13 +53,13 @@ export function ThreadViewByTrace({
   const legacyFilters = useMemo<UseTracesListSourceArgs['legacyFilters']>(() => ({ threadId }), [threadId]);
   const { rows, isLoading, isPlaceholderData, error, hasNextPage, isFetchingNextPage, fetchNextPage } =
     useTracesListSource({
-      initialAutoRefetch: false,
+      autoRefetch: false,
       withQueryTrace,
       legacyFilters,
       limit: pageSize,
       query: now => ({
         timeRange: {
-          from: new Date(now.getTime() - THREAD_WINDOW_MS).toISOString(),
+          from: THREAD_WINDOW_FROM,
           to: now.toISOString(),
         },
         where: { op: 'eq', left: { path: 'threadId' }, right: { literal: threadId } },

@@ -2,9 +2,10 @@ import * as fs from 'node:fs/promises';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { loadSessionInstructions } from '@mastra/code-sdk/agents/prompts/agent-instructions';
 import { RequestContext } from '@mastra/core/request-context';
-import { LocalSandbox } from '@mastra/core/workspace';
-import type { LocalFilesystem } from '@mastra/core/workspace';
+import { FactorySandbox, LocalSandbox } from '@mastra/core/workspace';
+import type { FactorySandboxContext, LocalFilesystem } from '@mastra/core/workspace';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -79,6 +80,7 @@ const mocks = vi.hoisted(() => ({
   }),
   materializeRepo: vi.fn(async (_input: unknown) => {}),
   checkoutSessionBranch: vi.fn(async () => {}),
+  syncEnvironmentRepository: vi.fn(async () => ({ outcome: 'created' as const, branch: 'factory/issue-7' })),
   runSetupCommand: vi.fn(async () => {}),
   runTeardownCommand: vi.fn(async () => {}),
   /** Released sandboxes claimable by new sessions; claim() consumes matches. */
@@ -86,6 +88,12 @@ const mocks = vi.hoisted(() => ({
     cloneUrl: 'https://github.com/octocat/hello.git',
     authorization: { scheme: 'bearer' as const, token: `repo-token-${repositoryId}` },
   })),
+  /** Environment-wide grant, offered by the fake provider while `wideTokens` is true. */
+  getRepositoriesAccess: vi.fn(async ({ repositoryIds }: { repositoryIds: string[] }) => ({
+    cloneUrl: 'https://github.com/octocat/hello.git',
+    authorization: { scheme: 'bearer' as const, token: `env-token-${repositoryIds.join('+')}` },
+  })),
+  wideTokens: true,
   mintInstallationToken: vi.fn(async () => 'gh-token'),
   setEnv: vi.fn(),
   /** Org GitHub PATs surfaced via integration settings; null = not configured. */
@@ -95,6 +103,9 @@ const mocks = vi.hoisted(() => ({
   runBindingRole: null as string | null,
   runBindingStatus: 'active' as 'active' | 'revoked',
   runBindingThreadId: null as string | null,
+  /** Whether the session has any binding row, even one the active lookup cannot resolve. */
+  everBound: false,
+  hasRunBindingForSession: vi.fn(async () => mocks.everBound || mocks.runBindingRole !== null),
   findActiveRunBindingForSession: vi.fn(async ({ sessionId }: { sessionId: string }) =>
     mocks.runBindingRole
       ? {
@@ -103,6 +114,7 @@ const mocks = vi.hoisted(() => ({
           orgId: 'org-1',
           threadId: mocks.runBindingThreadId ?? sessionId,
           resourceId: sessionId,
+          sessionId,
         }
       : null,
   ),
@@ -116,6 +128,7 @@ vi.mock('./integrations/github/sandbox', async importOriginal => ({
   SetupCommandError: (await importOriginal<typeof import('./integrations/github/sandbox.js')>()).SetupCommandError,
   materializeRepo: (...args: unknown[]) => (mocks.materializeRepo as any)(...args),
   checkoutSessionBranch: (...args: unknown[]) => (mocks.checkoutSessionBranch as any)(...args),
+  syncEnvironmentRepository: (...args: unknown[]) => (mocks.syncEnvironmentRepository as any)(...args),
   runSetupCommand: (...args: unknown[]) => (mocks.runSetupCommand as any)(...args),
   runTeardownCommand: (...args: unknown[]) => (mocks.runTeardownCommand as any)(...args),
 }));
@@ -123,12 +136,18 @@ vi.mock('./integrations/github/sandbox', async importOriginal => ({
 import { MaterializeError, SetupCommandError } from './integrations/github/sandbox.js';
 import { createGithubSubscriptionTools } from './integrations/github/session-subscriptions.js';
 import { requireGithubTokenInjector } from './integrations/github/token-refresh.js';
+import { CallbackFactorySandbox } from './sandbox/callback-factory-sandbox.js';
 import {
   __clearSessionSandboxesForTests,
   evictSessionSandbox,
   hasFailedSetupCommand,
   recordFailedSetupCommand,
 } from './sandbox/session-sandbox.js';
+import {
+  __clearSessionEnvironmentsForTests,
+  peekSessionEnvironment,
+  peekSessionEnvironmentTeardown,
+} from './session/environment-state-processor.js';
 import {
   createWorkspaceFactory,
   FactorySkillSource,
@@ -169,11 +188,15 @@ afterEach(async () => {
   mocks.localRoot = null;
   mocks.markerPresent = false;
   __clearSessionSandboxesForTests();
+  __clearSessionEnvironmentsForTests();
   mocks.materializeRepo.mockClear();
   mocks.checkoutSessionBranch.mockClear();
+  mocks.syncEnvironmentRepository.mockClear();
   mocks.runSetupCommand.mockClear();
   mocks.runTeardownCommand.mockClear();
   mocks.getRepositoryAccess.mockClear();
+  mocks.getRepositoriesAccess.mockClear();
+  mocks.wideTokens = true;
   mocks.mintInstallationToken.mockClear();
   mocks.setEnv.mockClear();
   mocks.githubPat = null;
@@ -181,7 +204,9 @@ afterEach(async () => {
   mocks.runBindingRole = null;
   mocks.runBindingStatus = 'active';
   mocks.runBindingThreadId = null;
+  mocks.everBound = false;
   mocks.findActiveRunBindingForSession.mockClear();
+  mocks.hasRunBindingForSession.mockClear();
 });
 
 function createRequestContext(projectPath: string) {
@@ -208,7 +233,9 @@ function createGithubRequestContext(
   const state: Record<string, unknown> = { factoryProjectId: projectId };
   requestContext.set('controller', {
     modeId: 'build',
-    resourceId: sessionId,
+    // Factory sessions run under the Factory resource and are addressed by their own id.
+    resourceId: projectId,
+    sessionId,
     threadId: sessionId,
     getState: () => state,
     setState: async (updates: Record<string, unknown>) => {
@@ -230,6 +257,7 @@ function createUnscopedGithubRequestContext(projectId: string, projectPath: stri
   requestContext.set('controller', {
     modeId: 'build',
     resourceId: projectId,
+    sessionId: projectId,
     getState,
     session: { id: projectId, state: { get: getState } },
   });
@@ -288,6 +316,7 @@ function fakeGithubIntegration() {
     id: 'github',
     versionControl: {
       getRepositoryAccess: mocks.getRepositoryAccess,
+      ...(mocks.wideTokens ? { getRepositoriesAccess: mocks.getRepositoriesAccess } : {}),
     },
     mintInstallationToken: (...args: unknown[]) => mocks.mintInstallationToken(...(args as [])),
     getInstallationOctokit: vi.fn(),
@@ -324,6 +353,7 @@ function fakeGithubIntegration() {
               }
             : null;
         }),
+        setBuildStatus: vi.fn(async () => null),
       },
       connections: {
         get: vi.fn(async () => ({
@@ -358,6 +388,7 @@ describe('bundled Factory skill assets', () => {
       'factory-plan',
       'factory-rereview',
       'factory-review',
+      'factory-self-review',
       'factory-triage',
     ]);
     await Promise.all(
@@ -991,9 +1022,12 @@ describe('GitHub session workspace preparation', () => {
     mocks.localRoot = root;
     const github = fakeGithubIntegration();
     const resolver = createWorkspaceFactory({
-      sandbox: mocks.createSandbox as any,
+      sandbox: new CallbackFactorySandbox(mocks.createSandbox as any),
       github: github as any,
-      workItems: { findActiveRunBindingForSession: mocks.findActiveRunBindingForSession } as any,
+      workItems: {
+        findActiveRunBindingForSession: mocks.findActiveRunBindingForSession,
+        hasRunBindingForSession: mocks.hasRunBindingForSession,
+      } as any,
       ...(workspaceRegistry ? { workspaceRegistry } : {}),
     });
     return {
@@ -1010,8 +1044,15 @@ describe('GitHub session workspace preparation', () => {
     addSession({ id: 'session-a', branch: 'feature-a' });
     addSession({ id: 'session-b', branch: 'feature-b' });
 
+    const create = vi.spyOn(CallbackFactorySandbox.prototype, 'create');
     const workspaceA = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') });
     const workspaceB = await workspace({ requestContext: createGithubRequestContext('project-1', 'session-b') });
+
+    // Boot goes through the FactorySandbox contract: the context plus the
+    // environment's settings document (empty on this surface).
+    expect(create).toHaveBeenCalledTimes(2);
+    expect(create).toHaveBeenNthCalledWith(1, expect.objectContaining({ sessionId: 'session-a' }), {});
+    create.mockRestore();
 
     const workdirA = path.join(root, 'session-a', 'hello');
     const workdirB = path.join(root, 'session-b', 'hello');
@@ -1062,7 +1103,7 @@ describe('GitHub session workspace preparation', () => {
     }));
     const workspace = eager(
       createWorkspaceFactory({
-        sandbox: mocks.createSandbox as any,
+        sandbox: new CallbackFactorySandbox(mocks.createSandbox as any),
         sourceControls: [
           {
             id: 'gitlab',
@@ -1244,6 +1285,54 @@ describe('GitHub session workspace preparation', () => {
     expect(await workspace.skills?.get('factory-review')).toBeFalsy();
     expect(await workspace.skills?.get('factory-rereview')).toBeFalsy();
     expect((await workspace.skills?.get('factory-plan'))?.instructions).toContain('# Factory Plan');
+  });
+
+  it('exposes review skills to an unbound side session a user session started', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a', originSessionId: 'user-session', originThreadId: 'user-thread' });
+
+    const workspace = (await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') }))!;
+    await workspace.skills?.maybeRefresh();
+
+    expect((await workspace.skills?.get('factory-review'))?.instructions).toBeTruthy();
+    expect((await workspace.skills?.get('factory-rereview'))?.instructions).toBeTruthy();
+  });
+
+  it('keeps review skills hidden from a side session bound to a work role', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a', originSessionId: 'user-session', originThreadId: 'user-thread' });
+    mocks.runBindingRole = 'work';
+
+    const workspace = (await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') }))!;
+    await workspace.skills?.maybeRefresh();
+
+    expect(await workspace.skills?.get('factory-review')).toBeFalsy();
+  });
+
+  it('keeps review skills hidden from a side session whose active binding is ambiguous', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a', originSessionId: 'user-session', originThreadId: 'user-thread' });
+    // Several active bindings: the active lookup returns null, but the session is bound.
+    mocks.everBound = true;
+
+    const workspace = (await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') }))!;
+    await workspace.skills?.maybeRefresh();
+
+    expect(await workspace.skills?.get('factory-review')).toBeFalsy();
+  });
+
+  it('keeps review skills hidden from an unbound user session', async () => {
+    const { resolver } = await createLocalFactory();
+    addProject();
+    addSession({ id: 'session-a' });
+
+    const workspace = (await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') }))!;
+    await workspace.skills?.maybeRefresh();
+
+    expect(await workspace.skills?.get('factory-review')).toBeFalsy();
   });
 
   it('exposes review skills to a review session before it has a live thread', async () => {
@@ -1528,26 +1617,20 @@ describe('GitHub session workspace preparation', () => {
     expect(sandbox.executeCommand).toHaveBeenCalled();
   });
 
-  it('authorizes a workspace-free supervisor session before controller session creation', async () => {
-    const projects = { get: vi.fn().mockResolvedValue({ id: 'project-1', orgId: 'org-1' }) };
-    const resolver = createWorkspaceFactory({ projects: projects as any });
-    const requestContext = createGithubRequestContext('project-1', 'factory-supervisor:project-1');
+  it('opens no workspace for a project-keyed resourceId from a retired session kind', async () => {
+    const projects = { get: vi.fn() };
+    const sourceControl = fakeGithubIntegration().sourceControlStorage;
+    const getBySessionId = vi.spyOn(sourceControl.sessions, 'getBySessionId');
+    const resolver = createWorkspaceFactory({
+      projects: projects as any,
+      sourceControls: [{ id: 'github', versionControl: {} as any, storage: sourceControl as any }],
+    });
+    const requestContext = createGithubRequestContext('project-1', 'factory-retired-kind:project-1');
 
     await expect(resolver({ requestContext } as any)).resolves.toBeUndefined();
-    expect(projects.get).toHaveBeenCalledWith({ orgId: 'org-1', id: 'project-1' });
-  });
-
-  it('refuses a workspace-free supervisor session outside the caller organization', async () => {
-    const projects = { get: vi.fn().mockResolvedValue(null) };
-    const resolver = createWorkspaceFactory({ projects: projects as any });
-    const requestContext = createGithubRequestContext('project-1', 'factory-supervisor:project-1', {
-      organizationId: 'org-2',
-      workosId: 'user-1',
-    });
-
-    await expect(resolver({ requestContext } as any)).rejects.toThrow(
-      'Factory supervisor project-1 is not available to the current user',
-    );
+    expect(getBySessionId).toHaveBeenCalledWith('factory-retired-kind:project-1');
+    expect(projects.get).not.toHaveBeenCalled();
+    expect(mocks.materializeRepo).not.toHaveBeenCalled();
   });
 
   it('opens the session for a session-shaped auth user, whose org lives on the session half', async () => {
@@ -1706,6 +1789,16 @@ describe('GitHub session workspace preparation', () => {
     expect(hasFailedSetupCommand('session-x', 'corepack enable && pnpm install')).toBe(false);
     evictSessionSandbox('session-x');
     expect(hasFailedSetupCommand('session-x', 'pnpm install')).toBe(false);
+  });
+
+  it('remembers every failed setup command of a session, not only the latest', () => {
+    // An environment boot records the primary, per-repository and workspace
+    // commands; a second failure must not make the first one run again.
+    recordFailedSetupCommand('session-y', 'pnpm install');
+    recordFailedSetupCommand('session-y', 'workspace:pnpm -r build');
+    expect(hasFailedSetupCommand('session-y', 'pnpm install')).toBe(true);
+    expect(hasFailedSetupCommand('session-y', 'workspace:pnpm -r build')).toBe(true);
+    evictSessionSandbox('session-y');
   });
 
   it('an infra failure inside setup is not recorded and retries in full', async () => {
@@ -1943,7 +2036,7 @@ describe('GitHub session workspace preparation', () => {
     // No localRoot: the factory takes the remote path (in-VM workdirs).
     return eager(
       createWorkspaceFactory({
-        sandbox: mocks.createSandbox as any,
+        sandbox: new CallbackFactorySandbox(mocks.createSandbox as any),
         github: fakeGithubIntegration() as any,
         workItems: { findActiveRunBindingForSession: mocks.findActiveRunBindingForSession } as any,
       }),
@@ -2463,7 +2556,13 @@ describe('GitHub session workspace preparation', () => {
     const workspace = await resolver({ requestContext });
     const tools = createGithubSubscriptionTools(requestContext, integration);
 
-    expect(Object.keys(tools)).toEqual(['github_refresh_token']);
+    // Subscriptions gate on the factory, so a factory session always has them beside refresh.
+    expect(Object.keys(tools)).toEqual([
+      'github_refresh_token',
+      'github_upsert_factory_triage_comment',
+      'github_subscribe_pr',
+      'github_unsubscribe_pr',
+    ]);
     await expect(tools.github_refresh_token!.execute!({}, {} as never)).rejects.toThrow(
       'active Factory sandbox workspace',
     );
@@ -2526,7 +2625,9 @@ describe('GitHub session workspace preparation', () => {
     const integration = github as unknown as Parameters<typeof createGithubSubscriptionTools>[1];
 
     expect(await resolver({ requestContext })).toBeUndefined();
-    expect(createGithubSubscriptionTools(requestContext, integration)).toEqual({});
+    expect(Object.keys(createGithubSubscriptionTools(requestContext, integration))).not.toContain(
+      'github_refresh_token',
+    );
   });
 
   it('refreshes a Slack-shaped GitHub session after lazy startup and on later reuse', async () => {
@@ -2693,16 +2794,6 @@ describe('GitHub session workspace preparation', () => {
     ).resolves.toBeDefined();
   });
 
-  it('refuses private sessions to same-org non-owners', async () => {
-    const { workspace } = await createLocalFactory();
-    addProject();
-    addSession({ id: 'session-a', userId: 'someone-else', visibility: 'private' });
-
-    await expect(workspace({ requestContext: createGithubRequestContext('project-1', 'session-a') })).rejects.toThrow(
-      /Factory session session-a is not available/,
-    );
-  });
-
   it('refuses cross-org callers regardless of visibility', async () => {
     const { workspace } = await createLocalFactory();
     addProject();
@@ -2793,7 +2884,7 @@ describe('GitHub session workspace preparation', () => {
       tempDirs.push(root);
       mocks.localRoot = root;
       return createWorkspaceFactory({
-        sandbox: mocks.createSandbox as any,
+        sandbox: new CallbackFactorySandbox(mocks.createSandbox as any),
         github: fakeGithubIntegration() as any,
         workItems: { findActiveRunBindingForSession: mocks.findActiveRunBindingForSession } as any,
         ...(sandboxStart !== undefined ? { sandboxStart } : {}),
@@ -3133,6 +3224,7 @@ describe('FactorySkillSource layering', () => {
       'factory-plan',
       'factory-rereview',
       'factory-review',
+      'factory-self-review',
       'factory-triage',
     ]);
     expect(await source.exists(path.join(mount, 'my-custom-skill', 'SKILL.md'))).toBe(false);
@@ -3233,5 +3325,764 @@ describe('FactorySkillSource layering', () => {
     expect(resolveLocalFactorySkillsPath(path.join(tmpDir, 'src', 'mastra', 'public'))).toBe(skillsDir);
     // No local root anywhere.
     expect(resolveLocalFactorySkillsPath(path.join(tmpDir, 'src'))).toBeUndefined();
+  });
+});
+
+describe('factory environment sandbox context', () => {
+  /** Records every `create(ctx, settings)` call and hands the sandbox construction to the shared mock. */
+  class RecordingFactorySandbox extends FactorySandbox<Record<string, unknown>> {
+    readonly provider = 'recording';
+    readonly calls: Array<{ ctx: FactorySandboxContext; settings: Record<string, unknown> }> = [];
+    create(ctx: FactorySandboxContext, settings: Record<string, unknown>) {
+      this.calls.push({ ctx, settings });
+      return mocks.createSandbox(ctx);
+    }
+  }
+
+  /**
+   * A factory with ordered environment links. The session's own link
+   * (`project-1`, the D1 bridge) is the position-1 repository; the fixture
+   * answers `listByProject` and per-id repository lookups on top of the
+   * single-link stubs above.
+   */
+  function environmentFixture(options: {
+    links: Array<{
+      id: string;
+      repositoryId: string;
+      slug: string;
+      position: number;
+      inEnvironment: boolean;
+      setupCommand?: string;
+      teardownCommand?: string;
+    }>;
+    project?: Record<string, unknown>;
+    workspaceRegistry?: FactoryWorkspaceRegistry;
+  }) {
+    const github = fakeGithubIntegration();
+    const repositories = new Map(
+      options.links.map(link => [link.repositoryId, { id: link.repositoryId, slug: link.slug, defaultBranch: 'main' }]),
+    );
+    github.sourceControlStorage.repositories.get = vi.fn(
+      async ({ id }: { id: string }) => repositories.get(id) ?? null,
+    );
+    (github.sourceControlStorage.projectRepositories as any).listByProject = vi.fn(async () =>
+      options.links.map(link => ({
+        id: link.id,
+        connectionId: 'connection-1',
+        repositoryId: link.repositoryId,
+        branch: null,
+        position: link.position,
+        inEnvironment: link.inEnvironment,
+        setupCommand: link.setupCommand ?? null,
+        teardownCommand: link.teardownCommand ?? null,
+        createdAt: new Date(0),
+      })),
+    );
+    const project = {
+      id: 'factory-1',
+      orgId: 'org-1',
+      sandboxWorkingDirectory: '/workspace',
+      workspaceSetupCommand: 'touch .workspace-ready',
+      ...options.project,
+    };
+    const projects = { get: vi.fn(async ({ id }: { id: string }) => (id === project.id ? project : null)) };
+    const sandbox = new RecordingFactorySandbox();
+    const resolver = createWorkspaceFactory({
+      sandbox,
+      github: github as any,
+      projects: projects as any,
+      workspaceRegistry: options.workspaceRegistry,
+    });
+    return { resolver, projects, sandbox, github };
+  }
+
+  const twoLinks = [
+    {
+      id: 'project-1',
+      repositoryId: 'repository-1',
+      slug: 'octocat/hello',
+      position: 1,
+      inEnvironment: true,
+      setupCommand: 'pnpm i',
+    },
+    { id: 'link-2', repositoryId: 'repository-2', slug: 'octocat/docs', position: 2, inEnvironment: true },
+    { id: 'link-3', repositoryId: 'repository-3', slug: 'octocat/legacy', position: 3, inEnvironment: false },
+  ];
+
+  it.each([false, true])('does not publish a retired boot over a replacement: %s', async reopen => {
+    const workspaceRegistry = new FactoryWorkspaceRegistry();
+    const { resolver } = environmentFixture({
+      links: twoLinks.map(link => ({ ...link, teardownCommand: 'echo old-teardown' })),
+      workspaceRegistry,
+    });
+    addProject({ setupCommand: 'pnpm i' });
+    addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+    let release!: () => void;
+    let entered!: () => void;
+    const blocked = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    const started = new Promise<void>(resolve => {
+      entered = resolve;
+    });
+    mocks.materializeRepo.mockImplementationOnce(async () => {
+      entered();
+      await blocked;
+    });
+    const workspace = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    const boot = workspace!.sandbox!.getInfo!();
+    const rejected = expect(boot).rejects.toThrow('retired during workspace materialization');
+    await started;
+    await workspaceRegistry.invalidateSession('session-a');
+    expect(peekSessionEnvironment('session-a')).toBeUndefined();
+    if (reopen) {
+      const replacement = environmentFixture({
+        links: [{ ...twoLinks[0]!, teardownCommand: 'echo new-teardown' }],
+        workspaceRegistry,
+      });
+      const next = await replacement.resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      await next!.sandbox!.getInfo!();
+    }
+    const state = peekSessionEnvironment('session-a');
+    const teardown = peekSessionEnvironmentTeardown('session-a');
+    release();
+    await rejected;
+    expect(peekSessionEnvironment('session-a')).toBe(state);
+    expect(peekSessionEnvironmentTeardown('session-a')).toEqual(teardown);
+    if (reopen) expect(state?.repositories.map(repo => repo.slug)).toEqual(['octocat/hello']);
+  });
+
+  it('looks for project skills inside every checkout of an environment session, its own first', async () => {
+    const { resolver } = environmentFixture({ links: twoLinks });
+    addProject({ setupCommand: 'pnpm i' });
+    addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+
+    const workspace = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    // The filesystem root is the workspace root; `hello` (the session's own)
+    // and `docs` are checkouts under it, `legacy` is outside the environment.
+    const skills = (workspace as any)._config.skills as string[];
+    expect(skills.filter(skill => skill.endsWith('/.claude/skills'))).toEqual([
+      'hello/.claude/skills',
+      'docs/.claude/skills',
+    ]);
+    expect(skills).toEqual(expect.arrayContaining(['hello/.agents/skills', 'docs/.agents/skills']));
+    expect(skills).not.toContain('.claude/skills');
+    expect(skills.some(skill => skill.startsWith('legacy/'))).toBe(false);
+  });
+
+  it("loads every checkout's AGENTS.md into the session prompt, its own first", async () => {
+    const root = await fs.mkdtemp(path.join(os.tmpdir(), 'factory-env-instructions-'));
+    tempDirs.push(root);
+    for (const [dir, text] of [
+      ['hello', 'HELLO: run pnpm test'],
+      ['docs', 'DOCS: keep headings sentence case'],
+    ] as const) {
+      await fs.mkdir(path.join(root, dir), { recursive: true });
+      await fs.writeFile(path.join(root, dir, 'AGENTS.md'), text);
+    }
+    const { resolver } = environmentFixture({ links: twoLinks });
+    addProject({ setupCommand: 'pnpm i' });
+    addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+    const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+    // A remote workdir is known once the sandbox starts; the next resolution pins it.
+    const workspace = await resolver({ requestContext });
+    await workspace!.sandbox!.getInfo!();
+    await resolver({ requestContext });
+
+    const state = (requestContext.get('controller') as { getState: () => Record<string, any> }).getState();
+    expect(state.instructionRoots).toEqual(['hello', 'docs']);
+    // The same call the SDK system prompt makes with this state, against a
+    // workspace root laid out the way the sandbox lays it out.
+    const sources = loadSessionInstructions({
+      workingDir: root,
+      instructionRoots: state.instructionRoots,
+      skipGlobal: true,
+    });
+    expect(sources.map(source => source.content)).toEqual([
+      'HELLO: run pnpm test',
+      'DOCS: keep headings sentence case',
+    ]);
+  });
+
+  it('builds the list-form context from every inEnvironment link in position order', async () => {
+    const { resolver, sandbox } = environmentFixture({
+      links: [...twoLinks].reverse(),
+      project: { sandboxSettings: { cpuCount: 2, idleTimeoutMinutes: 45 } },
+    });
+    addProject({ setupCommand: 'pnpm i' });
+    addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+
+    await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    expect(mocks.createSandbox).toHaveBeenCalledTimes(1);
+    const ctx = mocks.createSandbox.mock.calls[0]![0] as any;
+    expect(ctx).toMatchObject({
+      sessionId: 'session-a',
+      repoFullName: 'octocat/hello',
+      workspaceSetupCommand: 'touch .workspace-ready',
+      continueOnSetupFailure: true,
+      workingDirectory: '/workspace',
+    });
+    // Resources are the stored settings document handed to create(ctx, settings), never context keys.
+    expect('cpuCount' in ctx).toBe(false);
+    expect('memoryMB' in ctx).toBe(false);
+    expect('idleTimeoutMinutes' in ctx).toBe(false);
+    expect(Object.keys(ctx).sort()).toEqual([
+      'continueOnSetupFailure',
+      'getRepositoryAccess',
+      'repoFullName',
+      'repos',
+      'sandboxId',
+      'sessionId',
+      'setupCommand',
+      'workingDirectory',
+      'workspaceSetupCommand',
+    ]);
+    expect(sandbox.calls).toHaveLength(1);
+    expect(sandbox.calls[0]!.ctx).toBe(ctx);
+    expect(sandbox.calls[0]!.settings).toEqual({ cpuCount: 2, idleTimeoutMinutes: 45 });
+    // Mutually exclusive for the template: the key is present and undefined.
+    expect('getRepositoryAccess' in ctx).toBe(true);
+    expect(ctx.getRepositoryAccess).toBeUndefined();
+    expect(ctx.setupCommand).toBeUndefined();
+    expect(ctx.repos).toHaveLength(2);
+    expect(ctx.repos[0]).toMatchObject({ setupCommand: 'pnpm i' });
+    expect('setupCommand' in ctx.repos[1]).toBe(false);
+    // Each entry mints its own repository's token.
+    await expect(ctx.repos[0].getRepositoryAccess()).resolves.toMatchObject({
+      authorization: { token: 'repo-token-repository-1' },
+    });
+    await expect(ctx.repos[1].getRepositoryAccess()).resolves.toMatchObject({
+      authorization: { token: 'repo-token-repository-2' },
+    });
+    expect(mocks.getRepositoryAccess).toHaveBeenCalledWith({ orgId: 'org-1', repositoryId: 'repository-2' });
+  });
+
+  it('passes no working directory or workspace setup when the project leaves them unset', async () => {
+    const { resolver, sandbox } = environmentFixture({
+      links: twoLinks,
+      project: {
+        sandboxWorkingDirectory: '~/relative',
+        workspaceSetupCommand: null,
+      },
+    });
+    addProject();
+    addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+
+    await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    const ctx = mocks.createSandbox.mock.calls[0]![0] as any;
+    expect(ctx).toMatchObject({ continueOnSetupFailure: true });
+    expect('workingDirectory' in ctx).toBe(false);
+    expect('workspaceSetupCommand' in ctx).toBe(false);
+    expect(ctx.repos).toHaveLength(2);
+    // No stored document: the provider receives an empty one and applies its own defaults.
+    expect(sandbox.calls[0]!.settings).toEqual({});
+  });
+
+  it('keeps the single-repository context when no link is in the environment or the session has no factory', async () => {
+    const { resolver, sandbox } = environmentFixture({
+      links: twoLinks.map(link => ({ ...link, inEnvironment: false })),
+      project: { sandboxSettings: { memoryMb: 4096 } },
+    });
+    addProject({ setupCommand: 'pnpm i' });
+    addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+    addSession({ id: 'session-b', factoryProjectId: null });
+
+    await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+    await resolver({ requestContext: createGithubRequestContext('project-1', 'session-b') });
+
+    for (const call of mocks.createSandbox.mock.calls) {
+      const ctx = call[0] as any;
+      expect(ctx).toMatchObject({ repoFullName: 'octocat/hello', setupCommand: 'pnpm i' });
+      expect(typeof ctx.getRepositoryAccess).toBe('function');
+      expect(Object.keys(ctx).sort()).toEqual([
+        'getRepositoryAccess',
+        'repoFullName',
+        'sandboxId',
+        'sessionId',
+        'setupCommand',
+      ]);
+    }
+    // The settings belong to the project: the factory session boots with them
+    // in single-repository form too; a session without a factory gets none.
+    expect(sandbox.calls.map(call => call.settings)).toEqual([{ memoryMb: 4096 }, {}]);
+  });
+
+  it('boots a session whose own link left the environment in single-repository form, still with the settings', async () => {
+    const { resolver, sandbox } = environmentFixture({
+      links: twoLinks.map(link => (link.id === 'project-1' ? { ...link, inEnvironment: false } : link)),
+      project: { sandboxSettings: { cpuCount: 4 } },
+    });
+    addProject({ setupCommand: 'pnpm i' });
+    addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+
+    await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+
+    const [call] = sandbox.calls;
+    expect('repos' in call!.ctx).toBe(false);
+    expect(call!.ctx).toMatchObject({ repoFullName: 'octocat/hello', setupCommand: 'pnpm i' });
+    expect(call!.settings).toEqual({ cpuCount: 4 });
+  });
+
+  describe('environment boot', () => {
+    /**
+     * Resolve the workspace, then answer the marker probes the environment
+     * hook issues (per-repo markers are keyed by directory name, the
+     * workspace marker by its path) and force the lazy start.
+     */
+    async function boot(
+      resolver: (args: any) => Promise<any>,
+      markers: { repos?: Record<string, boolean>; workspace?: boolean } = {},
+    ) {
+      const workspace = await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
+      const sandbox = mocks.createSandbox.mock.results[0]!.value as { executeCommand: ReturnType<typeof vi.fn> };
+      const original = sandbox.executeCommand.getMockImplementation()!;
+      sandbox.executeCommand.mockImplementation(async (command: string, ...rest: unknown[]) => {
+        const text = String(command);
+        const repoProbe = /test -d "[^"]*\/([^/"]+)\/\.git" && test -f/.exec(text);
+        if (repoProbe) {
+          return { exitCode: markers.repos?.[repoProbe[1]!] ? 0 : 1, stdout: '', stderr: '' };
+        }
+        if (text.includes('workspace-setup"') && text.startsWith('test -f')) {
+          return { exitCode: markers.workspace ? 0 : 1, stdout: '', stderr: '' };
+        }
+        return original(command, ...rest);
+      });
+      await workspace.sandbox.getInfo();
+      return { workspace, exec: sandbox.executeCommand };
+    }
+
+    it('materializes every repository beneath the root, syncs the others with their own token and sets up once', async () => {
+      const { resolver } = environmentFixture({ links: twoLinks });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1', branch: 'factory/issue-7' });
+      mocks.syncEnvironmentRepository.mockResolvedValueOnce({ outcome: 'resumed', branch: 'factory/issue-7' });
+
+      const { workspace, exec } = await boot(resolver);
+
+      // The primary keeps today's path: materialize with the session store, then the session branch.
+      expect(mocks.materializeRepo).toHaveBeenCalledTimes(2);
+      const [primary, docs] = mocks.materializeRepo.mock.calls.map(call => call[0] as any);
+      expect(primary.row.sandboxWorkdir).toBe('/home/user/hello');
+      expect(primary.token).toBe('repo-token-repository-1');
+      expect(typeof primary.storage.markMaterialized).toBe('function');
+      expect(mocks.checkoutSessionBranch).toHaveBeenCalledWith(
+        expect.anything(),
+        '/home/user/hello',
+        expect.objectContaining({ branch: 'factory/issue-7', token: 'repo-token-repository-1' }),
+      );
+      // The secondary is cloned into its own directory with its own token and synced by the remote rule.
+      expect(docs.row.sandboxWorkdir).toBe('/home/user/docs');
+      expect(docs.repoInfo).toMatchObject({ repoFullName: 'octocat/docs', defaultBranch: 'main' });
+      expect(docs.token).toBe('repo-token-repository-2');
+      expect(mocks.syncEnvironmentRepository).toHaveBeenCalledExactlyOnceWith(
+        expect.anything(),
+        '/home/user/docs',
+        expect.objectContaining({
+          branch: 'factory/issue-7',
+          defaultBranch: 'main',
+          token: 'repo-token-repository-2',
+          repoFullName: 'octocat/docs',
+        }),
+      );
+      expect(mocks.checkoutSessionBranch).toHaveBeenCalledTimes(1);
+      // Setup: the primary's command in its directory, the workspace command at the root, nothing for docs.
+      expect(mocks.runSetupCommand.mock.calls.map(call => [call[1], call[2]])).toEqual([
+        ['/home/user/hello', 'pnpm i'],
+        ['/home/user', 'touch .workspace-ready'],
+      ]);
+      const markerWrites = exec.mock.calls.map(([command]) => String(command)).filter(c => c.includes("printf '%s'"));
+      expect(markerWrites.some(c => c.includes('/home/user/.mastra-sandbox/repos/hello'))).toBe(true);
+      expect(markerWrites.some(c => c.includes('/home/user/.mastra-sandbox/workspace-setup'))).toBe(true);
+      // D2: the session's working directory is the root; the primary checkout stays the PR tools' target.
+      expect(mocks.sessions.find(session => session.id === 'session-a')?.sandboxWorkdir).toBe('/home/user');
+      await (workspace as any).filesystem.exists('.').catch(() => {});
+      expect((workspace as any).filesystem.basePath).toBe('/home/user');
+      expect(peekSessionEnvironment('session-a')).toEqual({
+        workingDirectory: '/home/user',
+        repositories: [
+          {
+            slug: 'octocat/hello',
+            dir: '/home/user/hello',
+            branch: 'factory/issue-7',
+            defaultBranch: 'main',
+            position: 1,
+            setupStatus: 'ok',
+          },
+          {
+            slug: 'octocat/docs',
+            dir: '/home/user/docs',
+            branch: 'factory/issue-7',
+            defaultBranch: 'main',
+            position: 2,
+            setupStatus: 'skipped',
+          },
+        ],
+      });
+    });
+
+    it('roots the agent at the workspace root with its skill roots under its own checkout when the environment holds several repositories', async () => {
+      const { resolver } = environmentFixture({ links: twoLinks });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1', branch: 'factory/issue-7' });
+
+      // The remote workdir is unknown at construction: the skill roots must not depend on it.
+      const { workspace } = await boot(resolver);
+      expect((workspace as any)._config.skills).toEqual(
+        expect.arrayContaining(['hello/.mastracode/skills', 'hello/.claude/skills', 'hello/.agents/skills']),
+      );
+      expect((workspace as any)._config.skills).not.toContain('.claude/skills');
+      await (workspace as any).filesystem.exists('.').catch(() => {});
+      expect((workspace as any).filesystem.basePath).toBe('/home/user');
+
+      // The pin self-heals on the next resolution once the VM resolved its workdir.
+      const requestContext = createGithubRequestContext('project-1', 'session-a');
+      await resolver({ requestContext });
+      const ctx = requestContext.get('controller') as { getState: () => { projectPath?: string } };
+      expect(ctx.getState().projectPath).toBe('/home/user');
+    });
+
+    it('keeps the agent rooted at its checkout with unprefixed skill roots when the environment holds one repository', async () => {
+      const { resolver } = environmentFixture({
+        links: twoLinks.map(link => (link.id === 'project-1' ? link : { ...link, inEnvironment: false })),
+      });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1', branch: 'factory/issue-7' });
+
+      const { workspace } = await boot(resolver);
+      expect((workspace as any)._config.skills).toEqual(
+        expect.arrayContaining(['.mastracode/skills', '.claude/skills', '.agents/skills']),
+      );
+      expect((workspace as any)._config.skills.some((skillPath: string) => skillPath.startsWith('hello/'))).toBe(false);
+      await (workspace as any).filesystem.exists('.').catch(() => {});
+      expect((workspace as any).filesystem.basePath).toBe('/home/user/hello');
+
+      const requestContext = createGithubRequestContext('project-1', 'session-a');
+      await resolver({ requestContext });
+      const ctx = requestContext.get('controller') as { getState: () => { projectPath?: string } };
+      expect(ctx.getState().projectPath).toBe('/home/user/hello');
+    });
+
+    it('installs one GH_TOKEN covering every environment repository and re-mints it the same way on refresh', async () => {
+      const { resolver, github } = environmentFixture({ links: twoLinks });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+      const requestContext = createGithubRequestContext('project-1', 'session-a');
+
+      const workspace = await resolver({ requestContext });
+      await workspace.sandbox.getInfo();
+
+      expect(mocks.getRepositoriesAccess).toHaveBeenCalledWith({
+        orgId: 'org-1',
+        repositoryIds: ['repository-1', 'repository-2'],
+      });
+      expect(lastGhToken()).toBe('env-token-repository-1+repository-2');
+      expect(peekSessionEnvironment('session-a')?.note).toBeUndefined();
+
+      mocks.getRepositoriesAccess.mockResolvedValueOnce({
+        cloneUrl: 'https://github.com/octocat/hello.git',
+        authorization: { scheme: 'bearer', token: 'env-token-rotated' },
+      });
+      const integration = github as unknown as Parameters<typeof createGithubSubscriptionTools>[1];
+      const refresh = createGithubSubscriptionTools(requestContext, integration).github_refresh_token!;
+      expect(await refresh.execute!({}, {} as never)).toEqual({ refreshed: true });
+      expect(lastGhToken()).toBe('env-token-rotated');
+
+      // A refresh the provider can no longer widen narrows GH_TOKEN and says so.
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      mocks.getRepositoriesAccess.mockResolvedValueOnce(undefined);
+      expect(await refresh.execute!({}, {} as never)).toEqual({ refreshed: true });
+      expect(lastGhToken()).toBe('repo-token-repository-1');
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(peekSessionEnvironment('session-a')?.note).toBe(
+        'GH_TOKEN covers octocat/hello only; use the source_control_* tools for other repositories.',
+      );
+      warn.mockRestore();
+    });
+
+    it('boots on the session repository token when the environment-wide mint fails', async () => {
+      mocks.getRepositoriesAccess.mockRejectedValueOnce(new Error('installation cannot grant octocat/docs'));
+      const { resolver } = environmentFixture({ links: twoLinks });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await boot(resolver);
+
+      expect(lastGhToken()).toBe('repo-token-repository-1');
+      expect(warn).toHaveBeenCalledExactlyOnceWith(
+        '[Mastra Factory] GH_TOKEN covers the session repository only',
+        expect.objectContaining({
+          reason: 'provider failed to mint one token for this repository set (Error)',
+        }),
+      );
+      expect(peekSessionEnvironment('session-a')?.note).toBe(
+        'GH_TOKEN covers octocat/hello only; use the source_control_* tools for other repositories.',
+      );
+      warn.mockRestore();
+    });
+
+    it('falls back to the session repository token, warns once and tells the agent when one token cannot cover the environment', async () => {
+      mocks.wideTokens = false;
+      const { resolver } = environmentFixture({ links: twoLinks });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await boot(resolver);
+
+      expect(lastGhToken()).toBe('repo-token-repository-1');
+      expect(warn).toHaveBeenCalledExactlyOnceWith(
+        '[Mastra Factory] GH_TOKEN covers the session repository only',
+        expect.objectContaining({
+          sessionId: 'session-a',
+          repositories: ['octocat/hello', 'octocat/docs'],
+          reason: 'provider mints per-repository tokens only',
+        }),
+      );
+      expect(JSON.stringify(warn.mock.calls)).not.toContain('repo-token');
+      expect(peekSessionEnvironment('session-a')?.note).toBe(
+        'GH_TOKEN covers octocat/hello only; use the source_control_* tools for other repositories.',
+      );
+      warn.mockRestore();
+    });
+
+    it('skips setup where the template marker matches and runs it where the marker is missing', async () => {
+      const { resolver } = environmentFixture({
+        links: [twoLinks[0]!, { ...twoLinks[1]!, setupCommand: 'pnpm docs' }],
+      });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+
+      await boot(resolver, { repos: { hello: true, docs: false }, workspace: true });
+
+      expect(mocks.runSetupCommand.mock.calls.map(call => [call[1], call[2]])).toEqual([
+        ['/home/user/docs', 'pnpm docs'],
+      ]);
+      expect(mocks.materializeRepo).toHaveBeenCalledTimes(2);
+      expect(mocks.checkoutSessionBranch).toHaveBeenCalledTimes(1);
+    });
+
+    it('continues the boot when a secondary repository cannot be synced, and reports it in the state', async () => {
+      const { resolver } = environmentFixture({ links: twoLinks });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+      mocks.syncEnvironmentRepository.mockRejectedValueOnce(new Error('fetch failed'));
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await boot(resolver);
+
+      expect(warn).toHaveBeenCalledWith(
+        '[Mastra Factory] Environment repository could not be synced; continuing the boot',
+        expect.objectContaining({ projectRepositoryId: 'link-2', error: 'fetch failed' }),
+      );
+      expect(mocks.runSetupCommand.mock.calls.map(call => call[2])).toEqual(['pnpm i', 'touch .workspace-ready']);
+      expect(peekSessionEnvironment('session-a')?.repositories[1]).toMatchObject({
+        slug: 'octocat/docs',
+        branch: null,
+        setupStatus: 'failed',
+      });
+      warn.mockRestore();
+    });
+
+    it('records the environment for teardown even when the workspace setup command fails', async () => {
+      const { resolver } = environmentFixture({ links: twoLinks });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+      mocks.runSetupCommand.mockImplementation(async (_sandbox: unknown, _dir: string, command: string) => {
+        if (command === 'touch .workspace-ready') {
+          throw new SetupCommandError('Setup command failed (exit 1)', 'setup-failed');
+        }
+      });
+
+      await expect(boot(resolver)).rejects.toThrow(/Setup command failed/);
+
+      expect(peekSessionEnvironment('session-a')?.repositories.map(repo => repo.slug)).toEqual([
+        'octocat/hello',
+        'octocat/docs',
+      ]);
+
+      // The next start skips the failed workspace command instead of failing again.
+      mocks.runSetupCommand.mockClear();
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      await expect(boot(resolver)).resolves.toBeDefined();
+      expect(mocks.runSetupCommand.mock.calls.map(call => call[2])).not.toContain('touch .workspace-ready');
+      expect(warn).toHaveBeenCalledWith(
+        '[Mastra Factory] Skipping workspace setup command that already failed this session',
+        expect.objectContaining({ sessionId: 'session-a' }),
+      );
+      warn.mockRestore();
+      mocks.runSetupCommand.mockReset();
+    });
+
+    it('leaves out a later repository whose directory name collides with an earlier one', async () => {
+      const { resolver } = environmentFixture({
+        links: [
+          ...twoLinks,
+          { id: 'link-4', repositoryId: 'repository-4', slug: 'someone-else/docs', position: 4, inEnvironment: true },
+        ],
+      });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await boot(resolver);
+
+      expect(warn).toHaveBeenCalledWith(
+        '[Mastra Factory] Environment repository shares its directory name with an earlier one; skipping it',
+        expect.objectContaining({ projectRepositoryId: 'link-4', directory: 'docs' }),
+      );
+      const ctx = mocks.createSandbox.mock.calls[0]![0] as any;
+      expect(ctx.repos).toHaveLength(2);
+      expect(mocks.materializeRepo).toHaveBeenCalledTimes(2);
+      expect(peekSessionEnvironment('session-a')?.repositories.map(repo => repo.slug)).toEqual([
+        'octocat/hello',
+        'octocat/docs',
+      ]);
+      warn.mockRestore();
+    });
+
+    it('keeps the primary setup failure fatal while the other repositories still boot', async () => {
+      const { resolver } = environmentFixture({ links: twoLinks });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+      mocks.runSetupCommand.mockRejectedValueOnce(
+        new SetupCommandError('Setup command failed (exit 1)', 'setup-failed'),
+      );
+
+      await expect(boot(resolver)).rejects.toThrow(/Setup command failed/);
+
+      expect(mocks.syncEnvironmentRepository).toHaveBeenCalledTimes(1);
+      expect(peekSessionEnvironment('session-a')?.repositories[0]).toMatchObject({
+        slug: 'octocat/hello',
+        setupStatus: 'failed',
+      });
+    });
+
+    it('records each repository setup result on its link, redacting credentials from the failure', async () => {
+      const { resolver, github } = environmentFixture({
+        links: [twoLinks[0]!, { ...twoLinks[1]!, setupCommand: 'pnpm docs' }],
+      });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+      mocks.runSetupCommand.mockImplementation(async (_sandbox: unknown, _dir: string, command: string) => {
+        if (command === 'pnpm docs') {
+          throw new SetupCommandError(
+            'Setup command failed (exit 1): fatal: https://x-access-token:ghs_abc123@github.com/octocat/docs',
+            'setup-failed',
+          );
+        }
+      });
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+      await boot(resolver);
+
+      const writes = (github.sourceControlStorage.projectRepositories as any).setBuildStatus.mock.calls.map(
+        (call: [unknown]) => call[0],
+      );
+      expect(writes).toEqual([
+        { orgId: 'org-1', id: 'project-1', status: 'configured', error: null, builtAt: expect.any(Date) },
+        {
+          orgId: 'org-1',
+          id: 'link-2',
+          status: 'failed',
+          error: 'Setup command failed (exit 1): fatal: https://***@github.com/octocat/docs',
+          builtAt: expect.any(Date),
+        },
+      ]);
+      warn.mockRestore();
+    });
+
+    it('keeps the recorded setup failure when a later start skips the command that failed', async () => {
+      const { resolver, github } = environmentFixture({
+        links: [twoLinks[0]!, { ...twoLinks[1]!, setupCommand: 'pnpm docs' }],
+      });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+      mocks.runSetupCommand.mockImplementation(async (_sandbox: unknown, _dir: string, command: string) => {
+        if (command === 'pnpm docs')
+          throw new SetupCommandError('Setup command failed (exit 1): no lockfile', 'setup-failed');
+        // A failed workspace command makes the next start boot again, like a reconnect.
+        if (command === 'touch .workspace-ready')
+          throw new SetupCommandError('Setup command failed (exit 1)', 'setup-failed');
+      });
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+      const setBuildStatus = (github.sourceControlStorage.projectRepositories as any).setBuildStatus;
+
+      await expect(boot(resolver)).rejects.toThrow(/Setup command failed/);
+      expect(setBuildStatus).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'link-2',
+          status: 'failed',
+          error: 'Setup command failed (exit 1): no lockfile',
+        }),
+      );
+
+      setBuildStatus.mockClear();
+      await expect(boot(resolver)).resolves.toBeDefined();
+
+      expect(mocks.runSetupCommand.mock.calls.filter(call => call[2] === 'pnpm docs')).toHaveLength(1);
+      expect(setBuildStatus.mock.calls.map((call: [{ id: string }]) => call[0].id)).not.toContain('link-2');
+      expect(peekSessionEnvironment('session-a')?.repositories[1]).toMatchObject({
+        slug: 'octocat/docs',
+        setupStatus: 'failed',
+      });
+      warn.mockRestore();
+      mocks.runSetupCommand.mockReset();
+    });
+
+    it("keeps the primary repository's recorded setup failure when a later start skips it", async () => {
+      const { resolver, github } = environmentFixture({ links: twoLinks });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+      mocks.runSetupCommand.mockImplementation(async (_sandbox: unknown, _dir: string, command: string) => {
+        if (command === 'pnpm i')
+          throw new SetupCommandError('Setup command failed (exit 1): no lockfile', 'setup-failed');
+      });
+      const setBuildStatus = (github.sourceControlStorage.projectRepositories as any).setBuildStatus;
+
+      await expect(boot(resolver)).rejects.toThrow(/Setup command failed/);
+      expect(setBuildStatus).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'project-1',
+          status: 'failed',
+          error: expect.stringMatching(/^Setup command failed \(exit 1\): no lockfile/),
+        }),
+      );
+
+      setBuildStatus.mockClear();
+      await boot(resolver).catch(() => undefined);
+
+      expect(mocks.runSetupCommand.mock.calls.filter(call => call[2] === 'pnpm i')).toHaveLength(1);
+      expect(setBuildStatus.mock.calls.map((call: [{ id: string }]) => call[0].id)).not.toContain('project-1');
+      expect(peekSessionEnvironment('session-a')?.repositories[0]).toMatchObject({
+        slug: 'octocat/hello',
+        setupStatus: 'failed',
+      });
+      mocks.runSetupCommand.mockReset();
+    });
+
+    it('leaves a repository whose setup was interrupted unrecorded instead of configured', async () => {
+      const { resolver, github } = environmentFixture({
+        links: [twoLinks[0]!, { ...twoLinks[1]!, setupCommand: 'pnpm docs' }],
+      });
+      addProject({ setupCommand: 'pnpm i' });
+      addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
+      mocks.runSetupCommand.mockImplementation(async (_sandbox: unknown, _dir: string, command: string) => {
+        if (command === 'pnpm docs') throw new Error('sandbox connection lost');
+      });
+
+      await expect(boot(resolver)).rejects.toThrow('sandbox connection lost');
+
+      const writes = (github.sourceControlStorage.projectRepositories as any).setBuildStatus.mock.calls.map(
+        (call: [unknown]) => call[0],
+      );
+      expect(writes).toEqual([
+        { orgId: 'org-1', id: 'project-1', status: 'configured', error: null, builtAt: expect.any(Date) },
+      ]);
+    });
   });
 });

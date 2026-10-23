@@ -2,7 +2,9 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import os from 'node:os';
 import path from 'node:path';
+import type { MastraModelGatewayInterface } from '@mastra/core/llm';
 import { MIN_PRICED_MODELS, MODELS_DEV_API_URL, modelsDevToPricingModels, pickModelsDevCosts } from './models-dev';
+import type { ModelsDevCosts } from './models-dev';
 import type { PricingModel } from './pricing-model';
 
 const DATA_FILE_NAME = 'pricing-data.json';
@@ -15,8 +17,9 @@ const CACHE_FILE = () => path.join(os.homedir(), '.cache', 'mastra', 'pricing-da
 // Every installed version of this package shares the cache file. Bump this when the cached
 // prices change shape or meaning, so other versions ignore the file instead of misreading it.
 const CACHE_VERSION = 1;
-const BEDROCK_GEOGRAPHY_PREFIXES = new Set(['global', 'us', 'eu', 'apac', 'jp', 'au']);
+const BEDROCK_GEOGRAPHY_PREFIXES = new Set(['global', 'us', 'eu', 'apac', 'jp', 'au', 'in']);
 const AI_SDK_VERCEL_GATEWAY_PROVIDER_ID = 'gateway';
+const AZURE_OPENAI_GATEWAY_ID = 'azure-openai';
 const VERCEL_PRICING_PROVIDER_ID = 'vercel';
 const AI_SDK_PROVIDER_NAMESPACE_ALIASES = new Map([
   ['fireworks', 'fireworks-ai'],
@@ -28,6 +31,15 @@ const AI_SDK_PROVIDER_NAMESPACE_ALIASES = new Map([
 let cachedLoadError: string | null = null;
 let globalRegistry: PricingRegistry | null = null;
 let bundledRegistry: PricingRegistry | null = null;
+/** The part of a model router gateway that pricing reads. */
+type PricingGateway = Pick<MastraModelGatewayInterface, 'id' | 'getId' | 'fetchProviders'>;
+// Prices that custom gateways returned from `fetchProviders()`, for models models.dev does not list.
+let gatewayRegistry: PricingRegistry | null = null;
+let gatewayCosts: ModelsDevCosts = {};
+let gatewaySource: (() => Iterable<PricingGateway>) | null = null;
+// Per gateway: `Infinity` once its prices are loaded, else when loading last failed.
+const gatewayLoadAttempts = new Map<PricingGateway, number>();
+let gatewayLoadInFlight = false;
 // When the global pricing was last confirmed against models.dev. 0 means the bundled snapshot.
 let refreshedAt = 0;
 let lastRefreshAttemptAt = 0;
@@ -62,19 +74,24 @@ export class PricingRegistry {
   }
 
   get(args: { provider: string; model: string }): PricingModel | null {
-    const match = this.find(args);
-    if (match || this !== globalRegistry) {
-      return match;
+    if (this !== globalRegistry) {
+      return this.find(args);
     }
 
     // models.dev can drop or rename a model after a release, so refreshed prices may miss a
-    // model the bundled snapshot still has.
-    const bundledMatch = this === bundledRegistry ? null : getBundledRegistry()?.find(args);
-    if (bundledMatch) {
-      return bundledMatch;
+    // model the bundled snapshot still has. Gateway prices only fill what models.dev lacks, so a
+    // gateway that names a public provider cannot reprice direct calls to that provider.
+    const match =
+      this.find(args) ??
+      (this === bundledRegistry ? null : getBundledRegistry()?.find(args)) ??
+      gatewayRegistry?.find(args);
+    if (match) {
+      return match;
     }
 
-    // A model with no price anywhere may be newer than the pricing in use.
+    // A model with no price anywhere may be newer than the pricing in use, or served by a
+    // gateway whose prices are not loaded yet.
+    void loadGatewayPricing();
     refreshGlobalPricing();
     return null;
   }
@@ -101,12 +118,83 @@ function getBundledRegistry(): PricingRegistry | null {
 }
 
 /**
+ * Where to find the model router gateways whose `pricing` fills the gaps in models.dev. Prices
+ * load on the first lookup that has no price, so production does not call gateways at startup;
+ * under the same switches as the models.dev refresh (`mastra dev`, or
+ * `MASTRA_AUTO_REFRESH_PRICING=true`) they also load right away, off the hot path, so the first
+ * model call is priced. Each gateway is read once; a failed read is retried at most once an hour.
+ */
+export function setPricingGateways(source: () => Iterable<PricingGateway>): void {
+  gatewaySource = source;
+  if (isRefreshEnabled()) {
+    void loadGatewayPricing();
+  }
+}
+
+/** Load `pricing` from every custom gateway not loaded yet. Off under `MASTRA_OFFLINE`. */
+export async function loadGatewayPricing(): Promise<void> {
+  if (!gatewaySource || gatewayLoadInFlight || isOffline()) {
+    return;
+  }
+
+  gatewayLoadInFlight = true;
+  try {
+    const builtInIds = await getBuiltInGatewayIds();
+    let changed = false;
+    for (const gateway of gatewaySource()) {
+      const gatewayId = gateway.getId?.() ?? gateway.id;
+      const lastAttempt = gatewayLoadAttempts.get(gateway) ?? 0;
+      if (builtInIds.has(gatewayId) || Date.now() - lastAttempt < MIN_REFRESH_ATTEMPT_INTERVAL_MS) {
+        continue;
+      }
+
+      try {
+        const providers = await gateway.fetchProviders();
+        for (const [providerId, config] of Object.entries(providers ?? {})) {
+          for (const [modelId, cost] of Object.entries(config?.pricing ?? {})) {
+            (gatewayCosts[providerId] ??= { models: {} }).models[modelId] = { cost: cost as Record<string, unknown> };
+          }
+        }
+        gatewayLoadAttempts.set(gateway, Infinity);
+        changed = true;
+      } catch (error) {
+        gatewayLoadAttempts.set(gateway, Date.now());
+        console.warn(`Failed to load model prices from gateway ${gatewayId}:`, error);
+      }
+    }
+    if (changed) {
+      gatewayRegistry = new PricingRegistry(modelsDevToPricingModels(gatewayCosts));
+    }
+  } finally {
+    gatewayLoadInFlight = false;
+  }
+}
+
+/**
+ * The gateways core ships: the ones Mastra registers on its own, plus Azure OpenAI, which users
+ * construct themselves. Their `fetchProviders()` can hit the network and never carries prices.
+ * Read from core when it exports the list (1.46+), else the known ids.
+ */
+async function getBuiltInGatewayIds(): Promise<Set<string>> {
+  try {
+    const { defaultGateways, getGatewayId } = await import('@mastra/core/llm');
+    return new Set([...defaultGateways.map(getGatewayId), AZURE_OPENAI_GATEWAY_ID]);
+  } catch {
+    return new Set(['models.dev', 'netlify', 'mastra', AZURE_OPENAI_GATEWAY_ID]);
+  }
+}
+
+function isOffline(): boolean {
+  const offline = process.env.MASTRA_OFFLINE;
+  return offline === 'true' || offline === '1';
+}
+
+/**
  * Same switches as the model router's auto-refresh in `@mastra/core`: on by default only under
  * `mastra dev` (`MASTRA_DEV`), opt-in elsewhere, and always off with `MASTRA_OFFLINE`.
  */
 function isRefreshEnabled(): boolean {
-  const offline = process.env.MASTRA_OFFLINE;
-  if (offline === 'true' || offline === '1') {
+  if (isOffline()) {
     return false;
   }
   const isDev = process.env.MASTRA_DEV === 'true' || process.env.MASTRA_DEV === '1';

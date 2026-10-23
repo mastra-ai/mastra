@@ -3,16 +3,18 @@ import { GitBranch } from 'lucide-react';
 import type { ReactNode } from 'react';
 import type { ProviderConnectionMethod } from '../../../hooks/useProviderConnection';
 import type { WorkSource } from '../../../hooks/useWorkSourceConnections';
-import type { OnboardingStep } from '../../../services/onboardingFlow';
-import { OnboardingPersonalPreview, OnboardingSharedModelPreview } from './OnboardingAccountsPreview';
+import type { OnboardingModelScope, OnboardingStep } from '../../../services/onboardingFlow';
+import { OnboardingAccountsPreview } from './OnboardingAccountsPreview';
 import { OnboardingIntakePreview } from './OnboardingIntakePreview';
 import { SketchLabel } from './SketchLabel';
 import { OnboardingIllustration } from './OnboardingIllustration';
-import type { DrawingScene, AccountsMode } from './onboarding-drawing';
+import type { AccountsMode, DrawingScene } from './onboarding-drawing';
 import '../onboarding-preview.css';
 
 export interface OnboardingPreviewProps {
   step: OnboardingStep;
+  modelScope?: OnboardingModelScope;
+  local?: boolean;
   personalModel?: string;
   repository?: { name: string; fullName: string; defaultBranch: string };
   source?: WorkSource;
@@ -23,16 +25,17 @@ export interface OnboardingPreviewProps {
   personalConnectionMethod?: ProviderConnectionMethod;
 }
 
+const ACCOUNT_MODES: Record<OnboardingModelScope, AccountsMode> = {
+  factory: 'shared',
+  user: 'individual',
+  hybrid: 'hybrid',
+};
+
 function sceneForStep(step: OnboardingStep): DrawingScene {
   if (step === 'initial') return 'factory';
   if (step === 'vcs') return 'codebase';
   if (step === 'project-management') return 'intake';
   return 'accounts';
-}
-
-function accountsMode(personalScene: boolean, personalIsFactoryModel: boolean): AccountsMode {
-  if (!personalScene) return 'shared';
-  return personalIsFactoryModel ? 'individual' : 'hybrid';
 }
 
 function OnboardingScene({ active, children }: { active: boolean; children: ReactNode }) {
@@ -90,6 +93,8 @@ function OnboardingCodebasePreview({ repository }: Pick<OnboardingPreviewProps, 
 
 export function OnboardingPreview({
   step,
+  modelScope = 'factory',
+  local = false,
   personalModel,
   repository,
   source = 'linear',
@@ -99,11 +104,8 @@ export function OnboardingPreview({
   connectionMethod,
   personalConnectionMethod,
 }: OnboardingPreviewProps) {
-  const personalIsFactoryModel = !model;
-  const reviewing = step === 'review';
-  const personalScene = step === 'personal-provider' || (reviewing && personalIsFactoryModel);
   const scene = sceneForStep(step);
-  const mode = accountsMode(personalScene, personalIsFactoryModel);
+  const mode = ACCOUNT_MODES[modelScope];
   return (
     <aside className="onboarding-preview min-w-0 px-8 xl:px-12" aria-hidden="true">
       <div className="onboarding-diagram relative mx-auto w-full max-w-150">
@@ -117,18 +119,14 @@ export function OnboardingPreview({
         <OnboardingScene active={step === 'project-management'}>
           <OnboardingIntakePreview source={source} />
         </OnboardingScene>
-        <OnboardingScene active={step === 'model-provider' || (reviewing && !personalIsFactoryModel)}>
-          <OnboardingSharedModelPreview
-            repository={repository}
+        <OnboardingScene active={scene === 'accounts'}>
+          <OnboardingAccountsPreview
+            step={step}
+            modelScope={modelScope}
+            local={local}
             model={model}
             providerId={providerId}
             connectionMethod={connectionMethod}
-          />
-        </OnboardingScene>
-        <OnboardingScene active={step === 'personal-provider' || (reviewing && personalIsFactoryModel)}>
-          <OnboardingPersonalPreview
-            model={model}
-            providerId={providerId}
             personalProviderId={personalProviderId}
             personalConnectionMethod={personalConnectionMethod}
             personalModel={personalModel}

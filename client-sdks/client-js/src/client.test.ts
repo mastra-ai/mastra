@@ -652,28 +652,6 @@ describe('MastraClient', () => {
         expect(result).toEqual(mockMessages);
       });
 
-      it('should not include system reminders by default', async () => {
-        const mockMessages = {
-          messages: [{ id: 'msg-1', content: 'Hello' }],
-        };
-        (global.fetch as any).mockResolvedValueOnce({
-          ok: true,
-          status: 200,
-          headers: { get: () => 'application/json' },
-          json: async () => mockMessages,
-        });
-
-        const result = await client.listThreadMessages('thread-1', {
-          agentId: 'agent-1',
-        });
-
-        expect(global.fetch).toHaveBeenCalledWith(
-          'http://localhost:4111/api/memory/threads/thread-1/messages?agentId=agent-1',
-          expect.any(Object),
-        );
-        expect(result).toEqual(mockMessages);
-      });
-
       it('should include system reminders when requested', async () => {
         const mockMessages = {
           messages: [{ id: 'msg-1', content: 'Hello' }],
@@ -1049,6 +1027,27 @@ describe('MastraClient', () => {
         'http://localhost:4111/api/datasets?page=0&perPage=20&targetType=agent&targetIds=a1&targetIds=a+2',
         expect.any(Object),
       );
+    });
+
+    it('serializes datasetIds as repeated query params for dataset listings', async () => {
+      mockSuccess();
+
+      await client.listDatasets({ datasetIds: ['ds-1', 'ds 2'] });
+
+      expect(global.fetch).toHaveBeenCalledWith(
+        'http://localhost:4111/api/datasets?datasetIds=ds-1&datasetIds=ds+2',
+        expect.any(Object),
+      );
+    });
+
+    it('returns no datasets without a request when datasetIds is empty', async () => {
+      const result = await client.listDatasets({ datasetIds: [] });
+
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(result).toEqual({
+        datasets: [],
+        pagination: { total: 0, page: 0, perPage: false, hasMore: false },
+      });
     });
 
     it('serializes orderBy as bracket-notation params for dataset and experiment listings', async () => {

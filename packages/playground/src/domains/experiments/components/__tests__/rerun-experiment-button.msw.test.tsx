@@ -23,33 +23,6 @@ vi.mock('react-router', async importOriginal => {
   return { ...actual, useNavigate: () => mockNavigate };
 });
 
-vi.mock('@mastra/playground-ui/components/Combobox', () => ({
-  Combobox: ({
-    options,
-    value,
-    onValueChange,
-    placeholder,
-  }: {
-    options: Array<{ label: string; value: string }>;
-    value?: string | string[];
-    onValueChange?: (value: string) => void;
-    placeholder?: string;
-  }) => (
-    <select
-      aria-label={placeholder}
-      value={Array.isArray(value) ? (value[0] ?? '') : (value ?? '')}
-      onChange={event => onValueChange?.(event.target.value)}
-    >
-      <option value="">{placeholder}</option>
-      {options.map(option => (
-        <option key={option.value} value={option.value}>
-          {option.label}
-        </option>
-      ))}
-    </select>
-  ),
-}));
-
 vi.mock('@mastra/playground-ui/components/CodeEditor', () => ({
   CodeEditor: ({ value, onChange }: { value: string; onChange?: (value: string) => void }) => (
     <textarea aria-label="Request context JSON" value={value} onChange={event => onChange?.(event.target.value)} />
@@ -106,6 +79,10 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
+const targetField = () => screen.getByRole<HTMLInputElement>('combobox', { name: /^Target/ });
+const datasetField = () => screen.getByRole<HTMLInputElement>('combobox', { name: /^Dataset(?! version)/ });
+const runButton = () => screen.getByRole<HTMLButtonElement>('button', { name: 'Run experiment' });
+
 const renderButton = (experiment = original) =>
   renderWithProviders(
     <TestLinkProvider>
@@ -119,24 +96,13 @@ describe('RerunExperimentButton', () => {
     renderButton();
 
     fireEvent.click(screen.getByRole('button', { name: /rerun/i }));
-    await screen.findByRole('dialog', { name: /run experiment/i });
+    await screen.findByRole('dialog', { name: /new experiment/i });
 
-    const datasetCombobox = await screen.findByRole('combobox', { name: 'Select a dataset...' });
-    await waitFor(() => expect((datasetCombobox as HTMLSelectElement).value).toBe('dataset-1'));
-    await waitFor(() =>
-      expect((screen.getByRole('combobox', { name: 'Select version' }) as HTMLSelectElement).value).toBe('11'),
-    );
-    expect((screen.getByRole('combobox', { name: 'Select target type' }) as HTMLSelectElement).value).toBe('agent');
-    await waitFor(() =>
-      expect((screen.getByRole('combobox', { name: 'Select agent' }) as HTMLSelectElement).value).toBe('agent-1'),
-    );
-    await waitFor(() =>
-      expect((screen.getByRole('combobox', { name: 'Select scorers...' }) as HTMLSelectElement).value).toBe(
-        'answer-relevancy',
-      ),
-    );
+    await waitFor(() => expect(targetField().value).toBe('Agent One'));
+    expect(datasetField().value).toBe('Dataset 1');
+    expect(await screen.findByText(/· v11$/)).toBeDefined();
 
-    fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+    fireEvent.click(runButton());
 
     await waitFor(() => expect(triggerCalls).toHaveLength(1));
     expect(triggerCalls[0].datasetId).toBe('dataset-1');
@@ -164,17 +130,10 @@ describe('RerunExperimentButton', () => {
     renderButton({ ...original, scorerIds: null });
 
     fireEvent.click(screen.getByRole('button', { name: /rerun/i }));
-    await screen.findByRole('dialog', { name: /run experiment/i });
+    await screen.findByRole('dialog', { name: /new experiment/i });
 
-    await waitFor(() =>
-      expect((screen.getByRole('combobox', { name: 'Select scorers...' }) as HTMLSelectElement).value).toBe(
-        'answer-relevancy',
-      ),
-    );
-    await waitFor(() =>
-      expect((screen.getByRole('combobox', { name: 'Select agent' }) as HTMLSelectElement).value).toBe('agent-1'),
-    );
-    fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+    await waitFor(() => expect(targetField().value).toBe('Agent One'));
+    fireEvent.click(runButton());
 
     await waitFor(() => expect(triggerCalls).toHaveLength(1));
     expect(triggerCalls[0].body).toMatchObject({ scorerIds: ['answer-relevancy'] });
@@ -186,16 +145,18 @@ describe('RerunExperimentButton', () => {
 
     // When the rerun dialog opens
     fireEvent.click(screen.getByRole('button', { name: /rerun/i }));
-    await screen.findByRole('dialog', { name: /run experiment/i });
+    await screen.findByRole('dialog', { name: /new experiment/i });
 
-    // Then the name/description inputs are prefilled and sent with the new run
-    expect((screen.getByLabelText(/^Name/) as HTMLInputElement).value).toBe('Original run');
-    expect((screen.getByLabelText('Description') as HTMLInputElement).value).toBe('Original description');
+    // Then Advanced stays closed, still holds the prefilled name/description, and both are sent with the new run
+    await waitFor(() => expect(targetField().value).toBe('Agent One'));
+    const advanced = screen.getByRole('button', { name: 'Advanced' });
+    expect(advanced.getAttribute('aria-expanded')).toBe('false');
 
-    await waitFor(() =>
-      expect((screen.getByRole('combobox', { name: 'Select agent' }) as HTMLSelectElement).value).toBe('agent-1'),
-    );
-    fireEvent.click(screen.getByRole('button', { name: 'Run' }));
+    fireEvent.click(advanced);
+    expect((await screen.findByLabelText<HTMLInputElement>('Experiment name')).value).toBe('Original run');
+    expect(screen.getByLabelText<HTMLTextAreaElement>('Description').value).toBe('Original description');
+
+    fireEvent.click(runButton());
 
     await waitFor(() => expect(triggerCalls).toHaveLength(1));
     expect(triggerCalls[0].body).toMatchObject({ name: 'Original run', description: 'Original description' });
@@ -214,5 +175,21 @@ describe('RerunExperimentButton', () => {
   it('is hidden when the target type cannot be submitted from the run dialog', () => {
     renderButton({ ...original, targetType: 'processor', targetId: 'proc-1' });
     expect(screen.queryByRole('button', { name: /rerun/i })).toBeNull();
+  });
+
+  describe('when the run is still in progress', () => {
+    it('disables Rerun until the run finishes', () => {
+      renderButton({ ...original, status: 'running', completedAt: null });
+
+      expect(screen.getByRole('button', { name: /rerun/i }).hasAttribute('disabled')).toBe(true);
+    });
+  });
+
+  describe('when the run is queued', () => {
+    it('disables Rerun until the run finishes', () => {
+      renderButton({ ...original, status: 'pending', completedAt: null });
+
+      expect(screen.getByRole('button', { name: /rerun/i }).hasAttribute('disabled')).toBe(true);
+    });
   });
 });

@@ -107,15 +107,38 @@ Use a consistent `serviceName` to filter data from a specific application or dep
 
 ## Query observability data
 
-Query hosted observability data from the terminal with the Mastra CLI:
+Browse hosted traces from the terminal with the Mastra CLI:
 
 ```bash npm2yarn
 npx mastra api trace list
 ```
 
-The CLI can infer platform credentials from your project environment. See the [`mastra api` CLI reference](/reference/cli/mastra#mastra-api) for available commands, filtering, pagination, credential resolution, and `curl` examples.
+The CLI reads `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` from your project environment and targets the US observability endpoint by default. See [CLI target resolution](/reference/cli/mastra#target-resolution) for other authentication options and regional endpoints.
+
+Use `mastra api trace query` to find completed traces by their fields or related spans. For example, find traces whose root span took more than five seconds:
+
+```bash
+npx mastra api trace query '{
+  "timeRange": {
+    "from": "2026-08-01T00:00:00.000Z",
+    "to": "2026-08-08T00:00:00.000Z"
+  },
+  "where": {
+    "op": "gt",
+    "left": { "path": "durationMs" },
+    "right": { "literal": 5000 }
+  },
+  "page": { "limit": 25 }
+}'
+```
+
+Choose a time range containing your exported traces. Any range works as long as `from` is earlier than `to`, with no maximum duration. Results appear in `data.traces`.
+
+Mastra Platform uses the same trace-query endpoints and request format as Mastra Server. Use the [Advanced trace queries reference](/reference/observability/tracing/advanced-queries#send-an-http-request) for HTTP requests, supported filters, pagination, polling, and field discovery.
 
 You can query exported feedback over HTTP. See the [Feedback API](/docs/mastra-platform/api#feedback-api) for its current status, regional endpoints, authentication, project scoping, and supported query parameters such as `traceId` and `environment`.
+
+You can query exported metrics over HTTP, with `MastraClient`, or with `mastra api metric`. See the [Metrics API](/docs/mastra-platform/api#metrics-api) for regional endpoints, authentication, project scoping, and supported endpoints.
 
 ## Import existing traces
 

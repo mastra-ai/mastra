@@ -30,7 +30,8 @@ const EXTEND_IF_OWNED_SCRIPT = `
  * KEYS[1] stream key
  * ARGV[1] group, ARGV[2] consumer, ARGV[3] stream entry id,
  * ARGV[4] republish payload ('' = drop without republish),
- * ARGV[5] stream idle TTL in ms (0 = none)
+ * ARGV[5] stream idle TTL in ms (0 = none),
+ * ARGV[6] approximate MAXLEN trim (0 = no trim)
  */
 const NACK_IF_OWNED_SCRIPT = `
   local pending = redis.call("XPENDING", KEYS[1], ARGV[1], ARGV[3], ARGV[3], 1)
@@ -38,7 +39,11 @@ const NACK_IF_OWNED_SCRIPT = `
     return 0
   end
   if ARGV[4] ~= "" then
-    redis.call("XADD", KEYS[1], "*", "event", ARGV[4])
+    if tonumber(ARGV[6]) > 0 then
+      redis.call("XADD", KEYS[1], "MAXLEN", "~", ARGV[6], "*", "event", ARGV[4])
+    else
+      redis.call("XADD", KEYS[1], "*", "event", ARGV[4])
+    end
     if tonumber(ARGV[5]) > 0 then
       redis.call("PEXPIRE", KEYS[1], ARGV[5])
     end
@@ -333,14 +338,7 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
       createdAt,
       deliveryAttempt: event.deliveryAttempt ?? 1,
     };
-    const xaddOptions: { TRIM?: { strategy: 'MAXLEN'; strategyModifier: '~'; threshold: number } } = {};
-    if (this.#maxStreamLength > 0) {
-      xaddOptions.TRIM = {
-        strategy: 'MAXLEN',
-        strategyModifier: '~',
-        threshold: this.#maxStreamLength,
-      };
-    }
+    const xaddOptions = this.#xaddTrimOptions();
     const streamKey = this.#streamKey(topic);
     // When a TTL is configured the write and its PEXPIRE run in one MULTI
     // transaction. A detached PEXPIRE could fail or be skipped (process exit)
@@ -367,6 +365,11 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
             })
         : this.#writeClient.xAdd(streamKey, '*', { event: JSON.stringify(payload) }, xaddOptions);
     await promise;
+  }
+
+  #xaddTrimOptions(): { TRIM?: { strategy: 'MAXLEN'; strategyModifier: '~'; threshold: number } } {
+    if (this.#maxStreamLength <= 0) return {};
+    return { TRIM: { strategy: 'MAXLEN', strategyModifier: '~', threshold: this.#maxStreamLength } };
   }
 
   async subscribe(topic: string, cb: EventCallback, options?: SubscribeOptions): Promise<void> {
@@ -1103,11 +1106,11 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
           // the stream's final write.
           await this.#writeClient
             .multi()
-            .xAdd(sub.streamKey, '*', { event: JSON.stringify(next) })
+            .xAdd(sub.streamKey, '*', { event: JSON.stringify(next) }, this.#xaddTrimOptions())
             .pExpire(sub.streamKey, this.#streamIdleTtlMs)
             .exec();
         } else {
-          await this.#writeClient.xAdd(sub.streamKey, '*', { event: JSON.stringify(next) });
+          await this.#writeClient.xAdd(sub.streamKey, '*', { event: JSON.stringify(next) }, this.#xaddTrimOptions());
         }
       } catch (err) {
         this.#logger?.warn?.('valkey-streams: nack republish failed; leaving original pending for reclaim', {
@@ -1155,7 +1158,14 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
       try {
         owned = await this.#writeClient.eval(NACK_IF_OWNED_SCRIPT, {
           keys: [sub.streamKey],
-          arguments: [sub.group, sub.consumer, streamId, payload, String(this.#streamIdleTtlMs)],
+          arguments: [
+            sub.group,
+            sub.consumer,
+            streamId,
+            payload,
+            String(this.#streamIdleTtlMs),
+            String(this.#maxStreamLength > 0 ? this.#maxStreamLength : 0),
+          ],
         });
       } catch (err) {
         this.#logger?.warn?.('valkey-streams: timeout nack failed; leaving original pending for reclaim', {
@@ -1325,11 +1335,11 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
         if (this.#streamIdleTtlMs > 0) {
           await this.#writeClient
             .multi()
-            .xAdd(sub.streamKey, '*', payload)
+            .xAdd(sub.streamKey, '*', payload, this.#xaddTrimOptions())
             .pExpire(sub.streamKey, this.#streamIdleTtlMs)
             .exec();
         } else {
-          await this.#writeClient.xAdd(sub.streamKey, '*', payload);
+          await this.#writeClient.xAdd(sub.streamKey, '*', payload, this.#xaddTrimOptions());
         }
       } catch (err) {
         this.#logger?.warn?.('valkey-streams: nack republish failed for replayed event', {

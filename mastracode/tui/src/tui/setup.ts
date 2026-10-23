@@ -17,6 +17,7 @@ import { TaskProgressComponent } from './components/task-progress.js';
 import { notifyForInputRequest, runPermissionHooksForEvent, showError, showInfo } from './display.js';
 import { isGoalJudgeInputLocked, showGoalJudgeInputLockInfo } from './goal-input-lock.js';
 import { switchModeWithPack } from './model-packs/apply.js';
+import { isLocalOnlyCommand } from './runtime.js';
 import type { TUIState } from './state.js';
 import { updateStatusLine } from './status-line.js';
 import { theme } from './theme.js';
@@ -230,7 +231,8 @@ async function pauseStoredGoal(state: TUIState, pausedReason: string): Promise<v
   const threadId = state.session.thread.getId();
   if (!threadId) return;
   try {
-    const agent = state.controller.getCurrentAgent(state.session);
+    if (!state.local) return;
+    const agent = state.local.controller.getCurrentAgent(state.local.session);
     // Only an active goal is being judged; never overwrite a finished or already-paused goal.
     const record = await agent.getObjective({ threadId });
     if (record?.status !== 'active') return;
@@ -260,7 +262,7 @@ function abortActiveGoalJudge(state: TUIState): boolean {
   const pausedReason = 'Judge evaluation was interrupted.';
   if (state.goalManager.getGoal()) {
     state.goalManager.pause(pausedReason);
-    void state.goalManager.saveToThread(state);
+    if (state.local) void state.goalManager.saveToThread(state.local);
   } else {
     // Nothing is loaded in memory (e.g. another client wrote the goal), so an
     // empty save would not persist the pause. Pause the stored record directly;
@@ -282,12 +284,19 @@ export function buildLayout(state: TUIState, refreshModelAuthStatus: () => Promi
   const version = state.options.version || '0.1.0';
 
   // Project info shown beside the logo
-  const info = [
-    `Project: ${state.projectInfo.name}`,
-    `Resource ID: ${state.projectInfo.resourceId}`,
-    state.projectInfo.gitBranch ? `Branch: ${state.projectInfo.gitBranch}` : null,
-    state.projectInfo.isWorktree ? `Worktree of: ${state.projectInfo.mainRepoPath}` : null,
-  ].filter((line): line is string => Boolean(line));
+  const info = state.factory
+    ? [
+        `Factory: ${state.factory.projectName}`,
+        `Repository: ${state.factory.repositorySlug}`,
+        `Branch: ${state.factory.branch}`,
+        `URL: ${state.factory.url}`,
+      ]
+    : [
+        `Project: ${state.projectInfo.name}`,
+        `Resource ID: ${state.projectInfo.resourceId}`,
+        state.projectInfo.gitBranch ? `Branch: ${state.projectInfo.gitBranch}` : null,
+        state.projectInfo.isWorktree ? `Worktree of: ${state.projectInfo.mainRepoPath}` : null,
+      ].filter((line): line is string => Boolean(line));
 
   const sep = theme.fg('dim', ' · ');
   const hintParts: string[] = [];
@@ -425,6 +434,11 @@ export function setupAutocomplete(state: TUIState): void {
     THINK_COMMAND_DESCRIPTOR,
     { name: 'connect', description: 'Connect a provider account or API key' },
     { name: 'login', description: 'Sign in with a provider account' },
+    {
+      name: 'factory',
+      description: 'Switch to Factory mode, connecting first if needed (connect|status|local|disconnect)',
+    },
+    { name: 'local', description: 'Switch from Factory mode back to local mode' },
     { name: 'skills', description: 'List available skills' },
     { name: 'skill/', description: 'Activate a skill by name' },
     { name: 'cost', description: 'Show token usage and estimated costs' },
@@ -490,7 +504,7 @@ export function setupAutocomplete(state: TUIState): void {
     { name: 'report-issue', description: 'Open or browse mastracode issues' },
     { name: 'setup', description: 'Re-run the setup wizard' },
     { name: 'browser', description: 'Configure browser automation' },
-    { name: 'theme', description: 'Switch color theme (auto/dark/light)' },
+    { name: 'theme', description: 'Switch color theme (picker, list, or name)' },
     { name: 'update', description: 'Check for and install updates' },
     { name: 'api-keys', description: 'Manage API keys for model providers' },
     { name: 'plugins', description: 'Manage Mastra Code plugins' },
@@ -581,8 +595,9 @@ export function setupAutocomplete(state: TUIState): void {
     });
   }
 
+  const available = state.local ? slashCommands : slashCommands.filter(cmd => !isLocalOnlyCommand(cmd.name));
   const fdPath = detectFdPath();
-  state.autocompleteProvider = new CombinedAutocompleteProvider(slashCommands, process.cwd(), fdPath);
+  state.autocompleteProvider = new CombinedAutocompleteProvider(available, process.cwd(), fdPath);
   state.editor.setAutocompleteProvider(state.autocompleteProvider);
 }
 
@@ -625,9 +640,10 @@ export async function loadCustomSlashCommands(state: TUIState): Promise<void> {
  */
 export async function loadSkillCommands(state: TUIState): Promise<void> {
   try {
-    let workspace = state.controller.getWorkspace() ?? state.workspace;
-    if (!workspace && state.controller.hasWorkspace()) {
-      workspace = await state.controller.resolveWorkspace({ session: state.session });
+    const local = state.local;
+    let workspace = local?.controller.getWorkspace() ?? state.workspace;
+    if (!workspace && local?.controller.hasWorkspace()) {
+      workspace = await local.controller.resolveWorkspace({ session: local.session });
     }
     if (!workspace?.skills) {
       state.skillCommands = [];

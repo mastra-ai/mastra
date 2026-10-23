@@ -1,6 +1,12 @@
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
+import { createFactorySecretEncryption } from '../../../secret-encryption.js';
+import type { FactorySecretEncryption } from '../../../secret-encryption.js';
 import { IntegrationStorage } from './base.js';
 import type { IntegrationStorageHandle } from './base.js';
 
@@ -140,5 +146,37 @@ describe('IntegrationStorage', () => {
       await store.settings.save('org-1', 'user-1', { projectIds: ['p1'] });
       expect(await domain.forIntegration('linear').settings.get('org-1', 'user-1')).toBeNull();
     });
+  });
+});
+
+describe('IntegrationStorage enabling secretEncryption', () => {
+  it('encrypts settings and connections written without encryption and reads back the original objects', async () => {
+    const url = `file:${join(mkdtempSync(join(tmpdir(), 'factory-integrations-')), 'enable-encryption.db')}`;
+    const connection = { accessToken: 'fake-token', refreshToken: null, expiresAtMs: null };
+    const boot = async (encryption?: FactorySecretEncryption) => {
+      const backend = new LibSQLFactoryStorage({ id: 'integrations-migration-test', url });
+      const domain = backend.registerDomain(new IntegrationStorage(encryption));
+      await backend.init();
+      return { backend, store: domain.forIntegration<TestConnection, { pat: string }>('github') };
+    };
+
+    {
+      const { backend, store } = await boot();
+      await store.settings.save('org-1', '__org__', { pat: 'ghp_fake' });
+      await store.connections.upsert('org-1', { data: connection });
+      await backend.close();
+    }
+
+    const encryption = createFactorySecretEncryption({ primary: { id: 'v1', key: new Uint8Array(32).fill(7) } });
+    for (let i = 0; i < 2; i++) {
+      const { backend, store } = await boot(encryption);
+      expect(await store.settings.get('org-1', '__org__')).toEqual({ pat: 'ghp_fake' });
+      expect((await store.connections.get('org-1'))!.data).toEqual(connection);
+      const settingsRow = await backend.ops.findOne<{ config: string }>('integration_settings', { org_id: 'org-1' });
+      const connectionRow = await backend.ops.findOne<{ data: string }>('integration_connections', { org_id: 'org-1' });
+      expect(settingsRow!.config).toMatch(/^mastra:factory-secret:v1:/);
+      expect(connectionRow!.data).toMatch(/^mastra:factory-secret:v1:/);
+      await backend.close();
+    }
   });
 });

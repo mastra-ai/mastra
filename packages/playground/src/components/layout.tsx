@@ -10,7 +10,6 @@ import { useIsMobile } from '@mastra/playground-ui/hooks/use-is-mobile';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { AppShell, MainCard } from '@mastra/playground-ui/new/layout/app-shell';
 import { CollapsiblePanel } from '@mastra/playground-ui/resize/collapsible-panel';
-import { PanelDrawer } from '@mastra/playground-ui/resize/panel-drawer';
 import { PanelGroup } from '@mastra/playground-ui/resize/panel-group';
 import { PanelSeparator } from '@mastra/playground-ui/resize/separator';
 import { useAuthCapabilities, isAuthenticated } from '@mastra/react/hooks/auth';
@@ -72,8 +71,9 @@ const UNCLIPPED: CSSProperties = { overflow: 'visible' };
 
 /**
  * Hosts the page-registered side panel next to the Studio frame (outside the
- * rounded card). Desktop: resizable panel; mobile: edge drawer. The page always
- * renders under the same `Panel` so crossing the breakpoint never remounts it.
+ * rounded card), on desktop only: below the breakpoint each page shows its panel
+ * in its own drawer, opened from its header. The page always renders under the
+ * same `Panel` so crossing the breakpoint never remounts it.
  */
 export function StudioFrame({ children, className }: { children: React.ReactNode; className?: string }) {
   const isMobile = useIsMobile();
@@ -97,7 +97,8 @@ export function StudioFrame({ children, className }: { children: React.ReactNode
         </Panel>
         {hasPanel && !isMobile && (
           <>
-            <PanelSeparator />
+            {/* The separator is the gap between the two cards, so its handle sits between them. */}
+            <PanelSeparator className="w-2" />
             <CollapsiblePanel
               id="route-side-panel"
               ref={panelHandle}
@@ -105,9 +106,9 @@ export function StudioFrame({ children, className }: { children: React.ReactNode
               collapsible
               collapsedSize={0}
               hideExpandButton
-              minSize={320}
+              minSize={480}
               maxSize="50%"
-              defaultSize={380}
+              defaultSize={560}
               className="min-w-0"
               onResize={size => onPanelResize(size.inPixels)}
             >
@@ -116,11 +117,6 @@ export function StudioFrame({ children, className }: { children: React.ReactNode
           </>
         )}
       </PanelGroup>
-      {hasPanel && isMobile && (
-        <PanelDrawer direction="right" label="Open details panel">
-          <RouteSidePanelSlot className="h-full min-h-0" />
-        </PanelDrawer>
-      )}
     </div>
   );
 }

@@ -10,7 +10,7 @@ import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import type { JsonSchema, JsonSchemaProperty } from '@mastra/playground-ui/utils/json-schema';
+import type { JsonSchemaProperty } from '@mastra/playground-ui/utils/json-schema';
 import { useCompareAgentVersions } from '@mastra/react/hooks/agents';
 import { Braces, Wrench, Cpu } from 'lucide-react';
 import { useMemo } from 'react';
@@ -43,7 +43,8 @@ function ConfigTabLabel({ title, icon, badge }: { title: string; icon: React.Rea
 
 function VariableProperty({ name, prop, depth }: { name: string; prop: JsonSchemaProperty; depth: number }) {
   const typeLabel = Array.isArray(prop.type) ? prop.type.filter((t: string) => t !== 'null').join(' | ') : prop.type;
-  const hasChildren = prop.type === 'object' && prop.properties && Object.keys(prop.properties).length > 0;
+  const properties = prop.properties;
+  const hasChildren = prop.type === 'object' && properties && Object.keys(properties).length > 0;
 
   return (
     <div style={depth > 0 ? { paddingLeft: depth * 12 } : undefined}>
@@ -60,7 +61,7 @@ function VariableProperty({ name, prop, depth }: { name: string; prop: JsonSchem
       </div>
       {hasChildren && (
         <div className="ml-1 border-l border-border">
-          {Object.entries(prop.properties!).map(([childName, childProp]) => (
+          {Object.entries(properties).map(([childName, childProp]) => (
             <VariableProperty key={childName} name={childName} prop={childProp} depth={depth + 1} />
           ))}
         </div>
@@ -87,9 +88,9 @@ function computeLineDiff(oldText: string, newText: string): DiffLine[] {
   for (let i = 1; i <= m; i++) {
     for (let j = 1; j <= n; j++) {
       if (oldLines[i - 1] === newLines[j - 1]) {
-        dp[i]![j] = dp[i - 1]![j - 1]! + 1;
+        dp[i][j] = dp[i - 1][j - 1] + 1;
       } else {
-        dp[i]![j] = Math.max(dp[i - 1]![j]!, dp[i]![j - 1]!);
+        dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
       }
     }
   }
@@ -101,14 +102,14 @@ function computeLineDiff(oldText: string, newText: string): DiffLine[] {
 
   while (i > 0 || j > 0) {
     if (i > 0 && j > 0 && oldLines[i - 1] === newLines[j - 1]) {
-      result.push({ type: 'equal', text: oldLines[i - 1]! });
+      result.push({ type: 'equal', text: oldLines[i - 1] });
       i--;
       j--;
-    } else if (j > 0 && (i === 0 || dp[i]![j - 1]! >= dp[i - 1]![j]!)) {
-      result.push({ type: 'added', text: newLines[j - 1]! });
+    } else if (j > 0 && (i === 0 || dp[i][j - 1] >= dp[i - 1][j])) {
+      result.push({ type: 'added', text: newLines[j - 1] });
       j--;
     } else {
-      result.push({ type: 'removed', text: oldLines[i - 1]! });
+      result.push({ type: 'removed', text: oldLines[i - 1] });
       i--;
     }
   }
@@ -138,13 +139,13 @@ function RefBlockCopyContent({ promptBlockId }: { promptBlockId: string }) {
   });
   const content = promptBlock?.content ?? '';
   if (!content) return null;
-  return <CopyButton content={content} tooltip="Copy prompt block text" size="sm" />;
+  return <CopyButton content={content} tooltip="Copy prompt block text" />;
 }
 
 function BlockCopyButton({ block }: { block: Record<string, unknown> }) {
   const rawContent = getRawBlockContent(block);
   if (rawContent) {
-    return <CopyButton content={rawContent} tooltip="Copy prompt text" size="sm" />;
+    return <CopyButton content={rawContent} tooltip="Copy prompt text" />;
   }
   if (block.type === 'prompt_block_ref' && (typeof block.promptBlockId === 'string' || typeof block.id === 'string')) {
     return <RefBlockCopyContent promptBlockId={(block.promptBlockId as string) ?? (block.id as string)} />;
@@ -317,7 +318,7 @@ function RefBlockPreview({ promptBlockId }: { promptBlockId: string }) {
     <div className="relative rounded-md border border-border bg-background p-3">
       {content && (
         <div className="absolute top-2 right-2">
-          <CopyButton content={content} tooltip="Copy prompt block text" size="sm" />
+          <CopyButton content={content} tooltip="Copy prompt block text" />
         </div>
       )}
       {promptBlock?.name && (
@@ -356,7 +357,7 @@ function ReadOnlyInstructions({ blocks }: { blocks: unknown }) {
           <div key={(block.id as string) ?? idx} className="relative rounded-md border border-border bg-background p-3">
             {content && (
               <div className="absolute top-2 right-2">
-                <CopyButton content={content} tooltip="Copy prompt text" size="sm" />
+                <CopyButton content={content} tooltip="Copy prompt text" />
               </div>
             )}
             <Txt variant="caption" tone="muted" font="mono" className="whitespace-pre-wrap">
@@ -665,7 +666,7 @@ function ReadOnlyConfigWithDiff({
             currentTools={toolsDiff.currentValue as Record<string, unknown> | undefined}
           />
         ) : (
-          <ReadOnlyTools tools={tools as Record<string, unknown> | undefined} />
+          <ReadOnlyTools tools={tools} />
         )}
       </TabContent>
     </Tabs>
@@ -687,7 +688,7 @@ export function AgentPlaygroundConfig({ agentId, selectedVersionId, latestVersio
   const { isInstructionsLocked } = getEditorOwnership(isCodeAgentOverride, editorConfig);
   const tools = form.watch('tools');
   const instructionBlocks = form.watch('instructionBlocks');
-  const variables = form.watch('variables') as JsonSchema | undefined;
+  const variables = form.watch('variables');
   const toolCount = tools ? Object.keys(tools).length : 0;
 
   const variableEntries = useMemo(() => Object.entries(variables?.properties ?? {}), [variables]);

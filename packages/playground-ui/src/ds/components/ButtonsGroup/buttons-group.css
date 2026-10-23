@@ -30,19 +30,16 @@
   [data-slot='buttons-group'] {
     --segment-height: var(--spacing-control-md);
     --segment-glyph: var(--spacing-icon-md);
-    --segment-glyph-stroke: 1.5;
   }
 
   [data-slot='buttons-group'][data-size='sm'] {
     --segment-height: var(--spacing-control-sm);
     --segment-glyph: var(--spacing-icon-sm);
-    --segment-glyph-stroke: 1.75;
   }
 
   [data-slot='buttons-group'][data-size='lg'] {
     --segment-height: var(--spacing-control-lg);
     --segment-glyph: var(--spacing-icon-lg);
-    --segment-glyph-stroke: 1.25;
   }
 
   /* An InputGroup wrapping a textarea or a stacked addon is deliberately auto-height and
@@ -69,7 +66,6 @@
   [data-slot='buttons-group'] > :not([data-slot='buttons-group-text']) > svg {
     width: var(--segment-glyph);
     height: var(--segment-glyph);
-    stroke-width: var(--segment-glyph-stroke);
   }
 
   /* The control inside an InputGroup is sized to the root's content box, so it follows the

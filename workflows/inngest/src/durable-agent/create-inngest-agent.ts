@@ -42,6 +42,7 @@ import {
   agentThreadStreamRuntime,
   prepareForDurableExecution,
   createDurableAgentStream,
+  emitChunkEvent,
   emitErrorEvent,
   runDurableStreamUntilIdle,
   runResumeDurableStreamUntilIdle,
@@ -49,6 +50,8 @@ import {
   getRunRegistryEntry,
   deleteRunRegistryEntry,
   publishAbortRequest,
+  normalizeResumeGenerateArgs,
+  validateModelTimeoutSettings,
 } from '@mastra/core/agent/durable';
 import type { AgentStepFinishEventData, AgentSuspendedEventData } from '@mastra/core/agent/durable';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
@@ -60,6 +63,7 @@ import { CachingPubSub, PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
+import { ChunkFrom } from '@mastra/core/stream';
 import type { MastraModelOutput, ChunkType, FullOutput, MastraOnFinishCallback } from '@mastra/core/stream';
 import { deepMerge } from '@mastra/core/utils';
 import type { ShouldPersistSnapshotFn, Workflow } from '@mastra/core/workflows';
@@ -75,6 +79,7 @@ import { InngestPubSub } from '../pubsub';
 import type { InngestFlowControlConfig } from '../types';
 import type { InngestWorkflow } from '../workflow';
 import { createInngestDurableAgenticWorkflow, InngestDurableStepIds } from './create-inngest-agentic-workflow';
+import { keepSuspendedRunScopes } from './resume-scopes';
 
 class InngestAgentPubSubRouter extends PubSub {
   constructor(
@@ -157,9 +162,10 @@ const RESUME_SNAPSHOT_POLL_MS = 100;
 async function withDefaultOptions<T extends { requestContext?: AgentExecutionOptions<any>['requestContext'] }>(
   agent: Agent<any, any, any>,
   options: T | undefined,
-): Promise<T> {
+): Promise<T & Pick<AgentExecutionOptions, 'modelSettings'>> {
   const defaults = await agent.getDefaultOptions({ requestContext: options?.requestContext });
-  return deepMerge((defaults ?? {}) as Record<string, unknown>, (options ?? {}) as Record<string, unknown>) as T;
+  return deepMerge((defaults ?? {}) as Record<string, unknown>, (options ?? {}) as Record<string, unknown>) as T &
+    Pick<AgentExecutionOptions, 'modelSettings'>;
 }
 
 // =============================================================================
@@ -555,6 +561,11 @@ export interface InngestAgent<TOutput = undefined> {
    * {@link FullOutput}. Mirrors {@link DurableAgent.resumeGenerate} on top
    * of {@link InngestAgent.resume}.
    */
+  resumeGenerate(
+    resumeData: unknown,
+    options: InngestAgentResumeOptions<TOutput> & { runId: string },
+  ): Promise<FullOutput<TOutput>>;
+  /** @deprecated Use `resumeGenerate(resumeData, { runId, ...options })`, matching `Agent.resumeGenerate`. */
   resumeGenerate(
     runId: string,
     resumeData: unknown,
@@ -1000,6 +1011,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         messages,
         options: callbackOptions as AgentExecutionOptions<TOutput>,
         optionsAreResolved: true,
+        // `callbackOptions` include the Agent's defaults; only the call's own scopes are caller input.
+        // `scopes` is not part of the typed stream options, but callers can still pass it through.
+        callScopes: (streamOptions as { scopes?: string[] } | undefined)?.scopes,
         runId: streamOptions?.runId,
         requestContext: streamOptions?.requestContext,
         methodType: (streamOptions as any)?.__methodType ?? 'stream',
@@ -1051,6 +1065,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       const {
         output,
         cleanup: streamCleanup,
+        fail: failStream,
         ready,
       } = createDurableAgentStream<TOutput>({
         pubsub: getPubsub(),
@@ -1109,9 +1124,19 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // Track the trigger promise on the registry so generate() can await suspend
       // snapshot persistence before returning.
       const workflowExecution = ready
-        .then(() => triggerWorkflow(runId, workflowInput, tracingOptions, streamOptions?.actor))
-        .catch(error => {
-          void emitError(runId, error);
+        .then(async () => {
+          // Only initial runs open a message; resume continues the existing stream.
+          await emitChunkEvent(getPubsub(), runId, {
+            type: 'start',
+            runId,
+            from: ChunkFrom.AGENT,
+            payload: { id: workflowInput.agentId, messageId },
+          });
+          return triggerWorkflow(runId, workflowInput, tracingOptions, streamOptions?.actor);
+        })
+        .catch(async error => {
+          await emitError(runId, error);
+          await failStream(error);
         });
       const trackedEntry = getRunRegistryEntry(runId, mastra);
       if (trackedEntry) {
@@ -1164,6 +1189,15 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     },
 
     async resume(runId, resumeData, resumeOptions): Promise<InngestAgentStreamResult<TOutput>> {
+      if (agentThreadStreamRuntime.isResumeFenced(runId, agent.getPubSub())) {
+        throw new MastraError({
+          id: 'AGENT_RESUME_ABORTED_RUN',
+          domain: ErrorDomain.AGENT,
+          category: ErrorCategory.USER,
+          text: `InngestAgent "${agent.name}" resume() cannot resume aborted run "${runId}".`,
+          details: { agentName: agent.name, runId },
+        });
+      }
       // Delegate to the resume idle-loop wrapper when `untilIdle` is set.
       // After the resumed segment completes, the wrapper runs
       // `agent.stream([], ...)` continuations against the same thread until
@@ -1232,6 +1266,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           ...(resumeOptions?.requestContext?.entries() ?? []),
         ]),
       });
+      validateModelTimeoutSettings(callbackOptions.modelSettings?.timeout);
       const resumeOffset = await getPubsubOffset(runId);
 
       // Install a fresh abort controller scoped to the resumed segment and
@@ -1274,10 +1309,17 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         deleteRunRegistryEntry(runId, mastra);
       };
 
+      // The segment being resumed publishes its SUSPENDED event after its
+      // snapshot is saved, so it can land after `resumeOffset`. Every real
+      // re-suspension of this segment streams its own chunk first, so a
+      // SUSPENDED event seen before any chunk belongs to the earlier segment
+      // and must not close (or be reported by) this stream.
+      let resumedChunkSeen = false;
       // Re-subscribe to the stream
       const {
         output,
         cleanup: streamCleanup,
+        detach: detachStream,
         ready,
       } = createDurableAgentStream<TOutput>({
         pubsub: getPubsub(),
@@ -1292,7 +1334,10 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         threadId: resumeOptions?.threadId,
         resourceId: resumeOptions?.resourceId,
         structuredOutput: existingEntry.structuredOutput as StructuredOutputOptions<TOutput> | undefined,
-        onChunk: callbackOptions.onChunk,
+        onChunk: chunk => {
+          resumedChunkSeen = true;
+          return callbackOptions.onChunk?.(chunk);
+        },
         onStepFinish: callbackOptions.onStepFinish,
         onFinish: async result => {
           try {
@@ -1308,7 +1353,14 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             finalizeResumeRegistry();
           }
         },
-        onSuspended: callbackOptions.onSuspended,
+        onSuspended: async data => {
+          if (!resumedChunkSeen) return;
+          try {
+            await callbackOptions.onSuspended?.(data);
+          } finally {
+            if (resumeOptions?.closeOnSuspend) detachStream();
+          }
+        },
         onAbort: async data => {
           try {
             await (callbackOptions.onAbort as ((event: any) => void | Promise<void>) | undefined)?.(data);
@@ -1316,7 +1368,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             finalizeResumeRegistry();
           }
         },
-        closeOnSuspend: resumeOptions?.closeOnSuspend ?? false,
+        // Closing on suspend is handled in onSuspended above.
+        closeOnSuspend: false,
       });
 
       // Load the workflow snapshot to build proper resume data
@@ -1389,6 +1442,13 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         }
 
         const requestContext = mergeResumeRequestContext(snapshot?.requestContext, resumeOptions?.requestContext);
+        try {
+          keepSuspendedRunScopes(snapshot, requestContext, resumeOptions);
+        } catch (error) {
+          // A scope rejection belongs to this caller; the parked run stays resumable.
+          notResumable = true;
+          throw error;
+        }
         const tracingOptions = snapshot?.tracingContext
           ? {
               traceId: snapshot.tracingContext.traceId,
@@ -1628,10 +1688,15 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       }
     },
 
-    async resumeGenerate(runId, resumeData, resumeOptions): Promise<FullOutput<TOutput>> {
+    async resumeGenerate(...args: unknown[]): Promise<FullOutput<TOutput>> {
+      const {
+        runId,
+        resumeData,
+        options: resumeOptions,
+      } = normalizeResumeGenerateArgs<InngestAgentResumeOptions<TOutput>>(args);
       // `resumeGenerate` is a one-shot drain; strip `untilIdle` so the
       // underlying resume() never delegates to the idle-loop wrapper.
-      const { untilIdle, ...rest } = resumeOptions ?? {};
+      const { untilIdle, ...rest } = resumeOptions;
       void untilIdle;
       const result = await proxyRef!.resume(runId, resumeData, {
         ...rest,
@@ -1885,7 +1950,13 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       if (!runId) {
         throw new Error('approveToolCallGenerate() on InngestAgent requires a runId.');
       }
-      return proxyRef!.resumeGenerate(runId, { approved: true }, resumeOptions as InngestAgentResumeOptions<TOutput>);
+      return proxyRef!.resumeGenerate(
+        { approved: true },
+        {
+          ...(resumeOptions as InngestAgentResumeOptions<TOutput>),
+          runId,
+        },
+      );
     },
 
     async declineToolCallGenerate(options) {
@@ -1894,9 +1965,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         throw new Error('declineToolCallGenerate() on InngestAgent requires a runId.');
       }
       return proxyRef!.resumeGenerate(
-        runId,
         { approved: false, ...(reason !== undefined ? { reason } : {}) },
-        resumeOptions as InngestAgentResumeOptions<TOutput>,
+        { ...(resumeOptions as InngestAgentResumeOptions<TOutput>), runId },
       );
     },
 
@@ -1909,7 +1979,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       const aborted = agent.abortThreadStream(abortOptions);
       if (!aborted || !runId) return aborted;
 
-      abortDurableRun(runId);
+      if (!abortOptions.localOnly) abortDurableRun(runId);
       return true;
     },
 

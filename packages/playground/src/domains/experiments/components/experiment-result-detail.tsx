@@ -1,6 +1,6 @@
 import type { ClientScoreRowData } from '@mastra/client-js';
 
-import { TraceScoresTab } from '@mastra/playground-ui/domains/scores';
+import { TraceScoresList } from '@mastra/playground-ui/domains/scores';
 import { SpanFeedbackTab } from '@mastra/playground-ui/domains/traces/components/span-feedback-tab';
 import { TraceFeedbackTab } from '@mastra/playground-ui/domains/traces/components/trace-feedback-tab';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
@@ -29,9 +29,10 @@ export type ExperimentResultDetailProps = Omit<
 };
 
 /**
- * Shared "result + score + trace" drawer stack used by the experiment item page
+ * Shared "result + score + trace" panel stack used by the experiment item page
  * and the review queues, so the Trace / score interactions behave identically.
- * Score and trace are sibling drawers rendered after the result so they stack on top.
+ * The result is a drawer, or an inline card with `variant="inline"`. Score and trace
+ * are sibling drawers rendered after the result so they stack on top.
  */
 export function ExperimentResultDetail({
   result,
@@ -151,7 +152,7 @@ export function ExperimentResultDetail({
         scoresTabBadge={anchorSpanScores?.pagination?.total ?? undefined}
         scoresTabSlot={({ traceId, rootSpanId }) =>
           rootSpanId ? (
-            <TraceScoresTab
+            <TraceScoresList
               traceId={traceId}
               spanId={rootSpanId}
               onScoreSelect={scoreId => {

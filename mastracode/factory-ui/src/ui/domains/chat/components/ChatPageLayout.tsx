@@ -11,7 +11,7 @@ interface ChatPageLayoutProps {
   children: ReactNode;
 }
 
-/** `PageLayout` for chat pages (new session, thread, supervisor) with a crumb trail. */
+/** `PageLayout` for chat pages (new session, thread) with a crumb trail. */
 export function ChatPageLayout({ crumbs, headerActions, children }: ChatPageLayoutProps) {
   const slots = useSidebarHeaderSlots({
     breadcrumbs: crumbs && (

@@ -502,7 +502,7 @@ const sidebars = {
             { type: 'doc', id: 'observability/tracing/configuration', label: 'Configuration' },
             {
               type: 'doc',
-              id: 'observability/tracing/trace-query',
+              id: 'observability/tracing/advanced-queries',
               label: 'Advanced trace queries',
             },
             { type: 'doc', id: 'observability/tracing/instances', label: 'Instances' },
@@ -708,8 +708,10 @@ const sidebars = {
           id: 'signals/create-notification-inbox-tool',
           label: 'createNotificationInboxTool()',
         },
+        { type: 'doc', id: 'signals/notifications', label: 'Notifications' },
         { type: 'doc', id: 'signals/signal-provider', label: 'SignalProvider' },
         { type: 'doc', id: 'signals/task-signal-provider', label: 'TaskSignalProvider' },
+        { type: 'doc', id: 'signals/thread-events', label: 'Thread events' },
         { type: 'doc', id: 'signals/webhook-signal-provider', label: 'WebhookSignalProvider' },
       ],
     },
@@ -895,6 +897,7 @@ const sidebars = {
       label: 'Workspaces',
       collapsed: true,
       items: [
+        { type: 'doc', id: 'workspace/factory-sandbox', label: 'FactorySandbox' },
         { type: 'doc', id: 'workspace/local-filesystem', label: 'LocalFilesystem' },
         { type: 'doc', id: 'workspace/local-sandbox', label: 'LocalSandbox' },
         { type: 'doc', id: 'workspace/platform-filesystem', label: 'PlatformFilesystem' },

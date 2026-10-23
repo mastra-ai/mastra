@@ -773,4 +773,37 @@ describe('buildGitLabVersionControl', () => {
       }),
     ).rejects.toMatchObject<Partial<GitLabApiError>>({ status: 400 });
   });
+
+  it('publishes commit checks as GitLab commit statuses with mapped states', async () => {
+    const result = setup();
+    const setCommitStatus = vi.spyOn(result.api, 'setCommitStatus').mockImplementation(async (_project, sha, status) => ({
+      id: 5,
+      sha,
+      name: status.name,
+      status: status.state,
+      target_url: null,
+    }));
+    const base = {
+      connection: CONNECTION,
+      sourceId: 'acme/app',
+      headSha: 'a'.repeat(40),
+      ref: 'feature/tests',
+      name: 'Factory Review / tests',
+      summary: 'ignored by GitLab',
+    };
+
+    await expect(
+      result.versionControl.publishCommitCheck!({ ...base, status: 'failure', title: 'x'.repeat(300) }),
+    ).resolves.toEqual({ id: '5', name: 'Factory Review / tests', headSha: 'a'.repeat(40), status: 'failure', url: null });
+    await result.versionControl.publishCommitCheck!({ ...base, status: 'in-progress', title: 'Running' });
+    await result.versionControl.publishCommitCheck!({ ...base, status: 'neutral', title: 'Static only' });
+
+    expect(setCommitStatus.mock.calls.map(([project, sha, status]) => [project, sha, status.state])).toEqual([
+      ['acme/app', 'a'.repeat(40), 'failed'],
+      ['acme/app', 'a'.repeat(40), 'running'],
+      ['acme/app', 'a'.repeat(40), 'skipped'],
+    ]);
+    expect(setCommitStatus.mock.calls[0]![2].ref).toBe('feature/tests');
+    expect(setCommitStatus.mock.calls[0]![2].description).toHaveLength(255);
+  });
 });

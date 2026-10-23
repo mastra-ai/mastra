@@ -113,6 +113,9 @@ export class DevBundler extends Bundler {
       import { createNodeServer, getToolExports } from '#server';
       export { scoreTracesWorkflow, createNodeServer, getToolExports };
     `;
+    // Tool files aren't reachable from the entry, so analyze them too; otherwise workspace
+    // packages lose exports that only tools import.
+    const toolsInputOptions = await this.listToolsInputOptions(toolsPaths);
     const inputOptions = await getWatcherInputOptions(
       entryFile,
       this.platform,
@@ -121,10 +124,9 @@ export class DevBundler extends Bundler {
       },
       {
         sourcemap: sourcemapEnabled,
-        analysisEntries: [entryFile, devServerAnalysisEntry],
+        analysisEntries: [entryFile, devServerAnalysisEntry, ...Object.values(toolsInputOptions)],
       },
     );
-    const toolsInputOptions = await this.listToolsInputOptions(toolsPaths);
 
     const outputDir = join(outputDirectory, this.outputDir);
 

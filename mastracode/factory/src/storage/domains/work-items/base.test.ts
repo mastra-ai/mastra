@@ -1037,6 +1037,108 @@ describe('WorkItemsStorage', () => {
   });
 });
 
+describe('work item subscriptions', () => {
+  const follow = (workItemId: string, sessionId: string, reason: 'created' | 'started' | 'subscribed') => ({
+    orgId: 'org1',
+    factoryProjectId: 'project1',
+    workItemId,
+    sessionId,
+    threadId: `${sessionId}-thread`,
+    resourceId: sessionId,
+    userId: 'user1',
+    reason,
+  });
+
+  async function seed() {
+    const storage = await makeStorage();
+    const { item } = await storage.upsert({ orgId: 'org1', userId: 'user1', factoryProjectId: 'project1', input });
+    const { item: other } = await storage.upsert({
+      orgId: 'org1',
+      userId: 'user1',
+      factoryProjectId: 'project1',
+      input: { ...input, externalSource: { ...input.externalSource, externalId: '43' } },
+    });
+    return { storage, item, other };
+  }
+
+  it('is idempotent and keeps the earliest reason', async () => {
+    const { storage, item } = await seed();
+    const first = await storage.subscribeToWorkItem(follow(item.id, 'sess-a', 'created'));
+    const again = await storage.subscribeToWorkItem(follow(item.id, 'sess-a', 'subscribed'));
+
+    expect(again).toEqual(first);
+    expect(first).toMatchObject({
+      workItemId: item.id,
+      sessionId: 'sess-a',
+      threadId: 'sess-a-thread',
+      reason: 'created',
+    });
+    expect(await storage.listWorkItemSubscribers({ orgId: 'org1', workItemId: item.id })).toHaveLength(1);
+  });
+
+  it("lists an item's subscribers and a session's subscriptions, scoped by org and Factory", async () => {
+    const { storage, item, other } = await seed();
+    // Distinct timestamps, so "earliest first" doesn't fall to the random-id tiebreak.
+    vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-14T10:00:00Z') });
+    try {
+      await storage.subscribeToWorkItem(follow(item.id, 'sess-a', 'created'));
+      vi.setSystemTime(new Date('2026-10-14T10:00:01Z'));
+      await storage.subscribeToWorkItem(follow(item.id, 'sess-b', 'subscribed'));
+      vi.setSystemTime(new Date('2026-10-14T10:00:02Z'));
+      await storage.subscribeToWorkItem(follow(other.id, 'sess-a', 'started'));
+    } finally {
+      vi.useRealTimers();
+    }
+
+    const subscribers = await storage.listWorkItemSubscribers({ orgId: 'org1', workItemId: item.id });
+    expect(subscribers.map(row => [row.sessionId, row.reason])).toEqual([
+      ['sess-a', 'created'],
+      ['sess-b', 'subscribed'],
+    ]);
+    const followed = await storage.listSessionSubscriptions({
+      orgId: 'org1',
+      factoryProjectId: 'project1',
+      sessionId: 'sess-a',
+    });
+    expect(followed.map(row => row.workItemId).sort()).toEqual([item.id, other.id].sort());
+    expect(await storage.listWorkItemSubscribers({ orgId: 'org2', workItemId: item.id })).toEqual([]);
+    expect(
+      await storage.listSessionSubscriptions({ orgId: 'org1', factoryProjectId: 'project2', sessionId: 'sess-a' }),
+    ).toEqual([]);
+  });
+
+  it('unsubscribes one session from one item', async () => {
+    const { storage, item, other } = await seed();
+    await storage.subscribeToWorkItem(follow(item.id, 'sess-a', 'subscribed'));
+    await storage.subscribeToWorkItem(follow(other.id, 'sess-a', 'subscribed'));
+
+    expect(await storage.unsubscribeFromWorkItem({ orgId: 'org1', workItemId: item.id, sessionId: 'sess-a' })).toBe(
+      true,
+    );
+    expect(await storage.unsubscribeFromWorkItem({ orgId: 'org1', workItemId: item.id, sessionId: 'sess-a' })).toBe(
+      false,
+    );
+    expect(await storage.listWorkItemSubscribers({ orgId: 'org1', workItemId: item.id })).toEqual([]);
+    expect(await storage.listWorkItemSubscribers({ orgId: 'org1', workItemId: other.id })).toHaveLength(1);
+  });
+
+  it("removes an item's subscriptions when the item is deleted", async () => {
+    const { storage, item, other } = await seed();
+    await storage.subscribeToWorkItem(follow(item.id, 'sess-a', 'created'));
+    await storage.subscribeToWorkItem(follow(other.id, 'sess-a', 'created'));
+
+    await storage.delete({ orgId: 'org1', id: item.id });
+
+    expect(await storage.listWorkItemSubscribers({ orgId: 'org1', workItemId: item.id })).toEqual([]);
+    const followed = await storage.listSessionSubscriptions({
+      orgId: 'org1',
+      factoryProjectId: 'project1',
+      sessionId: 'sess-a',
+    });
+    expect(followed.map(row => row.workItemId)).toEqual([other.id]);
+  });
+});
+
 describe('applyStageTransition', () => {
   it('stamps exitedBy alongside exitedAt when closing an exited stage', () => {
     const history: WorkItemStageEntry[] = [{ stage: 'intake', enteredAt: '2026-07-01T00:00:00.000Z', by: 'user_1' }];

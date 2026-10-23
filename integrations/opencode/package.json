@@ -1,6 +1,6 @@
 {
   "name": "@mastra/opencode",
-  "version": "0.1.36-alpha.2",
+  "version": "0.1.38",
   "description": "OpenCode plugin for Mastra Observational Memory",
   "type": "module",
   "main": "./dist/index.js",
@@ -24,8 +24,8 @@
   "scripts": {
     "build:lib": "tsdown --silent --config tsdown.config.ts",
     "build:watch": "pnpm build:lib --watch",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix ."
   },
   "keywords": [
     "mastra",
@@ -59,7 +59,7 @@
     "@internal/types-builder": "workspace:*",
     "@opencode-ai/plugin": "1.14.48",
     "@opencode-ai/sdk": "^1.18.5",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   }

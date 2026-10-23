@@ -31,11 +31,14 @@ Storage adapters use the shared core retention contract for `prune()`, or a data
 | PostgreSQL | `prune()` | All supported growth domains. vNext observability drops expired partitions or chunks |
 | MongoDB | `prune()` or native TTL | All supported growth domains. Native TTL indexes are also available |
 | DuckDB | `prune()` | Observability spans, metrics, logs, scores, and feedback |
-| MySQL | `prune()` | Observability spans |
-| Microsoft SQL Server | `prune()` | Observability spans |
-| Oracle Database | `prune()` | Observability spans and logs |
-| Amazon Aurora DSQL | `prune()` | Observability spans |
-| Google Cloud Spanner | `prune()` | Observability spans, plus metrics when metrics storage is enabled |
+| MySQL | `prune()` | Observability spans, durable agent run fencing (`runOwnership`, `runFences`) |
+| Microsoft SQL Server | `prune()` | Observability spans, durable agent run fencing (`runOwnership`, `runFences`) |
+| Oracle Database | `prune()` | Observability spans and logs, durable agent run fencing (`runOwnership`, `runFences`) |
+| Amazon Aurora DSQL | `prune()` | Observability spans, durable agent run fencing (`runOwnership`, `runFences`) |
+| Google Cloud Spanner | `prune()` | Observability spans, plus metrics when metrics storage is enabled. Durable agent run fencing (`runOwnership`, `runFences`) |
+| DynamoDB | `prune()` | Durable agent run fencing (`runOwnership`, `runFences`) |
+| Convex | `prune()` | Durable agent run fencing (`runOwnership`, `runFences`). Redeploy your Convex functions after upgrading |
+| Cloudflare D1 and Durable Objects | `prune()` | Durable agent run fencing (`runOwnership`, `runFences`) |
 | ClickHouse | Native TTL | Observability spans, metrics, logs, scores, and feedback. When all five signals have finite retention, deletion-request records expire after the longest signal retention plus 30 days |
 
 ## Storage-specific maintenance

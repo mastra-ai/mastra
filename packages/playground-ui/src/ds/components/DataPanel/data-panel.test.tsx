@@ -27,6 +27,16 @@ describe('DataPanel', () => {
     expect(document.querySelector(POPUP)?.getAttribute('data-swipe-direction')).toBe('right');
   });
 
+  it('keeps the popup rounding on the drawer card', () => {
+    render(
+      <DataPanel open title="Span details">
+        <DataPanel.Content>Panel body</DataPanel.Content>
+      </DataPanel>,
+    );
+
+    expect(document.querySelector(`${POPUP} section`)?.className).toContain('rounded-xl');
+  });
+
   describe('when a size is given', () => {
     it('uses the viewport-relative width and ignores depth', () => {
       render(
@@ -332,6 +342,18 @@ describe('DataPanel', () => {
       expect(region.contains(screen.getByText('Panel body'))).toBe(true);
       expect(screen.queryByRole('dialog')).toBeNull();
       expect(document.querySelector(POPUP)).toBeNull();
+    });
+
+    it('rounds the card like the app frame it sits beside', () => {
+      render(
+        <DataPanel variant="inline" title="Span details">
+          <DataPanel.Content>Panel body</DataPanel.Content>
+        </DataPanel>,
+      );
+
+      const { className } = screen.getByRole('region', { name: 'Span details' });
+      expect(className).toContain('rounded-studio-frame');
+      expect(className).not.toContain('rounded-xl');
     });
 
     it('does not mark the body as drawer content', () => {

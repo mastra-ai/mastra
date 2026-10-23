@@ -842,9 +842,15 @@ export type AgentControllerEvent =
   | { type: 'thread_changed'; threadId: string; previousThreadId: string | null }
   | { type: 'thread_created'; thread: AgentControllerThread }
   | { type: 'thread_deleted'; threadId: string }
+  | { type: 'thread_owner_changed'; threadId: string; fromOwnerId: string | undefined; toOwnerId: string }
   | { type: 'state_changed'; state: Record<string, unknown>; changedKeys: string[] }
   | { type: 'agent_start' }
-  | { type: 'agent_end'; reason?: 'complete' | 'aborted' | 'error' | 'suspended' }
+  | {
+      type: 'agent_end';
+      reason?: 'complete' | 'aborted' | 'error' | 'suspended';
+      /** Why an aborted run stopped, when the abort said: `'thread-lease-lost'` when another run holds its thread lease. */
+      abortReason?: string;
+    }
   | { type: 'message_start'; message: MastraDBMessage }
   | {
       type: 'message_update';
@@ -1107,7 +1113,7 @@ export interface AgentControllerRequestState<TState = unknown> {
 export interface AgentControllerRequestSession<TState = unknown> {
   /** Stable session identifier (mirrors SessionRecord.id in storage). */
   id: string;
-  /** Stable session owner (mirrors SessionRecord.ownerId in storage). */
+  /** Stable identity of the process-local session host. Use `threadOwnerId` for thread ownership and billing. */
   ownerId: string;
   /** Currently-selected mode ID */
   modeId: string;
@@ -1158,11 +1164,14 @@ export interface AgentControllerRequestContext<TState = unknown> {
   /** Thread ID captured for this request. */
   threadId: string | null;
 
-  /** Current resource ID */
+  /** Thread owner captured once when this run starts. */
+  threadOwnerId?: string;
+
+  /** Current resource ID: whose threads and memory this session uses. Several sessions may share it. */
   resourceId: string;
 
-  /** Optional isolation scope used to identify this session within its resource. */
-  scope?: string;
+  /** ID of the session handling this request. Look the session up with `AgentController.getSession(sessionId)`. */
+  sessionId: string;
 
   /**
    * Snapshot of the relevant session-owned values for this request.

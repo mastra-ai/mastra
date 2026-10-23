@@ -179,6 +179,8 @@ describe('DurableAgent.recover(runId)', () => {
 
     const entry = globalRunRegistry.get('run-1');
     expect(entry).toBeDefined();
+    expect(entry?.agentId).toBe(agent.id);
+    expect(agent.runRegistry.get('run-1')?.agentId).toBe(agent.id);
     expect(entry?.messageList).toBeDefined();
     expect(entry?.requestContext?.get?.('userId')).toBe('u-1');
 
@@ -614,6 +616,7 @@ describe('DurableAgent.recover(runId)', () => {
   it('refuses a suspended run without claiming it, and releases the claim when the run suspends during the claim', async () => {
     const runId = 'run-suspended';
     const workflows = (await store.getStore('workflows'))!;
+    const publish = vi.spyOn(agent.getPubSub(), 'publish');
     await seed(store, runId, 'suspended', 'agent-A');
     const workflow = stubWorkflow(agent, 'success');
 
@@ -635,6 +638,59 @@ describe('DurableAgent.recover(runId)', () => {
     expect((await workflows.getRunOwnership({ runId }))?.live).toBe(false);
     // Nothing is left behind that would make the next recover() see the run as live or in progress.
     await expect(agent.recover(runId)).rejects.toMatchObject({ id: 'DURABLE_AGENT_RECOVER_RUN_SUSPENDED' });
+    expect(
+      publish.mock.calls.filter(
+        ([topic, event]) => topic === AGENT_STREAM_TOPIC(runId) && event.type === AgentStreamEventTypes.ERROR,
+      ),
+    ).toHaveLength(0);
+  });
+
+  it('stays silent when the snapshot disappears during the recovery claim', async () => {
+    const runId = 'run-snapshot-disappears';
+    const workflows = (await store.getStore('workflows'))!;
+    const publish = vi.spyOn(agent.getPubSub(), 'publish');
+    await seed(store, runId, 'running', 'agent-A');
+    const workflow = stubWorkflow(agent, 'success');
+    const claim = workflows.claimRunOwnership.bind(workflows);
+    vi.spyOn(workflows, 'claimRunOwnership').mockImplementationOnce(async input => {
+      await workflows.deleteWorkflowRunById({ runId, workflowName: DurableStepIds.AGENTIC_LOOP });
+      return claim(input);
+    });
+
+    await expect(agent.recover(runId)).rejects.toMatchObject({ id: 'DURABLE_AGENT_RECOVER_SNAPSHOT_NOT_FOUND' });
+
+    expect(workflow.createRun).not.toHaveBeenCalled();
+    expect(ExecutionFence.getLocalActive(runId)).toBeUndefined();
+    expect((await workflows.getRunOwnership({ runId }))?.live).toBe(false);
+    expect(
+      publish.mock.calls.filter(
+        ([topic, event]) => topic === AGENT_STREAM_TOPIC(runId) && event.type === AgentStreamEventTypes.ERROR,
+      ),
+    ).toHaveLength(0);
+  });
+
+  it('stays silent when the run becomes inactive during the recovery claim', async () => {
+    const runId = 'run-becomes-inactive';
+    const workflows = (await store.getStore('workflows'))!;
+    const publish = vi.spyOn(agent.getPubSub(), 'publish');
+    await seed(store, runId, 'running', 'agent-A');
+    const workflow = stubWorkflow(agent, 'success');
+    const claim = workflows.claimRunOwnership.bind(workflows);
+    vi.spyOn(workflows, 'claimRunOwnership').mockImplementationOnce(async input => {
+      await seed(store, runId, 'canceled', 'agent-A');
+      return claim(input);
+    });
+
+    await expect(agent.recover(runId)).rejects.toMatchObject({ id: 'DURABLE_AGENT_RECOVER_RUN_NOT_ACTIVE' });
+
+    expect(workflow.createRun).not.toHaveBeenCalled();
+    expect(ExecutionFence.getLocalActive(runId)).toBeUndefined();
+    expect((await workflows.getRunOwnership({ runId }))?.live).toBe(false);
+    expect(
+      publish.mock.calls.filter(
+        ([topic, event]) => topic === AGENT_STREAM_TOPIC(runId) && event.type === AgentStreamEventTypes.ERROR,
+      ),
+    ).toHaveLength(0);
   });
 
   it('does not let an older cleanup remove a newer recovery of the same run', async () => {
@@ -860,21 +916,38 @@ describe('DurableAgent.recover(runId)', () => {
     }
   });
 
-  it('releases the claim when workflow construction throws synchronously', async () => {
+  it('publishes a terminal error and releases the claim when workflow construction throws synchronously', async () => {
     const runId = 'run-workflow-construction-fail';
     const failureStore = new InMemoryStore();
     const failurePubsub = new EventEmitterPubSub();
+    const publish = vi.spyOn(failurePubsub, 'publish');
     const workflows = (await failureStore.getStore('workflows'))!;
     const { agent: failureAgent } = createDurableWithStore('agent-workflow-fail', failureStore, failurePubsub);
     await seed(failureStore, runId, 'running', 'agent-workflow-fail');
+    const observed = await failureAgent.observe(runId, { offset: 0 });
+    const observedChunks = (async () => {
+      const chunks = [];
+      for await (const chunk of observed.fullStream) chunks.push(chunk);
+      return chunks;
+    })();
     const getWorkflow = vi.spyOn(failureAgent, 'getWorkflow').mockImplementation(() => {
       throw new Error('workflow construction failed');
     });
 
     await expect(failureAgent.recover(runId)).rejects.toThrow('workflow construction failed');
+    const chunks = await observedChunks;
+    const errors = chunks.filter(chunk => chunk.type === 'error');
+    expect(errors).toHaveLength(1);
+    expect((errors[0]?.payload as any).error.message).toBe('workflow construction failed');
+    expect(
+      publish.mock.calls.filter(
+        ([topic, event]) => topic === AGENT_STREAM_TOPIC(runId) && event.type === AgentStreamEventTypes.ERROR,
+      ),
+    ).toHaveLength(1);
     expect(globalRunRegistry.get(runId)).toBeUndefined();
     expect(ExecutionFence.getLocalActive(runId)).toBeUndefined();
     expect((await workflows.getRunOwnership({ runId }))?.live).toBe(false);
+    observed.cleanup();
 
     // Both the run claim and this process's recovery claim are free again.
     getWorkflow.mockRestore();
@@ -883,6 +956,33 @@ describe('DurableAgent.recover(runId)', () => {
     await globalRunRegistry.get(runId)?.workflowExecution;
     expect(createRun).toHaveBeenCalledTimes(1);
     recovered.cleanup();
+  });
+
+  it('publishes a terminal error when the post-claim snapshot reload fails', async () => {
+    const runId = 'run-snapshot-reload-fail';
+    const failureStore = new InMemoryStore();
+    const failurePubsub = new EventEmitterPubSub();
+    const publish = vi.spyOn(failurePubsub, 'publish');
+    const workflows = (await failureStore.getStore('workflows'))!;
+    const { agent: failureAgent } = createDurableWithStore('agent-snapshot-fail', failureStore, failurePubsub);
+    await seed(failureStore, runId, 'running', 'agent-snapshot-fail');
+    const getWorkflowRunById = workflows.getWorkflowRunById.bind(workflows);
+    let snapshotReads = 0;
+    vi.spyOn(workflows, 'getWorkflowRunById').mockImplementation(async args => {
+      snapshotReads++;
+      if (snapshotReads === 2) throw new Error('snapshot reload failed');
+      return getWorkflowRunById(args);
+    });
+
+    await expect(failureAgent.recover(runId)).rejects.toThrow('snapshot reload failed');
+
+    const errorEvents = publish.mock.calls.filter(
+      ([topic, event]) => topic === AGENT_STREAM_TOPIC(runId) && event.type === AgentStreamEventTypes.ERROR,
+    );
+    expect(errorEvents).toHaveLength(1);
+    expect((errorEvents[0]?.[1] as any).data.error.message).toBe('snapshot reload failed');
+    expect(ExecutionFence.getLocalActive(runId)).toBeUndefined();
+    expect((await workflows.getRunOwnership({ runId }))?.live).toBe(false);
   });
 
   it('deletes both AGENTIC_LOOP and AGENTIC_EXECUTION snapshot rows on success', async () => {

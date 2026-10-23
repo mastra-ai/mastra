@@ -53,7 +53,7 @@ export type ExperimentResultPanelResult = Pick<DatasetExperimentResult, 'id' | '
     tags?: string[] | null;
   };
 
-export type ExperimentResultPanelScore = { id: string; scorerId: string; score: number };
+export type ExperimentResultPanelScore = { id: string; scorerId: string; score: number; reason?: string | null };
 
 export type ExperimentResultPanelProps = {
   /** Keep the panel mounted and pass `undefined` to close it, so the drawer animates out. */
@@ -86,6 +86,11 @@ export type ExperimentResultPanelProps = {
    * Feedback tabs; this renders the feedback tab, keyed by trace id.
    */
   feedbackTabSlot?: (args: { traceId: string }) => ReactNode;
+  /**
+   * `drawer` (default) portals the panel over the app. `inline` renders it in the document flow
+   * (e.g. inside the route side panel) and renders nothing while there is no `result`/`itemId`.
+   */
+  variant?: 'drawer' | 'inline';
 };
 
 export function ExperimentResultPanel({
@@ -94,32 +99,44 @@ export function ExperimentResultPanel({
   fallback,
   title,
   onClose,
+  variant = 'drawer',
   ...bodyProps
 }: ExperimentResultPanelProps) {
   const dialogTitle = title ?? (itemId ? `Experiment item ${itemId}` : `Experiment result ${result?.id ?? ''}`);
+  const content = result ? (
+    <ExperimentResultPanelBody result={result} onClose={onClose} {...bodyProps} />
+  ) : itemId ? (
+    <>
+      <DataPanel.Header>
+        <DataPanel.Heading>
+          Experiment item
+          <DataPanel.CopyId id={itemId} />
+        </DataPanel.Heading>
+        <DataPanel.HeaderActions>
+          <DataPanel.CloseButton icon="x" onClick={onClose} />
+        </DataPanel.HeaderActions>
+      </DataPanel.Header>
+      {fallback}
+    </>
+  ) : null;
+
+  if (variant === 'inline') {
+    if (!content) return null;
+    return (
+      <DataPanel variant="inline" title={dialogTitle}>
+        {content}
+      </DataPanel>
+    );
+  }
+
   return (
     <DataPanel open={!!(result ?? itemId)} onClose={onClose} title={dialogTitle} depth={1}>
-      {result ? (
-        <ExperimentResultPanelBody result={result} onClose={onClose} {...bodyProps} />
-      ) : itemId ? (
-        <>
-          <DataPanel.Header>
-            <DataPanel.Heading>
-              Experiment item
-              <DataPanel.CopyId id={itemId} />
-            </DataPanel.Heading>
-            <DataPanel.HeaderActions>
-              <DataPanel.CloseButton icon="x" onClick={onClose} />
-            </DataPanel.HeaderActions>
-          </DataPanel.Header>
-          {fallback}
-        </>
-      ) : null}
+      {content}
     </DataPanel>
   );
 }
 
-type ExperimentResultPanelBodyProps = Omit<ExperimentResultPanelProps, 'result' | 'itemId' | 'fallback'> & {
+type ExperimentResultPanelBodyProps = Omit<ExperimentResultPanelProps, 'result' | 'itemId' | 'fallback' | 'variant'> & {
   result: ExperimentResultPanelResult;
 };
 
@@ -232,6 +249,7 @@ function ExperimentResultPanelBody({
       scores: (scores ?? []).map(score => ({
         scorerId: score.scorerId,
         value: score.score,
+        reason: score.reason,
         label: onScoreClick ? (
           <ScoreButton
             scorerId={score.scorerId}
@@ -282,21 +300,20 @@ function ExperimentResultPanelBody({
   return (
     <>
       <DataPanel.Header>
-        <DataPanel.Heading>Experiment result</DataPanel.Heading>
+        {canFlag && (
+          <Button size="sm" variant="primary" onClick={() => onFlagForReview(result.id)} icon={<ClipboardPlus />}>
+            Request review
+          </Button>
+        )}
+        {onComplete && result.status === 'needs-review' && (
+          <Button size="sm" variant="primary" onClick={onComplete} icon={<CheckCircle />}>
+            Mark as reviewed
+          </Button>
+        )}
         <DataPanel.HeaderActions>
-          {canFlag && (
-            <Button size="sm" variant="primary" onClick={() => onFlagForReview!(result.id)} icon={<ClipboardPlus />}>
-              Request review
-            </Button>
-          )}
-          {onComplete && result.status === 'needs-review' && (
-            <Button size="sm" variant="primary" onClick={onComplete} icon={<CheckCircle />}>
-              Mark as reviewed
-            </Button>
-          )}
           {experimentLink && (
             <Button
-              size="sm"
+              size="icon-sm"
               variant="ghost"
               render={<Link href={experimentLink} />}
               tooltip="See experiment"
@@ -306,7 +323,7 @@ function ExperimentResultPanelBody({
             </Button>
           )}
           {result.traceId && onShowTrace && (
-            <Button size="sm" variant="ghost" onClick={onShowTrace} tooltip="See trace" aria-label="See trace">
+            <Button size="icon-sm" variant="ghost" onClick={onShowTrace} tooltip="See trace" aria-label="See trace">
               <TraceIcon />
             </Button>
           )}

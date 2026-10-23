@@ -8,11 +8,11 @@
   "dependencies": {
     "@mastra/core": "1.66.0",
     "@mastra/mcp": "1.17.3",
-    "@modelcontextprotocol/sdk": "1.31.0",
+    "@modelcontextprotocol/sdk": "1.32.1",
     "zod": "4.5.4"
   },
   "devDependencies": {
-    "@types/node": "22.20.1",
+    "@types/node": "22.20.5",
     "typescript": "7.0.2"
   }
 }

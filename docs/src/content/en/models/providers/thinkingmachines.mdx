@@ -7,7 +7,7 @@ description: "Browse Thinking Machines model IDs, capabilities, context windows,
 
 # <img src="https://models.dev/logos/thinkingmachines.svg" alt="Thinking Machines logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Thinking Machines
 
-Access 2 Thinking Machines models through Mastra's model router. Authentication is handled automatically using the `TINKER_API_KEY` environment variable.
+Access 38 Thinking Machines models through Mastra's model router. Authentication is handled automatically using the `TINKER_API_KEY` environment variable.
 
 Learn more in the [Thinking Machines documentation](https://tinker-docs.thinkingmachines.ai/tinker/compatible-apis/anthropic/).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "thinkingmachines/thinkingmachines/Inkling"
+  model: "thinkingmachines/Qwen/Qwen3-8B"
 });
 
 // Generate a response
@@ -46,6 +46,366 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
 <ProviderModelsTable
   models={[
   {
+    "model": "thinkingmachines/deepseek-ai/DeepSeek-V3.1",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
+    "inputCost": 1.695,
+    "outputCost": 4.215
+  },
+  {
+    "model": "thinkingmachines/deepseek-ai/DeepSeek-V4.1-Flash-1017:peft:262144",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.6,
+    "outputCost": 3.6
+  },
+  {
+    "model": "thinkingmachines/deepseek-ai/DeepSeek-V4.1-Flash:peft:262144",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.6,
+    "outputCost": 3.6
+  },
+  {
+    "model": "thinkingmachines/moonshotai/Kimi-K2.6",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
+    "inputCost": 2.205,
+    "outputCost": 5.49
+  },
+  {
+    "model": "thinkingmachines/moonshotai/Kimi-K2.6:peft:131072",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 2.205,
+    "outputCost": 5.49
+  },
+  {
+    "model": "thinkingmachines/nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 65536,
+    "maxOutput": 65536,
+    "inputCost": 0.195,
+    "outputCost": 0.495
+  },
+  {
+    "model": "thinkingmachines/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 65536,
+    "maxOutput": 65536,
+    "inputCost": 0.57,
+    "outputCost": 1.44
+  },
+  {
+    "model": "thinkingmachines/nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16:peft:262144",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.57,
+    "outputCost": 1.44
+  },
+  {
+    "model": "thinkingmachines/nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 65536,
+    "maxOutput": 65536,
+    "inputCost": 1.8,
+    "outputCost": 6.225
+  },
+  {
+    "model": "thinkingmachines/nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16:peft:262144",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 1.8,
+    "outputCost": 6.225
+  },
+  {
+    "model": "thinkingmachines/nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 65536,
+    "maxOutput": 65536,
+    "inputCost": 0.184,
+    "outputCost": 0.495
+  },
+  {
+    "model": "thinkingmachines/nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16:peft:262144",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.184,
+    "outputCost": 0.495
+  },
+  {
+    "model": "thinkingmachines/nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-BF16",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 65536,
+    "maxOutput": 65536,
+    "inputCost": 0.57,
+    "outputCost": 1.44
+  },
+  {
+    "model": "thinkingmachines/nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-BF16:peft:262144",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.57,
+    "outputCost": 1.44
+  },
+  {
+    "model": "thinkingmachines/openai/gpt-oss-120b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
+    "inputCost": 0.33,
+    "outputCost": 0.84
+  },
+  {
+    "model": "thinkingmachines/openai/gpt-oss-120b:peft:131072",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 131072,
+    "maxOutput": 131072,
+    "inputCost": 0.33,
+    "outputCost": 0.84
+  },
+  {
+    "model": "thinkingmachines/openai/gpt-oss-20b",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
+    "inputCost": 0.18,
+    "outputCost": 0.45
+  },
+  {
+    "model": "thinkingmachines/Qwen/Qwen3-8B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 32768,
+    "maxOutput": 32768,
+    "inputCost": 0.195,
+    "outputCost": 0.6
+  },
+  {
+    "model": "thinkingmachines/Qwen/Qwen3.5-35B-A3B-Base",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 65536,
+    "maxOutput": 65536,
+    "inputCost": 0.54,
+    "outputCost": 1.335
+  },
+  {
+    "model": "thinkingmachines/Qwen/Qwen3.5-397B-A17B",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 65536,
+    "maxOutput": 65536,
+    "inputCost": 1.65,
+    "outputCost": 7.5
+  },
+  {
+    "model": "thinkingmachines/Qwen/Qwen3.5-397B-A17B:peft:262144",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 1.65,
+    "outputCost": 7.5
+  },
+  {
+    "model": "thinkingmachines/Qwen/Qwen3.5-4B",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 65536,
+    "maxOutput": 65536,
+    "inputCost": 0.33,
+    "outputCost": 1.005
+  },
+  {
+    "model": "thinkingmachines/Qwen/Qwen3.5-4B:peft:262144",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.33,
+    "outputCost": 1.005
+  },
+  {
+    "model": "thinkingmachines/Qwen/Qwen3.5-9B",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 65536,
+    "maxOutput": 65536,
+    "inputCost": 0.3,
+    "outputCost": 0.807
+  },
+  {
+    "model": "thinkingmachines/Qwen/Qwen3.5-9B-Base",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": false,
+    "reasoning": false,
+    "contextWindow": 65536,
+    "maxOutput": 65536,
+    "inputCost": 0.3,
+    "outputCost": 0.807
+  },
+  {
+    "model": "thinkingmachines/Qwen/Qwen3.6-27B",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 65536,
+    "maxOutput": 65536,
+    "inputCost": 1.86,
+    "outputCost": 5.595
+  },
+  {
+    "model": "thinkingmachines/Qwen/Qwen3.6-35B-A3B",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 65536,
+    "maxOutput": 65536,
+    "inputCost": 0.45,
+    "outputCost": 1.335
+  },
+  {
+    "model": "thinkingmachines/Qwen/Qwen3.6-35B-A3B:peft:262144",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.45,
+    "outputCost": 1.335
+  },
+  {
+    "model": "thinkingmachines/Qwen/Qwen3.8-27B",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 65536,
+    "maxOutput": 65536,
+    "inputCost": 0.6975,
+    "outputCost": 5.595
+  },
+  {
+    "model": "thinkingmachines/Qwen/Qwen3.8-27B:peft:262144",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.6975,
+    "outputCost": 5.595
+  },
+  {
     "model": "thinkingmachines/thinkingmachines/Inkling",
     "imageInput": true,
     "audioInput": false,
@@ -58,6 +418,42 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 4.68
   },
   {
+    "model": "thinkingmachines/thinkingmachines/Inkling-Small",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 65536,
+    "maxOutput": 65536,
+    "inputCost": 0.58,
+    "outputCost": 1.44
+  },
+  {
+    "model": "thinkingmachines/thinkingmachines/Inkling-Small:peft:262144",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.58,
+    "outputCost": 1.44
+  },
+  {
+    "model": "thinkingmachines/thinkingmachines/Inkling-Small:peft:262144:sampling-nvfp4",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
     "model": "thinkingmachines/thinkingmachines/Inkling:peft:262144",
     "imageInput": true,
     "audioInput": false,
@@ -66,8 +462,44 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 262144,
-    "inputCost": 3.74,
-    "outputCost": 9.36
+    "inputCost": 1.87,
+    "outputCost": 4.68
+  },
+  {
+    "model": "thinkingmachines/thinkingmachines/Inkling:peft:262144:sampling-nvfp4",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 1,
+    "outputCost": 4.05
+  },
+  {
+    "model": "thinkingmachines/zai-org/GLM-5.3-Flash:peft:262144",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 0.84,
+    "outputCost": 2.11
+  },
+  {
+    "model": "thinkingmachines/zai-org/GLM-5.3:peft:262144",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 262144,
+    "maxOutput": 262144,
+    "inputCost": 3.78,
+    "outputCost": 12.15
   }
 ]}
 />
@@ -84,7 +516,7 @@ const agent = new Agent({
   name: "custom-agent",
   model: {
     url: "https://tinker.thinkingmachines.dev/services/tinker-prod/anthropic/api/v1",
-    id: "thinkingmachines/thinkingmachines/Inkling",
+    id: "thinkingmachines/Qwen/Qwen3-8B",
     apiKey: process.env.TINKER_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -102,8 +534,8 @@ const agent = new Agent({
   model: ({ requestContext }) => {
     const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "thinkingmachines/thinkingmachines/Inkling:peft:262144"
-      : "thinkingmachines/thinkingmachines/Inkling";
+      ? "thinkingmachines/zai-org/GLM-5.3:peft:262144"
+      : "thinkingmachines/Qwen/Qwen3-8B";
   }
 });
 ```

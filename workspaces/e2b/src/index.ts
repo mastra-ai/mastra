@@ -1,4 +1,5 @@
 export { E2BSandbox, type E2BSandboxOptions } from './sandbox';
+export { E2BSandboxFilesystem } from './sandbox/filesystem';
 export { E2BProcessManager } from './sandbox/process-manager';
 export {
   createDefaultMountableTemplate,
@@ -28,4 +29,5 @@ export {
   type E2BMountConfig,
 } from './sandbox/mounts';
 export { e2bSandboxProvider } from './provider';
+export { E2BFactorySandbox, type E2BFactorySandboxOptions, type E2BFactorySandboxSettings } from './factory-sandbox';
 export { E2BCodeModeTransport } from './code-mode/transport';

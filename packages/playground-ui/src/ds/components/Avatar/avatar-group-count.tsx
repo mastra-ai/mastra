@@ -1,4 +1,5 @@
-import { useContext, type ComponentProps } from 'react';
+import { useContext } from 'react';
+import type { ComponentProps } from 'react';
 
 import { AvatarSizeContext, avatarIconClasses, avatarSizeClasses, avatarTextClasses } from './avatar-size';
 import { cn } from '@/lib/utils';
@@ -14,7 +15,8 @@ export function AvatarGroupCount({ className, ...props }: AvatarGroupCountProps)
       data-slot="avatar-group-count"
       data-size={size}
       className={cn(
-        'relative flex shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground tabular-nums ring-2 ring-card',
+        'relative flex shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground tabular-nums',
+        'after:pointer-events-none after:absolute after:inset-0 after:rounded-full after:border after:border-border',
         avatarSizeClasses[size],
         avatarTextClasses[size],
         avatarIconClasses[size],

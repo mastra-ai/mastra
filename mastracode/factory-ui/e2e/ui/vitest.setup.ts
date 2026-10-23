@@ -43,7 +43,7 @@ if (!globalThis.localStorage) {
     key: index => Array.from(store.keys())[index] ?? null,
     removeItem: key => store.delete(key),
     setItem: (key, value) => store.set(key, value),
-  } as Storage;
+  };
 }
 
 // jsdom polyfills used by the settings UI.
@@ -88,6 +88,10 @@ if (!globalThis.IntersectionObserver) {
 
 if (!Element.prototype.scrollTo) {
   Element.prototype.scrollTo = () => {};
+}
+
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {};
 }
 
 // jsdom's window.scrollTo only logs "Not implemented"; <ScrollRestoration /> calls it on every navigation.

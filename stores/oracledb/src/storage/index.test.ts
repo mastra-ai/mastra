@@ -8,6 +8,7 @@ import {
 import { createAgentsTests } from '../../../_test-utils/src/domains/agents';
 import { createMemoryTest } from '../../../_test-utils/src/domains/memory';
 import { createObservabilityTests } from '../../../_test-utils/src/domains/observability';
+import { createRunFencingTests } from '../../../_test-utils/src/domains/run-fencing';
 import { createScoresTest } from '../../../_test-utils/src/domains/scores';
 import { createWorkflowsTests } from '../../../_test-utils/src/domains/workflows';
 import { OraclePoolManager } from '../shared/connection';
@@ -55,11 +56,12 @@ describeIntegration('OracleStore shared storage suite', () => {
     await poolManager.close();
   });
 
-  createWorkflowsTests({ storage: store });
+  createWorkflowsTests({ storage: store, workflowResultsNoopWhenRunMissing: false });
   createMemoryTest({ storage: store });
   createScoresTest({ storage: store, capabilities: { listScoresBySpan: true, toolMocks: false } });
   createObservabilityTests({ storage: store });
   createAgentsTests({ storage: store });
+  createRunFencingTests({ storage: store });
 
   createClientAcceptanceTests({
     storeName: 'OracleStore',

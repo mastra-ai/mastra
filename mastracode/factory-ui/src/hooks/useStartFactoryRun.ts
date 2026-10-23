@@ -86,13 +86,13 @@ export function useStartFactoryRun() {
 
       await Promise.all([
         queryClient.invalidateQueries({
-          queryKey: queryKeys.agentControllerThreads(AGENT_CONTROLLER_ID, sessionId, undefined),
+          queryKey: queryKeys.agentControllerThreads(AGENT_CONTROLLER_ID, sessionId),
         }),
         queryClient.invalidateQueries({ queryKey: queryKeys.workItems(factoryId) }),
         // The session was just minted. Without this the sidebar keeps serving
         // its cached list and it only appears once some later navigation
         // happens to refetch it.
-        queryClient.invalidateQueries({ queryKey: queryKeys.sessions(repository.projectRepositoryId) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.sessions(factoryId) }),
       ]);
       return { factoryId, sessionId, threadId: prepared.threadId, threadTitle };
     },

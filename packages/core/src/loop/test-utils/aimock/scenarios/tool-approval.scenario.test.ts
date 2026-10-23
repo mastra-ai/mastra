@@ -1,8 +1,15 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
-import { describe, it, expect } from 'vitest';
+import { it, expect } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools';
-import { runApprovalScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import { MockMemory } from '../../../../memory';
+import {
+  createSharedAgent,
+  describeForAllEngines,
+  runApprovalScenario,
+  runLoopScenario,
+  useLoopScenarioAimock,
+} from '../aimock-scenario';
 
 /**
  * Regression class: tool approval + suspend/resume.
@@ -13,8 +20,10 @@ import { runApprovalScenario, useLoopScenarioAimock } from '../aimock-scenario';
  * continue path keeps message ordering and tool plumbing intact across the
  * snapshot boundary.
  */
-describe('AIMock loop scenario: tool approval suspend/resume', () => {
+describeForAllEngines('AIMock loop scenario: tool approval suspend/resume', engine => {
   const getMock = useLoopScenarioAimock();
+  // InngestAgent.resume() has no resume claim yet, so a second approval resolves instead of rejecting (#27485).
+  const itFailsOnInngest = engine === 'inngest' ? it.fails : it;
 
   const makeLookupTool = () =>
     createTool({
@@ -28,6 +37,7 @@ describe('AIMock loop scenario: tool approval suspend/resume', () => {
   it('approves a suspended tool call, executes it, then completes', async () => {
     const { output, chunks, approvals, requests } = await runApprovalScenario({
       llm: getMock(),
+      engine,
       prompt: 'Look up the status for query alpha.',
       tools: { lookup_status: makeLookupTool() },
       stopWhen: stepCountIs(5),
@@ -70,6 +80,7 @@ describe('AIMock loop scenario: tool approval suspend/resume', () => {
   it('declines a suspended tool call and reports the denial back to the model', async () => {
     const { output, approvals, requests } = await runApprovalScenario({
       llm: getMock(),
+      engine,
       prompt: 'Look up the status for query beta.',
       tools: { lookup_status: makeLookupTool() },
       stopWhen: stepCountIs(5),
@@ -110,6 +121,7 @@ describe('AIMock loop scenario: tool approval suspend/resume', () => {
 
     const { approvals, requests } = await runApprovalScenario({
       llm: getMock(),
+      engine,
       prompt: 'Use the label "beta".',
       tools: { do_the_thing: dangerTool },
       stopWhen: stepCountIs(5),
@@ -127,5 +139,110 @@ describe('AIMock loop scenario: tool approval suspend/resume', () => {
     expect(approvals).toEqual(['decline:call_20470_stream']);
     expect(executions).toBe(0);
     expect(JSON.stringify(requests[1]?.body?.messages ?? [])).not.toContain('"done":true');
+  });
+
+  // A user clicking Approve twice must not run the tool twice, and the second
+  // click must fail right away instead of waiting on the first run (#27365).
+  itFailsOnInngest('approving the same tool call twice runs it once and fails the second approval fast', async () => {
+    let executions = 0;
+    let release!: () => void;
+    const gate = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    const archiveTool = createTool({
+      id: 'archive',
+      description: 'Archive an item',
+      inputSchema: z.object({ item: z.string() }),
+      requireApproval: true,
+      execute: async () => {
+        executions += 1;
+        await gate;
+        return { archived: true };
+      },
+    });
+
+    const llm = getMock();
+    const memory = new MockMemory();
+    const shared = await createSharedAgent(llm, { tools: { archive: archiveTool }, memory, engine });
+    const { output, chunks } = await runLoopScenario({
+      engine,
+      llm,
+      sharedAgent: shared,
+      prompt: 'Archive a',
+      memory,
+      threadId: 'double-approve-thread',
+      resourceId: 'double-approve-resource',
+      collectChunks: true,
+      fixtures: mock => {
+        mock.on(
+          { endpoint: 'chat', hasToolResult: false },
+          { toolCalls: [{ id: 'call_archive', name: 'archive', arguments: { item: 'a' } }] },
+        );
+        mock.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Archived.' });
+      },
+    });
+    expect(chunks!.some(chunk => chunk.type === 'tool-call-approval')).toBe(true);
+
+    const first = shared.agent.approveToolCall({ runId: output.runId, toolCallId: 'call_archive' });
+    const startedAt = Date.now();
+    const second = shared.agent.approveToolCall({ runId: output.runId, toolCallId: 'call_archive' });
+    await expect(second).rejects.toMatchObject({ id: 'AGENT_RESUME_ALREADY_CLAIMED' });
+    expect(Date.now() - startedAt).toBeLessThan(1_000);
+
+    release();
+    const resumed = await first;
+    const resumedTypes: string[] = [];
+    for await (const chunk of resumed.fullStream) resumedTypes.push(chunk.type);
+    expect(resumedTypes).not.toContain('error');
+    expect(resumedTypes).toContain('finish');
+    expect(executions).toBe(1);
+  });
+
+  it('requireToolApproval in agent defaultOptions gates tool calls', async () => {
+    let executions = 0;
+    const archiveTool = createTool({
+      id: 'archive',
+      description: 'Archive an item',
+      inputSchema: z.object({ item: z.string() }),
+      execute: async () => {
+        executions += 1;
+        return { archived: true };
+      },
+    });
+
+    const llm = getMock();
+    const memory = new MockMemory();
+    const shared = await createSharedAgent(llm, {
+      tools: { archive: archiveTool },
+      memory,
+      engine,
+      defaultOptions: { requireToolApproval: true },
+    });
+    const { output, chunks } = await runLoopScenario({
+      engine,
+      llm,
+      sharedAgent: shared,
+      prompt: 'Archive a',
+      memory,
+      threadId: 'default-options-approval-thread',
+      resourceId: 'default-options-approval-resource',
+      collectChunks: true,
+      fixtures: mock => {
+        mock.on(
+          { endpoint: 'chat', hasToolResult: false },
+          { toolCalls: [{ id: 'call_archive', name: 'archive', arguments: { item: 'a' } }] },
+        );
+        mock.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Archived.' });
+      },
+    });
+    expect(chunks!.some(chunk => chunk.type === 'tool-call-approval')).toBe(true);
+    expect(executions).toBe(0);
+
+    const resumed = await shared.agent.approveToolCall({ runId: output.runId, toolCallId: 'call_archive' });
+    for await (const _ of resumed.fullStream) {
+      // drain
+    }
+    expect(executions).toBe(1);
+    expect(await resumed.text).toBe('Archived.');
   });
 });

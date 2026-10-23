@@ -1,8 +1,8 @@
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
+import type { FactorySandbox } from '@mastra/core/workspace';
 import type { Context } from 'hono';
 import type { RouteAuth } from '../../routes/route.js';
-import type { MastraFactorySandboxConfig } from '../../sandbox/session-sandbox.js';
 import { sanitizeSegment } from '../../sandbox/workdir.js';
 import type { AuditEmitter } from '../../storage/domains/audit/domain.js';
 import type { IntakeStorage } from '../../storage/domains/intake/base.js';
@@ -29,7 +29,7 @@ export interface BuildGitLabRoutesOptions {
   gitlab?: GitLabIntegrationBase;
   auth?: RouteAuth;
   intake?: IntakeStorage;
-  sandbox?: MastraFactorySandboxConfig;
+  sandbox?: FactorySandbox;
   emitAudit?: AuditEmitter['emit'];
   webhookSecret?: string;
   ingestFactoryEvent?: (event: ParsedGitLabWebhook) => Promise<unknown>;
@@ -489,15 +489,20 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
           const tenant = auth.tenant(loose(c));
           if (!tenant?.orgId) return c.json({ error: 'unauthorized' }, 401);
 
+          // Sessions read by session id; resourceId is the older address.
+          const sessionId = c.req.query('sessionId');
           const resourceId = c.req.query('resourceId');
           const threadId = c.req.query('threadId');
-          const sessionScope = c.req.query('scope');
-          if (!resourceId || !threadId) return c.json({ error: 'resourceId and threadId are required' }, 400);
+          const target = !threadId
+            ? null
+            : sessionId
+              ? { orgId: tenant.orgId, sessionId, threadId }
+              : resourceId
+                ? { orgId: tenant.orgId, resourceId, threadId }
+                : null;
+          if (!target) return c.json({ error: 'sessionId (or resourceId) and threadId are required' }, 400);
 
-          const subscriptions = await listMergeRequestSubscriptionsForThread(
-            { orgId: tenant.orgId, resourceId, threadId, sessionScope },
-            gitlab.integrationStorage,
-          );
+          const subscriptions = await listMergeRequestSubscriptionsForThread(target, gitlab.integrationStorage);
           return c.json({
             subscriptions: subscriptions.map(subscription => ({
               id: subscription.id,

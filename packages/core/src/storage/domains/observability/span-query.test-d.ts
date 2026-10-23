@@ -8,9 +8,10 @@ test('the span contract shares scalar predicates and keeps authorization outside
   expectTypeOf<SpanQueryRequest>().not.toHaveProperty('authorizationBinding');
   expectTypeOf<SpanQueryRow>().not.toHaveProperty('input');
   expectTypeOf<SpanQueryRow>().not.toHaveProperty('output');
-  expectTypeOf<SpanQueryRow['cost']>().toEqualTypeOf<
-    { state: 'available'; amount: number; currency: string } | { state: 'missing' } | { state: 'unavailable' }
-  >();
+  expectTypeOf<SpanQueryRow>().not.toHaveProperty('cost');
+  expectTypeOf<SpanQueryRow>().not.toHaveProperty('inputTruncated');
+  expectTypeOf<SpanQueryRow>().not.toHaveProperty('outputTruncated');
+  expectTypeOf<SpanQueryRow>().not.toHaveProperty('errorTruncated');
 });
 
 test('internal span planning helpers are not part of the storage API', () => {

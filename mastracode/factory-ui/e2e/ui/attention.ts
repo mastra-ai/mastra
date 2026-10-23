@@ -25,7 +25,12 @@ export function attentionKindSummaries(items: FactoryAttentionItem[]): FactoryAt
     'automation-proposed': summarize(items, 'automation-proposed'),
     mention: summarize(items, 'mention'),
     activity: summarize(items, 'activity'),
-    'supervisor-finding': summarize(items, 'supervisor-finding'),
     'agent-waiting': summarize(items, 'agent-waiting'),
   };
+}
+
+/** The route lists only the kinds a request names, as each Needs you list asks for its own. */
+export function itemsOfRequestedKinds<Item extends FactoryAttentionItem>(request: Request, items: Item[]): Item[] {
+  const kinds = new URL(request.url).searchParams.getAll('kind');
+  return kinds.length === 0 ? items : items.filter(item => kinds.includes(item.kind));
 }

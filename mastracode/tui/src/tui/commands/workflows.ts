@@ -9,6 +9,7 @@
 import { deleteWorkflow, getWorkflow, listWorkflows, runWorkflow } from '@mastra/code-sdk/workflows/service';
 import type { StoredWorkflowRow, WorkflowRunEvent } from '@mastra/code-sdk/workflows/service';
 import { RequestContext } from '@mastra/core/request-context';
+import { requireLocal } from '../runtime.js';
 import { getTermWidth } from '../theme.js';
 import type { SlashCommandContext } from './types.js';
 
@@ -322,7 +323,7 @@ export async function handleWorkflowsCommand(
     return;
   }
 
-  const mastra = ctx.controller.getMastra();
+  const mastra = requireLocal(ctx.state, '/workflows').controller.getMastra();
   if (!mastra) {
     ctx.showError('Workflows: no Mastra instance attached to this controller.');
     return;

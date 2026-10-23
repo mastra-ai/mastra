@@ -12,13 +12,13 @@ import type { ChatSessionContextApi } from '../ChatSessionContext';
 import { useChatModels } from '../useChatModels';
 
 const draftSession: ChatSessionContextApi = {
-  resourceId: 'draft-1',
+  sessionId: 'draft-1',
+  resourceId: 'user-1',
   sessionEnabled: false,
   resourceReady: false,
   sandboxReady: false,
   sandboxPreparing: false,
   resourceEnabled: false,
-  projectPath: undefined,
   baseUrl: TEST_BASE_URL,
   kind: 'user',
   draftSessionId: 'draft-1',
@@ -33,6 +33,11 @@ function ActiveModelProbe() {
   return <div>{activeModelId}</div>;
 }
 
+function DefaultModelProbe() {
+  const { defaultModelId } = useChatModels();
+  return <div data-testid="default-model">{defaultModelId}</div>;
+}
+
 function LoadingProbe() {
   const { isLoading } = useChatModels();
   return <div>{isLoading ? 'loading' : 'ready'}</div>;
@@ -44,6 +49,72 @@ function ErrorProbe() {
 }
 
 describe('ChatModelsProvider', () => {
+  it.each([
+    { modelScope: 'factory', kind: 'factory', expected: 'deepseek/deepseek-flash' },
+    { modelScope: 'factory', kind: 'user', expected: 'deepseek/deepseek-flash' },
+    { modelScope: 'user', kind: 'factory', expected: 'anthropic/claude-opus-4-1' },
+    { modelScope: 'user', kind: 'user', expected: 'anthropic/claude-opus-4-1' },
+    { modelScope: 'hybrid', kind: 'factory', expected: 'deepseek/deepseek-flash' },
+    { modelScope: 'hybrid', kind: 'user', expected: 'anthropic/claude-opus-4-1' },
+  ] as const)(
+    'uses the $expected default in a $modelScope $kind session without replacing its selected model',
+    async ({ modelScope, kind, expected }) => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1`, () =>
+          HttpResponse.json({ project: { id: 'factory-1', modelScope, defaultModelId: 'deepseek/deepseek-flash' } }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: 'openai/gpt-5.5' })),
+      );
+
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/models`, ({ request }) => {
+          const params = new URL(request.url).searchParams;
+          expect(params.get('resourceId')).toBe('session-1');
+          expect(params.get('threadId')).toBe('thread-1');
+          return HttpResponse.json({
+            models: [],
+            modelScope: expected === 'deepseek/deepseek-flash' ? 'factory' : 'user',
+            defaultModelId: expected,
+          });
+        }),
+      );
+
+      renderWithProviders(
+        <ChatSessionContext.Provider
+          value={{
+            ...draftSession,
+            resourceId: 'session-1',
+            sessionThreadId: 'thread-1',
+            resourceReady: true,
+            kind,
+            draftSessionId: undefined,
+          }}
+        >
+          <ChatConnectionContext.Provider
+            value={{
+              status: 'ready',
+              state: {
+                controllerId: AGENT_CONTROLLER_ID,
+                sessionId: 'session-1',
+                resourceId: 'session-1',
+                modeId: 'build',
+                modelId: 'openai/gpt-5',
+              },
+            }}
+          >
+            <ChatModelsProvider>
+              <ActiveModelProbe />
+              <DefaultModelProbe />
+            </ChatModelsProvider>
+          </ChatConnectionContext.Provider>
+        </ChatSessionContext.Provider>,
+      );
+
+      expect(await screen.findByText(expected)).toBeVisible();
+      expect(screen.getByText('openai/gpt-5')).toBeVisible();
+    },
+  );
+
   it('uses the personal default model ahead of the Factory default for a new chat', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1`, () =>
@@ -119,6 +190,9 @@ describe('ChatModelsProvider', () => {
 
   it('uses the live session state model', async () => {
     server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1`, () =>
+        HttpResponse.json({ project: { id: 'factory-1', modelScope: 'user' } }),
+      ),
       http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
         HttpResponse.json({ modelId: 'anthropic/claude-opus-4-1' }),
       ),
@@ -139,6 +213,7 @@ describe('ChatModelsProvider', () => {
             status: 'ready',
             state: {
               controllerId: AGENT_CONTROLLER_ID,
+              sessionId: 'session-1',
               resourceId: 'session-1',
               modeId: 'build',
               modelId: 'openai/gpt-5',

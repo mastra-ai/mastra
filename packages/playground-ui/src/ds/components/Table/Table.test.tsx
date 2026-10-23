@@ -155,6 +155,31 @@ it('applies the inset variant to the existing named parts without nesting header
   expect(screen.getByRole('cell', { name: 'Memory' })).toBeTruthy();
 });
 
+it('marks an inset header placed inside the panel, and only on inset tables', () => {
+  const { rerender } = render(
+    <Table variant="inset" aria-label="Usage by project">
+      <Table.Header placement="inside">
+        <Table.Row>
+          <Table.Head>Project</Table.Head>
+        </Table.Row>
+      </Table.Header>
+    </Table>,
+  );
+  const header = () => screen.getByRole('table', { name: 'Usage by project' }).querySelector('thead');
+  expect(header()?.dataset.placement).toBe('inside');
+
+  rerender(
+    <Table aria-label="Usage by project">
+      <Table.Header placement="inside">
+        <Table.Row>
+          <Table.Head>Project</Table.Head>
+        </Table.Row>
+      </Table.Header>
+    </Table>,
+  );
+  expect(header()?.dataset.placement).toBeUndefined();
+});
+
 it('forwards native table and cell refs in inset mode', () => {
   const tableRef = createRef<HTMLTableElement>();
   const cellRef = createRef<HTMLTableCellElement>();

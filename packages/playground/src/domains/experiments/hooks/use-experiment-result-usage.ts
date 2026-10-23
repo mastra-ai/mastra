@@ -16,14 +16,17 @@ export function useExperimentResultUsage(traceId: string | null | undefined) {
   const isAgentTrace = rootSpan?.entityType === 'agent';
   const { supportsMetrics, isLoading: isCapabilitiesLoading } = useObservabilityStorageCapabilities();
 
+  const isUsageEnabled = isAgentTrace && supportsMetrics;
   const usage = useTraceUsage({
     traceIds: traceId ? [traceId] : [],
-    enabled: isAgentTrace && supportsMetrics,
+    enabled: isUsageEnabled,
     autoRefetch: false,
   });
+  // Switching results keeps the previous trace's usage as placeholder data, which is not `isLoading`.
+  const isUsageLoading = isUsageEnabled && (usage.isLoading || usage.isPlaceholderData);
 
   return {
     usage: traceId ? usage.data?.get(traceId) : undefined,
-    isLoading: !!traceId && (isTraceLoading || isCapabilitiesLoading || usage.isLoading),
+    isLoading: !!traceId && (isTraceLoading || isCapabilitiesLoading || isUsageLoading),
   };
 }

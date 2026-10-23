@@ -2411,6 +2411,124 @@ describe('BackgroundTaskManager', () => {
       abortController.abort();
     });
 
+    describe('resource scoping', () => {
+      const enqueueFor = (resourceId: string | undefined, toolCallId: string, result: string) =>
+        manager.enqueue(
+          {
+            toolName: 'tool',
+            toolCallId,
+            args: { secret: `${toolCallId}-args` },
+            agentId: 'a1',
+            runId: `run-${toolCallId}`,
+            threadId: `thread-${toolCallId}`,
+            resourceId,
+          },
+          ctx(vi.fn().mockResolvedValue(result)),
+        );
+
+      const collect = async (stream: ReadableStream<Record<string, unknown>>, abort: AbortController) => {
+        await tick();
+        abort.abort();
+        const events: any[] = [];
+        const reader = stream.getReader();
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          events.push(value);
+        }
+        return events;
+      };
+
+      it('does not deliver resource-scoped task events to an unscoped subscriber', async () => {
+        const abortController = new AbortController();
+        const stream = manager.stream({ agentId: 'a1', abortSignal: abortController.signal });
+
+        await enqueueFor('victim', 'victim-call', 'SECRET');
+        await enqueueFor(undefined, 'shared-call', 'shared');
+
+        const events = await collect(stream, abortController);
+        expect(events.map(e => e.payload.toolCallId)).not.toContain('victim-call');
+        expect(JSON.stringify(events)).not.toContain('SECRET');
+        expect(events).toContainEqual(
+          expect.objectContaining({
+            type: 'background-task-completed',
+            payload: expect.objectContaining({ toolCallId: 'shared-call', result: 'shared' }),
+          }),
+        );
+      });
+
+      it('delivers only the subscribed resource across threads', async () => {
+        const abortController = new AbortController();
+        const stream = manager.stream({ agentId: 'a1', resourceId: 'user-1', abortSignal: abortController.signal });
+
+        await enqueueFor('user-1', 'own-call', 'mine');
+        await enqueueFor('user-2', 'other-call', 'theirs');
+        await enqueueFor(undefined, 'unscoped-call', 'unscoped');
+
+        const events = await collect(stream, abortController);
+        expect(new Set(events.map(e => e.payload.toolCallId))).toEqual(new Set(['own-call']));
+        expect(events).toContainEqual(
+          expect.objectContaining({
+            type: 'background-task-completed',
+            payload: expect.objectContaining({ result: 'mine' }),
+          }),
+        );
+      });
+
+      it('treats an empty-string resource id as a resource, not as unscoped', async () => {
+        const unscopedAbort = new AbortController();
+        const unscoped = manager.stream({ agentId: 'a1', abortSignal: unscopedAbort.signal });
+        const emptyAbort = new AbortController();
+        const empty = manager.stream({ agentId: 'a1', resourceId: '', abortSignal: emptyAbort.signal });
+
+        await enqueueFor('', 'empty-call', 'EMPTY');
+        await enqueueFor('user-1', 'user-call', 'USER');
+
+        const unscopedEvents = await collect(unscoped, unscopedAbort);
+        expect(unscopedEvents.map(e => e.payload.toolCallId)).not.toContain('empty-call');
+
+        const emptyEvents = await collect(empty, emptyAbort);
+        expect(new Set(emptyEvents.map(e => e.payload.toolCallId))).toEqual(new Set(['empty-call']));
+      });
+
+      it('delivers every resource when allResources is set', async () => {
+        const abortController = new AbortController();
+        const stream = manager.stream({ allResources: true, abortSignal: abortController.signal });
+
+        await enqueueFor('user-1', 'one-call', 'r1');
+        await enqueueFor('user-2', 'two-call', 'r2');
+
+        const events = await collect(stream, abortController);
+        expect(new Set(events.map(e => e.payload.toolCallId))).toEqual(new Set(['one-call', 'two-call']));
+      });
+
+      it('excludes other resources from the existing-task snapshot', async () => {
+        const blocking = () => ctx(vi.fn().mockImplementation(() => new Promise(() => {})));
+        await manager.enqueue(
+          { toolName: 'tool', toolCallId: 'victim-call', args: {}, agentId: 'a1', runId: 'r1', resourceId: 'victim' },
+          blocking(),
+        );
+        await manager.enqueue(
+          { toolName: 'tool', toolCallId: 'shared-call', args: {}, agentId: 'a1', runId: 'r2' },
+          blocking(),
+        );
+        await tick();
+
+        const unscopedAbort = new AbortController();
+        const unscoped = await collect(manager.stream({ abortSignal: unscopedAbort.signal }), unscopedAbort);
+        expect(unscoped.map(e => e.payload.toolCallId)).toEqual(['shared-call']);
+
+        const victimTask = (await manager.listTasks({ resourceId: 'victim' })).tasks[0]!;
+        const byIdAbort = new AbortController();
+        const byId = await collect(manager.stream({ taskId: victimTask.id, abortSignal: byIdAbort.signal }), byIdAbort);
+        expect(byId).toEqual([]);
+
+        const allAbort = new AbortController();
+        const all = await collect(manager.stream({ allResources: true, abortSignal: allAbort.signal }), allAbort);
+        expect(new Set(all.map(e => e.payload.toolCallId))).toEqual(new Set(['victim-call', 'shared-call']));
+      });
+    });
+
     it('closes when abortSignal fires', async () => {
       const abortController = new AbortController();
       const stream = manager.stream({ abortSignal: abortController.signal });

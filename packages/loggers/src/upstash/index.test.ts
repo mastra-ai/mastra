@@ -199,6 +199,34 @@ describe('UpstashTransport', () => {
 
       expect(getPushedLog().time).toBe(now);
     });
+
+    it('should not mutate object input when adding a timestamp', async () => {
+      const record = { msg: 'caller-owned' };
+      transport.write(record as any);
+      await transport._flush();
+
+      expect(record).toEqual({ msg: 'caller-owned' });
+      expect(getPushedLog()).toEqual({ msg: 'caller-owned', time: now });
+    });
+
+    it('should not mutate object input with a null timestamp', async () => {
+      const record = { msg: 'null time', time: null };
+      transport.write(record as any);
+      await transport._flush();
+
+      expect(record.time).toBeNull();
+      expect(getPushedLog().time).toBe(now);
+    });
+
+    it('should send frozen records and pass the original chunk through', async () => {
+      const record = Object.freeze({ msg: 'frozen' });
+      const callback = vi.fn();
+      transport._transform(record as any, 'utf8', callback);
+      await transport._flush();
+
+      expect(callback).toHaveBeenCalledWith(null, record);
+      expect(getPushedLog()).toEqual({ msg: 'frozen', time: now });
+    });
   });
 
   describe('error handling', () => {
@@ -239,6 +267,109 @@ describe('UpstashTransport', () => {
 
       await expect(transport._flush()).rejects.toThrow('Network error');
       expect(transport.logBuffer.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('pipeline command errors', () => {
+    const wrongType = 'WRONGTYPE Operation against a key holding the wrong kind of value';
+    const pipelineResponse = (results: unknown[]) =>
+      Promise.resolve({ ok: true, json: () => Promise.resolve(results) });
+
+    beforeEach(() => {
+      vi.spyOn(console, 'error').mockImplementation(() => {});
+    });
+
+    it('should keep the batch when Redis rejects LPUSH', async () => {
+      fetchMock.mockImplementationOnce(() => pipelineResponse([{ error: wrongType }, { error: wrongType }]));
+      transport.logBuffer.push({ msg: 'hello', time: 1 } as any);
+      const lastFlush = transport.lastFlush;
+      vi.advanceTimersByTime(5);
+
+      await expect(transport._flush()).rejects.toThrow(wrongType);
+
+      expect(transport.logBuffer).toEqual([{ msg: 'hello', time: 1 }]);
+      expect(transport.lastFlush).toBe(lastFlush);
+    });
+
+    it('should resend a rejected batch before newer records', async () => {
+      fetchMock.mockImplementationOnce(() => pipelineResponse([{ error: wrongType }, { error: wrongType }]));
+      const batchTransport = new UpstashTransport({ ...defaultOptions, batchSize: 2 });
+      batchTransport.logBuffer.push({ msg: 'message1' } as any, { msg: 'message2' } as any, { msg: 'message3' } as any);
+
+      await expect(batchTransport._flush()).rejects.toThrow(wrongType);
+      await batchTransport._flush();
+
+      const [lpush] = JSON.parse(fetchMock.mock.calls[1][1].body);
+      expect(lpush.slice(2).map((log: string) => JSON.parse(log).msg)).toEqual(['message1', 'message2']);
+    });
+
+    it('should report a rejected LTRIM without resending the pushed batch', async () => {
+      fetchMock.mockImplementationOnce(() => pipelineResponse([{ result: 1 }, { error: wrongType }]));
+      transport.logBuffer.push({ msg: 'hello', time: 1 } as any);
+      const lastFlush = transport.lastFlush;
+      vi.advanceTimersByTime(5);
+
+      await expect(transport._flush()).rejects.toThrow(`Failed to trim Upstash log list: ${wrongType}`);
+
+      expect(transport.logBuffer).toEqual([]);
+      expect(transport.lastFlush).toBeGreaterThan(lastFlush);
+    });
+
+    it('should keep the batch when LPUSH is rejected without an LTRIM command', async () => {
+      fetchMock.mockImplementationOnce(() => pipelineResponse([{ error: wrongType }]));
+      const untrimmedTransport = new UpstashTransport({ ...defaultOptions, maxListLength: -1 });
+      untrimmedTransport.logBuffer.push({ msg: 'hello', time: 1 } as any);
+
+      await expect(untrimmedTransport._flush()).rejects.toThrow(wrongType);
+
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toHaveLength(1);
+      expect(untrimmedTransport.logBuffer).toEqual([{ msg: 'hello', time: 1 }]);
+    });
+
+    it('should pass a rejected final push to the destroy callback', async () => {
+      fetchMock.mockImplementationOnce(() => pipelineResponse([{ error: wrongType }, { error: wrongType }]));
+      transport.logBuffer.push({ msg: 'hello', time: 1 } as any);
+
+      const error = await new Promise<Error | null | undefined>(resolve => {
+        transport._destroy(null as any, (err?: Error | null) => resolve(err));
+      });
+
+      expect(error?.message).toContain(wrongType);
+      expect(transport.logBuffer).toEqual([{ msg: 'hello', time: 1 }]);
+    });
+
+    it('should keep draining on destroy after a rejected LTRIM and report the trim error', async () => {
+      const noPerm = "NOPERM this user has no permissions to run the 'ltrim' command";
+      fetchMock.mockImplementationOnce(() => pipelineResponse([{ result: 2 }, { error: noPerm }]));
+      const batchTransport = new UpstashTransport({ ...defaultOptions, batchSize: 2 });
+      batchTransport.logBuffer.push(
+        { msg: 'message1' } as any,
+        { msg: 'message2' } as any,
+        { msg: 'message3' } as any,
+        { msg: 'message4' } as any,
+      );
+
+      const error = await new Promise<Error | null | undefined>(resolve => {
+        batchTransport._destroy(null as any, (err?: Error | null) => resolve(err));
+      });
+
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      const pushed = fetchMock.mock.calls.flatMap(([, init]) =>
+        JSON.parse(init.body)[0]
+          .slice(2)
+          .map((log: string) => JSON.parse(log).msg),
+      );
+      expect(pushed).toEqual(['message1', 'message2', 'message3', 'message4']);
+      expect(batchTransport.logBuffer).toEqual([]);
+      expect(error?.message).toBe(`Failed to trim Upstash log list: ${noPerm}`);
+    });
+
+    it('should resolve when every pipeline command succeeds', async () => {
+      fetchMock.mockImplementationOnce(() => pipelineResponse([{ result: 1 }, { result: 'OK' }]));
+      transport.logBuffer.push({ msg: 'hello', time: 1 } as any);
+
+      await expect(transport._flush()).resolves.toBeUndefined();
+      expect(transport.logBuffer).toEqual([]);
     });
   });
 
@@ -467,6 +598,52 @@ describe('UpstashTransport', () => {
       ]);
       expect(result).toMatchObject({ total: 5, page: 2, perPage: 2, hasMore: true });
       expect(result.logs.map(log => log.msg)).toEqual(['message3', 'message4']);
+    });
+
+    it('should skip malformed entries in snapshot queries', async () => {
+      fetchMock.mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve([{ result: [JSON.stringify({ msg: 'valid', time: 1 }), 'invalid json'] }]),
+        }),
+      );
+
+      const result = await transport.listLogs({ returnPaginationResults: false });
+
+      expect(result.logs).toEqual([{ msg: 'valid', time: 1 }]);
+      expect(result).toMatchObject({ total: 1, perPage: 1, hasMore: false });
+    });
+
+    it('should return no logs when every snapshot entry is malformed', async () => {
+      fetchMock.mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve([{ result: ['nope', '{bad'] }]),
+        }),
+      );
+
+      const result = await transport.listLogs({ returnPaginationResults: false });
+
+      expect(result.logs).toEqual([]);
+      expect(result.total).toBe(0);
+    });
+
+    it('should skip malformed entries in unfiltered pages without changing the request', async () => {
+      fetchMock.mockImplementationOnce(() =>
+        Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve([{ result: 5 }, { result: [JSON.stringify({ msg: 'm3', time: 3 }), 'bad'] }]),
+        }),
+      );
+
+      const result = await transport.listLogs({ page: 2, perPage: 2 });
+
+      expect(JSON.parse(fetchMock.mock.calls[0][1].body)).toEqual([
+        ['LLEN', 'test-logs'],
+        ['LRANGE', 'test-logs', 2, 3],
+      ]);
+      expect(result).toMatchObject({ total: 5, page: 2, perPage: 2, hasMore: true });
+      expect(result.logs.map(log => log.msg)).toEqual(['m3']);
     });
 
     it('should read run ID queries from a single snapshot', async () => {

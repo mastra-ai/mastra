@@ -15,7 +15,9 @@ import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { AGENT_CONTROLLER_ID } from '../../../chat/services/constants';
 import type { FactoryUserSession } from '../../services/user-sessions';
-import { UserSessionsSection } from '../UserSessionsSection';
+import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
+import { SessionsSection } from '../SessionsSection';
+import { testChatSession } from './fixtures/sessionsSection';
 
 const factoryId = 'fp-1';
 const projectRepositoryId = 'ghp-1';
@@ -62,9 +64,7 @@ function stubProjectAndSessions(sessions: FactoryUserSession[]) {
         ],
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/source-control/projects/${projectRepositoryId}/sessions`, () =>
-      HttpResponse.json({ sessions }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () => HttpResponse.json({ sessions })),
   );
 }
 
@@ -85,9 +85,11 @@ function stubActiveSessions(activeIds: Set<string>) {
 function renderSection() {
   return renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/${factoryId}`]}>
-      <Routes>
-        <Route path="/factories/:factoryId" element={<UserSessionsSection />} />
-      </Routes>
+      <ChatSessionContext.Provider value={testChatSession('fp-1', projectRepositoryId)}>
+        <Routes>
+          <Route path="/factories/:factoryId" element={<SessionsSection />} />
+        </Routes>
+      </ChatSessionContext.Provider>
     </MemoryRouter>,
   );
 }
@@ -121,7 +123,7 @@ describe('User sessions sidebar activity', () => {
     // stamped `materializedAt` (registered after the base stub — the most
     // recent handler wins).
     server.use(
-      http.get(`${TEST_BASE_URL}/web/source-control/projects/${projectRepositoryId}/sessions`, () =>
+      http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () =>
         HttpResponse.json({
           sessions: [
             makeSession({
@@ -146,11 +148,11 @@ describe('User sessions sidebar activity', () => {
     await client.invalidateQueries({
       queryKey: queryKeys.agentControllerActivity(AGENT_CONTROLLER_ID, TEST_BASE_URL),
     });
-    await client.invalidateQueries({ queryKey: queryKeys.sessions(projectRepositoryId) });
+    await client.invalidateQueries({ queryKey: queryKeys.sessions(factoryId) });
     await waitForMutationsIdle(client);
 
     // The belt goes dark on an idle session, not back on (or stuck at) initializing.
-    const row = screen.getByRole('button', { name: 'feature-d' }).closest('li');
+    const row = screen.getByRole('link', { name: 'feature-d' }).closest('li');
     await waitFor(() => expect(row?.querySelector('[role="status"]')).toBeNull());
   });
 
@@ -161,7 +163,7 @@ describe('User sessions sidebar activity', () => {
     const { client } = renderSection();
     await waitForMutationsIdle(client);
 
-    const row = (await screen.findByRole('button', { name: 'feature-c' })).closest('li');
+    const row = (await screen.findByRole('link', { name: 'feature-c' })).closest('li');
     expect(row).not.toBeNull();
     expect(row?.querySelector('[role="status"]')).toBeNull();
   });

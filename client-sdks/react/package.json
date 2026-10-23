@@ -1,6 +1,6 @@
 {
   "name": "@mastra/react",
-  "version": "1.10.0-alpha.2",
+  "version": "1.12.0",
   "repository": {
     "type": "git",
     "url": "git+https://github.com/mastra-ai/mastra.git",
@@ -60,8 +60,8 @@
     "./styles.css": "./dist/react.css"
   },
   "scripts": {
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix .",
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix .",
     "build": "echo 'Use turbo to run build'",
     "build:js": "tsdown --config tsdown.config.ts",
     "build:css": "tailwindcss -i src/ui/index.css -o dist/react.css",
@@ -104,24 +104,17 @@
     "@vitejs/plugin-react": "^5.2.0",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.7.0",
-    "eslint-plugin-storybook": "^10.6.0",
     "jsdom": "^30.1.1",
     "msw": "^2.12.11",
     "react": "^19.2.5",
     "react-dom": "^19.2.5",
     "storybook": "^9.1.20",
     "tailwindcss": "^4.3.3",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
-    "vite": "^7.3.1",
+    "vite": "^8.0.0",
     "vitest": "catalog:",
     "zod": "^3.25.76"
-  },
-  "eslintConfig": {
-    "extends": [
-      "plugin:storybook/recommended"
-    ]
   },
   "engines": {
     "node": ">=22.13.0"

@@ -98,11 +98,18 @@ describe('ExperimentCrumbItemCount', () => {
     );
 
   describe('when the run is in progress', () => {
-    it('follows the processed items until the run completes', async () => {
-      stubLiveExperiment({ ...triggered, status: 'running', succeededCount: 3, failedCount: 1 });
+    it('leaves the progress to the page body until the run completes', async () => {
+      let liveExperimentCalls = 0;
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/datasets/:datasetId/experiments/:experimentId`, () => {
+          liveExperimentCalls += 1;
+          return HttpResponse.json({ ...triggered, status: 'running', succeededCount: 3, failedCount: 1 });
+        }),
+      );
       renderCount();
 
-      expect(await screen.findByText('4/10 items · 1 errored')).toBeTruthy();
+      await waitFor(() => expect(liveExperimentCalls).toBeGreaterThan(0));
+      expect(screen.queryByText(/items?\b/)).toBeNull();
 
       stubLiveExperiment({ ...triggered, status: 'completed', succeededCount: 10, failedCount: 0 });
       await advancePoll();

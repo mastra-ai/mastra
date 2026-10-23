@@ -18,7 +18,7 @@ import { useEffect, useEffectEvent, useState } from 'react';
 
 import type { OAuthStartResponse } from '../../../../api/types';
 import { useCompleteProviderOAuth, usePollProviderOAuth } from '../../../../hooks/use-providers';
-import { providerDisplayName } from './provider-display-name';
+import { providerDisplayName } from '@mastra/factory/provider-display-name';
 
 interface ProviderOAuthDialogProps {
   provider: string;

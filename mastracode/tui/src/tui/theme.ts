@@ -138,6 +138,10 @@ function getSurface(): MastraSurface {
 // Falls back to the surface palette bg if not detected.
 let detectedTerminalBg: string | undefined;
 
+// Colors from an active custom theme file. When set, these replace the
+// built-in dark/light palette as the base for contrast adaptation.
+let customThemeColors: ThemeColors | undefined;
+
 /** The effective background color used for contrast calculations. */
 export function getContrastBg(): string {
   return detectedTerminalBg ?? getSurface().bg;
@@ -206,7 +210,7 @@ function computeAdaptedColors(): void {
   }
 
   // Adapt theme foreground colors against actual terminal bg
-  const baseTheme = currentThemeMode === 'light' ? lightTheme : darkTheme;
+  const baseTheme = customThemeColors ?? (currentThemeMode === 'light' ? lightTheme : darkTheme);
   const adapted = { ...baseTheme };
   for (const key of textThemeKeys) {
     adapted[key] = ensureContrast(baseTheme[key], bg, TUI_MIN_CONTRAST);
@@ -267,8 +271,10 @@ export function surfaceShade(step: number): string {
  */
 export function displayModeColor(hex: string): string {
   const isBrandGreen = hex.toLowerCase() === mastraBrand.green.toLowerCase();
-  if (currentThemeMode === 'light') return isBrandGreen ? lightTheme.accent : ensureContrast(hex, getContrastBg());
-  if (isBrandGreen) return darkTheme.accent;
+  // Brand green maps to the active theme's accent so custom themes recolor the mode label,
+  // prompt border, and Working-row pulse along with everything else.
+  if (isBrandGreen) return currentTheme.accent;
+  if (currentThemeMode === 'light') return ensureContrast(hex, getContrastBg());
   const mix = (i: number) => {
     const c = parseInt(hex.slice(i, i + 2), 16);
     return Math.round(c + (255 - c) * 0.35)
@@ -495,34 +501,24 @@ export function getThemeGeneration(): number {
 
 /**
  * Apply a theme mode, updating both the surface palette and the theme colors.
+ * Pass `customColors` (from a custom theme file) to use them as the base
+ * palette instead of the built-in dark/light theme; pass undefined to clear
+ * any previously-applied custom theme. `customBg` (a custom theme's `bg`
+ * color) becomes the base that panel shades and contrast adaptation derive
+ * from, without touching the terminal's own background.
  */
-export function applyThemeMode(mode: ThemeMode, terminalBgHex?: string): void {
+export function applyThemeMode(
+  mode: ThemeMode,
+  terminalBgHex?: string,
+  customColors?: ThemeColors,
+  customBg?: string,
+): void {
   currentThemeMode = mode;
-  currentTheme = mode === 'light' ? lightTheme : darkTheme;
-  detectedTerminalBg = terminalBgHex;
+  customThemeColors = customColors;
+  currentTheme = customColors ?? (mode === 'light' ? lightTheme : darkTheme);
+  detectedTerminalBg = customBg ?? terminalBgHex;
   themeGeneration++;
   computeAdaptedColors();
-  // Set terminal default foreground via OSC 10 so unstyled text (e.g. editor input)
-  // adapts to the theme. Convert hex to rgb/ format for OSC.
-  if (process.stdout.isTTY) {
-    const textHex = currentTheme.text;
-    const r = parseInt(textHex.slice(1, 3), 16);
-    const g = parseInt(textHex.slice(3, 5), 16);
-    const b = parseInt(textHex.slice(5, 7), 16);
-    process.stdout.write(
-      `\x1b]10;rgb:${r.toString(16).padStart(2, '0')}/${g.toString(16).padStart(2, '0')}/${b.toString(16).padStart(2, '0')}\x07`,
-    );
-  }
-}
-
-/**
- * Restore terminal foreground to default. Call on exit to undo OSC 10 changes.
- */
-export function restoreTerminalForeground(): void {
-  if (process.stdout.isTTY) {
-    // OSC 110 resets the terminal's default foreground to its original value.
-    process.stdout.write('\x1b]110\x07');
-  }
 }
 
 // =============================================================================
@@ -749,18 +745,19 @@ export const theme = {
 // =============================================================================
 
 export function getMarkdownTheme(): MarkdownTheme {
-  const t = getTheme();
+  // Resolve colors lazily (inside each closure) so long-lived components pick
+  // up theme switches instead of keeping colors captured at construction time.
   return {
-    heading: (text: string) => chalk.hex(t.textHighlight).bold(text),
-    link: (text: string) => chalk.hex(t.textHighlight)(text),
-    linkUrl: (text: string) => chalk.hex(t.muted)(text),
-    code: (text: string) => chalk.hex(t.textHighlight).bold(text),
-    codeBlock: (text: string) => chalk.hex(t.text)(text),
-    codeBlockBorder: (text: string) => chalk.hex(t.dim)(text),
-    quote: (text: string) => chalk.hex(t.muted).italic(text),
-    quoteBorder: (text: string) => chalk.hex(t.borderMuted)(text),
-    hr: (text: string) => chalk.hex(t.borderMuted)(text),
-    listBullet: (text: string) => chalk.hex(t.textHighlight)(text),
+    heading: (text: string) => chalk.hex(getTheme().textHighlight).bold(text),
+    link: (text: string) => chalk.hex(getTheme().textHighlight)(text),
+    linkUrl: (text: string) => chalk.hex(getTheme().muted)(text),
+    code: (text: string) => chalk.hex(getTheme().textHighlight).bold(text),
+    codeBlock: (text: string) => chalk.hex(getTheme().text)(text),
+    codeBlockBorder: (text: string) => chalk.hex(getTheme().dim)(text),
+    quote: (text: string) => chalk.hex(getTheme().muted).italic(text),
+    quoteBorder: (text: string) => chalk.hex(getTheme().borderMuted)(text),
+    hr: (text: string) => chalk.hex(getTheme().borderMuted)(text),
+    listBullet: (text: string) => chalk.hex(getTheme().textHighlight)(text),
     // Required by MarkdownTheme interface
     bold: (text: string) => chalk.bold(text),
     italic: (text: string) => chalk.italic(text),

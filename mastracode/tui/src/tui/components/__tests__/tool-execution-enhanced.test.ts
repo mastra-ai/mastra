@@ -4,7 +4,14 @@ import { Container, visibleWidth } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { describe, it, expect, vi } from 'vitest';
 import { reconcileChatBoundarySpacers } from '../../chat-boundary-reconciliation.js';
-import { theme, tintHex, ensureTerminalGlyphContrast } from '../../theme.js';
+import {
+  theme,
+  tintHex,
+  ensureTerminalGlyphContrast,
+  displayModeColor,
+  surfaceShade,
+  getContrastText,
+} from '../../theme.js';
 import { getSpacingBetweenComponents } from '../chat-spacing.js';
 import { ToolExecutionComponentEnhanced, parseErrorFromContent } from '../tool-execution-enhanced.js';
 
@@ -737,11 +744,12 @@ describe('ToolExecutionComponentEnhanced compact display', () => {
       isError: false,
     });
 
+    const displayed = displayModeColor(modeColor);
     const output = component.render(100).join('\n');
-    expect(output).toContain(chalk.hex(modeColor)('▐'));
-    expect(output).toContain(chalk.bgHex(modeColor).hex('#000000').bold('view'));
-    expect(output).toContain(chalk.bgHex('#141414').hex(modeColor)('src/example.ts'));
-    expect(output).toContain(chalk.hex(ensureTerminalGlyphContrast(tintHex(modeColor, 0.35)))('│'));
+    expect(output).toContain(chalk.hex(displayed)('▐'));
+    expect(output).toContain(chalk.bgHex(displayed).hex(getContrastText(displayed)).bold('view'));
+    expect(output).toContain(chalk.bgHex(surfaceShade(1)).hex(displayed)('src/example.ts'));
+    expect(output).toContain(chalk.hex(ensureTerminalGlyphContrast(tintHex(displayed, 0.35)))('│'));
   });
 
   it('renders compact non-shell tool validation errors with actionable details', () => {

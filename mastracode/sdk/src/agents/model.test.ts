@@ -189,6 +189,30 @@ describe('request-scoped credentials', () => {
   });
 });
 
+describe('Kimi and Copilot model ids', () => {
+  it.each(['kimi-code-plan-cn/k3', 'kimi-for-coding/k3', 'mastracode/kimi-for-coding/k3'])(
+    'resolves %s through the Kimi For Coding subscription provider',
+    modelId => {
+      process.env.KIMI_API_KEY = 'kimi-test-key';
+
+      const model = resolveModel(modelId) as unknown as { provider: string; modelId: string };
+
+      expect(model.provider).toBe('kimi-for-coding');
+      expect(model.modelId).toBe('k3');
+    },
+  );
+
+  it.each(['github-copilot/gpt-4.1', 'mastracode/github-copilot/gpt-4.1'])(
+    'resolves %s through the GitHub Copilot provider',
+    modelId => {
+      const model = resolveModel(modelId) as unknown as { provider: string; modelId: string };
+
+      expect(model.provider).toMatch(/^github-copilot/);
+      expect(model.modelId).toBe('gpt-4.1');
+    },
+  );
+});
+
 describe('getDynamicModel error branches', () => {
   it('points at the missing controller context when the run has no session request context at all', () => {
     const requestContext = new RequestContext();

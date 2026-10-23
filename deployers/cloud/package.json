@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-cloud",
-  "version": "1.77.0-alpha.2",
+  "version": "1.79.0",
   "description": "",
   "type": "module",
   "files": [
@@ -26,8 +26,8 @@
     "build": "tsdown --silent --config tsdown.config.ts",
     "build:watch": "tsdown --watch --silent --config tsdown.config.ts",
     "test": "vitest run",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix .",
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix .",
     "prepack": "node scripts/sync-versions.mjs"
   },
   "keywords": [],
@@ -47,11 +47,10 @@
     "@manypkg/get-packages": "^3.1.0",
     "@mastra/core": "workspace:*",
     "@types/fs-extra": "^11.0.4",
-    "@types/node": "22.20.1",
+    "@types/node": "22.20.5",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.7.0",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

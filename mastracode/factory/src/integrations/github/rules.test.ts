@@ -979,7 +979,7 @@ describe('GithubRules', () => {
           return () => agentEndListeners.delete(listener);
         }),
         state: { get: vi.fn(() => ({ factoryProjectId: project.id })), set: vi.fn(async () => {}) },
-        mode: { get: vi.fn(() => 'build') },
+        mode: { get: vi.fn(() => 'build'), resolve: vi.fn(() => ({})) },
         model: { get: vi.fn(() => 'openai/gpt-5.6-sol') },
         identity: { getId: vi.fn(() => key), getOwnerId: vi.fn(() => 'user-1') },
         permissions: { setForTool: vi.fn(async () => {}) },
@@ -991,8 +991,9 @@ describe('GithubRules', () => {
     }
 
     const controller = {
+      queryThreadById: vi.fn(async () => null),
       createSession: vi.fn(async ({ id, threadId }: { id: string; threadId: string }) => makeSession(id, threadId)),
-      getSessionByResource: vi.fn(async (resourceId: string) => sessions.get(resourceId)),
+      getSession: vi.fn(async (sessionId: string) => sessions.get(sessionId)),
     };
     await sourceControl.sessions.create({
       sessionId: 'session-issue-42',
@@ -1060,7 +1061,9 @@ describe('GithubRules', () => {
     expect(deliveredSignals).toEqual([
       expect.objectContaining({
         threadId: 'session-issue-42',
-        contents: expect.stringContaining('<skill name="factory-triage">'),
+        type: 'reactive',
+        tagName: 'skill',
+        attributes: { name: 'factory-triage' },
         user: { workosId: 'user-1', organizationId: 'org-1' },
       }),
     ]);
@@ -1217,7 +1220,7 @@ describe('GithubRules', () => {
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      controller: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
@@ -1296,7 +1299,7 @@ describe('GithubRules', () => {
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      controller: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
@@ -1601,7 +1604,7 @@ describe('GithubRules', () => {
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      controller: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
@@ -1692,7 +1695,7 @@ describe('GithubRules', () => {
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      controller: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
@@ -1747,6 +1750,102 @@ describe('GithubRules', () => {
       role: 'review',
       cancelInFlight: true,
     });
+  });
+
+  it('starts the re-review of a pushed commit on that commit, not the one the last verdict covered (#27590)', async () => {
+    const reviewedHeadSha = 'aaaaaaa000000000000000000000000000000000';
+    const pushedHeadSha = 'bbbbbbb000000000000000000000000000000000';
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    // The reviewer requested changes on A and its run ended; the card stays in
+    // Reviewing with the verdict recorded.
+    const card = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        title: 'PR 17',
+        stages: ['review'],
+        sessions: {},
+        metadata: {
+          authorTrusted: true,
+          reviewVerdict: 'request changes',
+          reviewedHeadSha,
+          pullRequestHeadSha: reviewedHeadSha,
+          pullRequestHeadAt: Date.parse('2030-01-01T00:00:00.000Z'),
+        },
+      },
+    });
+    const configVersion = 'factory-config-v1';
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: { getSession: vi.fn(async () => undefined) } as never,
+      transitionService: new FactoryTransitionService({ storage: workItems, configVersion, boards: createBoardRegistry() }),
+      storage: workItems,
+      boards: createBoardRegistry(),
+      isAutoRunEnabled: async () => true,
+      ownerId: 'worker-1',
+    });
+    // The dispatcher polls on its own timer, so its tick can land as soon as
+    // the push's re-review transition commits, before the webhook handler has
+    // finished. Run it at exactly that point.
+    const commitRuleEvaluation = workItems.commitRuleEvaluation.bind(workItems);
+    const pushStatuses: string[] = [];
+    workItems.commitRuleEvaluation = async input => {
+      const committed = await commitRuleEvaluation(input);
+      if (input.ingress.identity.includes('delivery-push-b')) pushStatuses.push(committed.status);
+      if (committed.status === 'committed' && input.ingress.identity.endsWith('delivery-push-b')) {
+        await dispatcher.runOnce(new Date('2030-01-01T01:00:00Z'));
+      }
+      return committed;
+    };
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry(),
+      configVersion,
+    });
+
+    const push = pullRequest('synchronize', 'delivery-push-b');
+    await expect(
+      service.ingest({
+        ...push,
+        payload: {
+          ...push.payload,
+          pull_request: {
+            ...push.payload.pull_request,
+            head: { ref: 'feature', sha: pushedHeadSha },
+            updated_at: '2030-01-01T01:00:00Z',
+          },
+        },
+      }),
+    ).resolves.toEqual({ status: 'committed' });
+    await dispatcher.runOnce(new Date('2030-01-01T01:00:01Z'));
+
+    // The push is evaluated against the card as it is after the head was
+    // recorded, so it commits first time rather than retrying a stale read.
+    expect(pushStatuses).toEqual(['committed']);
+
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    const invocations = decisions.filter(entry => entry.decision.type === 'invokeSkill');
+    expect(invocations).toHaveLength(1);
+    const kickoff = invocations[0]!.decision;
+    expect(kickoff).toMatchObject({ type: 'invokeSkill', skillName: 'factory-rereview', role: 'review' });
+    const text = kickoff.type === 'invokeSkill' ? (kickoff.arguments ?? '') : '';
+    // The new run names the pushed head as the one to review, and the head the
+    // recorded verdict covered as superseded.
+    expect(text).toContain(`new review pass for head \`${pushedHeadSha}\``);
+    expect(text).toContain(`recorded "request changes" on \`${reviewedHeadSha}\``);
+    expect(text).toContain(`record a verdict for \`${pushedHeadSha}\``);
+    const stored = await workItems.get({ orgId: 'org-1', id: card.item.id });
+    expect(stored?.metadata).toMatchObject({ pullRequestHeadSha: pushedHeadSha, reviewedHeadSha });
   });
 
   it('ignores push events on PRs whose card has not yet completed a review pass', async () => {
@@ -2323,7 +2422,7 @@ describe('GithubRules', () => {
       getWorkspace: () => ({ skills: { maybeRefresh: vi.fn(async () => {}), get: vi.fn(async () => undefined) } }),
       subscribe: vi.fn(() => () => {}),
       state: { get: vi.fn(() => ({ factoryProjectId: project.id })), set: vi.fn(async () => {}) },
-      mode: { get: vi.fn(() => 'build') },
+      mode: { get: vi.fn(() => 'build'), resolve: vi.fn(() => ({})) },
       model: { get: vi.fn(() => 'openai/gpt-5.6-sol') },
       identity: { getId: vi.fn(() => 'session-work-42'), getOwnerId: vi.fn(() => 'user-1') },
       permissions: { setForTool: vi.fn(async () => {}) },
@@ -2340,8 +2439,9 @@ describe('GithubRules', () => {
       ),
     };
     const controller = {
+      queryThreadById: vi.fn(async () => null),
       createSession: vi.fn(async () => session),
-      getSessionByResource: vi.fn(async () => session),
+      getSession: vi.fn(async () => session),
     };
     await sourceControl.sessions.create({
       sessionId: 'session-work-42',
@@ -2656,7 +2756,7 @@ describe('GithubRules', () => {
       configVersion: 'factory-config-v1',
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      controller: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion: 'factory-config-v1',
@@ -2847,7 +2947,7 @@ describe('GithubRules', () => {
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      controller: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
@@ -3300,6 +3400,92 @@ describe('GithubRules label routes', () => {
     const { service } = await setupRoutes('release');
     await expect(service.ingest(issueLabels('labeled', ['release']))).resolves.toEqual({ status: 'ignored' });
     const onPullRequest = issueLabels('labeled', ['release'], 'pr-labeled');
+    (onPullRequest.payload.issue as Record<string, unknown>).pull_request = { url: 'x' };
+    await expect(service.ingest(onPullRequest)).resolves.toEqual({ status: 'ignored' });
+  });
+
+  function issueAssignees(action: 'assigned' | 'unassigned', assignees: string[], deliveryId = `assignee-${action}`) {
+    const ingress = issueLabels('labeled', [], deliveryId);
+    (ingress.payload as Record<string, unknown>).action = action;
+    (ingress.payload.issue as Record<string, unknown>).assignees = assignees.map(login => ({ login }));
+    return ingress;
+  }
+
+  it.each([
+    { action: 'assigned', before: [], after: ['alice', 'bob'] },
+    { action: 'unassigned', before: ['alice', 'bob'], after: ['bob'] },
+    { action: 'unassigned', before: ['bob'], after: [] },
+  ] as const)(
+    'mirrors $action from $before to $after onto the linked issue card without moving it or proposing runs',
+    async ({ action, before, after }) => {
+      const { service, workItems, project } = await setupRoutes('release');
+      const created = await createLinkedIssue(workItems, project.id);
+      const item = (await workItems.update({
+        orgId: 'org-1',
+        id: created.id,
+        userId: 'user-1',
+        patch: { metadata: { assignees: [...before] } },
+      }))!.item;
+
+      await expect(service.ingest(issueAssignees(action, [...after]))).resolves.toEqual({ status: 'committed' });
+      expect(await workItems.get({ orgId: 'org-1', id: item.id })).toMatchObject({
+        board: item.board,
+        stages: ['planning'],
+        metadata: { assignees: [...after] },
+      });
+      expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+    },
+  );
+
+  it('keeps the newer assignees when an older assigned payload arrives after a newer unassigned one', async () => {
+    const { service, workItems, project } = await setupRoutes('release');
+    const created = await createLinkedIssue(workItems, project.id);
+    await workItems.update({
+      orgId: 'org-1',
+      id: created.id,
+      userId: 'user-1',
+      patch: { metadata: { assignees: ['alice'] } },
+    });
+    const newer = issueAssignees('unassigned', [], 'assignee-newer');
+    (newer.payload.issue as Record<string, unknown>).updated_at = '2030-01-01T00:00:02Z';
+    const older = issueAssignees('assigned', ['alice'], 'assignee-older');
+    (older.payload.issue as Record<string, unknown>).updated_at = '2030-01-01T00:00:01Z';
+
+    await expect(service.ingest(newer)).resolves.toEqual({ status: 'committed' });
+    await expect(service.ingest(older)).resolves.toEqual({ status: 'ignored' });
+    expect((await workItems.get({ orgId: 'org-1', id: created.id }))?.metadata).toMatchObject({
+      assignees: [],
+      githubAssigneesUpdatedAt: '2030-01-01T00:00:02Z',
+    });
+  });
+
+  it('advances the stored time on a newer no-op so a delayed older unassigned cannot overwrite it', async () => {
+    const { service, workItems, project } = await setupRoutes('release');
+    const created = await createLinkedIssue(workItems, project.id);
+    await workItems.update({
+      orgId: 'org-1',
+      id: created.id,
+      userId: 'user-1',
+      patch: { metadata: { assignees: ['alice'], githubAssigneesUpdatedAt: '2030-01-01T00:00:01Z' } },
+    });
+    const newerNoop = issueAssignees('assigned', ['alice'], 'assignee-t3');
+    (newerNoop.payload.issue as Record<string, unknown>).updated_at = '2030-01-01T00:00:03Z';
+    const delayed = issueAssignees('unassigned', [], 'assignee-t2');
+    (delayed.payload.issue as Record<string, unknown>).updated_at = '2030-01-01T00:00:02Z';
+
+    await expect(service.ingest(newerNoop)).resolves.toEqual({ status: 'committed' });
+    await expect(service.ingest(delayed)).resolves.toEqual({ status: 'ignored' });
+    expect((await workItems.get({ orgId: 'org-1', id: created.id }))?.metadata).toMatchObject({
+      assignees: ['alice'],
+      githubAssigneesUpdatedAt: '2030-01-01T00:00:03Z',
+    });
+  });
+
+  it('ignores assignee changes for issues without a card and on pull requests', async () => {
+    const { service, workItems, project } = await setupRoutes('release');
+    await expect(service.ingest(issueAssignees('assigned', ['alice']))).resolves.toEqual({ status: 'ignored' });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+    const onPullRequest = issueAssignees('assigned', ['alice'], 'pr-assigned');
     (onPullRequest.payload.issue as Record<string, unknown>).pull_request = { url: 'x' };
     await expect(service.ingest(onPullRequest)).resolves.toEqual({ status: 'ignored' });
   });
@@ -4366,5 +4552,78 @@ describe('createGithubPullRequestReconciler', () => {
         },
       ],
     });
+  });
+});
+
+describe('GithubRules push hand-off', () => {
+  function push(ref: string, repositoryId = 10) {
+    return {
+      event: 'push',
+      deliveryId: `push-${ref}`,
+      payload: {
+        ref,
+        after: 'c'.repeat(40),
+        installation: { id: 7 },
+        repository: { id: repositoryId, full_name: 'acme/repo', default_branch: 'main' },
+        sender: { login: 'maintainer' },
+      },
+    };
+  }
+
+  it('hands a push to a linked repository to the hook once per project and never to the rules', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project, projectRepository } =
+      await setup('write');
+    const onRepositoryPush = vi.fn();
+    const commit = vi.spyOn(workItems, 'commitRuleEvaluation');
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry(),
+      configVersion: 'v1',
+      onRepositoryPush,
+    });
+
+    await expect(service.ingest(push('refs/heads/main'))).resolves.toEqual({ status: 'ignored' });
+
+    expect(onRepositoryPush).toHaveBeenCalledTimes(1);
+    expect(onRepositoryPush).toHaveBeenCalledWith({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      projectRepository: { id: projectRepository.id, inEnvironment: true },
+      ref: 'refs/heads/main',
+      defaultBranch: 'main',
+    });
+    expect(commit).not.toHaveBeenCalled();
+  });
+
+  it('ignores pushes to repositories no project links and runs without a hook', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects } = await setup('write');
+    const onRepositoryPush = vi.fn();
+    const withHook = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry(),
+      configVersion: 'v1',
+      onRepositoryPush,
+    });
+    await expect(withHook.ingest(push('refs/heads/main', 99))).resolves.toEqual({ status: 'ignored' });
+    expect(onRepositoryPush).not.toHaveBeenCalled();
+
+    const withoutHook = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry(),
+      configVersion: 'v1',
+    });
+    await expect(withoutHook.ingest(push('refs/heads/main'))).resolves.toEqual({ status: 'ignored' });
   });
 });

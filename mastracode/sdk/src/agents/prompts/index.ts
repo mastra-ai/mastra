@@ -12,12 +12,7 @@ import { loadSettings, resolveLspSetting } from '../../onboarding/settings.js';
 import { MC_TOOLS } from '../../tool-names.js';
 import { hasParallelKey, hasTavilyKey } from '../../tools/index.js';
 import { getLocalPlansRelativeDir } from '../../utils/plans.js';
-import {
-  loadAgentInstructions,
-  formatInstructionSource,
-  createGitRefInstructionReader,
-  AGENT_INSTRUCTIONS_HEADING,
-} from './agent-instructions.js';
+import { loadSessionInstructions, formatInstructionSource, AGENT_INSTRUCTIONS_HEADING } from './agent-instructions.js';
 import { buildModePromptFn } from './build.js';
 import { fastModePrompt } from './fast.js';
 import { modelSpecificPrompts } from './model.js';
@@ -31,6 +26,10 @@ export interface PromptContext extends Omit<BasePromptContext, 'toolGuidance'> {
   /** The subconscious knowledge tools are registered on the agent. */
   hasSubconscious?: boolean;
   hostInstructions?: string;
+  /** Controller built-in tools removed via `disableBuiltinTools`; treated as denied. */
+  disabledBuiltinTools?: readonly string[];
+  /** Resolved in `buildFullPromptSections`; false when `submit_plan` is denied or disabled. */
+  submitPlanAvailable?: boolean;
   currentDate: string;
   workingDir: string;
 }
@@ -100,6 +99,9 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
     }
   }
 
+  // Disabled built-ins are never registered, so they are denied for guidance too.
+  for (const name of ctx.disabledBuiltinTools ?? []) deniedTools.add(name);
+
   // LSP is opt-in — when it is off the tool is never registered, so its
   // guidance must not be advertised either.
   if (resolveLspSetting(loadSettings().lsp) === false) deniedTools.add(MC_TOOLS.LSP_INSPECT);
@@ -133,7 +135,9 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
 
   const base = buildBasePrompt(baseCtx);
   const entry = modePrompts[ctx.modeId] || modePrompts.build;
-  const modeSpecific = (typeof entry === 'function' ? entry(ctx) : entry) ?? '';
+  const modeSpecific =
+    (typeof entry === 'function' ? entry({ ...ctx, submitPlanAvailable: !deniedTools.has('submit_plan') }) : entry) ??
+    '';
   const modelSpecific = ctx.modelId
     ? (modelSpecificPrompts[ctx.modelId as keyof typeof modelSpecificPrompts] ?? '')
     : '';
@@ -152,22 +156,25 @@ export function buildFullPromptSections(ctx: PromptContext): PromptSection[] {
   // without one, project-scope files are skipped entirely. Home-directory
   // (global) instructions belong to whoever owns the machine, so hosts that
   // run sessions for someone else opt out of them entirely.
+  // A host booting several checkouts under one working directory names them
+  // as `instructionRoots`, so each checkout's own files load.
   const configDir = ctx.state?.configDir as string | undefined;
-  const untrustedCheckout = ctx.state?.untrustedCheckout === true;
-  const skipGlobalInstructions = ctx.state?.skipGlobalInstructions === true;
   const baseRef = typeof ctx.state?.baseRef === 'string' ? ctx.state.baseRef : undefined;
-  const projectReader = untrustedCheckout
-    ? baseRef
-      ? createGitRefInstructionReader(ctx.workingDir, baseRef)
-      : { exists: () => false, read: () => '' }
+  const instructionRoots = Array.isArray(ctx.state?.instructionRoots)
+    ? (ctx.state.instructionRoots as string[])
     : undefined;
   // No working directory means a hosted session with no project attached:
   // load NO instruction files at all — project locations would resolve
   // against the server's own cwd, and global locations against the server's
   // homedir. Neither belongs in a hosted session's prompt.
   const instructionSources = ctx.workingDir
-    ? loadAgentInstructions(ctx.workingDir, configDir, projectReader, {
-        skipGlobal: skipGlobalInstructions,
+    ? loadSessionInstructions({
+        workingDir: ctx.workingDir,
+        instructionRoots,
+        configDir,
+        untrustedCheckout: ctx.state?.untrustedCheckout === true,
+        baseRef,
+        skipGlobal: ctx.state?.skipGlobalInstructions === true,
       })
     : [];
   // Emitted per source so each AGENTS.md/CLAUDE.md can be costed individually.

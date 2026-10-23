@@ -6,12 +6,11 @@ import { ReviewStatusBadge } from '@mastra/playground-ui/domains/review/componen
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ScorersIcon } from '@mastra/playground-ui/icons/ScorersIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import type { ListSort } from '@mastra/playground-ui/sort/sort-by';
-import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
 import { GaugeIcon } from 'lucide-react';
 import { getResultErrorMessage, getResultOutputPreview } from '../utils/result-output';
 import { formatCostValue, formatTokenCount, totalTokens } from './comparison/comparison-metric-format';
+import { ScoreReasonHoverCard } from './comparison/score-reason-hover-card';
 import { ComputedTag } from '@/domains/observability/components/computed-tag';
 
 /**
@@ -30,7 +29,7 @@ export type ExperimentResultsListItem = {
   tags?: string[] | null;
   /** Inline scores, used by the summary `scores` column. */
   scores?: Record<string, number> | Array<{ score: number | null }> | null;
-  /** When the run started; drives the `startedAt` column. */
+  /** When the run started; with `completedAt`, drives the `duration` column. */
   startedAt?: string | Date | null;
   /** When the run finished; with `startedAt`, drives the `duration` column. */
   completedAt?: string | Date | null;
@@ -47,16 +46,13 @@ const BUILT_IN_COLUMNS = new Set([
   'error',
   'tags',
   'scores',
-  'startedAt',
   'cost',
   'tokens',
   'duration',
 ]);
 
-export type ExperimentResultsSortKey = 'startedAt';
-
 export type ExperimentResultsListColumn = {
-  /** `itemId` (or `id`) | `status` | `input` | `tags` | `scores` | `startedAt` | `cost` | `tokens` | `duration` | a scorer id */
+  /** `itemId` (or `id`) | `status` | `input` | `tags` | `scores` | `cost` | `tokens` | `duration` | a scorer id */
   name: string;
   label: string;
   size: string;
@@ -68,7 +64,8 @@ export type ExperimentResultsListProps<T extends ExperimentResultsListItem> = {
   featuredResultId: string | null;
   onResultClick: (resultId: string) => void;
   columns: ExperimentResultsListColumn[];
-  scoresByItemId?: Record<string, ClientScoreRowData[]>;
+  /** Structurally narrowed to what the scorer cells read, so `ClientScoreRowData[]` fits. */
+  scoresByItemId?: Record<string, Array<Pick<ClientScoreRowData, 'scorerId' | 'score' | 'reason'>>>;
   scorerIds?: string[];
   setEndOfListElement?: (element: HTMLDivElement | null) => void;
   isFetchingNextPage?: boolean;
@@ -78,9 +75,6 @@ export type ExperimentResultsListProps<T extends ExperimentResultsListItem> = {
   onToggleSelect?: (resultId: string) => void;
   /** When provided with selection, renders a select-all checkbox in the header. */
   onToggleSelectAll?: () => void;
-  /** Server-side sort; the `startedAt` header is only sortable when `onSortChange` is provided. */
-  sort?: ListSort<ExperimentResultsSortKey>;
-  onSortChange?: (direction: 'asc' | 'desc', key: ExperimentResultsSortKey) => void;
 };
 
 /**
@@ -101,8 +95,6 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
   selectedIds,
   onToggleSelect,
   onToggleSelectAll,
-  sort,
-  onSortChange,
 }: ExperimentResultsListProps<T>) {
   const { Link: LinkComponent, paths } = useLinkComponent();
   const hasSelection = Boolean(selectedIds && onToggleSelect);
@@ -118,7 +110,6 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
   const hasErrorColumn = hasColumn('error');
   const hasTagsColumn = hasColumn('tags');
   const hasScoresColumn = hasColumn('scores');
-  const hasStartedAtColumn = hasColumn('startedAt');
   const hasCostColumn = hasColumn('cost');
   const hasTokensColumn = hasColumn('tokens');
   const hasDurationColumn = hasColumn('duration');
@@ -141,15 +132,6 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
           <span className="min-w-0 truncate">{col.label}</span>
         </LinkComponent>
       </DataList.TopCell>
-    ) : col.name === 'startedAt' && onSortChange ? (
-      <DataList.SortableTopCell
-        key={col.name}
-        sortKey="startedAt"
-        sort={sort?.key === 'startedAt' ? sort.direction : undefined}
-        onSortChange={onSortChange}
-      >
-        {col.label}
-      </DataList.SortableTopCell>
     ) : (
       <DataList.TopCell key={col.name}>{col.label}</DataList.TopCell>
     );
@@ -159,7 +141,7 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
   }
 
   return (
-    <DataList columns={gridColumns} className="min-w-0" scrollRef={containerRef} fit="container">
+    <DataList columns={gridColumns} className="min-w-0" scrollRef={containerRef}>
       <DataList.Top hasLeadingCell={hasSelection}>
         {hasSelection &&
           (onToggleSelectAll ? (
@@ -238,15 +220,6 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
                   </DataList.Cell>
                 )}
 
-                {hasStartedAtColumn &&
-                  (result.startedAt ? (
-                    <DataList.TextCell data-testid={`result-created-${result.id}`}>
-                      {formatDate(result.startedAt, 'date-time')}
-                    </DataList.TextCell>
-                  ) : (
-                    <DataList.Cell className="text-placeholder">—</DataList.Cell>
-                  ))}
-
                 {hasCostColumn && (
                   <DataList.Cell
                     className="text-muted-foreground tabular-nums"
@@ -277,9 +250,14 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
                 {scorerIds?.map(scorerId => {
                   const scores = scoresByItemId?.[result.itemId];
                   const score = scores?.find(s => s.scorerId === scorerId);
+                  const reason = score?.reason?.trim();
                   return (
-                    <DataList.Cell key={scorerId} className="text-muted-foreground tabular-nums">
+                    <DataList.Cell
+                      key={scorerId}
+                      className="flex items-center gap-1.5 text-muted-foreground tabular-nums"
+                    >
                       {score != null ? score.score.toFixed(3) : '-'}
+                      {reason && <ScoreReasonHoverCard scorerId={scorerId} reason={reason} nested />}
                     </DataList.Cell>
                   );
                 })}

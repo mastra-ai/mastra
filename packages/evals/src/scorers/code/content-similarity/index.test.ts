@@ -27,20 +27,6 @@ describe('ContentSimilarityMetric', () => {
     expect(result.score).toBe(1);
   });
 
-  it('should handle case differences with default options', async () => {
-    const inputMessages = [createTestMessage({ content: 'The Quick Brown Fox', role: 'user', id: 'test-input' })];
-    const output = [createTestMessage({ content: 'the quick brown fox', role: 'assistant', id: 'test-output' })];
-    const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
-    expect(result.score).toBe(1);
-  });
-
-  it('should handle whitespace differences with default options', async () => {
-    const inputMessages = [createTestMessage({ content: 'The   quick\nbrown    fox', role: 'user', id: 'test-input' })];
-    const output = [createTestMessage({ content: 'The quick brown fox', role: 'assistant', id: 'test-output' })];
-    const result = await scorer.run(createAgentTestRun({ inputMessages, output }));
-    expect(result.score).toBe(1);
-  });
-
   it('should be case sensitive when ignoreCase is false', async () => {
     const caseSensitiveMetric = createContentSimilarityScorer({ ignoreCase: false });
     const inputMessages = [createTestMessage({ content: 'The Quick Brown FOX', role: 'user', id: 'test-input' })];

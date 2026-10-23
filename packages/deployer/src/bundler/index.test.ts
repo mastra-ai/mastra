@@ -101,6 +101,7 @@ describe('Bundler.installDependencies', () => {
       dir: join('/tmp/build', 'output'),
       pnpmOverrides,
       pnpmNodeLinker: undefined,
+      pnpmWorkspaceSettings: undefined,
     });
   });
 });

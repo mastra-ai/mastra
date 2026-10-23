@@ -211,6 +211,11 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
       threadId?: string;
       ifActive?: { behavior?: AgentSignalActiveBehavior; attributes?: AgentSignalAttributes };
       ifIdle?: never;
+      /**
+       * Validated, but does not change the scopes of the run receiving the signal:
+       * a run's scopes are fixed when it starts.
+       */
+      scopes?: string[];
     }
   | {
       runId?: string;
@@ -218,6 +223,11 @@ export type SendAgentSignalOptions<OUTPUT = unknown> =
       threadId: string;
       ifActive?: { behavior?: AgentSignalActiveBehavior; attributes?: AgentSignalAttributes };
       ifIdle?: AgentSignalIfIdleOptions<OUTPUT>;
+      /**
+       * Scopes for a run this signal starts, unioned with `ifIdle.streamOptions.scopes`.
+       * `resource:`/`thread:` scopes must equal `resourceId`/`threadId`.
+       */
+      scopes?: string[];
     };
 
 /**
@@ -288,6 +298,10 @@ export type QueueAgentMessageOptions<OUTPUT = unknown> = SendAgentSignalOptions<
 };
 
 export type QueueAgentMessageResult<OUTPUT = unknown> = SendAgentSignalResult<OUTPUT>;
+
+export type QueueAgentSignalOptions<OUTPUT = unknown> = QueueAgentMessageOptions<OUTPUT>;
+
+export type QueueAgentSignalResult<OUTPUT = unknown> = SendAgentSignalResult<OUTPUT>;
 
 export interface SubscribeAgentThreadEventsOptions {
   resourceId: string;
@@ -820,6 +834,12 @@ interface AgentConfigBase<
    */
   memory?: DynamicArgument<MastraMemory, TRequestContext>;
   /**
+   * Scopes every run of this agent acts with, as `<type>:<value>` addresses such as `org:acme`.
+   * Unioned with per-call `scopes` and the reserved `mastra__scopes` request-context key.
+   * A resolver function runs once per call with the request context.
+   */
+  scopes?: DynamicArgument<string[], TRequestContext>;
+  /**
    * Skills that guide agent behavior — reusable instructions the model loads on demand.
    *
    * Accepts an array of path strings (pointing to SKILL.md directories on disk) and/or
@@ -1322,7 +1342,7 @@ export interface DurableAgentLike {
    */
   __subscribeToRunStream?(
     runId: string,
-    options: { offset?: number },
+    options: { offset?: number; onComplete?: () => void },
     onEvent: (event: AgentStreamEvent) => void,
   ): Promise<() => Promise<void>>;
   /**

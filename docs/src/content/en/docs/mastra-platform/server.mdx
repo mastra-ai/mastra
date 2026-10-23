@@ -63,7 +63,7 @@ Server deploy provisions hosted storage automatically. If you override storage w
 
 ## Deploy lifecycle
 
-Each project runs one build at a time as its deploy transitions through **queued → uploading → building → deploying → running** (or **failed**, **cancelled**, **crashed**, or **stopped**). When multiple deploys queue up, the latest proceeds and the rest are cancelled. Builds running longer than 15 minutes are automatically failed. The first deploy provisions infrastructure and seeds environment variables from your local `.env`. Your server URL remains stable across deploys.
+Each project runs one build at a time as its deploy transitions through **queued → uploading → starting → deploying → running** (or **failed**, **cancelled**, **crashed**, or **stopped**). Deploys triggered from GitHub first build from source, so they pass through **building** between **queued** and **uploading**. When multiple deploys queue up, the latest proceeds and the rest are cancelled. Builds running longer than 15 minutes are automatically failed. The first deploy provisions infrastructure and seeds environment variables from your local `.env`. Your server URL remains stable across deploys.
 
 ## Idle behavior
 

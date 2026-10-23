@@ -17,7 +17,7 @@ import type { CallSettings, ModelMessage, StepResult, ToolSet, TypedToolCall, UI
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { StoredMessageLoader } from '../agent/message-list/memory-message-refs';
 import type { AIV5Type, MastraDBMessage } from '../agent/message-list/types';
-import type { AgentSignalType } from '../agent/signals';
+import type { AgentSignalDataPart, AgentSignalType } from '../agent/signals';
 import type { StructuredOutputOptions } from '../agent/types';
 import type { ModelConfigModelSettings } from '../llm/model/model-settings';
 import type { MastraLanguageModel, SharedProviderOptions } from '../llm/model/shared.types';
@@ -312,6 +312,8 @@ export interface StepStartPayload {
   messageId?: string;
   /** Epoch milliseconds sampled immediately before the model provider call. Absent when no provider call occurred. */
   startedAt?: number;
+  modelId?: string;
+  provider?: string;
   request: {
     body?: string;
     [key: string]: unknown;
@@ -829,6 +831,8 @@ interface ToolCallApprovalPayload {
   resumeSchema: string;
   /** Epoch ms when approval was requested; matches the tool part's `updatedAt`. */
   updatedAt?: number;
+  /** Token usage of the model step that produced this tool call. */
+  usage?: LanguageModelUsage;
 }
 
 interface ToolCallSuspendedPayload {
@@ -837,6 +841,8 @@ interface ToolCallSuspendedPayload {
   suspendPayload: any;
   args: Record<string, any>;
   resumeSchema: string;
+  /** Token usage of the model step that produced this tool call. */
+  usage?: LanguageModelUsage;
 }
 
 interface ToolCallResumedPayload {
@@ -848,6 +854,20 @@ interface ToolCallResumedPayload {
   suspendPayload?: any;
   resumeSchema?: string;
 }
+
+/** Subscription-only presentation of admitted input, not the step-boundary delivery echo. */
+export type UserMessagePendingChunk = BaseChunkType & {
+  type: 'data-user-message-pending';
+  transient: true;
+  data: AgentSignalDataPart['data'] & { metadata: Record<string, unknown> & { status: 'pending' | 'queued' } };
+};
+
+/** Emitted only for input actually removed before delivery, never for a cancellation request. */
+export type UserMessageCancelledChunk = BaseChunkType & {
+  type: 'data-user-message-cancelled';
+  transient: true;
+  data: { id: string };
+};
 
 export type DataChunkType = {
   type: `data-${string}`;
@@ -1087,6 +1107,8 @@ export type TypedChunkType<OUTPUT = undefined> =
   | AgentChunkType<OUTPUT>
   | WorkflowStreamEvent
   | NetworkChunkType<OUTPUT>
+  | UserMessagePendingChunk
+  | UserMessageCancelledChunk
   | (DataChunkType & {
       from: never;
       runId: never;
@@ -1186,6 +1208,11 @@ export type MastraOnFinishCallbackArgs<OUTPUT = undefined> = LLMStepResult<OUTPU
   runId?: string;
   /** Model messages the run added to the conversation (the response messages). */
   messages?: ModelMessage[];
+  /**
+   * @internal Cumulative usage already recorded by earlier suspended legs of this run, so the
+   * MODEL_GENERATION span of a resumed leg records only its own share.
+   */
+  generationReportedUsage?: LanguageModelUsage;
 };
 
 /**

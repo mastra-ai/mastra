@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { MIN_PRICED_MODELS, modelsDevToPricingModels, pickModelsDevCosts } from './models-dev';
-import { PricingRegistry } from './pricing-registry';
+import type { PricingRegistry } from './pricing-registry';
 
 const NEW_MODEL = { provider: 'openai', model: 'brand-new-model' };
 
@@ -183,5 +183,125 @@ describe('PricingRegistry.getGlobal refresh', () => {
     expect(Registry.getGlobal()?.get(NEW_MODEL)).toBeNull();
     await vi.waitFor(() => expect(Registry.getGlobal()?.get(NEW_MODEL)?.tiers[0]?.rates.input_tokens).toBe(7e-6));
     expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('gateway pricing', () => {
+  const PRIVATE_MODEL = { provider: 'my-provider', model: 'model-1' };
+  const PUBLIC_MODEL = { provider: 'openai', model: 'gpt-4o' };
+
+  function gateway(id: string, pricing: Record<string, unknown>, providerId = 'my-provider') {
+    return { id, fetchProviders: vi.fn(async () => ({ [providerId]: { pricing } })) };
+  }
+
+  async function loadModule(env: Record<string, string> = {}) {
+    vi.resetModules();
+    // Refresh off (not `mastra dev`) unless a test turns it on; gateway loading on (not offline).
+    vi.stubEnv('MASTRA_DEV', '');
+    vi.stubEnv('MASTRA_AUTO_REFRESH_PRICING', '');
+    vi.stubEnv('MASTRA_OFFLINE', '');
+    for (const [key, value] of Object.entries(env)) vi.stubEnv(key, value);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{}', { status: 500 })),
+    );
+    vi.spyOn(console, 'warn').mockImplementation(() => {});
+    return import('./pricing-registry');
+  }
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllEnvs();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it('prices models that models.dev lacks on the first miss, and never replaces a models.dev price', async () => {
+    const { PricingRegistry, setPricingGateways } = await loadModule();
+    const publicPrice = PricingRegistry.getGlobal()?.get(PUBLIC_MODEL)?.tiers[0]?.rates.input_tokens;
+    expect(publicPrice).toBeGreaterThan(0);
+
+    const custom = gateway('private', {
+      'model-1': { input: 0.5, output: 1.5, tiers: [{ tier: { size: 200_000 }, input: 1, output: 3 }] },
+    });
+    const reseller = gateway('reseller', { 'gpt-4o': { input: 99, output: 99 } }, 'openai');
+    await import('@mastra/core/llm'); // warm the loader's import, so a startup load would run within a tick
+    setPricingGateways(() => [custom, reseller]);
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(custom.fetchProviders).not.toHaveBeenCalled(); // production: nothing is called at startup
+
+    expect(PricingRegistry.getGlobal()?.get(PRIVATE_MODEL)).toBeNull(); // the miss starts the load
+    await vi.waitFor(() => expect(PricingRegistry.getGlobal()?.get(PRIVATE_MODEL)).not.toBeNull());
+    const priced = PricingRegistry.getGlobal()?.get(PRIVATE_MODEL);
+    expect(priced?.tiers[0]?.rates).toEqual({ input_tokens: 0.5e-6, output_tokens: 1.5e-6 });
+    expect(priced?.getPricingTierForUsage({ inputTokens: 250_000 })?.rates.input_tokens).toBe(1e-6);
+    expect(PricingRegistry.getGlobal()?.get(PUBLIC_MODEL)?.tiers[0]?.rates.input_tokens).toBe(publicPrice);
+  });
+
+  it('loads at startup under `mastra dev`, and reads each gateway once across Mastra registrations', async () => {
+    const { PricingRegistry, setPricingGateways } = await loadModule({ MASTRA_DEV: 'true' });
+    const custom = gateway('private', { 'model-1': { input: 2, output: 4 } });
+    setPricingGateways(() => [custom]);
+    await vi.waitFor(() => expect(custom.fetchProviders).toHaveBeenCalledTimes(1));
+    await vi.waitFor(() =>
+      expect(PricingRegistry.getGlobal()?.get(PRIVATE_MODEL)?.tiers[0]?.rates.input_tokens).toBe(2e-6),
+    );
+
+    setPricingGateways(() => [custom]);
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(custom.fetchProviders).toHaveBeenCalledTimes(1);
+  });
+
+  it('loads a gateway added later on the next miss, and skips the gateways core ships', async () => {
+    const { PricingRegistry, setPricingGateways } = await loadModule();
+    const builtIns = [
+      gateway('models.dev', { 'gpt-4o': { input: 99, output: 99 } }, 'openai'),
+      gateway('azure-openai', { 'gpt-4o': { input: 99, output: 99 } }, 'azure'),
+    ];
+    const first = gateway('first', { 'model-0': { input: 1, output: 1 } });
+    const gateways = [...builtIns, first];
+    setPricingGateways(() => gateways);
+    expect(PricingRegistry.getGlobal()?.get({ provider: 'my-provider', model: 'model-0' })).toBeNull();
+    await vi.waitFor(() =>
+      expect(PricingRegistry.getGlobal()?.get({ provider: 'my-provider', model: 'model-0' })).not.toBeNull(),
+    );
+    expect(PricingRegistry.getGlobal()?.get(PRIVATE_MODEL)).toBeNull();
+
+    gateways.push(gateway('private', { 'model-1': { input: 2, output: 4 } }));
+    expect(PricingRegistry.getGlobal()?.get(PRIVATE_MODEL)).toBeNull(); // the miss starts the load
+    await vi.waitFor(() =>
+      expect(PricingRegistry.getGlobal()?.get(PRIVATE_MODEL)?.tiers[0]?.rates.input_tokens).toBe(2e-6),
+    );
+    for (const builtIn of builtIns) expect(builtIn.fetchProviders).not.toHaveBeenCalled();
+  });
+
+  it('warns when a gateway fails to load and retries it at most once an hour', async () => {
+    vi.useFakeTimers();
+    const { PricingRegistry, setPricingGateways } = await loadModule();
+    const broken = gateway('private', { 'model-1': { input: 2, output: 4 } });
+    broken.fetchProviders.mockRejectedValueOnce(new Error('down'));
+    setPricingGateways(() => [broken]);
+
+    expect(PricingRegistry.getGlobal()?.get(PRIVATE_MODEL)).toBeNull();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('gateway private'), expect.any(Error));
+    expect(PricingRegistry.getGlobal()?.get(PRIVATE_MODEL)).toBeNull();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(broken.fetchProviders).toHaveBeenCalledTimes(1); // the miss does not retry within the hour
+
+    await vi.advanceTimersByTimeAsync(61 * 60 * 1000);
+    expect(PricingRegistry.getGlobal()?.get(PRIVATE_MODEL)).toBeNull();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(broken.fetchProviders).toHaveBeenCalledTimes(2);
+    expect(PricingRegistry.getGlobal()?.get(PRIVATE_MODEL)?.tiers[0]?.rates.input_tokens).toBe(2e-6);
+  });
+
+  it('does not call gateways under MASTRA_OFFLINE', async () => {
+    const { PricingRegistry, setPricingGateways } = await loadModule({ MASTRA_OFFLINE: 'true' });
+    const custom = gateway('private', { 'model-1': { input: 2, output: 4 } });
+    setPricingGateways(() => [custom]);
+    expect(PricingRegistry.getGlobal()?.get(PRIVATE_MODEL)).toBeNull();
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(custom.fetchProviders).not.toHaveBeenCalled();
   });
 });

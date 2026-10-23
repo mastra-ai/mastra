@@ -8,7 +8,15 @@ import type { ButtonVariant } from './Button';
 import { Button } from './Button';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
 
-const ALL_VARIANTS: ButtonVariant[] = ['default', 'primary', 'destructive', 'destructive-ghost', 'ghost', 'link'];
+const ALL_VARIANTS: ButtonVariant[] = [
+  'default',
+  'primary',
+  'destructive',
+  'destructive-ghost',
+  'ghost',
+  'subtle',
+  'link',
+];
 
 const meta: Meta<typeof Button> = {
   title: 'Elements/Button',
@@ -52,7 +60,7 @@ export const Variants: Story = {
   render: () => (
     <div className="flex flex-wrap items-center gap-4">
       {ALL_VARIANTS.map(variant => (
-        <Button key={variant} variant={variant}>
+        <Button key={variant} variant={variant} render={variant === 'link' ? <a href="#" /> : undefined}>
           {variant}
         </Button>
       ))}
@@ -74,7 +82,7 @@ export const Disabled: Story = {
   render: () => (
     <div className="flex flex-wrap items-center gap-4">
       {ALL_VARIANTS.map(variant => (
-        <Button key={variant} variant={variant} disabled>
+        <Button key={variant} variant={variant} disabled render={variant === 'link' ? <a href="#" /> : undefined}>
           {variant}
         </Button>
       ))}
@@ -91,12 +99,21 @@ export const WithIcon: Story = {
 
 export const WithIconSizes: Story = {
   render: () => (
-    <div className="flex items-center gap-4">
-      {(['sm', 'md', 'lg'] as const).map(size => (
-        <Button key={size} size={size} icon={<Plus />}>
-          Add Item
-        </Button>
-      ))}
+    <div className="flex flex-col gap-4">
+      <div className="flex items-center gap-4">
+        {(['sm', 'md', 'lg'] as const).map(size => (
+          <Button key={size} size={size} icon={<Plus />}>
+            Add Item
+          </Button>
+        ))}
+      </div>
+      <div className="flex items-center gap-4">
+        {(['sm', 'md', 'lg'] as const).map(size => (
+          <Button key={size} size={size} iconEnd={<ArrowUpRight />}>
+            Open portal
+          </Button>
+        ))}
+      </div>
     </div>
   ),
 };
@@ -108,13 +125,23 @@ export const WithTooltip: Story = {
   },
 };
 
-export const IconAutoDetect: Story = {
+// A button with only an icon takes the icon size of the same rung: same height as the
+// labelled button beside it, but square, so it renders as a circle instead of a pill.
+export const IconBesideText: Story = {
   render: () => (
-    <div className="flex items-center gap-4">
+    <div className="flex flex-col gap-4">
       {(['sm', 'md', 'lg'] as const).map(size => (
-        <Button key={size} size={size}>
-          <Settings />
-        </Button>
+        <div key={size} className="flex items-center gap-2">
+          <Button size={size} icon={<Plus />}>
+            Add item
+          </Button>
+          <Button size={`icon-${size}`} tooltip="Settings">
+            <Settings />
+          </Button>
+          <Button size={`icon-${size}`} variant="ghost" tooltip="Delete">
+            <Trash />
+          </Button>
+        </div>
       ))}
     </div>
   ),
@@ -180,16 +207,16 @@ export const VariantSizeMatrix: Story = {
           <Txt as="span" variant="meta" tone="muted">
             {variant}
           </Txt>
-          <Button variant={variant} size="sm">
+          <Button variant={variant} size="sm" render={variant === 'link' ? <a href="#" /> : undefined}>
             sm
           </Button>
-          <Button variant={variant} size="md">
+          <Button variant={variant} size="md" render={variant === 'link' ? <a href="#" /> : undefined}>
             md
           </Button>
-          <Button variant={variant} size="lg">
+          <Button variant={variant} size="lg" render={variant === 'link' ? <a href="#" /> : undefined}>
             lg
           </Button>
-          <Button variant={variant} size="lg">
+          <Button variant={variant} size="lg" render={variant === 'link' ? <a href="#" /> : undefined}>
             <Trash />
             with icon
           </Button>
@@ -251,7 +278,7 @@ export const Link: Story = {
         <Txt as="span" variant="subheading">
           Disabled
         </Txt>
-        <Button variant="link" disabled>
+        <Button variant="link" disabled render={<a href="#" />}>
           View usage
         </Button>
       </div>

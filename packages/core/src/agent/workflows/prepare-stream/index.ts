@@ -3,7 +3,7 @@ import type { ActorSignal, MastraFGAPermissionInput } from '../../../auth/ee';
 import type { BackgroundTaskManager } from '../../../background-tasks';
 import type { AgentBackgroundConfig } from '../../../background-tasks/types';
 import type { SystemMessage } from '../../../llm';
-import type { ToolCallConcurrency } from '../../../loop/types';
+import type { AgentLoopResumeClaim, ToolCallConcurrency } from '../../../loop/types';
 import { createRunScope } from '../../../mastra/run-scope';
 import type { MastraMemory } from '../../../memory/memory';
 import { checkThreadFGA } from '../../../memory/thread-fga';
@@ -47,10 +47,12 @@ interface CreatePrepareStreamWorkflowOptions<OUTPUT = undefined> {
   resumeContext?: {
     resumeData: any;
     snapshot: any;
+    claim?: AgentLoopResumeClaim;
   };
   agentId: string;
   actor?: ActorSignal;
   agentVersionId?: string;
+  resolvedScopes?: string[];
   agentName?: string;
   toolCallId?: string;
   workspace?: Workspace;
@@ -89,6 +91,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
   agentId,
   actor,
   agentVersionId,
+  resolvedScopes,
   agentName,
   toolCallId,
   workspace,
@@ -175,6 +178,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     resumeContext,
     agentId,
     agentVersionId,
+    resolvedScopes,
     agentName,
     toolCallId,
     methodType,
@@ -205,6 +209,7 @@ export function createPrepareStreamWorkflow<OUTPUT = undefined>({
     agentSpan,
     agentId,
     agentVersionId,
+    resolvedScopes,
     methodType,
     saveQueueManager,
     authorizeMemory,

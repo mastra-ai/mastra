@@ -13,10 +13,19 @@ Use `MastraModelGatewayInterface` when you want to provide a plain object gatewa
 
 ## Class overview
 
+Install the OpenAI-compatible provider used in this example:
+
+```bash npm2yarn
+npm install @ai-sdk/openai-compatible
+```
+
 ```typescript
-import { MastraModelGateway, type ProviderConfig } from '@mastra/core/llm'
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v5'
-import type { LanguageModelV2 } from '@ai-sdk/provider-v5'
+import {
+  MastraModelGateway,
+  type GatewayLanguageModel,
+  type ProviderConfig,
+} from '@mastra/core/llm'
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible'
 
 class MyCustomGateway extends MastraModelGateway {
   readonly id = 'custom'
@@ -51,7 +60,7 @@ class MyCustomGateway extends MastraModelGateway {
     modelId: string
     providerId: string
     apiKey: string
-  }): Promise<LanguageModelV2> {
+  }): Promise<GatewayLanguageModel> {
     const baseURL = this.buildUrl(`${providerId}/${modelId}`)
     return createOpenAICompatible({
       name: providerId,
@@ -129,6 +138,13 @@ Fetches provider configurations from the gateway.
     type: 'string',
     isOptional: true,
     description: 'Optional documentation URL',
+  },
+  {
+    name: 'pricing',
+    type: 'Record<string, ModelPricing>',
+    isOptional: true,
+    description:
+      'Prices per model ID in USD per 1 million tokens, with the same keys as a models.dev `cost` (`input`, `output`, `cache_read`, `cache_write`, `reasoning`, `input_audio`, `output_audio`). Optional `tiers` hold long-context rates. `@mastra/observability` uses them for cost metrics when models.dev has no price for the model.',
   },
 ]}
 />

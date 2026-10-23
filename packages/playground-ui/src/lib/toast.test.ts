@@ -175,7 +175,7 @@ describe('toast entry point', () => {
   });
 
   it('rejects a message it cannot render', () => {
-    expect(() => toast(42 as unknown as string)).toThrow('Invalid message type');
+    expect(() => toast(42)).toThrow('Invalid message type');
     expect(() => toast(null)).toThrow('Invalid message type');
   });
 

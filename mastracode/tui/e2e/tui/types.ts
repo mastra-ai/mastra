@@ -5,7 +5,11 @@ import type { MastraTUIOptions } from '../../src/tui/index.js';
 
 export type ScenarioName =
   | 'startup'
+  | 'factory-client-mode'
   | 'abort-followup'
+  | 'abort-escape-off'
+  | 'abort-escape-durable'
+  | 'abort-escape-evented'
   | 'abort-queued-followup'
   | 'startup-interrupted'
   | 'account-rotation'
@@ -158,6 +162,9 @@ export type ScenarioName =
   | 'notify-input-request-hook'
   | 'om-settings'
   | 'om-auto-selection'
+  | 'om-auto-preview-google-api-key'
+  | 'om-auto-preview-stored-google-key'
+  | 'om-auto-preview-anthropic-only'
   | 'om-attachment-observation'
   | 'om-global-settings-persistence'
   | 'om-model-override-reload'

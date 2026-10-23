@@ -10,14 +10,27 @@
  * - A `buildResult` callback to construct the caller-specific return value
  * - Optional `postPipeInner` hooks for durable-specific cleanup/abort tracking
  */
+import { resolveAgentScopes } from '../../agent/scopes';
 import type { BackgroundTaskManager } from '../../background-tasks/manager';
 import type { MastraMemory } from '../../memory/memory';
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../../request-context';
+import {
+  MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY,
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_SCOPES_KEY,
+  MASTRA_THREAD_ID_KEY,
+  RequestContext,
+} from '../../request-context';
 import { deepMerge } from '../../utils';
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
+
+/** Upper bound on the startup task-adoption lookup; past it the wrapper tracks events only. */
+const ADOPT_LOOKUP_TIMEOUT_MS = 5_000;
+
+/** Inner-run chunks after which the run is parked, waiting to be resumed. */
+const PARKING_CHUNKS = new Set(['tool-call-approval', 'tool-call-suspended']);
 
 export const TERMINAL_BG_CHUNKS = new Set([
   'background-task-completed',
@@ -49,12 +62,29 @@ export interface ResolvedScope {
  * falls through to a plain stream in that case.
  */
 export async function resolveScope(
-  agent: { getMemory: (opts?: any) => Promise<MastraMemory | undefined> },
+  agent: {
+    getMemory: (opts?: any) => Promise<MastraMemory | undefined>;
+    getScopes?: (opts?: any) => Promise<string[] | undefined>;
+  },
   mergedOptions: Record<string, any>,
 ): Promise<ResolvedScope | null> {
   const requestContext = (mergedOptions?.requestContext as RequestContext | undefined) ?? new RequestContext();
   const memory = await agent.getMemory({ requestContext });
   if (!memory) return null;
+
+  // With agent scopes, the run's thread/resource come from the same resolver stream() uses.
+  const agentScopes = (await agent.getScopes?.({ requestContext })) ?? [];
+  const callScopes = mergedOptions?.scopes as string[] | undefined;
+  if (agentScopes.length || callScopes?.length || requestContext.has(MASTRA_SCOPES_KEY)) {
+    const { threadId, resourceId } = resolveAgentScopes({
+      requestContext,
+      agentScopes,
+      callScopes,
+      memory: mergedOptions?.memory,
+    });
+    const scopeKey = threadId || resourceId ? `${threadId ?? ''}|${resourceId ?? ''}` : null;
+    return { threadId, resourceId, scopeKey };
+  }
 
   const threadIdFromContext = requestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
   const resourceIdFromContext = requestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
@@ -173,10 +203,31 @@ export function buildContinuationOpts(
   batch: Array<Record<string, unknown>>,
 ): Record<string, any> {
   const directive = buildContinuationDirective(batch);
+  const toolCallIds = batch
+    .map(chunk => (chunk as { payload?: { toolCallId?: unknown } }).payload?.toolCallId)
+    .filter((id): id is string => typeof id === 'string' && id.length > 0);
+  // Share the caller's context so tool/processor updates stay visible to it. IDs are merged with
+  // any set by an overlapping continuation on the same context; releaseContinuationToolCallIds
+  // removes only this continuation's IDs once it finishes.
+  const requestContext = (baseContinuationOpts.requestContext as RequestContext | undefined) ?? new RequestContext();
+  const existing = (requestContext.get(MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY) as string[] | undefined) ?? [];
+  requestContext.set(MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY, [...new Set([...existing, ...toolCallIds])]);
   return {
     ...baseContinuationOpts,
+    requestContext,
+    continuationToolCallIds: toolCallIds,
     context: [...(callerContext ?? []), { role: 'system' as const, content: directive }],
   };
+}
+
+export function releaseContinuationToolCallIds(requestContext: RequestContext | undefined, toolCallIds: string[]) {
+  if (!requestContext) return;
+  const own = new Set(toolCallIds);
+  const remaining = ((requestContext.get(MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY) as string[] | undefined) ?? []).filter(
+    id => !own.has(id),
+  );
+  if (remaining.length) requestContext.set(MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY, remaining);
+  else requestContext.delete(MASTRA_CONTINUATION_TOOL_CALL_IDS_KEY);
 }
 
 // ---------------------------------------------------------------------------
@@ -336,7 +387,7 @@ export async function runIdleLoop<
   }
 
   const { threadId, resourceId, scopeKey } = scope;
-  const maxIdleMs = _maxIdleMs ?? 5 * 60_000;
+  const maxIdleMs = _maxIdleMs ?? deps.bgManager.config.untilIdleMaxIdleMs ?? 5 * 60_000;
 
   // Continuation calls reuse the memory thread but drop segment-scoped options.
   // Omitting runId lets durable agents start a fresh stream segment instead of
@@ -360,6 +411,9 @@ export async function runIdleLoop<
   const runningTaskIds = new Set<string>();
   const pendingCompletions: Array<Record<string, unknown>> = [];
   const processedTerminalKeys = new Set<string>();
+  /** Tasks whose terminal bg chunk this wrapper already saw — the startup
+   * adoption lookup must not re-add them from a stale storage snapshot. */
+  const settledTaskIds = new Set<string>();
   let isProcessing = false;
   let closed = false;
   let idleTimer: ReturnType<typeof setTimeout> | undefined;
@@ -368,10 +422,16 @@ export async function runIdleLoop<
   let activeInnerRunId: string | undefined;
   let continuationAbort: AbortController | undefined;
   let aborting = false;
+  // Set once the active inner run parks on a tool approval or a tool
+  // suspend(). A parked run is waiting for resumeStreamUntilIdle(), so a reader
+  // that stops reading (break / request disconnect) must only detach;
+  // aborting here would discard the run the caller is about to resume.
+  let parked = false;
+  let innerReader: ReadableStreamDefaultReader<any> | undefined;
   const outerAbort = new AbortController();
 
   // --- Close / idle timer ---
-  const forceClose = () => {
+  const forceClose = (opts?: { keepInnerRuns?: boolean }) => {
     if (closed) return;
     closed = true;
     if (idleTimer) {
@@ -385,7 +445,13 @@ export async function runIdleLoop<
     } catch {
       // already closed
     }
-    hooks?.onForceClose?.();
+    if (opts?.keepInnerRuns) {
+      // Cancelling the inner reader only unsubscribes this wrapper; the
+      // parked run and its registry entry stay in place for the resume.
+      void innerReader?.cancel().catch(() => {});
+    } else {
+      hooks?.onForceClose?.();
+    }
   };
 
   const abortWrapper = () => {
@@ -398,6 +464,8 @@ export async function runIdleLoop<
     if (activeInnerRunId) agent.abortRunStream?.(activeInnerRunId);
     forceClose();
   };
+
+  const detachOrAbort = () => (parked ? forceClose({ keepInnerRuns: true }) : abortWrapper());
 
   const tryClose = () => {
     if (closed) return;
@@ -424,18 +492,22 @@ export async function runIdleLoop<
     clearIdleTimer();
     if (isProcessing) return;
     if (runningTaskIds.size === 0) return;
-    idleTimer = setTimeout(forceClose, maxIdleMs);
+    idleTimer = setTimeout(() => forceClose(), maxIdleMs);
   };
 
   // --- Stream plumbing ---
   const pipeInner = async (inner: ReadableStream<any>) => {
     const reader = inner.getReader();
+    innerReader = reader;
     try {
       while (true) {
         if (outerAbort.signal.aborted) break;
         const { done, value } = await reader.read();
         if (done) break;
         clearIdleTimer();
+        if (value && typeof value === 'object' && PARKING_CHUNKS.has((value as any).type)) {
+          parked = true;
+        }
         try {
           outerController.enqueue(value);
         } catch {
@@ -449,6 +521,7 @@ export async function runIdleLoop<
         }
       }
     } finally {
+      if (innerReader === reader) innerReader = undefined;
       reader.releaseLock();
     }
   };
@@ -456,6 +529,8 @@ export async function runIdleLoop<
   const processIfIdle = async () => {
     if (isProcessing || closed || runningTaskIds.size > 0 || pendingCompletions.length === 0) return;
     isProcessing = true;
+    let continuationContext: RequestContext | undefined;
+    let continuationToolCallIds: string[] = [];
     try {
       const batch = pendingCompletions.splice(0, pendingCompletions.length);
       for (const chunk of batch) {
@@ -464,9 +539,13 @@ export async function runIdleLoop<
         if (tid && ctype) processedTerminalKeys.add(`${tid}:${ctype}`);
       }
       const continuationOpts = buildContinuationOpts(baseContinuationOpts, restStreamOptions?.context as any[], batch);
+      continuationContext = continuationOpts.requestContext;
+      continuationToolCallIds = continuationOpts.continuationToolCallIds;
+      delete continuationOpts.continuationToolCallIds;
       const segmentAbort = new AbortController();
       continuationAbort = segmentAbort;
       activeInnerRunId = undefined;
+      parked = false;
       const existingAbortSignal = continuationOpts.abortSignal as AbortSignal | undefined;
       continuationOpts.abortSignal = existingAbortSignal
         ? AbortSignal.any([existingAbortSignal, segmentAbort.signal])
@@ -490,6 +569,7 @@ export async function runIdleLoop<
       forceClose();
       return;
     } finally {
+      releaseContinuationToolCallIds(continuationContext, continuationToolCallIds);
       isProcessing = false;
       if (runningTaskIds.size === 0 && pendingCompletions.length > 0) {
         void processIfIdle();
@@ -504,14 +584,14 @@ export async function runIdleLoop<
   acquireStreamSlot(deps.activeStreams, scopeKey, abortWrapper);
   acquireRunStreamSlot(deps.activeStreams, wrapperRunId, abortWrapper);
 
-  streamOptions?.abortSignal?.addEventListener('abort', abortWrapper, { once: true });
+  streamOptions?.abortSignal?.addEventListener('abort', detachOrAbort, { once: true });
 
   const combinedStream = new ReadableStream<any>({
     start(controller) {
       outerController = controller;
     },
     cancel() {
-      abortWrapper();
+      detachOrAbort();
     },
   });
 
@@ -535,6 +615,16 @@ export async function runIdleLoop<
 
         const taskId = (chunk.payload as { taskId?: string } | undefined)?.taskId;
 
+        // An unscoped wrapper (no thread or resource id) subscribes with
+        // wildcard filters, so it would receive every resource's task events
+        // for this agent — terminal payloads include the task result. Same
+        // semantics as the adoption gate below: unscoped streams own nothing
+        // cross-resource, so only deliver events for tasks this wrapper
+        // observed itself.
+        if (!threadId && !resourceId && taskId && !runningTaskIds.has(taskId) && !settledTaskIds.has(taskId)) {
+          continue;
+        }
+
         const terminalKey = taskId && TERMINAL_BG_CHUNKS.has(chunk.type) ? `${taskId}:${chunk.type}` : undefined;
         if (terminalKey && processedTerminalKeys.has(terminalKey)) {
           continue;
@@ -552,6 +642,7 @@ export async function runIdleLoop<
         if (chunk.type === 'background-task-running' || chunk.type === 'background-task-resumed') {
           runningTaskIds.add(taskId);
         } else if (TERMINAL_BG_CHUNKS.has(chunk.type)) {
+          settledTaskIds.add(taskId);
           runningTaskIds.delete(taskId);
           pendingCompletions.push(chunk);
           if (runningTaskIds.size === 0) void processIfIdle();
@@ -567,6 +658,46 @@ export async function runIdleLoop<
   // --- Initial turn ---
   isProcessing = true;
   clearIdleTimer();
+
+  // Adopt tasks started by a prior wrapper on this scope (#26841): a new
+  // untilIdle stream aborts the previous wrapper via acquireStreamSlot, and
+  // this wrapper's bg subscription (`includeExisting: false`) never saw their
+  // 'running' events. Without this lookup the wrapper closes after its first
+  // turn and those tasks' completions wake nobody. Runs concurrently with the
+  // first turn (isProcessing blocks continuations and tryClose until both
+  // settle); `settledTaskIds` keeps a task whose terminal chunk already
+  // arrived from being re-added off a stale storage snapshot.
+  const bgManager = deps.bgManager;
+  // The storage contract defines no timeout for listTasks; a hung adapter
+  // must not hold isProcessing forever (blocking continuations and the idle
+  // timer). After the bound, continue with event-only tracking and ignore a
+  // late lookup result.
+  let adoptionAbandoned = false;
+  const adoptPriorTasks = (async () => {
+    try {
+      // Adoption requires an authorized scope. Task filters drop undefined
+      // keys, so without a thread or resource id the lookup would return
+      // EVERY running/pending task for the agent — adopting them would let
+      // another resource's task completion drive a continuation on this
+      // stream and disclose its result. An unscoped stream therefore adopts
+      // nothing: it only tracks tasks whose events it observes itself.
+      if (!threadId && !resourceId) return;
+      const { tasks } = await bgManager.listTasks({
+        agentId: agent.id,
+        threadId,
+        resourceId,
+        status: ['running', 'pending'],
+      });
+      if (adoptionAbandoned) return;
+      for (const task of tasks) {
+        if (!settledTaskIds.has(task.id)) runningTaskIds.add(task.id);
+      }
+    } catch {
+      // Best-effort: on a failed lookup the wrapper behaves as before the
+      // adoption pass (tracks only tasks whose events it sees itself).
+    }
+  })();
+
   let first: TFirstResult;
   try {
     first = await firstTurn(initialStreamOpts);
@@ -591,6 +722,21 @@ export async function runIdleLoop<
         // already closed
       }
     }
+    // The adoption lookup must land before the first idle evaluation, or
+    // tryClose below could close the wrapper while an adopted task still
+    // runs — but the wait is bounded so a hung storage adapter cannot block
+    // the wrapper forever.
+    await Promise.race([
+      adoptPriorTasks,
+      new Promise<void>(resolve => {
+        const timer = setTimeout(() => {
+          adoptionAbandoned = true;
+          resolve();
+        }, ADOPT_LOOKUP_TIMEOUT_MS);
+        (timer as { unref?: () => void }).unref?.();
+        void adoptPriorTasks.finally(() => clearTimeout(timer));
+      }),
+    ]);
     isProcessing = false;
     if (runningTaskIds.size === 0 && pendingCompletions.length > 0) {
       void processIfIdle();
@@ -600,5 +746,5 @@ export async function runIdleLoop<
     }
   })();
 
-  return buildResult(first, { combinedStream, forceClose, threadId, resourceId });
+  return buildResult(first, { combinedStream, forceClose: () => forceClose(), threadId, resourceId });
 }

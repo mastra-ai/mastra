@@ -11,16 +11,8 @@
  */
 import type { RequestContext } from '@mastra/core/request-context';
 
-import {
-  getConnectionContext,
-  getCredential,
-  proxyRequestWithResponse,
-  resolveClient,
-  type ConnectClientOptions,
-  type ConnectionContext,
-  type ConnectionCredential,
-  type ProxyRequestOptions,
-} from '../client.js';
+import { getConnectionContext, getCredential, proxyRequestWithResponse, resolveClient } from '../client.js';
+import type { ConnectClientOptions, ConnectionContext, ConnectionCredential, ProxyRequestOptions } from '../client.js';
 import { MastraConnectError } from '../errors.js';
 
 /**

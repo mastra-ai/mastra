@@ -16,7 +16,7 @@ import type {
   ToolCallAttributes,
 } from '@mastra/core/observability';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
-import { initLogger, _exportsForTestingOnly } from 'braintrust';
+import { initLogger, currentSpan, _exportsForTestingOnly } from 'braintrust';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { BraintrustExporter } from './tracing';
 import type { BraintrustExporterConfig, BraintrustLogger, BraintrustSpan } from './tracing';
@@ -3120,6 +3120,154 @@ describe('BraintrustExporter with braintrustLogger parameter', () => {
     // So when we verify mockAgentSpan.startSpan was called (not mockExternalSpan),
     // it proves getBraintrustParent() returned mockAgentSpan (not external),
     // which means it correctly looked up the agent span from spanData.spans
+  });
+});
+
+describe('BraintrustExporter flush and shutdown', () => {
+  // Braintrust's SDK only enqueues rows; flush()/shutdown() must wait for its background logger.
+  function deferred() {
+    let resolve!: () => void;
+    const promise = new Promise<void>(r => {
+      resolve = r;
+    });
+    return { promise, resolve };
+  }
+
+  async function settled(promise: Promise<unknown>): Promise<boolean> {
+    let done = false;
+    void promise.then(() => {
+      done = true;
+    });
+    await new Promise(r => setImmediate(r));
+    return done;
+  }
+
+  let mockSpan: any;
+  let mockLogger: any;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    // Earlier suites leave currentSpan() returning an ambient span
+    vi.mocked(currentSpan).mockReturnValue(undefined as any);
+    mockSpan = { id: 'mockSpan', startSpan: vi.fn(), log: vi.fn(), end: vi.fn() };
+    mockSpan.startSpan.mockReturnValue(mockSpan);
+    mockLogger = {
+      startSpan: vi.fn().mockReturnValue(mockSpan),
+      logFeedback: vi.fn(),
+      flush: vi.fn(),
+    };
+  });
+
+  it('flush() waits for the logger flush to finish', async () => {
+    const gate = deferred();
+    mockLogger.flush.mockReturnValue(gate.promise);
+    const exporter = new TestBraintrustExporter({ braintrustLogger: mockLogger });
+
+    await exporter.exportTracingEvent({
+      type: TracingEventType.SPAN_STARTED,
+      exportedSpan: createMockSpan({
+        id: 'root',
+        name: 'root',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+      }),
+    });
+
+    const flushing = exporter.flush();
+    expect(await settled(flushing)).toBe(false);
+    expect(mockLogger.flush).toHaveBeenCalledTimes(1);
+
+    gate.resolve();
+    await flushing;
+  });
+
+  it('flush() waits for the lazily created logger', async () => {
+    const gate = deferred();
+    mockLogger.flush.mockReturnValue(gate.promise);
+    vi.mocked(initLogger).mockResolvedValue(mockLogger);
+    const exporter = new TestBraintrustExporter({ apiKey: 'test-api-key' });
+
+    await exporter.exportTracingEvent({
+      type: TracingEventType.SPAN_STARTED,
+      exportedSpan: createMockSpan({
+        id: 'root',
+        name: 'root',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+      }),
+    });
+
+    const flushing = exporter.flush();
+    expect(await settled(flushing)).toBe(false);
+
+    gate.resolve();
+    await flushing;
+    expect(mockLogger.flush).toHaveBeenCalledTimes(1);
+  });
+
+  it('shutdown() flushes after writing abort rows for open spans', async () => {
+    const gate = deferred();
+    mockLogger.flush.mockReturnValue(gate.promise);
+    const exporter = new TestBraintrustExporter({ braintrustLogger: mockLogger });
+
+    await exporter.exportTracingEvent({
+      type: TracingEventType.SPAN_STARTED,
+      exportedSpan: createMockSpan({
+        id: 'root',
+        name: 'root',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+      }),
+    });
+
+    const stopping = exporter.shutdown();
+    expect(await settled(stopping)).toBe(false);
+
+    expect(mockSpan.log).toHaveBeenCalledWith(expect.objectContaining({ error: 'Observability is shutting down.' }));
+    expect(mockSpan.end).toHaveBeenCalled();
+    expect(mockLogger.flush).toHaveBeenCalledTimes(1);
+    expect(mockLogger.flush.mock.invocationCallOrder[0]).toBeGreaterThan(mockSpan.end.mock.invocationCallOrder[0]);
+
+    gate.resolve();
+    await stopping;
+  });
+
+  it('flush() waits for the ambient external span', async () => {
+    const gate = deferred();
+    const mockExternalSpan = {
+      id: 'external-span-id',
+      startSpan: vi.fn().mockReturnValue(mockSpan),
+      log: vi.fn(),
+      end: vi.fn(),
+      flush: vi.fn().mockReturnValue(gate.promise),
+    };
+    vi.mocked(currentSpan).mockReturnValue(mockExternalSpan as any);
+    const exporter = new TestBraintrustExporter({ braintrustLogger: mockLogger });
+
+    await exporter.exportTracingEvent({
+      type: TracingEventType.SPAN_STARTED,
+      exportedSpan: createMockSpan({
+        id: 'root',
+        name: 'root',
+        type: SpanType.AGENT_RUN,
+        isRoot: true,
+        attributes: {},
+      }),
+    });
+
+    const flushing = exporter.flush();
+    expect(await settled(flushing)).toBe(false);
+    expect(mockExternalSpan.flush).toHaveBeenCalledTimes(1);
+
+    gate.resolve();
+    await flushing;
+
+    // Later flushes keep covering the same ambient span
+    await exporter.flush();
+    expect(mockExternalSpan.flush).toHaveBeenCalledTimes(2);
   });
 });
 

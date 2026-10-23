@@ -1,4 +1,9 @@
-import { abortFollowupScenario } from './abort-followup.js';
+import {
+  abortEscapeDurableScenario,
+  abortEscapeEventedScenario,
+  abortEscapeOffScenario,
+  abortFollowupScenario,
+} from './abort-followup.js';
 import { abortQueuedFollowupScenario } from './abort-queued-followup.js';
 import { accountRotationScenario } from './account-rotation.js';
 import { accountRoutingTargetedScenario } from './account-routing-targeted.js';
@@ -65,6 +70,7 @@ import { customSlashCommandScenario } from './custom-slash-command.js';
 import { debugLoggingScenario } from './debug-logging.js';
 import { experimentalAgentDurableScenario, experimentalAgentEventedScenario } from './experimental-agent-runtime.js';
 import { experimentalAgentSettingsScenario } from './experimental-agent-settings.js';
+import { factoryClientModeScenario } from './factory-client-mode.js';
 import { fileAttachmentBlockedRetryScenario } from './file-attachment-blocked-retry.js';
 import { fileAttachmentHistoryReloadScenario } from './file-attachment-history-reload.js';
 import { fileAutocompleteScenario } from './file-autocomplete.js';
@@ -119,6 +125,7 @@ import { modelSearchScenario } from './model-search.js';
 import { modelSelectionApiKeyPromptScenario } from './model-selection-api-key-prompt.js';
 import { modelSelectionCancelEnvScenario } from './model-selection-cancel-env.js';
 import { modelsPackActivationPersistenceScenario } from './models-pack-activation-persistence.js';
+import { modelsPackKimiModelScenario } from './models-pack-kimi-model.js';
 import { modelsPackMemoryAutoScenario } from './models-pack-memory-auto.js';
 import { modelsPackMemoryModelScenario } from './models-pack-memory-model.js';
 import { multiAccountLoginScenario } from './multi-account-login.js';
@@ -129,6 +136,11 @@ import { notificationSignalInterruptScenario } from './notification-signal-inter
 import { notificationSignalRenderingScenario } from './notification-signal-rendering.js';
 import { notifyInputRequestHookScenario } from './notify-input-request-hook.js';
 import { omAttachmentObservationScenario } from './om-attachment-observation.js';
+import {
+  omAutoPreviewAnthropicOnlyScenario,
+  omAutoPreviewGoogleApiKeyScenario,
+  omAutoPreviewStoredGoogleKeyScenario,
+} from './om-auto-preview-credentials.js';
 import { omAutoSelectionScenario } from './om-auto-selection.js';
 import { omGlobalSettingsPersistenceScenario } from './om-global-settings-persistence.js';
 import { omModelOverrideReloadScenario } from './om-model-override-reload.js';
@@ -247,7 +259,11 @@ export type { McE2eScenario, McE2eScenarioRuntime, ScenarioName } from './types.
 
 export const scenarios: Record<ScenarioName, McE2eScenario> = {
   startup: startupScenario,
+  'factory-client-mode': factoryClientModeScenario,
   'abort-followup': abortFollowupScenario,
+  'abort-escape-off': abortEscapeOffScenario,
+  'abort-escape-durable': abortEscapeDurableScenario,
+  'abort-escape-evented': abortEscapeEventedScenario,
   'abort-queued-followup': abortQueuedFollowupScenario,
   'startup-interrupted': startupInterruptedScenario,
   'branch-context-long-name': branchContextLongNameScenario,
@@ -360,6 +376,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'model-selection-cancel-env': modelSelectionCancelEnvScenario,
   'mode-switch-applies-pack-model': modeSwitchAppliesPackModelScenario,
   'models-pack-activation-persistence': modelsPackActivationPersistenceScenario,
+  'models-pack-kimi-model': modelsPackKimiModelScenario,
   'models-pack-memory-auto': modelsPackMemoryAutoScenario,
   'models-pack-memory-model': modelsPackMemoryModelScenario,
   'notification-inbox-crud-flow': notificationInboxCrudFlowScenario,
@@ -371,6 +388,9 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'knowledge-browser': knowledgeBrowserScenario,
   'om-attachment-observation': omAttachmentObservationScenario,
   'om-auto-selection': omAutoSelectionScenario,
+  'om-auto-preview-google-api-key': omAutoPreviewGoogleApiKeyScenario,
+  'om-auto-preview-stored-google-key': omAutoPreviewStoredGoogleKeyScenario,
+  'om-auto-preview-anthropic-only': omAutoPreviewAnthropicOnlyScenario,
   'om-global-settings-persistence': omGlobalSettingsPersistenceScenario,
   'om-model-override-reload': omModelOverrideReloadScenario,
   'om-pack-startup-restore': omPackStartupRestoreScenario,

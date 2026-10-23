@@ -13,11 +13,12 @@ import type {
   OutputProcessorOrWorkflow,
 } from '../../../processors';
 import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '../../../request-context';
-import { getNeedsApprovalFn } from '../../../tools/toolchecks';
+import { getNeedsApprovalFn, isApprovalExempt } from '../../../tools/toolchecks';
 import type { CoreTool, RequireToolApproval, ToolApprovalContext } from '../../../tools/types';
 import type { Workspace } from '../../../workspace';
 import type { MessageList } from '../../message-list';
 import { SaveQueueManager } from '../../save-queue';
+import { restoreRunAgentScopes } from '../../scopes';
 import type { ToolsInput } from '../../types';
 import { recordRunSavedMessages } from '../run-message-refs';
 import { getRunRegistryEntry, globalRunRegistry, setRunRegistryEntry } from '../run-registry';
@@ -128,6 +129,7 @@ export function restoreRequestContext(entries?: Record<string, unknown>, runLeve
     if (liveToken !== undefined) {
       restored.setRaw(MASTRA_AUTH_TOKEN_KEY, liveToken);
     }
+    restoreRunAgentScopes(restored);
     return restored;
   }
   return runLevel ?? new RequestContext();
@@ -685,7 +687,8 @@ export function resolveTool(toolName: string, mastra?: Mastra): CoreTool | undef
  *  - Function-form global `requireToolApproval` is evaluated per call with
  *    `(toolName, args, ...)`. Throwing defaults to "require approval" (safe).
  *  - Boolean global / tool-level `requireApproval` seed the decision.
- *  - A per-tool `needsApprovalFn` (e.g. skill tools) is authoritative when
+ *  - Approval-exempt tools (skill tools) never require approval.
+ *  - A per-tool `needsApprovalFn` is authoritative when
  *    present and overrides the seed. It receives `{ requestContext, workspace }`
  *    as its second argument, exactly like the non-durable loop.
  *
@@ -698,6 +701,8 @@ export async function toolRequiresApproval(
   args?: Record<string, unknown>,
   approvalContext?: Partial<ToolApprovalContext> & { toolName: string },
 ): Promise<boolean> {
+  if (isApprovalExempt(tool)) return false;
+
   let globalRequires: boolean;
   if (typeof globalRequireApproval === 'function') {
     try {
@@ -717,7 +722,7 @@ export async function toolRequiresApproval(
 
   let requires = globalRequires || !!(tool as any).requireApproval;
 
-  // needsApprovalFn overrides all other flags (e.g., skill tools return false)
+  // needsApprovalFn overrides all other flags
   const needsApprovalFn = getNeedsApprovalFn(tool);
   if (needsApprovalFn) {
     try {

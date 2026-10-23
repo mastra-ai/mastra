@@ -84,11 +84,13 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
   private otelSpanMap = new Map<string, { otelSpan: OtelSpan; otelContext: OtelContext; startLinks?: Set<string> }>();
   private spanConverter?: SpanConverter;
   private hasCustomTracerProvider: boolean;
+  private hasCustomLoggerProvider: boolean;
   private warnedNoTracerProvider = false;
 
   constructor(config: OtelBridgeConfig = {}) {
     super(config);
     this.hasCustomTracerProvider = config.tracerProvider !== undefined;
+    this.hasCustomLoggerProvider = config.loggerProvider !== undefined;
     this.tracerProvider = config.tracerProvider ?? otelTrace.getTracerProvider();
     this.otelTracer = this.tracerProvider.getTracer('@mastra/otel-bridge', '1.0.0');
     this.loggerProvider = config.loggerProvider ?? otelLogs.getLoggerProvider();
@@ -472,12 +474,28 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
    * instance is terminated.
    */
   async flush(): Promise<void> {
-    await this.flushProvider(this.tracerProvider, 'tracer');
-    await this.flushProvider(this.loggerProvider, 'logger');
+    // Re-resolve the global providers on every flush: the OTEL SDK is often
+    // registered after the bridge is constructed, and `otelLogs.getLoggerProvider()`
+    // only returns the real provider once one has been registered.
+    const tracerProvider = this.hasCustomTracerProvider ? this.tracerProvider : otelTrace.getTracerProvider();
+    const loggerProvider = this.hasCustomLoggerProvider ? this.loggerProvider : otelLogs.getLoggerProvider();
+    await this.flushProvider(tracerProvider, 'tracer');
+    await this.flushProvider(loggerProvider, 'logger');
   }
 
   private async flushProvider(provider: unknown, label: 'tracer' | 'logger'): Promise<void> {
     try {
+      // `trace.getTracerProvider()` returns the API's ProxyTracerProvider once a
+      // global provider is registered (e.g. by `NodeSDK.start()`). The proxy has
+      // no forceFlush of its own; the SDK provider behind it does.
+      if (
+        provider &&
+        typeof provider === 'object' &&
+        'getDelegate' in provider &&
+        typeof (provider as { getDelegate: unknown }).getDelegate === 'function'
+      ) {
+        provider = (provider as { getDelegate: () => unknown }).getDelegate();
+      }
       if (
         provider &&
         typeof provider === 'object' &&
@@ -500,15 +518,14 @@ export class OtelBridge extends BaseExporter implements ObservabilityBridge {
    * Shutdown the bridge and clean up resources
    */
   async shutdown(): Promise<void> {
-    // Flush before shutdown
-    await this.flush();
-
-    // End any remaining spans
+    // End any remaining spans first so the flush below exports them too
     for (const [spanId, { otelSpan }] of this.otelSpanMap.entries()) {
       this.logger.warn(`[OtelBridge] Force-ending span that was not properly closed [id=${spanId}]`);
       otelSpan.end();
     }
     this.otelSpanMap.clear();
+
+    await this.flush();
     this.logger.info('[OtelBridge] Shutdown complete');
   }
 }

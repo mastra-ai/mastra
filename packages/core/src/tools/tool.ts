@@ -227,7 +227,7 @@ export class Tool<
    * Schema for validating request context values.
    * When provided, the request context will be validated against this schema before tool execution.
    */
-  requestContextSchema?: PublicSchema<TRequestContext>;
+  requestContextSchema?: PublicSchema<TRequestContext, any>;
 
   /**
    * Tool execution function
@@ -238,6 +238,9 @@ export class Tool<
   execute?: NonNullable<
     ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContext>['execute']
   >;
+
+  /** Whether this tool only displays its call and receives a server acknowledgement. */
+  renderOnly?: boolean;
 
   /** Parent Mastra instance for accessing shared resources */
   mastra?: Mastra;
@@ -268,6 +271,23 @@ export class Tool<
    * authoritative per-tool approval decision and is always evaluated by the agent runtime.
    */
   needsApprovalFn?: NeedsApprovalFn;
+
+  /**
+   * Runs before the approval gate for calls that require approval and can reject the call
+   * with `{ proceed: false, output }`, returning `output` to the model without suspending
+   * or executing.
+   * @example
+   * ```typescript
+   * beforeApproval: async ({ orderId }) => {
+   *   if (!(await orderExists(orderId))) {
+   *     return { proceed: false, output: { error: `Order ${orderId} not found` } };
+   *   }
+   * }
+   * ```
+   */
+  beforeApproval?: NonNullable<
+    ToolAction<TSchemaIn, TSchemaOut, TSuspendSchema, TResumeSchema, TContext, TId, TRequestContext>['beforeApproval']
+  >;
 
   /**
    * Enables strict tool input generation for providers that support it.
@@ -386,8 +406,10 @@ export class Tool<
     this.suspendSchema = opts.suspendSchema ? toStandardSchema(opts.suspendSchema) : undefined;
     this.resumeSchema = opts.resumeSchema ? toStandardSchema(opts.resumeSchema) : undefined;
     this.requestContextSchema = opts.requestContextSchema;
+    this.renderOnly = opts.renderOnly;
     this.mastra = opts.mastra;
     this.requireApproval = opts.requireApproval || false;
+    this.beforeApproval = opts.beforeApproval;
     this.strict = opts.strict;
     this.outputValidation = opts.outputValidation;
     this.providerOptions = opts.providerOptions;
@@ -405,8 +427,11 @@ export class Tool<
     // Tools receive two parameters:
     // 1. input - The raw, validated input data
     // 2. context - Execution metadata (mastra, suspend, etc.)
-    if (opts.execute) {
-      const originalExecute = opts.execute;
+    if (opts.renderOnly && opts.execute) {
+      throw new Error('A render-only tool cannot also define execute');
+    }
+    const originalExecute = opts.renderOnly ? async () => ({ acknowledged: true }) : opts.execute;
+    if (originalExecute) {
       this.execute = async (inputData: TSchemaIn, context?: any) => {
         // When a tool is being resumed (resumeData present in context), skip input
         // validation. The original args were already validated during the initial

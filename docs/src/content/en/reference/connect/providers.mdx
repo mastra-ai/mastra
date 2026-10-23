@@ -9,7 +9,7 @@ import { ProviderLogo } from '@site/src/components/connect/provider-logo';
 
 # Provider toolsets
 
-This page documents generated toolsets for 21 providers (883 tools in this version of `@mastra/connect`). It isn't an exhaustive list of providers registered in the SDK or available in the platform catalog. [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
+This page documents generated toolsets for 22 providers (910 tools in this version of `@mastra/connect`). It isn't an exhaustive list of providers registered in the SDK or available in the platform catalog. [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
 
 Tool keys are stable identifiers of the form `<provider>_<action>` and are the values accepted by `allowTools` and `disallowTools`. Toolsets are versioned with the package: the exact list depends on the installed `@mastra/connect` version, and this page reflects the version it was generated from.
 
@@ -23,13 +23,14 @@ MCP providers (Attio, Canva, Clay, Neon, Render, Robinhood, and Sanity) serve th
 | <ProviderLogo slug="github" mono /> [GitHub](#github) | `github` | 49 |
 | <ProviderLogo slug="googlecalendar" /> [Google Calendar](#google-calendar) | `google-calendar` | 43 |
 | <ProviderLogo slug="googledocs" /> [Google Docs](#google-docs) | `google-docs` | 37 |
-| <ProviderLogo slug="googledrive" /> [Google Drive](#google-drive) | `google-drive` | 30 |
+| <ProviderLogo slug="googledrive" /> [Google Drive](#google-drive) | `google-drive` | 32 |
 | <ProviderLogo slug="gmail" /> [Gmail](#gmail) | `google-mail` | 52 |
 | <ProviderLogo slug="googlesheets" /> [Google Sheets](#google-sheets) | `google-sheet` | 18 |
 | <ProviderLogo slug="hubspot" /> [HubSpot](#hubspot) | `hubspot` | 50 |
 | <ProviderLogo src="https://app.nango.dev/images/template-logos/incident-io.svg" /> [incident.io](#incidentio) | `incident-io` | 66 |
 | <ProviderLogo slug="jira" /> [Jira](#jira) | `jira` | 38 |
 | <ProviderLogo slug="linear" /> [Linear](#linear) | `linear` | 46 |
+| <ProviderLogo slug="microsoftteams" /> [Microsoft Teams](#microsoft-teams) | `microsoft-teams` | 25 |
 | <ProviderLogo slug="notion" mono /> [Notion](#notion) | `notion` | 44 |
 | <ProviderLogo src="https://svgl.app/library/openai.svg" mono /> [OpenAI](#openai) | `openai` | 26 |
 | <ProviderLogo slug="posthog" /> [PostHog](#posthog) | `posthog` | 67 |
@@ -315,7 +316,7 @@ Provider ID: `google-docs` · 37 tools
 
 ## Google Drive
 
-Provider ID: `google-drive` · 30 tools
+Provider ID: `google-drive` · 32 tools
 
 | Tool | Description |
 | - | - |
@@ -328,6 +329,7 @@ Provider ID: `google-drive` · 30 tools
 | `google_drive_delete_permission` | Remove a permission from a file |
 | `google_drive_delete_shared_drive` | Delete a shared drive |
 | `google_drive_empty_trash` | Permanently delete all trashed files |
+| `google_drive_export_file` | Export a Google Workspace file (Doc, Sheet, Slide, etc.) to the specified MIME type. |
 | `google_drive_find_file` | Search for files by name or query in Google Drive |
 | `google_drive_find_folder` | Search for a folder by name or query |
 | `google_drive_get_about` | Get the user's drive info and storage quota |
@@ -342,6 +344,7 @@ Provider ID: `google-drive` · 30 tools
 | `google_drive_list_drives` | List shared drives the user can access, with cursor pagination and drive metadata like hidden, capabilities, and restrictions. |
 | `google_drive_list_files_non_unified` | List immediate files and folders for a folder ID, or root when omitted, with cursor pagination and shared-drive support. |
 | `google_drive_list_permissions` | List permissions on a file |
+| `google_drive_list_revisions` | List the revision history for a Drive file. |
 | `google_drive_move_file` | Move a file to a different folder |
 | `google_drive_unhide_shared_drive` | Restore a hidden shared drive to default view |
 | `google_drive_update_comment` | Update a comment on a file |
@@ -661,6 +664,38 @@ Provider ID: `linear` · 46 tools
 | `linear_update_issue_label` | Update an existing Linear issue label. |
 | `linear_update_issue_relation` | Update fields on an existing Linear issue relation. |
 | `linear_update_project` | Update an existing Linear project. |
+
+## Microsoft Teams
+
+Provider ID: `microsoft-teams` · 25 tools
+
+| Tool | Description |
+| - | - |
+| `microsoft_teams_add_team_member` | Add a member to a team |
+| `microsoft_teams_create_channel` | Create a channel in a team. |
+| `microsoft_teams_create_channel_message` | Post a root message in a channel |
+| `microsoft_teams_create_channel_tab` | Add a tab to a channel. |
+| `microsoft_teams_create_chat` | Create a one-on-one or group chat. |
+| `microsoft_teams_create_chat_message` | Send a message in a chat |
+| `microsoft_teams_create_team` | Create a team from a template or existing group. |
+| `microsoft_teams_delete_channel` | Delete a channel from a team |
+| `microsoft_teams_get_channel` | Retrieve a channel by ID. |
+| `microsoft_teams_get_channel_message` | Retrieve a channel message by ID. |
+| `microsoft_teams_get_chat` | Retrieve a chat by ID. |
+| `microsoft_teams_get_chat_message` | Retrieve a chat message by ID. |
+| `microsoft_teams_get_team` | Retrieve a team by ID. |
+| `microsoft_teams_list_channel_messages` | List root messages in a channel. |
+| `microsoft_teams_list_channel_replies` | List replies under a channel message thread |
+| `microsoft_teams_list_channel_tabs` | List tabs configured on a channel. |
+| `microsoft_teams_list_channels` | List channels in a team. |
+| `microsoft_teams_list_chat_members` | List members in a chat |
+| `microsoft_teams_list_chat_messages` | List messages in a chat. |
+| `microsoft_teams_list_chats` | List chats for a user. |
+| `microsoft_teams_list_joined_teams` | List teams the user has joined |
+| `microsoft_teams_list_team_members` | List members in a team. |
+| `microsoft_teams_remove_team_member` | Remove a member from a team. |
+| `microsoft_teams_reply_to_channel_message` | Reply to a channel message thread. |
+| `microsoft_teams_update_channel` | Update mutable channel properties. |
 
 ## Notion
 

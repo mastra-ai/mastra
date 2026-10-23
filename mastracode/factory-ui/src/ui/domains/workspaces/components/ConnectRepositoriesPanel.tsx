@@ -3,12 +3,13 @@ import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
+import { RefreshCw } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
 import { useApiConfig } from '../../../../api/config';
 import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
-import { useGithubReposQuery } from '../../../../hooks/useGithubRepos';
+import { useGithubReposQuery, useRefreshGithubReposMutation } from '../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { useLinkRepositoryMutation, useUnlinkRepositoryMutation } from '../../../../hooks/useFactories';
 import { gitLabProjectRepository } from '../../factory/services/gitlab';
@@ -31,6 +32,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
   const gitlabConfigured = gitlabStatusQuery.data?.enabled === true && gitlabStatusQuery.data.configured;
   const [query, setQuery] = useState('');
   const reposQuery = useGithubReposQuery(query || undefined, githubConnected);
+  const refreshRepos = useRefreshGithubReposMutation(query || undefined);
   const gitlabProjectsQuery = useGitLabProjectsQuery(gitlabConfigured);
   const linkRepository = useLinkRepositoryMutation();
   const unlinkRepository = useUnlinkRepositoryMutation();
@@ -56,7 +58,12 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
     ? linked.filter(repo => repo.slug.toLowerCase().includes(normalizedQuery))
     : linked;
 
-  const error = reposQuery.error ?? gitlabProjectsQuery.error ?? linkRepository.error ?? unlinkRepository.error;
+  const error =
+    reposQuery.error ??
+    refreshRepos.error ??
+    gitlabProjectsQuery.error ??
+    linkRepository.error ??
+    unlinkRepository.error;
   const busyRepoId = linkRepository.isPending ? linkRepository.variables?.repo.id : null;
   const unlinkingId = unlinkRepository.isPending ? unlinkRepository.variables?.projectRepositoryId : null;
 
@@ -87,8 +94,31 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
         )
       ) : (
         <>
-          <div className="px-4 py-2">
-            <ListSearch label="Search repositories" placeholder="Search…" size="sm" value={query} onSearch={setQuery} />
+          <div className="flex items-center gap-2 px-4 py-2">
+            <div className="min-w-0 flex-1">
+              <ListSearch
+                label="Search repositories"
+                placeholder="Search…"
+                size="sm"
+                value={query}
+                onSearch={setQuery}
+              />
+            </div>
+            {githubConnected && (
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label="Refresh GitHub repositories"
+                disabled={refreshRepos.isPending}
+                onClick={() => refreshRepos.mutate()}
+              >
+                <RefreshCw
+                  className={refreshRepos.isPending ? 'size-3.5 animate-spin' : 'size-3.5'}
+                  aria-hidden="true"
+                />
+                Refresh
+              </Button>
+            )}
           </div>
 
           {error && (

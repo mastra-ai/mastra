@@ -3,6 +3,7 @@ import * as React from 'react';
 
 import { DataPanelVariantContext } from './data-panel-context';
 import { PortalContainerProvider } from '@/ds/primitives/portal-container';
+import { frameFillStyle, frameSurfaceStyle } from '@/ds/primitives/raised-surface';
 import { cn } from '@/lib/utils';
 
 // `drawer-popup` / `drawer-backdrop` carry the slide + fade transitions.
@@ -57,7 +58,9 @@ export interface DataPanelInlineProps extends DataPanelBaseProps {
 
 export type DataPanelProps = DataPanelDrawerProps | DataPanelInlineProps;
 
-const CARD_CLASSES = 'flex max-h-full w-full flex-col overflow-hidden rounded-xl border border-border bg-background';
+// The edge comes from the surface's `--surface-rim` inset (no CSS border), like `MainCard`.
+// `p-px` reserves that rim pixel so the header divider doesn't paint over it.
+const CARD_CLASSES = 'flex max-h-full w-full flex-col overflow-hidden p-px';
 
 const DEPTH_WIDTH = { 1: 'w-xl', 2: 'w-lg', 3: 'w-md' } as const;
 const SIZE_WIDTH = { half: 'w-1/2', wide: 'w-4/5', full: 'w-full' } as const;
@@ -82,7 +85,8 @@ function DataPanelInline({ title, description, children, className }: DataPanelI
         data-variant="inline"
         aria-label={title}
         aria-describedby={description ? descriptionId : undefined}
-        className={cn(CARD_CLASSES, 'h-full min-h-0', className)}
+        // Inline, the card docks beside the app frame, so it shares the frame's rounding.
+        className={cn(CARD_CLASSES, frameSurfaceStyle, 'h-full min-h-0 rounded-studio-frame', className)}
       >
         {description && (
           <span id={descriptionId} className="sr-only">
@@ -149,7 +153,10 @@ function DataPanelDrawer({
 
               <PortalContainerProvider container={portalHost}>
                 {/* Whole card is swipe-exempt: pointerdown on tabs/buttons/text must not start a dismiss gesture. */}
-                <DrawerPrimitive.Content render={<section />} className={cn(CARD_CLASSES, className)}>
+                <DrawerPrimitive.Content
+                  render={<section />}
+                  className={cn(CARD_CLASSES, frameFillStyle, 'rounded-xl shadow-overlay', className)}
+                >
                   {children}
                 </DrawerPrimitive.Content>
               </PortalContainerProvider>

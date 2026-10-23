@@ -1,3 +1,4 @@
+import type { FactoryRepositoryAccess } from '@mastra/core/workspace';
 import type {
   SourceControlInstallation,
   SourceControlRepository,
@@ -19,10 +20,7 @@ export interface RepositoryInput {
   metadata?: Record<string, unknown>;
 }
 
-export interface RepositoryAccess {
-  cloneUrl: string;
-  authorization?: { scheme: 'bearer'; token: string; username?: string };
-}
+export type RepositoryAccess = FactoryRepositoryAccess;
 export interface RepositoryTarget {
   connection: IntegrationConnection;
   sourceId: string;
@@ -239,6 +237,33 @@ export interface UpdateReviewersInput extends PullRequestRef {
   teams?: string[];
 }
 
+export type CommitCheckStatus = 'in-progress' | 'success' | 'failure' | 'neutral' | 'cancelled' | 'skipped';
+
+export interface PublishCommitCheckInput {
+  connection: IntegrationConnection;
+  sourceId: string;
+  /** Full commit SHA the check is attached to. */
+  headSha: string;
+  /** Source branch of the change request; GitLab needs it to show the status on the merge request. */
+  ref?: string;
+  /** Stable check name; publishing again with the same name updates the existing check. */
+  name: string;
+  status: CommitCheckStatus;
+  title: string;
+  summary: string;
+  /** Optional long-form details (Markdown) such as per-command results. */
+  details?: string;
+  actingUserId?: string;
+}
+
+export interface CommitCheck {
+  id: string;
+  name: string;
+  headSha: string;
+  status: CommitCheckStatus;
+  url: string | null;
+}
+
 /** Fixed repository, pull-request lifecycle, review, comment, and reviewer contract. */
 export interface VersionControl {
   initialize(input: { storage: SourceControlStorageHandle }): void;
@@ -255,6 +280,14 @@ export interface VersionControl {
   /** Resolve the provider-owned reference for a durably registered repository. */
   getRepositoryTarget(input: { orgId: string; repositoryId: string }): Promise<RepositoryTarget>;
   getRepositoryAccess(input: { orgId: string; repositoryId: string }): Promise<RepositoryAccess>;
+  /**
+   * One credential that reaches every listed repository, for providers whose
+   * per-repository tokens would otherwise leave `gh` blind to the rest of an
+   * environment. Resolves `undefined` when the provider cannot cover the set
+   * (several installations, more repositories than one token allows); the
+   * caller then falls back to `getRepositoryAccess` for the primary.
+   */
+  getRepositoriesAccess?(input: { orgId: string; repositoryIds: string[] }): Promise<RepositoryAccess | undefined>;
   listPullRequests(input: ListPullRequestsInput): Promise<PullRequestPage>;
   getPullRequest(input: PullRequestRef): Promise<PullRequest | null>;
   createPullRequest(input: CreatePullRequestInput): Promise<PullRequest>;
@@ -281,4 +314,6 @@ export interface VersionControl {
   listRequestedReviewers(input: PullRequestRef): Promise<RequestedReviewers>;
   requestReviewers(input: UpdateReviewersInput): Promise<RequestedReviewers>;
   removeRequestedReviewers(input: UpdateReviewersInput): Promise<RequestedReviewers>;
+  /** Optional because not every provider (or connection type) can publish commit checks. */
+  publishCommitCheck?(input: PublishCommitCheckInput): Promise<CommitCheck>;
 }
