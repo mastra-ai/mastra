@@ -1,6 +1,5 @@
-import { generateTypes } from '@internal/types-builder';
 import esbuildCompileZod from '@internal/types-builder/compile-zod';
-import { defineConfig } from 'tsdown';
+import { defineLibConfig } from '@internal/types-builder/tsdown';
 
 type EsbuildOnLoadPlugin = {
   name: string;
@@ -43,7 +42,7 @@ function adaptEsbuildOnLoadPlugin(plugin: EsbuildOnLoadPlugin) {
   };
 }
 
-export default defineConfig({
+export default defineLibConfig({
   entry: {
     index: 'src/index.ts',
     'scorers/prebuilt/index': 'src/scorers/prebuilt/index.ts',
@@ -52,17 +51,7 @@ export default defineConfig({
     'vitest/index': 'src/vitest/index.ts',
     'vitest/setup': 'src/vitest/setup.ts',
   },
-  format: ['esm', 'cjs'],
-  fixedExtension: false,
-  nodeProtocol: 'strip',
-  clean: true,
-  dts: false,
-  treeshake: true,
-  sourcemap: true,
   inputOptions: {
     plugins: [adaptEsbuildOnLoadPlugin(esbuildCompileZod())],
-  },
-  onSuccess: async () => {
-    await generateTypes(process.cwd());
   },
 });

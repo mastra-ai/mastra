@@ -3706,6 +3706,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
+      '@internal/types-builder':
+        specifier: workspace:*
+        version: link:../_types-builder
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -3847,6 +3850,9 @@ importers:
       '@internal/lint':
         specifier: workspace:*
         version: link:../_config
+      '@internal/types-builder':
+        specifier: workspace:*
+        version: link:../_types-builder
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -3881,6 +3887,9 @@ importers:
       '@internal/llm-recorder':
         specifier: workspace:*
         version: link:../_llm-recorder
+      '@internal/types-builder':
+        specifier: workspace:*
+        version: link:../_types-builder
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -3927,6 +3936,9 @@ importers:
       '@vitest/ui':
         specifier: 'catalog:'
         version: 4.1.11(vitest@4.1.11)
+      tsdown:
+        specifier: 0.23.1
+        version: 0.23.1(@volar/typescript@2.4.23(typescript@6.0.3))(oxc-resolver@11.21.2)(tsx@4.23.1)(typescript@6.0.3)
       zod:
         specifier: 'catalog:'
         version: 4.6.7

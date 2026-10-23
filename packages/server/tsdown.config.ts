@@ -1,7 +1,6 @@
-import { generateTypes } from '@internal/types-builder';
-import { defineConfig } from 'tsdown';
+import { defineLibConfig } from '@internal/types-builder/tsdown';
 
-export default defineConfig({
+export default defineLibConfig({
   entry: [
     'src/index.ts',
     'src/server/handlers.ts',
@@ -15,19 +14,10 @@ export default defineConfig({
     '!src/server/auth/*.test.ts',
     '!src/server/schemas/*.test.ts',
   ],
-  format: ['esm', 'cjs'],
-  fixedExtension: false,
-  nodeProtocol: 'strip',
-  clean: true,
-  dts: false,
-  treeshake: true,
-  sourcemap: true,
   // The `@mastra/agent-builder` package has `typescript` as a peer dependency and we don't want to bundle it
   deps: {
     neverBundle: ['typescript'],
     alwaysBundle: ['@internal/core', '@internal/voice', '@mastra/schema-compat'],
   },
-  onSuccess: async () => {
-    await generateTypes(process.cwd(), new Set(['@internal/core', '@mastra/schema-compat', '@internal/voice']));
-  },
+  bundledTypes: ['@internal/core', '@mastra/schema-compat', '@internal/voice'],
 });

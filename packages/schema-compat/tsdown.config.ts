@@ -1,7 +1,6 @@
-import { generateTypes } from '@internal/types-builder';
-import { defineConfig } from 'tsdown';
+import { defineLibConfig } from '@internal/types-builder/tsdown';
 
-export default defineConfig({
+export default defineLibConfig({
   entry: [
     'src/index.ts',
     'src/schema.ts',
@@ -11,34 +10,22 @@ export default defineConfig({
     'src/standard-schema/adapters/json-schema.ts',
     'src/standard-schema/adapters/zod-v3.ts',
   ],
-  format: ['esm', 'cjs'],
-  fixedExtension: false,
-  nodeProtocol: 'strip',
-  clean: true,
-  dts: false,
-  treeshake: true,
-  sourcemap: true,
   deps: {
     // json-schema-to-zod and zod-to-json-schema only expose a real default export in their ESM
     // builds; when externalized, the CJS output calls `require(...).default` which is undefined.
     alwaysBundle: ['@internal/ai-sdk-v4', 'ajv', 'json-schema-to-zod', 'zod-to-json-schema', 'zod-from-json-schema-v3'],
   },
-  onSuccess: async () => {
-    await generateTypes(
-      process.cwd(),
-      new Set([
-        '@internal/ai-sdk-v4',
-        '@internal/ai-sdk-v5',
-        '@internal/ai-v6',
-        '@standard-schema/spec',
-        '@types/json-schema',
-        'ajv',
-        'fast-uri',
-        'fast-deep-equal',
-        'json-schema-to-zod',
-        'zod-to-json-schema',
-        'zod-from-json-schema-v3',
-      ]),
-    );
-  },
+  bundledTypes: [
+    '@internal/ai-sdk-v4',
+    '@internal/ai-sdk-v5',
+    '@internal/ai-v6',
+    '@standard-schema/spec',
+    '@types/json-schema',
+    'ajv',
+    'fast-uri',
+    'fast-deep-equal',
+    'json-schema-to-zod',
+    'zod-to-json-schema',
+    'zod-from-json-schema-v3',
+  ],
 });

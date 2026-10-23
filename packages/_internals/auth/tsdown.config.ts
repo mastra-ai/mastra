@@ -1,7 +1,6 @@
-import { generateTypes } from '@internal/types-builder';
-import { defineConfig } from 'tsdown';
+import { defineLibConfig } from '@internal/types-builder/tsdown';
 
-export default defineConfig({
+export default defineLibConfig({
   entry: [
     'src/index.ts',
     'src/provider/index.ts',
@@ -10,14 +9,5 @@ export default defineConfig({
     'src/ee/index.ts',
     'src/ee/capabilities.ts',
   ],
-  format: ['esm', 'cjs'],
-  fixedExtension: false,
-  nodeProtocol: 'strip',
-  clean: true,
-  dts: false,
-  treeshake: true,
-  sourcemap: true,
-  onSuccess: async () => {
-    await generateTypes(process.cwd(), new Set(['@internal/core']));
-  },
+  bundledTypes: ['@internal/core'],
 });

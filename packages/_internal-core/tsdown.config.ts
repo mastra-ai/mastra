@@ -1,6 +1,6 @@
-import { defineConfig } from 'tsdown';
+import { defineLibConfig } from '@internal/types-builder/tsdown';
 
-export default defineConfig({
+export default defineLibConfig({
   entry: [
     'src/storage/index.ts',
     'src/base/index.ts',
@@ -14,11 +14,5 @@ export default defineConfig({
     'src/memory/index.ts',
     'src/frontmatter/index.ts',
   ],
-  format: ['esm', 'cjs'],
-  fixedExtension: false,
-  nodeProtocol: 'strip',
-  clean: true,
   dts: true,
-  treeshake: true,
-  sourcemap: true,
 });
