@@ -13,9 +13,8 @@ import {
 import type { AgentController } from '@mastra/core/agent-controller';
 import type { ApiRoute, ContextWithMastra } from '@mastra/core/server';
 import { type ChannelsStorage, type ChannelInstallation } from '@mastra/core/storage';
-import type { SlackAdapter } from '@chat-adapter/slack';
+import { createSlackAdapter, type SlackAdapter } from '@chat-adapter/slack';
 
-import { createSlackAdapter } from './adapter';
 import { SlackManifestClient } from './client';
 import { verifySlackRequest, parseSlackFormBody, encrypt, decrypt } from './crypto';
 import { buildManifest } from './manifest';
@@ -102,7 +101,7 @@ export function resolveSlackAdapterConfig(channelConfig: SlackProviderConfig): S
  * Uses the resolved app name (config.name ?? agentName) to detect renames.
  */
 export function hashConfig(
-  opts: { description?: string; slashCommands?: SlackConnectOptions['slashCommands']; agentView?: boolean },
+  opts: { description?: string; slashCommands?: SlackConnectOptions['slashCommands'] },
   baseUrl: string,
   resolvedAppName: string,
   resolvedDescription: string,
@@ -112,8 +111,9 @@ export function hashConfig(
     description: resolvedDescription,
     slashCommands: opts.slashCommands,
     baseUrl,
-    // Only hashed when on, so apps that never opt in keep their existing hash.
-    ...(opts.agentView ? { agentView: true } : {}),
+    // Bumped when the generated manifest changes shape, so apps created before
+    // the change get the new manifest on their next startup.
+    manifestVersion: 2,
   });
   return crypto.createHash('sha256').update(normalized).digest('hex').slice(0, 16);
 }
@@ -788,7 +788,7 @@ export class SlackProvider implements ChannelProvider {
     const resolvedAppName = installation.name ?? agent.name ?? installation.agentId;
     const resolvedDescription = installation.description || agent.getDescription() || 'AI assistant powered by Mastra';
     const currentHash = hashConfig(
-      { slashCommands: installation.slashCommands, agentView: this.#channelConfig.agentView },
+      { slashCommands: installation.slashCommands },
       baseUrl,
       resolvedAppName,
       resolvedDescription,
@@ -810,7 +810,6 @@ export class SlackProvider implements ChannelProvider {
           description: cmd.description ?? `Run ${cmd.command}`,
           usageHint: cmd.usageHint,
         })),
-        agentView: this.#channelConfig.agentView,
       });
 
       await this.#requireManifestClient().updateApp(installation.appId, manifest);
@@ -846,8 +845,8 @@ export class SlackProvider implements ChannelProvider {
    * applied separately.
    */
   #forwardedAdapterOptions() {
-    const { logger, agentView } = this.#channelConfig;
-    return { logger, agentView };
+    const { logger } = this.#channelConfig;
+    return { logger };
   }
 
   /**
@@ -1169,7 +1168,6 @@ export class SlackProvider implements ChannelProvider {
         description: cmd.description ?? `Run ${cmd.command}`,
         usageHint: cmd.usageHint,
       })),
-      agentView: this.#channelConfig.agentView,
     });
 
     // Apply user's manifest transform if provided
@@ -1215,10 +1213,7 @@ export class SlackProvider implements ChannelProvider {
     // Store pending installation (includes auth URL for UI to fetch later)
     // Hash the same normalized slash commands that are stored, so #checkConfigDrift compares like with like.
     const configHash = hashConfig(
-      {
-        slashCommands: normalizedCommands.length ? normalizedCommands : undefined,
-        agentView: this.#channelConfig.agentView,
-      },
+      { slashCommands: normalizedCommands.length ? normalizedCommands : undefined },
       baseUrl,
       appName,
       appDescription,

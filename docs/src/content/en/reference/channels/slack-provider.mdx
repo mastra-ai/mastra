@@ -197,14 +197,6 @@ await slack.configure({
     isOptional: true,
     description: "Logger forwarded to the underlying `SlackAdapter`. Defaults to the adapter's `ConsoleLogger`.",
   },
-  {
-    name: 'agentView',
-    type: 'boolean',
-    isOptional: true,
-    defaultValue: 'false',
-    description:
-      "Run the agent as a Slack Agent Session instead of the legacy assistant view. Each run marks the thread `processing`, so Slack shows its native Stop button and the user's stop aborts the run. Slack also titles new DM sessions from the first message. Apps this provider manages switch their manifest from `assistant_view` to `agent_view`, including the `agent_session_stopped` bot event: new apps on creation, existing apps on the next startup. Slack can't switch an app back, and users need to hard-refresh Slack afterwards.",
-  },
 ]}
 />
 
@@ -342,6 +334,8 @@ Returns: `Promise<void>`
 
 When `connect()` builds a Slack app, the generated manifest requests a default set of bot scopes and event subscriptions. Configuring slash commands also adds the `commands` scope. Override the defaults with the `manifest` option on `connect()`.
 
+The manifest declares the `agent_view` feature, so users can keep messaging the agent in a DM while it works. Apps created with the older `assistant_view` feature move to `agent_view` the next time the provider starts. Slack can't move an app back to `assistant_view`, and users need to hard-refresh Slack after the switch.
+
 | Default bot scopes | Default bot events |
 | - | - |
 | `chat:write` | `app_mention` |
@@ -349,7 +343,7 @@ When `connect()` builds a Slack app, the generated manifest requests a default s
 | `im:write` | `message.groups` |
 | `channels:history` | `message.im` |
 | `channels:read` | `message.mpim` |
-| `groups:history` | `agent_session_stopped` |
+| `groups:history` | |
 | `groups:read` | |
 | `im:history` | |
 | `im:read` | |

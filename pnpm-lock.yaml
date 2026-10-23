@@ -1149,7 +1149,7 @@ importers:
   channels/slack:
     dependencies:
       '@chat-adapter/slack':
-        specifier: ^4.39.0
+        specifier: ^4.37.0
         version: 4.40.0(ai@7.0.143(zod@4.6.7))(bufferutil@4.1.0)(supports-color@10.2.2)(zod@4.6.7)
     devDependencies:
       '@mastra/core':
@@ -4576,7 +4576,7 @@ importers:
         specifier: ^1.1.0
         version: 1.1.0
       chat:
-        specifier: ^4.39.0
+        specifier: ^4.37.0
         version: 4.40.0(ai@7.0.143(zod@4.6.7))(supports-color@10.2.2)(zod@4.6.7)
       croner:
         specifier: ^10.0.1

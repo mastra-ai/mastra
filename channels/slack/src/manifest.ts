@@ -51,7 +51,6 @@ export const DEFAULT_BOT_EVENTS = [
   'message.groups',
   'message.im',
   'message.mpim',
-  'agent_session_stopped',
 ] as const;
 
 export interface BuildManifestOptions {
@@ -72,28 +71,13 @@ export interface BuildManifestOptions {
 
   /** Slash commands to register */
   slashCommands?: SlashCommand[];
-
-  /**
-   * Declare Slack's Agent messaging experience (`agent_view`) instead of the
-   * legacy `assistant_view`. Slack rejects a manifest declaring both, and an
-   * app moved to `agent_view` can't go back.
-   */
-  agentView?: boolean;
 }
 
 /**
  * Build a Slack app manifest for an agent.
  */
 export function buildManifest(options: BuildManifestOptions): SlackAppManifest {
-  const {
-    name,
-    description,
-    webhookUrl,
-    oauthRedirectUrl,
-    commandsUrl = webhookUrl,
-    slashCommands = [],
-    agentView = false,
-  } = options;
+  const { name, description, webhookUrl, oauthRedirectUrl, commandsUrl = webhookUrl, slashCommands = [] } = options;
 
   const scopes: string[] = [...DEFAULT_BOT_SCOPES];
   const events: string[] = [...DEFAULT_BOT_EVENTS];
@@ -101,11 +85,6 @@ export function buildManifest(options: BuildManifestOptions): SlackAppManifest {
   // Add commands scope if we have slash commands
   if (slashCommands.length > 0) {
     scopes.push('commands');
-  }
-
-  // Slack's manifest validator recommends this event for `agent_view` apps.
-  if (agentView) {
-    events.push('app_home_opened');
   }
 
   // Slack docs say 140 but the API rejects at that length for short_desc.
@@ -129,10 +108,13 @@ export function buildManifest(options: BuildManifestOptions): SlackAppManifest {
         display_name: name,
         always_online: true,
       },
-      // Required by Slack when `assistant:write` scope is present.
-      ...(agentView
-        ? { agent_view: { agent_description: shortDescription } }
-        : { assistant_view: { assistant_description: shortDescription } }),
+      // Required by Slack when `assistant:write` scope is present. Slack
+      // retires `assistant_view` in February 2027, and its DM threads keep the
+      // composer locked while a status shows. `agent_view` lets users reply
+      // mid-run. Slack rejects a manifest that declares both.
+      agent_view: {
+        agent_description: shortDescription,
+      },
     },
     oauth_config: {
       redirect_urls: [oauthRedirectUrl],

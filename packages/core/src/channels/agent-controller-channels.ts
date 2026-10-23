@@ -195,15 +195,6 @@ export class AgentControllerChannels extends AgentChannels {
    */
   private sessionStartRuns = new WeakMap<Session<any>, Promise<void>>();
 
-  /**
-   * The session that last accepted a message for each mapped thread id, so a
-   * platform stop click can abort it without re-resolving. Re-resolving would
-   * run FGA and `resolveSession` with no sender context (stop events have no
-   * handler hook to stamp a tenant) and could rebind or create a session.
-   * In-memory, matching {@link autoApproveResourceIds}.
-   */
-  private dispatchedSessions = new Map<string, Session<any>>();
-
   constructor(config: AgentControllerChannelsConfig) {
     super(config);
     this.onSessionStart = config.onSessionStart;
@@ -214,11 +205,6 @@ export class AgentControllerChannels extends AgentChannels {
   /** @internal Called by AgentController's constructor to bind itself. */
   __setController(controller: AgentController<any>): void {
     this.controller = controller;
-    controller.onSessionDeleted(session => {
-      for (const [threadId, dispatched] of this.dispatchedSessions) {
-        if (dispatched === session) this.dispatchedSessions.delete(threadId);
-      }
-    });
   }
 
   /**
@@ -338,7 +324,6 @@ export class AgentControllerChannels extends AgentChannels {
       { requestContext, requireDelivery: true },
     );
     await result.accepted;
-    this.dispatchedSessions.set(thread.id, session);
   }
 
   /**
@@ -398,35 +383,6 @@ export class AgentControllerChannels extends AgentChannels {
     memory: { thread: string; resource: string };
   }): Promise<void> {
     await this.respondToSessionApproval({ decision: 'decline', ...args });
-  }
-
-  /**
-   * Abort the run of the session that last accepted a message for this chat
-   * thread. Never resolves or creates a session, so a stop click can't start
-   * one, rebind one, or trip FGA without the sender's context.
-   */
-  protected override async dispatchStop({ thread }: { thread: StorageThreadType }): Promise<boolean> {
-    const session = this.dispatchedSessions.get(thread.id);
-    if (!session) {
-      this.log('debug', 'Stop target: no session dispatched for thread', { threadId: thread.id });
-      return false;
-    }
-    const boundThreadId = session.thread.getId();
-    // The live stream is what `abort()` stops; a run owned by another thread
-    // owner shows up there without arming this session's local run state.
-    const running = session.stream.isActive() || session.run.isRunning();
-    if (boundThreadId !== thread.id || !running) {
-      this.log('debug', 'Stop target: session not running this thread', {
-        threadId: thread.id,
-        sessionId: session.identity.getId(),
-        boundThreadId,
-        streamActive: session.stream.isActive(),
-        runRunning: session.run.isRunning(),
-      });
-      return false;
-    }
-    session.abort();
-    return true;
   }
 
   /**

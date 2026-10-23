@@ -58,7 +58,6 @@ describe('buildManifest', () => {
     for (const event of DEFAULT_BOT_EVENTS) {
       expect(events).toContain(event);
     }
-    expect(events).not.toContain('app_home_opened');
   });
 
   it('enables app_home messages tab', () => {
@@ -78,19 +77,10 @@ describe('buildManifest', () => {
     expect(scopes).toContain('assistant:write');
   });
 
-  it('declares assistant_view feature (required by assistant:write scope)', () => {
+  it('declares agent_view, not the retired assistant_view (required by assistant:write scope)', () => {
     const manifest = buildManifest(baseOptions);
-    expect(manifest.features?.assistant_view).toBeDefined();
-    expect(manifest.features?.assistant_view?.assistant_description).toBeTruthy();
-    expect(manifest.features?.agent_view).toBeUndefined();
-  });
-
-  it('declares agent_view instead of assistant_view under agentView', () => {
-    const manifest = buildManifest({ ...baseOptions, description: 'Helps', agentView: true });
-    expect(manifest.settings?.event_subscriptions?.bot_events).toContain('app_home_opened');
-    expect(manifest.features?.agent_view).toEqual({ agent_description: 'Helps' });
-    // Slack rejects a manifest that declares both views.
-    expect(manifest.features?.assistant_view).toBeUndefined();
+    expect(manifest.features?.agent_view?.agent_description).toBeTruthy();
+    expect(manifest.features).not.toHaveProperty('assistant_view');
   });
 
   describe('slash commands', () => {

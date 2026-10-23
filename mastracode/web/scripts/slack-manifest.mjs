@@ -60,8 +60,9 @@ const manifest = {
       display_name: values.name,
       always_online: true,
     },
-    // Factory runs as a Slack Agent Session (`agentView`). Slack rejects a
-    // manifest with both views, and an app can't go back to `assistant_view`.
+    // Slack retires `assistant_view` in February 2027, and its DM threads keep
+    // the composer locked while a status shows. Slack rejects a manifest that
+    // declares both views.
     agent_view: {
       agent_description: 'AI assistant powered by Mastra',
     },
@@ -95,16 +96,7 @@ const manifest = {
   settings: {
     event_subscriptions: {
       request_url: webhookUrl,
-      bot_events: [
-        'app_mention',
-        'message.channels',
-        'message.groups',
-        'message.im',
-        'message.mpim',
-        'agent_session_stopped',
-        // Recommended by Slack's validator for `agent_view` apps.
-        'app_home_opened',
-      ],
+      bot_events: ['app_mention', 'message.channels', 'message.groups', 'message.im', 'message.mpim'],
     },
     interactivity: {
       is_enabled: true,
