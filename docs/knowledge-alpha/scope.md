@@ -83,13 +83,13 @@ On main, `canonicalizeKnowledgeScope` (`storage/domains/knowledge/base.ts:685`) 
    | Position | Levels |
    |---|---|
    | 0, 1, 2 | `org`, `resource`, `thread` (unchanged, `SCOPE_ORDER` `:680`) |
-   | then | every other level, by level name, then by value; the name and the value are compared separately (not the whole `type:value` string), each by UTF-16 code unit (not `localeCompare`, which depends on locale) |
+   | then | every other entry, compared as the whole `type:value` string by UTF-16 code unit (not `localeCompare`, which depends on locale) |
 
    Code-unit order and `localeCompare` disagree for the characters the type pattern allows (`^[a-z][a-z0-9_-]*$`): `['a-b:x','a_b:x','a1:x','ab:x','a:x']` sorts `a_b a-b a: a1 ab` by `localeCompare` and `a-b a1 a: a_b ab` by code unit. Keys are matched by string equality, so two processes with different ICU or locale data (the Director dogfood runs ~15) would compute different keys for one scope. The comparator is `a < b ? -1 : a > b ? 1 : 0`.
 
-   Comparing name and value separately matters: by name, `a:x` sorts before `a-b:x`, but by whole entry `a-b:x` comes first because `-` (45) is below `:` (58). The alpha compares by name, then value, and the test uses types `a`, `a-b`, `a_b` and `a1`.
+   The comparison is on the whole entry, not name then value: `a-b:x` sorts before `a:x` because `-` (45) is below `:` (58). It needs no parsing, and the test asserts exactly `a-b:x a1:x a:x a_b:x ab:x`.
 
-   No existing key changes: every stored scope holds only `org`/`resource`/`thread` entries, whose order is unchanged. Ties only arise between entries of one old level, and the only such pairs are `:uncurated` companions (`resource:x`, `resource:x:uncurated`), where one is a prefix of the other, so either comparison puts the shorter first. Those rows fail the one-per-level rule anyway (item 6, D9). A new level can't move a key either. Its position comes from its own name, so a key containing only older levels is unaffected, and a key containing it is new. Today's `localeCompare` (`:719`) is replaced by plain code-unit comparison so keys can't differ between machines.
+   No existing key changes: every stored scope holds only `org`/`resource`/`thread` entries, whose order is unchanged. Ties only arise between entries of one old level, and the only such pairs are `:uncurated` companions (`resource:x`, `resource:x:uncurated`), where one is a prefix of the other, so either comparison puts the shorter first. Those rows fail the one-per-level rule anyway (item 6, D9). A new level can't move a key either. Its position comes from its own entry, so a key containing only older levels is unaffected, and a key containing it is new. Today's `localeCompare` (`:719`) is replaced by plain code-unit comparison so keys can't differ between machines.
 4. **Subset containment narrows** (`isKnowledgeScopeVisible`, `:728-731`). A record is visible only to runs holding every one of its tags, so every extra tag narrows who can read it. That's the intended model:
    - A record at `org:acme` + `team:director` is visible to every run holding both, whatever else it holds.
    - A record that also carries `request:r25` is visible only to runs tagged `request:r25`.
@@ -229,7 +229,7 @@ Counted with `estimateTokenCount` from tokenx, which is already a core dependenc
 - A Mastra Code agent still has its knowledge tools and pins after the SDK rewire.
 - The TUI renders an old thread containing `subconscious-activity` signals without printing them.
 - Instructions: an agent with read tools only gets the read part and no write or pin parts. With write tools it also gets the write part. With pins it also gets `PINNED_INSTRUCTIONS`, byte-equal to `curate.ts:54`. The block is byte-identical across two turns with different scopes and pin changes. `instructions: false` removes it, a string replaces it, and a function extends it. An app-configured processor with the same id isn't doubled.
-- Store: new-level keys sort by type name then value, each by code unit, independent of locale, checked with `-`, `_` and digits in type names (`a`, `a-b`, `a_b`, `a1`, `ab`). Two values of one level are refused. A `thread` tag without `resource` is refused, and one without `org` is accepted.
+- Store: new-level keys sort by whole entry by code unit, independent of locale: `['a:x','ab:x','a_b:x','a1:x','a-b:x']` canonicalizes to exactly `a-b:x a1:x a:x a_b:x ab:x`. Two values of one level are refused. A `thread` tag without `resource` is refused, and one without `org` is accepted.
 - Store boundary: `canonicalizeKnowledgeScope` with 9 entries throws, called directly and through each adapter's read and write, not only through a run.
 - Factory routes: a record at `[org:x, project:p]` is reported at its own rung, not `org`, and is shown in a view `[org:x, resource:r, thread:t, project:p]`. A Factory-called write or read with no `org:` tag is refused.
 - For each, a red control showing the test fails without the change.
