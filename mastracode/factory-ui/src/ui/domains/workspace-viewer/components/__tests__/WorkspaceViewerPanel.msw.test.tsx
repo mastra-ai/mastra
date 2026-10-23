@@ -1,10 +1,11 @@
-import { act, screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
-import { queryKeys } from '../../../../../api/keys';
+import type { WorkspaceChangePatches, WorkspaceChangesScope } from '../../../../../api/types';
 import { server } from '../../../../../../e2e/ui/msw-server';
+import { openPropertiesMenu, openPropertySubmenu } from '../../../../../../e2e/ui/properties-menu';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { WorkspaceViewerPanel } from '../WorkspaceViewerPanel';
 import {
@@ -18,7 +19,7 @@ import {
 const TREE_URL = `${TEST_BASE_URL}/web/workspace/tree`;
 const FILE_URL = `${TEST_BASE_URL}/web/workspace/file`;
 const CHANGES_URL = `${TEST_BASE_URL}/web/workspace/changes`;
-const DIFF_URL = `${TEST_BASE_URL}/web/workspace/changes/diff`;
+const PATCHES_URL = `${TEST_BASE_URL}/web/workspace/changes/patches`;
 const WORKSPACE = 'session-1';
 
 const TREE: Record<string, Array<{ name: string; path: string; type: 'file' | 'directory'; size?: number }>> = {
@@ -57,6 +58,17 @@ function installHandlers() {
     http.get(CHANGES_URL, () =>
       HttpResponse.json({ workspacePath: WORKSPACE, available: true, additions: 0, deletions: 0, changes: [] }),
     ),
+    http.get(PATCHES_URL, () =>
+      HttpResponse.json({
+        workspacePath: WORKSPACE,
+        available: true,
+        additions: 0,
+        deletions: 0,
+        changes: [],
+        scope: 'branch',
+        patches: {},
+      }),
+    ),
   );
   return Object.assign(fileRequests, { treeRequests });
 }
@@ -78,6 +90,10 @@ function treeHolding(filePath: string) {
   });
 }
 
+const AGENT_CHANGE = { path: 'src/agent.ts', status: 'modified', additions: 4, deletions: 1 } as const;
+const AGENT_PATCH =
+  'diff --git a/src/agent.ts b/src/agent.ts\nindex 1234567..abcdef0 100644\n--- a/src/agent.ts\n+++ b/src/agent.ts\n@@ -1 +1 @@\n-export {}\n+export const agent = {};\n';
+
 function pendingChangesHandler() {
   return http.get(CHANGES_URL, () =>
     HttpResponse.json({
@@ -85,9 +101,42 @@ function pendingChangesHandler() {
       available: true,
       additions: 4,
       deletions: 1,
-      changes: [{ path: 'src/agent.ts', status: 'modified', additions: 4, deletions: 1 }],
+      changes: [AGENT_CHANGE],
     }),
   );
+}
+
+type ScopedChanges = Pick<WorkspaceChangePatches, 'changes' | 'patches'>;
+
+/** Answers the Changes panel with the files and diffs of the scope it asks for. */
+function patchesHandler(byScope: Record<WorkspaceChangesScope, ScopedChanges>) {
+  return http.get(PATCHES_URL, ({ request }) => {
+    const scope = new URL(request.url).searchParams.get('scope') === 'uncommitted' ? 'uncommitted' : 'branch';
+    const { changes, patches } = byScope[scope];
+    return HttpResponse.json({
+      workspacePath: WORKSPACE,
+      available: true,
+      additions: changes.reduce((sum, change) => sum + (change.additions ?? 0), 0),
+      deletions: changes.reduce((sum, change) => sum + (change.deletions ?? 0), 0),
+      changes,
+      scope,
+      patches,
+    } satisfies WorkspaceChangePatches);
+  });
+}
+
+function diffText(panel: HTMLElement) {
+  return Array.from(
+    panel.querySelectorAll('diffs-container'),
+    container => container.shadowRoot?.textContent ?? '',
+  ).join('\n');
+}
+
+function diffLayoutOf(panel: HTMLElement) {
+  return panel
+    .querySelector('diffs-container')
+    ?.shadowRoot?.querySelector('pre[data-diff-type]')
+    ?.getAttribute('data-diff-type');
 }
 
 describe('WorkspaceViewerPanel', () => {
@@ -375,19 +424,14 @@ describe('WorkspaceViewerPanel', () => {
   });
 
   describe('when the workspace has pending changes', () => {
-    it('opens the changes and diff inside the same panel', async () => {
+    it('stacks the diff of every changed file and names the ones too large to show', async () => {
       installHandlers();
+      const generated = { path: 'src/generated.json', status: 'untracked', additions: 90_000, deletions: 0 } as const;
       server.use(
         pendingChangesHandler(),
-        http.get(DIFF_URL, ({ request }) => {
-          const path = new URL(request.url).searchParams.get('path');
-          return HttpResponse.json({
-            workspacePath: WORKSPACE,
-            path,
-            patch:
-              'diff --git a/src/agent.ts b/src/agent.ts\nnew file mode 100644\nindex 0000000..1234567\n--- /dev/null\n+++ b/src/agent.ts\n@@ -1 +1 @@\n-export {}\n+export const agent = {};\n',
-            truncated: false,
-          });
+        patchesHandler({
+          branch: { changes: [AGENT_CHANGE, generated], patches: { [AGENT_CHANGE.path]: AGENT_PATCH } },
+          uncommitted: { changes: [], patches: {} },
         }),
       );
       const user = userEvent.setup();
@@ -398,74 +442,139 @@ describe('WorkspaceViewerPanel', () => {
       const changesButton = screen.getByRole('button', { name: /Changes/ });
       expect(changesButton).toHaveTextContent('−1');
       await user.click(changesButton);
-      await user.click(await screen.findByText('agent.ts'));
 
       const changesPanel = await screen.findByTestId('workspace-changes-panel');
-      const diff = await within(changesPanel).findByLabelText('Workspace change diff');
-      await waitFor(() =>
-        expect(diff.querySelector('diffs-container')?.shadowRoot?.textContent).toContain('export const agent = {};'),
-      );
-      expect(within(changesPanel).queryByText('new file mode 100644')).not.toBeInTheDocument();
-      await user.click(screen.getByRole('button', { name: 'Back to changed files' }));
-      const selectedChange = screen
-        .getByTestId('workspace-changes-panel')
-        .querySelector<HTMLElement>('[data-tree-item-id="src/agent.ts"]');
-      expect(selectedChange).toHaveAttribute('aria-selected', 'true');
+      await waitFor(() => expect(diffText(changesPanel)).toContain('export const agent = {};'));
+      expect(within(changesPanel).getByText('Diff too large to show')).toBeInTheDocument();
+      expect(within(changesPanel).getByRole('button', { name: 'Jump to file, 2 files' })).toBeInTheDocument();
     });
 
-    it('returns to the changes list when the selected change disappears', async () => {
+    it('shows a moved file with where it came from instead of an empty diff', async () => {
       installHandlers();
+      const moved = {
+        path: 'src/agents/helper.ts',
+        previousPath: 'src/helper.ts',
+        status: 'renamed',
+        additions: 0,
+        deletions: 0,
+      } as const;
+      const movedPatch =
+        'diff --git a/src/helper.ts b/src/agents/helper.ts\nsimilarity index 100%\nrename from src/helper.ts\nrename to src/agents/helper.ts\n';
       server.use(
         pendingChangesHandler(),
-        http.get(DIFF_URL, ({ request }) => {
-          const path = new URL(request.url).searchParams.get('path');
-          return HttpResponse.json({
-            workspacePath: WORKSPACE,
-            path,
-            patch:
-              'diff --git a/src/agent.ts b/src/agent.ts\nindex 1234567..abcdef0 100644\n--- a/src/agent.ts\n+++ b/src/agent.ts\n@@ -1 +1 @@\n-export {}\n+export const agent = {};\n',
-            truncated: false,
-          });
+        patchesHandler({
+          branch: {
+            changes: [AGENT_CHANGE, moved],
+            patches: { [AGENT_CHANGE.path]: AGENT_PATCH, [moved.path]: movedPatch },
+          },
+          uncommitted: { changes: [], patches: {} },
         }),
       );
       const user = userEvent.setup();
-      const { client } = renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
 
+      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
       await user.click(await screen.findByRole('button', { name: /Changes/ }));
-      await user.click(await screen.findByText('agent.ts'));
-      await screen.findByLabelText('Workspace change diff');
+      const changesPanel = await screen.findByTestId('workspace-changes-panel');
 
-      act(() => {
-        client.setQueryData(queryKeys.workspaceChanges(WORKSPACE), {
-          workspacePath: WORKSPACE,
-          available: true,
-          additions: 0,
-          deletions: 0,
-          changes: [],
-        });
-      });
-
-      expect(await screen.findByRole('heading', { name: 'Changes' })).toBeInTheDocument();
-      expect(screen.getByText('No changes')).toBeInTheDocument();
-      expect(screen.queryByLabelText('Workspace change diff')).not.toBeInTheDocument();
+      expect((await within(changesPanel).findByText('from')).parentElement).toHaveTextContent('from src/helper.ts');
+      expect(within(changesPanel).getByRole('img', { name: 'Renamed' })).toBeInTheDocument();
+      expect(within(changesPanel).queryByText('+0')).not.toBeInTheDocument();
+      expect(within(changesPanel).queryByRole('button', { name: /helper\.ts/ })).not.toBeInTheDocument();
+      await waitFor(() => expect(changesPanel.querySelectorAll('diffs-container')).toHaveLength(1));
     });
+
+    it('shows only uncommitted work once switched away from the whole branch', async () => {
+      installHandlers();
+      const notes = { path: 'NOTES.md', status: 'untracked', additions: 1, deletions: 0 } as const;
+      const notesPatch =
+        'diff --git a/NOTES.md b/NOTES.md\nnew file mode 100644\nindex 0000000..1111111\n--- /dev/null\n+++ b/NOTES.md\n@@ -0,0 +1 @@\n+draft notes\n';
+      server.use(
+        pendingChangesHandler(),
+        patchesHandler({
+          branch: {
+            changes: [AGENT_CHANGE, notes],
+            patches: { [AGENT_CHANGE.path]: AGENT_PATCH, [notes.path]: notesPatch },
+          },
+          uncommitted: { changes: [notes], patches: { [notes.path]: notesPatch } },
+        }),
+      );
+      const user = userEvent.setup();
+
+      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
+      await user.click(await screen.findByRole('button', { name: /Changes/ }));
+      const changesPanel = await screen.findByTestId('workspace-changes-panel');
+      await waitFor(() => expect(diffText(changesPanel)).toContain('export const agent = {};'));
+
+      await user.click(within(changesPanel).getByRole('button', { name: 'Branch changes' }));
+      await user.click(await screen.findByRole('menuitemradio', { name: 'Uncommitted changes' }));
+
+      await waitFor(() => expect(diffText(changesPanel)).toContain('draft notes'));
+      expect(diffText(changesPanel)).not.toContain('export const agent = {};');
+      expect(within(changesPanel).getByRole('button', { name: 'Jump to file, 1 file' })).toBeInTheDocument();
+    });
+
     it('does not present cached change totals after a refresh fails', async () => {
       installHandlers();
-      server.use(pendingChangesHandler());
+      server.use(
+        pendingChangesHandler(),
+        patchesHandler({
+          branch: { changes: [AGENT_CHANGE], patches: { [AGENT_CHANGE.path]: AGENT_PATCH } },
+          uncommitted: { changes: [], patches: {} },
+        }),
+      );
       const user = userEvent.setup();
 
       renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
       const changesButton = await screen.findByRole('button', { name: /Changes/ });
       await screen.findByText('+4');
       await user.click(changesButton);
+      const changesPanel = await screen.findByTestId('workspace-changes-panel');
+      await within(changesPanel).findByRole('button', { name: 'Jump to file, 1 file' });
 
-      server.use(http.get(CHANGES_URL, () => HttpResponse.json({ error: 'Unable to read changes' }, { status: 500 })));
-      await user.click(screen.getByRole('button', { name: 'Refresh changes' }));
+      server.use(
+        http.get(CHANGES_URL, () => HttpResponse.json({ error: 'Unable to read changes' }, { status: 500 })),
+        http.get(PATCHES_URL, () => HttpResponse.json({ error: 'Unable to read changes' }, { status: 500 })),
+      );
+      await openPropertiesMenu(user, 'Changes options');
+      await user.click(await screen.findByRole('menuitem', { name: 'Refresh' }));
       await screen.findByText('Unable to read changes');
+      expect(within(changesPanel).queryByRole('button', { name: /^Jump to file/ })).not.toBeInTheDocument();
+      expect(within(changesPanel).queryByText('+4')).not.toBeInTheDocument();
       await user.click(screen.getByRole('button', { name: 'Back to workspace' }));
 
       expect(await screen.findByText('Unavailable')).toBeInTheDocument();
       expect(screen.queryByText('+4')).not.toBeInTheDocument();
+    });
+
+    it('remembers the diff layout picked from the options menu', async () => {
+      installHandlers();
+      server.use(
+        pendingChangesHandler(),
+        patchesHandler({
+          branch: { changes: [AGENT_CHANGE], patches: { [AGENT_CHANGE.path]: AGENT_PATCH } },
+          uncommitted: { changes: [], patches: {} },
+        }),
+      );
+      const user = userEvent.setup();
+      const openChanges = async () => {
+        await user.click(await screen.findByRole('button', { name: /Changes/ }));
+        const changesPanel = await screen.findByTestId('workspace-changes-panel');
+        await waitFor(() => expect(diffText(changesPanel)).toContain('export const agent = {};'));
+        return changesPanel;
+      };
+
+      const { unmount } = renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
+      const changesPanel = await openChanges();
+      expect(diffLayoutOf(changesPanel)).toBe('single');
+
+      await openPropertySubmenu(user, 'Changes options', 'Diff layout');
+      await user.click(screen.getByRole('menuitemradio', { name: 'Split' }));
+      await waitFor(() => expect(diffLayoutOf(changesPanel)).toBe('split'));
+      await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+
+      unmount();
+      renderWithProviders(<WorkspaceViewerPanel workspacePath={WORKSPACE} />);
+      expect(diffLayoutOf(await openChanges())).toBe('split');
     });
   });
 
@@ -477,6 +586,9 @@ describe('WorkspaceViewerPanel', () => {
       // ever provisioned by browsing).
       server.use(
         http.get(CHANGES_URL, () => HttpResponse.json({ workspacePath: WORKSPACE, available: false, changes: [] })),
+        http.get(PATCHES_URL, () =>
+          HttpResponse.json({ workspacePath: WORKSPACE, available: false, changes: [], scope: 'branch', patches: {} }),
+        ),
       );
       const user = userEvent.setup();
 

@@ -1,14 +1,15 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
+import type { WorkspaceChanges } from '../../../../../api/types';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
 import { WorkspaceChangesPanel } from '../WorkspaceChangesPanel';
 import { WORKSPACE, multiRepositoryChanges, singleRepositoryChanges } from './fixtures/workspace-repositories';
 
-const DIFF_URL = `${TEST_BASE_URL}/web/workspace/changes/diff`;
+const PATCHES_URL = `${TEST_BASE_URL}/web/workspace/changes/patches`;
 
 Object.defineProperty(CSSStyleSheet.prototype, 'replaceSync', { value: () => {} });
 
@@ -22,49 +23,33 @@ function treeItemIds(container: HTMLElement) {
   );
 }
 
-function renderChanges(changes: typeof multiRepositoryChanges) {
-  const noop = () => {};
-  return renderWithProviders(
+/** Opens the Changes panel on `changes` and returns its jump-to-file tree. */
+async function openFileTree(changes: WorkspaceChanges) {
+  server.use(http.get(PATCHES_URL, () => HttpResponse.json({ ...changes, scope: 'branch', patches: {} })));
+  const user = userEvent.setup();
+  renderWithProviders(
     <WorkspaceChangesPanel
       workspacePath={WORKSPACE}
       visible
-      changes={changes}
       repositoryProviders={{ 'mastra-ai/mastra': 'github', 'mastra-ai/platform': 'gitlab' }}
-      isLoading={false}
-      isRefreshing={false}
-      onRefresh={noop}
-      onBack={noop}
+      onBack={() => {}}
     />,
   );
+  await user.click(await screen.findByRole('button', { name: /^Jump to file/ }));
+  const tree = await screen.findByRole('dialog');
+  return { user, tree };
 }
 
 describe('workspace repository groups', () => {
-  it('renders one changes group per repository in payload order and requests diffs with the prefixed path', async () => {
-    const diffRequests: Array<string | null> = [];
-    server.use(
-      http.get(DIFF_URL, ({ request }) => {
-        const url = new URL(request.url);
-        diffRequests.push(url.search);
-        return HttpResponse.json({
-          workspacePath: WORKSPACE,
-          path: url.searchParams.get('path'),
-          patch: 'diff --git a/proof.txt b/proof.txt\n--- /dev/null\n+++ b/proof.txt\n@@ -0,0 +1 @@\n+proof\n',
-          truncated: false,
-        });
-      }),
-    );
-    const user = userEvent.setup();
+  it('lists one group per repository in payload order, keeping each file under its prefixed path', async () => {
+    const { tree } = await openFileTree(multiRepositoryChanges);
 
-    renderChanges(multiRepositoryChanges);
-
-    const panel = screen.getByTestId('workspace-changes-panel');
-    const groups = repositoryGroups(panel);
+    const groups = repositoryGroups(tree);
     expect(groups.map(group => group.textContent)).toEqual([
       expect.stringContaining('mastra-ai/mastra'),
       expect.stringContaining('mastra-ai/platform'),
       expect.stringContaining('mastra-ai/mastra-website'),
     ]);
-    // The icon follows the factory's provider for the slug; an unknown slug gets the GitHub icon.
     expect(within(groups[0]).getByTestId('repository-provider-github')).toBeInTheDocument();
     expect(within(groups[1]).getByTestId('repository-provider-gitlab')).toBeInTheDocument();
     expect(within(groups[2]).getByTestId('repository-provider-github')).toBeInTheDocument();
@@ -74,38 +59,28 @@ describe('workspace repository groups', () => {
     expect(groups[1]).toHaveTextContent('1 file');
     expect(groups[1]).toHaveTextContent('+3');
     expect(groups[2]).toHaveTextContent('0 files');
-    // The repository directory is stripped from the rows; the request path keeps it.
-    expect(treeItemIds(panel)).toEqual(['mastra/src/agent.ts', 'mastra/README.md', 'platform/proof.txt']);
-    expect(within(panel).queryByText('mastra')).not.toBeInTheDocument();
-    expect(within(panel).getByText('src')).toBeInTheDocument();
-
-    await user.click(within(panel).getByText('proof.txt'));
-
-    await within(await screen.findByTestId('workspace-changes-panel')).findByLabelText('Workspace change diff');
-    expect(diffRequests).toEqual([`?workspacePath=${WORKSPACE}&path=platform%2Fproof.txt`]);
+    expect(treeItemIds(tree)).toEqual(['mastra/src/agent.ts', 'mastra/README.md', 'platform/proof.txt']);
+    expect(within(tree).queryByText('mastra')).not.toBeInTheDocument();
+    expect(within(tree).getByText('src')).toBeInTheDocument();
   });
 
   it('collapses a repository group without touching the others', async () => {
-    const user = userEvent.setup();
-    renderChanges(multiRepositoryChanges);
+    const { user, tree } = await openFileTree(multiRepositoryChanges);
 
-    const panel = screen.getByTestId('workspace-changes-panel');
-    await user.click(within(panel).getByRole('button', { name: 'Hide files in mastra-ai/mastra' }));
+    await user.click(within(tree).getByRole('button', { name: 'Hide files in mastra-ai/mastra' }));
 
-    expect(treeItemIds(panel)).toEqual(['platform/proof.txt']);
-    expect(within(panel).getByRole('button', { name: 'Show files in mastra-ai/mastra' })).toHaveAttribute(
+    expect(treeItemIds(tree)).toEqual(['platform/proof.txt']);
+    expect(within(tree).getByRole('button', { name: 'Show files in mastra-ai/mastra' })).toHaveAttribute(
       'aria-expanded',
       'false',
     );
   });
 
-  it('renders a one-repository session without any group header, as before', () => {
-    renderChanges(singleRepositoryChanges);
-    const changesPanel = screen.getByTestId('workspace-changes-panel');
-    expect(repositoryGroups(changesPanel)).toHaveLength(0);
-    expect(treeItemIds(changesPanel)).toEqual(['src/agent.ts', 'README.md']);
-    expect(within(changesPanel).getByRole('button', { name: 'src' })).toHaveAttribute('aria-expanded', 'true');
-    expect(within(changesPanel).getByText('agent.ts')).toBeInTheDocument();
-    expect(within(changesPanel).getByText('README.md')).toBeInTheDocument();
+  it('renders a one-repository session without any group header', async () => {
+    const { tree } = await openFileTree(singleRepositoryChanges);
+
+    expect(repositoryGroups(tree)).toHaveLength(0);
+    expect(treeItemIds(tree)).toEqual(['src/agent.ts', 'README.md']);
+    expect(within(tree).getByRole('button', { name: 'src' })).toHaveAttribute('aria-expanded', 'true');
   });
 });

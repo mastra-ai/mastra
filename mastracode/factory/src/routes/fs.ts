@@ -144,11 +144,16 @@ export interface WorkspaceChanges {
   repositories?: WorkspaceChangesRepository[];
 }
 
-export interface WorkspaceDiff {
-  workspacePath: string;
-  path: string;
-  patch: string;
-  truncated: boolean;
+/** What the changes are measured against: the base branch the session forked from, or its last commit. */
+export type WorkspaceChangesScope = 'branch' | 'uncommitted';
+
+export interface WorkspaceChangePatches extends WorkspaceChanges {
+  scope: WorkspaceChangesScope;
+  /**
+   * Each change's unified diff, keyed by its `path` in `changes`. A change has
+   * none when its diff alone passes 512 KB or all diffs together pass 8 MB.
+   */
+  patches: Record<string, string>;
 }
 
 export type ArtifactEntry = WorkspaceRenderedEntry;
@@ -163,16 +168,22 @@ export interface ArtifactListing {
 
 const MAX_TEXT_FILE_BYTES = 512 * 1024;
 const MAX_DIFF_BYTES = 512 * 1024;
-const WORKSPACE_NUMSTAT_SCRIPT = `
+const MAX_PATCH_SET_BYTES = 8 * 1024 * 1024;
+/**
+ * The working tree against `$2`, then every untracked file as added (staged
+ * into a throwaway index), in the diff format the remaining arguments give.
+ */
+const WORKSPACE_DIFF_SCRIPT = `
 set -e
 workdir=$1
 base=$2
+shift 2
 index_file=$(mktemp)
 untracked_file=$(mktemp)
 object_dir=$(mktemp -d)
 trap 'rm -f "$index_file" "$untracked_file"; rm -rf "$object_dir"' EXIT
 rm -f "$index_file"
-git -C "$workdir" diff --numstat -z --find-renames --no-ext-diff --no-textconv "$base"
+git -C "$workdir" -c core.quotePath=false diff --no-ext-diff --no-textconv --find-renames "$@" "$base"
 git -C "$workdir" ls-files --others --exclude-standard -z >"$untracked_file"
 git_dir=$(git -C "$workdir" rev-parse --absolute-git-dir)
 export GIT_INDEX_FILE="$index_file"
@@ -181,24 +192,24 @@ export GIT_ALTERNATE_OBJECT_DIRECTORIES="$git_dir/objects"
 git -C "$workdir" read-tree --empty
 git -C "$workdir" update-index --add -z --stdin <"$untracked_file"
 empty_tree=$(git -C "$workdir" hash-object -t tree /dev/null)
-git -C "$workdir" diff --cached --numstat -z --no-ext-diff --no-textconv "$empty_tree"
+git -C "$workdir" -c core.quotePath=false diff --cached --no-ext-diff --no-textconv "$@" "$empty_tree"
 `;
-const BOUNDED_GIT_DIFF_SCRIPT = `
-allow_exit_one=$1
+const NUMSTAT_FORMAT = ['--numstat', '-z'];
+const PATCH_FORMAT = ['--patch', '--no-color', '--unified=3', '--src-prefix=a/', '--dst-prefix=b/'];
+/** Keeps the first `$1` bytes of the command in the remaining arguments; being cut short is not a failure. */
+const BOUNDED_OUTPUT_SCRIPT = `
+limit=$1
 shift
 status_file=$(mktemp)
-stderr_file=$(mktemp)
-trap 'rm -f "$status_file" "$stderr_file"' EXIT
+trap 'rm -f "$status_file"' EXIT
 (
-  git "$@" 2>"$stderr_file"
+  "$@"
   printf '%s' "$?" >"$status_file"
-) | head -c ${MAX_DIFF_BYTES + 1}
+) | head -c "$limit"
 status=$(cat "$status_file")
 case "$status" in
   0|141) exit 0 ;;
-  1) [ "$allow_exit_one" = "1" ] && exit 0 ;;
 esac
-cat "$stderr_file" >&2
 exit "\${status:-1}"
 `;
 const TEXT_DECODER = new TextDecoder('utf-8', { fatal: true });
@@ -542,27 +553,6 @@ function repositoryBaseBranches(
     bases.set(repo.slug, state?.defaultBranch ?? 'HEAD');
   }
   return bases;
-}
-
-/**
- * Split a client path into the layout repository it belongs to and the path
- * inside that checkout. Longest prefix wins; the inside path is validated
- * again so a prefix cannot smuggle a traversal. A path matching no repository
- * (including a bare prefix) is not available: the file routes only serve the
- * checkouts, never the workspace root itself.
- */
-function resolveLayoutPath(
-  layout: SessionLayout,
-  path: string,
-  label: string,
-): { repo: SessionLayoutRepository; relative: string } {
-  const safePath = assertRelativePath(path, label);
-  if (layout.repos.length === 1) return { repo: layout.repos[0]!, relative: safePath };
-  const repo = layout.repos
-    .filter(candidate => safePath.startsWith(candidate.prefix) && safePath.length > candidate.prefix.length)
-    .toSorted((a, b) => b.prefix.length - a.prefix.length)[0];
-  if (!repo) throw new Error(`${label} is not available in this session's repositories`);
-  return { repo, relative: assertRelativePath(safePath.slice(repo.prefix.length), label) };
 }
 
 /** List an approved rendered root inside a Factory session's sandbox workdir. */
@@ -945,11 +935,17 @@ function unavailableWorkspaceChanges(workspacePath: string): WorkspaceChanges {
   return { workspacePath, available: false, changes: [] };
 }
 
+function isWorkspaceChangesScope(value: string): value is WorkspaceChangesScope {
+  return value === 'branch' || value === 'uncommitted';
+}
+
 async function resolveSessionComparisonBase(
   sandbox: ExecutableSandbox,
   workdir: string,
   baseBranch: string,
+  scope: WorkspaceChangesScope,
 ): Promise<string> {
+  if (scope === 'uncommitted') return 'HEAD';
   const result = await sandbox.executeCommand('git', ['-C', workdir, 'merge-base', 'HEAD', `origin/${baseBranch}`], {
     timeout: 30_000,
   });
@@ -963,10 +959,8 @@ type RepositoryChanges = Pick<WorkspaceChangesRepository, 'available' | 'changes
 async function listRepositoryChanges(
   sandbox: ExecutableSandbox,
   workdir: string,
-  baseBranch: string,
+  comparisonBase: string,
 ): Promise<RepositoryChanges> {
-  const comparisonBase = await resolveSessionComparisonBase(sandbox, workdir, baseBranch);
-
   // These outputs are parsed record by record (-z) and per path, so retain all
   // of them rather than the default 1 MiB tail, which would drop or split entries.
   const [statusResult, trackedResult, statsResult] = await Promise.all([
@@ -978,10 +972,11 @@ async function listRepositoryChanges(
       timeout: 30_000,
       maxRetainedBytes: Infinity,
     }),
-    sandbox.executeCommand('sh', ['-c', WORKSPACE_NUMSTAT_SCRIPT, 'mastracode-numstat', workdir, comparisonBase], {
-      timeout: 30_000,
-      maxRetainedBytes: Infinity,
-    }),
+    sandbox.executeCommand(
+      'sh',
+      ['-c', WORKSPACE_DIFF_SCRIPT, 'mastracode-numstat', workdir, comparisonBase, ...NUMSTAT_FORMAT],
+      { timeout: 30_000, maxRetainedBytes: Infinity },
+    ),
   ]);
   if (statusResult.exitCode !== 0) return { available: false, changes: [] };
 
@@ -1017,33 +1012,27 @@ function prefixChange(change: WorkspaceChange, prefix: string): WorkspaceChange 
   };
 }
 
-export async function listSessionWorkspaceChanges(session: SourceControlSession): Promise<WorkspaceChanges> {
-  const handle = await sessionSandbox(session);
-  if (!handle) return unavailableWorkspaceChanges(session.sessionId);
-  const { layout, baseBranches: bases } = handle;
+interface InspectedRepository {
+  repo: SessionLayoutRepository;
+  changes: RepositoryChanges;
+}
 
+function assembleWorkspaceChanges(workspacePath: string, inspected: InspectedRepository[]): WorkspaceChanges {
   // One repository: the response is exactly what it was before layouts.
-  if (layout.repos.length === 1) {
-    const repo = layout.repos[0]!;
-    const result = await listRepositoryChanges(handle.sandbox, repo.dir, bases.get(repo.slug) ?? session.baseBranch);
-    if (!result.available) return unavailableWorkspaceChanges(session.sessionId);
-    return { workspacePath: session.sessionId, ...result };
+  if (inspected.length === 1) {
+    const { changes } = inspected[0]!;
+    if (!changes.available) return unavailableWorkspaceChanges(workspacePath);
+    return { workspacePath, ...changes };
   }
 
-  // Several: inspect every checkout in parallel, one group each. A failing
-  // one (missing checkout, git error) is unavailable on its own, the others
-  // still answer.
-  const groups: WorkspaceChangesRepository[] = await Promise.all(
-    layout.repos.map(async repo => {
-      const result = await listRepositoryChanges(handle.sandbox, repo.dir, bases.get(repo.slug)!);
-      return {
-        slug: repo.slug,
-        prefix: repo.prefix,
-        ...result,
-        changes: result.changes.map(change => prefixChange(change, repo.prefix)),
-      };
-    }),
-  );
+  // Several: a failing checkout (missing, git error) is unavailable on its
+  // own, the others still answer.
+  const groups: WorkspaceChangesRepository[] = inspected.map(({ repo, changes }) => ({
+    slug: repo.slug,
+    prefix: repo.prefix,
+    ...changes,
+    changes: changes.changes.map(change => prefixChange(change, repo.prefix)),
+  }));
   const available = groups.filter(group => group.available);
   const changes = available.flatMap(group => group.changes).toSorted((a, b) => a.path.localeCompare(b.path));
   const counted = available.filter(group => group.additions !== undefined);
@@ -1055,7 +1044,7 @@ export async function listSessionWorkspaceChanges(session: SourceControlSession)
         }
       : {};
   return {
-    workspacePath: session.sessionId,
+    workspacePath,
     available: available.length > 0,
     changes,
     ...totals,
@@ -1063,97 +1052,125 @@ export async function listSessionWorkspaceChanges(session: SourceControlSession)
   };
 }
 
-async function executeBoundedGitDiff(sandbox: ExecutableSandbox, args: string[], allowExitOne = false) {
-  return sandbox.executeCommand(
-    'sh',
-    ['-c', BOUNDED_GIT_DIFF_SCRIPT, 'mastracode-diff', allowExitOne ? '1' : '0', ...args],
-    { timeout: 30_000 },
-  );
-}
-
-function truncatePatch(patchBuffer: Buffer): string {
-  const patch = patchBuffer.subarray(0, MAX_DIFF_BYTES).toString('utf8');
-  const lastNewline = patch.lastIndexOf('\n');
-  if (lastNewline >= 0) return patch.slice(0, lastNewline + 1);
-  return patch.replace(/\uFFFD+$/, '');
-}
-
-export async function readSessionWorkspaceDiff(
-  session: SourceControlSession,
-  path: string,
-  previousPath?: string,
-): Promise<WorkspaceDiff> {
-  const safePath = assertRelativePath(path, 'path');
-  if (previousPath) assertRelativePath(previousPath, 'previousPath');
+export async function listSessionWorkspaceChanges(session: SourceControlSession): Promise<WorkspaceChanges> {
   const handle = await sessionSandbox(session);
-  if (!handle) throw new Error('Session workspace is not available');
-  // The client sends the prefixed paths it was listed; git runs inside the
-  // checkout they belong to, on the paths relative to it. A rename never
-  // crosses checkouts, so both halves must resolve to the same repository.
-  const target = resolveLayoutPath(handle.layout, safePath, 'path');
-  const previous = previousPath ? resolveLayoutPath(handle.layout, previousPath, 'previousPath') : undefined;
-  if (previous && previous.repo !== target.repo) {
-    throw new Error('previousPath is not available in the repository of path');
-  }
-  const workdir = target.repo.dir;
-  const comparisonBase = await resolveSessionComparisonBase(
-    handle.sandbox,
-    workdir,
-    handle.baseBranches.get(target.repo.slug)!,
-  );
+  if (!handle) return unavailableWorkspaceChanges(session.sessionId);
+  const { sandbox, layout, baseBranches } = handle;
 
-  const pathspecs = previous ? [previous.relative, target.relative] : [target.relative];
-  let result = await executeBoundedGitDiff(handle.sandbox, [
-    '--literal-pathspecs',
-    '-C',
-    workdir,
-    'diff',
-    '--find-renames',
-    '--no-ext-diff',
-    '--no-color',
-    '--unified=3',
-    comparisonBase,
-    '--',
-    ...pathspecs,
-  ]);
-  if (result.exitCode !== 0) throw new Error(result.stderr || 'Unable to read workspace diff');
-
-  if (!result.stdout) {
-    const untracked = await handle.sandbox.executeCommand(
-      'git',
-      ['--literal-pathspecs', '-C', workdir, 'ls-files', '--others', '--exclude-standard', '--', target.relative],
-      { timeout: 30_000, maxRetainedBytes: Infinity },
-    );
-    if (untracked.exitCode === 0 && untracked.stdout.trim()) {
-      result = await executeBoundedGitDiff(
-        handle.sandbox,
-        [
-          '-C',
-          workdir,
-          'diff',
-          '--no-index',
-          '--no-ext-diff',
-          '--no-color',
-          '--unified=3',
-          '--',
-          '/dev/null',
-          target.relative,
-        ],
-        true,
+  const inspected = await Promise.all(
+    layout.repos.map(async repo => {
+      const comparisonBase = await resolveSessionComparisonBase(
+        sandbox,
+        repo.dir,
+        baseBranches.get(repo.slug) ?? session.baseBranch,
+        'branch',
       );
-      if (result.exitCode !== 0 && result.exitCode !== 1) {
-        throw new Error(result.stderr || 'Unable to read workspace diff');
-      }
-    }
+      return { repo, changes: await listRepositoryChanges(sandbox, repo.dir, comparisonBase) };
+    }),
+  );
+  return assembleWorkspaceChanges(session.sessionId, inspected);
+}
+
+const GIT_C_ESCAPES: Record<string, string> = {
+  '"': '\\"',
+  '\\': '\\\\',
+  '\x07': '\\a',
+  '\b': '\\b',
+  '\t': '\\t',
+  '\n': '\\n',
+  '\v': '\\v',
+  '\f': '\\f',
+  '\r': '\\r',
+};
+
+/** A path as git writes it in a diff header: `core.quotePath=false` quotes only for quotes, backslashes and control characters. */
+function gitHeaderPath(path: string): string {
+  let escaped = '';
+  let quoted = false;
+  for (const char of path) {
+    const code = char.charCodeAt(0);
+    const escape =
+      GIT_C_ESCAPES[char] ?? (code < 0x20 || code === 0x7f ? `\\${code.toString(8).padStart(3, '0')}` : '');
+    quoted ||= escape !== '';
+    escaped += escape || char;
+  }
+  return quoted ? `"${escaped}"` : path;
+}
+
+/**
+ * Each change's section of one checkout's patch, matched by its `diff --git`
+ * header. A section cut by the size budget, or larger than one file's limit,
+ * is left out.
+ */
+function keyWorkspacePatches(patch: string, changes: readonly WorkspaceChange[]): Map<string, string> {
+  const sections = patch.split(/^(?=diff --git )/m);
+  if (Buffer.byteLength(patch) > MAX_PATCH_SET_BYTES) sections.pop();
+
+  const sectionsByHeader = new Map<string, string>();
+  for (const section of sections) {
+    const headerEnd = section.indexOf('\n');
+    if (headerEnd < 0 || Buffer.byteLength(section) > MAX_DIFF_BYTES) continue;
+    sectionsByHeader.set(section.slice(0, headerEnd), section);
   }
 
-  const patchBuffer = Buffer.from(result.stdout);
-  const truncated = patchBuffer.length > MAX_DIFF_BYTES;
+  const patches = new Map<string, string>();
+  for (const change of changes) {
+    const header = `diff --git ${gitHeaderPath(`a/${change.previousPath ?? change.path}`)} ${gitHeaderPath(`b/${change.path}`)}`;
+    const section = sectionsByHeader.get(header);
+    if (section) patches.set(change.path, section);
+  }
+  return patches;
+}
+
+export async function listSessionWorkspacePatches(
+  session: SourceControlSession,
+  scope: WorkspaceChangesScope,
+): Promise<WorkspaceChangePatches> {
+  const handle = await sessionSandbox(session);
+  if (!handle) return { ...unavailableWorkspaceChanges(session.sessionId), scope, patches: {} };
+  const { sandbox, layout, baseBranches } = handle;
+
+  const inspected = await Promise.all(
+    layout.repos.map(async repo => {
+      const comparisonBase = await resolveSessionComparisonBase(
+        sandbox,
+        repo.dir,
+        baseBranches.get(repo.slug) ?? session.baseBranch,
+        scope,
+      );
+      const [changes, patch] = await Promise.all([
+        listRepositoryChanges(sandbox, repo.dir, comparisonBase),
+        sandbox.executeCommand(
+          'sh',
+          [
+            '-c',
+            BOUNDED_OUTPUT_SCRIPT,
+            'mastracode-bounded',
+            String(MAX_PATCH_SET_BYTES + 1),
+            'sh',
+            '-c',
+            WORKSPACE_DIFF_SCRIPT,
+            'mastracode-patch',
+            repo.dir,
+            comparisonBase,
+            ...PATCH_FORMAT,
+          ],
+          { timeout: 30_000, maxRetainedBytes: Infinity },
+        ),
+      ]);
+      if (patch.exitCode !== 0) {
+        return { repo, changes: { available: false, changes: [] }, patches: new Map<string, string>() };
+      }
+      return { repo, changes, patches: keyWorkspacePatches(patch.stdout, changes.changes) };
+    }),
+  );
+  const patches = inspected.flatMap(({ repo, patches: repoPatches }) =>
+    Array.from(repoPatches, ([path, patch]): [string, string] => [`${repo.prefix}${path}`, patch]),
+  );
   return {
-    workspacePath: session.sessionId,
-    path: safePath,
-    patch: truncated ? truncatePatch(patchBuffer) : result.stdout,
-    truncated,
+    ...assembleWorkspaceChanges(session.sessionId, inspected),
+    scope,
+    patches: Object.fromEntries(patches),
   };
 }
 
@@ -1272,26 +1289,23 @@ export function buildFsRoutes(options: { root?: string; sessionFs?: SessionFsDep
         }
       },
     }),
-    registerApiRoute('/web/workspace/changes/diff', {
+    registerApiRoute('/web/workspace/changes/patches', {
       method: 'GET',
       requiresAuth: false,
       handler: async c => {
         const workspacePath = c.req.query('workspacePath');
-        const path = c.req.query('path');
-        const previousPath = c.req.query('previousPath');
+        const scope = c.req.query('scope') ?? 'branch';
         if (!workspacePath) return c.json({ error: 'Missing required query param: workspacePath' }, 400);
-        if (!path) return c.json({ error: 'Missing required query param: path' }, 400);
+        if (!isWorkspaceChangesScope(scope)) return c.json({ error: 'scope must be branch or uncommitted' }, 400);
         try {
           const session = await resolveAuthorizedSession(loose(c), sessionFs, workspacePath);
-          if (!session || !sessionFs) return c.json({ error: 'Session workspace is not available' }, 403);
-          return c.json(await readSessionWorkspaceDiff(session, path, previousPath));
+          if (!session || !sessionFs) {
+            return c.json({ ...unavailableWorkspaceChanges(workspacePath), scope, patches: {} });
+          }
+          return c.json(await listSessionWorkspacePatches(session, scope));
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
-          const status =
-            message.includes('relative') || message.includes('escapes') || message.includes('not available')
-              ? 403
-              : 500;
-          return c.json({ error: message }, status);
+          return c.json({ error: message }, message.includes('not available') ? 403 : 500);
         }
       },
     }),
