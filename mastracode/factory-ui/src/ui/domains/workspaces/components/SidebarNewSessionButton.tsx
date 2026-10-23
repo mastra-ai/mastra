@@ -1,4 +1,4 @@
-import { Button } from '@mastra/playground-ui/components/Button';
+import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Plus } from 'lucide-react';
 import { useParams } from 'react-router';
 
@@ -14,8 +14,15 @@ export function SidebarNewSessionButton() {
   if (!factoryId || !hasRepositories) return null;
 
   return (
-    <Button icon={<Plus />} className="w-full justify-start" onClick={() => openNewUserSession(factoryId)}>
-      New session
-    </Button>
+    <Sidebar.NavList>
+      <Sidebar.NavLink
+        render={
+          <button type="button" onClick={() => openNewUserSession(factoryId)}>
+            <Plus />
+            <Sidebar.NavLabel>New session</Sidebar.NavLabel>
+          </button>
+        }
+      />
+    </Sidebar.NavList>
   );
 }

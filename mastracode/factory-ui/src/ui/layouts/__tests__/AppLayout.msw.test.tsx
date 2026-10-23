@@ -138,7 +138,7 @@ describe('AppLayout', () => {
     stubFactory();
     renderApp();
 
-    const sidebar = await screen.findByRole('complementary', { name: 'Main sidebar' });
+    const sidebarBeforeNavigation = await screen.findByRole('complementary', { name: 'Main sidebar' });
     expect(screen.getByRole('heading', { name: 'Page A' })).toBeInTheDocument();
     expect(screen.getAllByRole('complementary', { name: 'Main sidebar' })).toHaveLength(1);
 
@@ -146,8 +146,7 @@ describe('AppLayout', () => {
 
     await waitFor(() => expect(screen.getByRole('heading', { name: 'Page B' })).toBeInTheDocument());
     expect(screen.queryByRole('heading', { name: 'Page A' })).not.toBeInTheDocument();
-    // Same DOM node: the sidebar was not remounted by the navigation.
-    expect(screen.getByRole('complementary', { name: 'Main sidebar' })).toBe(sidebar);
+    expect(screen.getByRole('complementary', { name: 'Main sidebar' })).toBe(sidebarBeforeNavigation);
   });
 
   it('leaves retired Factory pages out of the sidebar', async () => {
@@ -223,7 +222,6 @@ describe('AppLayout', () => {
     await userEvent.keyboard('[[');
     await waitFor(() => expect(sidebarIsCollapsed()).toBe(true));
 
-    // Holding the key must not flip it back on auto-repeat.
     fireEvent.keyDown(document.body, { key: '[', repeat: true });
     expect(sidebarIsCollapsed()).toBe(true);
 

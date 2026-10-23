@@ -138,8 +138,6 @@ describe('User sessions creation', () => {
         /^\/factories\/fp-1\/user\/new\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
       ),
     );
-    // The session only exists once the first prompt creates it, so the sidebar
-    // has nothing to list yet.
     expect(screen.queryByRole('link', { name: 'New session' })).not.toBeInTheDocument();
     expect(screen.getByText('No sessions yet')).toBeInTheDocument();
     await waitForMutationsIdle(client);

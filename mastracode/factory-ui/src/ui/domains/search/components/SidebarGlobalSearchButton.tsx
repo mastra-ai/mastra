@@ -4,7 +4,6 @@ import { Search } from 'lucide-react';
 
 import { useGlobalSearchControls } from '../hooks/useGlobalSearchControls';
 
-// Hidden in the mobile drawer — the mobile header owns the trigger at that width
 export function SidebarGlobalSearchButton() {
   const { openSearch } = useGlobalSearchControls();
   const shortcutLabel = useKeyboardShortcutLabel('K');

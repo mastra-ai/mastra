@@ -6,7 +6,6 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import { useFactoriesQuery, useFactoryQuery } from '../../../../hooks/useFactories';
 import { createFactoryPath, factorySwitchPath } from '../services/factoryPaths';
 
-/** Inline factory selection with a single Create Factory action. */
 export function FactorySwitcher() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const location = useLocation();
@@ -32,8 +31,9 @@ export function FactorySwitcher() {
         aria-label="Select factory"
         variant="ghost"
         size="sm"
-        className="min-w-0 gap-1"
+        className="-ml-[calc(var(--button-px)-2px)] min-w-0 gap-1"
       >
+        <FactoryIcon />
         <Txt tone="ink" as="span" variant="caption" className="min-w-0 truncate">
           {activeFactory?.name ?? 'Select a factory…'}
         </Txt>
