@@ -2333,6 +2333,17 @@ describe('Agent Routes Authorization', () => {
       });
     }
 
+    it('returns 501 when run-scoped abort targets a non-durable agent', async () => {
+      await expect(
+        ABORT_AGENT_RUN_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          runId: 'non-durable-run',
+          requestContext: createContextWithReservedKeys({}),
+        }),
+      ).rejects.toMatchObject({ status: 501 });
+    });
+
     it('resolves request-scoped memory before authorizing run cancellation', async () => {
       const scopedAgent = createDurableAgent({
         id: 'test-durable-agent',
