@@ -39,18 +39,12 @@
     "qwen3.8-flash-next"
   ],
   "reasoning": {
-    "glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
-    "laguna-s-2.1": [
+    "mimo-v2.6-pro-rl": [
       {
         "type": "toggle"
       }
     ],
-    "mimo-v2.6-pro-rl": [
+    "minimax-m3": [
       {
         "type": "toggle"
       }
@@ -61,30 +55,24 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.x-menthol": [
+    "laguna-s-2.1": [
       {
         "type": "toggle"
       }
     ],
-    "muse-glimmer-30b": [
+    "glm-5.2": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
+        "values": ["none", "high", "max"]
       }
     ],
-    "mimo-v2.6-flash-rl": [
+    "deepseek-v4.1-flash": [
       {
         "type": "toggle"
-      }
-    ],
-    "minimax-m3": [
+      },
       {
-        "type": "toggle"
-      }
-    ],
-    "nemotron-3-nano-omni-30b-a3b-reasoning": [
-      {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "qwen3.8-27b": [
@@ -102,13 +90,30 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-v4-flash-0731": [
-      {
-        "type": "toggle"
-      },
+    "muse-glimmer-30b": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "glm-5.x-menthol": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nemotron-3.5-content-safety": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "mimo-v2.6-flash-rl": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nemotron-3-nano-omni-30b-a3b-reasoning": [
+      {
+        "type": "toggle"
       }
     ],
     "qwen3.8-flash-next": [
@@ -117,18 +122,13 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "deepseek-v4.1-flash": [
+    "deepseek-v4-flash-0731": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "nemotron-3.5-content-safety": [
-      {
-        "type": "toggle"
       }
     ]
   }
