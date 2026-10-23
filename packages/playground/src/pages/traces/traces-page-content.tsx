@@ -1,53 +1,28 @@
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
-import { TracesExplorer, useTracesConfig } from '@mastra/playground-ui/domains/traces/components/traces-explorer';
-import {
-  TracesSpansSwitch,
-  TracesSpansSwitchSkeleton,
-} from '@mastra/playground-ui/domains/traces/components/traces-spans-switch';
-import type { ObservabilityView } from '@mastra/playground-ui/domains/traces/components/traces-spans-switch';
+import { TracesExplorer } from '@mastra/playground-ui/domains/traces/components/traces-explorer';
 import { memo } from 'react';
 import { useNavigate } from 'react-router';
-import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { CreateDatasetDialog } from '@/domains/datasets/components/create-dataset-dialog';
-import { navCrumb } from '@/domains/navigation/crumbs';
 import { LiveKitRecordingReview } from '@/domains/voice/components/livekit-recording-review';
 import { traceScoreLink } from '@/lib/app-routing';
-
-const crumbs = [navCrumb('/traces')];
 
 // Memoized so a URL change (trace click, filter edit) re-renders only the explorer parts whose
 // context slice changed, not the whole tree.
 export const TracesPageContent = memo(function TracesPageContent({ isScoped }: { isScoped: boolean }) {
   const navigate = useNavigate();
-  const { withSpanQuery, withThreadQuery, isCapabilitiesLoading } = useTracesConfig();
 
-  // Scoped instances render inside another page (e.g. the agent Traces tab) that already owns the header.
-  let tabs;
-  if (!isScoped) {
-    if (isCapabilitiesLoading) tabs = <TracesSpansSwitchSkeleton />;
-    else if (withSpanQuery || withThreadQuery) {
-      const views: ObservabilityView[] = ['traces'];
-      if (withSpanQuery) views.push('spans');
-      if (withThreadQuery) views.push('threads');
-      tabs = <TracesSpansSwitch current="traces" views={views} onViewChange={view => navigate(`/${view}`)} />;
-    }
-  }
-
-  return (
-    <TracesExplorer.Layout
-      breadcrumbs={isScoped ? undefined : <PageBreadcrumbs crumbs={crumbs} />}
-      tabs={tabs}
-      toolbar={
-        <ActionRow>
-          <ActionRow.Start>
-            <TracesExplorer.FilterBar />
-          </ActionRow.Start>
-          <ActionRow.End>
-            <TracesExplorer.ColumnsMenu />
-          </ActionRow.End>
-        </ActionRow>
-      }
-    >
+  const toolbar = (
+    <ActionRow>
+      <ActionRow.Start>
+        <TracesExplorer.FilterBar />
+      </ActionRow.Start>
+      <ActionRow.End>
+        <TracesExplorer.ColumnsMenu />
+      </ActionRow.End>
+    </ActionRow>
+  );
+  const content = (
+    <>
       <TracesExplorer.List />
       <TracesExplorer.Panel
         headerActionsSlot={({ traceId, spans }) => (
@@ -56,6 +31,12 @@ export const TracesPageContent = memo(function TracesPageContent({ isScoped }: {
         onOpenScore={(traceId, scoreId) => navigate(traceScoreLink(traceId, scoreId))}
         renderCreateDatasetDialog={props => <CreateDatasetDialog {...props} />}
       />
-    </TracesExplorer.Layout>
+    </>
   );
+
+  // Scoped instances render inside another page (e.g. the agent Traces tab) whose header has no
+  // breadcrumbs or view switch; /traces gets both from the shared observability layout.
+  if (isScoped) return <TracesExplorer.Layout toolbar={toolbar}>{content}</TracesExplorer.Layout>;
+
+  return <TracesExplorer.Body toolbar={toolbar}>{content}</TracesExplorer.Body>;
 });
