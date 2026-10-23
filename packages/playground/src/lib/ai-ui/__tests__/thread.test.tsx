@@ -2,8 +2,6 @@ import { MastraClient } from '@mastra/client-js';
 import type { ListMemoryThreadMessagesResponse, StreamParams } from '@mastra/client-js';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { TaskItem } from '@mastra/core/signals';
-import { ChunkFrom } from '@mastra/core/stream';
-import type { ChunkType } from '@mastra/core/stream';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
@@ -16,6 +14,7 @@ import { ChatProvider } from '../chat/chat-provider';
 import { Thread } from '../thread';
 import { emptyChannelPlatforms, emptyMcpServers, memoryDisabled, memoryEnabled, v2Agent } from './fixtures/agent';
 import { attachmentMessages } from './fixtures/attachment-messages';
+import { abortedSignalRun, acceptedSignalMessage, signalRunStart } from './fixtures/signal-run';
 import { WorkingMemoryProvider } from '@/domains/agents/context/agent-working-memory-context';
 import { BrowserSessionProvider } from '@/domains/agents/context/browser-session-provider';
 import { ThreadInputProvider } from '@/domains/conversation';
@@ -1190,11 +1189,11 @@ describe('Thread', () => {
         ),
         http.post(`${BASE_URL}/api/agents/:agentId/send-message`, async ({ request }) => {
           sentMessages.push(JSON.stringify(await request.json()));
-          return HttpResponse.json({ accepted: true, runId: 'run-1' });
+          return HttpResponse.json(acceptedSignalMessage);
         }),
         http.post(`${BASE_URL}/api/agents/:agentId/threads/abort`, () => {
           abortRequests += 1;
-          return HttpResponse.json({ aborted: true });
+          return HttpResponse.json(abortedSignalRun);
         }),
       );
 
@@ -1202,13 +1201,7 @@ describe('Thread', () => {
         renderThread([]);
       });
       await waitFor(() => expect(subscription).toBeDefined());
-      await act(async () =>
-        subscription?.enqueue(
-          new TextEncoder().encode(
-            sseChunk({ type: 'start', runId: 'run-1', from: ChunkFrom.AGENT, payload: {} } satisfies ChunkType),
-          ),
-        ),
-      );
+      await act(async () => subscription?.enqueue(new TextEncoder().encode(sseChunk(signalRunStart))));
       await screen.findByRole('button', { name: 'Cancel' });
     });
 
@@ -1232,7 +1225,7 @@ describe('Thread', () => {
       expect(screen.queryByRole('button', { name: 'Send' })).toBeNull();
     });
 
-    it('keeps the run going when Send is double-clicked, and Cancel still stops it', async () => {
+    it('does not cancel the run when Send is double-clicked', async () => {
       fireEvent.change(screen.getByPlaceholderText('Enter your message...'), {
         target: { value: 'Continue with the new instructions' },
       });
@@ -1241,9 +1234,13 @@ describe('Thread', () => {
       await waitFor(() => expect(sentMessages.join()).toContain('Continue with the new instructions'));
       fireEvent.click(primaryAction, { detail: 2 });
       await act(async () => new Promise(resolve => setTimeout(resolve, 100)));
-      expect(abortRequests).toBe(0);
 
+      expect(abortRequests).toBe(0);
+    });
+
+    it('cancels the run when Cancel is clicked', async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Cancel' }), { detail: 1 });
+
       await waitFor(() => expect(abortRequests).toBe(1));
     });
   });

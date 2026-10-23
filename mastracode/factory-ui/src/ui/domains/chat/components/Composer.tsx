@@ -85,7 +85,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   });
   const composerDisabled = createDraftSessionMutation.isPending || blocked || planFeedback.isSubmitting;
   const sendDisabled = composerDisabled || draftConfigNotReady || chatPreparing || planFeedback.loading;
-  const hasSubmittableDraft = draft.trim().length > 0 || (images.length > 0 && !planFeedback.pending);
+  const draftImagesCanBeSent = !planFeedback.pending && !liveRun;
+  const hasSubmittableDraft = draft.trim().length > 0 || (images.length > 0 && draftImagesCanBeSent);
   const textareaDisabled = composerDisabled && !chatPreparing;
   const initializingPlaceholder = useInitializingPlaceholder(chatPreparing, draft.length === 0);
   const normalPlaceholder = planFeedback.pending
