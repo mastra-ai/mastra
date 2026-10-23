@@ -68,6 +68,7 @@ import type { MastraServerCache } from '@mastra/core/cache';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { CachingPubSub, PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
+import { createTimeoutAbortSignal, isMastraTimeoutError } from '@mastra/core/loop';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { ChunkFrom } from '@mastra/core/stream';
@@ -886,6 +887,51 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
   }
 
   /**
+   * Arm the run-level execution budget (`modelSettings.timeout.totalMs`) for
+   * one execution session (stream or resume) and compose it into the registry
+   * entry's `abortSignal`, which co-located durable steps read. At the
+   * deadline the run is reported failed: the stream gets one
+   * `MastraTimeoutError` and the snapshot rows are deleted. Mirrors core
+   * `DurableAgent.#installAbortWithTotalTimeout` + `settleExecution`.
+   * Returns the timer teardown; a no-op when no budget is configured.
+   */
+  function armTotalTimeout(
+    entry: { abortSignal?: AbortSignal },
+    abortController: AbortController,
+    runId: string,
+    timeoutMs: number | undefined,
+  ): () => void {
+    const totalTimeout = createTimeoutAbortSignal({
+      parentSignal: abortController.signal,
+      timeoutMs,
+      timeoutType: 'total',
+      // Steps already holding `entry.abortSignal` must still see a later abort().
+      detachParentOnCleanup: false,
+    });
+    entry.abortSignal = totalTimeout.signal;
+    void totalTimeout.timeoutPromise?.catch(async error => {
+      if (!isMastraTimeoutError(error) || totalTimeout.signal?.reason !== error) return;
+      await emitError(runId, error);
+      await deleteRunSnapshots(runId);
+    });
+    return totalTimeout.cleanup;
+  }
+
+  async function deleteRunSnapshots(runId: string): Promise<void> {
+    try {
+      const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
+      await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: InngestDurableStepIds.AGENTIC_LOOP });
+      await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: InngestDurableStepIds.AGENTIC_EXECUTION });
+    } catch (error) {
+      mastra?.getLogger?.()?.warn?.('Failed to delete Inngest durable agent snapshot rows', {
+        agentId,
+        runId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  /**
    * Tool calls of the suspended iteration, seeded into the resumed stream so its
    * `toolCalls` includes the call being resumed. Mirrors core
    * `DurableAgent.#loadSuspendedToolCalls`; the Inngest engine runs the nested
@@ -1156,7 +1202,12 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         forwardExternalAbort(streamOptions.abortSignal, abortController, runId);
       }
       registryEntry.abortController = abortController;
-      registryEntry.abortSignal = abortController.signal;
+      const clearTotalTimeout = armTotalTimeout(
+        registryEntry,
+        abortController,
+        runId,
+        callbackOptions.modelSettings?.timeout?.totalMs,
+      );
 
       // 1b. Register non-serializable state on the global run registry so
       // workflow steps running in the same process can recover it.
@@ -1172,8 +1223,14 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // Track cleanup state and global registry entry lifecycle.
       let cleanedUp = false;
       const finalizeGlobalRegistry = () => {
+        clearTotalTimeout();
         if (cleanedUp) return;
         cleanedUp = true;
+        // A run stopped by its deadline keeps executing until its in-flight step
+        // returns. Keep its entry, whose signal is aborted, so the next
+        // co-located step stops instead of calling the model again; the
+        // registry TTL evicts it.
+        if (isMastraTimeoutError(registryEntry.abortSignal?.reason)) return;
         deleteRunRegistryEntry(runId, mastra);
       };
 
@@ -1211,7 +1268,11 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             finalizeGlobalRegistry();
           }
         },
-        onSuspended: callbackOptions.onSuspended,
+        onSuspended: async data => {
+          // A suspension ends this execution session; resume() arms its own budget.
+          clearTotalTimeout();
+          await callbackOptions.onSuspended?.(data);
+        },
         onAbort: async data => {
           try {
             await (callbackOptions.onAbort as ((event: any) => void | Promise<void>) | undefined)?.(data);
@@ -1418,14 +1479,31 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         globalRunRegistry.set(runId, existingEntry);
       }
       existingEntry.abortController = abortController;
-      existingEntry.abortSignal = abortController.signal;
+      // Re-arm the run-level budget for the resumed session, as core does: a
+      // budget on the resume call wins, otherwise the original run's budget from
+      // its registry entry (warm) or persisted workflow input (cold).
+      const clearTotalTimeout = armTotalTimeout(
+        existingEntry,
+        abortController,
+        runId,
+        callbackOptions.modelSettings?.timeout?.totalMs ??
+          existingRegistryEntry?.timeoutTotalMs ??
+          (await resumableSnapshot.catch(() => undefined))?.snapshot?.context?.input?.options?.modelSettings?.timeout
+            ?.totalMs,
+      );
 
       // Track cleanup state for the resumed segment so terminal events
       // (finish/error/abort/cleanup) always tear down the registry entry.
       let resumeCleanedUp = false;
       const finalizeResumeRegistry = () => {
+        clearTotalTimeout();
         if (resumeCleanedUp) return;
         resumeCleanedUp = true;
+        // A run stopped by its deadline keeps executing until its in-flight step
+        // returns. Keep its entry, whose signal is aborted, so the next
+        // co-located step stops instead of calling the model again; the
+        // registry TTL evicts it.
+        if (isMastraTimeoutError(existingEntry.abortSignal?.reason)) return;
         deleteRunRegistryEntry(runId, mastra);
       };
 
@@ -1476,6 +1554,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         },
         onSuspended: async data => {
           if (!resumedChunkSeen) return;
+          clearTotalTimeout();
           try {
             await callbackOptions.onSuspended?.(data);
           } finally {
