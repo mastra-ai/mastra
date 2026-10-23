@@ -1,4 +1,9 @@
-import type { GetObservabilityCapabilitiesResponse, MastraClient, QuerySpansResult } from '@mastra/client-js';
+import type {
+  GetObservabilityCapabilitiesResponse,
+  MastraClient,
+  QuerySpansResult,
+  QueryTraceThreadsResult,
+} from '@mastra/client-js';
 import { SpanType } from '@mastra/core/observability';
 import { TraceStatus } from '@mastra/core/storage';
 
@@ -173,3 +178,6 @@ export const spanDetailById: Record<string, Awaited<ReturnType<MastraClient['get
 
 export const emptyEntityNames: Awaited<ReturnType<MastraClient['getEntityNames']>> = { entityNames: [] };
 export const emptyEnvironments: Awaited<ReturnType<MastraClient['getEnvironments']>> = { environments: [] };
+
+/** Thread list returned after switching from Spans to Threads. */
+export const emptyThreads: QueryTraceThreadsResult = { threads: [], page: { next: null } };

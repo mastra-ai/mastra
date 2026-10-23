@@ -11,7 +11,7 @@ Most docs pages fit one of these patterns:
 - **Setup or configuration:** Helps readers enable and configure a Mastra-owned feature.
 - **Task-oriented:** Takes readers from a known starting point to a verifiable result.
 
-These are authoring patterns, not mandatory templates. A page may combine them when the result remains coherent.
+These are authoring patterns, not mandatory templates. A page may combine them when the result remains coherent. A guide-like structure doesn't automatically qualify a page for the Guides section; follow [Admission to Guides](INFORMATION_ARCHITECTURE.md#admission-to-guides) before choosing that placement.
 
 ## Overview pages
 

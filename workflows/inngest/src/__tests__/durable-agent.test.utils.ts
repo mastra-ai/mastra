@@ -211,10 +211,12 @@ export async function startConnectInngestDevServer(): Promise<ChildProcess | nul
  */
 export async function setupSharedTestInfrastructure({
   observability,
+  backgroundTasks,
   retries,
   fastRetries = false,
 }: {
   observability?: NonNullable<ConstructorParameters<typeof Mastra>[0]>['observability'];
+  backgroundTasks?: NonNullable<ConstructorParameters<typeof Mastra>[0]>['backgroundTasks'];
   retries?: InngestFlowControlConfig['retries'];
   fastRetries?: boolean;
 } = {}): Promise<void> {
@@ -249,6 +251,7 @@ export async function setupSharedTestInfrastructure({
       [workflow.id]: workflow,
     },
     ...(observability ? { observability } : {}),
+    ...(backgroundTasks ? { backgroundTasks } : {}),
     server: {
       apiRoutes: [
         {
